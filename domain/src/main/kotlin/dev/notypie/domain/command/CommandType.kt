@@ -1,4 +1,4 @@
-package dev.notypie.domain.app
+package dev.notypie.domain.command
 
 enum class CommandType() {
     SIMPLE,
