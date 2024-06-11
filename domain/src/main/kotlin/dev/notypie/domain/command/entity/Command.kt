@@ -1,7 +1,7 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.CommandType
-import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.dto.CommandData
 import java.util.*
 
 class Command(
@@ -22,14 +22,11 @@ class Command(
 
     private fun generateIdValue(): UUID = UUID.randomUUID()
 
-    private fun parseSlackEventFromRequest(
-        headers: Map<String, List<String>>,
-        payload: Map<String, Any>
-    ) {
+    private fun buildContext(commandData: CommandData) {
 
     }
 
     private fun broadcastBotResponseToChannel() {
-
+        this.commandContext.responseBuilder
     }
 }

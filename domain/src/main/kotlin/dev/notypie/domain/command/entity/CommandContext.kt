@@ -8,6 +8,7 @@ class CommandContext(
 
     val tracking: Boolean = true,
 
-    val requestHeaders: SlackRequestHeaders
+    val requestHeaders: SlackRequestHeaders,
+    val responseBuilder: SlackResponseBuilder
 ) {
 }

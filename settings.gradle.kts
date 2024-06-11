@@ -3,3 +3,5 @@ plugins {
 }
 rootProject.name = "CodeCompanion"
 include("domain")
+include("infrastructure")
+include("application")
