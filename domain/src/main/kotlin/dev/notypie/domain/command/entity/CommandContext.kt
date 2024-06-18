@@ -5,11 +5,11 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 
 abstract class CommandContext(
     val channel: String,
-    val botToken: String,
+    val appToken: String,
     val tracking: Boolean = true,
 
     val requestHeaders: SlackRequestHeaders,
-    val responseBuilder: SlackResponseBuilder
+//    val responseBuilder: SlackResponseBuilder
 ) {
     val commandType: CommandType
 
@@ -19,7 +19,4 @@ abstract class CommandContext(
 
     abstract fun parseCommandType(): CommandType
 
-    private fun buildContext(){
-
-    }
 }

@@ -1,7 +1,9 @@
 package dev.notypie.domain.command.dto
 
+import java.util.concurrent.ConcurrentHashMap
+
 class SlackRequestHeaders(
-    private val underlying: Map<String, List<String>>
+    private val underlying: Map<String, List<String>> = ConcurrentHashMap()
 ) {
 
     init{
