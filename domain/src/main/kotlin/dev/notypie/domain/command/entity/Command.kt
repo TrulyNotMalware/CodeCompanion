@@ -3,6 +3,7 @@ package dev.notypie.domain.command.entity
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
+import dev.notypie.domain.command.dto.mention.AppMentionEventData
 import dev.notypie.domain.command.entity.context.SlackChallengeContext
 import dev.notypie.domain.command.entity.context.SlackAppMentionContext
 import java.util.*
@@ -37,14 +38,22 @@ class Command(
             SlackCommandType.EVENT_CALLBACK -> {
                 if(commandData.rawBody.containsKey("event") && commandData.rawBody["event"] is Map<*, *>){
                     val eventBody:Map<String, Any> = commandData.rawBody["event"] as Map<String, Any>
-                    return when(eventBody["type"]){
-//                        "app_mention" -> SlackAppMentionContext()
-                        else -> TODO()
-                    }
+                    return this.handleEventCallBackContext(
+                        commandType = enumValueOf<SlackCommandType>(eventBody["type"].toString()),
+                        eventBody = eventBody
+                    )
                 } else {
                     throw RuntimeException("NOT VALID REQUEST") //TODO fix this exception later.
                 }
             }
+            else -> TODO()
+        }
+    }
+
+    private fun handleEventCallBackContext( commandType: SlackCommandType, eventBody: Map<String, Any> ): CommandContext {
+
+        return when(commandType){
+//            SlackCommandType.APP_MENTION -> SlackAppMentionContext()
             else -> TODO()
         }
     }

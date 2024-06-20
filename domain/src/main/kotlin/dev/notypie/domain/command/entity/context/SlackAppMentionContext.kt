@@ -9,7 +9,7 @@ class SlackAppMentionContext(
 ): CommandContext(
     channel = slackCommandData.channel,
     appToken = slackCommandData.appToken,
-    requestHeaders = slackCommandData.rawHeader
+    requestHeaders = slackCommandData.rawHeader,
 ) {
 
     init{
