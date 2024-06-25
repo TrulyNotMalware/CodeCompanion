@@ -14,15 +14,16 @@ class Command(
 
     val publisherId: String,
     val commandData: SlackCommandData,
-    val commandContext: CommandContext
 ) {
     companion object{
         const val baseUrl: String = "https://slack.com/api/"
     }
     val commandId: UUID
+    val commandContext: CommandContext
 
     init {
         this.commandId = this.generateIdValue()
+        this.commandContext = this.buildContext(this.commandData)
     }
 
     private fun generateIdValue(): UUID = UUID.randomUUID()
@@ -36,26 +37,20 @@ class Command(
                     token = commandData.appToken)
             )
             SlackCommandType.EVENT_CALLBACK -> {
-                if(commandData.rawBody.containsKey("event") && commandData.rawBody["event"] is Map<*, *>){
-                    val eventBody:Map<String, Any> = commandData.rawBody["event"] as Map<String, Any>
-                    return this.handleEventCallBackContext(
-                        commandType = enumValueOf<SlackCommandType>(eventBody["type"].toString()),
-                        eventBody = eventBody
-                    )
-                } else {
-                    throw RuntimeException("NOT VALID REQUEST") //TODO fix this exception later.
-                }
+                return this.handleEventCallBackContext(
+                    commandData = commandData
+                )
             }
             else -> TODO()
         }
     }
 
-    private fun handleEventCallBackContext( commandType: SlackCommandType, eventBody: Map<String, Any> ): CommandContext {
+    private fun handleEventCallBackContext( commandData: SlackCommandData ): CommandContext {
 
-        return when(commandType){
+//        return when(commandType){
 //            SlackCommandType.APP_MENTION -> SlackAppMentionContext()
-            else -> TODO()
-        }
+//            else -> TODO()
+//        }
     }
 
     private fun broadcastBotResponseToChannel() {
