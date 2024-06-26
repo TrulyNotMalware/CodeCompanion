@@ -10,25 +10,25 @@ data class AppMentionEventData(
     val clientMessageId: String,
 
     @field:JsonProperty("type")
-    private val type: String,
+    val type: String,
 
     @field:JsonProperty("text")
-    private val rawText: String,
+    val rawText: String,
 
     @field:JsonProperty("user")
-    private val userId: String,
+    val userId: String,
 
-    private val ts: Double,
+    val ts: Double,
 
     @field:JsonProperty("blocks")
-    private val blocks: List<Block>,
+    val blocks: List<Block>,
 
     @field:JsonProperty("team")
-    private val team: String,
+    val team: String,
 
     @field:JsonProperty("channel")
-    private val channel: String,
+    val channel: String,
 
     @field:JsonProperty("event_ts")
-    private val eventTs: Double
+    val eventTs: Double
 )

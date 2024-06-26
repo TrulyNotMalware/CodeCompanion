@@ -1,9 +1,10 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.SlackCommandType
+import dev.notypie.domain.command.SlackRequestBuilder
+import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
-import dev.notypie.domain.command.dto.mention.AppMentionEventData
 import dev.notypie.domain.command.entity.context.SlackChallengeContext
 import dev.notypie.domain.command.entity.context.SlackAppMentionContext
 import java.util.*
@@ -14,17 +15,15 @@ class Command(
 
     val publisherId: String,
     val commandData: SlackCommandData,
+    val slackRequestHandler: SlackRequestHandler,
+    val slackResponseBuilder: SlackRequestBuilder,
 ) {
     companion object{
         const val baseUrl: String = "https://slack.com/api/"
     }
-    val commandId: UUID
-    val commandContext: CommandContext
 
-    init {
-        this.commandId = this.generateIdValue()
-        this.commandContext = this.buildContext(this.commandData)
-    }
+    private val commandId: UUID = this.generateIdValue()
+    private val commandContext: CommandContext = this.buildContext(this.commandData)
 
     private fun generateIdValue(): UUID = UUID.randomUUID()
 
@@ -34,7 +33,8 @@ class Command(
                 UrlVerificationRequest(type = commandData.slackCommandType.toString(),
                     channel = commandData.channel,
                     challenge = commandData.rawBody["challenge"].toString(),
-                    token = commandData.appToken)
+                    token = commandData.appToken
+                ), responseBuilder = this.slackResponseBuilder
             )
             SlackCommandType.EVENT_CALLBACK -> {
                 return this.handleEventCallBackContext(
@@ -46,14 +46,14 @@ class Command(
     }
 
     private fun handleEventCallBackContext( commandData: SlackCommandData ): CommandContext {
-
-//        return when(commandType){
-//            SlackCommandType.APP_MENTION -> SlackAppMentionContext()
-//            else -> TODO()
-//        }
+        return when(commandData.slackCommandType){
+            SlackCommandType.APP_MENTION -> SlackAppMentionContext(
+                slackCommandData = commandData, baseUrl = baseUrl, responseBuilder = this.slackResponseBuilder )
+            else -> TODO()
+        }
     }
 
-    private fun broadcastBotResponseToChannel() {
+    fun broadcastBotResponseToChannel() {
 //        this.commandContext.sendSlackResponse()
     }
 }
