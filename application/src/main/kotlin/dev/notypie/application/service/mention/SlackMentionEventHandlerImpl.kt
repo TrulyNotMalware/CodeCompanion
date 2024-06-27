@@ -46,7 +46,7 @@ class SlackMentionEventHandlerImpl(
 //            val slackCommandType = SlackCommandType.valueOf(eventSubType.uppercase())
 //            return this.objectMapper.convertValue(payload, slackCommandType.convertType.java)
 //        } else {
-//            throw RuntimeException("NOT VALID REQUEST") //TODO fix this exception later.
+//            throw RuntimeException("NOT VALID REQUEST")
 //        }
 //    }
 

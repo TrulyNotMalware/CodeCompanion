@@ -7,5 +7,6 @@ bootJar.enabled = false
 jar.enabled = true
 
 dependencies {
-
+    implementation(project(":domain"))
+    implementation("org.springframework:spring-web")
 }

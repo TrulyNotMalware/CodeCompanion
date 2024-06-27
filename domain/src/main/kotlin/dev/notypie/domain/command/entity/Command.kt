@@ -14,9 +14,9 @@ class Command(
     val appName: String,
 
     val publisherId: String,
-    val commandData: SlackCommandData,
-    val slackRequestHandler: SlackRequestHandler,
-    val slackResponseBuilder: SlackRequestBuilder,
+    private val commandData: SlackCommandData,
+    private val slackRequestHandler: SlackRequestHandler,
+    private val slackResponseBuilder: SlackRequestBuilder,
 ) {
     companion object{
         const val baseUrl: String = "https://slack.com/api/"
@@ -34,7 +34,7 @@ class Command(
                     channel = commandData.channel,
                     challenge = commandData.rawBody["challenge"].toString(),
                     token = commandData.appToken
-                ), responseBuilder = this.slackResponseBuilder
+                ), responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler
             )
             SlackCommandType.EVENT_CALLBACK -> {
                 return this.handleEventCallBackContext(
@@ -48,7 +48,8 @@ class Command(
     private fun handleEventCallBackContext( commandData: SlackCommandData ): CommandContext {
         return when(commandData.slackCommandType){
             SlackCommandType.APP_MENTION -> SlackAppMentionContext(
-                slackCommandData = commandData, baseUrl = baseUrl, responseBuilder = this.slackResponseBuilder )
+                slackCommandData = commandData, baseUrl = baseUrl,
+                responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler )
             else -> TODO()
         }
     }
