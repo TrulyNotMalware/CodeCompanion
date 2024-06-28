@@ -6,7 +6,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
 import dev.notypie.domain.command.dto.mention.SlackAppMentionRequest
 import dev.notypie.domain.command.entity.CommandContext
-import dev.notypie.domain.command.SlackRequestBuilder
+import dev.notypie.domain.command.SlackResponseBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import java.util.LinkedList
 import java.util.Queue
@@ -14,7 +14,7 @@ import java.util.Queue
 class SlackAppMentionContext(
     val slackCommandData: SlackCommandData,
     val baseUrl: String,
-    responseBuilder: SlackRequestBuilder,
+    responseBuilder: SlackResponseBuilder,
     requestHandler: SlackRequestHandler
 ): CommandContext(
     channel = slackCommandData.channel,

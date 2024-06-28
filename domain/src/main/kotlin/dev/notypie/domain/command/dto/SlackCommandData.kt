@@ -5,6 +5,7 @@ import dev.notypie.domain.command.SlackCommandType
 data class SlackCommandData(
     val appId: String,
     val appToken: String,
+    val publisherId: String,
     val channel: String,
 
     val slackCommandType: SlackCommandType,

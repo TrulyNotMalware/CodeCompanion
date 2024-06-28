@@ -2,6 +2,6 @@ package dev.notypie.domain.command
 
 import dev.notypie.domain.command.dto.SlackEventContents
 
-interface SlackRequestBuilder {
+interface SlackResponseBuilder {
     fun buildRequestBody(): SlackEventContents
 }

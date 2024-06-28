@@ -9,4 +9,7 @@ jar.enabled = true
 dependencies {
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
+
+    //Slack API
+    implementation("com.slack.api:bolt:${rootProject.extra.get("slackSdkVersion")}")
 }

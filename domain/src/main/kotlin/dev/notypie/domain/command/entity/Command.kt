@@ -1,7 +1,7 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackRequestBuilder
+import dev.notypie.domain.command.SlackResponseBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
@@ -10,13 +10,10 @@ import dev.notypie.domain.command.entity.context.SlackAppMentionContext
 import java.util.*
 
 class Command(
-    val appId: String,
     val appName: String,
-
-    val publisherId: String,
     private val commandData: SlackCommandData,
     private val slackRequestHandler: SlackRequestHandler,
-    private val slackResponseBuilder: SlackRequestBuilder,
+    private val slackResponseBuilder: SlackResponseBuilder,
 ) {
     companion object{
         const val baseUrl: String = "https://slack.com/api/"
@@ -54,7 +51,7 @@ class Command(
         }
     }
 
-    fun broadcastBotResponseToChannel() {
+    private fun broadcastBotResponseToChannel() {
 //        this.commandContext.sendSlackResponse()
     }
 }
