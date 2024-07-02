@@ -8,12 +8,13 @@ import dev.notypie.domain.command.dto.mention.SlackAppMentionRequest
 import dev.notypie.domain.command.entity.CommandContext
 import dev.notypie.domain.command.SlackResponseBuilder
 import dev.notypie.domain.command.SlackRequestHandler
-import java.util.LinkedList
-import java.util.Queue
+import java.util.*
 
 class SlackAppMentionContext(
     val slackCommandData: SlackCommandData,
     val baseUrl: String,
+    val commandId: UUID,
+
     responseBuilder: SlackResponseBuilder,
     requestHandler: SlackRequestHandler
 ): CommandContext(
@@ -47,12 +48,12 @@ class SlackAppMentionContext(
             ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
             ?.let { this.extractUserAndCommand(elements = it.elements) }
             ?.let { this.buildContext(it.first, it.second) }
-            ?: this.defaultCommandContext()
+            ?: this.handleNotSupportedCommand()
     }
 
-    private fun defaultCommandContext(): SlackTextResponseContext = SlackTextResponseContext(
+    private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
         channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
-        responseBuilder = this.responseBuilder, requestHandler = requestHandler
+        responseBuilder = this.responseBuilder, requestHandler = requestHandler, text = "Command Not supported."
     )
 
     private fun extractUserAndCommand(elements : List<Element>):

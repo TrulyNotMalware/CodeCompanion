@@ -26,7 +26,7 @@ class SlackMentionEventHandlerImpl(
         val slackCommandData = this.parseAppMentionEvent(headers = headers, payload = payload)
         val command = Command(appName = SLACK_APP_NAME, commandData = slackCommandData,
             slackRequestHandler = slackRequestHandler, slackResponseBuilder = slackResponseBuilder)
-
+        command.handleEvent()
     }
 
     override fun parseAppMentionEvent(

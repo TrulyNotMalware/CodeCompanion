@@ -7,6 +7,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
 import dev.notypie.domain.command.entity.context.SlackChallengeContext
 import dev.notypie.domain.command.entity.context.SlackAppMentionContext
+import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import java.util.*
 
 class Command(
@@ -22,6 +23,10 @@ class Command(
     private val commandId: UUID = this.generateIdValue()
     private val commandContext: CommandContext = this.buildContext(this.commandData)
 
+    fun handleEvent(){
+        val slackApiResponse = this.commandContext.runCommand()
+    }
+
     private fun generateIdValue(): UUID = UUID.randomUUID()
 
     private fun buildContext(commandData: SlackCommandData): CommandContext {
@@ -33,12 +38,8 @@ class Command(
                     token = commandData.appToken
                 ), responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler
             )
-            SlackCommandType.EVENT_CALLBACK -> {
-                return this.handleEventCallBackContext(
-                    commandData = commandData
-                )
-            }
-            else -> TODO()
+            SlackCommandType.EVENT_CALLBACK -> this.handleEventCallBackContext(commandData = commandData)
+            else -> this.handleNotSupportedCommand()
         }
     }
 
@@ -46,12 +47,13 @@ class Command(
         return when(commandData.slackCommandType){
             SlackCommandType.APP_MENTION -> SlackAppMentionContext(
                 slackCommandData = commandData, baseUrl = baseUrl,
-                responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler )
-            else -> TODO()
+                responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler, commandId = this.commandId )
+            else -> handleNotSupportedCommand()
         }
     }
 
-    private fun broadcastBotResponseToChannel() {
-//        this.commandContext.sendSlackResponse()
-    }
+    private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
+        channel = this.commandData.channel, appToken = this.commandData.appToken, requestHeaders = this.commandData.rawHeader,
+        responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler, text = "Command Not supported."
+    )
 }

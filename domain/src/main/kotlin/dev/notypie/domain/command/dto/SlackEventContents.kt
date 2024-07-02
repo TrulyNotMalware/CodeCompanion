@@ -9,4 +9,5 @@ open class SlackEventContents(
 
     //EventResponse type
     val type: String,
+    val data: Any
 )
