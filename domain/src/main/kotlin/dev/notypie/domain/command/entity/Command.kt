@@ -5,6 +5,7 @@ import dev.notypie.domain.command.SlackResponseBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
+import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.context.SlackChallengeContext
 import dev.notypie.domain.command.entity.context.SlackAppMentionContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
@@ -23,8 +24,8 @@ class Command(
     private val commandId: UUID = this.generateIdValue()
     private val commandContext: CommandContext = this.buildContext(this.commandData)
 
-    fun handleEvent(){
-        val slackApiResponse = this.commandContext.runCommand()
+    fun handleEvent(): SlackApiResponse{
+        return this.commandContext.runCommand()
     }
 
     private fun generateIdValue(): UUID = UUID.randomUUID()

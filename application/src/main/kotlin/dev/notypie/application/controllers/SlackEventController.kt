@@ -21,7 +21,7 @@ class SlackEventController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestBody payload: Map<String, Any>
     ): ResponseEntity<*> {
-        val slackCommandData = this.eventHandler.parseAppMentionEvent(headers = headers, payload = payload)
+        val slackCommandData = this.eventHandler.handleEvent(headers = headers, payload = payload)
         return ResponseEntity.ok().body(slackCommandData)
     }
 }

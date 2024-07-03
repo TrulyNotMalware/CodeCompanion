@@ -56,16 +56,16 @@ class SlackAppMentionContext(
         responseBuilder = this.responseBuilder, requestHandler = requestHandler, text = "Command Not supported."
     )
 
-    private fun extractUserAndCommand(elements : List<Element>):
+    private fun extractUserAndCommand(elements : List<Element>?):
             Pair<Queue<String>, Queue<String>> {
         val userQueue: Queue<String> = LinkedList()
         val commandQueue: Queue<String> = LinkedList()
 
         elements
-            .forEach { element ->
+            ?.forEach { element ->
                 when (element.type) {
                     ELEMENT_TYPE_USER -> if (element.userId != this.botId) userQueue.offer(element.userId)
-                    ELEMENT_TYPE_TEXT -> element.text.split(COMMAND_DELIMITER).forEach { commandQueue.offer(it) }
+                    ELEMENT_TYPE_TEXT -> element.text?.split(COMMAND_DELIMITER)?.forEach { commandQueue.offer(it) }
                 }
             }
         this.verifyCommandQueue(commandQueue = commandQueue)

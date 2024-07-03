@@ -7,6 +7,7 @@ import dev.notypie.domain.command.SlackResponseBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackAppMentionRequest
+import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.Command
 import org.springframework.stereotype.Service
 import org.springframework.util.MultiValueMap
@@ -22,11 +23,10 @@ class SlackMentionEventHandlerImpl(
         const val SLACK_APP_NAME = "helperDev"
     }
 
-    fun handleCommand(headers: MultiValueMap<String, String>, payload: Map<String, Any>) {
+    override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): SlackApiResponse {
         val slackCommandData = this.parseAppMentionEvent(headers = headers, payload = payload)
-        val command = Command(appName = SLACK_APP_NAME, commandData = slackCommandData,
-            slackRequestHandler = slackRequestHandler, slackResponseBuilder = slackResponseBuilder)
-        command.handleEvent()
+        val command = this.buildCommand(commandData = slackCommandData)
+        return command.handleEvent()
     }
 
     override fun parseAppMentionEvent(
@@ -41,12 +41,16 @@ class SlackMentionEventHandlerImpl(
         )
     }
 
+    private fun buildCommand(commandData: SlackCommandData) : Command = Command(appName = SLACK_APP_NAME, commandData = commandData,
+        slackRequestHandler = slackRequestHandler, slackResponseBuilder = slackResponseBuilder)
+
+    override fun handleEvent(slackCommandData: SlackCommandData): SlackApiResponse = this.buildCommand(commandData = slackCommandData).handleEvent()
+
     private fun resolveAppId(payload: Map<String, Any>): String{
         if(payload[SLACK_APPID_KEY_NAME] != null) return payload[SLACK_APPID_KEY_NAME].toString()
         else throw RuntimeException("COMMAND_TYPE_NOT_DETECTED")
     }
 
     private fun convertBodyData( payload : Map<String, Any> ) = this.objectMapper.convertValue(payload, SlackAppMentionRequest::class.java)
-
 
 }
