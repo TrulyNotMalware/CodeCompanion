@@ -1,7 +1,7 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackResponseBuilder
+import dev.notypie.domain.command.SlackRequestBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
@@ -15,7 +15,7 @@ class Command(
     val appName: String,
     private val commandData: SlackCommandData,
     private val slackRequestHandler: SlackRequestHandler,
-    private val slackResponseBuilder: SlackResponseBuilder,
+    private val slackResponseBuilder: SlackRequestBuilder,
 ) {
     companion object{
         const val baseUrl: String = "https://slack.com/api/"

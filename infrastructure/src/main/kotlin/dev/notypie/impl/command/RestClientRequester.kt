@@ -44,13 +44,12 @@ class RestClientRequester(
 
     private fun <T> performRequest( method: RestClient.RequestHeadersUriSpec<*>, uri: String,  authorizationHeader: String?, responseType: Class<T>): ResponseEntity<T> =
         method.uri(uri).apply {
-            if (!authorizationHeader.isNullOrBlank()) header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+            if (!authorizationHeader.isNullOrBlank()) header(HttpHeaders.AUTHORIZATION, "Bearer $authorizationHeader")
         }.run { returnEntity(spec = this, responseType = responseType) }
 
     private fun <T> performRequest( method: RestClient.RequestBodyUriSpec, uri: String,  authorizationHeader: String?, body:Any?, contentType: MediaType?, responseType: Class<T>): ResponseEntity<T> =
         method.uri(uri).apply{
-            if (!authorizationHeader.isNullOrBlank()) header(HttpHeaders.AUTHORIZATION, authorizationHeader)
-
+            if (!authorizationHeader.isNullOrBlank()) header(HttpHeaders.AUTHORIZATION, "Bearer $authorizationHeader")
             if( body != null ){
                 if( contentType != null ) contentType(contentType).body(body)
                 else body(body)

@@ -3,7 +3,7 @@ package dev.notypie.application.service.mention
 import com.fasterxml.jackson.databind.ObjectMapper
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackRequestHandler
-import dev.notypie.domain.command.SlackResponseBuilder
+import dev.notypie.domain.command.SlackRequestBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackAppMentionRequest
@@ -16,7 +16,7 @@ import org.springframework.util.MultiValueMap
 class SlackMentionEventHandlerImpl(
     private val objectMapper: ObjectMapper,
     private val slackRequestHandler: SlackRequestHandler,
-    private val slackResponseBuilder: SlackResponseBuilder
+    private val slackResponseBuilder: SlackRequestBuilder
 ): AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"

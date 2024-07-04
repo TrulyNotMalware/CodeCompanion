@@ -1,7 +1,7 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.CommandType
-import dev.notypie.domain.command.SlackResponseBuilder
+import dev.notypie.domain.command.SlackRequestBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.SlackApiResponse
@@ -12,7 +12,7 @@ abstract class CommandContext(
     val tracking: Boolean = true,
 
     val requestHeaders: SlackRequestHeaders,
-    val responseBuilder: SlackResponseBuilder,
+    val responseBuilder: SlackRequestBuilder,
     val requestHandler: SlackRequestHandler
 ) {
     val commandType: CommandType = this.parseCommandType()

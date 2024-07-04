@@ -3,7 +3,7 @@ package dev.notypie.domain.command.entity.context
 import dev.notypie.domain.command.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandContext
-import dev.notypie.domain.command.SlackResponseBuilder
+import dev.notypie.domain.command.SlackRequestBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackEventContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
@@ -15,7 +15,7 @@ class SlackNoticeContext(
 
     channel: String,
     appToken: String,
-    responseBuilder: SlackResponseBuilder,
+    responseBuilder: SlackRequestBuilder,
     requestHandler: SlackRequestHandler,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
 ): CommandContext(
