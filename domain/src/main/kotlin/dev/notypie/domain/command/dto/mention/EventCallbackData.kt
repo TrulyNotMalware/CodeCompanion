@@ -2,7 +2,7 @@ package dev.notypie.domain.command.dto.mention
 
 import com.fasterxml.jackson.annotation.JsonProperty
 
-data class AppMentionEventData(
+data class EventCallbackData(
     /**
      * Required scopes : app_mention:read
      */

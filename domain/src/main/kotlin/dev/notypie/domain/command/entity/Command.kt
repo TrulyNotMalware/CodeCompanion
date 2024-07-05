@@ -5,6 +5,8 @@ import dev.notypie.domain.command.SlackRequestBuilder
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
+import dev.notypie.domain.command.dto.mention.EventCallbackData
+import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.context.SlackChallengeContext
 import dev.notypie.domain.command.entity.context.SlackAppMentionContext
@@ -45,7 +47,9 @@ class Command(
     }
 
     private fun handleEventCallBackContext( commandData: SlackCommandData ): CommandContext {
-        return when(commandData.slackCommandType){
+        val eventCallBack = commandData.body as SlackEventCallBackRequest
+        val type = SlackCommandType.valueOf(eventCallBack.event.type.uppercase())
+        return when(type){
             SlackCommandType.APP_MENTION -> SlackAppMentionContext(
                 slackCommandData = commandData, baseUrl = baseUrl,
                 responseBuilder = this.slackResponseBuilder, requestHandler = slackRequestHandler, commandId = this.commandId )

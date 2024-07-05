@@ -4,7 +4,7 @@ import dev.notypie.domain.command.CommandSet
 import dev.notypie.domain.command.CommandType
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
-import dev.notypie.domain.command.dto.mention.SlackAppMentionRequest
+import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.CommandContext
 import dev.notypie.domain.command.SlackRequestBuilder
 import dev.notypie.domain.command.SlackRequestHandler
@@ -33,23 +33,22 @@ class SlackAppMentionContext(
 
         const val COMMAND_DELIMITER = " "
     }
-
-    private val slackAppMentionRequestData: SlackAppMentionRequest = slackCommandData.body as SlackAppMentionRequest
+    private val parsedContext: CommandContext = parseContextFromData()
+    private val slackAppMentionRequestData: SlackEventCallBackRequest = slackCommandData.body as SlackEventCallBackRequest
     private val botId: String = slackAppMentionRequestData.authorizations
         .find { it.isBot }?.userId ?: ""
-    private val parsedContext: CommandContext = this.parseContextFromData()
 
     override fun parseCommandType(): CommandType = this.parsedContext.commandType
     override fun runCommand() = this.parsedContext.runCommand()
 
-    private fun parseContextFromData(): CommandContext{
-        return this.slackAppMentionRequestData.event.blocks
+    private fun parseContextFromData(): CommandContext =
+        this.slackAppMentionRequestData.event.blocks
             .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
             ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
             ?.let { this.extractUserAndCommand(elements = it.elements) }
             ?.let { this.buildContext(it.first, it.second) }
             ?: this.handleNotSupportedCommand()
-    }
+
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
         channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,

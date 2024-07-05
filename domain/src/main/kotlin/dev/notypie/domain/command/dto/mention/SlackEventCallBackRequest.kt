@@ -2,7 +2,7 @@ package dev.notypie.domain.command.dto.mention
 
 import com.fasterxml.jackson.annotation.JsonProperty
 
-data class SlackAppMentionRequest(
+data class SlackEventCallBackRequest(
     val token: String,
 
     @field:JsonProperty("team_id")
@@ -11,7 +11,7 @@ data class SlackAppMentionRequest(
     @field:JsonProperty("api_app_id")
     val apiAppId: String,
 
-    val event: AppMentionEventData,
+    val event: EventCallbackData,
     val type: String,
 
     @field:JsonProperty("event_id")

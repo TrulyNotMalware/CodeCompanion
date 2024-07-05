@@ -1,7 +1,7 @@
 package dev.notypie.domain.command
 
 import dev.notypie.domain.command.dto.UrlVerificationRequest
-import dev.notypie.domain.command.dto.mention.SlackAppMentionRequest
+import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import kotlin.reflect.KClass
 
 enum class SlackCommandType(
@@ -10,5 +10,5 @@ enum class SlackCommandType(
     URL_VERIFICATION(UrlVerificationRequest::class),
     EVENT_CALLBACK(Nothing::class),
     //Subtype of event call back
-    APP_MENTION(SlackAppMentionRequest::class)
+    APP_MENTION(SlackEventCallBackRequest::class)
 }
