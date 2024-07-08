@@ -25,7 +25,9 @@ class SlackTextResponseContext(
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun runCommand(): SlackApiResponse {
-        val requestBody = this.responseBuilder.buildRequestBody(channel=this.channel, simpleString = this.text)
+        val requestBody = this.responseBuilder.buildSimpleTextRequestBody(
+            headLineText = "Simple Text Response",
+            channel=this.channel, simpleString = this.text)
         return this.requestHandler.sendToSlackServer(headers = this.requestHeaders, body = requestBody.data)
     }
 }

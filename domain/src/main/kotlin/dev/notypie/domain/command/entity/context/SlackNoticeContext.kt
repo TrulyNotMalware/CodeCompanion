@@ -29,7 +29,8 @@ class SlackNoticeContext(
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun runCommand(): SlackApiResponse {
-        val eventContents: SlackEventContents = this.responseBuilder.buildRequestBody(
+        val eventContents: SlackEventContents = this.responseBuilder.buildSimpleTextRequestBody(
+            headLineText = "[Notice!]",
             channel = this.channel, simpleString = this.createResponseText()
         )
         val slackApiResponse = this.requestHandler.sendToSlackServer(headers = this.requestHeaders, body = eventContents)

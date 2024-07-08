@@ -19,7 +19,9 @@ abstract class CommandContext(
 
     internal abstract fun parseCommandType(): CommandType
     internal open fun runCommand(): SlackApiResponse{
-        val requestBody = this.responseBuilder.buildRequestBody(channel=this.channel, simpleString = "This is default response.")
+        val requestBody = this.responseBuilder.buildSimpleTextRequestBody(
+            headLineText = "Hello Developer!",
+            channel=this.channel, simpleString = "This is default response.")
         return this.requestHandler.sendToSlackServer(headers = this.requestHeaders, body = requestBody)
     }
 }
