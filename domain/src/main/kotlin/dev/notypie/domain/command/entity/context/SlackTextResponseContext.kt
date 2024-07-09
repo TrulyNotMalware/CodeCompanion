@@ -3,7 +3,7 @@ package dev.notypie.domain.command.entity.context
 import dev.notypie.domain.command.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandContext
-import dev.notypie.domain.command.SlackRequestBuilder
+import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 
@@ -13,21 +13,18 @@ class SlackTextResponseContext(
     channel: String,
     appToken: String,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    responseBuilder: SlackRequestBuilder,
-    requestHandler: SlackRequestHandler
+    slackApiRequester: SlackApiRequester,
 ): CommandContext(
     channel = channel,
     appToken = appToken,
-    responseBuilder = responseBuilder,
+    slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    requestHandler = requestHandler
 ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun runCommand(): SlackApiResponse {
-        val requestBody = this.responseBuilder.buildSimpleTextRequestBody(
+        return this.slackApiRequester.simpleTextRequest(
             headLineText = "Simple Text Response",
             channel=this.channel, simpleString = this.text)
-        return this.requestHandler.sendToSlackServer(headers = this.requestHeaders, body = requestBody.data)
     }
 }

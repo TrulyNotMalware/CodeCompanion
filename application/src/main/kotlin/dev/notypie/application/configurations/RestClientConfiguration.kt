@@ -14,15 +14,6 @@ class RestClientConfiguration {
         const val SLACK_API_BASE_URL = "https://slack.com/api/"
     }
 
-    @Value("\${slack.api.token}")
-    lateinit var botToken: String
-
-
     @Bean
     fun restRequester(): RestRequester = RestClientRequester(baseUrl = SLACK_API_BASE_URL)
-
-    @Bean
-    fun slackRequestHandler(
-        restRequester: RestRequester
-    ): SlackRequestHandler = SlackRequestHandlerImpl(restRequester = restRequester, botToken = botToken)
 }

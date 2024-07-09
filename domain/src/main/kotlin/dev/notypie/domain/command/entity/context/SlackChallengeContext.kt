@@ -4,20 +4,18 @@ import dev.notypie.domain.command.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.UrlVerificationRequest
 import dev.notypie.domain.command.entity.CommandContext
-import dev.notypie.domain.command.SlackRequestBuilder
+import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.SlackRequestHandler
 
 class SlackChallengeContext(
     urlVerificationRequest: UrlVerificationRequest,
-    responseBuilder: SlackRequestBuilder,
-    requestHandler: SlackRequestHandler
+    slackApiRequester: SlackApiRequester,
 ): CommandContext(
     channel = urlVerificationRequest.channel,
     appToken = urlVerificationRequest.token,
     requestHeaders = SlackRequestHeaders(),
     tracking = false,
-    responseBuilder = responseBuilder,
-    requestHandler = requestHandler
+    slackApiRequester = slackApiRequester
 ) {
     /**
      * Slack Challenge request is simple type.

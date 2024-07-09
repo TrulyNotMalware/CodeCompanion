@@ -6,11 +6,13 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import org.springframework.http.MediaType
 
+@Deprecated(message = "")
 class SlackRequestHandlerImpl(
     private val restRequester: RestRequester,
     private val botToken: String,
 ) : SlackRequestHandler {
 
+    @Deprecated(message = "")
     override fun sendToSlackServer(headers: SlackRequestHeaders, body: Any): SlackApiResponse =
         this.restRequester.post(uri = Methods.CHAT_POST_MESSAGE,
             authorizationHeader = this.botToken,

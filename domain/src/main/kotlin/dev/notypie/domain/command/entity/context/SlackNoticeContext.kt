@@ -3,9 +3,7 @@ package dev.notypie.domain.command.entity.context
 import dev.notypie.domain.command.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandContext
-import dev.notypie.domain.command.SlackRequestBuilder
-import dev.notypie.domain.command.SlackRequestHandler
-import dev.notypie.domain.command.dto.SlackEventContents
+import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import java.util.*
 
@@ -15,26 +13,22 @@ class SlackNoticeContext(
 
     channel: String,
     appToken: String,
-    responseBuilder: SlackRequestBuilder,
-    requestHandler: SlackRequestHandler,
+    slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
 ): CommandContext(
     channel = channel,
     appToken = appToken,
-    responseBuilder = responseBuilder,
-    requestHandler = requestHandler,
+    slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
 ){
     private val responseText: String = this.commands.joinToString { "" }
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun runCommand(): SlackApiResponse {
-        val eventContents: SlackEventContents = this.responseBuilder.buildSimpleTextRequestBody(
-            headLineText = "[Notice!]",
+        return this.slackApiRequester.simpleTextRequest(
+            headLineText = "Notice!",
             channel = this.channel, simpleString = this.createResponseText()
         )
-        val slackApiResponse = this.requestHandler.sendToSlackServer(headers = this.requestHeaders, body = eventContents)
-        return slackApiResponse
     }
 
 

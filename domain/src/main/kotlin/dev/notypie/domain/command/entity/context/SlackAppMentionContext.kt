@@ -6,7 +6,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.CommandContext
-import dev.notypie.domain.command.SlackRequestBuilder
+import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.SlackRequestHandler
 import java.util.*
 
@@ -15,14 +15,12 @@ class SlackAppMentionContext(
     val baseUrl: String,
     val commandId: UUID,
 
-    responseBuilder: SlackRequestBuilder,
-    requestHandler: SlackRequestHandler
+    slackApiRequester: SlackApiRequester
 ): CommandContext(
     channel = slackCommandData.channel,
     appToken = slackCommandData.appToken,
     requestHeaders = slackCommandData.rawHeader,
-    responseBuilder = responseBuilder,
-    requestHandler = requestHandler
+    slackApiRequester = slackApiRequester
 ) {
     companion object{
         const val BLOCK_TYPE_RICH_TEXT = "rich_text"
@@ -33,26 +31,31 @@ class SlackAppMentionContext(
 
         const val COMMAND_DELIMITER = " "
     }
-    private val parsedContext: CommandContext = parseContextFromData()
-    private val slackAppMentionRequestData: SlackEventCallBackRequest = slackCommandData.body as SlackEventCallBackRequest
-    private val botId: String = slackAppMentionRequestData.authorizations
-        .find { it.isBot }?.userId ?: ""
+    private val slackAppMentionRequestData: SlackEventCallBackRequest
+    private val botId: String
+    private val parsedContext: CommandContext
 
-    override fun parseCommandType(): CommandType = this.parsedContext.commandType
+    init{
+        this.slackAppMentionRequestData = this.slackCommandData.body as SlackEventCallBackRequest
+        this.botId = slackAppMentionRequestData.authorizations.find { it.isBot }?.userId ?: ""
+        this.parsedContext = parseContextFromData()
+    }
+
+    override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun runCommand() = this.parsedContext.runCommand()
 
-    private fun parseContextFromData(): CommandContext =
-        this.slackAppMentionRequestData.event.blocks
-            .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
-            ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
-            ?.let { this.extractUserAndCommand(elements = it.elements) }
-            ?.let { this.buildContext(it.first, it.second) }
-            ?: this.handleNotSupportedCommand()
+    private fun parseContextFromData(): CommandContext = this.slackAppMentionRequestData.event.blocks
+        .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
+        ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
+        ?.let { this.extractUserAndCommand(elements = it.elements) }
+        ?.let { this.buildContext(it.first, it.second) }
+        ?: this.handleNotSupportedCommand()
+
 
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
         channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
-        responseBuilder = this.responseBuilder, requestHandler = requestHandler, text = "Command Not supported."
+        slackApiRequester = this.slackApiRequester, text = "Command Not supported."
     )
 
     private fun extractUserAndCommand(elements : List<Element>?):
@@ -64,7 +67,7 @@ class SlackAppMentionContext(
             ?.forEach { element ->
                 when (element.type) {
                     ELEMENT_TYPE_USER -> if (element.userId != this.botId) userQueue.offer(element.userId)
-                    ELEMENT_TYPE_TEXT -> element.text?.split(COMMAND_DELIMITER)?.forEach { commandQueue.offer(it) }
+                    ELEMENT_TYPE_TEXT -> element.text?.replace(" ","")?.split(COMMAND_DELIMITER)?.forEach { commandQueue.offer(it) }
                 }
             }
         this.verifyCommandQueue(commandQueue = commandQueue)
@@ -73,12 +76,12 @@ class SlackAppMentionContext(
 
     private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext{
         val command: String = commandQueue.poll().replace(" ", "")
-        return when(CommandSet.valueOf(command.uppercase())){
+        return when(CommandSet.valueOf(command.uppercase())){ //FIXME Command Not Found Exceptions.
             CommandSet.NOTICE ->
                 SlackNoticeContext(
                     users = userQueue, commands = commandQueue,
                     channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
-                    responseBuilder = this.responseBuilder, requestHandler = requestHandler)
+                    slackApiRequester = this.slackApiRequester)
         }
     }
 

@@ -7,9 +7,15 @@ import com.slack.api.model.block.composition.PlainTextObject
 
 class ModalSimpleObjectBuilder {
 
-    fun plainTextObject(text: String): PlainTextObject = plainText{ it.text(text) }
+    fun plainTextObject(text: String): PlainTextObject = plainText{
+        it.text(text)
+        it.emoji(true)
+    }
 
-    fun markdownTextObject(markdownText: String): MarkdownTextObject = markdownText { it.text(markdownText) }
+    fun markdownTextObject(markdownText: String): MarkdownTextObject = markdownText {
+        it.text(markdownText)
+        it.verbatim(true)
+    }
 
     //Reference from https://api.slack.com/reference/block-kit/composition-objects
     fun confirmationDialogObject( title: String, text: String, confirmText: String, denyText: String): ConfirmationDialogObject =

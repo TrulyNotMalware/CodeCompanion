@@ -1,7 +1,7 @@
 package dev.notypie.application.configurations
 
-import dev.notypie.domain.command.SlackRequestBuilder
-import dev.notypie.impl.command.SlackRequestBuilderImpl
+import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.impl.command.SlackApiClientImpl
 import dev.notypie.slack.ModalTemplateBuilder
 import dev.notypie.slack.SlackTemplateBuilder
 import org.springframework.beans.factory.annotation.Value
@@ -18,7 +18,7 @@ class SlackRequestBuilderConfiguration {
     fun slackTemplateBuilder() : SlackTemplateBuilder = ModalTemplateBuilder()
 
     @Bean
-    fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder): SlackRequestBuilder = SlackRequestBuilderImpl(
+    fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder): SlackApiRequester = SlackApiClientImpl(
         botToken = botToken, templateBuilder = slackTemplateBuilder
     )
 }
