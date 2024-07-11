@@ -7,6 +7,7 @@ import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackEventContents
+import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.slack.SlackTemplateBuilder
 
@@ -33,6 +34,16 @@ class SlackApiClientImpl(
             this.chatPostMessageBuilder(channel = channel,
                 blocks = this.templateBuilder.simpleTextResponseTemplate(headLineText = headLineText, body = simpleString, isMarkDown = true)
             )
+        )
+        return SlackApiResponse(ok = result.isOk, channel = channel)
+    }
+
+    fun simpleTimeScheduleRequest(headLineText: String, channel: String,  timeScheduleInfo: TimeScheduleInfo): SlackApiResponse{
+        val result: ChatPostMessageResponse = slack.methods(botToken).chatPostMessage(
+            this.chatPostMessageBuilder(channel = channel,
+                blocks = this.templateBuilder.simpleScheduleNoticeTemplate(
+                    headLineText = headLineText, timeScheduleInfo = timeScheduleInfo
+                ))
         )
         return SlackApiResponse(ok = result.isOk, channel = channel)
     }
