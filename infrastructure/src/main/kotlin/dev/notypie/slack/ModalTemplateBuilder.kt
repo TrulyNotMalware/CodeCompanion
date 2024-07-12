@@ -27,7 +27,7 @@ class ModalTemplateBuilder(
             this.modalBlockBuilder.timeScheduleBlock(timeScheduleInfo = timeScheduleInfo)
         )
 
-    fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents): List<LayoutBlock> =
+    override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents): List<LayoutBlock> =
         this.createLayouts(
             this.modalBlockBuilder.headerBlock(text = headLineText),
             this.modalBlockBuilder.dividerBlock(),
@@ -35,4 +35,16 @@ class ModalTemplateBuilder(
                 "reason= ${approvalContents.reason}", isMarkDown = true),
             this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         )
+
+    override fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): List<LayoutBlock> =
+        createLayouts(
+            modalBlockBuilder.headerBlock(text = headLineText),
+            modalBlockBuilder.dividerBlock(),
+            modalBlockBuilder.textBlock("type = exception", "reason = $errorMessage")
+        ) + (
+                if(!details.isNullOrBlank())
+                    listOf(modalBlockBuilder.simpleText(text = details, isMarkDown = false))
+                else
+                    listOf()
+                )
 }

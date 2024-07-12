@@ -38,7 +38,17 @@ class SlackApiClientImpl(
         return SlackApiResponse(ok = result.isOk, channel = channel)
     }
 
-    fun simpleTimeScheduleRequest(headLineText: String, channel: String,  timeScheduleInfo: TimeScheduleInfo): SlackApiResponse{
+    override fun errorTextRequest(errorClassName: String, channel: String, errorMessage: String, details: String?): SlackApiResponse{
+        val errorHeaderText = "Error : $errorClassName"
+        val result: ChatPostMessageResponse = slack.methods(this.botToken).chatPostMessage(
+            this.chatPostMessageBuilder(channel = channel,
+                blocks = this.templateBuilder.errorNoticeTemplate(
+                    headLineText = errorHeaderText, errorMessage = errorMessage, details = details))
+        )
+        return SlackApiResponse(ok = result.isOk, channel = channel)
+    }
+
+    override fun simpleTimeScheduleRequest(headLineText: String, channel: String,  timeScheduleInfo: TimeScheduleInfo): SlackApiResponse{
         val result: ChatPostMessageResponse = slack.methods(botToken).chatPostMessage(
             this.chatPostMessageBuilder(channel = channel,
                 blocks = this.templateBuilder.simpleScheduleNoticeTemplate(

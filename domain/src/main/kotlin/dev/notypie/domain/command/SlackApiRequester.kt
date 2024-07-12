@@ -1,6 +1,7 @@
 package dev.notypie.domain.command
 
 import dev.notypie.domain.command.dto.SlackEventContents
+import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 
 interface SlackApiRequester {
@@ -9,4 +10,6 @@ interface SlackApiRequester {
     fun buildSimpleTextRequestBody(headLineText: String, channel: String, simpleString: String): SlackEventContents
 
     fun simpleTextRequest(headLineText: String, channel: String, simpleString: String): SlackApiResponse
+    fun errorTextRequest(errorClassName: String, channel: String, errorMessage: String, details: String?): SlackApiResponse
+    fun simpleTimeScheduleRequest(headLineText: String, channel: String,  timeScheduleInfo: TimeScheduleInfo): SlackApiResponse
 }

@@ -11,7 +11,7 @@ import dev.notypie.domain.command.SlackRequestHandler
 import java.util.*
 
 class SlackAppMentionContext(
-    val slackCommandData: SlackCommandData,
+    private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,
 
@@ -62,12 +62,11 @@ class SlackAppMentionContext(
             Pair<Queue<String>, Queue<String>> {
         val userQueue: Queue<String> = LinkedList()
         val commandQueue: Queue<String> = LinkedList()
-
         elements
             ?.forEach { element ->
                 when (element.type) {
                     ELEMENT_TYPE_USER -> if (element.userId != this.botId) userQueue.offer(element.userId)
-                    ELEMENT_TYPE_TEXT -> element.text?.replace(" ","")?.split(COMMAND_DELIMITER)?.forEach { commandQueue.offer(it) }
+                    ELEMENT_TYPE_TEXT -> element.text?.split(COMMAND_DELIMITER)?.forEach { if(it.isNotBlank()) commandQueue.offer(it) }
                 }
             }
         this.verifyCommandQueue(commandQueue = commandQueue)
@@ -76,12 +75,16 @@ class SlackAppMentionContext(
 
     private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext{
         val command: String = commandQueue.poll().replace(" ", "")
-        return when(CommandSet.valueOf(command.uppercase())){ //FIXME Command Not Found Exceptions.
+        return when(CommandSet.parseCommand(command)){
             CommandSet.NOTICE ->
                 SlackNoticeContext(
                     users = userQueue, commands = commandQueue,
                     channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
                     slackApiRequester = this.slackApiRequester)
+            CommandSet.UNKNOWN -> SlackErrorAlertContext(
+                slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",
+                targetClassName = this::class.simpleName ?: "SlackAppMentionContext", details = null,
+                slackApiRequester = this.slackApiRequester)
         }
     }
 

@@ -21,7 +21,7 @@ class SlackNoticeContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
 ){
-    private val responseText: String = this.commands.joinToString { "" }
+    private val responseText: String = this.commands.joinToString { " " }
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun runCommand(): SlackApiResponse {
