@@ -33,11 +33,9 @@ class RestClientRequester(
 //    override fun <T> post(uri: String, authorizationHeader: String?, body:Any?, contentType: MediaType?, responseType: Class<T>): ResponseEntity<T> =
 //        this.performRequest(method = this.restClient.post(), uri = uri, authorizationHeader = authorizationHeader, body = body, contentType = contentType, responseType = responseType)
 
-    override fun <T> post(uri: String, authorizationHeader: String?, body:Any?, contentType: MediaType?, responseType: Class<T>): ResponseEntity<T> {
-        val res = this.performRequest(method = this.restClient.post(), uri = uri, authorizationHeader = authorizationHeader, body = body, contentType = contentType, responseType = Map::class.java)
-        println(res.body)
-        return this.performRequest(method = this.restClient.post(), uri = uri, authorizationHeader = authorizationHeader, body = body, contentType = contentType, responseType = responseType)
-    }
+    override fun <T> post(uri: String, authorizationHeader: String?, body:Any?, contentType: MediaType?, responseType: Class<T>): ResponseEntity<T> =
+        this.performRequest(method = this.restClient.post(), uri = uri, authorizationHeader = authorizationHeader, body = body, contentType = contentType, responseType = responseType)
+
 
     override fun <T> delete(uri: String, authorizationHeader: String?, responseType: Class<T>): ResponseEntity<T> =
         this.performRequest(method = this.restClient.delete(), uri = uri, authorizationHeader = authorizationHeader, responseType = responseType)
