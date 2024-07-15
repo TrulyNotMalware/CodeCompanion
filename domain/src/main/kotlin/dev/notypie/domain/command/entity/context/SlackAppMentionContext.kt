@@ -1,13 +1,12 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.CommandSet
-import dev.notypie.domain.command.CommandType
+import dev.notypie.domain.command.entity.CommandSet
+import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.CommandContext
 import dev.notypie.domain.command.SlackApiRequester
-import dev.notypie.domain.command.SlackRequestHandler
 import java.util.*
 
 class SlackAppMentionContext(
@@ -75,12 +74,15 @@ class SlackAppMentionContext(
 
     private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext{
         val command: String = commandQueue.poll().replace(" ", "")
-        return when(CommandSet.parseCommand(command)){
-            CommandSet.NOTICE ->
-                SlackNoticeContext(
+        return when(CommandSet.parseCommand(command)){ //FIXME Later when block
+            CommandSet.NOTICE -> SlackNoticeContext(
                     users = userQueue, commands = commandQueue,
                     channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
                     slackApiRequester = this.slackApiRequester)
+            CommandSet.APPROVAL -> SlackApprovalContext(
+                users = userQueue, commands = commandQueue,
+                channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
+                slackApiRequester = this.slackApiRequester)
             CommandSet.UNKNOWN -> SlackErrorAlertContext(
                 slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",
                 targetClassName = this::class.simpleName ?: "SlackAppMentionContext", details = null,

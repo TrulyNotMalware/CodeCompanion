@@ -2,7 +2,6 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackApiRequester
-import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
@@ -18,7 +17,7 @@ class Command(
     private val slackApiRequester: SlackApiRequester,
 ) {
     companion object{
-        const val baseUrl: String = "https://slack.com/api/"
+        const val BASE_URL: String = "https://slack.com/api/"
     }
 
     private val commandId: UUID = this.generateIdValue()
@@ -49,7 +48,7 @@ class Command(
         val type = SlackCommandType.valueOf(eventCallBack.event.type.uppercase())
         return when(type){
             SlackCommandType.APP_MENTION -> SlackAppMentionContext(
-                slackCommandData = commandData, baseUrl = baseUrl,
+                slackCommandData = commandData, baseUrl = BASE_URL,
                 slackApiRequester = this.slackApiRequester, commandId = this.commandId )
             else -> handleNotSupportedCommand()
         }

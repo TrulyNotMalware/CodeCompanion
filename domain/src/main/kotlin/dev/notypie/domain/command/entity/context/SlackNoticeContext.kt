@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.CommandType
+import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandContext
 import dev.notypie.domain.command.SlackApiRequester

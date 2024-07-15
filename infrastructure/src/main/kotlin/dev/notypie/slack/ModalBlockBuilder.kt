@@ -46,7 +46,7 @@ class ModalBlockBuilder(
     /**
      * Generates an `ActionsBlock` object representing a block with approval and reject buttons.
      *
-     * @param approvalContents The approval contents including button names, interaction values, and response URLs.
+     * @param approvalContents The approval contents including button names and interaction values.
      * @return An `ActionsBlock` object representing the approval block.
      */
     fun approvalBlock(approvalContents: ApprovalContents): ActionsBlock = actions {
@@ -55,12 +55,10 @@ class ModalBlockBuilder(
                 this.modalSimpleObjectBuilder.approvalButtonElement(
                     approvalButtonName = approvalContents.approvalButtonName,
                     interactionPayload = approvalContents.approvalInteractionValue,
-                    responseUrl = approvalContents.approvalResponseUrl
                 ),
                 this.modalSimpleObjectBuilder.rejectButtonElement(
                     rejectButtonName = approvalContents.rejectButtonName,
                     interactionPayload = approvalContents.rejectInteractionValue,
-                    responseUrl = approvalContents.rejectResponseUrl
                 )
             )
         )

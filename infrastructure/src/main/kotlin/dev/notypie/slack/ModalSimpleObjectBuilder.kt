@@ -22,19 +22,18 @@ class ModalSimpleObjectBuilder {
     fun imageBlockElement(imageUrl: String, altText: String): ImageElement =
         ImageElement.builder().imageUrl(imageUrl).altText(altText).build()
 
-    fun approvalButtonElement(approvalButtonName: String, interactionPayload: String, responseUrl: String): ButtonElement =
+    fun approvalButtonElement(approvalButtonName: String, interactionPayload: String): ButtonElement =
         this.buttonElement( buttonName = approvalButtonName, interactionPayload = interactionPayload,
-            responseUrl = responseUrl, style = ButtonType.PRIMARY)
+            style = ButtonType.PRIMARY)
 
-    fun rejectButtonElement(rejectButtonName: String, interactionPayload: String, responseUrl: String): ButtonElement =
+    fun rejectButtonElement(rejectButtonName: String, interactionPayload: String): ButtonElement =
         this.buttonElement( buttonName = rejectButtonName, interactionPayload = interactionPayload,
-            responseUrl = responseUrl, style = ButtonType.DANGER )
+            style = ButtonType.DANGER )
 
-    fun buttonElement(buttonName: String, interactionPayload: String, responseUrl: String, style: ButtonType = ButtonType.DEFAULT): ButtonElement =
+    fun buttonElement(buttonName: String, interactionPayload: String, style: ButtonType = ButtonType.DEFAULT): ButtonElement =
         ButtonElement.builder().apply {
             text(plainTextObject(text = buttonName))
             value(interactionPayload)
-            url(responseUrl)
             if(style != ButtonType.DEFAULT) style(style.toString().lowercase())
         }.build()
 

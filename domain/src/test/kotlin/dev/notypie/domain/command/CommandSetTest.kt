@@ -1,5 +1,6 @@
 package dev.notypie.domain.command
 
+import dev.notypie.domain.command.entity.CommandSet
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 

@@ -7,6 +7,7 @@ import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackEventContents
+import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.slack.SlackTemplateBuilder
@@ -54,6 +55,14 @@ class SlackApiClientImpl(
                 blocks = this.templateBuilder.simpleScheduleNoticeTemplate(
                     headLineText = headLineText, timeScheduleInfo = timeScheduleInfo
                 ))
+        )
+        return SlackApiResponse(ok = result.isOk, channel = channel)
+    }
+
+    override fun simpleApplyRejectRequest(headLineText: String, channel: String, approvalContents: ApprovalContents): SlackApiResponse{
+        val result: ChatPostMessageResponse = this.slack.methods(this.botToken).chatPostMessage(
+            this.chatPostMessageBuilder(channel = channel,
+                blocks = this.templateBuilder.approvalTemplate(headLineText = headLineText, approvalContents = approvalContents))
         )
         return SlackApiResponse(ok = result.isOk, channel = channel)
     }
