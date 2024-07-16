@@ -1,13 +1,21 @@
 package dev.notypie.slack
 
+import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*
-import com.slack.api.model.block.composition.ConfirmationDialogObject
-import com.slack.api.model.block.composition.MarkdownTextObject
-import com.slack.api.model.block.composition.PlainTextObject
 import com.slack.api.model.block.element.ButtonElement
 import com.slack.api.model.block.element.ImageElement
+import com.slack.api.model.block.element.MultiStaticSelectElement
+import com.slack.api.model.block.element.MultiUsersSelectElement
+import com.slack.api.model.block.element.PlainTextInputElement
+import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
+import dev.notypie.domain.command.dto.modals.SelectBoxDetails
+import dev.notypie.domain.command.dto.modals.TextInputContents
 
 class ModalSimpleObjectBuilder {
+
+    fun textObject(text: String, isMarkDown: Boolean): TextObject =
+        if(isMarkDown) this.plainTextObject(text = text)
+        else this.markdownTextObject(markdownText = text)
 
     fun plainTextObject(text: String): PlainTextObject = plainText{
         it.text(text)
@@ -37,8 +45,6 @@ class ModalSimpleObjectBuilder {
             if(style != ButtonType.DEFAULT) style(style.toString().lowercase())
         }.build()
 
-
-
     //Reference from https://api.slack.com/reference/block-kit/composition-objects
     fun confirmationDialogObject( title: String, text: String, confirmText: String, denyText: String): ConfirmationDialogObject =
         confirmationDialog {
@@ -47,4 +53,24 @@ class ModalSimpleObjectBuilder {
             it.confirm( this.plainTextObject(text = confirmText) )
             it.deny( this.plainTextObject(text = denyText) )
         }
+
+    fun selectionElement(placeholderText: String, contents: List<SelectBoxDetails>) =
+        MultiStaticSelectElement.builder()
+            .placeholder(this.plainTextObject(text = placeholderText))
+            .options(contents.map {
+                OptionObject.builder()
+                    .text(plainTextObject(it.name))
+                    .value(it.value.toString())
+                    .build()
+            })
+            .build()
+
+    fun multiUserSelectionElement(contents: MultiUserSelectContents) = MultiUsersSelectElement.builder()
+        .placeholder(this.plainTextObject(text = contents.placeholderText))
+        .build()
+
+    fun plainTextInputElement(contents: TextInputContents) = PlainTextInputElement.builder()
+        .placeholder(this.plainTextObject(text = contents.placeholderText))
+        .multiline(true)
+        .build()
 }

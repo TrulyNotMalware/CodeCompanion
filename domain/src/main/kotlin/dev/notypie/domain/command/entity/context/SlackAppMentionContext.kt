@@ -79,10 +79,14 @@ class SlackAppMentionContext(
                     users = userQueue, commands = commandQueue,
                     channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
                     slackApiRequester = this.slackApiRequester)
-            CommandSet.APPROVAL -> SlackApprovalContext(
-                users = userQueue, commands = commandQueue,
+//            CommandSet.APPROVAL -> SlackApprovalContext(
+//                users = userQueue, commands = commandQueue,
+//                channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
+//                slackApiRequester = this.slackApiRequester)
+            CommandSet.APPROVAL -> SlackApprovalFormContext(
                 channel = this.channel, appToken = this.appToken, requestHeaders = this.requestHeaders,
-                slackApiRequester = this.slackApiRequester)
+                slackApiRequester = this.slackApiRequester
+            )
             CommandSet.UNKNOWN -> SlackErrorAlertContext(
                 slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",
                 targetClassName = this::class.simpleName ?: "SlackAppMentionContext", details = null,

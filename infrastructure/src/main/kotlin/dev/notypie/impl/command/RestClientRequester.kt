@@ -7,7 +7,7 @@ import org.springframework.web.client.RestClient
 
 class RestClientRequester(
     val baseUrl: String = "",
-    val authorization: String? = null,
+    private val authorization: String? = null,
 ): RestRequester{
 
     companion object{
@@ -29,9 +29,6 @@ class RestClientRequester(
 
     override fun <T> get(uri: String, authorizationHeader: String?, responseType: Class<T>): ResponseEntity<T> =
         this.performRequest(method = this.restClient.get(), uri = uri, authorizationHeader = authorizationHeader, responseType = responseType)
-
-//    override fun <T> post(uri: String, authorizationHeader: String?, body:Any?, contentType: MediaType?, responseType: Class<T>): ResponseEntity<T> =
-//        this.performRequest(method = this.restClient.post(), uri = uri, authorizationHeader = authorizationHeader, body = body, contentType = contentType, responseType = responseType)
 
     override fun <T> post(uri: String, authorizationHeader: String?, body:Any?, contentType: MediaType?, responseType: Class<T>): ResponseEntity<T> =
         this.performRequest(method = this.restClient.post(), uri = uri, authorizationHeader = authorizationHeader, body = body, contentType = contentType, responseType = responseType)

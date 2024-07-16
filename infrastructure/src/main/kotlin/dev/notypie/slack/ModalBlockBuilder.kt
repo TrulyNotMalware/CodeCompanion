@@ -5,9 +5,7 @@ import com.slack.api.model.block.Blocks.*
 import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
 import com.slack.api.model.block.SectionBlock
-import com.slack.api.model.block.composition.TextObject
-import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
+import dev.notypie.domain.command.dto.modals.*
 
 class ModalBlockBuilder(
     private val modalSimpleObjectBuilder: ModalSimpleObjectBuilder = ModalSimpleObjectBuilder(),
@@ -97,5 +95,41 @@ class ModalBlockBuilder(
      * @return A `DividerBlock` object representing a horizontal divider.
      */
     fun dividerBlock(): DividerBlock = divider()
+
+    /**
+     * Creates a section block for a modal with a selection element.
+     *
+     * @param selectionContents The contents of the selection element.
+     * @return The created section block.
+     */
+    fun selectionBlock(selectionContents: SelectionContents): SectionBlock = section {
+        it.text(this.modalSimpleObjectBuilder.markdownTextObject( markdownText = "*${selectionContents.title}*\n${selectionContents.explanation}"))
+        it.accessory(this.modalSimpleObjectBuilder.selectionElement(
+            placeholderText = selectionContents.placeholderText, contents = selectionContents.contents)
+        )
+
+    }
+
+    /**
+     * Generates a section block with a multi-user selection element for a modal.
+     *
+     * @param contents The contents of the multi-user selection element.
+     * @return A `SectionBlock` object representing the section block with the multi-user selection element.
+     */
+    fun multiUserSelectBlock(contents: MultiUserSelectContents) = input {
+        it.label(this.modalSimpleObjectBuilder.plainTextObject(text = contents.title))
+        it.element(this.modalSimpleObjectBuilder.multiUserSelectionElement(contents = contents))
+    }
+
+    /**
+     * Generates a section block with a plain text input element.
+     *
+     * @param contents The contents of the plain text input element.
+     * @return The generated section block.
+     */
+    fun plainTextInputBlock(contents: TextInputContents) = input {
+        it.label(this.modalSimpleObjectBuilder.plainTextObject(text = contents.title))
+        it.element(this.modalSimpleObjectBuilder.plainTextInputElement(contents = contents))
+    }
 
 }

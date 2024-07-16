@@ -37,7 +37,7 @@ class SlackApprovalContext(
         val command = this.commands.poll()
         return ApprovalContents(
             type = "DEFAULT", reason = command,
-            approvalInteractionValue = "Approve?", rejectInteractionValue = "Reject?"
+            approvalInteractionValue = "Approved", rejectInteractionValue = "Rejected"
         )
     }
 }

@@ -8,6 +8,8 @@ import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackEventContents
 import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.dto.modals.SelectionContents
+import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.slack.SlackTemplateBuilder
@@ -36,7 +38,7 @@ class SlackApiClientImpl(
                 blocks = this.templateBuilder.simpleTextResponseTemplate(headLineText = headLineText, body = simpleString, isMarkDown = true)
             )
         )
-        return SlackApiResponse(ok = result.isOk, channel = channel)
+        return returnResponse(result = result)
     }
 
     override fun errorTextRequest(errorClassName: String, channel: String, errorMessage: String, details: String?): SlackApiResponse{
@@ -56,7 +58,7 @@ class SlackApiClientImpl(
                     headLineText = headLineText, timeScheduleInfo = timeScheduleInfo
                 ))
         )
-        return SlackApiResponse(ok = result.isOk, channel = channel)
+        return this.returnResponse(result = result)
     }
 
     override fun simpleApplyRejectRequest(headLineText: String, channel: String, approvalContents: ApprovalContents): SlackApiResponse{
@@ -64,10 +66,29 @@ class SlackApiClientImpl(
             this.chatPostMessageBuilder(channel = channel,
                 blocks = this.templateBuilder.approvalTemplate(headLineText = headLineText, approvalContents = approvalContents))
         )
-        return SlackApiResponse(ok = result.isOk, channel = channel)
+        return this.returnResponse(result = result)
+    }
+
+    override fun simpleApprovalFormRequest(headLineText: String, channel: String,
+                                  selectionFields: List<SelectionContents>, reasonInput: TextInputContents?): SlackApiResponse{
+        val result: ChatPostMessageResponse = this.slack.methods(this.botToken).chatPostMessage(
+            this.chatPostMessageBuilder(channel = channel,
+                blocks = this.templateBuilder.requestApprovalFormTemplate(
+                    headLineText = headLineText, selectionFields = selectionFields, reasonInput = reasonInput)
+            )
+        )
+        return this.returnResponse(result = result)
     }
 
     private fun chatPostMessageBuilder(channel: String, blocks: List<LayoutBlock>) =
         ChatPostMessageRequest.builder().channel(channel)
             .token(this.botToken).blocks(blocks).build()
+
+    private fun returnResponse(result: ChatPostMessageResponse): SlackApiResponse{
+        //Result is false.
+        if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
+                channel = result.channel, errorMessage = "Request ${result.isOk}", details = result.message.toString(),)
+
+        return SlackApiResponse(ok = result.isOk, channel = result.channel)
+    }
 }
