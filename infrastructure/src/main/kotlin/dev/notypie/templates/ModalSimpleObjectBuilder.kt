@@ -1,4 +1,4 @@
-package dev.notypie.slack
+package dev.notypie.templates
 
 import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*

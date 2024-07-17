@@ -3,6 +3,7 @@ package dev.notypie.domain.command.dto.response
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.notypie.domain.command.dto.mention.Block
 
+@Deprecated("for removal")
 data class SlackApiMessage(
     @field:JsonProperty("bot_id")
     val botId: String,

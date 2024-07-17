@@ -12,7 +12,7 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
-import dev.notypie.slack.SlackTemplateBuilder
+import dev.notypie.templates.SlackTemplateBuilder
 
 class SlackApiClientImpl(
     private val botToken: String,

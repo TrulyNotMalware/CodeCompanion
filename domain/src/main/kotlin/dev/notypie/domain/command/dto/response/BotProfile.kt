@@ -2,6 +2,7 @@ package dev.notypie.domain.command.dto.response
 
 import com.fasterxml.jackson.annotation.JsonProperty
 
+@Deprecated("for removal")
 data class BotProfile(
     val id: String,
 

@@ -1,4 +1,4 @@
-package dev.notypie.slack
+package dev.notypie.templates
 
 import com.slack.api.model.block.ActionsBlock
 import com.slack.api.model.block.Blocks.*

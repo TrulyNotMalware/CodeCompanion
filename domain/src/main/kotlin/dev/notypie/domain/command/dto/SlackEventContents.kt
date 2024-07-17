@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.dto
 
-open class SlackEventContents(
+data class SlackEventContents(
     val ok: Boolean,
     val warning: String? = null,
     val error: String? = null,

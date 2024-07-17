@@ -33,6 +33,8 @@ class SlackEventController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam payload: String
     ): ResponseEntity<*> {
+        //first we have to collect event history.
+        this.interactionHandler.handleInteractions(headers = headers, payload = payload)
         return ResponseEntity.ok().body("")
     }
 }

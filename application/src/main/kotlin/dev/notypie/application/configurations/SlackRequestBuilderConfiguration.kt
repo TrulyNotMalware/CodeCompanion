@@ -2,8 +2,8 @@ package dev.notypie.application.configurations
 
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.impl.command.SlackApiClientImpl
-import dev.notypie.slack.ModalTemplateBuilder
-import dev.notypie.slack.SlackTemplateBuilder
+import dev.notypie.templates.ModalTemplateBuilder
+import dev.notypie.templates.SlackTemplateBuilder
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
