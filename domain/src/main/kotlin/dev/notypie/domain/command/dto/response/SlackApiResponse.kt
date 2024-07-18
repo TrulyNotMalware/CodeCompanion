@@ -1,6 +1,14 @@
 package dev.notypie.domain.command.dto.response
 
+import dev.notypie.domain.command.dto.interactions.States
+
 data class SlackApiResponse(
     val ok: Boolean,
-    val channel: String?,
+    val apiAppId: String,
+
+    val publisherId: String,
+    val channel: String,
+    val token: String = "", //FIXME ChatPostRequest doesn't have any token?
+
+    val actions: List<States> = listOf()
 )

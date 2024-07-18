@@ -2,6 +2,7 @@ package dev.notypie.templates
 
 import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*
+import com.slack.api.model.block.element.BlockElement
 import com.slack.api.model.block.element.ButtonElement
 import com.slack.api.model.block.element.ImageElement
 import com.slack.api.model.block.element.MultiStaticSelectElement
@@ -10,8 +11,9 @@ import com.slack.api.model.block.element.PlainTextInputElement
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
+import dev.notypie.templates.dto.InteractiveObject
 
-class ModalSimpleObjectBuilder {
+class ModalSimpleObjectBuilder {//FIXME rename to "ModalElementBuilder"
 
     fun textObject(text: String, isMarkDown: Boolean): TextObject =
         if(isMarkDown) this.plainTextObject(text = text)
@@ -38,7 +40,7 @@ class ModalSimpleObjectBuilder {
         this.buttonElement( buttonName = rejectButtonName, interactionPayload = interactionPayload,
             style = ButtonType.DANGER )
 
-    fun buttonElement(buttonName: String, interactionPayload: String, style: ButtonType = ButtonType.DEFAULT): ButtonElement =
+    private fun buttonElement(buttonName: String, interactionPayload: String, style: ButtonType = ButtonType.DEFAULT): ButtonElement =
         ButtonElement.builder().apply {
             text(plainTextObject(text = buttonName))
             value(interactionPayload)
@@ -73,4 +75,8 @@ class ModalSimpleObjectBuilder {
         .placeholder(this.plainTextObject(text = contents.placeholderText))
         .multiline(true)
         .build()
+
+    //FIXME change for record history.
+//    private fun toInteractiveObject(element: BlockElement): InteractiveObject =
+//        InteractiveObject(state = , element = element)
 }

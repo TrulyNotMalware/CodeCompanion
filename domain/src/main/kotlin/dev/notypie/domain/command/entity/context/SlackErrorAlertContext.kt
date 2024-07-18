@@ -4,7 +4,6 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.SlackApiResponse
-import dev.notypie.domain.command.entity.CommandContext
 
 class SlackErrorAlertContext(
     private val slackCommandData: SlackCommandData,

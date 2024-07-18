@@ -5,7 +5,6 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
-import dev.notypie.domain.command.entity.CommandContext
 import dev.notypie.domain.command.entity.CommandType
 
 class SlackApprovalFormContext(

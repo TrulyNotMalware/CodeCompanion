@@ -5,7 +5,6 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
-import dev.notypie.domain.command.entity.CommandContext
 import java.util.*
 
 class SlackApprovalContext(

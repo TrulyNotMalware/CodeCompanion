@@ -48,7 +48,8 @@ class SlackApiClientImpl(
                 blocks = this.templateBuilder.errorNoticeTemplate(
                     headLineText = errorHeaderText, errorMessage = errorMessage, details = details))
         )
-        return SlackApiResponse(ok = result.isOk, channel = channel)
+//        return SlackApiResponse(ok = result.isOk, channel = channel)
+        return returnResponse(result = result)
     }
 
     override fun simpleTimeScheduleRequest(headLineText: String, channel: String,  timeScheduleInfo: TimeScheduleInfo): SlackApiResponse{
@@ -89,6 +90,7 @@ class SlackApiClientImpl(
         if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
                 channel = result.channel, errorMessage = "Request ${result.isOk}", details = result.message.toString(),)
 
-        return SlackApiResponse(ok = result.isOk, channel = result.channel)
+        return SlackApiResponse(ok = result.isOk, apiAppId = result.message.appId, publisherId = result.message.user,
+            channel = result.channel)
     }
 }
