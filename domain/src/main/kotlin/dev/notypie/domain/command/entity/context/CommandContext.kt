@@ -19,7 +19,8 @@ abstract class CommandContext(
     internal open fun runCommand(): SlackApiResponse{
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Hello Developer!",
-            channel=this.channel, simpleString = "This is default response."
+            channel = this.channel, simpleString = "This is default response.",
+            commandType = CommandType.SIMPLE
         )
     }
 }

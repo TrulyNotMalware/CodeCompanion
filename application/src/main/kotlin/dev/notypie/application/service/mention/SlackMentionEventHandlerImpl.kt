@@ -10,6 +10,8 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.history.entity.History
+import dev.notypie.domain.history.factory.HistoryFactory
 import org.springframework.stereotype.Service
 import org.springframework.util.MultiValueMap
 
@@ -22,12 +24,12 @@ class SlackMentionEventHandlerImpl(
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
         const val SLACK_APP_NAME = "helperDev"
+        const val REQUEST_TYPE = "APP_MENTION"
     }
 
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): SlackApiResponse {
         val slackCommandData = this.parseAppMentionEvent(headers = headers, payload = payload)
-        val command = this.buildCommand(commandData = slackCommandData)
-        return command.handleEvent()
+        return this.handleEvent(slackCommandData = slackCommandData)
     }
 
     override fun parseAppMentionEvent(
@@ -46,7 +48,13 @@ class SlackMentionEventHandlerImpl(
     private fun buildCommand(commandData: SlackCommandData) : Command = Command(appName = SLACK_APP_NAME, commandData = commandData,
         slackApiRequester = slackApiRequester)
 
-    override fun handleEvent(slackCommandData: SlackCommandData): SlackApiResponse = this.buildCommand(commandData = slackCommandData).handleEvent()
+    override fun handleEvent(slackCommandData: SlackCommandData): SlackApiResponse{
+        val command = this.buildCommand(commandData = slackCommandData)
+        val result: SlackApiResponse = command.handleEvent()
+        val history: History = HistoryFactory.buildHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
+        this.historyHandler.saveNewHistory(history = history)
+        return result
+    }
 
     private fun resolveAppId(payload: Map<String, Any>): String{
         if(payload[SLACK_APPID_KEY_NAME] != null) return payload[SLACK_APPID_KEY_NAME].toString()

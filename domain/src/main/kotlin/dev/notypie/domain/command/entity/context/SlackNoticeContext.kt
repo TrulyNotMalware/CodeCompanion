@@ -26,7 +26,8 @@ class SlackNoticeContext(
     override fun runCommand(): SlackApiResponse {
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Notice!",
-            channel = this.channel, simpleString = this.createResponseText()
+            channel = this.channel, simpleString = this.createResponseText(),
+            commandType = this.commandType
         )
     }
 

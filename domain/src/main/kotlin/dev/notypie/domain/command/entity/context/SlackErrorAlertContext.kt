@@ -23,6 +23,7 @@ class SlackErrorAlertContext(
     override fun runCommand(): SlackApiResponse =
         this.slackApiRequester.errorTextRequest(
             errorClassName = targetClassName, channel = this.channel,
-            errorMessage = errorMessage, details = details
+            errorMessage = errorMessage, details = details,
+            commandType = this.commandType
         )
 }

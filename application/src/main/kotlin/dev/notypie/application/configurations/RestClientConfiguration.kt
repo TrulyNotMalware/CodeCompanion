@@ -1,10 +1,7 @@
 package dev.notypie.application.configurations
 
-import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.RestRequester
-import dev.notypie.impl.command.SlackRequestHandlerImpl
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
