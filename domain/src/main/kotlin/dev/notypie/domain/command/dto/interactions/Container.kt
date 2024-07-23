@@ -1,10 +1,10 @@
 package dev.notypie.domain.command.dto.interactions
 
-import java.time.LocalDateTime
+import java.time.Instant
 
 data class Container(
     val type: String,
-    val messageTime: LocalDateTime,
+    val messageTime: Instant,
     val isEphemeral: Boolean,
     val isAppUnfurl: Boolean? = null,
     val appUnfurlUrl: String? = null,

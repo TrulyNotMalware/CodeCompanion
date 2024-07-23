@@ -2,6 +2,7 @@ package dev.notypie.domain.command.dto.interactions
 
 // Reference from Slack SDK - BlockActionPayload
 data class InteractionPayloads(
+    val type: String,
     val team: Team,
     val user: User,
     val triggerId: String,
@@ -15,4 +16,6 @@ data class InteractionPayloads(
     val channel: Channel,
 
     val responseUrl: String,
+    val states: List<States>,
+    val currentAction: States
 )
