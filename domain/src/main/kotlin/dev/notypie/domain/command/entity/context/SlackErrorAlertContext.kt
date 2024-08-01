@@ -11,12 +11,14 @@ class SlackErrorAlertContext(
     private val errorMessage: String,
     private val details: String?,
 
-    slackApiRequester: SlackApiRequester
+    slackApiRequester: SlackApiRequester,
+    idempotencyKey: String
 ) : CommandContext(
     channel = slackCommandData.channel,
     appToken = slackCommandData.appToken,
     requestHeaders = slackCommandData.rawHeader,
-    slackApiRequester = slackApiRequester
+    slackApiRequester = slackApiRequester,
+    idempotencyKey = idempotencyKey
 ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 

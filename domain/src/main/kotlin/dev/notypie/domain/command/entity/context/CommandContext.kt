@@ -10,6 +10,7 @@ abstract class CommandContext(
     val appToken: String,
     val tracking: Boolean = true,
 
+    val idempotencyKey: String,
     val requestHeaders: SlackRequestHeaders,
     val slackApiRequester: SlackApiRequester,
 ) {

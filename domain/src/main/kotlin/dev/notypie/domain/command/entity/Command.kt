@@ -16,6 +16,7 @@ import java.util.*
 //Aggregate Root
 class Command(
     val appName: String,
+    private val idempotencyKey: String,
     private val commandData: SlackCommandData,
     private val slackApiRequester: SlackApiRequester,
 ) {
@@ -28,7 +29,7 @@ class Command(
     private val commandContext: CommandContext
     init {
         this.commandParser = this.buildParser(this.commandData)
-        this.commandContext = this.commandParser.parseContext()
+        this.commandContext = this.commandParser.parseContext(idempotencyKey = this.idempotencyKey)
     }
 
     fun handleEvent(): SlackApiResponse = this.commandContext.runCommand()
@@ -43,6 +44,7 @@ class Command(
                     challenge = commandData.rawBody["challenge"].toString(),
                     token = commandData.appToken
                 ), slackApiRequester = this.slackApiRequester, requestHeaders = this.commandData.rawHeader
+                , idempotencyKey = this.idempotencyKey
             )
             SlackCommandType.EVENT_CALLBACK -> this.handleEventCallBackContext(commandData = commandData)
             else -> TODO()
@@ -55,13 +57,13 @@ class Command(
         return when(type){
             SlackCommandType.APP_MENTION -> AppMentionCommandParser(
                 slackCommandData = commandData, baseUrl = BASE_URL,
-                slackApiRequester = this.slackApiRequester, commandId = this.commandId )
+                slackApiRequester = this.slackApiRequester, commandId = this.commandId , idempotencyKey = this.idempotencyKey)
             else -> TODO()
         }
     }
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
         channel = this.commandData.channel, appToken = this.commandData.appToken, requestHeaders = this.commandData.rawHeader,
-        slackApiRequester = this.slackApiRequester, text = "Command Not supported."
+        slackApiRequester = this.slackApiRequester, text = "Command Not supported.", idempotencyKey = this.idempotencyKey
     )
 }

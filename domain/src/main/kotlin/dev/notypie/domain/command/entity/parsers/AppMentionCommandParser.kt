@@ -16,7 +16,7 @@ class AppMentionCommandParser(
     private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,
-
+    val idempotencyKey: String,
     private val slackApiRequester: SlackApiRequester
 ): ContextParser {
     companion object{
@@ -35,10 +35,10 @@ class AppMentionCommandParser(
     init{
         this.slackAppMentionRequestData = this.slackCommandData.body as SlackEventCallBackRequest
         this.botId = slackAppMentionRequestData.authorizations.find { it.isBot }?.userId ?: ""
-        this.parsedContext = this.parseContext()
+        this.parsedContext = this.parseContext(idempotencyKey = idempotencyKey)
     }
 
-    override fun parseContext(): CommandContext = this.slackAppMentionRequestData.event.blocks
+    override fun parseContext(idempotencyKey: String): CommandContext = this.slackAppMentionRequestData.event.blocks
         .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
         ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
         ?.let { this.extractUserAndCommand(elements = it.elements) }
@@ -47,7 +47,7 @@ class AppMentionCommandParser(
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
         channel = this.slackCommandData.channel, appToken = this.slackCommandData.appToken, requestHeaders = this.slackCommandData.rawHeader,
-        slackApiRequester = this.slackApiRequester, text = "Command Not supported."
+        slackApiRequester = this.slackApiRequester, text = "Command Not supported.", idempotencyKey = this.idempotencyKey
     )
 
     private fun extractUserAndCommand(elements : List<Element>?):
@@ -71,16 +71,16 @@ class AppMentionCommandParser(
             CommandSet.NOTICE -> SlackNoticeContext(
                     users = userQueue, commands = commandQueue,
                     channel = this.slackCommandData.channel, appToken = this.slackCommandData.appToken,
-                requestHeaders = this.slackCommandData.rawHeader, slackApiRequester = this.slackApiRequester)
+                requestHeaders = this.slackCommandData.rawHeader, slackApiRequester = this.slackApiRequester, idempotencyKey = this.idempotencyKey)
             CommandSet.APPROVAL -> SlackApprovalFormContext(
                 channel = this.slackCommandData.channel, appToken = this.slackCommandData.appToken,
                 requestHeaders = this.slackCommandData.rawHeader,
-                slackApiRequester = this.slackApiRequester
+                slackApiRequester = this.slackApiRequester, idempotencyKey = this.idempotencyKey
             )
             CommandSet.UNKNOWN -> SlackErrorAlertContext(
                 slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",
                 targetClassName = this::class.simpleName ?: "SlackAppMentionContext", details = null,
-                slackApiRequester = this.slackApiRequester)
+                slackApiRequester = this.slackApiRequester, idempotencyKey = this.idempotencyKey)
         }
     }
 

@@ -4,6 +4,7 @@ import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.repository.HistoryRepository
 import org.springframework.stereotype.Service
+import java.util.*
 
 @Service
 class HistoryHandlerImpl(
@@ -17,4 +18,7 @@ class HistoryHandlerImpl(
     override fun saveNewHistory(history: History) {
         this.historyRepository.insertNewHistory(history = history)
     }
+
+    override fun getHistory(id: UUID): History =
+        this.historyRepository.getHistoryById(id = id)
 }

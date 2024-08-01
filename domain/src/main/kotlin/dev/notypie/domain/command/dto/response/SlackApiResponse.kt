@@ -7,6 +7,7 @@ data class SlackApiResponse(
     val ok: Boolean,
     val apiAppId: String,
 
+    val idempotencyKey: String,
     val publisherId: String,
     val channel: String,
     val token: String = "", //FIXME ChatPostRequest doesn't have any token?

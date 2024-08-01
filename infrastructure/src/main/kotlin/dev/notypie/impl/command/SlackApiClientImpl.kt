@@ -68,6 +68,7 @@ class SlackApiClientImpl(
                 channel = result.channel, errorMessage = "Request ${result.isOk}", details = result.message.toString(), commandType = CommandType.SIMPLE)
 
         return SlackApiResponse(ok = result.isOk, apiAppId = result.message.appId, publisherId = result.message.user,
-            channel = result.channel, actionStates = states, commandType = commandType)
+            channel = result.channel, actionStates = states, commandType = commandType, idempotencyKey = ""//FIXME idempotencyKey refactoring
+        )
     }
 }

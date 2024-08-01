@@ -11,6 +11,7 @@ class History(
     private val channel: String,
     private val ok: Boolean,
     private val token: String,
+    val idempotencyKey: String,
 
     private val apiAppId: String,
     private val type: String, // RequestType.

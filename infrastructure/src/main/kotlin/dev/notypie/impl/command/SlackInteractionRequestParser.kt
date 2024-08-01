@@ -10,12 +10,12 @@ import java.time.Instant
 class SlackInteractionRequestParser
 : InteractionPayloadParser {
     
-    override fun parseStringContents(payload: String): InteractionPayloads {
+    override fun parseStringContents(payload: String): InteractionPayload {
         val blockActionPayload = GsonFactory.createSnakeCase().fromJson(payload, BlockActionPayload::class.java)
         return this.toInteractionPayloads(blockActionPayload = blockActionPayload)
     }
 
-    private fun toInteractionPayloads(blockActionPayload: BlockActionPayload): InteractionPayloads{
+    private fun toInteractionPayloads(blockActionPayload: BlockActionPayload): InteractionPayload{
         val channel = Channel(id = blockActionPayload.channel.id, name = blockActionPayload.channel.name)
         val unixTimeStamp = blockActionPayload.container.messageTs
         val timestampDouble = unixTimeStamp.toDouble()
@@ -27,7 +27,7 @@ class SlackInteractionRequestParser
         val nanos = ((timestampDouble - seconds) * 1_000_000_000).toInt()
         val messageTime: Instant = Instant.ofEpochSecond(seconds, nanos.toLong())
         val container = Container(isEphemeral = blockActionPayload.container.isEphemeral, messageTime = messageTime, type = blockActionPayload.container.type)
-        return InteractionPayloads(type = blockActionPayload.type, apiAppId = blockActionPayload.apiAppId, channel = channel,
+        return InteractionPayload(type = blockActionPayload.type, apiAppId = blockActionPayload.apiAppId, channel = channel,
             container = container, responseUrl = blockActionPayload.responseUrl, token = blockActionPayload.token, triggerId = blockActionPayload.triggerId,
             isEnterprise = blockActionPayload.isEnterpriseInstall, team = team, user = user,
             states = this.parseStates(blockActionPayload.state),

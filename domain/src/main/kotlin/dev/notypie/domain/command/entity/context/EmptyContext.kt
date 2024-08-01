@@ -8,12 +8,14 @@ class EmptyContext(
     channel: String,
     appToken: String,
     requestHeaders: SlackRequestHeaders,
-    slackApiRequester: SlackApiRequester
+    slackApiRequester: SlackApiRequester,
+    idempotencyKey: String
 ): CommandContext(
     channel = channel,
     appToken = appToken,
     requestHeaders = requestHeaders,
-    slackApiRequester = slackApiRequester
+    slackApiRequester = slackApiRequester,
+    idempotencyKey = idempotencyKey
 ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 }

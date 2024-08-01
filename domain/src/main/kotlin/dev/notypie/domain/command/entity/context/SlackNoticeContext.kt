@@ -14,11 +14,13 @@ class SlackNoticeContext(
     appToken: String,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
+    idempotencyKey: String
 ): CommandContext(
     channel = channel,
     appToken = appToken,
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
+    idempotencyKey = idempotencyKey
 ){
     private val responseText: String = this.commands.joinToString { " " }
     override fun parseCommandType(): CommandType = CommandType.SIMPLE

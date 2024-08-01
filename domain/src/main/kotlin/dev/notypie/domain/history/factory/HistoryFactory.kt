@@ -10,7 +10,7 @@ class HistoryFactory private constructor(){
                 apiAppId = slackApiResponse.apiAppId, channel = slackApiResponse.channel,
                 commandType = slackApiResponse.commandType, ok = slackApiResponse.ok,
                 token = slackApiResponse.token, states = slackApiResponse.actionStates,
-                type = requestType, publisherId = slackApiResponse.publisherId
+                type = requestType, publisherId = slackApiResponse.publisherId, idempotencyKey = slackApiResponse.idempotencyKey
             )
     }
 }

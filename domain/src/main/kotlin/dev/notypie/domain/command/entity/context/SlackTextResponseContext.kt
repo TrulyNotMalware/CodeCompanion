@@ -12,11 +12,13 @@ class SlackTextResponseContext(
     appToken: String,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     slackApiRequester: SlackApiRequester,
+    idempotencyKey: String
 ): CommandContext(
     channel = channel,
     appToken = appToken,
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
+    idempotencyKey = idempotencyKey
 ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 

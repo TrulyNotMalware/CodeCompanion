@@ -6,4 +6,6 @@ import java.util.UUID
 interface HistoryRepository {
     fun insertNewHistory(history: History): History
     fun getHistoryById(id: UUID): History
+
+    fun getHistoryByIdempotencyKey(idempotencyKey: String): List<History>
 }

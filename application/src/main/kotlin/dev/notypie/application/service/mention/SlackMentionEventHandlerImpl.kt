@@ -1,9 +1,9 @@
 package dev.notypie.application.service.mention
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.history.HistoryHandler
 import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackRequestHandler
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
@@ -45,11 +45,13 @@ class SlackMentionEventHandlerImpl(
         )
     }
 
-    private fun buildCommand(commandData: SlackCommandData) : Command = Command(appName = SLACK_APP_NAME, commandData = commandData,
-        slackApiRequester = slackApiRequester)
+    private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData) : Command =
+        Command(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
+            commandData = commandData, slackApiRequester = slackApiRequester)
 
     override fun handleEvent(slackCommandData: SlackCommandData): SlackApiResponse{
-        val command = this.buildCommand(commandData = slackCommandData)
+        val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
+        val command = this.buildCommand(idempotencyKey = idempotencyKey,commandData = slackCommandData)
         val result: SlackApiResponse = command.handleEvent()
         val history: History = HistoryFactory.buildHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
         this.historyHandler.saveNewHistory(history = history)

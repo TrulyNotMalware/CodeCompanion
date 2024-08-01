@@ -12,11 +12,13 @@ class SlackApprovalFormContext(
     appToken: String,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
+    idempotencyKey: String
 ): CommandContext(
     channel = channel,
     appToken = appToken,
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
+    idempotencyKey = idempotencyKey
 ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun runCommand(): SlackApiResponse =
