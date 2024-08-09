@@ -26,6 +26,7 @@ class SlackErrorAlertContext(
         this.slackApiRequester.errorTextRequest(
             errorClassName = targetClassName, channel = this.channel,
             errorMessage = errorMessage, details = details,
-            commandType = this.commandType
+            commandType = this.commandType,
+            idempotencyKey = this.idempotencyKey
         )
 }

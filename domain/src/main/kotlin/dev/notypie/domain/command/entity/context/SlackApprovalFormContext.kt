@@ -24,7 +24,8 @@ class SlackApprovalFormContext(
     override fun runCommand(): SlackApiResponse =
         this.slackApiRequester.simpleApprovalFormRequest(
             headLineText = "Approve Form", channel = this.channel,
-            selectionFields = this.buildSelectionFields(), commandType = this.commandType
+            selectionFields = this.buildSelectionFields(), commandType = this.commandType,
+            idempotencyKey = this.idempotencyKey
         )
 
     //FIXME Test for interaction commands.

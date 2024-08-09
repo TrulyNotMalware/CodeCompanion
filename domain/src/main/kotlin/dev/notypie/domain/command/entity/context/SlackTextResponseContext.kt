@@ -26,6 +26,7 @@ class SlackTextResponseContext(
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Simple Text Response",
             channel=this.channel, simpleString = this.text,
-            commandType = this.commandType)
+            commandType = this.commandType, idempotencyKey = this.idempotencyKey
+        )
     }
 }

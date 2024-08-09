@@ -21,7 +21,8 @@ abstract class CommandContext(
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Hello Developer!",
             channel = this.channel, simpleString = "This is default response.",
-            commandType = CommandType.SIMPLE
+            commandType = CommandType.SIMPLE,
+            idempotencyKey = this.idempotencyKey
         )
     }
 }

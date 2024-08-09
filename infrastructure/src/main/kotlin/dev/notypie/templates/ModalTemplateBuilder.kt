@@ -64,7 +64,6 @@ class ModalTemplateBuilder(
         approvalTargetUser: MultiUserSelectContents?, reasonInput: TextInputContents?,
         approvalContents: ApprovalContents?): LayoutBlocks
     {
-
         val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
             ApprovalContents(type = "", reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
             approvalInteractionValue = "request_apply", rejectInteractionValue = "request_cancel"))

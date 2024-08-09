@@ -1,6 +1,5 @@
 package dev.notypie.templates
 
-import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.templates.dto.LayoutBlocks
 

@@ -29,7 +29,8 @@ class SlackNoticeContext(
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Notice!",
             channel = this.channel, simpleString = this.createResponseText(),
-            commandType = this.commandType
+            commandType = this.commandType,
+            idempotencyKey = this.idempotencyKey
         )
     }
 

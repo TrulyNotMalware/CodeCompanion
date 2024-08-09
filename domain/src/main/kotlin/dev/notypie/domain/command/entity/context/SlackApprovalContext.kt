@@ -32,7 +32,8 @@ class SlackApprovalContext(
     override fun runCommand(): SlackApiResponse
         = this.slackApiRequester.simpleApplyRejectRequest(
             headLineText = "Approval Requests!", channel = this.channel, approvalContents = this.approvalContents,
-            commandType = this.commandType)
+            commandType = this.commandType, idempotencyKey = this.idempotencyKey
+        )
 
 
     private fun buildContents(): ApprovalContents{//FIXME Changed to receive input from Modal. 7.15 test for approval button.
