@@ -16,8 +16,8 @@ class InMemoryHistoryRepository(
 
     override fun getHistoryById(id: UUID): History = this.inMemoryDatabase[id] ?: throw RuntimeException("not exists")
 
-    override fun getHistoryByIdempotencyKey(idempotencyKey: String): List<History> =
+    override fun getHistoryByIdempotencyKey(idempotencyKey: String): History =
         this.inMemoryDatabase.values.filter { it.idempotencyKey == idempotencyKey }
-            .toList()
+            .first()
 
 }

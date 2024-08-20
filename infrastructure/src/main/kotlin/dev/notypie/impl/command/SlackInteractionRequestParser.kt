@@ -31,7 +31,9 @@ class SlackInteractionRequestParser
             container = container, responseUrl = blockActionPayload.responseUrl, token = blockActionPayload.token, triggerId = blockActionPayload.triggerId,
             isEnterprise = blockActionPayload.isEnterpriseInstall, team = team, user = user,
             states = this.parseStates(blockActionPayload.state),
-            currentAction = this.parseCurrentAction(blockActionPayload.actions))
+            currentAction = this.parseCurrentAction(blockActionPayload.actions),
+            botId = blockActionPayload.message.botId,
+            idempotencyKey = blockActionPayload.message.text)
     }
 
     private fun parseStates(viewState: ViewState): List<States>{

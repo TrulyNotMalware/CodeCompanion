@@ -78,14 +78,14 @@ class ModalTemplateBuilder(
             this.modalBlockBuilder.dividerBlock(),
         ).apply {
             addAll(selectionLayouts.map { it.layout })
-            userSelectLayout.layout
-            reasonInput?.let { modalBlockBuilder.plainTextInputBlock(contents = reasonInput) }
-            approvalLayout.layout
+            add(userSelectLayout.layout)
+            reasonInput?.let { add(modalBlockBuilder.plainTextInputBlock(contents = reasonInput)) }
+            add(approvalLayout.layout)
         }
 
         val states = mutableListOf<States>().apply {
             addAll(userSelectLayout.interactiveObjects)
-            selectionLayouts.map { it.interactiveObjects }
+            addAll(selectionLayouts.flatMap { it.interactiveObjects })
             addAll(approvalLayout.interactiveObjects)
         }
 

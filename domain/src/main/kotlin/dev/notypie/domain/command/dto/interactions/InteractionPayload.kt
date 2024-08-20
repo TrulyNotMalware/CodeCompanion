@@ -8,9 +8,11 @@ data class InteractionPayload(
     val triggerId: String,
     val isEnterprise: Boolean,
     val enterprise: Enterprise? = null,
+    val idempotencyKey: String,
 
     //Application information
     val apiAppId: String,
+    val botId: String,
     val token: String,
     val container: Container,
     val channel: Channel,

@@ -21,7 +21,7 @@ class ModalElementBuilder {
         if(isMarkDown) this.plainTextObject(text = text)
         else this.markdownTextObject(markdownText = text)
 
-    fun plainTextObject(text: String): PlainTextObject = plainText{
+    fun plainTextObject(text: String): PlainTextObject = plainText {
         it.text(text)
         it.emoji(true)
     }

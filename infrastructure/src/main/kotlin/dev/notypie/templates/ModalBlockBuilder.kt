@@ -57,7 +57,7 @@ class ModalBlockBuilder(
             interactionPayload = approvalContents.approvalInteractionValue)
         val rejectButton: InteractiveObject = this.modalElementBuilder.rejectButtonElement(
             rejectButtonName = approvalContents.rejectButtonName,
-            interactionPayload = approvalContents.rejectInteractionValue,)
+            interactionPayload = approvalContents.rejectInteractionValue)
 
         val layout = actions {
             it.elements(
@@ -126,7 +126,7 @@ class ModalBlockBuilder(
      * @param contents The contents of the multi-user selection element.
      * @return A `SectionBlock` object representing the section block with the multi-user selection element.
      */
-    fun multiUserSelectBlock(contents: MultiUserSelectContents): InteractionLayoutBlock{
+    fun multiUserSelectBlock(contents: MultiUserSelectContents): InteractionLayoutBlock {
         val multiUserSelection = this.modalElementBuilder.multiUserSelectionElement(contents = contents)
         val layout = input {
             it.label(this.modalElementBuilder.plainTextObject(text = contents.title))
