@@ -6,7 +6,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import java.util.*
 
-class SlackNoticeContext(
+internal class SlackNoticeContext(
     val users: Queue<String>,
     val commands: Queue<String>,
 

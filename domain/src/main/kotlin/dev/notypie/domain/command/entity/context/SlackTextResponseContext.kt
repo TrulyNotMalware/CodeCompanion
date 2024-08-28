@@ -5,7 +5,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 
-class SlackTextResponseContext(
+internal class SlackTextResponseContext(
     private val text: String,
 
     channel: String,

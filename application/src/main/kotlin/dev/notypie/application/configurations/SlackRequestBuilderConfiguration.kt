@@ -1,6 +1,5 @@
 package dev.notypie.application.configurations
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.SlackApiClientImpl

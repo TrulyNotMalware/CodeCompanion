@@ -7,7 +7,7 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandType
 
-class SlackApprovalFormContext(
+internal class SlackApprovalFormContext(
     channel: String,
     appToken: String,
     slackApiRequester: SlackApiRequester,

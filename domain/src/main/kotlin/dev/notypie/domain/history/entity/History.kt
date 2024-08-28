@@ -6,16 +6,16 @@ import java.time.LocalDateTime
 import java.util.*
 
 class History(
-    private val publisherId: String,
+    val publisherId: String,
     private val states: List<States>,
-    private val channel: String,
-    private val ok: Boolean,
-    private val token: String,
+    val channel: String,
+    val status: Status,
+    val token: String,
     val idempotencyKey: String,
 
-    private val apiAppId: String,
-    private val type: String, // RequestType.
-    private val commandType: CommandType
+    val apiAppId: String,
+    val type: String, // RequestType.
+    val commandType: CommandType
 ) {
     val historyId: UUID = UUID.randomUUID()
     private val time = LocalDateTime.now()

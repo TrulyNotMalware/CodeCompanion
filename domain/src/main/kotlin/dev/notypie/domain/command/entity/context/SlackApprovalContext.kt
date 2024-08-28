@@ -7,7 +7,7 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import java.util.*
 
-class SlackApprovalContext(
+internal class SlackApprovalContext(
     private val users: Queue<String>,
     private val commands: Queue<String>,
 

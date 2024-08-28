@@ -3,6 +3,32 @@ spring:
     activate:
       on-profile: "local"
 
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:test;MODE=MariaDB;DATABASE_TO_LOWER=TRUE
+    username: admin
+    password: admin
+
+    hikari:
+      transaction-isolation: TRANSACTION_REPEATABLE_READ
+      maximum-pool-size: 10
+#      minimum-idle: 10
+      connection-timeout: 5000
+      validation-timeout: 3000
+      connection-test-query: SELECT 1
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: hikari_pool
+
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: true
+  sql:
+    init:
+      mode: embedded
+
 server:
   port: 9000
   servlet:
@@ -25,10 +51,9 @@ management:
         loggers: logs
         httptrace: trace
 
-
 slack:
   api:
-    token: YOUR_SLACK_API_TOKEN
-    signingSecret: YOUR_SIGNING_SECRET
+    token: ${SLACK_API_TOKEN}
+    signingSecret: ${SLACK_SIGNING_SECRET}
   app:
-    token: YOUR_SLACK_APP_TOKEN
+    token: ${SLACK_APP_TOKEN}

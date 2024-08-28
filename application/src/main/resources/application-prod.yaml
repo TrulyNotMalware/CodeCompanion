@@ -3,6 +3,33 @@ spring:
     activate:
       on-profile: "prod"
 
+  datasource:
+    hikari:
+      transaction-isolation: ${SQL_PROD_ISOLATION_LEVEL}
+      maximum-pool-size: 10
+#      minimum-idle: 10
+      connection-timeout: ${SQL_PROD_CONNECTION_TIMEOUT}
+      validation-timeout: ${SQL_PROD_VALIDATION_TIMEOUT}
+      connection-test-query: SELECT 1
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: hikari_pool
+
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${SQL_DATABASE_URL}
+    username: ${SQL_DATABASE_USERNAME}
+    password: ${SQL_DATABASE_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    generate-ddl: false
+  h2:
+    console:
+      enabled: false
+
+
 server:
   port: 80
   servlet:
@@ -15,19 +42,19 @@ management:
     logfile:
       external-file: ./logback.log
     health:
-      show-details: always
+      show-details: when_authorized
   endpoints:
     web:
       exposure:
         include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
-      base-path: /api/actuator
+      base-path: ${ACTUATOR_BASE_PATH}
       path-mapping:
         loggers: logs
         httptrace: trace
 
 slack:
   api:
-    token: YOUR_SLACK_API_TOKEN
-    signingSecret: YOUR_SIGNING_SECRET
+    token: ${SLACK_API_TOKEN}
+    signingSecret: ${SLACK_SIGNING_SECRET}
   app:
-    token: YOUR_SLACK_APP_TOKEN
+    token: ${SLACK_APP_TOKEN}
