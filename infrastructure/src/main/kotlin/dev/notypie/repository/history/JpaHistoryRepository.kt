@@ -2,6 +2,7 @@ package dev.notypie.repository.history
 
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.repository.HistoryRepository
+import dev.notypie.repository.history.schema.JpaHistoryEntity
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID

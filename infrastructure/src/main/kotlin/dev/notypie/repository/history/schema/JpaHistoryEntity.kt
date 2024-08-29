@@ -1,4 +1,4 @@
-package dev.notypie.repository.history
+package dev.notypie.repository.history.schema
 
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status

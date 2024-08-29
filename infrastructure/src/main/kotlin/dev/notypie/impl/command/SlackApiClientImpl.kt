@@ -13,6 +13,7 @@ import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.history.entity.Status
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 
@@ -74,7 +75,8 @@ class SlackApiClientImpl(
             commandType = CommandType.SIMPLE, idempotencyKey = idempotencyKey)
 
         return SlackApiResponse(ok = result.isOk, apiAppId = result.message.appId, publisherId = result.message.user,
-            channel = result.channel, actionStates = states, commandType = commandType, idempotencyKey = idempotencyKey
+            channel = result.channel, actionStates = states, commandType = commandType, idempotencyKey = idempotencyKey,
+            status = if(result.isOk) Status.SUCCESS else Status.FAILED
         )
     }
 }

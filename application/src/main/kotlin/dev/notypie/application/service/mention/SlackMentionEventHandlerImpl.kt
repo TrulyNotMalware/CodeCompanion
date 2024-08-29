@@ -11,7 +11,7 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.history.entity.History
-import dev.notypie.domain.history.factory.HistoryFactory
+import dev.notypie.domain.history.factory.HistoryMapper
 import org.springframework.stereotype.Service
 import org.springframework.util.MultiValueMap
 
@@ -53,7 +53,7 @@ class SlackMentionEventHandlerImpl(
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command = this.buildCommand(idempotencyKey = idempotencyKey,commandData = slackCommandData)
         val result: SlackApiResponse = command.handleEvent()
-        val history: History = HistoryFactory.buildHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
+        val history: History = HistoryMapper.map(requestType = REQUEST_TYPE, slackApiResponse = result)
         this.historyHandler.saveNewHistory(history = history)
         return result
     }
