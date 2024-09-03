@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("org.springframework.boot") version "3.2.6" apply false
-    id("io.spring.dependency-management") version "1.1.5" apply false
+    id("org.springframework.boot") version "3.3.2" apply false
+    id("io.spring.dependency-management") version "1.1.6" apply false
     id("java-library")
     id("java-test-fixtures")
     kotlin("jvm") version "1.9.24"
@@ -56,7 +56,10 @@ subprojects {
 
     dependencies {
         implementation("org.jetbrains.kotlin:kotlin-reflect")
-        implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
+        implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+        //CHECK LATER
+        implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8")
+        implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
         testFixturesImplementation("org.jetbrains.kotlin:kotlin-reflect")
         testImplementation("io.kotest:kotest-runner-junit5-jvm:${rootProject.extra.get("kotestVersion")}")
         testImplementation("io.kotest.extensions:kotest-extensions-spring:${rootProject.extra.get("kotestSpringExtensionVersion")}")

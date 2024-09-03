@@ -1,4 +1,4 @@
-package dev.notypie.domain.history.factory
+package dev.notypie.domain.history.mapper
 
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.history.entity.History

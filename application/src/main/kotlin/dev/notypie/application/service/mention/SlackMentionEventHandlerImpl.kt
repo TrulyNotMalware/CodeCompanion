@@ -11,7 +11,7 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.history.entity.History
-import dev.notypie.domain.history.factory.HistoryMapper
+import dev.notypie.domain.history.mapper.HistoryMapper
 import org.springframework.stereotype.Service
 import org.springframework.util.MultiValueMap
 

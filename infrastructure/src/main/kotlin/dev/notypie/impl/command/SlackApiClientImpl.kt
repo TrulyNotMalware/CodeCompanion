@@ -1,10 +1,11 @@
 package dev.notypie.impl.command
 
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.slack.api.Slack
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
-import com.slack.api.model.Message
 import com.slack.api.model.block.LayoutBlock
+import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.ApprovalContents
@@ -14,12 +15,17 @@ import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
+import dev.notypie.repository.outbox.SlackPostRequestMessage
+import dev.notypie.repository.outbox.SlackRequestType
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
+import org.springframework.context.ApplicationEventPublisher
 
 class SlackApiClientImpl(
     private val botToken: String,
-    private val templateBuilder: SlackTemplateBuilder
+    private val templateBuilder: SlackTemplateBuilder,
+    private val applicationEventPublisher: ApplicationEventPublisher,
+    private val slackMessageDispatcher: SlackMessageDispatcher
 ): SlackApiRequester {
 
     private val slack: Slack = Slack.getInstance()
@@ -60,13 +66,24 @@ class SlackApiClientImpl(
         return this.returnResponse(result = result, states = layout.interactionStates, commandType = commandType, idempotencyKey = idempotencyKey)
     }
 
+    //FIXME REMOVE THIS
     private fun doAction(idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostMessageResponse
     = this.slack.methods(botToken).chatPostMessage(this.chatPostMessageBuilder(channel = channel, blocks = layout.template, idempotencyKey = idempotencyKey))
 
     //https://api.slack.com/methods/chat.postMessage
+    //FIXME REMOVE THIS
     private fun chatPostMessageBuilder(idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
         ChatPostMessageRequest.builder().channel(channel).text(idempotencyKey)
             .token(this.botToken).blocks(blocks).build()
+
+    private fun toSlackPostRequestMessage(type: SlackRequestType, layouts: List<LayoutBlock>):SlackPostRequestMessage {
+        val toStringContents = objectMapper.writeValueAsString(layouts)
+        val map: Map<String, Any> = objectMapper.readValue(toStringContents)
+        return SlackPostRequestMessage(
+            type = type,
+            payload = map
+        )
+    }
 
     private fun returnResponse(idempotencyKey: String, result: ChatPostMessageResponse, commandType: CommandType, states: List<States> = listOf()): SlackApiResponse{
         //Result is false.
