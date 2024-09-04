@@ -21,13 +21,15 @@ class SlackRequestBuilderConfiguration(
     fun slackTemplateBuilder() : SlackTemplateBuilder = ModalTemplateBuilder()
 
     @Bean
-    fun slackMessageDispatcher() = SlackMessageDispatcher(botToken = botToken)
+    fun slackMessageDispatcher(
+        applicationEventPublisher: ApplicationEventPublisher,
+    ) = SlackMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher)
 
     @Bean
     fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder,
                             applicationEventPublisher: ApplicationEventPublisher,
                             slackMessageDispatcher: SlackMessageDispatcher): SlackApiRequester = SlackApiClientImpl(
-        botToken = botToken, templateBuilder = slackTemplateBuilder, applicationEventPublisher =  applicationEventPublisher,
+        botToken = botToken, templateBuilder = slackTemplateBuilder,
         slackMessageDispatcher = slackMessageDispatcher
     )
 

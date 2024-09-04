@@ -24,7 +24,6 @@ import org.springframework.context.ApplicationEventPublisher
 class SlackApiClientImpl(
     private val botToken: String,
     private val templateBuilder: SlackTemplateBuilder,
-    private val applicationEventPublisher: ApplicationEventPublisher,
     private val slackMessageDispatcher: SlackMessageDispatcher
 ): SlackApiRequester {
 

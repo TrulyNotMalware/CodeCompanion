@@ -7,17 +7,16 @@ import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 
 class SlackMessageRelayServiceImpl(
-    private val messageOutboxRepository: MessageOutboxRepository,
-    private val messageDispatcher: SlackMessageDispatcher
+    private val messageDispatcher: SlackMessageDispatcher,
+    private val outboxRepository: MessageOutboxRepository
 ): MessageRelayService {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun relayMessage(message: SlackPostRequestMessage){
-
+    fun relayMessage(slackPostRequestMessage: SlackPostRequestMessage){
+        this.messageDispatcher.dispatch(slackPostRequestMessage = slackPostRequestMessage)
     }
 
-
-    private fun dispatch(){
+    override fun dispatchPendingMessages() {
 
     }
 }
