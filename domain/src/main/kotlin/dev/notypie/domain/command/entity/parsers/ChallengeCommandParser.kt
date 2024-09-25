@@ -6,6 +6,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.EmptyContext
 
+@Deprecated(message = "forRemoval")
 class ChallengeCommandParser(
     private val requestHeaders: SlackRequestHeaders,
     private val urlVerificationRequest: UrlVerificationRequest,

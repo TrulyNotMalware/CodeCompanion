@@ -15,8 +15,7 @@ class SlackInteractionHandlerImpl(
 
     override fun handleInteractions(headers: MultiValueMap<String, String>, payload: String) {
         val interactionPayload = this.interactionPayloadParser.parseStringContents(payload = payload)
-        println(payload)
-        println(interactionPayload)
+        
     }
 
 

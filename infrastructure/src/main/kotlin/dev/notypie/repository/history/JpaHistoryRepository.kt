@@ -11,7 +11,7 @@ open class JpaHistoryRepository(
     private val jpaHistoryRepository: JpaHistoryEntityRepository
 ): HistoryRepository {
 
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional
     override fun insertNewHistory(history: History): History {
         this.jpaHistoryRepository.save(this.toPersistenceEntity(history = history))
         return history

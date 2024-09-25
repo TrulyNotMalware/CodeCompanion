@@ -38,6 +38,7 @@ class Command(
 
     private fun buildParser(commandData: SlackCommandData): ContextParser {
         return when(commandData.slackCommandType){
+            //Removal challenge requests.
             SlackCommandType.URL_VERIFICATION -> ChallengeCommandParser(
                 urlVerificationRequest = UrlVerificationRequest(type = commandData.slackCommandType.toString(),
                     channel = commandData.channel,

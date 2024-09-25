@@ -2,6 +2,7 @@ package dev.notypie.application.controllers
 
 import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.mention.AppMentionEventHandler
+import dev.notypie.domain.command.SlackCommandType
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.util.MultiValueMap
@@ -24,6 +25,7 @@ class SlackEventController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestBody payload: Map<String, Any>
     ): ResponseEntity<*> {
+        if(isChallengeRequest(payload = payload)) return ResponseEntity.ok().body(payload)//FIXME logging.
         val slackCommandData = this.eventHandler.handleEvent(headers = headers, payload = payload)
         return ResponseEntity.ok().body(slackCommandData)
     }
@@ -37,4 +39,5 @@ class SlackEventController(
         this.interactionHandler.handleInteractions(headers = headers, payload = payload)
         return ResponseEntity.ok().body("")
     }
+    private fun isChallengeRequest(payload: Map<String, Any>) = payload["type"] == SlackCommandType.URL_VERIFICATION.toString().lowercase()
 }
