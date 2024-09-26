@@ -5,6 +5,7 @@ import com.slack.api.app_backend.interactive_components.payload.BlockActionPaylo
 import com.slack.api.model.view.ViewState
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.interactions.*
+import dev.notypie.templates.ButtonType
 import java.time.Instant
 
 class SlackInteractionRequestParser
@@ -73,8 +74,34 @@ class SlackInteractionRequestParser
                         selectedValue = action.selectedUsers.joinToString(", ")
                     )
 
+                ActionElementTypes.BUTTON.elementName -> this.buttonParser(action = action)
                 else -> null
             }
         } ?: States(type = ActionElementTypes.UNKNOWN)
+    }
+
+    private fun buttonParser(action: Action): States {
+        if(action.type != ActionElementTypes.BUTTON.elementName) throw IllegalArgumentException("Action type is not button.")
+        return when (action.style) {
+            ButtonType.PRIMARY.name.lowercase() ->
+                States(
+                    type = ActionElementTypes.APPLY_BUTTON,
+                    isSelected = true,
+                    selectedValue = action.value
+                )
+
+            ButtonType.DANGER.name.lowercase() ->
+                States(
+                    type = ActionElementTypes.REJECT_BUTTON,
+                    isSelected = true,
+                    selectedValue = action.value
+                )
+
+            else -> States(
+                type = ActionElementTypes.BUTTON,
+                isSelected = true,
+                selectedValue = action.value
+            )
+        }
     }
 }

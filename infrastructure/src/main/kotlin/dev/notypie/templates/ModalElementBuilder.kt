@@ -36,14 +36,14 @@ class ModalElementBuilder {
 
     fun approvalButtonElement(approvalButtonName: String, interactionPayload: String): InteractiveObject =
         this.toInteractiveObject(
-            state = States(type = ActionElementTypes.BUTTON )
+            state = States(type = ActionElementTypes.APPLY_BUTTON )
             ,element = this.buttonElement( buttonName = approvalButtonName,
                 interactionPayload = interactionPayload, style = ButtonType.PRIMARY)
         )
 
     fun rejectButtonElement(rejectButtonName: String, interactionPayload: String): InteractiveObject =
         this.toInteractiveObject(
-            state = States(type = ActionElementTypes.BUTTON),
+            state = States(type = ActionElementTypes.REJECT_BUTTON),
             element = this.buttonElement( buttonName = rejectButtonName, interactionPayload = interactionPayload,
                 style = ButtonType.DANGER )
         )

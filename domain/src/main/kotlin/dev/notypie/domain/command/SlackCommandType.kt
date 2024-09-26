@@ -10,5 +10,8 @@ enum class SlackCommandType(
     URL_VERIFICATION(UrlVerificationRequest::class),
     EVENT_CALLBACK(Nothing::class),
     //Subtype of event call back
-    APP_MENTION(SlackEventCallBackRequest::class)
+    APP_MENTION(SlackEventCallBackRequest::class),
+
+    //TODO Interaction Command Type
+//    REQUEST_FORM()
 }

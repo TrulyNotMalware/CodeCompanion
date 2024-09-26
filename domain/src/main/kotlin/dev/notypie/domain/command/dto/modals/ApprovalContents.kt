@@ -3,7 +3,7 @@ package dev.notypie.domain.command.dto.modals
 import java.time.LocalDateTime
 
 data class ApprovalContents(
-    val type: String,
+    val type: ApprovalContentType = ApprovalContentType.SIMPLE_REQUEST_FORM,
     val reason: String,
 
     val approvalButtonName: String = "Approval",
@@ -14,3 +14,9 @@ data class ApprovalContents(
 
     val time: LocalDateTime = LocalDateTime.now()
 )
+
+enum class ApprovalContentType{
+    SIMPLE_REQUEST_FORM,
+    FINAL_CONFIRM_FORM,
+
+}

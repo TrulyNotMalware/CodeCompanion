@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.dto.interactions
 
-data class Actions(//Primary actions ( ex, button click )
+@Deprecated(message = "forRemoval")
+data class Actions(
     val state: ActionStates = ActionStates.NOT_DETERMINED,
     val type: ActionElementTypes,
 

@@ -4,6 +4,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandType
+import kotlin.reflect.KClass
 
 abstract class CommandContext(
     val channel: String,
@@ -25,4 +26,9 @@ abstract class CommandContext(
             idempotencyKey = this.idempotencyKey
         )
     }
+    //TODO() when Approved or when Rejected action defines.
+    //NOT IN COMPANION OBJECTS
+//    fun doWhenApproved() :SlackCommandData{
+//
+//    }
 }

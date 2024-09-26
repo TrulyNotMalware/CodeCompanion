@@ -39,5 +39,6 @@ class SlackEventController(
         this.interactionHandler.handleInteractions(headers = headers, payload = payload)
         return ResponseEntity.ok().body("")
     }
+
     private fun isChallengeRequest(payload: Map<String, Any>) = payload["type"] == SlackCommandType.URL_VERIFICATION.toString().lowercase()
 }
