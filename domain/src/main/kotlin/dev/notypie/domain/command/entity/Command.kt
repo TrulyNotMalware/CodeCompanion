@@ -4,6 +4,7 @@ import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
+import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -48,6 +49,7 @@ class Command(
                 , idempotencyKey = this.idempotencyKey
             )
             SlackCommandType.EVENT_CALLBACK -> this.handleEventCallBackContext(commandData = commandData)
+            SlackCommandType.INTERACTION_RESPONSE -> this.handleInteractions(commandData = commandData)
             else -> TODO()
         }
     }
@@ -61,6 +63,11 @@ class Command(
                 slackApiRequester = this.slackApiRequester, commandId = this.commandId , idempotencyKey = this.idempotencyKey)
             else -> TODO()
         }
+    }
+
+    private fun handleInteractions(commandData: SlackCommandData): ContextParser {
+        val interactionPayload = commandData.body as InteractionPayload
+        TODO()
     }
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(

@@ -10,16 +10,13 @@ import java.util.UUID
 @Entity
 class JpaHistoryEntity(
     @field:Id
-    val id: UUID,
+    val id: UUID,// IdempotencyKey
 
     @field:Column(name = "publisher_id", nullable = false)
     val publisherId: String,
 
     @field:Column(name = "channel", nullable = false)
     val channel: String,
-
-    @field:Column(name = "idempotency_key", nullable = false)
-    val idempotencyKey: String,
 
     @field:Column(name = "api_app_id", nullable = false)
     val apiAppId: String,

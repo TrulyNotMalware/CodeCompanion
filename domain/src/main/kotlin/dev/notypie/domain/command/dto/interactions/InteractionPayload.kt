@@ -1,8 +1,13 @@
 package dev.notypie.domain.command.dto.interactions
 
+import dev.notypie.domain.command.SlackCommandType
+import dev.notypie.domain.command.dto.SlackCommandData
+import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.entity.CommandDetailType
+
 // Reference from Slack SDK - BlockActionPayload
 data class InteractionPayload(
-    val type: String,
+    val type: CommandDetailType,
     val team: Team,
     val user: User,
     val triggerId: String,
@@ -21,3 +26,22 @@ data class InteractionPayload(
     val states: List<States>,
     val currentAction: States
 )
+
+fun InteractionPayload.isCompleted() =
+    this.states.all { it.isSelected }
+            && this.currentAction.isSelected
+            && this.currentAction.type.isPrimary
+
+fun InteractionPayload.toSlackCommandData(
+    rawBody: Map<String, Any> = mapOf(), rawHeader: SlackRequestHeaders = SlackRequestHeaders()
+) =
+    SlackCommandData(
+        appId = this.apiAppId,
+        appToken = this.token,
+        publisherId = this.user.id,
+        channel = this.channel.id,
+        body = this,
+        slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
+        rawBody = rawBody,
+        rawHeader = rawHeader
+    )

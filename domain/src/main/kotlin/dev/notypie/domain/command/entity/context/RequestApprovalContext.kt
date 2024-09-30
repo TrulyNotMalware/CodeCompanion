@@ -5,6 +5,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
+import dev.notypie.domain.command.entity.CommandDetailType
 import java.util.*
 
 internal class RequestApprovalContext(
@@ -27,10 +28,12 @@ internal class RequestApprovalContext(
     private val approvalContents: ApprovalContents = this.buildContents()
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
+    override fun parseCommandDetailType() = CommandDetailType.REQUEST_APPLY_FORM
+
     override fun runCommand(): SlackApiResponse
         = this.slackApiRequester.simpleApplyRejectRequest(
             headLineText = "Approval Requests!", channel = this.channel, approvalContents = this.approvalContents,
-            commandType = this.commandType, idempotencyKey = this.idempotencyKey
+            commandType = this.commandType, idempotencyKey = this.idempotencyKey, commandDetailType = this.commandDetailType
         )
 
 

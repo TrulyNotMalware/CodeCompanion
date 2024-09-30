@@ -4,6 +4,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.response.SlackApiResponse
+import dev.notypie.domain.command.entity.CommandDetailType
 import java.util.*
 
 internal class SlackNoticeContext(
@@ -24,13 +25,14 @@ internal class SlackNoticeContext(
 ){
     private val responseText: String = this.commands.joinToString { " " }
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
+    override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): SlackApiResponse {
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Notice!",
             channel = this.channel, simpleString = this.createResponseText(),
             commandType = this.commandType,
-            idempotencyKey = this.idempotencyKey
+            idempotencyKey = this.idempotencyKey, commandDetailType = this.commandDetailType
         )
     }
 

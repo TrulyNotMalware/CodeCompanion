@@ -6,18 +6,17 @@ import java.time.LocalDateTime
 import java.util.*
 
 class History(
+    val historyId: UUID = UUID.randomUUID(),//IdempotencyKey
     val publisherId: String,
     private val states: List<States>,
     val channel: String,
     val status: Status,
     val token: String,
-    val idempotencyKey: String,
 
     val apiAppId: String,
     val type: String, // RequestType.
     val commandType: CommandType
 ) {
-    val historyId: UUID = UUID.randomUUID()
     private val time = LocalDateTime.now()
 
     //Interaction Contexts

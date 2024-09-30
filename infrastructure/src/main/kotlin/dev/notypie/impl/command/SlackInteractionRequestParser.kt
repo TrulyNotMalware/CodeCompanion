@@ -5,7 +5,9 @@ import com.slack.api.app_backend.interactive_components.payload.BlockActionPaylo
 import com.slack.api.model.view.ViewState
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.interactions.*
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.ButtonType
+import org.apache.commons.text.StringTokenizer
 import java.time.Instant
 
 class SlackInteractionRequestParser
@@ -13,6 +15,7 @@ class SlackInteractionRequestParser
     
     override fun parseStringContents(payload: String): InteractionPayload {
         val blockActionPayload = GsonFactory.createSnakeCase().fromJson(payload, BlockActionPayload::class.java)
+        print(blockActionPayload)
         return this.toInteractionPayloads(blockActionPayload = blockActionPayload)
     }
 
@@ -28,13 +31,16 @@ class SlackInteractionRequestParser
         val nanos = ((timestampDouble - seconds) * 1_000_000_000).toInt()
         val messageTime: Instant = Instant.ofEpochSecond(seconds, nanos.toLong())
         val container = Container(isEphemeral = blockActionPayload.container.isEphemeral, messageTime = messageTime, type = blockActionPayload.container.type)
-        return InteractionPayload(type = blockActionPayload.type, apiAppId = blockActionPayload.apiAppId, channel = channel,
+        val messageTokenizer = StringTokenizer(blockActionPayload.message.text, ",")
+        val idempotencyKey = messageTokenizer.nextToken()
+        val type = messageTokenizer.nextToken()
+        return InteractionPayload(type = CommandDetailType.valueOf(type), apiAppId = blockActionPayload.apiAppId, channel = channel,
             container = container, responseUrl = blockActionPayload.responseUrl, token = blockActionPayload.token, triggerId = blockActionPayload.triggerId,
             isEnterprise = blockActionPayload.isEnterpriseInstall, team = team, user = user,
             states = this.parseStates(blockActionPayload.state),
             currentAction = this.parseCurrentAction(blockActionPayload.actions),
             botId = blockActionPayload.message.botId,
-            idempotencyKey = blockActionPayload.message.text)
+            idempotencyKey = idempotencyKey)
     }
 
     private fun parseStates(viewState: ViewState): List<States>{

@@ -1,7 +1,11 @@
 package dev.notypie.application.service.interaction
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
+import dev.notypie.application.common.IdempotencyCreator
+import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
+import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.dto.SlackCommandData
+import dev.notypie.domain.command.dto.interactions.isCompleted
+import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.history.repository.HistoryRepository
 import dev.notypie.impl.command.InteractionPayloadParser
@@ -10,21 +14,26 @@ import org.springframework.util.MultiValueMap
 
 @Service
 class SlackInteractionHandlerImpl(
-    private val objectMapper: ObjectMapper,
     private val interactionPayloadParser: InteractionPayloadParser,
+    private val slackApiRequester: SlackApiRequester,
     private val historyRepository: HistoryRepository
 ): InteractionHandler {
 
     override fun handleInteractions(headers: MultiValueMap<String, String>, payload: String) {
         val interactionPayload = this.interactionPayloadParser.parseStringContents(payload = payload)
         if( interactionPayload.isCompleted() ){
-
+            val slackCommandData = interactionPayload.toSlackCommandData()
+            val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
+            val command = this.buildCommand(
+                idempotencyKey = idempotencyKey,
+                commandData = slackCommandData
+            )
+            command.handleEvent()
         }
     }
 
-    fun InteractionPayload.isCompleted() =
-        this.states.all { it.isSelected }
-                && this.currentAction.isSelected
-                && this.currentAction.type.isPrimary
 
+    private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData) : Command =
+        Command(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
+            commandData = commandData, slackApiRequester = slackApiRequester)
 }
