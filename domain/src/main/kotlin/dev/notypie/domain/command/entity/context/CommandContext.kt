@@ -29,9 +29,9 @@ abstract class CommandContext(
             commandDetailType = CommandDetailType.SIMPLE_TEXT
         )
     }
-    //TODO() when Approved or when Rejected action defines.
-    //NOT IN COMPANION OBJECTS
-//    fun doWhenApproved() :SlackCommandData{
-//
-//    }
+    internal open fun doWhenApproved():CommandContext = EmptyContext(
+        channel = this.channel, appToken = this.appToken,
+        requestHeaders = this.requestHeaders, idempotencyKey = this.idempotencyKey,
+        slackApiRequester = this.slackApiRequester
+    )
 }

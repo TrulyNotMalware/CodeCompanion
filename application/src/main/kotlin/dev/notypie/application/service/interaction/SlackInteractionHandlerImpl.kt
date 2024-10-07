@@ -28,7 +28,8 @@ class SlackInteractionHandlerImpl(
                 idempotencyKey = idempotencyKey,
                 commandData = slackCommandData
             )
-            command.handleEvent()
+            val slackApiResponse = command.handleEvent()
+
         }
     }
 

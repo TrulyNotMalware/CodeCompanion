@@ -5,6 +5,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.UrlVerificationRequest
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
+import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -12,6 +13,7 @@ import dev.notypie.domain.command.entity.parsers.ChallengeCommandParser
 import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.ContextParser
+import dev.notypie.domain.command.entity.parsers.InteractionCommandParser
 import java.util.*
 
 //Aggregate Root
@@ -67,7 +69,12 @@ class Command(
 
     private fun handleInteractions(commandData: SlackCommandData): ContextParser {
         val interactionPayload = commandData.body as InteractionPayload
-        TODO()
+        val type = interactionPayload.type
+        return InteractionCommandParser(slackCommandData = commandData,
+            baseUrl = BASE_URL, commandId = this.commandId, idempotencyKey = this.idempotencyKey)
+//        return when(type){
+//            CommandDetailType.APPROVAL_FORM
+//        }
     }
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(

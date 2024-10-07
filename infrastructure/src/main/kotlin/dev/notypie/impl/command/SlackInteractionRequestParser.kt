@@ -15,7 +15,6 @@ class SlackInteractionRequestParser
     
     override fun parseStringContents(payload: String): InteractionPayload {
         val blockActionPayload = GsonFactory.createSnakeCase().fromJson(payload, BlockActionPayload::class.java)
-        print(blockActionPayload)
         return this.toInteractionPayloads(blockActionPayload = blockActionPayload)
     }
 

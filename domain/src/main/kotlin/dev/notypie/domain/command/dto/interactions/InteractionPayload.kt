@@ -32,6 +32,8 @@ fun InteractionPayload.isCompleted() =
             && this.currentAction.isSelected
             && this.currentAction.type.isPrimary
 
+fun InteractionPayload.isPrimary() = this.currentAction.type.isPrimary
+
 fun InteractionPayload.toSlackCommandData(
     rawBody: Map<String, Any> = mapOf(), rawHeader: SlackRequestHeaders = SlackRequestHeaders()
 ) =
