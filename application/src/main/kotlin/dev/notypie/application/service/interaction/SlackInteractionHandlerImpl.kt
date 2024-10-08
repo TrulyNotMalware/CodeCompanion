@@ -7,6 +7,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.command.entity.CompositeCommand
 import dev.notypie.domain.history.repository.HistoryRepository
 import dev.notypie.impl.command.InteractionPayloadParser
 import org.springframework.stereotype.Service
@@ -35,6 +36,6 @@ class SlackInteractionHandlerImpl(
 
 
     private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData) : Command =
-        Command(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
+        CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
             commandData = commandData, slackApiRequester = slackApiRequester)
 }

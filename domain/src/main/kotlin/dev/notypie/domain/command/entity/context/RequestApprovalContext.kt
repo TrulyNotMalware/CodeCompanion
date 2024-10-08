@@ -3,6 +3,7 @@ package dev.notypie.domain.command.entity.context
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.dto.modals.ApprovalContentType
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -37,9 +38,10 @@ internal class RequestApprovalContext(
         )
 
 
-    private fun buildContents(): ApprovalContents{//FIXME Changed to receive input from Modal. 7.15 test for approval button.
+    private fun buildContents(type: ApprovalContentType = ApprovalContentType.SIMPLE_REQUEST_FORM): ApprovalContents{//FIXME Changed to receive input from Modal. 7.15 test for approval button.
         val command = this.commands.poll()
         return ApprovalContents(
+            type = type,
             reason = command,
             approvalInteractionValue = "Approved", rejectInteractionValue = "Rejected"
         )

@@ -2,7 +2,10 @@ package dev.notypie.impl.command
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.slack.api.Slack
+import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
+import com.slack.api.methods.request.chat.ChatPostEphemeralRequest.ChatPostEphemeralRequestBuilder
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
+import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.model.Message
 import com.slack.api.model.block.LayoutBlock
@@ -72,18 +75,41 @@ class SlackApiClientImpl(
         return this.returnResponse(result = result, states = layout.interactionStates, commandType = commandType, idempotencyKey = idempotencyKey)
     }
 
-    //FIXME REMOVE THIS
+    fun requestMeetingFormRequest(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, commandType: CommandType): SlackApiResponse{
+        val layout = this.templateBuilder.requestMeetingFormTemplate()
+        val result: ChatPostEphemeralResponse = this.doEphemeralAction(
+            commandDetailType = commandDetailType, idempotencyKey = idempotencyKey,
+            channel = channel, layout = layout
+        )
+        TODO("NO IMPLEMENTED YET")
+//        return this.returnEphemeralResponse(result = result, states = layout.interactionStates,
+//            commandType = commandType, idempotencyKey = idempotencyKey,
+//            channel = channel, apiAppId =
+//        )
+    }
+
     private fun doAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostMessageResponse
     = this.slack.methods(botToken).chatPostMessage(
         this.chatPostMessageBuilder(channel = channel, blocks = layout.template,
             idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
     )
 
+    private fun doEphemeralAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostEphemeralResponse
+    = this.slack.methods(botToken).chatPostEphemeral(
+        this.chatPostEphemeral(channel = channel, blocks = layout.template,
+            idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
+    )
+
     //https://api.slack.com/methods/chat.postMessage
-    //FIXME REMOVE THIS
     private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
         ChatPostMessageRequest.builder().channel(channel).text("${idempotencyKey}, ${commandDetailType.toString()}")
             .token(this.botToken).blocks(blocks).build()
+
+    private fun chatPostEphemeral(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
+        ChatPostEphemeralRequest.builder()
+            .channel(channel).text("${idempotencyKey}, ${commandDetailType.toString()}")
+            .token(this.botToken).blocks(blocks)
+            .build()
 
     private fun toSlackPostRequestMessage(type: SlackRequestType, layouts: List<LayoutBlock>):SlackPostRequestMessage {
         val toStringContents = objectMapper.writeValueAsString(layouts)
@@ -104,5 +130,18 @@ class SlackApiClientImpl(
             channel = result.channel, actionStates = states, commandType = commandType, idempotencyKey = idempotencyKey,
             status = if(result.isOk) Status.SUCCESS else Status.FAILED
         )
+    }
+
+    private fun returnEphemeralResponse(idempotencyKey: String, result: ChatPostEphemeralResponse, commandType: CommandType, states: List<States> = listOf(),
+                               channel: String, apiAppId: String, publisherId: String): SlackApiResponse{
+        TODO("NOT IMPLEMENTED YET")
+//        if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
+//            channel = channel, errorMessage = "Request ${result.isOk}", details = result.message.toString(),
+//            commandType = CommandType.SIMPLE, idempotencyKey = idempotencyKey, commandDetailType = CommandDetailType.ERROR_RESPONSE)
+//
+//        return SlackApiResponse(ok = result.isOk, apiAppId = apiAppId, publisherId = publisherId,
+//            channel = channel, actionStates = states, commandType = commandType, idempotencyKey = idempotencyKey,
+//            status = if(result.isOk) Status.SUCCESS else Status.FAILED
+//        )
     }
 }

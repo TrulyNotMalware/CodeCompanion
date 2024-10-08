@@ -11,4 +11,5 @@ interface SlackTemplateBuilder {
     fun requestApprovalFormTemplate(headLineText: String, selectionFields: List<SelectionContents>,
                                     approvalTargetUser: MultiUserSelectContents? = null, reasonInput: TextInputContents? = null,
                                     approvalContents: ApprovalContents? = null): LayoutBlocks
+    fun requestMeetingFormTemplate(approvalContents: ApprovalContents? = null):LayoutBlocks
 }

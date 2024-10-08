@@ -7,6 +7,8 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import java.util.LinkedList
+import java.util.Queue
 
 internal class SlackApprovalFormContext(
     channel: String,
@@ -31,7 +33,6 @@ internal class SlackApprovalFormContext(
             idempotencyKey = this.idempotencyKey, commandDetailType = this.commandDetailType
         )
 
-    //FIXME Test for interaction commands.
     private fun buildSelectionFields(): List<SelectionContents> = listOf(
         SelectionContents(title = "Purpose", explanation = "Please select the purpose of this form.",
             placeholderText = "SELECT", contents = listOf(
@@ -40,5 +41,17 @@ internal class SlackApprovalFormContext(
             )
         )
     )
+
+    override fun doWhenApproved(): CommandContext {
+        val commandQueue: Queue<String> = LinkedList()
+        val userQueue: Queue<String> = LinkedList()
+        return RequestApprovalContext(
+            slackApiRequester = this.slackApiRequester,
+            appToken = this.appToken, channel = this.channel,
+            idempotencyKey = this.idempotencyKey,
+            users = userQueue,
+            commands = commandQueue
+        )
+    }
 
 }

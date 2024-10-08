@@ -42,8 +42,7 @@ class ModalTemplateBuilder(
             this.modalBlockBuilder.dividerBlock(),
             this.modalBlockBuilder.textBlock("type= ${approvalContents.type}",
                 "reason= ${approvalContents.reason}", isMarkDown = true),
-            buttonLayout.layout
-            , states = buttonLayout.interactiveObjects
+            buttonLayout.layout, states = buttonLayout.interactiveObjects
         )
     }
 
@@ -89,6 +88,30 @@ class ModalTemplateBuilder(
             addAll(approvalLayout.interactiveObjects)
         }
 
+        return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
+    }
+
+    override fun requestMeetingFormTemplate(
+        approvalContents: ApprovalContents?
+    ): LayoutBlocks
+    {
+        val multiUserSelectionContents = this.modalBlockBuilder.multiUserSelectBlock(contents =
+            MultiUserSelectContents(title = "Select meeting members", placeholderText = DEFAULT_PLACEHOLDER_TEXT)
+        )
+        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
+        ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
+            approvalInteractionValue = "request_apply", rejectInteractionValue = "request_cancel"))
+
+        val blocks = mutableListOf(
+            this.modalBlockBuilder.headerBlock(text = "Request Meeting"),
+            this.modalBlockBuilder.dividerBlock(),
+            multiUserSelectionContents.layout,
+            approvalLayout.layout
+        )
+        val states = mutableListOf<States>().apply {
+            addAll(multiUserSelectionContents.interactiveObjects)
+            approvalLayout.interactiveObjects
+        }
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
     }
 }

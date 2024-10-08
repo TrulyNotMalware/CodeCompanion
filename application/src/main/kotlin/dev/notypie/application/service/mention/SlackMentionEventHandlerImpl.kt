@@ -1,8 +1,8 @@
 package dev.notypie.application.service.mention
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.history.HistoryHandler
+import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
@@ -10,6 +10,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.command.entity.CompositeCommand
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.mapper.mapHistory
 import org.springframework.stereotype.Service
@@ -18,7 +19,6 @@ import org.springframework.util.MultiValueMap
 
 @Service
 class SlackMentionEventHandlerImpl(
-    private val objectMapper: ObjectMapper,
     private val slackApiRequester: SlackApiRequester,
     private val historyHandler: HistoryHandler
 ): AppMentionEventHandler {
@@ -47,8 +47,8 @@ class SlackMentionEventHandlerImpl(
         )
     }
 
-    private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData) : Command =
-        Command(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
+    private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData): Command =
+        CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
             commandData = commandData, slackApiRequester = slackApiRequester)
 
     @Transactional
@@ -66,6 +66,6 @@ class SlackMentionEventHandlerImpl(
         else throw RuntimeException("COMMAND_TYPE_NOT_DETECTED")
     }
 
-    private fun convertBodyData( payload : Map<String, Any> ) = this.objectMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
+    private fun convertBodyData( payload : Map<String, Any> ) = objectMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
 
 }
