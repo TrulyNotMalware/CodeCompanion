@@ -80,7 +80,7 @@ class SlackApiClientImpl(
         val layout = this.templateBuilder.requestMeetingFormTemplate()
         val result: ChatPostEphemeralResponse = this.doEphemeralAction(
             commandDetailType = commandDetailType, idempotencyKey = commandBasicInfo.idempotencyKey,
-            channel = commandBasicInfo.channel, layout = layout
+            channel = commandBasicInfo.channel, layout = layout, publisherId = commandBasicInfo.publisherId
         )
         return this.returnEphemeralResponse(result = result, states = layout.interactionStates,
             commandType = commandType, idempotencyKey = commandBasicInfo.idempotencyKey,
@@ -94,10 +94,12 @@ class SlackApiClientImpl(
             idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
     )
 
-    private fun doEphemeralAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostEphemeralResponse
+    private fun doEphemeralAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String,
+                                  layout: LayoutBlocks, publisherId: String): ChatPostEphemeralResponse
     = this.slack.methods(botToken).chatPostEphemeral(
-        this.chatPostEphemeral(channel = channel, blocks = layout.template,
-            idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
+        this.chatPostEphemeralBuilder(channel = channel, blocks = layout.template,
+            idempotencyKey = idempotencyKey, commandDetailType = commandDetailType,
+            publisherId = publisherId)
     )
 
     //https://api.slack.com/methods/chat.postMessage
@@ -105,12 +107,14 @@ class SlackApiClientImpl(
         ChatPostMessageRequest.builder().channel(channel).text("${idempotencyKey}, ${commandDetailType.toString()}")
             .token(this.botToken).blocks(blocks).build()
 
-    private fun chatPostEphemeral(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
+    private fun chatPostEphemeralBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String,
+                                         blocks: List<LayoutBlock>, publisherId: String) =
         ChatPostEphemeralRequest.builder()
             .channel(channel).text("${idempotencyKey}, ${commandDetailType.toString()}")
-            .token(this.botToken).blocks(blocks)
+            .token(this.botToken).blocks(blocks).user(publisherId)
             .build()
 
+    @Deprecated(message = "for removal")
     private fun toSlackPostRequestMessage(type: SlackRequestType, layouts: List<LayoutBlock>):SlackPostRequestMessage {
         val toStringContents = objectMapper.writeValueAsString(layouts)
         val map: Map<String, Any> = objectMapper.readValue(toStringContents)
