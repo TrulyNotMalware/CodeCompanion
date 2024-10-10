@@ -16,10 +16,8 @@ class RequestMeetingCommand(
     slackApiRequester = slackApiRequester
 ) {
     private val context = RequestMeetingContext(
-        channel = this.commandData.channel,
-        appToken = this.commandData.appToken,
-        idempotencyKey = this.idempotencyKey,
-        slackApiRequester = this.slackApiRequester
+        commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+        slackApiRequester = this.slackApiRequester,
     )
     override fun handleEvent(): SlackApiResponse = this.context.runCommand()
 

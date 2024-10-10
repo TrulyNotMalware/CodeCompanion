@@ -46,8 +46,9 @@ class AppMentionCommandParser(
         ?: this.handleNotSupportedCommand()
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
-        channel = this.slackCommandData.channel, appToken = this.slackCommandData.appToken, requestHeaders = this.slackCommandData.rawHeader,
-        slackApiRequester = this.slackApiRequester, text = "Command Not supported.", idempotencyKey = this.idempotencyKey
+        requestHeaders = this.slackCommandData.rawHeader,
+        slackApiRequester = this.slackApiRequester, text = "Command Not supported.",
+        commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
     )
 
     private fun extractUserAndCommand(elements : List<Element>?):
@@ -70,12 +71,12 @@ class AppMentionCommandParser(
         return when(CommandSet.parseCommand(command)){ //FIXME Later when block
             CommandSet.NOTICE -> SlackNoticeContext(
                     users = userQueue, commands = commandQueue,
-                    channel = this.slackCommandData.channel, appToken = this.slackCommandData.appToken,
-                requestHeaders = this.slackCommandData.rawHeader, slackApiRequester = this.slackApiRequester, idempotencyKey = this.idempotencyKey)
+                commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
+                requestHeaders = this.slackCommandData.rawHeader, slackApiRequester = this.slackApiRequester)
             CommandSet.APPROVAL -> SlackApprovalFormContext(
-                channel = this.slackCommandData.channel, appToken = this.slackCommandData.appToken,
+                commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
                 requestHeaders = this.slackCommandData.rawHeader,
-                slackApiRequester = this.slackApiRequester, idempotencyKey = this.idempotencyKey
+                slackApiRequester = this.slackApiRequester
             )
             CommandSet.UNKNOWN -> SlackErrorAlertContext(
                 slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",

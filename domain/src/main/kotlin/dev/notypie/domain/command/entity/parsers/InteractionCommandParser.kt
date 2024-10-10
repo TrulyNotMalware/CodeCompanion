@@ -23,13 +23,10 @@ class InteractionCommandParser(
             CommandDetailType.APPROVAL_FORM ->
                 SlackApprovalFormContext(
                     slackApiRequester = this.slackApiRequester,
-                    appToken = this.slackCommandData.appToken,
-                    channel = this.slackCommandData.channel, idempotencyKey = idempotencyKey
+                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
                 ).doWhenApproved()
             else -> EmptyContext(
-                appToken = slackCommandData.appToken,
-                channel = slackCommandData.channel,
-                idempotencyKey = idempotencyKey,
+                commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
                 requestHeaders = slackCommandData.rawHeader,
                 slackApiRequester = slackApiRequester
             )

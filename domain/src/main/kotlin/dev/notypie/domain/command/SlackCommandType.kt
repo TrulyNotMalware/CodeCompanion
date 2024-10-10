@@ -1,7 +1,6 @@
 package dev.notypie.domain.command
 
-enum class SlackCommandType(
-) {
+enum class SlackCommandType{
     URL_VERIFICATION,
     EVENT_CALLBACK,
     SLASH,

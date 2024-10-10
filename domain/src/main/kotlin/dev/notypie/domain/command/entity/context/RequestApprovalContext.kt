@@ -2,6 +2,7 @@ package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContentType
 import dev.notypie.domain.command.dto.modals.ApprovalContents
@@ -13,17 +14,13 @@ internal class RequestApprovalContext(
     private val users: Queue<String>,
     private val commands: Queue<String>,
 
-    channel: String,
-    appToken: String,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    idempotencyKey: String
+    basicInfo: CommandBasicInfo
 ): CommandContext(
-    channel = channel,
-    appToken = appToken,
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    idempotencyKey = idempotencyKey
+    commandBasicInfo = basicInfo
 ){
 
     private val approvalContents: ApprovalContents = this.buildContents()
@@ -33,8 +30,8 @@ internal class RequestApprovalContext(
 
     override fun runCommand(): SlackApiResponse
         = this.slackApiRequester.simpleApplyRejectRequest(
-            headLineText = "Approval Requests!", channel = this.channel, approvalContents = this.approvalContents,
-            commandType = this.commandType, idempotencyKey = this.idempotencyKey, commandDetailType = this.commandDetailType
+            headLineText = "Approval Requests!", channel = this.commandBasicInfo.channel, approvalContents = this.approvalContents,
+            commandType = this.commandType, idempotencyKey = this.commandBasicInfo.idempotencyKey, commandDetailType = this.commandDetailType
         )
 
 

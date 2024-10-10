@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
@@ -11,26 +12,22 @@ import java.util.LinkedList
 import java.util.Queue
 
 internal class SlackApprovalFormContext(
-    channel: String,
-    appToken: String,
+    commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    idempotencyKey: String
 ): CommandContext(
-    channel = channel,
-    appToken = appToken,
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    idempotencyKey = idempotencyKey
+    commandBasicInfo = commandBasicInfo
 ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType() = CommandDetailType.APPROVAL_FORM
 
     override fun runCommand(): SlackApiResponse =
         this.slackApiRequester.simpleApprovalFormRequest(
-            headLineText = "Approve Form", channel = this.channel,
+            headLineText = "Approve Form", channel = this.commandBasicInfo.channel,
             selectionFields = this.buildSelectionFields(), commandType = this.commandType,
-            idempotencyKey = this.idempotencyKey, commandDetailType = this.commandDetailType
+            idempotencyKey = this.commandBasicInfo.idempotencyKey, commandDetailType = this.commandDetailType
         )
 
     private fun buildSelectionFields(): List<SelectionContents> = listOf(
@@ -47,8 +44,7 @@ internal class SlackApprovalFormContext(
         val userQueue: Queue<String> = LinkedList()
         return RequestApprovalContext(
             slackApiRequester = this.slackApiRequester,
-            appToken = this.appToken, channel = this.channel,
-            idempotencyKey = this.idempotencyKey,
+            basicInfo = this.commandBasicInfo,
             users = userQueue,
             commands = commandQueue
         )

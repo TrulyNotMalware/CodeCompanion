@@ -15,4 +15,14 @@ data class SlackCommandData(
 
     val body: Any,
     val seeds: String = LocalDateTime.now().toString()
-)
+){
+    fun extractBasicInfo(
+        idempotencyKey: String
+    ): CommandBasicInfo =
+        CommandBasicInfo(
+            appId = this.appId, appToken = this.appToken,
+            publisherId = this.publisherId, channel = this.channel,
+            idempotencyKey = idempotencyKey,
+        )
+
+}

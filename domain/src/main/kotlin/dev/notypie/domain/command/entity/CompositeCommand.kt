@@ -8,7 +8,6 @@ import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.parsers.ChallengeCommandParser
 import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.ContextParser
@@ -44,14 +43,6 @@ class CompositeCommand(
     private fun buildParser(commandData: SlackCommandData): ContextParser {
         return when(commandData.slackCommandType){
             //Removal challenge requests.
-            SlackCommandType.URL_VERIFICATION -> ChallengeCommandParser(
-                urlVerificationRequest = UrlVerificationRequest(type = commandData.slackCommandType.toString(),
-                    channel = commandData.channel,
-                    challenge = commandData.rawBody["challenge"].toString(),
-                    token = commandData.appToken
-                ), slackApiRequester = this.slackApiRequester, requestHeaders = this.commandData.rawHeader
-                , idempotencyKey = this.idempotencyKey
-            )
             SlackCommandType.EVENT_CALLBACK -> this.handleEventCallBackContext(commandData = commandData)
             SlackCommandType.INTERACTION_RESPONSE -> this.handleInteractions(commandData = commandData)
             else -> TODO()
@@ -81,7 +72,8 @@ class CompositeCommand(
     }
 
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
-        channel = this.commandData.channel, appToken = this.commandData.appToken, requestHeaders = this.commandData.rawHeader,
-        slackApiRequester = this.slackApiRequester, text = "Command Not supported.", idempotencyKey = this.idempotencyKey
+        requestHeaders = this.commandData.rawHeader,
+        slackApiRequester = this.slackApiRequester, text = "Command Not supported.",
+        commandBasicInfo = this.commandData.extractBasicInfo(this.idempotencyKey)
     )
 }

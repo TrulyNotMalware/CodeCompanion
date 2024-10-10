@@ -11,6 +11,7 @@ import com.slack.api.model.Message
 import com.slack.api.model.block.LayoutBlock
 import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
@@ -75,17 +76,16 @@ class SlackApiClientImpl(
         return this.returnResponse(result = result, states = layout.interactionStates, commandType = commandType, idempotencyKey = idempotencyKey)
     }
 
-    fun requestMeetingFormRequest(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, commandType: CommandType): SlackApiResponse{
+    override fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SlackApiResponse{
         val layout = this.templateBuilder.requestMeetingFormTemplate()
         val result: ChatPostEphemeralResponse = this.doEphemeralAction(
-            commandDetailType = commandDetailType, idempotencyKey = idempotencyKey,
-            channel = channel, layout = layout
+            commandDetailType = commandDetailType, idempotencyKey = commandBasicInfo.idempotencyKey,
+            channel = commandBasicInfo.channel, layout = layout
         )
-        TODO("NO IMPLEMENTED YET")
-//        return this.returnEphemeralResponse(result = result, states = layout.interactionStates,
-//            commandType = commandType, idempotencyKey = idempotencyKey,
-//            channel = channel, apiAppId =
-//        )
+        return this.returnEphemeralResponse(result = result, states = layout.interactionStates,
+            commandType = commandType, idempotencyKey = commandBasicInfo.idempotencyKey,
+            channel = commandBasicInfo.channel, apiAppId = commandBasicInfo.appId, publisherId = commandBasicInfo.publisherId
+        )
     }
 
     private fun doAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostMessageResponse
@@ -134,14 +134,13 @@ class SlackApiClientImpl(
 
     private fun returnEphemeralResponse(idempotencyKey: String, result: ChatPostEphemeralResponse, commandType: CommandType, states: List<States> = listOf(),
                                channel: String, apiAppId: String, publisherId: String): SlackApiResponse{
-        TODO("NOT IMPLEMENTED YET")
-//        if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
-//            channel = channel, errorMessage = "Request ${result.isOk}", details = result.message.toString(),
-//            commandType = CommandType.SIMPLE, idempotencyKey = idempotencyKey, commandDetailType = CommandDetailType.ERROR_RESPONSE)
-//
-//        return SlackApiResponse(ok = result.isOk, apiAppId = apiAppId, publisherId = publisherId,
-//            channel = channel, actionStates = states, commandType = commandType, idempotencyKey = idempotencyKey,
-//            status = if(result.isOk) Status.SUCCESS else Status.FAILED
-//        )
+        if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
+            channel = channel, errorMessage = "Request ${result.isOk}", details = result.error,
+            commandType = CommandType.SIMPLE, idempotencyKey = idempotencyKey, commandDetailType = CommandDetailType.ERROR_RESPONSE)
+
+        return SlackApiResponse(ok = result.isOk, apiAppId = apiAppId, publisherId = publisherId,
+            channel = channel, actionStates = states, commandType = commandType, idempotencyKey = idempotencyKey,
+            status = if(result.isOk) Status.SUCCESS else Status.FAILED
+        )
     }
 }

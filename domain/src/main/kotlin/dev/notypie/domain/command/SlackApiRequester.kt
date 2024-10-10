@@ -1,5 +1,6 @@
 package dev.notypie.domain.command
 
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
@@ -15,4 +16,5 @@ interface SlackApiRequester {
     fun simpleApplyRejectRequest(commandDetailType: CommandDetailType, idempotencyKey: String, headLineText: String, channel: String, approvalContents: ApprovalContents, commandType: CommandType): SlackApiResponse
     fun simpleApprovalFormRequest(commandDetailType: CommandDetailType, idempotencyKey: String, headLineText: String, channel: String,
                                   selectionFields: List<SelectionContents>, reasonInput: TextInputContents? = null, commandType: CommandType): SlackApiResponse
+    fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SlackApiResponse
 }

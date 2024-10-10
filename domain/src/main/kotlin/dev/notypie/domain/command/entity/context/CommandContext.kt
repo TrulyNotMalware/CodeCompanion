@@ -1,17 +1,15 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 
 abstract class CommandContext(
-    val channel: String,
-    val appToken: String,
+    val commandBasicInfo: CommandBasicInfo,
     val tracking: Boolean = true,
-
-    val idempotencyKey: String,
     val requestHeaders: SlackRequestHeaders,
     val slackApiRequester: SlackApiRequester,
 ) {
@@ -23,15 +21,15 @@ abstract class CommandContext(
     internal open fun runCommand(): SlackApiResponse{
         return this.slackApiRequester.simpleTextRequest(
             headLineText = "Hello Developer!",
-            channel = this.channel, simpleString = "This is default response.",
+            channel = this.commandBasicInfo.channel, simpleString = "This is default response.",
             commandType = CommandType.SIMPLE,
-            idempotencyKey = this.idempotencyKey,
+            idempotencyKey = this.commandBasicInfo.idempotencyKey,
             commandDetailType = CommandDetailType.SIMPLE_TEXT
         )
     }
     internal open fun doWhenApproved():CommandContext = EmptyContext(
-        channel = this.channel, appToken = this.appToken,
-        requestHeaders = this.requestHeaders, idempotencyKey = this.idempotencyKey,
+        commandBasicInfo = this.commandBasicInfo,
+        requestHeaders = this.requestHeaders,
         slackApiRequester = this.slackApiRequester
     )
 }
