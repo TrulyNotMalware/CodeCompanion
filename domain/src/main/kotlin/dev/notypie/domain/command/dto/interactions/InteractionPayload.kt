@@ -28,9 +28,9 @@ data class InteractionPayload(
 )
 
 fun InteractionPayload.isCompleted() =
+    this.currentAction.type.isPrimary &&
+    this.currentAction.isSelected &&
     this.states.all { it.isSelected }
-            && this.currentAction.isSelected
-            && this.currentAction.type.isPrimary
 
 fun InteractionPayload.isPrimary() = this.currentAction.type.isPrimary
 

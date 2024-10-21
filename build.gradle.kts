@@ -17,7 +17,7 @@ java {
 ext{
     set("kotestVersion", "5.9.0") // https://kotest.io/docs/changelog.html
     set("kotestSpringExtensionVersion", "1.3.0") // https://kotest.io/docs/extensions/spring.html
-    set("slackSdkVersion", "1.40.2")
+    set("slackSdkVersion", "1.44.0")
 }
 
 kotlin {

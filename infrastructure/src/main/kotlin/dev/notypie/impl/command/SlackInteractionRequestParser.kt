@@ -30,8 +30,14 @@ class SlackInteractionRequestParser
         val nanos = ((timestampDouble - seconds) * 1_000_000_000).toInt()
         val messageTime: Instant = Instant.ofEpochSecond(seconds, nanos.toLong())
         val container = Container(isEphemeral = blockActionPayload.container.isEphemeral, messageTime = messageTime, type = blockActionPayload.container.type)
-        //FIXME There may be cases where the message is missing. ( Slash command )
-        val messageTokenizer = StringTokenizer(blockActionPayload.message.text, ",")
+
+        //Ephemeral contents does not include message sections.
+        val currentAction = this.parseCurrentAction(blockActionPayload.actions)
+        val messageTokenizer =
+            if (container.isEphemeral){
+                if(currentAction.type.isPrimary) StringTokenizer(currentAction.selectedValue, ",")
+                else StringTokenizer("${CommandDetailType.NOTHING},${CommandDetailType.NOTHING}",",")
+            }else StringTokenizer(blockActionPayload.message.text, ",")
         val idempotencyKey = messageTokenizer.nextToken()
         val type = messageTokenizer.nextToken().replace("\\s".toRegex(), "")
         return InteractionPayload(type = CommandDetailType.valueOf(type), apiAppId = blockActionPayload.apiAppId, channel = channel,

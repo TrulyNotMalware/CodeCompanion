@@ -1,6 +1,7 @@
 package dev.notypie.templates
 
 import dev.notypie.domain.command.dto.modals.*
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.LayoutBlocks
 
 interface SlackTemplateBuilder {
@@ -11,5 +12,6 @@ interface SlackTemplateBuilder {
     fun requestApprovalFormTemplate(headLineText: String, selectionFields: List<SelectionContents>,
                                     approvalTargetUser: MultiUserSelectContents? = null, reasonInput: TextInputContents? = null,
                                     approvalContents: ApprovalContents? = null): LayoutBlocks
-    fun requestMeetingFormTemplate(approvalContents: ApprovalContents? = null):LayoutBlocks
+    fun requestMeetingFormTemplate(approvalContents: ApprovalContents? = null,
+                                   commandDetailType: CommandDetailType, idempotencyKey: String):LayoutBlocks
 }

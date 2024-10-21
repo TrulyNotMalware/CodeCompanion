@@ -3,6 +3,7 @@ package dev.notypie.templates
 import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
 
@@ -92,15 +93,18 @@ class ModalTemplateBuilder(
     }
 
     override fun requestMeetingFormTemplate(
-        approvalContents: ApprovalContents?
+        approvalContents: ApprovalContents?,
+        commandDetailType: CommandDetailType,
+        idempotencyKey: String
     ): LayoutBlocks
     {
         val multiUserSelectionContents = this.modalBlockBuilder.multiUserSelectBlock(contents =
             MultiUserSelectContents(title = "Select meeting members", placeholderText = DEFAULT_PLACEHOLDER_TEXT)
         )
+        val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
         val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
         ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
-            approvalInteractionValue = "request_apply", rejectInteractionValue = "request_cancel"))
+            approvalInteractionValue = concatenateString, rejectInteractionValue = concatenateString))
 
         val blocks = mutableListOf(
             this.modalBlockBuilder.headerBlock(text = "Request Meeting"),
@@ -114,4 +118,6 @@ class ModalTemplateBuilder(
         }
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
     }
+
+    private fun concatenateIdempotencyKey(idempotencyKey: String, commandDetailType: CommandDetailType) = "${idempotencyKey},${commandDetailType}"
 }

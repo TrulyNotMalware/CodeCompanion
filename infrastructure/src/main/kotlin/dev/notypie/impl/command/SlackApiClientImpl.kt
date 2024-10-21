@@ -25,7 +25,6 @@ import dev.notypie.repository.outbox.SlackPostRequestMessage
 import dev.notypie.repository.outbox.SlackRequestType
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
-import org.springframework.context.ApplicationEventPublisher
 
 class SlackApiClientImpl(
     private val botToken: String,
@@ -77,7 +76,9 @@ class SlackApiClientImpl(
     }
 
     override fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SlackApiResponse{
-        val layout = this.templateBuilder.requestMeetingFormTemplate()
+        val layout = this.templateBuilder.requestMeetingFormTemplate(
+            commandDetailType = commandDetailType, idempotencyKey = commandBasicInfo.idempotencyKey
+        )
         val result: ChatPostEphemeralResponse = this.doEphemeralAction(
             commandDetailType = commandDetailType, idempotencyKey = commandBasicInfo.idempotencyKey,
             channel = commandBasicInfo.channel, layout = layout, publisherId = commandBasicInfo.publisherId
@@ -104,9 +105,10 @@ class SlackApiClientImpl(
 
     //https://api.slack.com/methods/chat.postMessage
     private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
-        ChatPostMessageRequest.builder().channel(channel).text("${idempotencyKey}, ${commandDetailType.toString()}")
+        ChatPostMessageRequest.builder().channel(channel).text("${idempotencyKey},${commandDetailType}")
             .token(this.botToken).blocks(blocks).build()
 
+    //FIXME Ephemeral message cannot include any texts with blocks field
     private fun chatPostEphemeralBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String,
                                          blocks: List<LayoutBlock>, publisherId: String) =
         ChatPostEphemeralRequest.builder()
