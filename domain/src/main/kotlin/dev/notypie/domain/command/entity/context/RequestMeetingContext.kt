@@ -3,11 +3,19 @@ package dev.notypie.domain.command.entity.context
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.InteractionPayload
+import dev.notypie.domain.command.dto.interactions.isCompleted
+import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
-class RequestMeetingContext(
+internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
@@ -26,5 +34,36 @@ class RequestMeetingContext(
             commandDetailType = this.commandDetailType
             )
 
+    override fun handleInteractions(interactionPayload: InteractionPayload): CommandContext {
+        val timeString = interactionPayload.states
+            .first { it.type == ActionElementTypes.TIME_PICKER }.selectedValue
+        val dateString = interactionPayload.states
+            .first { it.type == ActionElementTypes.DATE_PICKER }.selectedValue
+        if(!this.isFutureTime(dateString = dateString, timeString = timeString)){
+            return ErrorResponseContext(
+                commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+                slackApiRequester = this.slackApiRequester, markdownErrorMessage = "Make sure to choose a time in the *future* rather than now."
+            )
+        }
+        if( !interactionPayload.isCompleted() ) {
+            return ErrorResponseContext(
+                commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+                slackApiRequester = this.slackApiRequester, markdownErrorMessage = "Please select *all options.*"
+            )
+        }
+        return ReplaceMessageContext(
+            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+            slackApiRequester = this.slackApiRequester, responseUrl = interactionPayload.responseUrl,
+            markdownMessage = "Successfully processed."
+        )
+    }
 
+    private fun isFutureTime(dateString: String, timeString: String): Boolean{
+        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+        val date = LocalDate.parse(dateString, dateFormatter)
+        val time = LocalTime.parse(timeString, timeFormatter)
+        return LocalDateTime.of(date, time).isAfter(LocalDateTime.now())
+    }
 }

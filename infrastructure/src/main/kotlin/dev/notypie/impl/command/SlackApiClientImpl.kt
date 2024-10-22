@@ -2,13 +2,14 @@ package dev.notypie.impl.command
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.slack.api.Slack
+import com.slack.api.app_backend.interactive_components.ActionResponseSender
+import com.slack.api.app_backend.interactive_components.response.ActionResponse
 import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
-import com.slack.api.methods.request.chat.ChatPostEphemeralRequest.ChatPostEphemeralRequestBuilder
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
 import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
-import com.slack.api.model.Message
 import com.slack.api.model.block.LayoutBlock
+import com.slack.api.webhook.WebhookResponse
 import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -33,6 +34,8 @@ class SlackApiClientImpl(
 ): SlackApiRequester {
 
     private val slack: Slack = Slack.getInstance()
+    private val webHookSender = ActionResponseSender(this.slack)
+    override fun doNothing(): SlackApiResponse = SlackApiResponse.empty()
 
     override fun simpleTextRequest(commandDetailType: CommandDetailType, idempotencyKey: String, headLineText: String, channel: String,
                                    simpleString: String, commandType: CommandType): SlackApiResponse {
@@ -42,7 +45,18 @@ class SlackApiClientImpl(
         return returnResponse(result = result, commandType = commandType, idempotencyKey = idempotencyKey)
     }
 
-    override fun errorTextRequest(commandDetailType: CommandDetailType, idempotencyKey: String, errorClassName: String, channel: String, errorMessage: String, details: String?, commandType: CommandType): SlackApiResponse{
+    override fun simpleEphemeralErrorTextRequest(markdownErrorMessage: String, commandBasicInfo: CommandBasicInfo,
+                                                 commandType: CommandType, commandDetailType: CommandDetailType): SlackApiResponse {
+        val layout = this.templateBuilder.onlyTextTemplate(message = markdownErrorMessage, isMarkDown = true)
+        val result = this.doEphemeralAction(commandDetailType = commandDetailType,
+            channel = commandBasicInfo.channel, layout = layout,
+            idempotencyKey = commandBasicInfo.idempotencyKey, publisherId = commandBasicInfo.publisherId)
+        return this.returnEphemeralResponse(idempotencyKey = commandBasicInfo.idempotencyKey,
+            channel = commandBasicInfo.channel, result = result, publisherId = commandBasicInfo.publisherId, commandType = commandType,
+            apiAppId = commandBasicInfo.appId)
+    }
+
+    override fun detailErrorTextRequest(commandDetailType: CommandDetailType, idempotencyKey: String, errorClassName: String, channel: String, errorMessage: String, details: String?, commandType: CommandType): SlackApiResponse{
         val errorHeaderText = "Error : $errorClassName"
         val layout = this.templateBuilder.errorNoticeTemplate(headLineText = errorHeaderText, errorMessage = errorMessage, details = details)
         val result: ChatPostMessageResponse = this.doAction(idempotencyKey = idempotencyKey,
@@ -89,6 +103,20 @@ class SlackApiClientImpl(
         )
     }
 
+    override fun replaceOriginalText(
+        markdownText: String,
+        responseUrl: String,
+        commandBasicInfo: CommandBasicInfo,
+        commandType: CommandType,
+        commandDetailType: CommandDetailType
+    ): SlackApiResponse {
+        val layout = this.templateBuilder.onlyTextTemplate(message = markdownText, isMarkDown = true)
+        val response = ActionResponse.builder()
+            .blocks(layout.template).replaceOriginal(true).build()
+        val result = this.webHookSender.send(responseUrl, response)
+        return this.returnResponse(idempotencyKey = commandBasicInfo.idempotencyKey, result = result)
+    }
+
     private fun doAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostMessageResponse
     = this.slack.methods(botToken).chatPostMessage(
         this.chatPostMessageBuilder(channel = channel, blocks = layout.template,
@@ -128,7 +156,7 @@ class SlackApiClientImpl(
 
     private fun returnResponse(idempotencyKey: String, result: ChatPostMessageResponse, commandType: CommandType, states: List<States> = listOf()): SlackApiResponse{
         //Result is false.
-        if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
+        if(!result.isOk) this.detailErrorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
                 channel = result.channel, errorMessage = "Request ${result.isOk}", details = result.message.toString(),
             commandType = CommandType.SIMPLE, idempotencyKey = idempotencyKey, commandDetailType = CommandDetailType.ERROR_RESPONSE)
 
@@ -138,9 +166,13 @@ class SlackApiClientImpl(
         )
     }
 
+    private fun returnResponse(idempotencyKey: String, result: WebhookResponse): SlackApiResponse{
+        TODO("NOT IMPLEMENTED YET")
+    }
+
     private fun returnEphemeralResponse(idempotencyKey: String, result: ChatPostEphemeralResponse, commandType: CommandType, states: List<States> = listOf(),
                                channel: String, apiAppId: String, publisherId: String): SlackApiResponse{
-        if(!result.isOk) this.errorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
+        if(!result.isOk) this.detailErrorTextRequest(errorClassName = this::class.simpleName ?: "SlackApiClientImpl",
             channel = channel, errorMessage = "Request ${result.isOk}", details = result.error,
             commandType = CommandType.SIMPLE, idempotencyKey = idempotencyKey, commandDetailType = CommandDetailType.ERROR_RESPONSE)
 

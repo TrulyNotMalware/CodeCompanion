@@ -5,6 +5,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.LayoutBlocks
 
 interface SlackTemplateBuilder {
+    fun onlyTextTemplate(message: String, isMarkDown: Boolean) : LayoutBlocks
     fun simpleTextResponseTemplate( headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks
     fun simpleScheduleNoticeTemplate( headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks
     fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents): LayoutBlocks

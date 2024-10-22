@@ -1,6 +1,5 @@
 package dev.notypie.templates
 
-import com.slack.api.model.block.ActionsBlock
 import com.slack.api.model.block.Blocks.*
 import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
@@ -144,6 +143,26 @@ class ModalBlockBuilder(
     fun plainTextInputBlock(contents: TextInputContents) = input {
         it.label(this.modalElementBuilder.plainTextObject(text = contents.title))
         it.element(this.modalElementBuilder.plainTextInputElement(contents = contents))
+    }
+
+    fun calendarThumbnailBlock(title: String, markdownBody: String) = section {
+        it.text(this.modalElementBuilder.markdownTextObject(markdownText = "*${title}*\n${markdownBody}"))
+        it.accessory(this.modalElementBuilder.imageBlockElement(imageUrl = DEFAULT_CALENDAR_IMAGE_URLS, altText = "calendar thumbnail"))
+    }
+
+    fun selectDateTimeScheduleBlock():InteractionLayoutBlock{
+        val datePickerElement = this.modalElementBuilder.datePickerElement()
+        val timePickerElement = this.modalElementBuilder.timePickerElement()
+        val layout = actions {
+            it.elements(
+                listOf(
+                    datePickerElement.element, timePickerElement.element
+                )
+            )
+        }
+        return toInteractionLayout(
+            datePickerElement.state, timePickerElement.state, layout = layout
+        )
     }
 
 

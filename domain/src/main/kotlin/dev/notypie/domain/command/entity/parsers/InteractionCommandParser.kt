@@ -6,6 +6,7 @@ import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
+import dev.notypie.domain.command.entity.context.RequestMeetingContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import java.util.*
 
@@ -24,7 +25,12 @@ class InteractionCommandParser(
                 SlackApprovalFormContext(
                     slackApiRequester = this.slackApiRequester,
                     commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
-                ).doWhenApproved()
+                ).handleInteractions(interactionPayload = interactionPayload)
+            CommandDetailType.REQUEST_MEETING_FORM ->
+                RequestMeetingContext(
+                    slackApiRequester = this.slackApiRequester,
+                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
+                ).handleInteractions(interactionPayload = interactionPayload)
             else -> EmptyContext(
                 commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
                 requestHeaders = slackCommandData.rawHeader,

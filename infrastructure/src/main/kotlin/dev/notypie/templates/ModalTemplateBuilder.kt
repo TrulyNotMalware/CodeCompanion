@@ -22,6 +22,11 @@ class ModalTemplateBuilder(
     private fun toLayoutBlocks(vararg blocks: LayoutBlock, states: List<States> = listOf()) =
         LayoutBlocks(interactionStates = states, template = this.createLayouts(blocks = blocks))
 
+    override fun onlyTextTemplate(message: String, isMarkDown: Boolean) : LayoutBlocks =
+        this.toLayoutBlocks(
+            this.modalBlockBuilder.simpleText(text = message, isMarkDown = isMarkDown)
+        )
+
     override fun simpleTextResponseTemplate( headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks
     = this.toLayoutBlocks(
         this.modalBlockBuilder.headerBlock(text = headLineText),
@@ -102,18 +107,27 @@ class ModalTemplateBuilder(
             MultiUserSelectContents(title = "Select meeting members", placeholderText = DEFAULT_PLACEHOLDER_TEXT)
         )
         val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
+        val timeScheduleBlock = this.modalBlockBuilder.selectDateTimeScheduleBlock()
         val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
         ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
             approvalInteractionValue = concatenateString, rejectInteractionValue = concatenateString))
 
-        val blocks = mutableListOf(
+        val blocks = listOf(
             this.modalBlockBuilder.headerBlock(text = "Request Meeting"),
             this.modalBlockBuilder.dividerBlock(),
+            this.modalBlockBuilder.calendarThumbnailBlock(
+                title = "Schedule a new meeting",
+                markdownBody = "Send a confirmation request to the meeting participants.\n" +
+                        "Once everyone approves, I'll let you know that it's confirmed!"
+            ),
             multiUserSelectionContents.layout,
+            this.modalBlockBuilder.simpleText(text = "Select meetup time", isMarkDown = false),
+            timeScheduleBlock.layout,
             approvalLayout.layout
         )
         val states = mutableListOf<States>().apply {
             addAll(multiUserSelectionContents.interactiveObjects)
+            addAll(timeScheduleBlock.interactiveObjects)
             approvalLayout.interactiveObjects
         }
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)

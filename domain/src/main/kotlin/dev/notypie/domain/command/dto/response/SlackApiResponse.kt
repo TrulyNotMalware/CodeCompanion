@@ -16,4 +16,12 @@ data class SlackApiResponse(
     val commandType: CommandType,
 
     val actionStates: List<States> = listOf()
-)
+){
+    companion object{
+        fun empty() = SlackApiResponse(
+            ok = true, apiAppId = "", status = Status.SUCCESS,
+            channel = "", commandType = CommandType.SIMPLE,
+            idempotencyKey = "", publisherId = ""
+        )
+    }
+}

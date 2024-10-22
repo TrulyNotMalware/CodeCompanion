@@ -7,7 +7,7 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
-import dev.notypie.domain.command.entity.context.SlackErrorAlertContext
+import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import java.util.*
@@ -78,7 +78,7 @@ class AppMentionCommandParser(
                 requestHeaders = this.slackCommandData.rawHeader,
                 slackApiRequester = this.slackApiRequester
             )
-            CommandSet.UNKNOWN -> SlackErrorAlertContext(
+            CommandSet.UNKNOWN -> DetailErrorAlertContext(
                 slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",
                 targetClassName = this::class.simpleName ?: "SlackAppMentionContext", details = null,
                 slackApiRequester = this.slackApiRequester, idempotencyKey = this.idempotencyKey)

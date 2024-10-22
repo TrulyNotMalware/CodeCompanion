@@ -6,7 +6,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 
-internal class SlackErrorAlertContext(
+internal class DetailErrorAlertContext(
     slackCommandData: SlackCommandData,
     private val targetClassName: String,
     private val errorMessage: String,
@@ -22,7 +22,7 @@ internal class SlackErrorAlertContext(
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): SlackApiResponse =
-        this.slackApiRequester.errorTextRequest(
+        this.slackApiRequester.detailErrorTextRequest(
             errorClassName = targetClassName, channel = this.commandBasicInfo.channel,
             errorMessage = errorMessage, details = details,
             commandType = this.commandType,

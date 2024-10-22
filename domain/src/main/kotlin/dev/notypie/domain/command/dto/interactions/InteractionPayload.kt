@@ -27,7 +27,7 @@ data class InteractionPayload(
     val currentAction: States
 )
 
-fun InteractionPayload.isCompleted() =
+fun InteractionPayload.isCompleted(): Boolean =
     this.currentAction.type.isPrimary &&
     this.currentAction.isSelected &&
     this.states.all { it.isSelected }

@@ -9,5 +9,7 @@ enum class ActionElementTypes(
     BUTTON("button", true),
     MULTI_STATIC_SELECT("multi_static_select", false),
     MULTI_USERS_SELECT("multi_users_select", false),
+    DATE_PICKER("datepicker", false),
+    TIME_PICKER("timepicker", false),
     UNKNOWN("unknown", false)
 }

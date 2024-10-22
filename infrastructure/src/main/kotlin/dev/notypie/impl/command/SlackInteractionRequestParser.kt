@@ -13,7 +13,7 @@ import java.time.Instant
 class SlackInteractionRequestParser
 : InteractionPayloadParser {
     
-    override fun parseStringContents(payload: String): InteractionPayload {
+    override fun parseStringPayload(payload: String): InteractionPayload {
         val blockActionPayload = GsonFactory.createSnakeCase().fromJson(payload, BlockActionPayload::class.java)
         return this.toInteractionPayloads(blockActionPayload = blockActionPayload)
     }
@@ -33,6 +33,7 @@ class SlackInteractionRequestParser
 
         //Ephemeral contents does not include message sections.
         val currentAction = this.parseCurrentAction(blockActionPayload.actions)
+        val botId = if(container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
         val messageTokenizer =
             if (container.isEphemeral){
                 if(currentAction.type.isPrimary) StringTokenizer(currentAction.selectedValue, ",")
@@ -45,7 +46,7 @@ class SlackInteractionRequestParser
             isEnterprise = blockActionPayload.isEnterpriseInstall, team = team, user = user,
             states = this.parseStates(blockActionPayload.state),
             currentAction = this.parseCurrentAction(blockActionPayload.actions),
-            botId = blockActionPayload.message.botId,
+            botId = botId,
             idempotencyKey = idempotencyKey)
     }
 
@@ -64,6 +65,11 @@ class SlackInteractionRequestParser
                         if(value.selectedUsers.isEmpty()) States(type = ActionElementTypes.MULTI_USERS_SELECT)
                         else States(type = ActionElementTypes.MULTI_USERS_SELECT, isSelected = true, selectedValue = value.selectedUsers.joinToString(", "))
                     }
+                    ActionElementTypes.DATE_PICKER.elementName ->
+                        States(type = ActionElementTypes.DATE_PICKER, isSelected = true, selectedValue = value.selectedDate)
+                    ActionElementTypes.TIME_PICKER.elementName ->
+                        States(type = ActionElementTypes.TIME_PICKER, isSelected = true, selectedValue = value.selectedTime)
+
                     else -> States(type = ActionElementTypes.UNKNOWN)
                 }
             }

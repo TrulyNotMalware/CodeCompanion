@@ -2,18 +2,16 @@ package dev.notypie.templates
 
 import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*
-import com.slack.api.model.block.element.BlockElement
-import com.slack.api.model.block.element.ButtonElement
-import com.slack.api.model.block.element.ImageElement
-import com.slack.api.model.block.element.MultiStaticSelectElement
-import com.slack.api.model.block.element.MultiUsersSelectElement
-import com.slack.api.model.block.element.PlainTextInputElement
+import com.slack.api.model.block.element.*
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.templates.dto.InteractiveObject
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 class ModalElementBuilder {
 
@@ -90,6 +88,24 @@ class ModalElementBuilder {
         .placeholder(this.plainTextObject(text = contents.placeholderText))
         .multiline(true)
         .build()
+
+    fun timePickerElement(placeholderText: String = "Select time") =
+        this.toInteractiveObject(
+            state = States(type = ActionElementTypes.TIME_PICKER),
+            element = TimePickerElement.builder()
+                .initialTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")))
+                .placeholder(this.plainTextObject(text = placeholderText))
+                .build()
+        )
+
+    fun datePickerElement(placeholderText: String = "Select a date") =
+        this.toInteractiveObject(
+            state = States(type = ActionElementTypes.DATE_PICKER),
+            element = DatePickerElement.builder()
+                .initialDate(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
+                .placeholder(this.plainTextObject(text = placeholderText))
+                .build()
+        )
 
     //FIXME change for record history.
     private fun toInteractiveObject(state: States, element: BlockElement): InteractiveObject =

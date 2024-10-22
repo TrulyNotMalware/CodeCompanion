@@ -4,7 +4,6 @@ import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.Command
@@ -22,7 +21,7 @@ class SlackInteractionHandlerImpl(
 ): InteractionHandler {
 
     override fun handleInteractions(headers: MultiValueMap<String, String>, payload: String) {
-        val interactionPayload = this.interactionPayloadParser.parseStringContents(payload = payload)
+        val interactionPayload = this.interactionPayloadParser.parseStringPayload(payload = payload)
         if( interactionPayload.isPrimary() ){
             val slackCommandData = interactionPayload.toSlackCommandData()
             val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
