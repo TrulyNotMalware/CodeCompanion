@@ -114,7 +114,7 @@ class SlackApiClientImpl(
         val response = ActionResponse.builder()
             .blocks(layout.template).replaceOriginal(true).build()
         val result = this.webHookSender.send(responseUrl, response)
-        return this.returnResponse(idempotencyKey = commandBasicInfo.idempotencyKey, result = result)
+        return this.returnResponse(commandBasicInfo = commandBasicInfo, result = result, commandType = commandType)
     }
 
     private fun doAction(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, layout: LayoutBlocks): ChatPostMessageResponse
@@ -166,8 +166,13 @@ class SlackApiClientImpl(
         )
     }
 
-    private fun returnResponse(idempotencyKey: String, result: WebhookResponse): SlackApiResponse{
-        TODO("NOT IMPLEMENTED YET")
+    private fun returnResponse(commandBasicInfo: CommandBasicInfo, result: WebhookResponse, commandType: CommandType ): SlackApiResponse{
+        return SlackApiResponse(
+            ok = result.code in 200..299,
+            apiAppId = commandBasicInfo.appId, channel = commandBasicInfo.channel, commandType = commandType,
+            idempotencyKey = commandBasicInfo.idempotencyKey, publisherId = commandBasicInfo.publisherId,
+            status = if(result.code in 200..299) Status.SUCCESS else Status.FAILED
+        )
     }
 
     private fun returnEphemeralResponse(idempotencyKey: String, result: ChatPostEphemeralResponse, commandType: CommandType, states: List<States> = listOf(),

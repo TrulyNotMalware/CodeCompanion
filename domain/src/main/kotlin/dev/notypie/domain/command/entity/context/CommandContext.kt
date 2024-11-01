@@ -21,10 +21,6 @@ abstract class CommandContext(
     internal abstract fun parseCommandDetailType(): CommandDetailType
 
     internal open fun runCommand(): SlackApiResponse = this.slackApiRequester.doNothing()
-    internal open fun handleInteractions(interactionPayload: InteractionPayload): CommandContext
-    = EmptyContext(
-        commandBasicInfo = this.commandBasicInfo,
-        requestHeaders = this.requestHeaders,
-        slackApiRequester = this.slackApiRequester
-    )
+    internal open fun handleInteraction(interactionPayload: InteractionPayload): SlackApiResponse =
+        this.slackApiRequester.doNothing()
 }

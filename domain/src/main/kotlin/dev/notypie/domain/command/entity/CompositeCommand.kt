@@ -3,7 +3,6 @@ package dev.notypie.domain.command.entity
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.UrlVerificationRequest
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.SlackApiResponse
@@ -36,7 +35,10 @@ class CompositeCommand(
         this.commandContext = this.commandParser.parseContext(idempotencyKey = this.idempotencyKey)
     }
 
-    override fun handleEvent(): SlackApiResponse = this.commandContext.runCommand()
+    override fun handleEvent(): SlackApiResponse =
+        if( commandData.slackCommandType == SlackCommandType.INTERACTION_RESPONSE)
+            this.commandContext.handleInteraction(this.commandData.body as InteractionPayload)
+        else this.commandContext.runCommand()
 
     private fun generateIdValue(): UUID = UUID.randomUUID()
 

@@ -6,7 +6,6 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.interactions.isCompleted
-import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -34,7 +33,7 @@ internal class RequestMeetingContext(
             commandDetailType = this.commandDetailType
             )
 
-    override fun handleInteractions(interactionPayload: InteractionPayload): CommandContext {
+    override fun handleInteraction(interactionPayload: InteractionPayload): SlackApiResponse {
         val timeString = interactionPayload.states
             .first { it.type == ActionElementTypes.TIME_PICKER }.selectedValue
         val dateString = interactionPayload.states
@@ -43,19 +42,19 @@ internal class RequestMeetingContext(
             return ErrorResponseContext(
                 commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
                 slackApiRequester = this.slackApiRequester, markdownErrorMessage = "Make sure to choose a time in the *future* rather than now."
-            )
+            ).runCommand()
         }
         if( !interactionPayload.isCompleted() ) {
             return ErrorResponseContext(
                 commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
                 slackApiRequester = this.slackApiRequester, markdownErrorMessage = "Please select *all options.*"
-            )
+            ).runCommand()
         }
         return ReplaceMessageContext(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
             slackApiRequester = this.slackApiRequester, responseUrl = interactionPayload.responseUrl,
             markdownMessage = "Successfully processed."
-        )
+        ).runCommand()
     }
 
     private fun isFutureTime(dateString: String, timeString: String): Boolean{

@@ -25,12 +25,12 @@ class InteractionCommandParser(
                 SlackApprovalFormContext(
                     slackApiRequester = this.slackApiRequester,
                     commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
-                ).handleInteractions(interactionPayload = interactionPayload)
+                )
             CommandDetailType.REQUEST_MEETING_FORM ->
                 RequestMeetingContext(
                     slackApiRequester = this.slackApiRequester,
                     commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
-                ).handleInteractions(interactionPayload = interactionPayload)
+                )
             else -> EmptyContext(
                 commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
                 requestHeaders = slackCommandData.rawHeader,
