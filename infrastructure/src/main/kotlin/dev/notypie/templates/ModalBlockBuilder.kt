@@ -7,6 +7,7 @@ import com.slack.api.model.block.LayoutBlock
 import com.slack.api.model.block.SectionBlock
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
+import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.InteractiveObject
 
@@ -162,6 +163,16 @@ class ModalBlockBuilder(
         }
         return toInteractionLayout(
             datePickerElement.state, timePickerElement.state, layout = layout
+        )
+    }
+
+    fun checkBoxesBlock( vararg options: CheckBoxOptions, isMarkDown: Boolean = true ): InteractionLayoutBlock {
+        val checkboxElements = this.modalElementBuilder.checkboxElements( options = options, isMarkDown = isMarkDown )
+        val layout = actions {
+            it.elements(listOf(checkboxElements.element))
+        }
+        return this.toInteractionLayout(
+            checkboxElements.state, layout = layout
         )
     }
 

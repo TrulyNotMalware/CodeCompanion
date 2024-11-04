@@ -45,9 +45,9 @@ class SlackApiClientImpl(
         return returnResponse(result = result, commandType = commandType, idempotencyKey = idempotencyKey)
     }
 
-    override fun simpleEphemeralErrorTextRequest(markdownErrorMessage: String, commandBasicInfo: CommandBasicInfo,
-                                                 commandType: CommandType, commandDetailType: CommandDetailType): SlackApiResponse {
-        val layout = this.templateBuilder.onlyTextTemplate(message = markdownErrorMessage, isMarkDown = true)
+    override fun simpleEphemeralTextRequest(textMessage: String, commandBasicInfo: CommandBasicInfo,
+                                            commandType: CommandType, commandDetailType: CommandDetailType): SlackApiResponse {
+        val layout = this.templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
         val result = this.doEphemeralAction(commandDetailType = commandDetailType,
             channel = commandBasicInfo.channel, layout = layout,
             idempotencyKey = commandBasicInfo.idempotencyKey, publisherId = commandBasicInfo.publisherId)
@@ -102,6 +102,8 @@ class SlackApiClientImpl(
             channel = commandBasicInfo.channel, apiAppId = commandBasicInfo.appId, publisherId = commandBasicInfo.publisherId
         )
     }
+
+
 
     override fun replaceOriginalText(
         markdownText: String,

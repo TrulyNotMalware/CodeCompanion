@@ -8,6 +8,7 @@ import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
+import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractiveObject
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -16,7 +17,7 @@ import java.time.format.DateTimeFormatter
 class ModalElementBuilder {
 
     fun textObject(text: String, isMarkDown: Boolean): TextObject =
-        if(isMarkDown) this.plainTextObject(text = text)
+        if( !isMarkDown ) this.plainTextObject(text = text)
         else this.markdownTextObject(markdownText = text)
 
     fun plainTextObject(text: String): PlainTextObject = plainText {
@@ -104,6 +105,21 @@ class ModalElementBuilder {
             element = DatePickerElement.builder()
                 .initialDate(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
                 .placeholder(this.plainTextObject(text = placeholderText))
+                .build()
+        )
+
+    fun optionElement(text: String, description: String = "", isMarkDown: Boolean = true) = option {
+        it.text(this.textObject(text = text, isMarkDown = isMarkDown))
+        it.description(this.plainTextObject(text = description))
+    }
+
+    fun checkboxElements(vararg options: CheckBoxOptions, isMarkDown: Boolean = true) =
+        this.toInteractiveObject(
+            state = States(type = ActionElementTypes.CHECKBOX),
+            element = CheckboxesElement.builder()
+                .options(
+                    options.map { this.optionElement(text = it.text, description = it.description, isMarkDown = isMarkDown) }
+                )
                 .build()
         )
 

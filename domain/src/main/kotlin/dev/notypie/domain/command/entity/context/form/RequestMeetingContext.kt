@@ -1,4 +1,4 @@
-package dev.notypie.domain.command.entity.context
+package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -9,6 +9,8 @@ import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.context.ReplaceMessageContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -38,18 +40,11 @@ internal class RequestMeetingContext(
             .first { it.type == ActionElementTypes.TIME_PICKER }.selectedValue
         val dateString = interactionPayload.states
             .first { it.type == ActionElementTypes.DATE_PICKER }.selectedValue
-        if(!this.isFutureTime(dateString = dateString, timeString = timeString)){
-            return ErrorResponseContext(
-                commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-                slackApiRequester = this.slackApiRequester, markdownErrorMessage = "Make sure to choose a time in the *future* rather than now."
-            ).runCommand()
-        }
-        if( !interactionPayload.isCompleted() ) {
-            return ErrorResponseContext(
-                commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-                slackApiRequester = this.slackApiRequester, markdownErrorMessage = "Please select *all options.*"
-            ).runCommand()
-        }
+        if( !this.isFutureTime(dateString = dateString, timeString = timeString) )
+            return this.createErrorResponse(errorMessage = "Make sure to choose a time in the *future* rather than now.")
+        if( !interactionPayload.isCompleted() )
+            return this.createErrorResponse(errorMessage = "Please select *all options.*")
+
         return ReplaceMessageContext(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
             slackApiRequester = this.slackApiRequester, responseUrl = interactionPayload.responseUrl,

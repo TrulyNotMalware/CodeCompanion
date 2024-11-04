@@ -4,6 +4,7 @@ import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
 
@@ -103,6 +104,9 @@ class ModalTemplateBuilder(
         idempotencyKey: String
     ): LayoutBlocks
     {
+        val callbackCheckboxes = this.modalBlockBuilder.checkBoxesBlock(
+            CheckBoxOptions(text = "*Confirmation CallBack*", description = "Send confirmation request to all participants and receive result")
+        )
         val multiUserSelectionContents = this.modalBlockBuilder.multiUserSelectBlock(contents =
             MultiUserSelectContents(title = "Select meeting members", placeholderText = DEFAULT_PLACEHOLDER_TEXT)
         )
@@ -117,20 +121,25 @@ class ModalTemplateBuilder(
             this.modalBlockBuilder.dividerBlock(),
             this.modalBlockBuilder.calendarThumbnailBlock(
                 title = "Schedule a new meeting",
-                markdownBody = "Send a confirmation request to the meeting participants.\n" +
-                        "Once everyone approves, I'll let you know that it's confirmed!"
+                markdownBody = "Create a new meeting.\n Please choose the meeting participants and the meeting date."
             ),
+            callbackCheckboxes.layout,
             multiUserSelectionContents.layout,
             this.modalBlockBuilder.simpleText(text = "Select meetup time", isMarkDown = false),
             timeScheduleBlock.layout,
             approvalLayout.layout
         )
         val states = mutableListOf<States>().apply {
+            addAll(callbackCheckboxes.interactiveObjects)
             addAll(multiUserSelectionContents.interactiveObjects)
             addAll(timeScheduleBlock.interactiveObjects)
-            approvalLayout.interactiveObjects
+            addAll(approvalLayout.interactiveObjects)
         }
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
+    }
+
+    fun timeScheduleNoticeTemplate(){
+        
     }
 
     private fun concatenateIdempotencyKey(idempotencyKey: String, commandDetailType: CommandDetailType) = "${idempotencyKey},${commandDetailType}"

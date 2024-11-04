@@ -23,4 +23,10 @@ abstract class CommandContext(
     internal open fun runCommand(): SlackApiResponse = this.slackApiRequester.doNothing()
     internal open fun handleInteraction(interactionPayload: InteractionPayload): SlackApiResponse =
         this.slackApiRequester.doNothing()
+
+    internal fun createErrorResponse(errorMessage: String): SlackApiResponse =
+        EphemeralTextResponse(
+            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+            slackApiRequester = this.slackApiRequester, textMessage = errorMessage
+        ).runCommand()
 }

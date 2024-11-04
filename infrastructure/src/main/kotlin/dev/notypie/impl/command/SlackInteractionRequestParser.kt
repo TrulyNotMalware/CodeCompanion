@@ -69,7 +69,10 @@ class SlackInteractionRequestParser
                         States(type = ActionElementTypes.DATE_PICKER, isSelected = true, selectedValue = value.selectedDate)
                     ActionElementTypes.TIME_PICKER.elementName ->
                         States(type = ActionElementTypes.TIME_PICKER, isSelected = true, selectedValue = value.selectedTime)
-
+                    ActionElementTypes.CHECKBOX.elementName ->
+                        if(value.selectedOptions.isEmpty()) States(type = ActionElementTypes.CHECKBOX)
+                        else States(type = ActionElementTypes.CHECKBOX, isSelected = value.selectedOptions.isNotEmpty(),
+                            selectedValue = value.selectedOptions.joinToString { it.text.text })
                     else -> States(type = ActionElementTypes.UNKNOWN)
                 }
             }

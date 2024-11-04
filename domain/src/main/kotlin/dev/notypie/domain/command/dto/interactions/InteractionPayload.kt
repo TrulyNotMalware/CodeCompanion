@@ -33,6 +33,7 @@ fun InteractionPayload.isCompleted(): Boolean =
     this.states.all { it.isSelected }
 
 fun InteractionPayload.isPrimary() = this.currentAction.type.isPrimary
+fun InteractionPayload.isCanceled() = this.currentAction.type == ActionElementTypes.REJECT_BUTTON
 
 fun InteractionPayload.toSlackCommandData(
     rawBody: Map<String, Any> = mapOf(), rawHeader: SlackRequestHeaders = SlackRequestHeaders()
