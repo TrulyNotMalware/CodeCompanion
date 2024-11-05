@@ -1,6 +1,5 @@
 package dev.notypie.impl.command
 
-import com.fasterxml.jackson.module.kotlin.readValue
 import com.slack.api.Slack
 import com.slack.api.app_backend.interactive_components.ActionResponseSender
 import com.slack.api.app_backend.interactive_components.response.ActionResponse
@@ -10,7 +9,6 @@ import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.model.block.LayoutBlock
 import com.slack.api.webhook.WebhookResponse
-import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.interactions.States
@@ -22,8 +20,6 @@ import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
-import dev.notypie.repository.outbox.SlackPostRequestMessage
-import dev.notypie.repository.outbox.SlackRequestType
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 
@@ -103,8 +99,6 @@ class SlackApiClientImpl(
         )
     }
 
-
-
     override fun replaceOriginalText(
         markdownText: String,
         responseUrl: String,
@@ -133,6 +127,17 @@ class SlackApiClientImpl(
             publisherId = publisherId)
     )
 
+//   Examples
+//        val ephemeralText = this.chatPostEphemeralBuilder(channel = channel, blocks = layout.template,
+//            idempotencyKey = idempotencyKey, commandDetailType = commandDetailType,
+//            publisherId = publisherId)
+//        val formBody : FormBody = RequestFormBuilder.toForm(ephemeralText).build()
+//        val jsonObject = mutableMapOf<String, String>()
+//        for (i in 0 until formBody.size) {
+//            jsonObject[formBody.name(i)] = formBody.value(i)
+//        }
+
+
     //https://api.slack.com/methods/chat.postMessage
     private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
         ChatPostMessageRequest.builder().channel(channel).text("${idempotencyKey},${commandDetailType}")
@@ -142,19 +147,9 @@ class SlackApiClientImpl(
     private fun chatPostEphemeralBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String,
                                          blocks: List<LayoutBlock>, publisherId: String) =
         ChatPostEphemeralRequest.builder()
-            .channel(channel).text("${idempotencyKey}, ${commandDetailType.toString()}")
+            .channel(channel).text("$idempotencyKey, $commandDetailType")
             .token(this.botToken).blocks(blocks).user(publisherId)
             .build()
-
-    @Deprecated(message = "for removal")
-    private fun toSlackPostRequestMessage(type: SlackRequestType, layouts: List<LayoutBlock>):SlackPostRequestMessage {
-        val toStringContents = objectMapper.writeValueAsString(layouts)
-        val map: Map<String, Any> = objectMapper.readValue(toStringContents)
-        return SlackPostRequestMessage(
-            type = type,
-            payload = map
-        )
-    }
 
     private fun returnResponse(idempotencyKey: String, result: ChatPostMessageResponse, commandType: CommandType, states: List<States> = listOf()): SlackApiResponse{
         //Result is false.

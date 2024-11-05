@@ -8,6 +8,7 @@ import dev.notypie.impl.command.SlackMessageDispatcher
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -18,14 +19,17 @@ class SlackRequestBuilderConfiguration(
 ) {
 
     @Bean
+    @ConditionalOnMissingBean(SlackTemplateBuilder::class)
     fun slackTemplateBuilder() : SlackTemplateBuilder = ModalTemplateBuilder()
 
     @Bean
+    @ConditionalOnMissingBean(SlackMessageDispatcher::class)
     fun slackMessageDispatcher(
         applicationEventPublisher: ApplicationEventPublisher,
     ) = SlackMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher)
 
     @Bean
+    @ConditionalOnMissingBean(SlackApiRequester::class)
     fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder,
                             applicationEventPublisher: ApplicationEventPublisher,
                             slackMessageDispatcher: SlackMessageDispatcher): SlackApiRequester = SlackApiClientImpl(
@@ -34,5 +38,6 @@ class SlackRequestBuilderConfiguration(
     )
 
     @Bean
+    @ConditionalOnMissingBean(InteractionPayloadParser::class)
     fun interactionRequestParser(): InteractionPayloadParser = SlackInteractionRequestParser()
 }

@@ -16,6 +16,7 @@ data class SlackApiResponse(
     val commandType: CommandType,
 
     val actionStates: List<States> = listOf()
+    //TODO Add JsonRequest data ( OutboxRepository )
 ){
     companion object{
         fun empty() = SlackApiResponse(

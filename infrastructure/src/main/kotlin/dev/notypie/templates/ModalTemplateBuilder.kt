@@ -7,6 +7,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
+import dev.notypie.templates.dto.TimeScheduleAlertContents
 
 /**
  * A class that implements the SlackTemplateBuilder interface and provides methods for building modal templates.
@@ -138,9 +139,40 @@ class ModalTemplateBuilder(
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
     }
 
-    fun timeScheduleNoticeTemplate(){
-        
+    override fun timeScheduleNoticeTemplate(
+        timeScheduleInfo: TimeScheduleAlertContents,
+        approvalContents: ApprovalContents?,
+        idempotencyKey: String, commandDetailType: CommandDetailType,
+    ): LayoutBlocks {
+        val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
+        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
+        ApprovalContents(reason = "Time Schedule Notice", approvalButtonName = "Approve", rejectButtonName = "Reject",
+            approvalInteractionValue = concatenateString, rejectInteractionValue = concatenateString))
+        val radioButtonLayout = this.modalBlockBuilder.radioButtonBlock(
+            *timeScheduleInfo.rejectReasons.toTypedArray(),
+            description = "Capturing reasons for meeting absence"
+        )
+        val blocks = listOf(
+            this.modalBlockBuilder.headerBlock(text = "Time Schedule Notice"),
+            this.modalBlockBuilder.dividerBlock(),
+            this.modalBlockBuilder.calendarThumbnailBlock(
+                title = timeScheduleInfo.title,
+                markdownBody = timeScheduleInfo.description
+            ),
+            radioButtonLayout.layout,
+            this.modalBlockBuilder.plainTextInputBlock(
+                contents = TextInputContents("detail reason", "")
+            ),
+            approvalLayout.layout,
+        )
+        val states = mutableListOf<States>().apply {
+            addAll(approvalLayout.interactiveObjects)
+            addAll(radioButtonLayout.interactiveObjects)
+        }
+        return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
     }
+
+
 
     private fun concatenateIdempotencyKey(idempotencyKey: String, commandDetailType: CommandDetailType) = "${idempotencyKey},${commandDetailType}"
 }

@@ -123,6 +123,16 @@ class ModalElementBuilder {
                 .build()
         )
 
+    fun radioButtonElements(vararg options: CheckBoxOptions, description: String ) =
+        this.toInteractiveObject(
+            state = States(type = ActionElementTypes.RADIO_BUTTONS),
+            element = RadioButtonsElement.builder()
+                .options(
+                    options.map { this.optionElement(text = it.text, description = it.description, isMarkDown = true) }
+                )
+                .build()
+        )
+
     //FIXME change for record history.
     private fun toInteractiveObject(state: States, element: BlockElement): InteractiveObject =
         InteractiveObject(state = state, element = element)

@@ -13,6 +13,7 @@ import dev.notypie.domain.command.entity.slash.ReplaceTextResponseCommand
 import dev.notypie.domain.history.repository.HistoryRepository
 import dev.notypie.impl.command.InteractionPayloadParser
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 
 @Service
@@ -21,14 +22,15 @@ class SlackInteractionHandlerImpl(
     private val slackApiRequester: SlackApiRequester,
     private val historyRepository: HistoryRepository
 ): InteractionHandler {
+    //TODO RETURN RESPONSES
 
+    @Transactional
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String) {
         val interactionPayload = this.interactionPayloadParser.parseStringPayload(payload = payload)
         val slackCommandData = interactionPayload.toSlackCommandData()
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
 
         if( interactionPayload.isCanceled() )
-            //TODO RETURN RESPONSES
             this.rejectCommand(
                 idempotencyKey = idempotencyKey, commandData = slackCommandData,
                 responseUrl = interactionPayload.responseUrl

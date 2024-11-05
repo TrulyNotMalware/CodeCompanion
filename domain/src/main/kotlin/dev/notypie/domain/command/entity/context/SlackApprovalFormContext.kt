@@ -8,8 +8,6 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import java.util.LinkedList
-import java.util.Queue
 
 internal class SlackApprovalFormContext(
     commandBasicInfo: CommandBasicInfo,

@@ -3,6 +3,7 @@ package dev.notypie.templates
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.LayoutBlocks
+import dev.notypie.templates.dto.TimeScheduleAlertContents
 
 interface SlackTemplateBuilder {
     fun onlyTextTemplate(message: String, isMarkDown: Boolean) : LayoutBlocks
@@ -15,4 +16,8 @@ interface SlackTemplateBuilder {
                                     approvalContents: ApprovalContents? = null): LayoutBlocks
     fun requestMeetingFormTemplate(approvalContents: ApprovalContents? = null,
                                    commandDetailType: CommandDetailType, idempotencyKey: String):LayoutBlocks
+    fun timeScheduleNoticeTemplate(
+        timeScheduleInfo: TimeScheduleAlertContents,
+        approvalContents: ApprovalContents?, idempotencyKey: String, commandDetailType: CommandDetailType, ): LayoutBlocks
+
 }

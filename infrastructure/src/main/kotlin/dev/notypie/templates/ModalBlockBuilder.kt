@@ -176,6 +176,18 @@ class ModalBlockBuilder(
         )
     }
 
+    fun radioButtonBlock( vararg options: String, description: String, isMarkDown: Boolean = true ) : InteractionLayoutBlock {
+        val radioButtonElements = this.modalElementBuilder.radioButtonElements( options = toCheckBoxOptions(stringOption = options), description = description )
+        val layout = section {
+            it.text(this.modalElementBuilder.textObject( text = description, isMarkDown = isMarkDown))
+            it.accessory(radioButtonElements.element)
+        }
+        return this.toInteractionLayout(
+            radioButtonElements.state, layout = layout
+        )
+    }
+
+    private fun toCheckBoxOptions(vararg stringOption: String) = stringOption.map { CheckBoxOptions(text = it) }.toTypedArray()
 
     private fun toInteractionLayout(vararg states: States, layout: LayoutBlock): InteractionLayoutBlock =
         InteractionLayoutBlock(

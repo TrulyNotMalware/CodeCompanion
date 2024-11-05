@@ -5,13 +5,11 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
-import dev.notypie.domain.command.dto.response.SlackApiResponse
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.ContextParser
 import dev.notypie.domain.command.entity.parsers.InteractionCommandParser
-import java.util.*
 
 class CompositeCommand(
     val appName: String,
@@ -27,20 +25,10 @@ class CompositeCommand(
         const val BASE_URL: String = "https://slack.com/api/"
     }
 
-    val commandId: UUID = this.generateIdValue()
-    private val commandParser: ContextParser
-    private val commandContext: CommandContext
-    init {
-        this.commandParser = this.buildParser(this.commandData)
-        this.commandContext = this.commandParser.parseContext(idempotencyKey = this.idempotencyKey)
-    }
+    private val commandParser: ContextParser = this.buildParser(this.commandData)
 
-    override fun handleEvent(): SlackApiResponse =
-        if( commandData.slackCommandType == SlackCommandType.INTERACTION_RESPONSE)
-            this.commandContext.handleInteraction(this.commandData.body as InteractionPayload)
-        else this.commandContext.runCommand()
-
-    private fun generateIdValue(): UUID = UUID.randomUUID()
+    override fun parseContext(): CommandContext =
+        this.commandParser.parseContext(idempotencyKey = this.idempotencyKey)
 
     private fun buildParser(commandData: SlackCommandData): ContextParser {
         return when(commandData.slackCommandType){

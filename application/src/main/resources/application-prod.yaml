@@ -3,6 +3,10 @@ spring:
     activate:
       on-profile: "prod"
 
+  threads:
+    virtual:
+      enabled: true
+
   datasource:
     hikari:
       transaction-isolation: ${SQL_PROD_ISOLATION_LEVEL}
