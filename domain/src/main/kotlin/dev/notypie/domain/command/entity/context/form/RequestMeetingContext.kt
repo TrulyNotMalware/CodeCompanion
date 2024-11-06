@@ -6,7 +6,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.interactions.isCompleted
-import dev.notypie.domain.command.dto.response.SlackApiResponse
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -28,14 +28,14 @@ internal class RequestMeetingContext(
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
 
-    override fun runCommand(): SlackApiResponse =
+    override fun runCommand(): CommandOutput =
         this.slackApiRequester.requestMeetingFormRequest(
             commandBasicInfo = this.commandBasicInfo,
             commandType = this.commandType,
             commandDetailType = this.commandDetailType
             )
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): SlackApiResponse {
+    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
         val timeString = interactionPayload.states
             .first { it.type == ActionElementTypes.TIME_PICKER }.selectedValue
         val dateString = interactionPayload.states

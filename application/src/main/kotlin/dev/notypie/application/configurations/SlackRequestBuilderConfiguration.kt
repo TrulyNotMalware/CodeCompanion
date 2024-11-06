@@ -1,10 +1,11 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.SlackApiClientImpl
 import dev.notypie.impl.command.SlackInteractionRequestParser
-import dev.notypie.impl.command.SlackMessageDispatcher
+import dev.notypie.impl.command.ApplicationMessageDispatcher
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
 import org.springframework.beans.factory.annotation.Value
@@ -23,18 +24,18 @@ class SlackRequestBuilderConfiguration(
     fun slackTemplateBuilder() : SlackTemplateBuilder = ModalTemplateBuilder()
 
     @Bean
-    @ConditionalOnMissingBean(SlackMessageDispatcher::class)
-    fun slackMessageDispatcher(
+    @ConditionalOnMissingBean(MessageDispatcher::class)
+    fun messageDispatcher(
         applicationEventPublisher: ApplicationEventPublisher,
-    ) = SlackMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher)
+    ) = ApplicationMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher)
 
     @Bean
     @ConditionalOnMissingBean(SlackApiRequester::class)
     fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder,
                             applicationEventPublisher: ApplicationEventPublisher,
-                            slackMessageDispatcher: SlackMessageDispatcher): SlackApiRequester = SlackApiClientImpl(
+                            slackMessageDispatcher: MessageDispatcher): SlackApiRequester = SlackApiClientImpl(
         botToken = botToken, templateBuilder = slackTemplateBuilder,
-        slackMessageDispatcher = slackMessageDispatcher
+        messageDispatcher = slackMessageDispatcher
     )
 
     @Bean

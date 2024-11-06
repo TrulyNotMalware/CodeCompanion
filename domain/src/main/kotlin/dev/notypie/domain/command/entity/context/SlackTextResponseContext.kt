@@ -4,7 +4,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.response.SlackApiResponse
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 
 internal class SlackTextResponseContext(
@@ -20,11 +20,11 @@ internal class SlackTextResponseContext(
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
-    override fun runCommand(): SlackApiResponse {
+    override fun runCommand(): CommandOutput {
         return this.slackApiRequester.simpleTextRequest(
-            headLineText = "Simple Text Response",
-            channel=this.commandBasicInfo.channel, simpleString = this.text,
-            commandType = this.commandType, idempotencyKey = this.commandBasicInfo.idempotencyKey,
+            commandBasicInfo = this.commandBasicInfo,
+            headLineText = "Simple Text Response", simpleString = this.text,
+            commandType = this.commandType,
             commandDetailType = this.commandDetailType
         )
     }

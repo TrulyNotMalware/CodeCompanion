@@ -8,7 +8,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
-import dev.notypie.domain.command.dto.response.SlackApiResponse
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CompositeCommand
 import dev.notypie.domain.history.entity.History
@@ -29,7 +29,7 @@ class SlackMentionEventHandlerImpl(
     }
 
     @Transactional
-    override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): SlackApiResponse {
+    override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
         val slackCommandData = this.parseAppMentionEvent(headers = headers, payload = payload)
         return this.handleEvent(slackCommandData = slackCommandData)
     }
@@ -52,10 +52,10 @@ class SlackMentionEventHandlerImpl(
             commandData = commandData, slackApiRequester = slackApiRequester)
 
     @Transactional
-    override fun handleEvent(slackCommandData: SlackCommandData): SlackApiResponse{
+    override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput{
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command = this.buildCommand(idempotencyKey = idempotencyKey,commandData = slackCommandData)
-        val result: SlackApiResponse = command.handleEvent()
+        val result: CommandOutput = command.handleEvent()
         val history: History = mapHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
         this.historyHandler.saveNewHistory(history = history)
         return result

@@ -3,7 +3,7 @@ package dev.notypie.domain.command.entity.context
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.response.SlackApiResponse
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 
 internal class DetailErrorAlertContext(
@@ -21,11 +21,11 @@ internal class DetailErrorAlertContext(
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
-    override fun runCommand(): SlackApiResponse =
+    override fun runCommand(): CommandOutput =
         this.slackApiRequester.detailErrorTextRequest(
-            errorClassName = targetClassName, channel = this.commandBasicInfo.channel,
+            errorClassName = targetClassName,
             errorMessage = errorMessage, details = details,
             commandType = this.commandType,
-            idempotencyKey = this.commandBasicInfo.idempotencyKey, commandDetailType = this.commandDetailType
+            commandBasicInfo = this.commandBasicInfo, commandDetailType = this.commandDetailType
         )
 }

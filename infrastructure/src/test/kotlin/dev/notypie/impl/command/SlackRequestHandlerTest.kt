@@ -1,6 +1,5 @@
 package dev.notypie.impl.command
 
-import dev.notypie.domain.command.SlackRequestHandler
 import io.kotest.core.spec.style.BehaviorSpec
 
 class SlackRequestHandlerTest: BehaviorSpec({
