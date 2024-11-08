@@ -13,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 @Configuration
 class SlackRequestBuilderConfiguration(
@@ -23,11 +24,23 @@ class SlackRequestBuilderConfiguration(
     @ConditionalOnMissingBean(SlackTemplateBuilder::class)
     fun slackTemplateBuilder() : SlackTemplateBuilder = ModalTemplateBuilder()
 
+    //FIXME Scheduler
+    @Bean
+    fun taskScheduler(): ThreadPoolTaskScheduler {
+        val scheduler = ThreadPoolTaskScheduler()
+        scheduler.poolSize = 5
+        scheduler.threadNamePrefix = "ScheduledTask-"
+        scheduler.initialize()
+        return scheduler
+    }
+
     @Bean
     @ConditionalOnMissingBean(MessageDispatcher::class)
     fun messageDispatcher(
         applicationEventPublisher: ApplicationEventPublisher,
-    ) = ApplicationMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher)
+        threadPoolTaskScheduler: ThreadPoolTaskScheduler,
+    ) = ApplicationMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher,
+        taskScheduler = threadPoolTaskScheduler)
 
     @Bean
     @ConditionalOnMissingBean(SlackApiRequester::class)

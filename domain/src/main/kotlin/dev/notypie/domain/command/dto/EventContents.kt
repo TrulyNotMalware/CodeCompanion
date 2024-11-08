@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.dto
 
 import dev.notypie.domain.command.entity.CommandDetailType
+import java.util.concurrent.TimeUnit
 
 data class PostEventContents(
     val messageType: MessageType,
@@ -23,6 +24,13 @@ data class ActionEventContents(
     val responseUrl: String,
     val channel: String,
     val body: String,
+)
+
+data class DelayHandleEventContents(
+    val apiAppId: String,
+
+    val delayTime: Long = 5L,
+    val timeUnit: TimeUnit = TimeUnit.MINUTES
 )
 
 enum class MessageType{

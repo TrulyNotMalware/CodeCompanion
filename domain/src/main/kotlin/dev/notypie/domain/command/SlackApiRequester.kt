@@ -10,7 +10,6 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 
 interface SlackApiRequester {
-    fun doNothing(): CommandOutput
     fun simpleTextRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo, simpleString: String, commandType: CommandType): CommandOutput
     fun simpleEphemeralTextRequest(textMessage: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): CommandOutput
     fun detailErrorTextRequest(commandDetailType: CommandDetailType, errorClassName: String, errorMessage: String, details: String?, commandType: CommandType, commandBasicInfo: CommandBasicInfo): CommandOutput

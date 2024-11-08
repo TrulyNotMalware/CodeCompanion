@@ -12,7 +12,7 @@ import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import java.util.*
 
-class AppMentionCommandParser(
+internal class AppMentionCommandParser(
     private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,

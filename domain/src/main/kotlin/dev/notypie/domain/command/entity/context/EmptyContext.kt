@@ -6,7 +6,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 
-class EmptyContext(
+internal class EmptyContext(
     commandBasicInfo: CommandBasicInfo,
     requestHeaders: SlackRequestHeaders,
     slackApiRequester: SlackApiRequester,

@@ -5,12 +5,12 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
+import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.context.ReplaceMessageContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -36,6 +36,10 @@ internal class RequestMeetingContext(
             )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+        val participants = this.getParticipants(
+            states = interactionPayload.states, publisher = interactionPayload.user.id
+        )
+        if( participants.isEmpty() ) return this.createErrorResponse(errorMessage = "Select participants")
         val timeString = interactionPayload.states
             .first { it.type == ActionElementTypes.TIME_PICKER }.selectedValue
         val dateString = interactionPayload.states
@@ -45,12 +49,18 @@ internal class RequestMeetingContext(
         if( !interactionPayload.isCompleted() )
             return this.createErrorResponse(errorMessage = "Please select *all options.*")
 
-        return ReplaceMessageContext(
-            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-            slackApiRequester = this.slackApiRequester, responseUrl = interactionPayload.responseUrl,
-            markdownMessage = "Successfully processed."
-        ).runCommand()
+        return this.interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
     }
+
+    private fun getParticipants(states: List<States>, publisher: String): Set<String> =
+        states.firstOrNull { state -> state.type == ActionElementTypes.MULTI_USERS_SELECT }
+            ?.takeIf { state -> state.selectedValue.isNotEmpty() }
+            ?.selectedValue
+            ?.split(",")
+            ?.filter { participant -> participant != publisher }
+            ?.toSet()
+        ?: emptySet()
+
 
     private fun isFutureTime(dateString: String, timeString: String): Boolean{
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")

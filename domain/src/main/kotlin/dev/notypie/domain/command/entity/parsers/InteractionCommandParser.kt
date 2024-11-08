@@ -10,7 +10,7 @@ import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import java.util.*
 
-class InteractionCommandParser(
+internal class InteractionCommandParser(
     private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,

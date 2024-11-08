@@ -7,6 +7,7 @@ import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.dto.ActionEventContents
+import dev.notypie.domain.command.dto.DelayHandleEventContents
 import dev.notypie.domain.command.dto.PostEventContents
 import dev.notypie.domain.command.dto.MessageType
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -17,12 +18,15 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import java.time.Instant
 
 class ApplicationMessageDispatcher(
     private val botToken: String,
-    private val applicationEventPublisher: ApplicationEventPublisher
+    private val applicationEventPublisher: ApplicationEventPublisher,
+    private val taskScheduler: ThreadPoolTaskScheduler
 ): MessageDispatcher {
 
     private val slack: Slack = Slack.getInstance()
@@ -55,6 +59,20 @@ class ApplicationMessageDispatcher(
         )
     }
 
+    //TODO Delay event trigger
+    fun dispatch(event: DelayHandleEventContents): CommandOutput{
+        taskScheduler.schedule({
+            this.applicationEventPublisher.publishEvent(event)
+        }, Instant.now().plusSeconds(event.delayTime * 60)
+        )
+        TODO()
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    fun listen(event: DelayHandleEventContents){
+
+    }
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: PostEventContents){
         when(event.messageType){
@@ -62,6 +80,7 @@ class ApplicationMessageDispatcher(
             MessageType.TO_ALL -> dispatchChatPostMessageContents(event = event)
         }
     }
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: ActionEventContents) = this.dispatchActionResponseContents(event = event)
 

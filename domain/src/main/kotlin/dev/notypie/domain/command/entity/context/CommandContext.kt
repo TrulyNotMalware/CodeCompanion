@@ -8,7 +8,7 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 
-abstract class CommandContext(
+internal abstract class CommandContext(
     val commandBasicInfo: CommandBasicInfo,
     val tracking: Boolean = true,
     val requestHeaders: SlackRequestHeaders,
@@ -20,13 +20,20 @@ abstract class CommandContext(
     internal abstract fun parseCommandType(): CommandType
     internal abstract fun parseCommandDetailType(): CommandDetailType
 
-    internal open fun runCommand(): CommandOutput = this.slackApiRequester.doNothing()
+    internal open fun runCommand(): CommandOutput = CommandOutput.empty()
     internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
-        this.slackApiRequester.doNothing()
+        CommandOutput.empty()
 
     internal fun createErrorResponse(errorMessage: String): CommandOutput =
         EphemeralTextResponse(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
             slackApiRequester = this.slackApiRequester, textMessage = errorMessage
+        ).runCommand()
+
+    internal fun interactionSuccessResponse(responseUrl: String, markDownMessage: String = "Successfully processed."): CommandOutput =
+        ReplaceMessageContext(
+            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+            slackApiRequester = this.slackApiRequester, responseUrl = responseUrl,
+            markdownMessage = markDownMessage
         ).runCommand()
 }

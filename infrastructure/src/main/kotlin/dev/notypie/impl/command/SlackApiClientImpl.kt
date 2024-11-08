@@ -31,8 +31,6 @@ class SlackApiClientImpl(
 ): SlackApiRequester {
 
     private val slackConfig = Slack.getInstance().config
-    override fun doNothing(): CommandOutput = CommandOutput.empty()
-
     override fun simpleTextRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo,
                                    simpleString: String, commandType: CommandType): CommandOutput {
         val layout = this.templateBuilder.simpleTextResponseTemplate(headLineText = headLineText, body = simpleString, isMarkDown = true)
@@ -189,11 +187,8 @@ class SlackApiClientImpl(
             body = body
         )
 
-    private fun toMap(formBody: FormBody): Map<String, String> {
-        val bodyData = mutableMapOf<String, String>()
-        for (i in 0 until formBody.size) bodyData[formBody.name(i)] = formBody.value(i)
-        return bodyData.toMap()
-    }
+    private fun toMap(formBody: FormBody): Map<String, String>
+        = (0 until formBody.size).associate { formBody.name(it) to formBody.value(it) }
 
 
     //https://api.slack.com/methods/chat.postMessage

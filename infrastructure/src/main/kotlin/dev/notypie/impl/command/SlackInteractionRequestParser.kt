@@ -63,7 +63,7 @@ class SlackInteractionRequestParser
                     }
                     ActionElementTypes.MULTI_USERS_SELECT.elementName -> {
                         if(value.selectedUsers.isEmpty()) States(type = ActionElementTypes.MULTI_USERS_SELECT)
-                        else States(type = ActionElementTypes.MULTI_USERS_SELECT, isSelected = true, selectedValue = value.selectedUsers.joinToString(", "))
+                        else States(type = ActionElementTypes.MULTI_USERS_SELECT, isSelected = true, selectedValue = value.selectedUsers.joinToString(","))
                     }
                     ActionElementTypes.DATE_PICKER.elementName ->
                         States(type = ActionElementTypes.DATE_PICKER, isSelected = true, selectedValue = value.selectedDate)

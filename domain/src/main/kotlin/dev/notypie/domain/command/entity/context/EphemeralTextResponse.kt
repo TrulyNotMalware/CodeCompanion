@@ -7,7 +7,7 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 
-class EphemeralTextResponse(
+internal class EphemeralTextResponse(
     commandBasicInfo: CommandBasicInfo,
     requestHeaders: SlackRequestHeaders,
     slackApiRequester: SlackApiRequester,
