@@ -38,7 +38,7 @@ class ApplicationMessageDispatcher(
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
-            status = Status.IN_PROGRESSED,
+            status = Status.SUCCESS,
             idempotencyKey = event.idempotencyKey,
             publisherId = event.publisherId,
             channel = event.channel,
@@ -51,7 +51,7 @@ class ApplicationMessageDispatcher(
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
-            status = Status.IN_PROGRESSED,
+            status = Status.SUCCESS,
             idempotencyKey = event.idempotencyKey,
             publisherId = event.publisherId,
             channel = event.channel,
@@ -59,13 +59,19 @@ class ApplicationMessageDispatcher(
         )
     }
 
-    //TODO Delay event trigger
-    fun dispatch(event: DelayHandleEventContents): CommandOutput{
-        taskScheduler.schedule({
+    override fun dispatch(event: DelayHandleEventContents, commandType: CommandType): CommandOutput {
+        this.taskScheduler.schedule({
             this.applicationEventPublisher.publishEvent(event)
-        }, Instant.now().plusSeconds(event.delayTime * 60)
+        }, Instant.now().plusSeconds(event.delayTime * 60))
+        return CommandOutput(
+            ok = true,
+            apiAppId = event.apiAppId,
+            status = Status.IN_PROGRESSED,
+            idempotencyKey = event.idempotencyKey,
+            publisherId = event.publisherId,
+            channel = event.channel,
+            commandType = commandType,
         )
-        TODO()
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

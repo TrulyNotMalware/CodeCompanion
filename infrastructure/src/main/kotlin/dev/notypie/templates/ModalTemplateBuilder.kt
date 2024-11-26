@@ -43,7 +43,8 @@ class ModalTemplateBuilder(
             this.modalBlockBuilder.timeScheduleBlock(timeScheduleInfo = timeScheduleInfo)
         )
 
-    override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents): LayoutBlocks{
+    override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: String, commandDetailType: CommandDetailType): LayoutBlocks{
+        val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
         val buttonLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         return this.toLayoutBlocks(
             this.modalBlockBuilder.headerBlock(text = headLineText),

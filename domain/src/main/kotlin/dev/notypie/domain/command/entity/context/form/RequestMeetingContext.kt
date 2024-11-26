@@ -7,6 +7,7 @@ import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.interactions.isCompleted
+import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -49,6 +50,15 @@ internal class RequestMeetingContext(
         if( !interactionPayload.isCompleted() )
             return this.createErrorResponse(errorMessage = "Please select *all options.*")
 
+        // send notice
+        ApprovalCallbackContext(
+            slackApiRequester = this.slackApiRequester, participants = participants,
+            commandBasicInfo = this.commandBasicInfo,
+            approvalContents = ApprovalContents(
+                headLineText = "Request Meeting", reason = "request meeting",
+                rejectInteractionValue = "deny", approvalInteractionValue = "approve"
+            )
+        ).runCommand()
         return this.interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
     }
 

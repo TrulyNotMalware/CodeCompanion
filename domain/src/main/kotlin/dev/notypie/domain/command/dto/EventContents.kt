@@ -28,9 +28,11 @@ data class ActionEventContents(
 
 data class DelayHandleEventContents(
     val apiAppId: String,
-
     val delayTime: Long = 5L,
-    val timeUnit: TimeUnit = TimeUnit.MINUTES
+    val timeUnit: TimeUnit = TimeUnit.MINUTES,
+    val idempotencyKey: String,
+    val channel: String,
+    val publisherId: String,
 )
 
 enum class MessageType{

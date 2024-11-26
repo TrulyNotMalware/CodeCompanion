@@ -30,7 +30,7 @@ internal class RequestApprovalContext(
 
     override fun runCommand(): CommandOutput
         = this.slackApiRequester.simpleApplyRejectRequest(
-            headLineText = "Approval Requests!", approvalContents = this.approvalContents,
+            approvalContents = this.approvalContents,
             commandType = this.commandType, commandDetailType = this.commandDetailType,
             commandBasicInfo = this.commandBasicInfo,
         )
