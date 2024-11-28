@@ -1,10 +1,7 @@
 package dev.notypie.templates
 
+import com.slack.api.model.block.*
 import com.slack.api.model.block.Blocks.*
-import com.slack.api.model.block.DividerBlock
-import com.slack.api.model.block.HeaderBlock
-import com.slack.api.model.block.LayoutBlock
-import com.slack.api.model.block.SectionBlock
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.templates.dto.CheckBoxOptions
@@ -54,10 +51,10 @@ class ModalBlockBuilder(
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
         val approvalButton: InteractiveObject = this.modalElementBuilder.approvalButtonElement(
             approvalButtonName = approvalContents.approvalButtonName,
-            interactionPayload = approvalContents.approvalInteractionValue)
+            interactionPayload = approvalContents.interactionValue)
         val rejectButton: InteractiveObject = this.modalElementBuilder.rejectButtonElement(
             rejectButtonName = approvalContents.rejectButtonName,
-            interactionPayload = approvalContents.rejectInteractionValue)
+            interactionPayload = approvalContents.interactionValue)
 
         val layout = actions {
             it.elements(
@@ -141,12 +138,12 @@ class ModalBlockBuilder(
      * @param contents The contents of the plain text input element.
      * @return The generated section block.
      */
-    fun plainTextInputBlock(contents: TextInputContents) = input {
+    fun plainTextInputBlock(contents: TextInputContents): InputBlock = input {
         it.label(this.modalElementBuilder.plainTextObject(text = contents.title))
         it.element(this.modalElementBuilder.plainTextInputElement(contents = contents))
     }
 
-    fun calendarThumbnailBlock(title: String, markdownBody: String) = section {
+    fun calendarThumbnailBlock(title: String, markdownBody: String): SectionBlock = section {
         it.text(this.modalElementBuilder.markdownTextObject(markdownText = "*${title}*\n${markdownBody}"))
         it.accessory(this.modalElementBuilder.imageBlockElement(imageUrl = DEFAULT_CALENDAR_IMAGE_URLS, altText = "calendar thumbnail"))
     }

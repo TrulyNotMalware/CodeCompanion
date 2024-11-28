@@ -44,7 +44,6 @@ class ModalTemplateBuilder(
         )
 
     override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: String, commandDetailType: CommandDetailType): LayoutBlocks{
-        val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
         val buttonLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         return this.toLayoutBlocks(
             this.modalBlockBuilder.headerBlock(text = headLineText),
@@ -68,13 +67,10 @@ class ModalTemplateBuilder(
     }
 
     override fun requestApprovalFormTemplate(
-        headLineText: String, selectionFields: List<SelectionContents>,
-        approvalTargetUser: MultiUserSelectContents?, reasonInput: TextInputContents?,
-        approvalContents: ApprovalContents?): LayoutBlocks
+        headLineText: String, selectionFields: List<SelectionContents>, approvalContents: ApprovalContents,
+        approvalTargetUser: MultiUserSelectContents?, reasonInput: TextInputContents? ): LayoutBlocks
     {
-        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
-            ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
-            approvalInteractionValue = "request_apply", rejectInteractionValue = "request_cancel"))
+        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         val userSelectLayout = this.modalBlockBuilder.multiUserSelectBlock(
             contents = approvalTargetUser ?:
             MultiUserSelectContents(title = "Select target user", placeholderText = DEFAULT_PLACEHOLDER_TEXT))
@@ -101,9 +97,7 @@ class ModalTemplateBuilder(
     }
 
     override fun requestMeetingFormTemplate(
-        approvalContents: ApprovalContents?,
-        commandDetailType: CommandDetailType,
-        idempotencyKey: String
+        approvalContents: ApprovalContents
     ): LayoutBlocks
     {
         val callbackCheckboxes = this.modalBlockBuilder.checkBoxesBlock(
@@ -112,11 +106,8 @@ class ModalTemplateBuilder(
         val multiUserSelectionContents = this.modalBlockBuilder.multiUserSelectBlock(contents =
             MultiUserSelectContents(title = "Select meeting members", placeholderText = DEFAULT_PLACEHOLDER_TEXT)
         )
-        val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
         val timeScheduleBlock = this.modalBlockBuilder.selectDateTimeScheduleBlock()
-        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
-        ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
-            approvalInteractionValue = concatenateString, rejectInteractionValue = concatenateString))
+        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
 
         val blocks = listOf(
             this.modalBlockBuilder.headerBlock(text = "Request Meeting"),
@@ -142,13 +133,9 @@ class ModalTemplateBuilder(
 
     override fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,
-        approvalContents: ApprovalContents?,
-        idempotencyKey: String, commandDetailType: CommandDetailType,
+        approvalContents: ApprovalContents
     ): LayoutBlocks {
-        val concatenateString = this.concatenateIdempotencyKey(idempotencyKey = idempotencyKey, commandDetailType = commandDetailType)
-        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents ?:
-        ApprovalContents(reason = "Time Schedule Notice", approvalButtonName = "Approve", rejectButtonName = "Reject",
-            approvalInteractionValue = concatenateString, rejectInteractionValue = concatenateString))
+        val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         val radioButtonLayout = this.modalBlockBuilder.radioButtonBlock(
             *timeScheduleInfo.rejectReasons.toTypedArray(),
             description = "Capturing reasons for meeting absence"
@@ -172,8 +159,4 @@ class ModalTemplateBuilder(
         }
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
     }
-
-
-
-    private fun concatenateIdempotencyKey(idempotencyKey: String, commandDetailType: CommandDetailType) = "${idempotencyKey},${commandDetailType}"
 }

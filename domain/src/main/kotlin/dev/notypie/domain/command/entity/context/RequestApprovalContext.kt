@@ -40,8 +40,8 @@ internal class RequestApprovalContext(
         val command = this.commands.poll()
         return ApprovalContents(
             type = type,
-            reason = command,
-            approvalInteractionValue = "Approved", rejectInteractionValue = "Rejected"
+            reason = command, idempotencyKey = this.commandBasicInfo.idempotencyKey,
+            commandDetailType = this.commandDetailType,
         )
     }
 }

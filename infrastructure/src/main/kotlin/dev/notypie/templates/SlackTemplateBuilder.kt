@@ -12,14 +12,12 @@ interface SlackTemplateBuilder {
     //FIXME ApprovalContents idempotencyKey
     fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: String, commandDetailType: CommandDetailType): LayoutBlocks
     fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks
-    fun requestApprovalFormTemplate(headLineText: String, selectionFields: List<SelectionContents>,
-                                    approvalTargetUser: MultiUserSelectContents? = null, reasonInput: TextInputContents? = null,
-                                    approvalContents: ApprovalContents? = null): LayoutBlocks
+    fun requestApprovalFormTemplate(headLineText: String, selectionFields: List<SelectionContents>, approvalContents: ApprovalContents,
+                                    approvalTargetUser: MultiUserSelectContents? = null, reasonInput: TextInputContents? = null): LayoutBlocks
     //FIXME ApprovalContents idempotencyKey
-    fun requestMeetingFormTemplate(approvalContents: ApprovalContents? = null,
-                                   commandDetailType: CommandDetailType, idempotencyKey: String):LayoutBlocks
+    fun requestMeetingFormTemplate(approvalContents: ApprovalContents):LayoutBlocks
     fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,
-        approvalContents: ApprovalContents?, idempotencyKey: String, commandDetailType: CommandDetailType, ): LayoutBlocks
+        approvalContents: ApprovalContents): LayoutBlocks
 
 }

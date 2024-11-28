@@ -82,9 +82,12 @@ class SlackApiClientImpl(
     }
 
     override fun simpleApprovalFormRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo,
-                                  selectionFields: List<SelectionContents>, reasonInput: TextInputContents?, commandType: CommandType): CommandOutput{
+                                  selectionFields: List<SelectionContents>, commandType: CommandType,
+                                           reasonInput: TextInputContents?, approvalContents: ApprovalContents?): CommandOutput{
         val layout = this.templateBuilder.requestApprovalFormTemplate(headLineText = headLineText,
-            selectionFields = selectionFields, reasonInput = reasonInput)
+            selectionFields = selectionFields, reasonInput = reasonInput,
+            approvalContents = approvalContents ?: ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
+                idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType))
         return this.doAction(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType, commandType = commandType, layout = layout, replaceOriginal = false
@@ -92,9 +95,11 @@ class SlackApiClientImpl(
     }
 
     override fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType,
-                                           userId: String?): CommandOutput{
+                                           userId: String?, approvalContents: ApprovalContents?): CommandOutput{
         val layout = this.templateBuilder.requestMeetingFormTemplate(
-            commandDetailType = commandDetailType, idempotencyKey = commandBasicInfo.idempotencyKey
+            approvalContents = approvalContents ?: ApprovalContents(
+                idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType, reason = "Request Meeting",
+            )
         )
         return this.doEphemeralAction(
             commandBasicInfo = commandBasicInfo,

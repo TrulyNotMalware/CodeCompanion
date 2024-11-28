@@ -1,9 +1,8 @@
-package dev.notypie.domain.command.entity.slash
+package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReplaceMessageContext
 

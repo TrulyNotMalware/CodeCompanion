@@ -16,7 +16,7 @@ class RequestMeetingCommand(
     slackApiRequester = slackApiRequester
 ) {
     override fun parseContext(): CommandContext = RequestMeetingContext(
-        commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+        commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
         slackApiRequester = this.slackApiRequester,
     )
 }

@@ -9,7 +9,7 @@ import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CompositeCommand
-import dev.notypie.domain.command.entity.slash.ReplaceTextResponseCommand
+import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.history.repository.HistoryRepository
 import dev.notypie.impl.command.InteractionPayloadParser
 import org.springframework.stereotype.Service

@@ -16,8 +16,8 @@ interface SlackApiRequester {
     fun simpleTimeScheduleRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo, timeScheduleInfo: TimeScheduleInfo, commandType: CommandType): CommandOutput
     fun simpleApplyRejectRequest(commandDetailType: CommandDetailType, commandBasicInfo: CommandBasicInfo, approvalContents: ApprovalContents, commandType: CommandType, userId: String? = null): CommandOutput
     fun simpleApprovalFormRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo,
-                                  selectionFields: List<SelectionContents>, reasonInput: TextInputContents? = null, commandType: CommandType): CommandOutput
-    fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, userId: String? = null): CommandOutput
+                                  selectionFields: List<SelectionContents>, commandType: CommandType, reasonInput: TextInputContents? = null, approvalContents: ApprovalContents? = null): CommandOutput
+    fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, userId: String? = null, approvalContents: ApprovalContents? = null): CommandOutput
 
     //Replace message
     fun replaceOriginalText(markdownText: String, responseUrl: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): CommandOutput

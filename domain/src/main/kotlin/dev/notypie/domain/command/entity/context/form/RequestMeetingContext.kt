@@ -51,14 +51,17 @@ internal class RequestMeetingContext(
             return this.createErrorResponse(errorMessage = "Please select *all options.*")
 
         // send notice
-        ApprovalCallbackContext(
-            slackApiRequester = this.slackApiRequester, participants = participants,
-            commandBasicInfo = this.commandBasicInfo,
-            approvalContents = ApprovalContents(
-                headLineText = "Request Meeting", reason = "request meeting",
-                rejectInteractionValue = "deny", approvalInteractionValue = "approve"
-            )
-        ).runCommand()
+        if(interactionPayload.states.first { state -> state.type == ActionElementTypes.CHECKBOX }.isSelected){
+            ApprovalCallbackContext(
+                slackApiRequester = this.slackApiRequester, participants = participants,
+                commandBasicInfo = this.commandBasicInfo,
+                approvalContents = ApprovalContents(
+                    headLineText = "Request Meeting", reason = "request meeting",
+                    idempotencyKey = this.commandBasicInfo.idempotencyKey,
+                    commandDetailType = CommandDetailType.NOTICE_FORM
+                )
+            ).runCommand()
+        }
         return this.interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
     }
 

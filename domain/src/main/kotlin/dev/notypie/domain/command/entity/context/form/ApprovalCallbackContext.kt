@@ -15,13 +15,19 @@ internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    private val participants: Set<String>,
-    private val approvalContents: ApprovalContents
+    approvalContents: ApprovalContents? = null,
+    private val participants: Set<String> = emptySet(),
 ) : CommandContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
     commandBasicInfo = commandBasicInfo
 ){
+    private val approvalContents: ApprovalContents = approvalContents ?:
+        ApprovalContents(
+            reason = "approve requests", idempotencyKey = this.commandBasicInfo.idempotencyKey,
+            commandDetailType = this.commandDetailType
+        )
+
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTICE_FORM
 
