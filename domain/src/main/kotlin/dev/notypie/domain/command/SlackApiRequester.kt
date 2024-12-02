@@ -11,13 +11,13 @@ import dev.notypie.domain.command.entity.CommandType
 
 interface SlackApiRequester {
     fun simpleTextRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo, simpleString: String, commandType: CommandType): CommandOutput
-    fun simpleEphemeralTextRequest(textMessage: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, userId: String? = null): CommandOutput
+    fun simpleEphemeralTextRequest(textMessage: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, targetUserId: String? = null): CommandOutput
     fun detailErrorTextRequest(commandDetailType: CommandDetailType, errorClassName: String, errorMessage: String, details: String?, commandType: CommandType, commandBasicInfo: CommandBasicInfo): CommandOutput
     fun simpleTimeScheduleRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo, timeScheduleInfo: TimeScheduleInfo, commandType: CommandType): CommandOutput
-    fun simpleApplyRejectRequest(commandDetailType: CommandDetailType, commandBasicInfo: CommandBasicInfo, approvalContents: ApprovalContents, commandType: CommandType, userId: String? = null): CommandOutput
+    fun simpleApplyRejectRequest(commandDetailType: CommandDetailType, commandBasicInfo: CommandBasicInfo, approvalContents: ApprovalContents, commandType: CommandType, targetUserId: String? = null): CommandOutput
     fun simpleApprovalFormRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo,
                                   selectionFields: List<SelectionContents>, commandType: CommandType, reasonInput: TextInputContents? = null, approvalContents: ApprovalContents? = null): CommandOutput
-    fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, userId: String? = null, approvalContents: ApprovalContents? = null): CommandOutput
+    fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, approvalContents: ApprovalContents? = null): CommandOutput
 
     //Replace message
     fun replaceOriginalText(markdownText: String, responseUrl: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): CommandOutput

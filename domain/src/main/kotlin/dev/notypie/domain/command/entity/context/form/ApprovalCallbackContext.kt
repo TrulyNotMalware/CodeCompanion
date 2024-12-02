@@ -36,7 +36,7 @@ internal class ApprovalCallbackContext(
                 participant -> this.slackApiRequester.simpleApplyRejectRequest(
                     commandDetailType = this.commandDetailType,
                     approvalContents = this.approvalContents, commandBasicInfo = this.commandBasicInfo,
-                    commandType = this.commandType, userId = participant
+                    commandType = this.commandType, targetUserId = participant
             )
         }
         val isAllOk = results.all{ it.ok }

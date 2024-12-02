@@ -42,11 +42,11 @@ class SlackApiClientImpl(
 
     override fun simpleEphemeralTextRequest(textMessage: String, commandBasicInfo: CommandBasicInfo,
                                             commandType: CommandType, commandDetailType: CommandDetailType,
-                                            userId: String?): CommandOutput {
+                                            targetUserId: String?): CommandOutput {
         val layout = this.templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
         return this.doEphemeralAction(commandDetailType = commandDetailType,
             commandType = commandType, commandBasicInfo = commandBasicInfo, layout = layout, replaceOriginal = false,
-            userId = userId)
+            targetUserId = targetUserId)
     }
 
     override fun detailErrorTextRequest(commandDetailType: CommandDetailType, errorClassName: String, errorMessage: String, details: String?, commandType: CommandType,
@@ -69,15 +69,15 @@ class SlackApiClientImpl(
     }
 
     override fun simpleApplyRejectRequest(commandDetailType: CommandDetailType, commandBasicInfo: CommandBasicInfo,
-                                          approvalContents: ApprovalContents, commandType: CommandType, userId: String?): CommandOutput{
+                                          approvalContents: ApprovalContents, commandType: CommandType, targetUserId: String?): CommandOutput{
         val layout = this.templateBuilder.approvalTemplate(
             headLineText = approvalContents.headLineText, approvalContents = approvalContents,
             idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
         )
-        return this.doEphemeralAction(
+        return this.doAction(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType, commandType = commandType, layout = layout, replaceOriginal = false,
-            userId = userId
+            targetUserId = targetUserId
         )
     }
 
@@ -95,7 +95,7 @@ class SlackApiClientImpl(
     }
 
     override fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType,
-                                           userId: String?, approvalContents: ApprovalContents?): CommandOutput{
+                                           approvalContents: ApprovalContents?): CommandOutput{
         val layout = this.templateBuilder.requestMeetingFormTemplate(
             approvalContents = approvalContents ?: ApprovalContents(
                 idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType, reason = "Request Meeting",
@@ -121,13 +121,15 @@ class SlackApiClientImpl(
     }
 
     private fun doAction( commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
-                          commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean) =
+                          commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
+                          targetUserId: String? = null) =
         this.messageDispatcher.dispatch(
             event = this.toEventContents(commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
                 replaceOriginal = replaceOriginal,
                 body = this.extractBodyData(
                     this.chatPostMessageBuilder(channel = commandBasicInfo.channel, blocks = layout.template,
-                        idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType)),
+                        idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
+                        targetUserId = targetUserId)),
                 messageType = MessageType.TO_ALL
             ),
             commandType = commandType
@@ -136,15 +138,15 @@ class SlackApiClientImpl(
 
     private fun doEphemeralAction(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                                   commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
-                                  userId: String? = null) =
+                                  targetUserId: String? = null) =
         this.messageDispatcher.dispatch(
             event = this.toEventContents(
                 commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
                 replaceOriginal = replaceOriginal,
                 body = this.extractBodyData(
-                    this.chatPostEphemeralBuilder(channel = commandBasicInfo.channel, blocks = layout.template,
+                    this.chatPostEphemeralBuilder(channel = targetUserId ?: commandBasicInfo.channel, blocks = layout.template,
                         idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
-                        userId = userId ?: commandBasicInfo.publisherId)
+                        userId = targetUserId ?: commandBasicInfo.publisherId)
                 ),
                 messageType = MessageType.EPHEMERAL
             ),
@@ -205,8 +207,9 @@ class SlackApiClientImpl(
 
 
     //https://api.slack.com/methods/chat.postMessage
-    private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>) =
-        ChatPostMessageRequest.builder().channel(channel).text("${idempotencyKey},${commandDetailType}")
+    private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>,
+                                       targetUserId: String? = null) =
+        ChatPostMessageRequest.builder().channel(targetUserId ?: channel).text("${idempotencyKey},${commandDetailType}")
             .token(this.botToken).blocks(blocks).build()
 
     //FIXME Ephemeral message cannot include any texts with blocks field
