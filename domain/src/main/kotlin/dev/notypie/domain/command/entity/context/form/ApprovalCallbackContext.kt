@@ -52,7 +52,8 @@ internal class ApprovalCallbackContext(
             channel = this.commandBasicInfo.channel,
             token = this.commandBasicInfo.appToken,
             commandType = this.commandType,
-            actionStates = results.flatMap { it.actionStates }
+            actionStates = results.flatMap { it.actionStates },
+            commandDetailType = this.commandDetailType
         )
     }
 

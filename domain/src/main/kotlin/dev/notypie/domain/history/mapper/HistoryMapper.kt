@@ -9,6 +9,5 @@ fun mapHistory(requestType: String, slackApiResponse: CommandOutput) =
         historyId = UUID.fromString(slackApiResponse.idempotencyKey),
         apiAppId = slackApiResponse.apiAppId, channel = slackApiResponse.channel,
         commandType = slackApiResponse.commandType, status = slackApiResponse.status,
-        token = slackApiResponse.token, states = slackApiResponse.actionStates,
-        type = requestType, publisherId = slackApiResponse.publisherId
+        publisherId = slackApiResponse.publisherId, commandDetailType = slackApiResponse.commandDetailType
     )

@@ -1,13 +1,13 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("org.springframework.boot") version "3.3.2" apply false
+    id("org.springframework.boot") version "3.3.6" apply false
     id("io.spring.dependency-management") version "1.1.6" apply false
     id("java-library")
     id("java-test-fixtures")
-    kotlin("jvm") version "1.9.24"
-    kotlin("plugin.spring") version "1.9.24" apply false
-    kotlin("plugin.jpa") version "1.9.24" apply false
+    kotlin("jvm") version "2.1.0"
+    kotlin("plugin.spring") version "2.1.0" apply false
+    kotlin("plugin.jpa") version "2.1.0" apply false
 }
 
 java {
@@ -17,7 +17,7 @@ java {
 ext{
     set("kotestVersion", "5.9.0") // https://kotest.io/docs/changelog.html
     set("kotestSpringExtensionVersion", "1.3.0") // https://kotest.io/docs/extensions/spring.html
-    set("slackSdkVersion", "1.44.0")
+    set("slackSdkVersion", "1.44.2")
 }
 
 kotlin {

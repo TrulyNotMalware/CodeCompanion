@@ -130,7 +130,7 @@ class SlackApiClientImpl(
                     this.chatPostMessageBuilder(channel = commandBasicInfo.channel, blocks = layout.template,
                         idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
                         targetUserId = targetUserId)),
-                messageType = MessageType.TO_ALL
+                messageType = if(targetUserId == null) MessageType.CHANNEL_ALERT else MessageType.DIRECT_MESSAGE
             ),
             commandType = commandType
         )
@@ -148,7 +148,7 @@ class SlackApiClientImpl(
                         idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
                         userId = targetUserId ?: commandBasicInfo.publisherId)
                 ),
-                messageType = MessageType.EPHEMERAL
+                messageType = MessageType.EPHEMERAL_MESSAGE
             ),
             commandType = commandType
         )

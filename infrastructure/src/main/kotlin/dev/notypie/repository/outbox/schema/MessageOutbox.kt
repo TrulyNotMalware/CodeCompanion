@@ -1,12 +1,14 @@
 package dev.notypie.repository.outbox.schema
 
+import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
-import dev.notypie.repository.outbox.SlackRequestType
-import jakarta.persistence.Column
-import jakarta.persistence.Convert
-import jakarta.persistence.Entity
-import jakarta.persistence.Id
-import org.springframework.data.annotation.CreatedDate
+import dev.notypie.common.objectMapper
+import dev.notypie.domain.command.dto.ActionEventContents
+import dev.notypie.domain.command.dto.MessageType
+import dev.notypie.domain.command.dto.PostEventContents
+import dev.notypie.domain.command.entity.CommandDetailType
+import jakarta.persistence.*
+import org.hibernate.annotations.CreationTimestamp
 import org.springframework.data.annotation.LastModifiedDate
 import java.time.LocalDateTime
 
@@ -16,28 +18,57 @@ class MessageOutbox(
     @field:Id
     val idempotencyKey: String,
 
-    @Convert(converter = JPAJsonConverter::class)
+    @field:Column(name = "publisher_id", nullable = false)
+    val publisherId: String,
+
+    @field:Convert(converter = JPAJsonConverter::class)
     @field:Column(name = "payload", columnDefinition = "JSON")
     val payload: Map<String, Any>,
 
-    @Convert(converter = JPAJsonConverter::class)
+    @field:Convert(converter = JPAJsonConverter::class)
     @field:Column(name = "metadata", columnDefinition = "JSON")
     val metadata: Map<String, Any>,
 
+    @field:Column(name = "command_detail_type")
+    @field:Enumerated(value = EnumType.STRING)
+    val commandDetailType: CommandDetailType,
+
     @field:Column(name = "type")
-    val type: SlackRequestType,
+    @field:Enumerated(value = EnumType.STRING)
+    val type: MessageType,
 
     @field:Column(name = "status")
     val status: MessageStatus,
 
-    @field:Column(name = "partition_key")
-    val partitionKey: Int,
-
-    @CreatedDate
+    @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime,
 
-    @LastModifiedDate
+    @field:LastModifiedDate
     @field:Column(name = "updated_at")
-    val updatedAt: LocalDateTime,
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
 )
+
+fun PostEventContents.toOutboxMessage() =
+    MessageOutbox(
+        idempotencyKey = this.idempotencyKey,
+        publisherId = this.publisherId,
+        commandDetailType = this.commandDetailType,
+        payload = this.body,
+        metadata = mapOf(),
+        type = this.messageType,
+        status = MessageStatus.PENDING,
+        createdAt = LocalDateTime.now()
+    )
+
+fun ActionEventContents.toOutboxMessage() =
+    MessageOutbox(
+        idempotencyKey = this.idempotencyKey,
+        publisherId = this.publisherId,
+        commandDetailType = this.commandDetailType,
+        payload = objectMapper.readValue<Map<String, Any>>(this.body),
+        metadata = mapOf(),
+        type = MessageType.ACTION_RESPONSE,
+        status = MessageStatus.PENDING,
+        createdAt = LocalDateTime.now()
+    )

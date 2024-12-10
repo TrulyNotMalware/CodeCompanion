@@ -24,14 +24,14 @@ open class JpaHistoryRepository(
             apiAppId = historyEntity.apiAppId, channel = historyEntity.channel,
             commandType = historyEntity.commandType,
             historyId = historyEntity.id,
-            status = historyEntity.status, publisherId = historyEntity.publisherId, states = listOf(),
-            token = historyEntity.token, type = historyEntity.type
+            status = historyEntity.status, publisherId = historyEntity.publisherId,
+            commandDetailType = historyEntity.commandDetailType,
         )
 
     private fun toPersistenceEntity(history: History) =
         JpaHistoryEntity(
             id = history.historyId, apiAppId = history.apiAppId, channel = history.channel,
             commandType = history.commandType, status = history.status,
-            publisherId = history.publisherId, token = history.token, type = history.type
+            publisherId = history.publisherId, commandDetailType = history.commandDetailType
         )
 }

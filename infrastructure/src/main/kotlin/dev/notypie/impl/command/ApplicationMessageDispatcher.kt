@@ -13,19 +13,24 @@ import dev.notypie.domain.command.dto.MessageType
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
+import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.schema.toOutboxMessage
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.time.Instant
 
-class ApplicationMessageDispatcher(
+
+open class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
+    private val outboxRepository: MessageOutboxRepository,
     private val taskScheduler: ThreadPoolTaskScheduler
 ): MessageDispatcher {
 
@@ -33,36 +38,10 @@ class ApplicationMessageDispatcher(
     private val okHttpClient = buildOkHttpClient(this.slack.config)
     private val MEDIA_TYPE_JSON = "application/json; charset=utf-8".toMediaType()
 
+    @Transactional
     override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
+        this.outboxRepository.save(event.toOutboxMessage())
         this.applicationEventPublisher.publishEvent(event)
-        return CommandOutput(
-            ok = true,
-            apiAppId = event.apiAppId,
-            status = Status.SUCCESS,
-            idempotencyKey = event.idempotencyKey,
-            publisherId = event.publisherId,
-            channel = event.channel,
-            commandType = commandType
-        )
-    }
-
-    override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
-        this.applicationEventPublisher.publishEvent(event)
-        return CommandOutput(
-            ok = true,
-            apiAppId = event.apiAppId,
-            status = Status.SUCCESS,
-            idempotencyKey = event.idempotencyKey,
-            publisherId = event.publisherId,
-            channel = event.channel,
-            commandType = commandType
-        )
-    }
-
-    override fun dispatch(event: DelayHandleEventContents, commandType: CommandType): CommandOutput {
-        this.taskScheduler.schedule({
-            this.applicationEventPublisher.publishEvent(event)
-        }, Instant.now().plusSeconds(event.delayTime * 60))
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
@@ -71,6 +50,39 @@ class ApplicationMessageDispatcher(
             publisherId = event.publisherId,
             channel = event.channel,
             commandType = commandType,
+            commandDetailType = event.commandDetailType,
+        )
+    }
+
+    @Transactional
+    override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
+        this.outboxRepository.save(event.toOutboxMessage())
+        this.applicationEventPublisher.publishEvent(event)
+        return CommandOutput(
+            ok = true,
+            apiAppId = event.apiAppId,
+            status = Status.IN_PROGRESSED,
+            idempotencyKey = event.idempotencyKey,
+            publisherId = event.publisherId,
+            channel = event.channel,
+            commandType = commandType,
+            commandDetailType = event.commandDetailType,
+        )
+    }
+
+    override fun dispatch(event: DelayHandleEventContents, commandType: CommandType): CommandOutput {
+        this.taskScheduler.schedule({
+            this.applicationEventPublisher.publishEvent(event)
+        }, Instant.now().plus(event.delayTime, event.timeUnit))
+        return CommandOutput(
+            ok = true,
+            apiAppId = event.apiAppId,
+            status = Status.IN_PROGRESSED,
+            idempotencyKey = event.idempotencyKey,
+            publisherId = event.publisherId,
+            channel = event.channel,
+            commandType = commandType,
+            commandDetailType = event.commandDetailType,
         )
     }
 
@@ -82,8 +94,10 @@ class ApplicationMessageDispatcher(
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: PostEventContents){
         when(event.messageType){
-            MessageType.EPHEMERAL -> dispatchEphemeralContents(event = event)
-            MessageType.TO_ALL -> dispatchChatPostMessageContents(event = event)
+            MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
+            MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
+            MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
+            MessageType.ACTION_RESPONSE -> TODO() //FIXME replace PostEventContents to ActionResponse
         }
     }
 
@@ -113,5 +127,6 @@ class ApplicationMessageDispatcher(
         val requestBody = event.body.toRequestBody(MEDIA_TYPE_JSON)
         val request = Request.Builder().url(event.responseUrl).post(requestBody).build()
         val result = this.okHttpClient.newCall(request).execute()
+
     }
 }

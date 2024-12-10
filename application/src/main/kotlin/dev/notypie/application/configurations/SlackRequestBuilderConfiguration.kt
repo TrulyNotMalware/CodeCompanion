@@ -6,6 +6,7 @@ import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.SlackApiClientImpl
 import dev.notypie.impl.command.SlackInteractionRequestParser
 import dev.notypie.impl.command.ApplicationMessageDispatcher
+import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
 import org.springframework.beans.factory.annotation.Value
@@ -39,8 +40,10 @@ class SlackRequestBuilderConfiguration(
     fun messageDispatcher(
         applicationEventPublisher: ApplicationEventPublisher,
         threadPoolTaskScheduler: ThreadPoolTaskScheduler,
-    ) = ApplicationMessageDispatcher(botToken = botToken, applicationEventPublisher = applicationEventPublisher,
-        taskScheduler = threadPoolTaskScheduler)
+        outboxRepository: MessageOutboxRepository
+    ) = ApplicationMessageDispatcher(
+        botToken = botToken, applicationEventPublisher = applicationEventPublisher,
+        taskScheduler = threadPoolTaskScheduler, outboxRepository = outboxRepository)
 
     @Bean
     @ConditionalOnMissingBean(SlackApiRequester::class)
