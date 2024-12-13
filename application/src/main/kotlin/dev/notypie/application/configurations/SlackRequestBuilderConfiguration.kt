@@ -43,7 +43,7 @@ class SlackRequestBuilderConfiguration(
         outboxRepository: MessageOutboxRepository
     ) = ApplicationMessageDispatcher(
         botToken = botToken, applicationEventPublisher = applicationEventPublisher,
-        taskScheduler = threadPoolTaskScheduler, outboxRepository = outboxRepository)
+        taskScheduler = threadPoolTaskScheduler)
 
     @Bean
     @ConditionalOnMissingBean(SlackApiRequester::class)

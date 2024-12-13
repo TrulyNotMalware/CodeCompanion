@@ -1,0 +1,60 @@
+spring:
+  config:
+    activate:
+      on-profile: "dev"
+
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER_NAME}
+    password: ${DATABASE_USER_PWD}
+
+    hikari:
+      transaction-isolation: TRANSACTION_REPEATABLE_READ
+      maximum-pool-size: 10
+      #      minimum-idle: 10
+      connection-timeout: 5000
+      validation-timeout: 3000
+      connection-test-query: SELECT 1
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: hikari_pool
+
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+server:
+  port: ${SERVER_PORT}
+  servlet:
+    session:
+      timeout: 5000
+
+
+management:
+  endpoint:
+    logfile:
+      external-file: ~/logback.log
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
+      base-path: ${ACTUATOR_BASE_PATH}
+      path-mapping:
+        loggers: logs
+        httptrace: trace
+
+slack:
+  api:
+    token: ${SLACK_API_TOKEN}
+    signingSecret: ${SLACK_SIGNING_SECRET}
+  app:
+    token: ${SLACK_APP_TOKEN}

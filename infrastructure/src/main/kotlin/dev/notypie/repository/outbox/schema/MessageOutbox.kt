@@ -38,6 +38,7 @@ class MessageOutbox(
     val type: MessageType,
 
     @field:Column(name = "status")
+    @field:Enumerated(value = EnumType.STRING)
     val status: MessageStatus,
 
     @field:CreationTimestamp

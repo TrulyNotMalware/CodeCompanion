@@ -21,16 +21,14 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
-import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.time.Instant
 
 
-open class ApplicationMessageDispatcher(
+class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
-    private val outboxRepository: MessageOutboxRepository,
     private val taskScheduler: ThreadPoolTaskScheduler
 ): MessageDispatcher {
 
@@ -38,9 +36,10 @@ open class ApplicationMessageDispatcher(
     private val okHttpClient = buildOkHttpClient(this.slack.config)
     private val MEDIA_TYPE_JSON = "application/json; charset=utf-8".toMediaType()
 
-    @Transactional
     override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
-        this.outboxRepository.save(event.toOutboxMessage())
+        //FIXME publish outbox save event. Listen in RelayService.
+//        this.applicationEventPublisher.publishEvent(event)
+//        this.outboxRepository.save(event.toOutboxMessage())
         this.applicationEventPublisher.publishEvent(event)
         return CommandOutput(
             ok = true,
@@ -54,9 +53,8 @@ open class ApplicationMessageDispatcher(
         )
     }
 
-    @Transactional
     override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
-        this.outboxRepository.save(event.toOutboxMessage())
+//        this.outboxRepository.save(event.toOutboxMessage())
         this.applicationEventPublisher.publishEvent(event)
         return CommandOutput(
             ok = true,
@@ -104,7 +102,6 @@ open class ApplicationMessageDispatcher(
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: ActionEventContents) = this.dispatchActionResponseContents(event = event)
 
-    //TODO result handling with Outbox repository.
     private fun dispatchEphemeralContents(event: PostEventContents){
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
                 for ((key, value) in event.body) builder.add(key, value)
