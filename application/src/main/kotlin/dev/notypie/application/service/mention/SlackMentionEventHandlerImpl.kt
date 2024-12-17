@@ -28,6 +28,8 @@ class SlackMentionEventHandlerImpl(
         const val REQUEST_TYPE = "APP_MENTION"
     }
 
+    //FIXME Remove AppMention Events.
+
     @Transactional
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
         val slackCommandData = this.parseAppMentionEvent(headers = headers, payload = payload)

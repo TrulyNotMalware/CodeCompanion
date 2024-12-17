@@ -13,8 +13,10 @@ import dev.notypie.domain.command.dto.MessageType
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
-import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
+import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.toOutboxMessage
+import io.github.oshai.kotlinlogging.KotlinLogging
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -24,6 +26,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.time.Instant
+
+private val logger = KotlinLogging.logger {  }
 
 
 class ApplicationMessageDispatcher(
@@ -37,9 +41,7 @@ class ApplicationMessageDispatcher(
     private val MEDIA_TYPE_JSON = "application/json; charset=utf-8".toMediaType()
 
     override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
-        //FIXME publish outbox save event. Listen in RelayService.
-//        this.applicationEventPublisher.publishEvent(event)
-//        this.outboxRepository.save(event.toOutboxMessage())
+        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
         this.applicationEventPublisher.publishEvent(event)
         return CommandOutput(
             ok = true,
@@ -54,7 +56,7 @@ class ApplicationMessageDispatcher(
     }
 
     override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
-//        this.outboxRepository.save(event.toOutboxMessage())
+        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
         this.applicationEventPublisher.publishEvent(event)
         return CommandOutput(
             ok = true,
@@ -91,6 +93,7 @@ class ApplicationMessageDispatcher(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: PostEventContents){
+        logger.info { "PostEventContents push" }
         when(event.messageType){
             MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
             MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
@@ -109,6 +112,8 @@ class ApplicationMessageDispatcher(
         }
         val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
             "chat.postEphemeral", this.botToken, ChatPostEphemeralResponse::class.java)
+        if(result.isOk) this.dispatchSuccessContents( idempotencyKey = event.idempotencyKey )
+        else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
     }
 
     private fun dispatchChatPostMessageContents(event: PostEventContents){
@@ -118,12 +123,27 @@ class ApplicationMessageDispatcher(
         }
         val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
             "chat.postMessage", this.botToken, ChatPostMessageResponse::class.java)
+        if(result.isOk) this.dispatchSuccessContents( idempotencyKey = event.idempotencyKey )
+        else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
     }
 
     private fun dispatchActionResponseContents(event: ActionEventContents){
         val requestBody = event.body.toRequestBody(MEDIA_TYPE_JSON)
         val request = Request.Builder().url(event.responseUrl).post(requestBody).build()
         val result = this.okHttpClient.newCall(request).execute()
+        if(result.code in 200..299) this.dispatchSuccessContents( idempotencyKey = event.idempotencyKey )
+        else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
+    }
 
+    private fun dispatchSuccessContents(idempotencyKey: String){
+        this.applicationEventPublisher.publishEvent(
+            MessagePublishSuccessEvent( idempotencyKey = idempotencyKey )
+        )
+    }
+
+    private fun dispatchFailedContents(idempotencyKey: String){
+        this.applicationEventPublisher.publishEvent(
+            MessagePublishFailedEvent( idempotencyKey = idempotencyKey, reason = "FAILED TO SEND MESSAGE TO CHANNEL" )
+        )
     }
 }

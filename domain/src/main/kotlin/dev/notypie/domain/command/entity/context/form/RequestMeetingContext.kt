@@ -50,6 +50,7 @@ internal class RequestMeetingContext(
         if( !interactionPayload.isCompleted() )
             return this.createErrorResponse(errorMessage = "Please select *all options.*")
 
+        // FIXME IdempotencyKey must be different by context.
         // send notice
         if(interactionPayload.states.first { state -> state.type == ActionElementTypes.CHECKBOX }.isSelected){
             ApprovalCallbackContext(
