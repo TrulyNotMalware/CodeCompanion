@@ -37,10 +37,6 @@ class OutboxMessage(
     @field:Enumerated(value = EnumType.STRING)
     val type: MessageType,
 
-    @field:Column(name = "status")
-    @field:Enumerated(value = EnumType.STRING)
-    val status: MessageStatus,
-
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime,
@@ -54,18 +50,25 @@ class OutboxMessage(
     var version: Long = 0L
         protected set
 
+    @field:Column(name = "status")
+    @field:Enumerated(value = EnumType.STRING)
+    var status: MessageStatus = MessageStatus.PENDING
+        protected set
 
-    fun updateMessageStatus(status: MessageStatus) =
-        OutboxMessage(
-            idempotencyKey = this.idempotencyKey,
-            publisherId = this.publisherId,
-            payload = this.payload,
-            metadata = this.metadata,
-            commandDetailType = this.commandDetailType,
-            type = this.type,
-            status = status,
-            createdAt = this.createdAt
-        )
+    //FIXME change final variables
+    fun updateMessageStatus(status: MessageStatus) {
+        this.status = status
+    }
+//        OutboxMessage(
+//            idempotencyKey = this.idempotencyKey,
+//            publisherId = this.publisherId,
+//            payload = this.payload,
+//            metadata = this.metadata,
+//            commandDetailType = this.commandDetailType,
+//            type = this.type,
+////            status = status,
+//            createdAt = this.createdAt
+//        )
 }
 
 fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
@@ -77,7 +80,7 @@ fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PEND
             payload = this.body,
             metadata = mapOf(),
             type = this.messageType,
-            status = status,
+//            status = status,
             createdAt = LocalDateTime.now()
         ),
         reason = "PostEventContents"
@@ -92,7 +95,7 @@ fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PE
             payload = objectMapper.readValue<Map<String, Any>>(this.body),
             metadata = mapOf(),
             type = MessageType.ACTION_RESPONSE,
-            status = status,
+//            status = status,
             createdAt = LocalDateTime.now()
         ),
         reason = "ActionEventContents"

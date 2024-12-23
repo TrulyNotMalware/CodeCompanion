@@ -8,7 +8,7 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.history.entity.Status
 
 internal class ApprovalCallbackContext(
@@ -17,7 +17,7 @@ internal class ApprovalCallbackContext(
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     approvalContents: ApprovalContents? = null,
     private val participants: Set<String> = emptySet(),
-) : CommandContext(
+) : ReactionContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
     commandBasicInfo = commandBasicInfo
@@ -32,6 +32,7 @@ internal class ApprovalCallbackContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTICE_FORM
 
     override fun runCommand(): CommandOutput {
+        //FIXME When participants is empty
         val results = this.participants.map {
                 participant -> this.slackApiRequester.simpleApplyRejectRequest(
                     commandDetailType = this.commandDetailType,

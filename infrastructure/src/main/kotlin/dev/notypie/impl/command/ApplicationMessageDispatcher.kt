@@ -135,15 +135,14 @@ class ApplicationMessageDispatcher(
         else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
     }
 
-    private fun dispatchSuccessContents(idempotencyKey: String){
+    private fun dispatchSuccessContents(idempotencyKey: String) =
         this.applicationEventPublisher.publishEvent(
             MessagePublishSuccessEvent( idempotencyKey = idempotencyKey )
         )
-    }
 
-    private fun dispatchFailedContents(idempotencyKey: String){
+    private fun dispatchFailedContents(idempotencyKey: String) =
         this.applicationEventPublisher.publishEvent(
             MessagePublishFailedEvent( idempotencyKey = idempotencyKey, reason = "FAILED TO SEND MESSAGE TO CHANNEL" )
         )
-    }
+
 }

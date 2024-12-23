@@ -37,35 +37,39 @@ class SlackMessageRelayServiceImpl(
         return this.outboxRepository.save(event.outboxMessage)
     }
 
+    /**
+     * FIXME outbox repository doesn't update any changes.
+     * update query not executed.
+     */
+//    @Retryable(
+//        maxAttempts = 3,
+//        backoff = Backoff(delay = 1000),
+//        retryFor = [ObjectOptimisticLockingFailureException::class]
+//    )
     @Transactional
-    @Retryable(
-        maxAttempts = 3,
-        backoff = Backoff(delay = 1000),
-        retryFor = [ObjectOptimisticLockingFailureException::class]
-    )
     @EventListener
     fun updateSuccessfulMessage(event: MessagePublishSuccessEvent){
-        logger.debug { "Published Successfully. Update Outbox Message ${event.idempotencyKey}" }
-        val pendingMessage = this.outboxRepository.findById(event.idempotencyKey)
+        logger.info { "Published Successfully. Update Outbox Message ${event.idempotencyKey}" }
+        val message = this.outboxRepository.findById(event.idempotencyKey)
             .orElseThrow { throw RuntimeException("Message Not Found.") }
-        this.outboxRepository.save(
-            pendingMessage.updateMessageStatus(status = MessageStatus.SUCCESS)
-        )
+        message.updateMessageStatus(status = MessageStatus.SUCCESS)
+        val result = this.outboxRepository.save(message)
+        logger.info { result.status }
     }
 
+//    @Retryable(
+//        maxAttempts = 3,
+//        backoff = Backoff(delay = 1000),
+//        retryFor = [ObjectOptimisticLockingFailureException::class]
+//    )
     @Transactional
-    @Retryable(
-        maxAttempts = 3,
-        backoff = Backoff(delay = 1000),
-        retryFor = [ObjectOptimisticLockingFailureException::class]
-    )
     @EventListener
     fun updateFailedMessage(event: MessagePublishFailedEvent){
-        logger.debug { "Published Failed. Update Outbox Message ${event.idempotencyKey}" }
-        val pendingMessage = this.outboxRepository.findById(event.idempotencyKey)
+        logger.info { "Published Failed. Update Outbox Message ${event.idempotencyKey}" }
+        val message = this.outboxRepository.findById(event.idempotencyKey)
             .orElseThrow { throw RuntimeException("Message Not Found.") }
-        this.outboxRepository.save(
-            pendingMessage.updateMessageStatus(status = MessageStatus.FAILURE)
-        )
+        message.updateMessageStatus(status = MessageStatus.FAILURE)
+        val result = this.outboxRepository.save(message)
+        logger.info { result.status }
     }
 }
