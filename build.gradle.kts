@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("org.springframework.boot") version "3.3.6" apply false
-    id("io.spring.dependency-management") version "1.1.6" apply false
+    id("org.springframework.boot") version "3.4.1" apply false
+    id("io.spring.dependency-management") version "1.1.7" apply false
     id("java-library")
     id("java-test-fixtures")
     kotlin("jvm") version "2.1.0"
