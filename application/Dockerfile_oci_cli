@@ -1,0 +1,25 @@
+FROM eclipse-temurin:21.0.4_7-jdk-alpine
+ARG JAR_FILE_NAME=application-alpha
+ARG SERVER_PORT=80
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        curl \
+        wget \
+        unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# From github releases.
+RUN wget https://github.com/oracle/oci-cli/releases/download/v3.51.2/oci-cli-3.51.2.zip
+RUN unzip oci-cli-3.51.2.zip
+RUN pip3 install ./oci-cli/oci_cli-3.51.2-py3-none-any.whl
+
+ARG PROFILES="prod"
+ENV PROFILE=${PROFILES}
+COPY ./build/libs/$JAR_FILE_NAME.jar /app.jar
+
+EXPOSE $SERVER_PORT
+ENTRYPOINT exec java -jar -Dspring.profiles.active=${PROFILE} -Duser.timezone=Asia/Seoul /app.jar

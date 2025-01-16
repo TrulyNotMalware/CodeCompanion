@@ -16,6 +16,9 @@ dependencies {
     //Springboot starter jpa
     api("org.springframework.boot:spring-boot-starter-data-jpa")
 
+    // https://mvnrepository.com/artifact/io.kubernetes/client-java
+    implementation("io.kubernetes:client-java:22.0.0")
+
     //Local & Test database
     runtimeOnly("com.h2database:h2")
     //MariaDB
