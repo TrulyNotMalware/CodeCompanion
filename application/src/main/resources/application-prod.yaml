@@ -57,8 +57,6 @@ management:
         httptrace: trace
 
 slack:
-  api:
-    token: ${SLACK_API_TOKEN}
-    signingSecret: ${SLACK_SIGNING_SECRET}
   app:
-    token: ${SLACK_APP_TOKEN}
+    api:
+      token: ${SLACK_API_TOKEN}

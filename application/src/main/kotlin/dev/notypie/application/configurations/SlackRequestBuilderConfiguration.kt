@@ -18,7 +18,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 @Configuration
 class SlackRequestBuilderConfiguration(
-    @Value("\${slack.api.token}") val botToken: String,
+    @Value("\${slack.app.api.token}") val botToken: String,
 ) {
 
     @Bean

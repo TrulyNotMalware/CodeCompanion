@@ -31,11 +31,15 @@ spring:
     show-sql: true
 
 server:
-  port: ${SERVER_PORT}
+  port: 9000
   servlet:
     session:
       timeout: 5000
 
+logging:
+  level:
+    org.springframework.transaction: debug
+    org.hibernate.sql: debug
 
 management:
   endpoint:
@@ -47,14 +51,12 @@ management:
     web:
       exposure:
         include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
-      base-path: ${ACTUATOR_BASE_PATH}
+      base-path: /api/actuator
       path-mapping:
         loggers: logs
         httptrace: trace
 
 slack:
-  api:
-    token: ${SLACK_API_TOKEN}
-    signingSecret: ${SLACK_SIGNING_SECRET}
   app:
-    token: ${SLACK_APP_TOKEN}
+    api:
+      token: ${SLACK_API_TOKEN}
