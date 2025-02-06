@@ -1,7 +1,7 @@
 package dev.notypie.application.service.slash
 
 import dev.notypie.application.common.IdempotencyCreator
-import dev.notypie.common.objectMapper
+import dev.notypie.application.common.parseRequestBodyData
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
@@ -18,16 +18,12 @@ class SlackSlashCommandHandlerImpl(
 
     @Transactional
     override fun handleMeetupRequest(headers: MultiValueMap<String, String>, data: Map<String, String>) {
-        val payload = this.parseBodyData(data = data)
+        val payload: SlashCommandRequestBody = parseRequestBodyData(data = data)
         val slackCommandData = payload.toSlackCommandData(rawHeader = SlackRequestHeaders(underlying = headers), rawBody = data)
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command: Command = RequestMeetingCommand(
             commandData = slackCommandData, idempotencyKey = idempotencyKey, slackApiRequester = this.slackApiRequester
         )
         val result = command.handleEvent()
-        
     }
-
-    private fun parseBodyData(data: Map<String, String>): SlashCommandRequestBody =
-        objectMapper.convertValue(data, SlashCommandRequestBody::class.java)
 }

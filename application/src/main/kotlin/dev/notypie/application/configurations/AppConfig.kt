@@ -1,21 +1,52 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.configurations.conditions.OnMicroServiceMode
+import dev.notypie.application.configurations.conditions.OnStandAloneMode
+import dev.notypie.application.service.user.DefaultUserServiceImpl
+import dev.notypie.application.service.user.MicroUserServiceImpl
+import dev.notypie.application.service.user.UserService
+import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.user.repository.UserRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
-import org.springframework.stereotype.Component
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 
-@Component
 @ConfigurationProperties(prefix = "slack.app")
 data class AppConfig(
-    var api: Api = Api(),
-    var mode: Mode = Mode()
+    val api: Api = Api(),
+    val mode: Mode = Mode()
 ) {
 
     data class Mode(
-        var standAlone: Boolean = true,
-        var microService: Boolean = false
+        val standAlone: Boolean = true,
+        val microService: Boolean = false
     )
 
     data class Api(
-        var token: String = ""
+        val token: String = ""
     )
+}
+
+@Configuration
+@OnStandAloneMode
+class ApplicationOptionConfiguration{
+
+    @Bean
+    fun userService(
+        slackApiRequester: SlackApiRequester,
+        userRepository: UserRepository
+    ): UserService
+    = DefaultUserServiceImpl(
+        slackApiRequester = slackApiRequester,
+        userRepository = userRepository
+    )
+}
+
+
+@Configuration
+@OnMicroServiceMode
+class ApplicationMicroServiceOptionConfiguration{
+
+    @Bean
+    fun userService(): UserService = MicroUserServiceImpl()
 }

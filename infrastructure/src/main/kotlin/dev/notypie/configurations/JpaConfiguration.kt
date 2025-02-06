@@ -1,6 +1,10 @@
 package dev.notypie.configurations
 
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.domain.user.repository.UserRepository
+import dev.notypie.repository.user.JpaTeamEntityRepository
+import dev.notypie.repository.user.JpaUserEntityRepository
+import dev.notypie.repository.user.JpaUserRepository
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -27,6 +31,17 @@ class JpaConfiguration {
         hikariDataSource: HikariDataSource
     ) = LazyConnectionDataSourceProxy(hikariDataSource)
 
+
+    @Bean
+    @Primary
+    fun userRepository(
+        jpaUserEntityRepository: JpaUserEntityRepository,
+        jpaTeamEntityRepository: JpaTeamEntityRepository
+    ) =
+        JpaUserRepository(
+            jpaUserEntityRepository = jpaUserEntityRepository,
+            jpaTeamEntityRepository = jpaTeamEntityRepository
+        )
     // Multi datasource
 //    @Bean
 //    @Primary

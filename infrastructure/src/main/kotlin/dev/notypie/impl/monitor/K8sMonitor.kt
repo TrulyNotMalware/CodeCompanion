@@ -30,8 +30,4 @@ class K8sMonitor(
             podName, namespace
         )
     }
-
-    private suspend fun getPods(namespace: String, podName: String){
-         
-    }
 }
