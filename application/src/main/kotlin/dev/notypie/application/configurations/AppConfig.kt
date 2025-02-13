@@ -6,6 +6,7 @@ import dev.notypie.application.service.user.DefaultUserServiceImpl
 import dev.notypie.application.service.user.MicroUserServiceImpl
 import dev.notypie.application.service.user.UserService
 import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.user.repository.TeamRepository
 import dev.notypie.domain.user.repository.UserRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -34,11 +35,11 @@ class ApplicationOptionConfiguration{
     @Bean
     fun userService(
         slackApiRequester: SlackApiRequester,
-        userRepository: UserRepository
+        teamRepository: TeamRepository
     ): UserService
     = DefaultUserServiceImpl(
         slackApiRequester = slackApiRequester,
-        userRepository = userRepository
+        teamRepository = teamRepository
     )
 }
 

@@ -1,9 +1,9 @@
 package dev.notypie.repository.user.schema
 
+import dev.notypie.domain.user.UserRole
 import dev.notypie.domain.user.entity.User
 import jakarta.persistence.*
 import java.time.LocalDateTime
-import java.util.*
 
 
 @Entity(name = "users")
@@ -13,30 +13,32 @@ class JpaUserSchema(
     val id : Long,
 
     @field:Column(nullable = false)
-    val userIdentifier: UUID,
-
-    @field:Column(nullable = false)
     val slackUserId : String,
 
     @field:Column(nullable = false)
-    val isAdmin: Boolean,
+    val userName: String,
 
-    @field:OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
-    val teams: List<TeamUserBindings>,
+    @field:Column(nullable = false)
+    val isAdmin: Boolean,
 
     @field:Column(nullable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     val createdAt: LocalDateTime
 )
 
-fun JpaUserSchema.toDomainEntity(): User {
-    val teams = this.teams.map { binding ->
-        binding.team.toDomainEntity()
-    }
-    return User(
+fun JpaUserSchema.toDomainEntity(role: UserRole? = null): User =
+    User(
         id = this.id,
-        identifier = this.userIdentifier,
         slackUserId = this.slackUserId,
-        teams = teams,
-        isAdmin = this.isAdmin
+        userName = this.userName,
+        isAdmin = this.isAdmin,
+        role = role ?: UserRole.MEMBER
     )
-}
+
+fun User.toJpaEntity(): JpaUserSchema =
+    JpaUserSchema(
+        id = this.id,
+        slackUserId = this.slackUserId,
+        userName = this.userName,
+        isAdmin = this.isAdmin,
+        createdAt = LocalDateTime.now()
+    )

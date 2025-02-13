@@ -9,9 +9,10 @@ class JpaUserRepository(
     private val jpaTeamEntityRepository: JpaTeamEntityRepository
 ) : UserRepository {
 
-    fun selectUser(slackUserId: String): User{
-        val jpaUserSchema = this.jpaUserEntityRepository.findBySlackUserIdWithTeams(slackUserId = slackUserId)
-            ?: throw IllegalArgumentException("User not found.")
-        return jpaUserSchema.toDomainEntity()
-    }
+    //Remove user side association
+//    fun selectUser(slackUserId: String): User{
+//        val jpaUserSchema = this.jpaUserEntityRepository.findBySlackUserIdWithTeams(slackUserId = slackUserId)
+//            ?: throw IllegalArgumentException("User not found.")
+//        return jpaUserSchema.toDomainEntity()
+//    }
 }

@@ -9,8 +9,12 @@ data class TeamMemberRole(
 )
 
 class Team(
+    val id: Long = 0L,
     val teamId: UUID = UUID.randomUUID(),
     val teamName: String,
-    val memberRoles: List<TeamMemberRole>
+    val teamDomain: String,
+    val slackTeamId: String,
+    val members: List<User>,
+    val description: String? = null
 ) {
 }

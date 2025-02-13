@@ -9,6 +9,6 @@ import org.springframework.stereotype.Repository
 @Repository
 interface JpaUserEntityRepository: JpaRepository<JpaUserSchema, Long> {
 
-    @Query("SELECT DISTINCT u FROM users u LEFT JOIN FETCH u.teams t WHERE u.slackUserId = :slackUserId")
-    fun findBySlackUserIdWithTeams(@Param("slackUserId") slackUserId: String): JpaUserSchema?
+//    @Query("SELECT DISTINCT u FROM users u LEFT JOIN FETCH u.teams t WHERE u.slackUserId = :slackUserId")
+//    fun findBySlackUserIdWithTeams(@Param("slackUserId") slackUserId: String): JpaUserSchema?
 }

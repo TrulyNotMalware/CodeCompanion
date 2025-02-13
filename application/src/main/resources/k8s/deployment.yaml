@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-companion-deploy
+spec:
+  selector:
+    matchLabels:
+      app: code-companion-deploy
+  template:
+    metadata:
+      labels:
+        app: code-companion-deploy
+    spec:
+      imagePullSecrets:
+        - name: dockercred
+      containers:
+        - name: code-companion-deploy
+          image: your_image_repository
+          ports:
+            - containerPort: 80
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: tz-seoul
+              mountPath: /etc/localtime
+          envFrom:
+            - secretRef:
+                name: code-companion-secret
+            - configMapRef:
+                name: code-companion-configmap
+      volumes:
+        - name: tz-seoul
+          hostPath:
+            path: /usr/share/zoneinfo/Asia/Seoul

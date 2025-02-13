@@ -48,4 +48,8 @@ data class SlashCommandRequestBody(
         rawBody = rawBody,
         rawHeader = rawHeader
     )
+
+    fun subCommandList()
+    = this.subCommands.split(" ")
+
 }

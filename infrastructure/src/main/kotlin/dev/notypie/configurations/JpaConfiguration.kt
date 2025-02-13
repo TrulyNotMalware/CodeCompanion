@@ -3,6 +3,7 @@ package dev.notypie.configurations
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.domain.user.repository.UserRepository
 import dev.notypie.repository.user.JpaTeamEntityRepository
+import dev.notypie.repository.user.JpaTeamRepository
 import dev.notypie.repository.user.JpaUserEntityRepository
 import dev.notypie.repository.user.JpaUserRepository
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties
@@ -42,6 +43,14 @@ class JpaConfiguration {
             jpaUserEntityRepository = jpaUserEntityRepository,
             jpaTeamEntityRepository = jpaTeamEntityRepository
         )
+
+    @Bean
+    @Primary
+    fun teamRepository(
+        jpaTeamEntityRepository: JpaTeamEntityRepository
+    ) = JpaTeamRepository(
+        teamRepository = jpaTeamEntityRepository
+    )
     // Multi datasource
 //    @Bean
 //    @Primary

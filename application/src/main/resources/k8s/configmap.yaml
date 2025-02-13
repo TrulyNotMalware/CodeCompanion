@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: code-companion-configmap
+data:
+  SQL_PROD_ISOLATION_LEVEL: 'TRANSACTION_REPEATABLE_READ'
+  SQL_PROD_CONNECTION_TIMEOUT: '5000'
+  SQL_PROD_VALIDATION_TIMEOUT: '3000'
+  HIBERNATE_DEFAULT_BATCH_SIZE: '1000'

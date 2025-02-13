@@ -16,8 +16,17 @@ class JpaTeamSchema(
     @field:Column(name = "team_id",nullable = false)
     val teamId : UUID,
 
+    @field:Column(name = "slack_team_domain", nullable = false)
+    val slackTeamDomain: String,
+
+    @field:Column(name = "slack_team_id", nullable = false)
+    val slackTeamId: String,
+
     @field:Column(name = "team_name",nullable = false)
     val teamName: String,
+
+    @field:Column(name = "description")
+    val description: String?,
 
     @field:OneToMany(mappedBy = "team", fetch = FetchType.LAZY)
     val users: List<TeamUserBindings>,
@@ -25,26 +34,62 @@ class JpaTeamSchema(
     @field:Column(nullable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     val createdAt: LocalDateTime,
     @field:Column
-    val updatedAt: LocalDateTime
+    val updatedAt: LocalDateTime? = null
 )
 
-fun JpaTeamSchema.toDomainEntity(): Team {
-    val domainMemberRoles = this.users.map { binding ->
-        TeamMemberRole(
-            userId = binding.user.id,
-            role = binding.role // UserRole
-        )
-    }
-    return Team(
+fun Team.toJpaEntity(): JpaTeamSchema =
+    JpaTeamSchema(
+        id = this.id,
+        teamId = this.teamId,
+        slackTeamDomain = this.teamDomain,
+        slackTeamId = this.slackTeamId,
+        teamName = this.teamName,
+        description = this.description,
+        users = this.members.map { member ->
+            TeamUserBindings(
+                id = 0L,
+                team = this.toJpaEntityWithoutMembers(),
+                user = member.toJpaEntity(),
+                role = member.role,
+                createdAt = LocalDateTime.now(),
+                updatedAt = LocalDateTime.now()
+            )
+        },
+        createdAt = LocalDateTime.now()
+    )
+
+fun JpaTeamSchema.toDomainEntity() =
+    Team(
+        id = this.id,
         teamId = this.teamId,
         teamName = this.teamName,
-        memberRoles = domainMemberRoles
+        teamDomain = this.slackTeamDomain,
+        slackTeamId = this.slackTeamId,
+        description = this.description,
+        members = this.users.map { binding ->
+            binding.user.toDomainEntity(role = binding.role)
+        }
     )
-}
+
+
+fun Team.toJpaEntityWithoutMembers(): JpaTeamSchema =
+    JpaTeamSchema(
+        id = this.id,
+        teamId = this.teamId,
+        slackTeamDomain = this.teamDomain,
+        slackTeamId = this.slackTeamId,
+        teamName = this.teamName,
+        description = this.description,
+        users = listOf(),
+        createdAt = LocalDateTime.now()
+    )
 
 fun JpaTeamSchema.toDomainEntityWithoutMembers() =
     Team(
         teamId = this.teamId,
         teamName = this.teamName,
-        memberRoles = emptyList()
+        members = emptyList(),
+        slackTeamId = this.slackTeamId,
+        teamDomain = this.slackTeamDomain,
+        description = this.description
     )

@@ -28,6 +28,9 @@ spring:
     hibernate:
       ddl-auto: none
     show-sql: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: ${HIBERNATE_DEFAULT_BATCH_SIZE}
     generate-ddl: false
   h2:
     console:

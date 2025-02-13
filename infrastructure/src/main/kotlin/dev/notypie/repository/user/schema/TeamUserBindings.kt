@@ -26,6 +26,4 @@ class TeamUserBindings(
     @field:Column(nullable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
-) {
-
-}
+)

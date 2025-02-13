@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: code-companion-ingress
+  labels:
+    app: code-companion-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: 'your-cluster-issuer'
+spec:
+  tls:
+    - hosts:
+        - your.uri
+      secretName: your-secret-tls
+  rules:
+    - host: your.uri
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: code-companion-svc
+                port:
+                  number: 80
