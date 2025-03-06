@@ -42,7 +42,6 @@ class ApplicationMessageDispatcher(
 
     override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
         this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
-        this.applicationEventPublisher.publishEvent(event)
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
@@ -57,7 +56,6 @@ class ApplicationMessageDispatcher(
 
     override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
         this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
-        this.applicationEventPublisher.publishEvent(event)
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
@@ -93,7 +91,6 @@ class ApplicationMessageDispatcher(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: PostEventContents){
-        logger.info { "PostEventContents push" }
         when(event.messageType){
             MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
             MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
@@ -107,7 +104,7 @@ class ApplicationMessageDispatcher(
 
     private fun dispatchEphemeralContents(event: PostEventContents){
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
-                for ((key, value) in event.body) builder.add(key, value)
+                for ((key, value) in event.body) builder.add(key, value.toString())
                 builder
         }
         val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
@@ -118,7 +115,7 @@ class ApplicationMessageDispatcher(
 
     private fun dispatchChatPostMessageContents(event: PostEventContents){
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
-            for ((key, value) in event.body) builder.add(key, value)
+            for ((key, value) in event.body) builder.add(key, value.toString())
             builder
         }
         val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,

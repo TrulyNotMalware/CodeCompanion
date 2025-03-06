@@ -8,8 +8,12 @@ import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.EntityManager
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
+import org.springframework.orm.ObjectOptimisticLockingFailureException
+import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -18,21 +22,47 @@ private val logger = KotlinLogging.logger {}
 @Service
 class SlackMessageRelayServiceImpl(
     private val outboxRepository: MessageOutboxRepository,
+    private val eventPublisher: ApplicationEventPublisher,
     private val entityManager: EntityManager
 ): MessageRelayService {
 
+    @Async
+    fun dispatchPendingMessagesBatch(pendingMessages: List<OutboxMessage>) {
+        //TODO Dispatch pending messages.
+//        for (message in pendingMessages){
+//            try{
+//
+//            }
+//        }
+    }
+
+    @Transactional
     override fun dispatchPendingMessages() {
-        
+        //TODO retry count check
+        val pageSize = 100
+        var offset = 0
+        while (true) {
+            val pendingMessages = this.outboxRepository.findPendingMessages(
+                limit = pageSize,
+                offset = offset
+            )
+            if (pendingMessages.isEmpty()) break
+
+            this.dispatchPendingMessagesBatch(pendingMessages)
+            offset += pendingMessages.size
+        }
     }
 
     @Transactional
     @Retryable(
-        maxAttempts = 3
+        maxAttempts = 3,
+        backoff = Backoff(delay = 1000),
+        retryFor = [ObjectOptimisticLockingFailureException::class]
     )
     @EventListener
-    fun saveOutboxMessages(event: NewMessagePublishedEvent): OutboxMessage{
+    fun saveOutboxMessages(event: NewMessagePublishedEvent){
         logger.debug { "Save Outbox Message from ${event.reason}" }
-        return this.outboxRepository.save(event.outboxMessage)
+        this.outboxRepository.save(event.outboxMessage)
     }
 
     /**
@@ -49,7 +79,6 @@ class SlackMessageRelayServiceImpl(
     fun updateSuccessfulMessage(event: MessagePublishSuccessEvent){
         logger.info { "Published Successfully. Update Outbox Message ${event.idempotencyKey}" }
         this.updateMessageWithTransaction(status = MessageStatus.SUCCESS, idempotencyKey = event.idempotencyKey)
-        logger.info { entityManager.isJoinedToTransaction }
     }
 
 //    @Retryable(
@@ -68,9 +97,7 @@ class SlackMessageRelayServiceImpl(
     fun updateMessageWithTransaction(status: MessageStatus, idempotencyKey: String): OutboxMessage {
         val message = this.outboxRepository.findById(idempotencyKey)
             .orElseThrow { throw RuntimeException("Message Not Found.") }
-        logger.info { message.status }
         message.updateMessageStatus(status = status)
-        logger.info { message.status }
         return this.outboxRepository.save(message)
     }
 }

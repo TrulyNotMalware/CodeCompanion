@@ -3,6 +3,8 @@ package dev.notypie.domain.command.dto
 import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.temporal.ChronoUnit
 
+interface SlackEvent
+
 data class PostEventContents(
     val messageType: MessageType,
     val apiAppId: String,
@@ -12,8 +14,8 @@ data class PostEventContents(
 
     val replaceOriginal: Boolean,
     val channel: String,
-    val body: Map<String, String>,
-)
+    val body: Map<String, Any>,
+): SlackEvent
 
 data class ActionEventContents(
     val apiAppId: String,
@@ -24,7 +26,7 @@ data class ActionEventContents(
     val responseUrl: String,
     val channel: String,
     val body: String,
-)
+): SlackEvent
 
 data class DelayHandleEventContents(
     val apiAppId: String,
@@ -34,7 +36,7 @@ data class DelayHandleEventContents(
     val idempotencyKey: String,
     val channel: String,
     val publisherId: String,
-)
+): SlackEvent
 
 enum class MessageType{
     CHANNEL_ALERT,

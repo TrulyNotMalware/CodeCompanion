@@ -14,4 +14,13 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String>{
 
 //    @Query("SELECT m FROM MessageOutbox m WHERE m.status = 'PENDING'")
     fun findByStatus(status: MessageStatus): List<OutboxMessage>
+
+    @Query("""
+        SELECT * FROM outbox_message
+        WHERE status = 'PENDING'
+        ORDER BY created_at ASC
+        LIMIT :limit OFFSET :offset
+    """, nativeQuery = true)
+    fun findPendingMessages(@Param("limit") limit: Int,
+                            @Param("offset") offset: Int): List<OutboxMessage>
 }

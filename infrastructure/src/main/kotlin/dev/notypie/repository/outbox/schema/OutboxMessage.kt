@@ -6,6 +6,7 @@ import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.dto.ActionEventContents
 import dev.notypie.domain.command.dto.MessageType
 import dev.notypie.domain.command.dto.PostEventContents
+import dev.notypie.domain.command.dto.SlackEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import jakarta.persistence.*
@@ -45,8 +46,8 @@ class OutboxMessage(
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ){
-    @Version
-    @Column(name = "version", nullable = false)
+    @field:Version
+    @field:Column(name = "version", nullable = false)
     var version: Long = 0L
         protected set
 
@@ -59,16 +60,29 @@ class OutboxMessage(
     fun updateMessageStatus(status: MessageStatus) {
         this.status = status
     }
-//        OutboxMessage(
-//            idempotencyKey = this.idempotencyKey,
-//            publisherId = this.publisherId,
-//            payload = this.payload,
-//            metadata = this.metadata,
-//            commandDetailType = this.commandDetailType,
-//            type = this.type,
-////            status = status,
-//            createdAt = this.createdAt
-//        )
+
+    fun toSlackEvent(): SlackEvent{
+        if(this.type == MessageType.ACTION_RESPONSE )
+            return ActionEventContents(
+                idempotencyKey = this.idempotencyKey,
+                publisherId = this.publisherId,
+                commandDetailType = this.commandDetailType,
+                body = objectMapper.writeValueAsString(this.payload),
+                apiAppId = this.metadata["api_app_id"].toString(),
+                responseUrl = this.metadata["response_url"].toString(),
+                channel = this.metadata["channel"].toString()
+            )
+        else return PostEventContents(
+            idempotencyKey = this.idempotencyKey,
+            publisherId = this.publisherId,
+            messageType = this.type,
+            apiAppId = this.metadata["api_app_id"].toString(),
+            commandDetailType = this.commandDetailType,
+            body = this.payload,
+            channel = this.metadata["channel"].toString(),
+            replaceOriginal = this.metadata["replace_original"].toString().toBoolean()
+        )
+    }
 }
 
 fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
@@ -83,7 +97,8 @@ fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PEND
 //            status = status,
             createdAt = LocalDateTime.now()
         ),
-        reason = "PostEventContents"
+        reason = "PostEventContents",
+        slackEvent = this
     )
 
 fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
@@ -98,5 +113,6 @@ fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PE
 //            status = status,
             createdAt = LocalDateTime.now()
         ),
-        reason = "ActionEventContents"
+        reason = "ActionEventContents",
+        slackEvent = this
     )
