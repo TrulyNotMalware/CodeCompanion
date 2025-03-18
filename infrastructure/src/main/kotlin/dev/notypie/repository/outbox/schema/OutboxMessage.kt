@@ -23,20 +23,26 @@ class OutboxMessage(
     val publisherId: String,
 
     @field:Convert(converter = JPAJsonConverter::class)
-    @field:Column(name = "payload", columnDefinition = "JSON")
+    @field:Column(name = "payload", columnDefinition = "TEXT")
     val payload: Map<String, Any>,
 
     @field:Convert(converter = JPAJsonConverter::class)
-    @field:Column(name = "metadata", columnDefinition = "JSON")
+    /**
+     * Debezium cdc json type cause Null pointer exception.
+     */
+    @field:Column(name = "metadata", columnDefinition = "TEXT")
     val metadata: Map<String, Any>,
 
     @field:Column(name = "command_detail_type")
-    @field:Enumerated(value = EnumType.STRING)
-    val commandDetailType: CommandDetailType,
+//    @field:Enumerated(value = EnumType.STRING)
+    /**
+     * Debezium cdc enum type cause Null pointer exception.
+     */
+    val commandDetailType: String,
 
     @field:Column(name = "type")
-    @field:Enumerated(value = EnumType.STRING)
-    val type: MessageType,
+//    @field:Enumerated(value = EnumType.STRING)
+    val type: String,
 
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
@@ -52,21 +58,21 @@ class OutboxMessage(
         protected set
 
     @field:Column(name = "status")
-    @field:Enumerated(value = EnumType.STRING)
-    var status: MessageStatus = MessageStatus.PENDING
+//    @field:Enumerated(value = EnumType.STRING)
+    var status: String = MessageStatus.PENDING.name
         protected set
 
     //FIXME change final variables
     fun updateMessageStatus(status: MessageStatus) {
-        this.status = status
+        this.status = status.name
     }
 
     fun toSlackEvent(): SlackEvent{
-        if(this.type == MessageType.ACTION_RESPONSE )
+        if(this.type == MessageType.ACTION_RESPONSE.name )
             return ActionEventContents(
                 idempotencyKey = this.idempotencyKey,
                 publisherId = this.publisherId,
-                commandDetailType = this.commandDetailType,
+                commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
                 body = objectMapper.writeValueAsString(this.payload),
                 apiAppId = this.metadata["api_app_id"].toString(),
                 responseUrl = this.metadata["response_url"].toString(),
@@ -75,9 +81,9 @@ class OutboxMessage(
         else return PostEventContents(
             idempotencyKey = this.idempotencyKey,
             publisherId = this.publisherId,
-            messageType = this.type,
+            messageType = MessageType.valueOf(this.type),
             apiAppId = this.metadata["api_app_id"].toString(),
-            commandDetailType = this.commandDetailType,
+            commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
             body = this.payload,
             channel = this.metadata["channel"].toString(),
             replaceOriginal = this.metadata["replace_original"].toString().toBoolean()
@@ -90,10 +96,10 @@ fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PEND
         outboxMessage = OutboxMessage(
             idempotencyKey = this.idempotencyKey,
             publisherId = this.publisherId,
-            commandDetailType = this.commandDetailType,
+            commandDetailType = this.commandDetailType.name,
             payload = this.body,
             metadata = mapOf(),
-            type = this.messageType,
+            type = this.messageType.name,
 //            status = status,
             createdAt = LocalDateTime.now()
         ),
@@ -106,10 +112,10 @@ fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PE
         outboxMessage = OutboxMessage(
             idempotencyKey = this.idempotencyKey,
             publisherId = this.publisherId,
-            commandDetailType = this.commandDetailType,
+            commandDetailType = this.commandDetailType.name,
             payload = objectMapper.readValue<Map<String, Any>>(this.body),
             metadata = mapOf(),
-            type = MessageType.ACTION_RESPONSE,
+            type = MessageType.ACTION_RESPONSE.name,
 //            status = status,
             createdAt = LocalDateTime.now()
         ),

@@ -7,7 +7,6 @@ import dev.notypie.application.service.user.MicroUserServiceImpl
 import dev.notypie.application.service.user.UserService
 import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.user.repository.TeamRepository
-import dev.notypie.domain.user.repository.UserRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -20,7 +19,8 @@ data class AppConfig(
 
     data class Mode(
         val standAlone: Boolean = true,
-        val microService: Boolean = false
+        val microService: Boolean = false,
+        val publisher: PublisherType = PublisherType.POOLING,
     )
 
     data class Api(

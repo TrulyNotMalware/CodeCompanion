@@ -23,7 +23,6 @@ private val logger = KotlinLogging.logger {}
 class SlackMessageRelayServiceImpl(
     private val outboxRepository: MessageOutboxRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val entityManager: EntityManager
 ): MessageRelayService {
 
     @Async
