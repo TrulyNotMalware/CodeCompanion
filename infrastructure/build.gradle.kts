@@ -10,7 +10,8 @@ dependencies {
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
     api("org.springframework.retry:spring-retry")
-
+    //CDC
+    api("org.springframework.kafka:spring-kafka")
     //Slack API
     implementation("com.slack.api:bolt:${rootProject.extra.get("slackSdkVersion")}")
     //Springboot starter jpa

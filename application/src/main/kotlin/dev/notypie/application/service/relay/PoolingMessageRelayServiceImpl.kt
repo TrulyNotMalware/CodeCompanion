@@ -1,3 +1,5 @@
+@file:JvmName("MessageRelayServiceKt")
+
 package dev.notypie.application.service.relay
 
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -7,7 +9,6 @@ import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jakarta.persistence.EntityManager
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.orm.ObjectOptimisticLockingFailureException
@@ -26,30 +27,13 @@ class SlackMessageRelayServiceImpl(
 ): MessageRelayService {
 
     @Async
-    fun dispatchPendingMessagesBatch(pendingMessages: List<OutboxMessage>) {
+    override fun batchPendingMessages(pendingMessages: List<OutboxMessage>) {
         //TODO Dispatch pending messages.
 //        for (message in pendingMessages){
 //            try{
 //
 //            }
 //        }
-    }
-
-    @Transactional
-    override fun dispatchPendingMessages() {
-        //TODO retry count check
-        val pageSize = 100
-        var offset = 0
-        while (true) {
-            val pendingMessages = this.outboxRepository.findPendingMessages(
-                limit = pageSize,
-                offset = offset
-            )
-            if (pendingMessages.isEmpty()) break
-
-            this.dispatchPendingMessagesBatch(pendingMessages)
-            offset += pendingMessages.size
-        }
     }
 
     @Transactional

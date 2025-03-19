@@ -1,10 +1,17 @@
 package dev.notypie.application.configurations.conditions
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.configurations.PublisherType
 import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.context.annotation.Condition
 import org.springframework.context.annotation.ConditionContext
+import org.springframework.core.env.Environment
 import org.springframework.core.type.AnnotatedTypeMetadata
+
+
+fun Environment.extractAppConfig(): AppConfig
+= Binder.get(this).bind("slack.app", AppConfig::class.java).orElse(AppConfig())
+
 
 /**
  * A condition that determines whether the application is running in StandAlone mode.
@@ -27,11 +34,8 @@ class OnStandAloneCondition: Condition {
      * @param metadata metadata of the @Conditional annotation for the current component
      * @return true if the application mode is set to standalone, false otherwise
      */
-    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean {
-        val binder = Binder.get(context.environment)
-        val appConfig = binder.bind("slack.app", AppConfig::class.java).orElse(AppConfig())
-        return appConfig.mode.standAlone
-    }
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        context.environment.extractAppConfig().mode.standAlone
 }
 
 /**
@@ -54,9 +58,51 @@ class OnMicroServiceCondition: Condition{
      * @param metadata metadata of the {@code @Conditional} annotation for the current component
      * @return true if the application mode is set to microservice, false otherwise
      */
-    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata): Boolean {
-        val binder = Binder.get(context.environment)
-        val appConfig = binder.bind("slack.app", AppConfig::class.java).orElse(AppConfig())
-        return appConfig.mode.microService
-    }
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        !context.environment.extractAppConfig().mode.standAlone
+
+}
+
+/**
+ * A custom Spring `Condition` implementation that conditionally evaluates the configuration
+ * based on whether the application is configured to use the `POOLING` publisher mode.
+ *
+ * The condition checks the application's configuration properties defined under the "slack.app" prefix.
+ * If the `publisher` mode in the configuration is set to `PublisherType.POOLING`, the condition evaluates as true.
+ *
+ * Typically used with the `@Conditional` annotation to conditionally load application components
+ * or beans defined under specific configuration setups.
+ */
+class OnPoolingPublisher: Condition{
+
+    /**
+     * Evaluates whether the given condition matches based on the application configuration.
+     *
+     * @param context the condition context containing the current environment and other related configuration information
+     * @param metadata metadata of the type to which the condition is applied
+     * @return true if the configured publisher mode is `PublisherType.POOLING`; false otherwise
+     */
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        context.environment.extractAppConfig().mode.publisher == PublisherType.POOLING
+
+}
+
+/**
+ * Conditional class used to determine if the application is running
+ * in a mode where the publisher type is CDC (Change Data Capture).
+ * This condition checks the application's configuration to verify
+ * if the publisher mode is set to `PublisherType.CDC`.
+ */
+class OnCdcPublisher: Condition{
+
+    /**
+     * Evaluates whether the condition is met based on the given context and metadata.
+     * The condition checks if the application configuration specifies the publisher mode as `PublisherType.CDC`.
+     *
+     * @param context provides the condition context, including access to the environment and bean factory.
+     * @param metadata metadata of the class or method being checked, including annotations.
+     * @return `true` if the publisher mode is `PublisherType.CDC`, otherwise `false`.
+     */
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        context.environment.extractAppConfig().mode.publisher == PublisherType.CDC
 }

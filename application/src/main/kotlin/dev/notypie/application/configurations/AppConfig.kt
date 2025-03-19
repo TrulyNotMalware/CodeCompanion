@@ -19,7 +19,6 @@ data class AppConfig(
 
     data class Mode(
         val standAlone: Boolean = true,
-        val microService: Boolean = false,
         val publisher: PublisherType = PublisherType.POOLING,
     )
 

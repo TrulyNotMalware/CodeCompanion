@@ -33,6 +33,19 @@ spring:
       hibernate:
         default_batch_fetch_size: 1000
 
+  kafka:
+    bootstrap-servers: ["kafka:port"]
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: codeCompanion
+      key-deserializer: org.apache.kafka.common.serialization.StringSerializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonSerializer
+      auto-offset-reset: earliest
+      enable-auto-commit: true
+      max-poll-records: 1000
+
 server:
   port: 9000
   servlet:
