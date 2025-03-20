@@ -23,14 +23,11 @@ class OutboxMessage(
     val publisherId: String,
 
     @field:Convert(converter = JPAJsonConverter::class)
-    @field:Column(name = "payload", columnDefinition = "TEXT")
+    @field:Column(name = "payload", columnDefinition = "JSON")
     val payload: Map<String, Any>,
 
     @field:Convert(converter = JPAJsonConverter::class)
-    /**
-     * Debezium cdc json type cause Null pointer exception.
-     */
-    @field:Column(name = "metadata", columnDefinition = "TEXT")
+    @field:Column(name = "metadata", columnDefinition = "JSON")
     val metadata: Map<String, Any>,
 
     @field:Column(name = "command_detail_type")

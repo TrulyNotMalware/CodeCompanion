@@ -77,3 +77,5 @@ slack:
       token: ${SLACK_API_TOKEN}
     mode:
       publisher: cdc
+      cdc:
+        topic: schema-history.code_companion.outbox_message

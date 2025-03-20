@@ -20,10 +20,15 @@ data class AppConfig(
     data class Mode(
         val standAlone: Boolean = true,
         val publisher: PublisherType = PublisherType.POOLING,
+        val cdc: Cdc = Cdc()
     )
 
     data class Api(
         val token: String = ""
+    )
+
+    data class Cdc(
+        val topic: String = ""
     )
 }
 
