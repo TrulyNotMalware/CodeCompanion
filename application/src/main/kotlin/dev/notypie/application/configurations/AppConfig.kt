@@ -1,7 +1,7 @@
 package dev.notypie.application.configurations
 
-import dev.notypie.application.configurations.conditions.OnMicroServiceMode
-import dev.notypie.application.configurations.conditions.OnStandAloneMode
+import dev.notypie.application.configurations.conditions.OnMicroServiceCondition
+import dev.notypie.application.configurations.conditions.OnStandAloneCondition
 import dev.notypie.application.service.user.DefaultUserServiceImpl
 import dev.notypie.application.service.user.MicroUserServiceImpl
 import dev.notypie.application.service.user.UserService
@@ -9,6 +9,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.user.repository.TeamRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
 
 @ConfigurationProperties(prefix = "slack.app")
@@ -33,7 +34,7 @@ data class AppConfig(
 }
 
 @Configuration
-@OnStandAloneMode
+@Conditional(OnStandAloneCondition::class)
 class ApplicationOptionConfiguration{
 
     @Bean
@@ -49,7 +50,7 @@ class ApplicationOptionConfiguration{
 
 
 @Configuration
-@OnMicroServiceMode
+@Conditional(OnMicroServiceCondition::class)
 class ApplicationMicroServiceOptionConfiguration{
 
     @Bean
