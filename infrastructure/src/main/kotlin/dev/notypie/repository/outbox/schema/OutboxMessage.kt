@@ -1,7 +1,5 @@
 package dev.notypie.repository.outbox.schema
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize
-import com.fasterxml.jackson.databind.deser.std.MapDeserializer
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.objectMapper
@@ -30,7 +28,6 @@ class OutboxMessage(
 
     @field:Convert(converter = JPAJsonConverter::class)
     @field:Column(name = "metadata", columnDefinition = "JSON")
-    @field:JsonDeserialize(using = MapDeserializer::class)
     val metadata: Map<String, Any>,
 
     @field:Column(name = "command_detail_type")
