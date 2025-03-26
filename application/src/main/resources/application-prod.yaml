@@ -43,11 +43,12 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
       group-id: codeCompanion
-      key-deserializer: org.apache.kafka.common.serialization.StringSerializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonSerializer
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       auto-offset-reset: earliest
       enable-auto-commit: true
       max-poll-records: 1000
+      isolation-level: read_committed
 
 server:
   port: 80
@@ -78,4 +79,4 @@ slack:
     mode:
       publisher: cdc
       cdc:
-        topic: schema-history.code_companion.outbox_message
+        topic: cdc.code_companion.outbox_message

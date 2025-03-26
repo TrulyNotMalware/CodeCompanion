@@ -2,6 +2,7 @@ package dev.notypie.application.configurations
 
 import dev.notypie.application.configurations.conditions.OnCdcPublisher
 import dev.notypie.application.configurations.conditions.OnPoolingPublisher
+import dev.notypie.application.service.relay.DebeziumLogTailingProcessor
 import dev.notypie.application.service.relay.MessageProcessor
 import dev.notypie.application.service.relay.PoolingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
@@ -31,5 +32,7 @@ class PoolingPublisherConfig{
 @Configuration
 @Conditional(OnCdcPublisher::class)
 class CdcPublisherConfig{
-    
+
+    @Bean
+    fun debeziumLogTailingProcessor() = DebeziumLogTailingProcessor()
 }

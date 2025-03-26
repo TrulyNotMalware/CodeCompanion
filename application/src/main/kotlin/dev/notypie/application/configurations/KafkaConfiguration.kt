@@ -1,7 +1,10 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.configurations.conditions.OnCdcPublisher
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
+import org.apache.kafka.clients.consumer.Consumer
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties
@@ -11,9 +14,14 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.core.*
+import org.springframework.kafka.listener.CommonErrorHandler
+import org.springframework.kafka.listener.MessageListenerContainer
 import org.springframework.kafka.support.micrometer.KafkaListenerObservation
 import org.springframework.kafka.support.micrometer.KafkaListenerObservationConvention
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
+import java.lang.Exception
+
+private val logger = KotlinLogging.logger {  }
 
 @Configuration
 @EnableKafka
@@ -37,6 +45,7 @@ class KafkaConfiguration(
             containerProperties.isObservationEnabled = true
             containerProperties.isMicrometerEnabled = false
             containerProperties.observationConvention = convention
+            setCommonErrorHandler(KafkaErrorHandler())
         }
 
     @Bean
@@ -71,4 +80,33 @@ class KafkaObservationConvention: KafkaListenerObservationConvention{
             context.listenerId
         )
 
+}
+
+class KafkaErrorHandler: CommonErrorHandler{
+
+    override fun handleOtherException(
+        thrownException: Exception,
+        consumer: Consumer<*, *>,
+        container: MessageListenerContainer,
+        batchListener: Boolean
+    ) {
+        super.handleOtherException(thrownException, consumer, container, batchListener)
+    }
+
+    override fun handleOne(
+        thrownException: Exception,
+        record: ConsumerRecord<*, *>,
+        consumer: Consumer<*, *>,
+        container: MessageListenerContainer
+    ): Boolean {
+        if(record.value() == null || record.value().toString().isBlank()){
+            logger.warn { "Received null or blank message. topic: ${record.topic()}, partition: ${record.partition()}, offset: ${record.offset()}" }
+            return true
+        }
+        return super.handleOne(thrownException, record, consumer, container)
+    }
+
+    override fun seeksAfterHandling(): Boolean {
+        return super.seeksAfterHandling()
+    }
 }

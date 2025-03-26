@@ -18,21 +18,19 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 @Configuration
 class SlackRequestBuilderConfiguration(
-    @Value("\${slack.app.api.token}") val botToken: String,
+    private val appConfig: AppConfig,
 ) {
 
     @Bean
     @ConditionalOnMissingBean(SlackTemplateBuilder::class)
     fun slackTemplateBuilder() : SlackTemplateBuilder = ModalTemplateBuilder()
 
-    //FIXME Scheduler
     @Bean
-    fun taskScheduler(): ThreadPoolTaskScheduler {
-        val scheduler = ThreadPoolTaskScheduler()
-        scheduler.poolSize = 5
-        scheduler.threadNamePrefix = "ScheduledTask-"
-        scheduler.initialize()
-        return scheduler
+    fun taskScheduler(): ThreadPoolTaskScheduler
+    = ThreadPoolTaskScheduler().apply {
+            poolSize = 5
+            threadNamePrefix = "ThreadPoolTaskScheduler-"
+            initialize()
     }
 
     @Bean
@@ -42,7 +40,7 @@ class SlackRequestBuilderConfiguration(
         threadPoolTaskScheduler: ThreadPoolTaskScheduler,
         outboxRepository: MessageOutboxRepository
     ) = ApplicationMessageDispatcher(
-        botToken = botToken, applicationEventPublisher = applicationEventPublisher,
+        botToken = appConfig.api.token, applicationEventPublisher = applicationEventPublisher,
         taskScheduler = threadPoolTaskScheduler)
 
     @Bean
@@ -50,7 +48,7 @@ class SlackRequestBuilderConfiguration(
     fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder,
                             applicationEventPublisher: ApplicationEventPublisher,
                             slackMessageDispatcher: MessageDispatcher): SlackApiRequester = SlackApiClientImpl(
-        botToken = botToken, templateBuilder = slackTemplateBuilder,
+        botToken = appConfig.api.token, templateBuilder = slackTemplateBuilder,
         messageDispatcher = slackMessageDispatcher
     )
 
