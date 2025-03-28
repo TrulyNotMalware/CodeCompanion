@@ -13,25 +13,23 @@ import java.util.concurrent.Executor
 
 @Configuration
 @EnableAsync
-class AsyncConfig : AsyncConfigurer{
+class AsyncConfig : AsyncConfigurer { //TODO REPLACE COROUTINE
 
-    @Bean(name = [ APPLICATION_EVENT_MULTICASTER_BEAN_NAME ])
-    fun applicationEventMulticaster(): ApplicationEventMulticaster{
-        val eventMultiCaster = SimpleApplicationEventMulticaster()
-        eventMultiCaster.setTaskExecutor(getAsyncExecutor())
-        return eventMultiCaster
-    }
+    @Bean(name = [APPLICATION_EVENT_MULTICASTER_BEAN_NAME])
+    fun applicationEventMulticaster(): ApplicationEventMulticaster =
+        SimpleApplicationEventMulticaster()
+            .apply { setTaskExecutor(getAsyncExecutor()) }
+
 
     @Bean(name = ["threadPoolTaskExecutor"])
-    override fun getAsyncExecutor(): Executor{
-        val executor = ThreadPoolTaskExecutor()
-        executor.corePoolSize = 10
-        executor.maxPoolSize = 10
-        executor.setQueueCapacity(10000)
-        executor.setThreadNamePrefix("AsyncThread-")
-        executor.setWaitForTasksToCompleteOnShutdown(true)
-        executor.setAwaitTerminationSeconds(10)
-        executor.initialize()
-        return executor
-    }
+    override fun getAsyncExecutor(): Executor =
+        ThreadPoolTaskExecutor().apply {
+            corePoolSize = 10
+            maxPoolSize = 10
+            queueCapacity = 10000
+            threadNamePrefix = "AsyncThread-"
+            setWaitForTasksToCompleteOnShutdown(true)
+            setAwaitTerminationSeconds(10)
+            initialize()
+        }
 }

@@ -2,6 +2,7 @@
 
 package dev.notypie.application.service.relay
 
+import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
@@ -9,7 +10,6 @@ import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.retry.annotation.Backoff
@@ -23,17 +23,18 @@ private val logger = KotlinLogging.logger {}
 @Service
 class SlackMessageRelayServiceImpl(
     private val outboxRepository: MessageOutboxRepository,
-    private val eventPublisher: ApplicationEventPublisher,
+    private val messageDispatcher: MessageDispatcher
 ): MessageRelayService {
 
-    @Async
     override fun batchPendingMessages(pendingMessages: List<OutboxMessage>) {
-        //TODO Dispatch pending messages.
-//        for (message in pendingMessages){
-//            try{
-//
-//            }
-//        }
+        pendingMessages.forEach { message ->
+            batchPendingMessagesAsync(message)
+        }
+    }
+
+    @Async
+    protected fun batchPendingMessagesAsync(pendingMessage: OutboxMessage){
+        val result = messageDispatcher.dispatch(event = pendingMessage.toSlackEvent())
     }
 
     @Transactional

@@ -95,7 +95,11 @@ fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PEND
             publisherId = this.publisherId,
             commandDetailType = this.commandDetailType.name,
             payload = this.body,
-            metadata = mapOf(),
+            metadata = mapOf(
+                "api_app_id" to this.apiAppId,
+                "channel" to this.channel,
+                "replace_original" to this.replaceOriginal
+            ),
             type = this.messageType.name,
 //            status = status,
             createdAt = LocalDateTime.now()
@@ -111,7 +115,11 @@ fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PE
             publisherId = this.publisherId,
             commandDetailType = this.commandDetailType.name,
             payload = objectMapper.readValue<Map<String, Any>>(this.body),
-            metadata = mapOf(),
+            metadata = mapOf(
+                "api_app_id" to this.apiAppId,
+                "channel" to this.channel,
+                "response_url" to this.responseUrl
+            ),
             type = MessageType.ACTION_RESPONSE.name,
 //            status = status,
             createdAt = LocalDateTime.now()

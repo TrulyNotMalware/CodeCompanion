@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.dto.response
 
+import dev.notypie.domain.command.dto.SlackEvent
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -16,7 +17,9 @@ data class CommandOutput(
     val channel: String,
     val token: String = "", //FIXME ChatPostRequest doesn't have any token?
     val commandType: CommandType,
-    val actionStates: List<States> = listOf()
+    val actionStates: List<States> = listOf(),
+
+    val errorReason: String = ""
 ){
     companion object{
         fun empty() = CommandOutput(
@@ -25,5 +28,19 @@ data class CommandOutput(
             commandDetailType = CommandDetailType.NOTHING,
             idempotencyKey = "", publisherId = ""
         )
+
+        fun fail(event: SlackEvent, reason: String) = CommandOutput(
+            ok = false, apiAppId = event.apiAppId, status = Status.FAILED,
+            channel = event.channel, commandType = CommandType.SIMPLE,
+            commandDetailType = CommandDetailType.NOTHING,
+            idempotencyKey = event.idempotencyKey, publisherId = event.publisherId
+        )
+
+        fun success(event: SlackEvent) = CommandOutput(
+            ok = true, apiAppId = event.apiAppId, status = Status.SUCCESS,
+            channel = event.channel, commandType = CommandType.SIMPLE,
+            commandDetailType = CommandDetailType.NOTHING,
+            idempotencyKey = event.idempotencyKey, publisherId = event.publisherId
+            )
     }
 }

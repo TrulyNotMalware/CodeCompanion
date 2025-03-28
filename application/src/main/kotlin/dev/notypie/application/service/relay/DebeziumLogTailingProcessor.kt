@@ -16,6 +16,6 @@ class DebeziumLogTailingProcessor(
     )
     override fun getPendingMessages(messageParameter: MessageProcessorParameter) {
         val consumerRecord = messageParameter as Envelope
-
+        
     }
 }

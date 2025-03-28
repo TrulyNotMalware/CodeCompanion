@@ -12,9 +12,6 @@ import org.springframework.transaction.annotation.Transactional
 @Repository
 interface MessageOutboxRepository : JpaRepository<OutboxMessage, String>{
 
-//    @Query("SELECT m FROM MessageOutbox m WHERE m.status = 'PENDING'")
-    fun findByStatus(status: MessageStatus): List<OutboxMessage>
-
     @Query("""
         SELECT * FROM outbox_message
         WHERE status = 'PENDING'

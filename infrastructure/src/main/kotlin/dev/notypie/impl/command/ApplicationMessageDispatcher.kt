@@ -6,10 +6,7 @@ import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.domain.command.MessageDispatcher
-import dev.notypie.domain.command.dto.ActionEventContents
-import dev.notypie.domain.command.dto.DelayHandleEventContents
-import dev.notypie.domain.command.dto.PostEventContents
-import dev.notypie.domain.command.dto.MessageType
+import dev.notypie.domain.command.dto.*
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
@@ -21,6 +18,7 @@ import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.transaction.event.TransactionPhase
@@ -84,11 +82,14 @@ class ApplicationMessageDispatcher(
         )
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun listen(event: DelayHandleEventContents){
+    override fun dispatch(event: SlackEvent): CommandOutput =
+        when(event){
+            is ActionEventContents -> this.dispatchActionResponseContents(event = event)
+            is DelayHandleEventContents -> TODO()
+            is PostEventContents -> this.dispatchChatPostMessageContents(event = event)
+        }
 
-    }
-
+    @Deprecated("Deprecated")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: PostEventContents){
         when(event.messageType){
@@ -99,44 +100,57 @@ class ApplicationMessageDispatcher(
         }
     }
 
+    @Deprecated("Deprecated")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun listen(event: ActionEventContents) = this.dispatchActionResponseContents(event = event)
 
-    private fun dispatchEphemeralContents(event: PostEventContents){
+    private fun dispatchEphemeralContents(event: PostEventContents): CommandOutput{
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
                 for ((key, value) in event.body) builder.add(key, value.toString())
                 builder
         }
         val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
             "chat.postEphemeral", this.botToken, ChatPostEphemeralResponse::class.java)
-        if(result.isOk) this.dispatchSuccessContents( idempotencyKey = event.idempotencyKey )
-        else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
+        return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun dispatchChatPostMessageContents(event: PostEventContents){
+    private fun dispatchChatPostMessageContents(event: PostEventContents): CommandOutput{
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
             for ((key, value) in event.body) builder.add(key, value.toString())
             builder
         }
         val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
             "chat.postMessage", this.botToken, ChatPostMessageResponse::class.java)
-        if(result.isOk) this.dispatchSuccessContents( idempotencyKey = event.idempotencyKey )
-        else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
+        return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun dispatchActionResponseContents(event: ActionEventContents){
+    private fun dispatchActionResponseContents(event: ActionEventContents): CommandOutput {
         val requestBody = event.body.toRequestBody(MEDIA_TYPE_JSON)
         val request = Request.Builder().url(event.responseUrl).post(requestBody).build()
         val result = this.okHttpClient.newCall(request).execute()
-        if(result.code in 200..299) this.dispatchSuccessContents( idempotencyKey = event.idempotencyKey )
-        else this.dispatchFailedContents( idempotencyKey = event.idempotencyKey )
+        return returnSuccessOrFailed(result = result, event = event)
     }
 
+    private fun returnSuccessOrFailed(result: ChatPostEphemeralResponse, event: SlackEvent) =
+        if(result.isOk) CommandOutput.success(event = event)
+        else CommandOutput.fail(event=event, reason = result.error)
+
+    private fun returnSuccessOrFailed(result: ChatPostMessageResponse, event: SlackEvent) =
+        if(result.isOk) CommandOutput.success(event = event)
+        else CommandOutput.fail(event=event, reason = result.error)
+
+    private fun returnSuccessOrFailed(result: Response, event: SlackEvent) =
+        if(result.isSuccessful) CommandOutput.success(event = event)
+        else CommandOutput.fail(event=event, reason = result.message)
+
+
+    @Deprecated("Deprecated")
     private fun dispatchSuccessContents(idempotencyKey: String) =
         this.applicationEventPublisher.publishEvent(
             MessagePublishSuccessEvent( idempotencyKey = idempotencyKey )
         )
 
+    @Deprecated("Deprecated")
     private fun dispatchFailedContents(idempotencyKey: String) =
         this.applicationEventPublisher.publishEvent(
             MessagePublishFailedEvent( idempotencyKey = idempotencyKey, reason = "FAILED TO SEND MESSAGE TO CHANNEL" )
