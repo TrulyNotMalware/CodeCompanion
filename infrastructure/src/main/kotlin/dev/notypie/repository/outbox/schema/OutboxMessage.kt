@@ -1,5 +1,6 @@
 package dev.notypie.repository.outbox.schema
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.objectMapper
@@ -9,17 +10,24 @@ import dev.notypie.domain.command.dto.PostEventContents
 import dev.notypie.domain.command.dto.SlackEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
+import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.springframework.data.annotation.LastModifiedDate
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
+
+private val logger = KotlinLogging.logger {  }
 
 @Entity
 class OutboxMessage(
     @field:Id
+    @field:JsonProperty("idempotency_key")
     val idempotencyKey: String,
 
     @field:Column(name = "publisher_id", nullable = false)
+    @field:JsonProperty("publisher_id")
     val publisherId: String,
 
     @field:Convert(converter = JPAJsonConverter::class)
@@ -35,6 +43,7 @@ class OutboxMessage(
     /**
      * Debezium cdc enum type cause Null pointer exception.
      */
+    @field:JsonProperty("command_detail_type")
     val commandDetailType: String,
 
     @field:Column(name = "type")
@@ -42,10 +51,12 @@ class OutboxMessage(
     val type: String,
 
     @field:CreationTimestamp
+    @field:JsonProperty("created_at")
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime,
 
     @field:LastModifiedDate
+    @field:JsonProperty("updated_at")
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ){
@@ -64,9 +75,9 @@ class OutboxMessage(
         this.status = status.name
     }
 
-    fun toSlackEvent(): SlackEvent{
+    fun toSlackEvent(): SlackEvent =
         if(this.type == MessageType.ACTION_RESPONSE.name )
-            return ActionEventContents(
+            ActionEventContents(
                 idempotencyKey = this.idempotencyKey,
                 publisherId = this.publisherId,
                 commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
@@ -75,7 +86,7 @@ class OutboxMessage(
                 responseUrl = this.metadata["response_url"].toString(),
                 channel = this.metadata["channel"].toString()
             )
-        else return PostEventContents(
+        else PostEventContents(
             idempotencyKey = this.idempotencyKey,
             publisherId = this.publisherId,
             messageType = MessageType.valueOf(this.type),
@@ -85,8 +96,8 @@ class OutboxMessage(
             channel = this.metadata["channel"].toString(),
             replaceOriginal = this.metadata["replace_original"].toString().toBoolean()
         )
-    }
 }
+
 
 fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
@@ -127,3 +138,32 @@ fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PE
         reason = "ActionEventContents",
         slackEvent = this
     )
+
+fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
+    runCatching {
+        fun MutableMap<String, Any>.parseJsonField(key: String) {
+            this[key]?.takeIf { it is String }?.let {
+                this[key] = objectMapper.readValue<Map<String, Any>>(it as String)
+            }
+        }
+
+        fun Long.toLocalDateTime(): LocalDateTime {
+            val seconds = this / 1_000_000
+            val nanos = (this % 1_000_000) * 1_000
+            return Instant.ofEpochSecond(seconds, nanos).atZone(ZoneId.systemDefault()).toLocalDateTime()
+        }
+
+        parseJsonField("metadata")
+        parseJsonField("payload")
+
+        val createdAt = this["created_at"]
+        val updatedAt = this["updated_at"]
+        if(createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
+        if(updatedAt is Long) this["updated_at"] = updatedAt.toLocalDateTime()
+
+        objectMapper.convertValue(this, OutboxMessage::class.java)
+    }.getOrElse { e ->
+        logger.error { "Failed to convert to OutboxMessage. ${e.message}" }
+        throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
+    }
+

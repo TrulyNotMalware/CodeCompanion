@@ -10,8 +10,7 @@ import dev.notypie.domain.command.dto.*
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
-import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
-import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
+import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import okhttp3.FormBody
@@ -20,18 +19,17 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.event.EventListener
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
-import org.springframework.transaction.event.TransactionPhase
-import org.springframework.transaction.event.TransactionalEventListener
 import java.time.Instant
 
 private val logger = KotlinLogging.logger {  }
 
-
 class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
-    private val taskScheduler: ThreadPoolTaskScheduler
+    private val taskScheduler: ThreadPoolTaskScheduler,
+    private val retryService: RetryService
 ): MessageDispatcher {
 
     private val slack: Slack = Slack.getInstance()
@@ -83,26 +81,24 @@ class ApplicationMessageDispatcher(
     }
 
     override fun dispatch(event: SlackEvent): CommandOutput =
-        when(event){
-            is ActionEventContents -> this.dispatchActionResponseContents(event = event)
-            is DelayHandleEventContents -> TODO()
-            is PostEventContents -> this.dispatchChatPostMessageContents(event = event)
-        }
+        this.retryService.execute(
+            action = {
+                when(event){
+                    is ActionEventContents -> this.dispatchActionResponseContents(event = event)
+                    is DelayHandleEventContents -> TODO()
+                    is PostEventContents ->
+                        when(event.messageType){
+                            MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event=event)
+                            MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event=event)
+                            MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event=event)
+                            MessageType.ACTION_RESPONSE -> TODO()
+                        }
+                }
+            }
+        )
 
-    @Deprecated("Deprecated")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun listen(event: PostEventContents){
-        when(event.messageType){
-            MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
-            MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
-            MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
-            MessageType.ACTION_RESPONSE -> TODO() //FIXME replace PostEventContents to ActionResponse
-        }
-    }
-
-    @Deprecated("Deprecated")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun listen(event: ActionEventContents) = this.dispatchActionResponseContents(event = event)
+    @EventListener
+    fun listenSlackEvent(event: SlackEvent) = this.dispatch(event = event)
 
     private fun dispatchEphemeralContents(event: PostEventContents): CommandOutput{
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
@@ -142,18 +138,4 @@ class ApplicationMessageDispatcher(
     private fun returnSuccessOrFailed(result: Response, event: SlackEvent) =
         if(result.isSuccessful) CommandOutput.success(event = event)
         else CommandOutput.fail(event=event, reason = result.message)
-
-
-    @Deprecated("Deprecated")
-    private fun dispatchSuccessContents(idempotencyKey: String) =
-        this.applicationEventPublisher.publishEvent(
-            MessagePublishSuccessEvent( idempotencyKey = idempotencyKey )
-        )
-
-    @Deprecated("Deprecated")
-    private fun dispatchFailedContents(idempotencyKey: String) =
-        this.applicationEventPublisher.publishEvent(
-            MessagePublishFailedEvent( idempotencyKey = idempotencyKey, reason = "FAILED TO SEND MESSAGE TO CHANNEL" )
-        )
-
 }

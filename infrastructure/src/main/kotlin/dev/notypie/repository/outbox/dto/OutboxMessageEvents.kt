@@ -1,19 +1,30 @@
 package dev.notypie.repository.outbox.dto
 
 import dev.notypie.domain.command.dto.SlackEvent
+import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 
-data class MessagePublishFailedEvent(
-    val idempotencyKey: String,
-    val reason: String
+sealed class OutboxUpdateEvent(
+    open val idempotencyKey: String,
+    open val status: MessageStatus
 )
 
+data class MessagePublishFailedEvent(
+    override val idempotencyKey: String,
+    val reason: String
+): OutboxUpdateEvent(idempotencyKey = idempotencyKey, status = MessageStatus.FAILURE)
+
 data class MessagePublishSuccessEvent(
-    val idempotencyKey: String
-)
+    override val idempotencyKey: String
+): OutboxUpdateEvent(idempotencyKey = idempotencyKey, status = MessageStatus.SUCCESS)
 
 data class NewMessagePublishedEvent(
     val reason: String,
     val outboxMessage: OutboxMessage,
     val slackEvent: SlackEvent
 )
+
+fun CommandOutput.toOutboxUpdateEvent(): OutboxUpdateEvent =
+    if( this.ok ) MessagePublishSuccessEvent(idempotencyKey = this.idempotencyKey)
+    else MessagePublishFailedEvent(idempotencyKey = this.idempotencyKey, reason = this.errorReason)

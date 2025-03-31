@@ -14,3 +14,7 @@ fun parseRequestBodyData(headers: MultiValueMap<String, String>, data: Map<Strin
     val payload: SlashCommandRequestBody = parseRequestBodyData(data = data)
     return payload.toSlackCommandData(rawHeader = SlackRequestHeaders(underlying = headers), rawBody = data)
 }
+
+inline fun <reified T : Any> Map<String, Any>.convert(): T{
+    return objectMapper.convertValue(this, T::class.java)
+}
