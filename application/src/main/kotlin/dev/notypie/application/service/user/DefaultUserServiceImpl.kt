@@ -14,7 +14,5 @@ class DefaultUserServiceImpl(
     override fun createNewTeam(headers: MultiValueMap<String, String>, data: Map<String, String>){
         val body = parseRequestBodyData(data = data)
         val subCommands = body.subCommandList()
-
-        
     }
 }

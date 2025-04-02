@@ -61,6 +61,9 @@ class SlackInteractionRequestParser
                             States(type = ActionElementTypes.MULTI_STATIC_SELECT, isSelected = true, selectedValue = selectedValue)
                         }
                     }
+                    ActionElementTypes.PLAIN_TEXT_INPUT.elementName ->{
+                        States(type = ActionElementTypes.PLAIN_TEXT_INPUT, isSelected = true, selectedValue = value.value ?: "")
+                    }
                     ActionElementTypes.MULTI_USERS_SELECT.elementName -> {
                         if(value.selectedUsers.isEmpty()) States(type = ActionElementTypes.MULTI_USERS_SELECT)
                         else States(type = ActionElementTypes.MULTI_USERS_SELECT, isSelected = true, selectedValue = value.selectedUsers.joinToString(","))

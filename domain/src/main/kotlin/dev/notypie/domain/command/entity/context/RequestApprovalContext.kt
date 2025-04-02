@@ -41,7 +41,7 @@ internal class RequestApprovalContext(
         return ApprovalContents(
             type = type,
             reason = command, idempotencyKey = this.commandBasicInfo.idempotencyKey,
-            commandDetailType = this.commandDetailType,
+            commandDetailType = this.commandDetailType, publisherId = commandBasicInfo.publisherId
         )
     }
 }

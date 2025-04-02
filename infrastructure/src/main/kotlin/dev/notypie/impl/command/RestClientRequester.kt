@@ -6,11 +6,12 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.client.RestClient
 
 class RestClientRequester(
-    val baseUrl: String = "",
+    val baseUrl: String,
     private val authorization: String? = null,
 ): RestRequester{
 
     companion object{
+        const val SLACK_API_BASE_URL = "https://slack.com/api/"
         const val DEFAULT_CONTENT_TYPE = "application/json; charset=utf-8"
     }
 

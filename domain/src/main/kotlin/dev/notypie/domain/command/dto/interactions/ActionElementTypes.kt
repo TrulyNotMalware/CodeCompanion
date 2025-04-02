@@ -13,5 +13,6 @@ enum class ActionElementTypes(
     TIME_PICKER("timepicker", false),
     CHECKBOX("checkboxes", false),
     RADIO_BUTTONS("radio_buttons", false),
+    PLAIN_TEXT_INPUT("plain_text_input", false),
     UNKNOWN("unknown", false)
 }

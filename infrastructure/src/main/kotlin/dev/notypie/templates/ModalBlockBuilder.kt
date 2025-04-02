@@ -148,6 +148,19 @@ class ModalBlockBuilder(
         it.accessory(this.modalElementBuilder.imageBlockElement(imageUrl = DEFAULT_CALENDAR_IMAGE_URLS, altText = "calendar thumbnail"))
     }
 
+    fun userNameWithThumbnailBlock(userName: String, userThumbnailUrl: String, mkdIntroduceComment: String = "") = context {
+        it.elements(
+            listOf(
+                this.modalElementBuilder.markdownTextObject(markdownText = mkdIntroduceComment),
+                this.modalElementBuilder.markdownTextObject(markdownText = "*$userName* "),
+                this.modalElementBuilder.imageBlockElement(
+                    imageUrl = userThumbnailUrl,
+                    altText = "thumbnail"
+                ),
+            )
+        )
+    }
+
     fun selectDateTimeScheduleBlock():InteractionLayoutBlock{
         val datePickerElement = this.modalElementBuilder.datePickerElement()
         val timePickerElement = this.modalElementBuilder.timePickerElement()

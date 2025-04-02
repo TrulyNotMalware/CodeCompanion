@@ -38,5 +38,28 @@ class RetryServiceTest: BehaviorSpec({
                 result shouldBe "Recovery"
             }
         }
+
+        `when`("run exception action that fails N times and succeeds afterwards") {
+            val maxFailures = 3
+            var failingCounter = 0
+            val countExceptionAction = {
+                if (failingCounter < maxFailures) {
+                    failingCounter++
+                    throw RuntimeException("Failure $failingCounter")
+                } else {
+                    "Success"
+                }
+            }
+
+            then("it should succeed after N failures") {
+                val result = retryService.execute(
+                    action = countExceptionAction,
+                    recoveryCallBack = recoveryAction, // Recovery if retry fails completely
+                    maxAttempts = maxFailures+1
+                )
+                result shouldBe "Success"
+            }
+        }
     }
+
 })

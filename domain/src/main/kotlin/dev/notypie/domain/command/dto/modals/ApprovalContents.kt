@@ -7,6 +7,8 @@ data class ApprovalContents(
     val headLineText: String = "Approval Requests",
     val type: ApprovalContentType = ApprovalContentType.SIMPLE_REQUEST_FORM,
     val reason: String,
+    val subTitle: String = "",
+    val publisherId: String,
 
     val approvalButtonName: String = "Approval",
     val rejectButtonName: String = "Deny",

@@ -87,7 +87,7 @@ class SlackApiClientImpl(
         val layout = this.templateBuilder.requestApprovalFormTemplate(headLineText = headLineText,
             selectionFields = selectionFields, reasonInput = reasonInput,
             approvalContents = approvalContents ?: ApprovalContents(reason = "Request Approval", approvalButtonName = "Send", rejectButtonName = "Cancel",
-                idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType))
+                idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType, publisherId = commandBasicInfo.publisherId))
         return this.doAction(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType, commandType = commandType, layout = layout, replaceOriginal = false
@@ -98,7 +98,8 @@ class SlackApiClientImpl(
                                            approvalContents: ApprovalContents?): CommandOutput{
         val layout = this.templateBuilder.requestMeetingFormTemplate(
             approvalContents = approvalContents ?: ApprovalContents(
-                idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType, reason = "Request Meeting",
+                idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
+                reason = "Request Meeting", publisherId = commandBasicInfo.publisherId
             )
         )
         return this.doEphemeralAction(

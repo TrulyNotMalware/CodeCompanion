@@ -30,7 +30,9 @@ data class InteractionPayload(
 fun InteractionPayload.isCompleted(): Boolean =
     this.currentAction.type.isPrimary &&
     this.currentAction.isSelected &&
-    this.states.all { it.isSelected || it.type == ActionElementTypes.CHECKBOX }//Checkbox is considered true
+    this.states.all { it.isSelected ||
+            it.type == ActionElementTypes.CHECKBOX ||//Checkbox is considered true
+            it.type == ActionElementTypes.PLAIN_TEXT_INPUT }//PlainTextInput considered true
 
 fun InteractionPayload.isPrimary() = this.currentAction.type.isPrimary
 fun InteractionPayload.isCanceled() = this.currentAction.type == ActionElementTypes.REJECT_BUTTON

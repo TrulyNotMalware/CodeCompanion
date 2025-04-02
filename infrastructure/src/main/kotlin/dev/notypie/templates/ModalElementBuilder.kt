@@ -85,9 +85,9 @@ class ModalElementBuilder {
                 .build()
         )
 
-    fun plainTextInputElement(contents: TextInputContents) = PlainTextInputElement.builder()
+    fun plainTextInputElement(contents: TextInputContents, multiline: Boolean = false) = PlainTextInputElement.builder()
         .placeholder(this.plainTextObject(text = contents.placeholderText))
-        .multiline(true)
+        .multiline(multiline)
         .build()
 
     fun timePickerElement(placeholderText: String = "Select time") =

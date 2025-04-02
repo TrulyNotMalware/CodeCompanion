@@ -49,15 +49,24 @@ internal class RequestMeetingContext(
             return this.createErrorResponse(errorMessage = "Make sure to choose a time in the *future* rather than now.")
         if( !interactionPayload.isCompleted() )
             return this.createErrorResponse(errorMessage = "Please select *all options.*")
-
+        val nameAndReasons = interactionPayload.states.filter{ it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+        val (title, reason) = nameAndReasons
+            .takeIf { it.size >= 2 }
+            ?.let {
+                val titleValue = it[0].selectedValue.ifBlank { "Request Meeting" }
+                val reasonValue = it[1].selectedValue.ifBlank { "request meeting" }
+                titleValue to reasonValue
+            }
+            ?: ("Request Meeting" to "request meeting")
         // send notice
         if(interactionPayload.states.first { state -> state.type == ActionElementTypes.CHECKBOX }.isSelected){
             ApprovalCallbackContext(
                 slackApiRequester = this.slackApiRequester, participants = participants,
                 commandBasicInfo = this.commandBasicInfo,
                 approvalContents = ApprovalContents(
-                    headLineText = "Request Meeting", reason = "request meeting",
+                    headLineText = "Meeting Request!", reason = reason, subTitle = title,
                     idempotencyKey = this.commandBasicInfo.idempotencyKey,
+                    publisherId = this.commandBasicInfo.publisherId,
                     commandDetailType = CommandDetailType.NOTICE_FORM
                 )
             ).runCommand()

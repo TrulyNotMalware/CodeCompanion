@@ -12,9 +12,12 @@ import dev.notypie.domain.command.entity.CompositeCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.history.repository.HistoryRepository
 import dev.notypie.impl.command.InteractionPayloadParser
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
+
+private val logger = KotlinLogging.logger {  }
 
 @Service
 class SlackInteractionHandlerImpl(

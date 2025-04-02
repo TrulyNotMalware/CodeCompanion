@@ -124,6 +124,7 @@ class ApplicationMessageDispatcher(
         val requestBody = event.body.toRequestBody(MEDIA_TYPE_JSON)
         val request = Request.Builder().url(event.responseUrl).post(requestBody).build()
         val result = this.okHttpClient.newCall(request).execute()
+        result.close()
         return returnSuccessOrFailed(result = result, event = event)
     }
 

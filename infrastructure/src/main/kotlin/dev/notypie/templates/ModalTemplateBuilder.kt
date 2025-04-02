@@ -4,6 +4,10 @@ import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.RestClientRequester
+import dev.notypie.impl.command.RestClientRequester.Companion.SLACK_API_BASE_URL
+import dev.notypie.impl.command.RestRequester
+import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
@@ -14,6 +18,10 @@ import dev.notypie.templates.dto.TimeScheduleAlertContents
  */
 class ModalTemplateBuilder(
     private val modalBlockBuilder: ModalBlockBuilder = ModalBlockBuilder(),
+    private val restRequester: RestRequester = RestClientRequester(
+        baseUrl = SLACK_API_BASE_URL
+    ),
+    private val slackApiToken: String
 ): SlackTemplateBuilder {
     companion object {
         const val DEFAULT_PLACEHOLDER_TEXT = "SELECT"
@@ -43,13 +51,21 @@ class ModalTemplateBuilder(
             this.modalBlockBuilder.timeScheduleBlock(timeScheduleInfo = timeScheduleInfo)
         )
 
+    //Username with thumbnail Requires Role users.profile.get. Reference from https://api.slack.com/methods/users.profile.get
     override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: String, commandDetailType: CommandDetailType): LayoutBlocks{
         val buttonLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
+        val user = this.restRequester.get(uri = "users.profile.get?user=${approvalContents.publisherId}",
+            authorizationHeader = this.slackApiToken, responseType = SlackUserProfileDto::class.java)
+            .body ?: throw IllegalArgumentException("User profile is not found.")
         return this.toLayoutBlocks(
             this.modalBlockBuilder.headerBlock(text = headLineText),
             this.modalBlockBuilder.dividerBlock(),
-            this.modalBlockBuilder.textBlock("type= ${approvalContents.type}",
-                "reason= ${approvalContents.reason}", isMarkDown = true),
+            this.modalBlockBuilder.userNameWithThumbnailBlock(
+                userName = user.profile.displayName,
+                userThumbnailUrl = user.profile.imageSize24,
+                mkdIntroduceComment = "*Publisher* :"
+            ),
+            this.modalBlockBuilder.textBlock("*${approvalContents.subTitle}*", isMarkDown = true),
             buttonLayout.layout, states = buttonLayout.interactiveObjects
         )
     }
@@ -110,11 +126,17 @@ class ModalTemplateBuilder(
         val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
 
         val blocks = listOf(
-            this.modalBlockBuilder.headerBlock(text = "Request Meeting"),
+            this.modalBlockBuilder.headerBlock(text = "Create new meeting"),
             this.modalBlockBuilder.dividerBlock(),
             this.modalBlockBuilder.calendarThumbnailBlock(
                 title = "Schedule a new meeting",
                 markdownBody = "Create a new meeting.\n Please choose the meeting participants and the meeting date."
+            ),
+            this.modalBlockBuilder.plainTextInputBlock(
+                TextInputContents(title = "Meeting name", placeholderText = "Meeting name")
+            ),
+            this.modalBlockBuilder.plainTextInputBlock(
+                TextInputContents(title = "Reason", placeholderText = "Reason")
             ),
             callbackCheckboxes.layout,
             multiUserSelectionContents.layout,

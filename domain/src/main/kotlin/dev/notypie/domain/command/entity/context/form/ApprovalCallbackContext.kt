@@ -25,7 +25,7 @@ internal class ApprovalCallbackContext(
     private val approvalContents: ApprovalContents = approvalContents ?:
         ApprovalContents(
             reason = "approve requests", idempotencyKey = this.commandBasicInfo.idempotencyKey,
-            commandDetailType = this.commandDetailType
+            commandDetailType = this.commandDetailType, publisherId = this.commandBasicInfo.publisherId
         )
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
@@ -58,8 +58,6 @@ internal class ApprovalCallbackContext(
         )
     }
 
-
-    // interaction 은 replace 해주어야 함. 승인, 거절 여부
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
 
         return this.interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
