@@ -1,5 +1,6 @@
 package dev.notypie.templates.dto
 
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import java.time.LocalDateTime
 
 data class TimeScheduleAlertContents(
@@ -8,8 +9,7 @@ data class TimeScheduleAlertContents(
             "If there is no response after 10 minutes, the attendance will be processed automatically.",
     val startTime: LocalDateTime,
     val host: String,
-    val rejectReasons: Set<String> = setOf(
-            "Scheduling Conflict", "Unexpected Emergency", "Health Issues", "Prior Commitment", "Lack of Preparation",
-            "Vacation", "Personal Reasons", "Other",
-    )
+    val rejectReasons: Set<String> =
+        RejectReason.entries.map { it.showMessage }
+            .toSet()
 )

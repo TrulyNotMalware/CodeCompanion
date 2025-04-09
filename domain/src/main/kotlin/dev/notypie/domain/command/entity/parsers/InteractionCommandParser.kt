@@ -27,6 +27,7 @@ internal class InteractionCommandParser(
                     slackApiRequester = this.slackApiRequester,
                     commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
                 )
+            CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
             CommandDetailType.REQUEST_MEETING_FORM ->
                 RequestMeetingContext(
                     slackApiRequester = this.slackApiRequester,

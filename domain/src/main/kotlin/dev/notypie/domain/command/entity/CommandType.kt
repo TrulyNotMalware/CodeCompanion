@@ -14,5 +14,6 @@ enum class CommandDetailType {
     REQUEST_APPLY_FORM,
 
     REQUEST_MEETING_FORM,
+    MEETING_APPROVAL_NOTICE_FORM,
     NOTICE_FORM
 }

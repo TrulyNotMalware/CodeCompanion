@@ -21,19 +21,39 @@ internal abstract class CommandContext(
     internal abstract fun parseCommandDetailType(): CommandDetailType
 
     internal open fun runCommand(): CommandOutput = CommandOutput.empty()
+    internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
     internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
         CommandOutput.empty()
 
-    internal fun createErrorResponse(errorMessage: String): CommandOutput =
+    internal fun createErrorResponse(errMessage: String): CommandOutput =
         EphemeralTextResponse(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-            slackApiRequester = this.slackApiRequester, textMessage = errorMessage
+            slackApiRequester = this.slackApiRequester, textMessage = errMessage
         ).runCommand()
 
-    internal fun interactionSuccessResponse(responseUrl: String, markDownMessage: String = "Successfully processed."): CommandOutput =
+    internal fun createErrorResponse(errMessage: String, results: CommandOutput): CommandOutput {
+        EphemeralTextResponse(
+            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+            slackApiRequester = this.slackApiRequester, textMessage = errMessage
+        ).runCommand()
+        return results
+    }
+
+    internal fun interactionSuccessResponse(responseUrl: String, mkdMessage: String = "Successfully processed."): CommandOutput =
         ReplaceMessageContext(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
             slackApiRequester = this.slackApiRequester, responseUrl = responseUrl,
-            markdownMessage = markDownMessage
+            markdownMessage = mkdMessage
         ).runCommand()
+
+    internal fun interactionSuccessResponse(responseUrl: String,
+                                            mkdMessage: String = "Successfully processed.",
+                                            results :CommandOutput): CommandOutput {
+        ReplaceMessageContext(
+            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
+            slackApiRequester = this.slackApiRequester, responseUrl = responseUrl,
+            markdownMessage = mkdMessage
+        ).runCommand()
+        return results
+    }
 }

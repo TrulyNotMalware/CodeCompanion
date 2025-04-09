@@ -13,6 +13,7 @@ import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.UpdateTimestamp
 import org.springframework.data.annotation.LastModifiedDate
 import java.time.Instant
 import java.time.LocalDateTime
@@ -55,10 +56,10 @@ class OutboxMessage(
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime,
 
-    @field:LastModifiedDate
+    @field:UpdateTimestamp
     @field:JsonProperty("updated_at")
     @field:Column(name = "updated_at")
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime? = null
 ){
     @field:Version
     @field:Column(name = "version", nullable = false)

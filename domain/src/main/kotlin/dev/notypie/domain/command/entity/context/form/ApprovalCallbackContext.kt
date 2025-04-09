@@ -31,19 +31,19 @@ internal class ApprovalCallbackContext(
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTICE_FORM
 
-    override fun runCommand(): CommandOutput {
-        //FIXME When participants is empty
-        val results = this.participants.map {
-                participant -> this.slackApiRequester.simpleApplyRejectRequest(
-                    commandDetailType = this.commandDetailType,
-                    approvalContents = this.approvalContents, commandBasicInfo = this.commandBasicInfo,
-                    commandType = this.commandType, targetUserId = participant
-            )
-        }
+    override fun runCommand() = this.handleCommand()
+    override fun runCommand(commandDetailType: CommandDetailType) =
+        this.handleCommand(commandDetailType = commandDetailType)
+
+    override fun handleInteraction(interactionPayload: InteractionPayload) =
+        this.interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
+
+    private fun handleCommand(commandDetailType: CommandDetailType = this.commandDetailType): CommandOutput {
+        val results = this.sendNoticeToParticipants(commandDetailType = commandDetailType)
         val isAllOk = results.all{ it.ok }
         val status =
             if (results.map { it.status }.all { it == Status.SUCCESS || it == Status.IN_PROGRESSED })
-            Status.SUCCESS else Status.FAILED
+                Status.SUCCESS else Status.FAILED
         return CommandOutput(
             ok = isAllOk,
             status = status,
@@ -58,8 +58,12 @@ internal class ApprovalCallbackContext(
         )
     }
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
-
-        return this.interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
-    }
+    private fun sendNoticeToParticipants(commandDetailType: CommandDetailType = this.commandDetailType) =
+        this.participants.map {
+                participant -> this.slackApiRequester.simpleApplyRejectRequest(
+                    commandDetailType = commandDetailType,
+                    approvalContents = this.approvalContents, commandBasicInfo = this.commandBasicInfo,
+                    commandType = this.commandType, targetUserId = participant
+                )
+            }
 }

@@ -6,10 +6,10 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
 
-data class CommandOutput(
-    val ok: Boolean,
+open class CommandOutput(
+    open val ok: Boolean,
     val apiAppId: String,
-    val status: Status,
+    open val status: Status,
     val commandDetailType: CommandDetailType,
 
     val idempotencyKey: String,
@@ -33,7 +33,8 @@ data class CommandOutput(
             ok = false, apiAppId = event.apiAppId, status = Status.FAILED,
             channel = event.channel, commandType = CommandType.SIMPLE,
             commandDetailType = CommandDetailType.NOTHING,
-            idempotencyKey = event.idempotencyKey, publisherId = event.publisherId
+            idempotencyKey = event.idempotencyKey, publisherId = event.publisherId,
+            errorReason = reason
         )
 
         fun success(event: SlackEvent) = CommandOutput(

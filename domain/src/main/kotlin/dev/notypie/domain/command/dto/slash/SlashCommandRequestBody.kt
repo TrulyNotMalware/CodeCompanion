@@ -49,7 +49,6 @@ data class SlashCommandRequestBody(
         rawHeader = rawHeader
     )
 
-    fun subCommandList()
-    = this.subCommands.split(" ")
+    fun subCommandList() = this.subCommands.split(" ")
 
 }

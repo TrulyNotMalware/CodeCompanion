@@ -10,9 +10,9 @@ import org.springframework.util.MultiValueMap
 fun parseRequestBodyData(data: Map<String, String>): SlashCommandRequestBody =
     objectMapper.convertValue(data, SlashCommandRequestBody::class.java)
 
-fun parseRequestBodyData(headers: MultiValueMap<String, String>, data: Map<String, String>): SlackCommandData {
+fun parseRequestBodyData(headers: MultiValueMap<String, String>, data: Map<String, String>): Pair<SlashCommandRequestBody, SlackCommandData> {
     val payload: SlashCommandRequestBody = parseRequestBodyData(data = data)
-    return payload.toSlackCommandData(rawHeader = SlackRequestHeaders(underlying = headers), rawBody = data)
+    return payload to payload.toSlackCommandData(rawHeader = SlackRequestHeaders(underlying = headers), rawBody = data)
 }
 
 inline fun <reified T : Any> Map<String, Any>.convert(): T{

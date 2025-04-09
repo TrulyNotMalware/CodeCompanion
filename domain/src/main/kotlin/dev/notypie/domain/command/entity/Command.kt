@@ -12,7 +12,7 @@ import java.util.*
 abstract class Command(
     val idempotencyKey: String,
     val commandData: SlackCommandData,
-    val slackApiRequester: SlackApiRequester,
+    internal val slackApiRequester: SlackApiRequester,
 ) {
     val commandId = this.generateIdValue()
     internal abstract fun parseContext(): CommandContext

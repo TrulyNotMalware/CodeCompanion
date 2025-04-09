@@ -24,7 +24,7 @@ class SlackMentionEventHandlerImpl(
 ): AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
-        const val SLACK_APP_NAME = "helperDev"
+        const val SLACK_APP_NAME = "CodeCompanion"
         const val REQUEST_TYPE = "APP_MENTION"
     }
 

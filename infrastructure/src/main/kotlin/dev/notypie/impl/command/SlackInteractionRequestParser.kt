@@ -82,8 +82,8 @@ class SlackInteractionRequestParser
         }
     }
 
-    private fun parseCurrentAction(actions: List<Action>): States {
-        return actions.firstNotNullOfOrNull { action ->
+    private fun parseCurrentAction(actions: List<Action>): States
+        = actions.firstNotNullOfOrNull { action ->
             when (action.type) {
                 ActionElementTypes.MULTI_STATIC_SELECT.elementName ->
                     States(
@@ -102,11 +102,11 @@ class SlackInteractionRequestParser
                 else -> null
             }
         } ?: States(type = ActionElementTypes.UNKNOWN)
-    }
 
-    private fun buttonParser(action: Action): States {
+
+    private fun buttonParser(action: Action): States =
         if(action.type != ActionElementTypes.BUTTON.elementName) throw IllegalArgumentException("Action type is not button.")
-        return when (action.style) {
+        else when (action.style) {
             ButtonType.PRIMARY.name.lowercase() ->
                 States(
                     type = ActionElementTypes.APPLY_BUTTON,
@@ -127,5 +127,5 @@ class SlackInteractionRequestParser
                 selectedValue = action.value
             )
         }
-    }
+
 }
