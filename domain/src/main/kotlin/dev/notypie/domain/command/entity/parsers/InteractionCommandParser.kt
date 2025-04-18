@@ -15,12 +15,12 @@ internal class InteractionCommandParser(
     private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,
-    val idempotencyKey: String,
+    val idempotencyKey: UUID,
     private val slackApiRequester: SlackApiRequester
 ): ContextParser{
     private val interactionPayload = slackCommandData.body as InteractionPayload
 
-    override fun parseContext(idempotencyKey: String): CommandContext =
+    override fun parseContext(idempotencyKey: UUID): CommandContext =
         when(this.interactionPayload.type){
             CommandDetailType.APPROVAL_FORM ->
                 SlackApprovalFormContext(

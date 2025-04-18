@@ -5,6 +5,7 @@ import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
+import java.util.UUID
 
 open class CommandOutput(
     open val ok: Boolean,
@@ -12,7 +13,7 @@ open class CommandOutput(
     open val status: Status,
     val commandDetailType: CommandDetailType,
 
-    val idempotencyKey: String,
+    val idempotencyKey: UUID,
     val publisherId: String,
     val channel: String,
     val token: String = "", //FIXME ChatPostRequest doesn't have any token?
@@ -26,7 +27,7 @@ open class CommandOutput(
             ok = true, apiAppId = "", status = Status.SUCCESS,
             channel = "", commandType = CommandType.SIMPLE,
             commandDetailType = CommandDetailType.NOTHING,
-            idempotencyKey = "", publisherId = ""
+            idempotencyKey = UUID.randomUUID(), publisherId = ""
         )
 
         fun fail(event: SlackEvent, reason: String) = CommandOutput(

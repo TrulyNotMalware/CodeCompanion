@@ -8,6 +8,7 @@ import dev.notypie.domain.command.dto.interactions.isCanceled
 import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CompositeCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.history.repository.HistoryRepository
@@ -17,6 +18,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
+import java.util.UUID
 
 private val logger = KotlinLogging.logger {  }
 
@@ -45,15 +47,18 @@ class SlackInteractionHandlerImpl(
                 idempotencyKey = idempotencyKey,
                 commandData = slackCommandData
             )
-            val slackApiResponse = command.handleEvent()
+            val result = command.handleEvent()
+            result.takeIf { it.ok }?.let {
+                applicationEventPublisher.publishEvent(it)
+            }
         }
     }
 
-    private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData) : Command =
+    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData) : Command =
         CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
             commandData = commandData, slackApiRequester = slackApiRequester)
 
-    private fun rejectCommand(idempotencyKey: String, commandData: SlackCommandData,
+    private fun rejectCommand(idempotencyKey: UUID, commandData: SlackCommandData,
                               responseUrl: String): Command =
         ReplaceTextResponseCommand(idempotencyKey = idempotencyKey, commandData = commandData,
             slackApiRequester = this.slackApiRequester, markdownMessage = "Canceled.", responseUrl = responseUrl)

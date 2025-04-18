@@ -2,6 +2,7 @@ package dev.notypie.domain.command.dto.modals
 
 import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.LocalDateTime
+import java.util.UUID
 
 data class ApprovalContents(
     val headLineText: String = "Approval Requests",
@@ -12,7 +13,7 @@ data class ApprovalContents(
 
     val approvalButtonName: String = "Approval",
     val rejectButtonName: String = "Deny",
-    val idempotencyKey: String,
+    val idempotencyKey: UUID,
     val commandDetailType: CommandDetailType,
 
     val time: LocalDateTime = LocalDateTime.now()

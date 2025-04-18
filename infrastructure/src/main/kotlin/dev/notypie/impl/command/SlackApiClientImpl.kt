@@ -23,6 +23,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import okhttp3.FormBody
+import java.util.UUID
 
 class SlackApiClientImpl(
     private val botToken: String,
@@ -208,13 +209,13 @@ class SlackApiClientImpl(
 
 
     //https://api.slack.com/methods/chat.postMessage
-    private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String, blocks: List<LayoutBlock>,
+    private fun chatPostMessageBuilder(commandDetailType: CommandDetailType, idempotencyKey: UUID, channel: String, blocks: List<LayoutBlock>,
                                        targetUserId: String? = null) =
         ChatPostMessageRequest.builder().channel(targetUserId ?: channel).text("${idempotencyKey},${commandDetailType}")
             .token(this.botToken).blocks(blocks).build()
 
     //FIXME Ephemeral message cannot include any texts with blocks field
-    private fun chatPostEphemeralBuilder(commandDetailType: CommandDetailType, idempotencyKey: String, channel: String,
+    private fun chatPostEphemeralBuilder(commandDetailType: CommandDetailType, idempotencyKey: UUID, channel: String,
                                          blocks: List<LayoutBlock>, userId: String) =
         ChatPostEphemeralRequest.builder()
             .channel(channel).text("$idempotencyKey, $commandDetailType")

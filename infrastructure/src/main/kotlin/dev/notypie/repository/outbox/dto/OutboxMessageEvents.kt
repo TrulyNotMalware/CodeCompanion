@@ -4,19 +4,20 @@ import dev.notypie.domain.command.dto.SlackEvent
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
+import java.util.UUID
 
 sealed class OutboxUpdateEvent(
-    open val idempotencyKey: String,
+    open val idempotencyKey: UUID,
     open val status: MessageStatus
 )
 
 data class MessagePublishFailedEvent(
-    override val idempotencyKey: String,
+    override val idempotencyKey: UUID,
     val reason: String
 ): OutboxUpdateEvent(idempotencyKey = idempotencyKey, status = MessageStatus.FAILURE)
 
 data class MessagePublishSuccessEvent(
-    override val idempotencyKey: String
+    override val idempotencyKey: UUID
 ): OutboxUpdateEvent(idempotencyKey = idempotencyKey, status = MessageStatus.SUCCESS)
 
 data class NewMessagePublishedEvent(

@@ -2,6 +2,7 @@ package dev.notypie.domain.command.dto
 
 import dev.notypie.domain.command.SlackCommandType
 import java.time.LocalDateTime
+import java.util.UUID
 
 data class SlackCommandData(
     val appId: String,
@@ -17,7 +18,7 @@ data class SlackCommandData(
     val seeds: String = LocalDateTime.now().toString()
 ){
     fun extractBasicInfo(
-        idempotencyKey: String
+        idempotencyKey: UUID
     ): CommandBasicInfo =
         CommandBasicInfo(
             appId = this.appId, appToken = this.appToken,

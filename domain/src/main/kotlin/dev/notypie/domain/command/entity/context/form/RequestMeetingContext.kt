@@ -38,9 +38,10 @@ internal class RequestMeetingContext(
             )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
-        val participants = this.getParticipantsOrNull(interactionPayload = interactionPayload)
-            ?: return this.createErrorResponse(errMessage = "Select participants")
-        val (dateString, timeString) = this.getDateTimeOrNull(interactionPayload = interactionPayload)
+        val participants = this.getParticipants(
+            states = interactionPayload.states, publisher = interactionPayload.user.id
+        ).ifEmpty { return this.createErrorResponse(errMessage = "Select participants") }
+        val startAt = this.getDateTimeOrNull(interactionPayload = interactionPayload)
             ?: return this.createErrorResponse(errMessage = "Make sure to choose a time in the *future* rather than now.")
         if( !interactionPayload.isCompleted() )
             return this.createErrorResponse(errMessage = "Please select *all options.*")
@@ -51,27 +52,23 @@ internal class RequestMeetingContext(
             if(sendNoticeResults.status != Status.SUCCESS)
                 return this.createErrorResponse(
                     errMessage = "Failed to send notice. Please try again later",
-                    results = this.interactionResults(Status.FAILED, participants)
+                    results = this.interactionResults(
+                        status = Status.FAILED, participants = participants, startAt = startAt)
                 )
         }
         return this.interactionSuccessResponse(
             responseUrl = interactionPayload.responseUrl,
-            results = this.interactionResults(Status.SUCCESS, participants)
+            results = this.interactionResults(
+                status = Status.SUCCESS, participants = participants, startAt = startAt
+            )
         )
     }
 
-    private fun interactionResults(status: Status, participants: Set<String>) =
+    private fun interactionResults(status: Status, participants: Set<String>, startAt: LocalDateTime) =
         RequestMeetingContextResult(
             ok = true, status = status, commandBasicInfo = this.commandBasicInfo,
-            participants = participants
+            participants = participants, startAt = startAt
         )
-
-    private fun getParticipantsOrNull(interactionPayload: InteractionPayload): Set<String>? =
-        this.getParticipants(
-            states = interactionPayload.states,
-            publisher = interactionPayload.user.id
-        ).ifEmpty { null }
-
 
     private fun getParticipants(states: List<States>, publisher: String): Set<String> =
         states.firstOrNull { state -> state.type == ActionElementTypes.MULTI_USERS_SELECT }
@@ -83,18 +80,16 @@ internal class RequestMeetingContext(
         ?: emptySet()
 
 
-    private fun getDateTimeOrNull(interactionPayload: InteractionPayload): Pair<String, String>? {
+    private fun getDateTimeOrNull(interactionPayload: InteractionPayload): LocalDateTime? {
         val timeString = interactionPayload.states
             .firstOrNull { it.type == ActionElementTypes.TIME_PICKER }
             ?.selectedValue
         val dateString = interactionPayload.states
             .firstOrNull { it.type == ActionElementTypes.DATE_PICKER }
             ?.selectedValue
-        return if (timeString != null && dateString != null && isFutureTime(dateString, timeString)) {
-            dateString to timeString
-        } else {
-            null
-        }
+        return if (timeString != null && dateString != null && isFutureTime(dateString, timeString))
+                LocalDateTime.parse("$dateString $timeString", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+            else null
     }
 
     private fun getTitleAndReason(interactionPayload: InteractionPayload): Pair<String, String> =
@@ -139,7 +134,8 @@ data class RequestMeetingContextResult(
     override val ok: Boolean,
     override val status: Status,
     val commandBasicInfo: CommandBasicInfo,
-    val participants: Set<String> = emptySet()
+    val participants: Set<String> = emptySet(),
+    val startAt: LocalDateTime
 ): CommandOutput(
     ok = ok,
     status = status,

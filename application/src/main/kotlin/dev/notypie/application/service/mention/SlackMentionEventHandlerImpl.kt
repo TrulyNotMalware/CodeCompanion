@@ -16,6 +16,7 @@ import dev.notypie.domain.history.mapper.mapHistory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
+import java.util.UUID
 
 @Service
 class SlackMentionEventHandlerImpl(
@@ -49,7 +50,7 @@ class SlackMentionEventHandlerImpl(
         )
     }
 
-    private fun buildCommand(idempotencyKey: String, commandData: SlackCommandData): Command =
+    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
         CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
             commandData = commandData, slackApiRequester = slackApiRequester)
 

@@ -6,7 +6,7 @@ import java.util.*
 
 fun mapHistory(requestType: String, slackApiResponse: CommandOutput) =
     History(
-        historyId = UUID.fromString(slackApiResponse.idempotencyKey),
+        historyId = slackApiResponse.idempotencyKey,
         apiAppId = slackApiResponse.apiAppId, channel = slackApiResponse.channel,
         commandType = slackApiResponse.commandType, status = slackApiResponse.status,
         publisherId = slackApiResponse.publisherId, commandDetailType = slackApiResponse.commandDetailType

@@ -16,7 +16,7 @@ internal class AppMentionCommandParser(
     private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,
-    val idempotencyKey: String,
+    val idempotencyKey: UUID,
     private val slackApiRequester: SlackApiRequester
 ): ContextParser {
     companion object{
@@ -38,7 +38,7 @@ internal class AppMentionCommandParser(
         this.parsedContext = this.parseContext(idempotencyKey = idempotencyKey)
     }
 
-    override fun parseContext(idempotencyKey: String): CommandContext = this.slackAppMentionRequestData.event.blocks
+    override fun parseContext(idempotencyKey: UUID): CommandContext = this.slackAppMentionRequestData.event.blocks
         .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
         ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
         ?.let { this.extractUserAndCommand(elements = it.elements) }

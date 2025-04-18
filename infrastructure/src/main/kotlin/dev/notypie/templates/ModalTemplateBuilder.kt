@@ -12,6 +12,7 @@ import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import java.util.UUID
 
 /**
  * A class that implements the SlackTemplateBuilder interface and provides methods for building modal templates.
@@ -52,7 +53,7 @@ class ModalTemplateBuilder(
         )
 
     //Username with thumbnail Requires Role users.profile.get. Reference from https://api.slack.com/methods/users.profile.get
-    override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: String, commandDetailType: CommandDetailType): LayoutBlocks{
+    override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: UUID, commandDetailType: CommandDetailType): LayoutBlocks{
         val buttonLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         val user = this.restRequester.get(uri = "users.profile.get?user=${approvalContents.publisherId}",
             authorizationHeader = this.slackApiToken, responseType = SlackUserProfileDto::class.java)

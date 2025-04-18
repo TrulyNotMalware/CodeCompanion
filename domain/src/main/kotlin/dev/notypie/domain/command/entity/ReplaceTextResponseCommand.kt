@@ -5,9 +5,10 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReplaceMessageContext
+import java.util.UUID
 
 class ReplaceTextResponseCommand(
-    idempotencyKey: String,
+    idempotencyKey: UUID,
     commandData: SlackCommandData,
     slackApiRequester: SlackApiRequester,
     private val markdownMessage: String,

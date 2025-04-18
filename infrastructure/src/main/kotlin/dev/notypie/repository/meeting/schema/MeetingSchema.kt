@@ -2,6 +2,7 @@ package dev.notypie.repository.meeting.schema
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.notypie.domain.command.dto.interactions.RejectReason
+import dev.notypie.domain.command.entity.context.form.RequestMeetingContextResult
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
@@ -28,7 +29,7 @@ class MeetingSchema(
     val isCanceled: Boolean = false,
 
     @field:OneToMany(mappedBy = "meeting", fetch = FetchType.LAZY,
-        orphanRemoval = true,
+        orphanRemoval = false, //Delete N+1
         cascade = [CascadeType.MERGE, CascadeType.PERSIST])
     val participants: MutableList<ParticipantsSchema> = mutableListOf(),
 
@@ -43,7 +44,31 @@ class MeetingSchema(
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
+    @field:UpdateTimestamp
+    @field:Column(name = "updated_at")
+    val updatedAt: LocalDateTime? = null
+)
+
+fun RequestMeetingContextResult.newMeeting(
+    isCanceled: Boolean = false, endAt: LocalDateTime? = null
+): MeetingSchema {
+    val meetingSchema = MeetingSchema(
+        idempotencyKey = this.idempotencyKey,
+        startAt = this.startAt,
+        endAt = endAt,
+        isCanceled = isCanceled,
+        publisherId = this.publisherId,
+        channel = this.channel,
     )
+    val participants = this.participants.map {
+        ParticipantsSchema(
+            meeting = meetingSchema,
+            userId = it
+        )
+    }
+    meetingSchema.participants.addAll(participants)
+    return meetingSchema
+}
 
 
 @Entity(name = "meeting_participants")
@@ -60,7 +85,7 @@ class ParticipantsSchema(
     val userId: String,
 
     @field:Column(name = "is_attending", nullable = false)
-    val isAttending: Boolean = false,
+    val isAttending: Boolean = true,
 
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "absent_reason")

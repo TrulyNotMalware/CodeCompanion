@@ -5,6 +5,7 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
+import java.util.UUID
 
 internal class DetailErrorAlertContext(
     slackCommandData: SlackCommandData,
@@ -12,7 +13,7 @@ internal class DetailErrorAlertContext(
     private val errorMessage: String,
     private val details: String?,
     slackApiRequester: SlackApiRequester,
-    idempotencyKey: String
+    idempotencyKey: UUID
 ) : CommandContext(
     requestHeaders = slackCommandData.rawHeader,
     slackApiRequester = slackApiRequester,

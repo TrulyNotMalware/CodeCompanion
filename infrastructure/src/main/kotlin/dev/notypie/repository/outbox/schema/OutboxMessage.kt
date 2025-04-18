@@ -18,6 +18,7 @@ import org.springframework.data.annotation.LastModifiedDate
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.*
 
 private val logger = KotlinLogging.logger {  }
 
@@ -79,7 +80,7 @@ class OutboxMessage(
     fun toSlackEvent(): SlackEvent =
         if(this.type == MessageType.ACTION_RESPONSE.name )
             ActionEventContents(
-                idempotencyKey = this.idempotencyKey,
+                idempotencyKey = UUID.fromString(this.idempotencyKey),
                 publisherId = this.publisherId,
                 commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
                 body = objectMapper.writeValueAsString(this.payload),
@@ -88,7 +89,7 @@ class OutboxMessage(
                 channel = this.metadata["channel"].toString()
             )
         else PostEventContents(
-            idempotencyKey = this.idempotencyKey,
+            idempotencyKey = UUID.fromString(this.idempotencyKey),
             publisherId = this.publisherId,
             messageType = MessageType.valueOf(this.type),
             apiAppId = this.metadata["api_app_id"].toString(),
@@ -103,7 +104,7 @@ class OutboxMessage(
 fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
         outboxMessage = OutboxMessage(
-            idempotencyKey = this.idempotencyKey,
+            idempotencyKey = this.idempotencyKey.toString(),
             publisherId = this.publisherId,
             commandDetailType = this.commandDetailType.name,
             payload = this.body,
@@ -123,7 +124,7 @@ fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PEND
 fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
         outboxMessage = OutboxMessage(
-            idempotencyKey = this.idempotencyKey,
+            idempotencyKey = this.idempotencyKey.toString(),
             publisherId = this.publisherId,
             commandDetailType = this.commandDetailType.name,
             payload = objectMapper.readValue<Map<String, Any>>(this.body),

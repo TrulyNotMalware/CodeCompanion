@@ -2,11 +2,12 @@ package dev.notypie.domain.command.dto
 
 import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 
 sealed class SlackEvent(
     open val apiAppId: String,
     open val commandDetailType: CommandDetailType,
-    open val idempotencyKey: String,
+    open val idempotencyKey: UUID,
     open val publisherId: String,
     open val channel: String
 )
@@ -15,7 +16,7 @@ data class PostEventContents(
     override val apiAppId: String,
     val messageType: MessageType,
     override val commandDetailType: CommandDetailType,
-    override val idempotencyKey: String,
+    override val idempotencyKey: UUID,
     override val publisherId: String,
     override val channel: String,
 
@@ -29,7 +30,7 @@ data class PostEventContents(
 data class ActionEventContents(
     override val apiAppId: String,
     override val commandDetailType: CommandDetailType,
-    override val idempotencyKey: String,
+    override val idempotencyKey: UUID,
     override val publisherId: String,
     override val channel: String,
 
@@ -46,7 +47,7 @@ data class DelayHandleEventContents(
     val delayTime: Long = 5L,
     val timeUnit: ChronoUnit = ChronoUnit.MINUTES,
     override val commandDetailType: CommandDetailType,
-    override val idempotencyKey: String,
+    override val idempotencyKey: UUID,
     override val channel: String,
     override val publisherId: String,
 ): SlackEvent(

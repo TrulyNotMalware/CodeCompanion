@@ -22,8 +22,8 @@ class DebeziumLogTailingProcessor(
         ]
     )
     override fun getPendingMessages(messageParameter: MessageProcessorParameter) {
-        val consumerRecord = messageParameter as Envelope
-        val outboxMessage = consumerRecord.payload.after?.toMutableMap()?.toOutboxMessage()
+        val consumeRecord = messageParameter as Envelope
+        val outboxMessage = consumeRecord.payload.after?.toMutableMap()?.toOutboxMessage()
         outboxMessage?.takeIf { it.status == MessageStatus.PENDING.name }
                 ?.toSlackEvent()
                 ?.let { this.messageDispatcher.dispatch(event = it) }

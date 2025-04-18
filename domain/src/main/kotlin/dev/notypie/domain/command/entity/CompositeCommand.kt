@@ -10,10 +10,11 @@ import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.ContextParser
 import dev.notypie.domain.command.entity.parsers.InteractionCommandParser
+import java.util.UUID
 
 class CompositeCommand(
     val appName: String,
-    idempotencyKey: String,
+    idempotencyKey: UUID,
     commandData: SlackCommandData,
     slackApiRequester: SlackApiRequester,
 ): Command(

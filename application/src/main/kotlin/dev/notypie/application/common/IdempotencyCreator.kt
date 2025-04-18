@@ -5,9 +5,9 @@ import java.util.UUID
 
 object IdempotencyCreator {
 
-    fun create(data: Any): String = UUID.nameUUIDFromBytes(
+    fun create(data: Any): UUID = UUID.nameUUIDFromBytes(
         this.serializeData(data = data).toByteArray(charset = Charsets.UTF_8)
-    ).toString()
+    )
 
     private fun serializeData(data: Any): String =
         when (data) {

@@ -7,8 +7,8 @@ data class CommandBasicInfo(
     val appToken: String,
     val publisherId: String,
     val channel: String,
-    val idempotencyKey: String,
+    val idempotencyKey: UUID,
 )
 
 fun CommandBasicInfo.withNewKey(): CommandBasicInfo =
-    CommandBasicInfo(appId, appToken, publisherId, channel, UUID.randomUUID().toString())
+    CommandBasicInfo(appId, appToken, publisherId, channel, UUID.randomUUID())

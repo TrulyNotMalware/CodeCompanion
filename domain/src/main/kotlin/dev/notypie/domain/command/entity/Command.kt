@@ -10,7 +10,7 @@ import java.util.*
 
 //Aggregate Root
 abstract class Command(
-    val idempotencyKey: String,
+    val idempotencyKey: UUID,
     val commandData: SlackCommandData,
     internal val slackApiRequester: SlackApiRequester,
 ) {

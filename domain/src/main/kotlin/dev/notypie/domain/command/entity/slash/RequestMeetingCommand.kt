@@ -5,9 +5,10 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import java.util.UUID
 
 class RequestMeetingCommand(
-    idempotencyKey: String,
+    idempotencyKey: UUID,
     commandData: SlackCommandData,
     slackApiRequester: SlackApiRequester,
 ): Command(

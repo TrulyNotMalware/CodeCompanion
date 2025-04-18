@@ -3,6 +3,7 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.domain.command.MessageDispatcher
+import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
@@ -16,13 +17,15 @@ import org.springframework.retry.annotation.Retryable
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
 @Service
 class SlackMessageRelayServiceImpl(
     private val outboxRepository: MessageOutboxRepository,
-    private val messageDispatcher: MessageDispatcher
+    private val messageDispatcher: MessageDispatcher,
+    private val retryService: RetryService
 ): MessageRelayService {
 
     override fun batchPendingMessages(pendingMessages: List<OutboxMessage>) {
@@ -48,18 +51,21 @@ class SlackMessageRelayServiceImpl(
         this.outboxRepository.save(event.outboxMessage)
     }
 
-    @Retryable(
-        maxAttempts = 5,
-        backoff = Backoff(delay = 1000),
-        retryFor = [ObjectOptimisticLockingFailureException::class]
-    )
+//    @Retryable(
+//        maxAttempts = 5,
+//        backoff = Backoff(delay = 1000),
+//        retryFor = [ObjectOptimisticLockingFailureException::class]
+//    )
     @Transactional
     @EventListener
     fun updateOutboxMessageStatus(event: OutboxUpdateEvent) =
-        this.updateMessage(status = event.status, idempotencyKey = event.idempotencyKey)
+        this.retryService.execute(
+            action = { this.updateMessage(status = event.status, idempotencyKey = event.idempotencyKey) },
+            maxAttempts = 5
+        )
 
-    fun updateMessage(status: MessageStatus, idempotencyKey: String): OutboxMessage {
-        val message = this.outboxRepository.findById(idempotencyKey)
+    fun updateMessage(status: MessageStatus, idempotencyKey: UUID): OutboxMessage {
+        val message = this.outboxRepository.findById(idempotencyKey.toString())
             .orElseThrow { throw RuntimeException("Message Not Found.") }
         message.updateMessageStatus(status = status)
         return this.outboxRepository.save(message)
