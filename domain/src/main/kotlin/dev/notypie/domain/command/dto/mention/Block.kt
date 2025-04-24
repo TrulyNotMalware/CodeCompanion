@@ -10,5 +10,11 @@ data class Block(
     val blockId: String,
 
     @field:JsonProperty("elements")
-    val elements: List<Element>
+    val elements: List<Element> = listOf(),
+
+    @field:JsonProperty("fields")
+    val fields: List<Element> = listOf(),
+
+    @field:JsonProperty("text")
+    val text: TextElement? = null
 )

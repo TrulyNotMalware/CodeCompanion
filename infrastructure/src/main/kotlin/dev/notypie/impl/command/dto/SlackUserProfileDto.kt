@@ -25,7 +25,7 @@ data class Profile(
     @field:JsonProperty("status_emoji")
     val statusEmoji: String,
     @field:JsonProperty("status_emoji_display_info")
-    val statusEmojiDisplayInfo: List<Any>?,
+    val statusEmojiDisplayInfo: List<Any> = listOf(),
     @field:JsonProperty("status_expiration")
     val statusExpiration: Int,
     @field:JsonProperty("avatar_hash")

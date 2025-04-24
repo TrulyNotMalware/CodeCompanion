@@ -6,6 +6,8 @@ import dev.notypie.domain.command.dto.mention.Element
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.dto.mention.PlainText
+import dev.notypie.domain.command.dto.mention.TextObject
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
@@ -59,11 +61,18 @@ internal class AppMentionCommandParser(
             ?.forEach { element ->
                 when (element.type) {
                     ELEMENT_TYPE_USER -> if (element.userId != this.botId) userQueue.offer(element.userId)
-                    ELEMENT_TYPE_TEXT -> element.text?.split(COMMAND_DELIMITER)?.forEach { if(it.isNotBlank()) commandQueue.offer(it) }
+                    ELEMENT_TYPE_TEXT -> {
+                        val text = when( val textValue = element.text ) {
+                            is PlainText -> textValue.value
+                            is TextObject -> textValue.text
+                            else -> null
+                        }
+                        text?.split(COMMAND_DELIMITER)?.forEach { if(it.isNotBlank()) commandQueue.offer(it) }
+                    }
                 }
             }
         this.verifyCommandQueue(commandQueue = commandQueue)
-        return Pair(userQueue, commandQueue)
+        return userQueue to commandQueue
     }
 
     private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext {

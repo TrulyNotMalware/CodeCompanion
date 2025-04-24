@@ -11,6 +11,9 @@ data class SlackEventCallBackRequest(
     @field:JsonProperty("api_app_id")
     val apiAppId: String,
 
+    @field:JsonProperty("context_enterprise_id")
+    val contextEnterpriseId: String? = null,
+
     val event: EventCallbackData,
     val type: String,
 
