@@ -36,13 +36,12 @@ class MeetingServiceImpl(
     }
 
     @EventListener
-    //TODO Transactional Event Listener required. Before produce message, save database first.
     fun createNewMeeting(result: RequestMeetingContextResult){
         val meeting = result.newMeeting()
         this.retryService.execute(
-            action = { meetingRepository.createNewMeeting(meeting) },
+            action = { meetingRepository.createNewMeeting(meetingSchema = meeting) },
             recoveryCallBack = {
-                TODO("Send Error Message to Created user.")
+//                slackApiRequester.simpleTextRequest()
             }
         )
     }

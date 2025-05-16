@@ -2,6 +2,7 @@ package dev.notypie.impl.command
 
 import com.slack.api.RequestConfigurator
 import com.slack.api.Slack
+import com.slack.api.methods.SlackApiTextResponse
 import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
@@ -128,11 +129,7 @@ class ApplicationMessageDispatcher(
         return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun returnSuccessOrFailed(result: ChatPostEphemeralResponse, event: SlackEvent) =
-        if(result.isOk) CommandOutput.success(event = event)
-        else CommandOutput.fail(event=event, reason = result.error)
-
-    private fun returnSuccessOrFailed(result: ChatPostMessageResponse, event: SlackEvent) =
+    private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEvent)=
         if(result.isOk) CommandOutput.success(event = event)
         else CommandOutput.fail(event=event, reason = result.error)
 

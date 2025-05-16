@@ -129,7 +129,7 @@ class SlackApiClientImpl(
             event = this.toEventContents(commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
                 replaceOriginal = replaceOriginal,
                 body = this.extractBodyData(
-                    this.chatPostMessageBuilder(channel = commandBasicInfo.channel, blocks = layout.template,
+                    chatPostMessageRequest = this.chatPostMessageBuilder(channel = commandBasicInfo.channel, blocks = layout.template,
                         idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
                         targetUserId = targetUserId)),
                 messageType = if(targetUserId == null) MessageType.CHANNEL_ALERT else MessageType.DIRECT_MESSAGE
@@ -146,7 +146,7 @@ class SlackApiClientImpl(
                 commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
                 replaceOriginal = replaceOriginal,
                 body = this.extractBodyData(
-                    this.chatPostEphemeralBuilder(channel = targetUserId ?: commandBasicInfo.channel, blocks = layout.template,
+                    chatPostEphemeralRequest = this.chatPostEphemeralBuilder(channel = targetUserId ?: commandBasicInfo.channel, blocks = layout.template,
                         idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
                         userId = targetUserId ?: commandBasicInfo.publisherId)
                 ),
@@ -171,10 +171,10 @@ class SlackApiClientImpl(
         )
 
     private fun extractBodyData(chatPostEphemeralRequest: ChatPostEphemeralRequest) =
-        this.toMap(RequestFormBuilder.toForm(chatPostEphemeralRequest).build())
+        this.toMap(formBody = RequestFormBuilder.toForm(chatPostEphemeralRequest).build())
 
     private fun extractBodyData(chatPostMessageRequest: ChatPostMessageRequest) =
-        this.toMap(RequestFormBuilder.toForm(chatPostMessageRequest).build())
+        this.toMap(formBody = RequestFormBuilder.toForm(chatPostMessageRequest).build())
 
     private fun toSnakeCaseJsonString(actionResponse: ActionResponse) =
         GsonFactory.createSnakeCase(this.slackConfig).toJson(actionResponse)

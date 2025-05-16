@@ -1,13 +1,16 @@
 package dev.notypie.repository.meeting
 
 import dev.notypie.repository.meeting.schema.MeetingSchema
+import jakarta.transaction.Transactional
 
-class MeetingRepositoryImpl(
+open class MeetingRepositoryImpl(
     private val jpaMeetingRepository: JpaMeetingRepository
 ): MeetingRepository {
-    override fun createNewMeeting(meetingSchema: MeetingSchema): MeetingSchema {
-        return jpaMeetingRepository.save(meetingSchema)
-    }
+
+    @Transactional
+    override fun createNewMeeting(meetingSchema: MeetingSchema): MeetingSchema =
+        jpaMeetingRepository.save(meetingSchema)
+
 
     override fun getMeeting(meetingId: Long): MeetingSchema {
         TODO("Not yet implemented")

@@ -55,7 +55,7 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        implementation("org.jetbrains.kotlin:kotlin-reflect")
+        implementation(kotlin("reflect"))
         implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
         //CHECK LATER
         implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8")
@@ -63,7 +63,7 @@ subprojects {
 
         //Kotlin logging
         implementation("io.github.oshai:kotlin-logging-jvm:7.0.7")
-        testFixturesImplementation("org.jetbrains.kotlin:kotlin-reflect")
+        testFixturesImplementation(kotlin("reflect"))
         testImplementation("io.kotest:kotest-runner-junit5-jvm:${rootProject.extra.get("kotestVersion")}")
         testImplementation("io.kotest.extensions:kotest-extensions-spring:${rootProject.extra.get("kotestSpringExtensionVersion")}")
         testImplementation("io.kotest:kotest-assertions-core-jvm:${rootProject.extra.get("kotestVersion")}")
