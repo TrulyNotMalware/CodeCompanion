@@ -28,7 +28,7 @@ class MeetingServiceImpl(
             commandData = slackCommandData, idempotencyKey = idempotencyKey, slackApiRequester = this.slackApiRequester
         )
         val result = command.handleEvent()
-
+        
     }
 
     fun handleGetMeetings(payload: SlashCommandRequestBody, slackCommandData: SlackCommandData){

@@ -7,10 +7,16 @@ import java.util.UUID
 data class SlackCommandData(
     val appId: String,
     val appToken: String,
+
     val publisherId: String,
+    val publisherName: String,
+
     val channel: String,
+    val channelName: String,
 
     val slackCommandType: SlackCommandType,
+    val subCommands: List<String> = listOf(),
+
     val rawHeader: SlackRequestHeaders,
     val rawBody: Map<String, Any>,
 

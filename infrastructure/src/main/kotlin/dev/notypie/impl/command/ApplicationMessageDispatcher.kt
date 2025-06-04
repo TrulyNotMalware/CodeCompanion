@@ -12,8 +12,10 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.history.entity.Status
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
+import jakarta.transaction.Transactional
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -30,7 +32,8 @@ class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val taskScheduler: ThreadPoolTaskScheduler,
-    private val retryService: RetryService
+    private val retryService: RetryService,
+    private val outboxRepository: MessageOutboxRepository
 ): MessageDispatcher {
 
     private val slack: Slack = Slack.getInstance()
@@ -38,7 +41,11 @@ class ApplicationMessageDispatcher(
     private val MEDIA_TYPE_JSON = "application/json; charset=utf-8".toMediaType()
 
     override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
-        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
+//        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
+        this.retryService.execute(
+            action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
+            maxAttempts = 3
+        )
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
@@ -52,7 +59,11 @@ class ApplicationMessageDispatcher(
     }
 
     override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
-        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
+//        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
+        this.retryService.execute(
+            action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
+            maxAttempts = 3
+        )
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
@@ -65,6 +76,7 @@ class ApplicationMessageDispatcher(
         )
     }
 
+    @Deprecated("for removal")
     override fun dispatch(event: DelayHandleEventContents, commandType: CommandType): CommandOutput {
         this.taskScheduler.schedule({
             this.applicationEventPublisher.publishEvent(event)

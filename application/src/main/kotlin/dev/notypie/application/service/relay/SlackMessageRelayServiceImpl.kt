@@ -39,11 +39,6 @@ class SlackMessageRelayServiceImpl(
         val result = messageDispatcher.dispatch(event = pendingMessage.toSlackEvent())
     }
 
-    @Retryable(
-        maxAttempts = 5,
-        backoff = Backoff(delay = 1000),
-        retryFor = [ObjectOptimisticLockingFailureException::class]
-    )
     @Transactional
     @EventListener
     fun saveOutboxMessages(event: NewMessagePublishedEvent){

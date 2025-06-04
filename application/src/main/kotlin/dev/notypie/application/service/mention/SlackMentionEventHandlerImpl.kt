@@ -46,7 +46,9 @@ class SlackMentionEventHandlerImpl(
         return SlackCommandData(
             appId = appId, appToken = body.token, publisherId = body.event.userId, channel = body.event.channel,
             slackCommandType = commandType, rawHeader = SlackRequestHeaders(underlying = headers),
-            rawBody = payload, body = body
+            rawBody = payload, body = body,
+            publisherName = payload["user_name"].toString(), //FIXME
+            channelName = payload["channel_name"].toString() //FIXME
         )
     }
 

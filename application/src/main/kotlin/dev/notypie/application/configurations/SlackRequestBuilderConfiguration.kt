@@ -44,7 +44,8 @@ class SlackRequestBuilderConfiguration(
         retryService: RetryService
     ) = ApplicationMessageDispatcher(
         botToken = appConfig.api.token, applicationEventPublisher = applicationEventPublisher,
-        taskScheduler = threadPoolTaskScheduler, retryService = retryService)
+        taskScheduler = threadPoolTaskScheduler, retryService = retryService,
+        outboxRepository = outboxRepository)
 
     @Bean
     @ConditionalOnMissingBean(SlackApiRequester::class)

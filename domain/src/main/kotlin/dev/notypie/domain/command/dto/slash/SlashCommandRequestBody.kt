@@ -42,11 +42,14 @@ data class SlashCommandRequestBody(
         appId = this.apiAppId,
         appToken = this.token,
         channel = this.channel,
+        channelName = this.channelName,
         publisherId = this.userId,
+        publisherName = this.userName,
         slackCommandType = SlackCommandType.SLASH,
         body = this,
         rawBody = rawBody,
-        rawHeader = rawHeader
+        rawHeader = rawHeader,
+        subCommands = subCommandList()
     )
 
     fun subCommandList() = this.subCommands.split(" ")

@@ -18,8 +18,15 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>
     ){
         val ( payload, slackCommandData ) = parseRequestBodyData(headers = headers, data = data)
-        payload.subCommandList().forEach { println(it) }
         this.meetingService.handleNewMeeting( headers = headers,
             payload = payload, slackCommandData = slackCommandData )
+    }
+
+    @PostMapping(value = ["/task"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun requestTasks(
+        @RequestHeader headers: MultiValueMap<String, String>,
+        @RequestParam data: Map<String, String>
+    ){
+        val (payload, slackCommandData ) = parseRequestBodyData(headers = headers, data = data)
     }
 }
