@@ -6,6 +6,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.common.event.EventPayload
 import java.util.*
 
 //Aggregate Root
@@ -13,6 +14,7 @@ abstract class Command(
     val idempotencyKey: UUID,
     val commandData: SlackCommandData,
     internal val slackApiRequester: SlackApiRequester,
+    internal val events: MutableList<EventPayload> = mutableListOf()
 ) {
     val commandId = this.generateIdValue()
     internal abstract fun parseContext(): CommandContext

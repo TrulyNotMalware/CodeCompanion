@@ -17,8 +17,8 @@ class DebeziumLogTailingProcessor(
     @KafkaListener(
         topics = ["\${slack.app.mode.cdc.topic}"], containerFactory = "concurrentKafkaListenerContainerFactory",
         properties = [
-            "spring.json.use.type.headers:false"
-            ,"spring.json.value.default.type=dev.notypie.application.service.relay.dto.Envelope"
+            "spring.json.use.type.headers:false",
+            "spring.json.value.default.type=dev.notypie.application.service.relay.dto.Envelope"
         ]
     )
     override fun getPendingMessages(messageParameter: MessageProcessorParameter) {

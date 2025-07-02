@@ -28,7 +28,6 @@ class SlackInteractionHandlerImpl(
     private val slackApiRequester: SlackApiRequester,
     private val applicationEventPublisher: ApplicationEventPublisher
 ): InteractionHandler {
-    //TODO RETURN RESPONSES
 
     @Transactional
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String) {

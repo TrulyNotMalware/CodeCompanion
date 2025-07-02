@@ -42,7 +42,7 @@ class ApplicationMessageDispatcher(
 
     override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
 //        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
-        this.retryService.execute(
+        val result = this.retryService.execute(
             action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
             maxAttempts = 3
         )

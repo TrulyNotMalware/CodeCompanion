@@ -5,5 +5,5 @@ import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import org.springframework.util.MultiValueMap
 
 interface MeetingService {
-    fun handleNewMeeting(headers: MultiValueMap<String, String>, payload: SlashCommandRequestBody, slackCommandData: SlackCommandData)
+    fun handleMeeting(headers: MultiValueMap<String, String>, payload: SlashCommandRequestBody, slackCommandData: SlackCommandData)
 }

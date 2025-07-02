@@ -80,6 +80,7 @@ slack:
     api:
       token: ${SLACK_API_TOKEN}
     mode:
-      publisher: cdc
+      outbox-reading-strategy: cdc
+      event-publisher: kafka
       cdc:
-        topic: cdc.code_companion.outbox_message
+        topic: ${SLACK_CDC_TOPIC}

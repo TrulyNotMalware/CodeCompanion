@@ -66,5 +66,3 @@ slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
-    mode:
-      publisher: pooling

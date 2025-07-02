@@ -21,14 +21,13 @@ class MeetingServiceImpl(
     private val retryService: RetryService
 ): MeetingService {
 
-    override fun handleNewMeeting(headers: MultiValueMap<String, String>,
-                                  payload: SlashCommandRequestBody, slackCommandData: SlackCommandData) {
+    override fun handleMeeting(headers: MultiValueMap<String, String>,
+                               payload: SlashCommandRequestBody, slackCommandData: SlackCommandData) {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command: Command = RequestMeetingCommand(
             commandData = slackCommandData, idempotencyKey = idempotencyKey, slackApiRequester = this.slackApiRequester
         )
         val result = command.handleEvent()
-        
     }
 
     fun handleGetMeetings(payload: SlashCommandRequestBody, slackCommandData: SlackCommandData){

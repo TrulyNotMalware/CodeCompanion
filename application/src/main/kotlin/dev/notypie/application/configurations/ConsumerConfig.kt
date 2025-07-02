@@ -1,7 +1,7 @@
 package dev.notypie.application.configurations
 
-import dev.notypie.application.configurations.conditions.OnCdcPublisher
-import dev.notypie.application.configurations.conditions.OnPoolingPublisher
+import dev.notypie.application.configurations.conditions.OnCdcConsumer
+import dev.notypie.application.configurations.conditions.OnPollingConsumer
 import dev.notypie.application.service.relay.DebeziumLogTailingProcessor
 import dev.notypie.application.service.relay.MessageProcessor
 import dev.notypie.application.service.relay.PoolingMessageProcessor
@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.scheduling.annotation.EnableScheduling
 
 @Configuration
-@Conditional(OnPoolingPublisher::class)
+@Conditional(OnPollingConsumer::class)
 @EnableScheduling
 class PoolingPublisherConfig{
 
@@ -32,7 +32,7 @@ class PoolingPublisherConfig{
 }
 
 @Configuration
-@Conditional(OnCdcPublisher::class)
+@Conditional(OnCdcConsumer::class)
 class CdcPublisherConfig{
 
     @Bean

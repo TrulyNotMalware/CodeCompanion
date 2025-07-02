@@ -24,15 +24,6 @@ class RequestMeetingCommand(
         slackApiRequester = this.slackApiRequester,
     )
 
-//    override fun handleEvent(): CommandOutput {
-//        val context = this.parseContext()
-//        this.commandData.subCommands.isNotEmpty()
-//            .run {  }
-//    }
-//
-//    private fun handleGetListEvent(): CommandOutput{
-//
-//    }
 }
 
 internal const val MEETING_COMMAND_IDENTIFIER: String = "meetup"

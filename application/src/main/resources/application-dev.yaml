@@ -32,6 +32,9 @@ spring:
     properties:
       hibernate:
         default_batch_fetch_size: 1000
+  h2:
+    console:
+      enabled: false
 
   kafka:
     bootstrap-servers: ["kafka:port"]
@@ -77,6 +80,7 @@ slack:
     api:
       token: ${SLACK_API_TOKEN}
     mode:
-      publisher: cdc
+      outbox-reading-strategy: cdc
+      event-publisher: kafka
       cdc:
         topic: cdc.code_companion.outbox_message

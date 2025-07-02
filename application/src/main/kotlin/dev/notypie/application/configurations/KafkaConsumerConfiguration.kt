@@ -1,6 +1,7 @@
 package dev.notypie.application.configurations
 
-import dev.notypie.application.configurations.conditions.OnCdcPublisher
+import dev.notypie.application.configurations.conditions.OnCdcConsumer
+import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
 import org.apache.kafka.clients.consumer.Consumer
@@ -11,6 +12,7 @@ import org.springframework.boot.autoconfigure.kafka.KafkaProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Import
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.core.*
@@ -24,9 +26,22 @@ import java.lang.Exception
 private val logger = KotlinLogging.logger {  }
 
 @Configuration
+@Conditional(OnCdcConsumer::class)
 @EnableKafka
-@Conditional(OnCdcPublisher::class)
-class KafkaConfiguration(
+@Import(KafkaConsumerConfiguration::class, KafkaObservationConvention::class)
+class CdcConsumerConfiguration
+
+@Configuration
+@Conditional(OnKafkaEventPublisher::class)
+@EnableKafka
+@Import(
+    KafkaProducerConfiguration::class,
+    KafkaObservationConvention::class,
+    KafkaConsumerConfiguration::class
+    )
+class KafkaEventPublisherConfiguration
+
+class KafkaConsumerConfiguration(
     private val convention: KafkaObservationConvention,
     private val kafkaProperties: KafkaProperties
 ) {
@@ -48,6 +63,11 @@ class KafkaConfiguration(
             setCommonErrorHandler(KafkaErrorHandler())
         }
 
+}
+
+class KafkaProducerConfiguration(
+    private val kafkaProperties: KafkaProperties
+){
     @Bean
     @ConditionalOnMissingBean(ProducerFactory::class)
     fun producerFactory(): ProducerFactory<String, Any> =
@@ -68,8 +88,6 @@ class KafkaConfiguration(
         }
 }
 
-@Configuration
-@Conditional(OnCdcPublisher::class)
 class KafkaObservationConvention: KafkaListenerObservationConvention{
 
     override fun getName(): String = "code.companion.listener"

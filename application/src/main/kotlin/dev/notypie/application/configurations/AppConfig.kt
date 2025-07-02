@@ -15,13 +15,14 @@ import org.springframework.context.annotation.Configuration
 @ConfigurationProperties(prefix = "slack.app")
 data class AppConfig(
     val api: Api = Api(),
-    val mode: Mode = Mode()
+    val mode: Mode = Mode(),
 ) {
 
     data class Mode(
         val standAlone: Boolean = true,
-        val publisher: PublisherType = PublisherType.POOLING,
-        val cdc: Cdc = Cdc()
+        val outboxReadingStrategy: OutboxReaderStrategy = OutboxReaderStrategy.POLLING,
+        val cdc: Cdc = Cdc(),
+        val eventPublisher: EventPublisherType = EventPublisherType.APPLICATION_EVENT
     )
 
     data class Api(
@@ -31,6 +32,11 @@ data class AppConfig(
     data class Cdc(
         val topic: String = ""
     )
+}
+
+enum class EventPublisherType{
+    KAFKA,
+    APPLICATION_EVENT
 }
 
 @Configuration
@@ -55,4 +61,9 @@ class ApplicationMicroServiceOptionConfiguration{
 
     @Bean
     fun userService(): UserService = MicroUserServiceImpl()
+}
+
+object KafkaTopicPrefix{
+    const val BASE = "code.companion."
+    const val MEETING_TOPIC_PREFIX = "$BASE.meeting"
 }

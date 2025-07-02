@@ -1,6 +1,6 @@
 package dev.notypie.application.configurations
 
-enum class PublisherType {
-    POOLING,
+enum class OutboxReaderStrategy {
+    POLLING,
     CDC
 }

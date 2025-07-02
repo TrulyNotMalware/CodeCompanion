@@ -18,7 +18,7 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>
     ){
         val ( payload, slackCommandData ) = parseRequestBodyData(headers = headers, data = data)
-        this.meetingService.handleNewMeeting( headers = headers,
+        this.meetingService.handleMeeting( headers = headers,
             payload = payload, slackCommandData = slackCommandData )
     }
 
