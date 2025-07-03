@@ -4,10 +4,10 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.objectMapper
-import dev.notypie.domain.common.event.ActionEventContents
+import dev.notypie.domain.common.event.ActionEventPayloadContents
 import dev.notypie.domain.common.event.MessageType
-import dev.notypie.domain.common.event.PostEventContents
-import dev.notypie.domain.common.event.SlackEvent
+import dev.notypie.domain.common.event.PostEventPayloadContents
+import dev.notypie.domain.common.event.SlackEventPayload
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -76,9 +76,9 @@ class OutboxMessage(
         this.status = status.name
     }
 
-    fun toSlackEvent(): SlackEvent =
+    fun toSlackEvent(): SlackEventPayload =
         if(this.type == MessageType.ACTION_RESPONSE.name )
-            ActionEventContents(
+            ActionEventPayloadContents(
                 idempotencyKey = UUID.fromString(this.idempotencyKey),
                 publisherId = this.publisherId,
                 commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
@@ -88,7 +88,7 @@ class OutboxMessage(
                 channel = this.metadata["channel"].toString(),
                 eventId = UUID.randomUUID()
             )
-        else PostEventContents(
+        else PostEventPayloadContents(
             idempotencyKey = UUID.fromString(this.idempotencyKey),
             publisherId = this.publisherId,
             messageType = MessageType.valueOf(this.type),
@@ -102,7 +102,7 @@ class OutboxMessage(
 }
 
 
-fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
+fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
         outboxMessage = OutboxMessage(
             idempotencyKey = this.idempotencyKey.toString(),
@@ -119,10 +119,10 @@ fun PostEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PEND
             createdAt = LocalDateTime.now()
         ),
         reason = "PostEventContents",
-        slackEvent = this
+        slackEventPayload = this
     )
 
-fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
+fun ActionEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
         outboxMessage = OutboxMessage(
             idempotencyKey = this.idempotencyKey.toString(),
@@ -139,7 +139,7 @@ fun ActionEventContents.toOutboxMessage(status: MessageStatus = MessageStatus.PE
             createdAt = LocalDateTime.now()
         ),
         reason = "ActionEventContents",
-        slackEvent = this
+        slackEventPayload = this
     )
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =

@@ -22,14 +22,14 @@ abstract class Command(
     val commandId = this.generateIdValue()
     internal abstract fun parseContext(): CommandContext
 
-    fun handleEvent(): CommandOutput{
-        return try{
-            executeCommand()
-        }finally {
-            events.takeIf { it.isNotEmpty() }?.let {
-                    publishEvents()
-                }
-        }
+    fun handleEvent() = runCatching { executeCommand() }
+        .onSuccess { publishEvents() }
+        .getOrElse { exception ->
+        CommandOutput.fail(
+            slackCommandData = this.commandData, idempotencyKey = this.idempotencyKey,
+            commandDetailType = CommandDetailType.ERROR_RESPONSE,
+            reason = exception.toString()
+        )
     }
 
     private fun publishEvents() = this.eventPublisher.publishEvent(events = this.events)

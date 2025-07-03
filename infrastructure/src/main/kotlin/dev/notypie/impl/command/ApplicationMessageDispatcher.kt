@@ -9,11 +9,11 @@ import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.common.event.ActionEventContents
-import dev.notypie.domain.common.event.DelayHandleEventContents
+import dev.notypie.domain.common.event.ActionEventPayloadContents
+import dev.notypie.domain.common.event.DelayHandleEventPayloadContents
 import dev.notypie.domain.common.event.MessageType
-import dev.notypie.domain.common.event.PostEventContents
-import dev.notypie.domain.common.event.SlackEvent
+import dev.notypie.domain.common.event.PostEventPayloadContents
+import dev.notypie.domain.common.event.SlackEventPayload
 import dev.notypie.domain.history.entity.Status
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -43,7 +43,7 @@ class ApplicationMessageDispatcher(
     private val okHttpClient = buildOkHttpClient(this.slack.config)
     private val MEDIA_TYPE_JSON = "application/json; charset=utf-8".toMediaType()
 
-    override fun dispatch(event: PostEventContents, commandType: CommandType): CommandOutput{
+    override fun dispatch(event: PostEventPayloadContents, commandType: CommandType): CommandOutput{
 //        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
         val result = this.retryService.execute(
             action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
@@ -61,7 +61,7 @@ class ApplicationMessageDispatcher(
         )
     }
 
-    override fun dispatch(event: ActionEventContents, commandType: CommandType): CommandOutput{
+    override fun dispatch(event: ActionEventPayloadContents, commandType: CommandType): CommandOutput{
 //        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
         this.retryService.execute(
             action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
@@ -80,7 +80,7 @@ class ApplicationMessageDispatcher(
     }
 
     @Deprecated("for removal")
-    override fun dispatch(event: DelayHandleEventContents, commandType: CommandType): CommandOutput {
+    override fun dispatch(event: DelayHandleEventPayloadContents, commandType: CommandType): CommandOutput {
         this.taskScheduler.schedule({
             this.applicationEventPublisher.publishEvent(event)
         }, Instant.now().plus(event.delayTime, event.timeUnit))
@@ -96,13 +96,13 @@ class ApplicationMessageDispatcher(
         )
     }
 
-    override fun dispatch(event: SlackEvent): CommandOutput =
+    override fun dispatch(event: SlackEventPayload): CommandOutput =
         this.retryService.execute(
             action = {
                 when(event){
-                    is ActionEventContents -> this.dispatchActionResponseContents(event = event)
-                    is DelayHandleEventContents -> TODO()
-                    is PostEventContents ->
+                    is ActionEventPayloadContents -> this.dispatchActionResponseContents(event = event)
+                    is DelayHandleEventPayloadContents -> TODO()
+                    is PostEventPayloadContents ->
                         when(event.messageType){
                             MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event=event)
                             MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event=event)
@@ -114,9 +114,9 @@ class ApplicationMessageDispatcher(
         )
 
     @EventListener
-    fun listenSlackEvent(event: SlackEvent) = this.dispatch(event = event)
+    fun listenSlackEvent(event: SlackEventPayload) = this.dispatch(event = event)
 
-    private fun dispatchEphemeralContents(event: PostEventContents): CommandOutput{
+    private fun dispatchEphemeralContents(event: PostEventPayloadContents): CommandOutput{
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
                 for ((key, value) in event.body) builder.add(key, value.toString())
                 builder
@@ -126,7 +126,7 @@ class ApplicationMessageDispatcher(
         return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun dispatchChatPostMessageContents(event: PostEventContents): CommandOutput{
+    private fun dispatchChatPostMessageContents(event: PostEventPayloadContents): CommandOutput{
         val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
             for ((key, value) in event.body) builder.add(key, value.toString())
             builder
@@ -136,7 +136,7 @@ class ApplicationMessageDispatcher(
         return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun dispatchActionResponseContents(event: ActionEventContents): CommandOutput {
+    private fun dispatchActionResponseContents(event: ActionEventPayloadContents): CommandOutput {
         val requestBody = event.body.toRequestBody(MEDIA_TYPE_JSON)
         val request = Request.Builder().url(event.responseUrl).post(requestBody).build()
         val result = this.okHttpClient.newCall(request).execute()
@@ -144,11 +144,11 @@ class ApplicationMessageDispatcher(
         return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEvent)=
+    private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEventPayload)=
         if(result.isOk) CommandOutput.success(event = event)
         else CommandOutput.fail(event=event, reason = result.error)
 
-    private fun returnSuccessOrFailed(result: Response, event: SlackEvent) =
+    private fun returnSuccessOrFailed(result: Response, event: SlackEventPayload) =
         if(result.isSuccessful) CommandOutput.success(event = event)
         else CommandOutput.fail(event=event, reason = result.message)
 }

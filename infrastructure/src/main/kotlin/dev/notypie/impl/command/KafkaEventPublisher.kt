@@ -16,7 +16,7 @@ class KafkaEventPublisher(
             when(event.isInternal) {
                 true -> this.applicationEventPublisher.publishEvent(event)
                 false -> this.kafkaTemplate.send(
-                    event.destination, event.commandId.toString(),event.payload
+                    event.destination, event.idempotencyKey.toString(),event.payload
                 )
             }
         }

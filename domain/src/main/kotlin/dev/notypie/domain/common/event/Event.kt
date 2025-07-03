@@ -7,7 +7,7 @@ interface EventPayload {
 }
 
 interface CommandEvent<out T: EventPayload>{
-    val commandId: UUID
+    val idempotencyKey: UUID
     val payload: T
     val destination: String
     val isInternal: Boolean
@@ -29,7 +29,7 @@ class GetMeetingEventPayload(
 )
 
 data class SelectMeetingListEvent(
-    override val commandId: UUID = UUID.randomUUID(),
+    override val idempotencyKey: UUID,
     override val timestamp: Long = System.currentTimeMillis(),
     override val isInternal: Boolean = true,
     override val destination: String = "",
@@ -37,9 +37,9 @@ data class SelectMeetingListEvent(
 ): CommandEvent<MeetingPayload>
 
 data class SendSlackMessageEvent(
-    override val commandId: UUID = UUID.randomUUID(),
-    override val payload: SlackEvent,
+    override val idempotencyKey: UUID,
+    override val payload: SlackEventPayload,
     override val isInternal: Boolean = false,
     override val destination: String,
     override val timestamp: Long
-): CommandEvent<SlackEvent>
+): CommandEvent<SlackEventPayload>

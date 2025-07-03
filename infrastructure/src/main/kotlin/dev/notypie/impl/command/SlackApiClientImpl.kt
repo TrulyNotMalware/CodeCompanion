@@ -9,10 +9,10 @@ import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.SlackApiRequester
-import dev.notypie.domain.common.event.ActionEventContents
+import dev.notypie.domain.common.event.ActionEventPayloadContents
 import dev.notypie.domain.common.event.MessageType
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.common.event.PostEventContents
+import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
@@ -181,7 +181,7 @@ class SlackApiClientImpl(
 
     private fun toEventContents(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                                 body: Map<String, String>, replaceOriginal: Boolean, messageType: MessageType) =
-        PostEventContents(
+        PostEventPayloadContents(
             messageType = messageType,
             apiAppId = commandBasicInfo.appId,
             commandDetailType = commandDetailType,
@@ -195,7 +195,7 @@ class SlackApiClientImpl(
 
     private fun toEventContents(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                                 responseUrl: String, body: String) =
-        ActionEventContents(
+        ActionEventPayloadContents(
             apiAppId = commandBasicInfo.appId,
             commandDetailType = commandDetailType,
             idempotencyKey = commandBasicInfo.idempotencyKey,

@@ -4,7 +4,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-sealed class SlackEvent(
+sealed class SlackEventPayload(
     open val apiAppId: String,
     open val commandDetailType: CommandDetailType,
     open val idempotencyKey: UUID,
@@ -12,7 +12,7 @@ sealed class SlackEvent(
     open val channel: String
 ): EventPayload
 
-data class PostEventContents(
+data class PostEventPayloadContents(
     override val eventId: UUID,
     override val apiAppId: String,
     val messageType: MessageType,
@@ -23,12 +23,12 @@ data class PostEventContents(
 
     val replaceOriginal: Boolean,
     val body: Map<String, Any>,
-): SlackEvent(
+): SlackEventPayload(
     apiAppId=apiAppId, commandDetailType=commandDetailType,
     idempotencyKey=idempotencyKey, publisherId=publisherId, channel=channel
 )
 
-data class ActionEventContents(
+data class ActionEventPayloadContents(
     override val eventId: UUID,
     override val apiAppId: String,
     override val commandDetailType: CommandDetailType,
@@ -38,13 +38,13 @@ data class ActionEventContents(
 
     val responseUrl: String,
     val body: String,
-): SlackEvent(
+): SlackEventPayload(
     apiAppId=apiAppId, commandDetailType=commandDetailType,
     idempotencyKey=idempotencyKey, publisherId=publisherId, channel=channel
 )
 
 
-data class DelayHandleEventContents(
+data class DelayHandleEventPayloadContents(
     override val eventId: UUID,
     override val apiAppId: String,
     val delayTime: Long = 5L,
@@ -53,7 +53,7 @@ data class DelayHandleEventContents(
     override val idempotencyKey: UUID,
     override val channel: String,
     override val publisherId: String,
-): SlackEvent(
+): SlackEventPayload(
     apiAppId=apiAppId, commandDetailType=commandDetailType,
     idempotencyKey=idempotencyKey, publisherId=publisherId, channel=channel
 )

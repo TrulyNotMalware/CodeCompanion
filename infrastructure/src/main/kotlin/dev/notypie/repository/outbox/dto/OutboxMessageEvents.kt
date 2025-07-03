@@ -1,6 +1,6 @@
 package dev.notypie.repository.outbox.dto
 
-import dev.notypie.domain.common.event.SlackEvent
+import dev.notypie.domain.common.event.SlackEventPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
@@ -23,7 +23,7 @@ data class MessagePublishSuccessEvent(
 data class NewMessagePublishedEvent(
     val reason: String,
     val outboxMessage: OutboxMessage,
-    val slackEvent: SlackEvent
+    val slackEventPayload: SlackEventPayload
 )
 
 fun CommandOutput.toOutboxUpdateEvent(): OutboxUpdateEvent =
