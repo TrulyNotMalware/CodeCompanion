@@ -1,9 +1,9 @@
 package dev.notypie.domain.command
 
-import dev.notypie.domain.command.dto.ActionEventContents
-import dev.notypie.domain.command.dto.DelayHandleEventContents
-import dev.notypie.domain.command.dto.PostEventContents
-import dev.notypie.domain.command.dto.SlackEvent
+import dev.notypie.domain.common.event.ActionEventContents
+import dev.notypie.domain.common.event.DelayHandleEventContents
+import dev.notypie.domain.common.event.PostEventContents
+import dev.notypie.domain.common.event.SlackEvent
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 

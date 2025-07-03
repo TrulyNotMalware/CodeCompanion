@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.dto.response
 
-import dev.notypie.domain.command.dto.SlackEvent
+import dev.notypie.domain.common.event.SlackEvent
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType

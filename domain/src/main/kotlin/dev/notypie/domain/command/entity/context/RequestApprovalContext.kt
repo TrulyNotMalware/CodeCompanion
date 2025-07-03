@@ -8,6 +8,8 @@ import dev.notypie.domain.command.dto.modals.ApprovalContentType
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.common.event.CommandEvent
+import dev.notypie.domain.common.event.EventPayload
 import java.util.*
 
 internal class RequestApprovalContext(
@@ -16,11 +18,13 @@ internal class RequestApprovalContext(
 
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    basicInfo: CommandBasicInfo
+    basicInfo: CommandBasicInfo,
+    events: Queue<CommandEvent<EventPayload>>
 ): CommandContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    commandBasicInfo = basicInfo
+    commandBasicInfo = basicInfo,
+    events = events,
 ){
 
     private val approvalContents: ApprovalContents = this.buildContents()

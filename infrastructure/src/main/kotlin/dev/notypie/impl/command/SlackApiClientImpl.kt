@@ -9,10 +9,10 @@ import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.SlackApiRequester
-import dev.notypie.domain.command.dto.ActionEventContents
-import dev.notypie.domain.command.dto.MessageType
+import dev.notypie.domain.common.event.ActionEventContents
+import dev.notypie.domain.common.event.MessageType
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.PostEventContents
+import dev.notypie.domain.common.event.PostEventContents
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
@@ -189,7 +189,8 @@ class SlackApiClientImpl(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             publisherId = commandBasicInfo.publisherId,
             replaceOriginal = replaceOriginal,
-            channel = commandBasicInfo.channel
+            channel = commandBasicInfo.channel,
+            eventId = UUID.randomUUID()
         )
 
     private fun toEventContents(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
@@ -201,7 +202,8 @@ class SlackApiClientImpl(
             publisherId = commandBasicInfo.publisherId,
             channel = commandBasicInfo.channel,
             responseUrl = responseUrl,
-            body = body
+            body = body,
+            eventId = UUID.randomUUID()
         )
 
     private fun toMap(formBody: FormBody): Map<String, String>

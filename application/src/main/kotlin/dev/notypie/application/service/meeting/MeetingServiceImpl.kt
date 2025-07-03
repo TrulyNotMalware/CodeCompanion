@@ -7,34 +7,34 @@ import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContextResult
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
+import dev.notypie.domain.common.event.EventPublisher
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.schema.newMeeting
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.event.TransactionPhase
+import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.util.MultiValueMap
 
 @Service
 class MeetingServiceImpl(
     private val slackApiRequester: SlackApiRequester,
     private val meetingRepository: MeetingRepository,
-    private val retryService: RetryService
+    private val retryService: RetryService,
+    private val eventPublisher: EventPublisher
 ): MeetingService {
 
     override fun handleMeeting(headers: MultiValueMap<String, String>,
                                payload: SlashCommandRequestBody, slackCommandData: SlackCommandData) {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command: Command = RequestMeetingCommand(
-            commandData = slackCommandData, idempotencyKey = idempotencyKey, slackApiRequester = this.slackApiRequester
+            commandData = slackCommandData, idempotencyKey = idempotencyKey,
+            slackApiRequester = this.slackApiRequester, eventPublisher = this.eventPublisher
         )
         val result = command.handleEvent()
     }
 
-    fun handleGetMeetings(payload: SlashCommandRequestBody, slackCommandData: SlackCommandData){
-
-    }
-
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun createNewMeeting(result: RequestMeetingContextResult){
         val meeting = result.newMeeting()
         this.retryService.execute(

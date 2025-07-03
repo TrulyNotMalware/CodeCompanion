@@ -11,6 +11,7 @@ import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CompositeCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
+import dev.notypie.domain.common.event.EventPublisher
 import dev.notypie.domain.history.repository.HistoryRepository
 import dev.notypie.impl.command.InteractionPayloadParser
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -26,7 +27,8 @@ private val logger = KotlinLogging.logger {  }
 class SlackInteractionHandlerImpl(
     private val interactionPayloadParser: InteractionPayloadParser,
     private val slackApiRequester: SlackApiRequester,
-    private val applicationEventPublisher: ApplicationEventPublisher
+    private val applicationEventPublisher: ApplicationEventPublisher,
+    private val eventPublisher: EventPublisher
 ): InteractionHandler {
 
     @Transactional
@@ -47,6 +49,7 @@ class SlackInteractionHandlerImpl(
                 commandData = slackCommandData
             )
             val result = command.handleEvent()
+            //FIXME Event publisher
             result.takeIf { it.ok }?.let {
                 applicationEventPublisher.publishEvent(it)
             }
@@ -55,10 +58,11 @@ class SlackInteractionHandlerImpl(
 
     private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData) : Command =
         CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
-            commandData = commandData, slackApiRequester = slackApiRequester)
+            commandData = commandData, slackApiRequester = slackApiRequester, eventPublisher = eventPublisher)
 
     private fun rejectCommand(idempotencyKey: UUID, commandData: SlackCommandData,
                               responseUrl: String): Command =
         ReplaceTextResponseCommand(idempotencyKey = idempotencyKey, commandData = commandData,
-            slackApiRequester = this.slackApiRequester, markdownMessage = "Canceled.", responseUrl = responseUrl)
+            slackApiRequester = this.slackApiRequester, markdownMessage = "Canceled.", responseUrl = responseUrl,
+            eventPublisher = eventPublisher)
 }

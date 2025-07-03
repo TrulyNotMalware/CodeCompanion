@@ -12,20 +12,25 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.common.event.CommandEvent
+import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.history.entity.Status
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Queue
 
 internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
+    events: Queue<CommandEvent<EventPayload>>
 ) : CommandContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    commandBasicInfo = commandBasicInfo
+    commandBasicInfo = commandBasicInfo,
+    events = events,
 ){
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
@@ -123,8 +128,9 @@ internal class RequestMeetingContext(
                 headLineText = "Meeting Request!", reason = reason, subTitle = title,
                 idempotencyKey = this.commandBasicInfo.idempotencyKey,
                 publisherId = this.commandBasicInfo.publisherId,
-                commandDetailType = CommandDetailType.NOTICE_FORM
-            )
+                commandDetailType = CommandDetailType.NOTICE_FORM,
+            ),
+            events = this.events
         ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
 
 

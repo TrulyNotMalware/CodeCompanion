@@ -62,8 +62,3 @@ class ApplicationMicroServiceOptionConfiguration{
     @Bean
     fun userService(): UserService = MicroUserServiceImpl()
 }
-
-object KafkaTopicPrefix{
-    const val BASE = "code.companion."
-    const val MEETING_TOPIC_PREFIX = "$BASE.meeting"
-}

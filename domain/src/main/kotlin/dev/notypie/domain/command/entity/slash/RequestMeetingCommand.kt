@@ -8,20 +8,23 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
 class RequestMeetingCommand(
     idempotencyKey: UUID,
     commandData: SlackCommandData,
     slackApiRequester: SlackApiRequester,
+    eventPublisher: EventPublisher
 ): Command(
     idempotencyKey = idempotencyKey,
     commandData = commandData,
-    slackApiRequester = slackApiRequester
+    slackApiRequester = slackApiRequester,
+    eventPublisher = eventPublisher
 ) {
     override fun parseContext(): CommandContext = RequestMeetingContext(
         commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
-        slackApiRequester = this.slackApiRequester,
+        slackApiRequester = this.slackApiRequester, events = this.events
     )
 
 }

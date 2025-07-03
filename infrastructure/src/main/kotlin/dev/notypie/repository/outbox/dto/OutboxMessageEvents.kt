@@ -1,6 +1,6 @@
 package dev.notypie.repository.outbox.dto
 
-import dev.notypie.domain.command.dto.SlackEvent
+import dev.notypie.domain.common.event.SlackEvent
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage

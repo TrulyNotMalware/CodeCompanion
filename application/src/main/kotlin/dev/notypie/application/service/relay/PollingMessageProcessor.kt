@@ -5,8 +5,7 @@ import dev.notypie.application.service.relay.dto.NoParameter
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import org.springframework.scheduling.annotation.Scheduled
 
-//Pooling publisher.
-class PoolingMessageProcessor(
+class PollingMessageProcessor(
     private val outboxRepository: MessageOutboxRepository,
     private val messageRelayService: SlackMessageRelayServiceImpl
 ): MessageProcessor{

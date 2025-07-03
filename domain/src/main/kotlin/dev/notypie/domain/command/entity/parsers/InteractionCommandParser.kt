@@ -9,6 +9,8 @@ import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
+import dev.notypie.domain.common.event.CommandEvent
+import dev.notypie.domain.common.event.EventPayload
 import java.util.*
 
 internal class InteractionCommandParser(
@@ -16,32 +18,37 @@ internal class InteractionCommandParser(
     val baseUrl: String,
     val commandId: UUID,
     val idempotencyKey: UUID,
-    private val slackApiRequester: SlackApiRequester
+    private val slackApiRequester: SlackApiRequester,
+    private val events: Queue<CommandEvent<EventPayload>>
 ): ContextParser{
     private val interactionPayload = slackCommandData.body as InteractionPayload
 
-    override fun parseContext(idempotencyKey: UUID): CommandContext =
+    override fun parseContext(events: Queue<CommandEvent<EventPayload>>, idempotencyKey: UUID): CommandContext =
         when(this.interactionPayload.type){
             CommandDetailType.APPROVAL_FORM ->
                 SlackApprovalFormContext(
                     slackApiRequester = this.slackApiRequester,
-                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
+                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
+                    events = events,
                 )
             CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
             CommandDetailType.REQUEST_MEETING_FORM ->
                 RequestMeetingContext(
                     slackApiRequester = this.slackApiRequester,
-                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
+                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
+                    events = events,
                 )
             CommandDetailType.NOTICE_FORM ->
                 ApprovalCallbackContext(
                     slackApiRequester = this.slackApiRequester,
-                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey)
+                    commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
+                    events = events,
                 )
             else -> EmptyContext(
                 commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
                 requestHeaders = slackCommandData.rawHeader,
-                slackApiRequester = slackApiRequester
+                slackApiRequester = slackApiRequester,
+                events = events,
             )
         }
 

@@ -10,6 +10,7 @@ import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.ContextParser
 import dev.notypie.domain.command.entity.parsers.InteractionCommandParser
+import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
 class CompositeCommand(
@@ -17,10 +18,12 @@ class CompositeCommand(
     idempotencyKey: UUID,
     commandData: SlackCommandData,
     slackApiRequester: SlackApiRequester,
+    eventPublisher: EventPublisher,
 ): Command(
     idempotencyKey = idempotencyKey,
     commandData = commandData,
-    slackApiRequester = slackApiRequester
+    slackApiRequester = slackApiRequester,
+    eventPublisher = eventPublisher
 ) {
     companion object{
         const val BASE_URL: String = "https://slack.com/api/"
@@ -29,7 +32,7 @@ class CompositeCommand(
     private val commandParser: ContextParser = this.buildParser(this.commandData)
 
     override fun parseContext(): CommandContext =
-        this.commandParser.parseContext(idempotencyKey = this.idempotencyKey)
+        this.commandParser.parseContext(events = this.events, idempotencyKey = this.idempotencyKey)
 
     private fun buildParser(commandData: SlackCommandData): ContextParser {
         return when(commandData.slackCommandType){
@@ -46,7 +49,9 @@ class CompositeCommand(
         return when(type){
             SlackCommandType.APP_MENTION -> AppMentionCommandParser(
                 slackCommandData = commandData, baseUrl = BASE_URL,
-                slackApiRequester = this.slackApiRequester, commandId = this.commandId , idempotencyKey = this.idempotencyKey)
+                slackApiRequester = this.slackApiRequester, commandId = this.commandId,
+                idempotencyKey = this.idempotencyKey, events = events
+            )
             else -> TODO()
         }
     }
@@ -56,7 +61,9 @@ class CompositeCommand(
         val type = interactionPayload.type
         return InteractionCommandParser(slackCommandData = commandData,
             baseUrl = BASE_URL, commandId = this.commandId,
-            idempotencyKey = this.idempotencyKey, slackApiRequester = this.slackApiRequester)
+            idempotencyKey = this.idempotencyKey, slackApiRequester = this.slackApiRequester,
+            events = events
+        )
 //        return when(type){
 //            CommandDetailType.APPROVAL_FORM
 //        }
@@ -65,6 +72,9 @@ class CompositeCommand(
     private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
         requestHeaders = this.commandData.rawHeader,
         slackApiRequester = this.slackApiRequester, text = "Command Not supported.",
-        commandBasicInfo = this.commandData.extractBasicInfo(this.idempotencyKey)
+        commandBasicInfo = this.commandData.extractBasicInfo(
+            idempotencyKey = this.idempotencyKey,
+        ),
+        events = this.events
     )
 }

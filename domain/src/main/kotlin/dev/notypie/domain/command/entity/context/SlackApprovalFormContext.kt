@@ -9,15 +9,20 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.common.event.CommandEvent
+import dev.notypie.domain.common.event.EventPayload
+import java.util.Queue
 
 internal class SlackApprovalFormContext(
     commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
+    events: Queue<CommandEvent<EventPayload>>
 ): CommandContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    commandBasicInfo = commandBasicInfo
+    commandBasicInfo = commandBasicInfo,
+    events = events,
 ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType() = CommandDetailType.APPROVAL_FORM

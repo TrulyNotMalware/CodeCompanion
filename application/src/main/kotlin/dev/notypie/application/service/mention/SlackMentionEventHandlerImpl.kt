@@ -11,6 +11,7 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CompositeCommand
+import dev.notypie.domain.common.event.EventPublisher
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.mapper.mapHistory
 import org.springframework.stereotype.Service
@@ -21,7 +22,8 @@ import java.util.UUID
 @Service
 class SlackMentionEventHandlerImpl(
     private val slackApiRequester: SlackApiRequester,
-    private val historyHandler: HistoryHandler
+    private val historyHandler: HistoryHandler,
+    private val eventPublisher: EventPublisher
 ): AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
@@ -54,7 +56,7 @@ class SlackMentionEventHandlerImpl(
 
     private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
         CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
-            commandData = commandData, slackApiRequester = slackApiRequester)
+            commandData = commandData, slackApiRequester = slackApiRequester, eventPublisher = eventPublisher)
 
     @Transactional
     override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput{

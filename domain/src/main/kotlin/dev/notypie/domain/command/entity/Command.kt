@@ -6,7 +6,9 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
+import dev.notypie.domain.common.event.EventPublisher
 import java.util.*
 
 //Aggregate Root
@@ -14,12 +16,26 @@ abstract class Command(
     val idempotencyKey: UUID,
     val commandData: SlackCommandData,
     internal val slackApiRequester: SlackApiRequester,
-    internal val events: MutableList<EventPayload> = mutableListOf()
+    internal val eventPublisher: EventPublisher,
+    internal val events: Queue<CommandEvent<EventPayload>> = LinkedList()
 ) {
     val commandId = this.generateIdValue()
     internal abstract fun parseContext(): CommandContext
 
-    open fun handleEvent(): CommandOutput{
+    fun handleEvent(): CommandOutput{
+        return try{
+            executeCommand()
+        }finally {
+            events.takeIf { it.isNotEmpty() }?.let {
+                    publishEvents()
+                }
+        }
+    }
+
+    private fun publishEvents() = this.eventPublisher.publishEvent(events = this.events)
+
+
+    internal open fun executeCommand(): CommandOutput{
         val context = this.parseContext()
         return if( commandData.slackCommandType == SlackCommandType.INTERACTION_RESPONSE )
             context.handleInteraction(this.commandData.body as InteractionPayload)

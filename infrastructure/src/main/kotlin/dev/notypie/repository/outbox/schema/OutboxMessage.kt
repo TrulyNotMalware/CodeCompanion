@@ -4,17 +4,16 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.objectMapper
-import dev.notypie.domain.command.dto.ActionEventContents
-import dev.notypie.domain.command.dto.MessageType
-import dev.notypie.domain.command.dto.PostEventContents
-import dev.notypie.domain.command.dto.SlackEvent
+import dev.notypie.domain.common.event.ActionEventContents
+import dev.notypie.domain.common.event.MessageType
+import dev.notypie.domain.common.event.PostEventContents
+import dev.notypie.domain.common.event.SlackEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
-import org.springframework.data.annotation.LastModifiedDate
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -86,7 +85,8 @@ class OutboxMessage(
                 body = objectMapper.writeValueAsString(this.payload),
                 apiAppId = this.metadata["api_app_id"].toString(),
                 responseUrl = this.metadata["response_url"].toString(),
-                channel = this.metadata["channel"].toString()
+                channel = this.metadata["channel"].toString(),
+                eventId = UUID.randomUUID()
             )
         else PostEventContents(
             idempotencyKey = UUID.fromString(this.idempotencyKey),
@@ -96,7 +96,8 @@ class OutboxMessage(
             commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
             body = this.payload,
             channel = this.metadata["channel"].toString(),
-            replaceOriginal = this.metadata["replace_original"].toString().toBoolean()
+            replaceOriginal = this.metadata["replace_original"].toString().toBoolean(),
+            eventId = UUID.randomUUID()
         )
 }
 

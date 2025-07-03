@@ -9,18 +9,23 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.common.event.CommandEvent
+import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.history.entity.Status
+import java.util.Queue
 
 internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     approvalContents: ApprovalContents? = null,
+    events: Queue<CommandEvent<EventPayload>>,
     private val participants: Set<String> = emptySet(),
 ) : ReactionContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    commandBasicInfo = commandBasicInfo
+    commandBasicInfo = commandBasicInfo,
+    events = events,
 ){
     private val approvalContents: ApprovalContents = approvalContents ?:
         ApprovalContents(

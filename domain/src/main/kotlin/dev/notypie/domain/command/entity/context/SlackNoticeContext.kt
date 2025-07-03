@@ -6,6 +6,8 @@ import dev.notypie.domain.command.SlackApiRequester
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.common.event.CommandEvent
+import dev.notypie.domain.common.event.EventPayload
 import java.util.*
 
 internal class SlackNoticeContext(
@@ -15,10 +17,12 @@ internal class SlackNoticeContext(
     commandBasicInfo: CommandBasicInfo,
     slackApiRequester: SlackApiRequester,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
+    events: Queue<CommandEvent<EventPayload>>
 ): CommandContext(
     slackApiRequester = slackApiRequester,
     requestHeaders = requestHeaders,
-    commandBasicInfo = commandBasicInfo
+    commandBasicInfo = commandBasicInfo,
+    events = events
 ){
     private val responseText: String = this.commands.joinToString { " " }
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
