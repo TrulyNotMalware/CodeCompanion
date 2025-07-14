@@ -1,13 +1,12 @@
 package dev.notypie.application.service.user
 
 import dev.notypie.application.common.parseRequestBodyData
-import dev.notypie.domain.command.SlackApiRequester
-import dev.notypie.domain.user.entity.User
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.user.repository.TeamRepository
 import org.springframework.util.MultiValueMap
 
 class DefaultUserServiceImpl(
-    private val slackApiRequester: SlackApiRequester,
+    private val slackEventBuilder: SlackEventBuilder,
     private val teamRepository: TeamRepository
 ): UserService {
 

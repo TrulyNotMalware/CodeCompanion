@@ -1,7 +1,7 @@
 package dev.notypie.domain.common.event
 
-import java.util.Queue
+import dev.notypie.domain.command.EventQueue
 
 interface EventPublisher {
-    fun publishEvent(events: Queue<CommandEvent<EventPayload>>)
+    fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>)
 }

@@ -4,7 +4,7 @@ import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.history.HistoryHandler
 import dev.notypie.common.objectMapper
 import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
@@ -21,7 +21,7 @@ import java.util.UUID
 
 @Service
 class SlackMentionEventHandlerImpl(
-    private val slackApiRequester: SlackApiRequester,
+    private val slackEventBuilder: SlackEventBuilder,
     private val historyHandler: HistoryHandler,
     private val eventPublisher: EventPublisher
 ): AppMentionEventHandler {
@@ -56,7 +56,7 @@ class SlackMentionEventHandlerImpl(
 
     private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
         CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
-            commandData = commandData, slackApiRequester = slackApiRequester, eventPublisher = eventPublisher)
+            commandData = commandData, slackEventBuilder = slackEventBuilder, eventPublisher = eventPublisher)
 
     @Transactional
     override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput{

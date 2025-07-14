@@ -1,13 +1,12 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.domain.command.MessageDispatcher
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.impl.command.*
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
@@ -48,10 +47,10 @@ class SlackRequestBuilderConfiguration(
         outboxRepository = outboxRepository)
 
     @Bean
-    @ConditionalOnMissingBean(SlackApiRequester::class)
+    @ConditionalOnMissingBean(SlackEventBuilder::class)
     fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder,
                             applicationEventPublisher: ApplicationEventPublisher,
-                            slackMessageDispatcher: MessageDispatcher): SlackApiRequester = SlackApiClientImpl(
+                            slackMessageDispatcher: MessageDispatcher): SlackEventBuilder = SlackApiEventConstructor(
         botToken = appConfig.api.token, templateBuilder = slackTemplateBuilder,
         messageDispatcher = slackMessageDispatcher
     )

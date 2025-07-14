@@ -1,6 +1,8 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.DefaultEventQueue
+import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
@@ -9,16 +11,17 @@ import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.common.event.EventPublisher
-import java.util.*
+import java.util.UUID
 
 //Aggregate Root
 abstract class Command(
     val idempotencyKey: UUID,
     val commandData: SlackCommandData,
-    internal val slackApiRequester: SlackApiRequester,
+    internal val slackEventBuilder: SlackEventBuilder,
     internal val eventPublisher: EventPublisher,
-    internal val events: Queue<CommandEvent<EventPayload>> = LinkedList()
 ) {
+    internal val events: EventQueue<CommandEvent<EventPayload>> = DefaultEventQueue()
+
     val commandId = this.generateIdValue()
     internal abstract fun parseContext(): CommandContext
 

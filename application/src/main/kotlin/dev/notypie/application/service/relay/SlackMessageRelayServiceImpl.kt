@@ -3,20 +3,21 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.domain.command.MessageDispatcher
+import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
-import org.springframework.orm.ObjectOptimisticLockingFailureException
-import org.springframework.retry.annotation.Backoff
-import org.springframework.retry.annotation.Retryable
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.event.TransactionPhase
+import org.springframework.transaction.event.TransactionalEventListener
 import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
@@ -64,5 +65,14 @@ class SlackMessageRelayServiceImpl(
             .orElseThrow { throw RuntimeException("Message Not Found.") }
         message.updateMessageStatus(status = status)
         return this.outboxRepository.save(message)
+    }
+
+    //Domain Event Listener
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    fun saveOutboxMessage(event: SendSlackMessageEvent){
+        val result = this.retryService.execute(
+            action = { outboxRepository.save(event.toOutboxMessage()) },
+            maxAttempts = 3
+        )
     }
 }

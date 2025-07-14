@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.context.form
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
@@ -19,15 +20,14 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.util.Queue
 
 internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
-    slackApiRequester: SlackApiRequester,
+    slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    events: Queue<CommandEvent<EventPayload>>
+    events: EventQueue<CommandEvent<EventPayload>>
 ) : CommandContext(
-    slackApiRequester = slackApiRequester,
+    slackEventBuilder = slackEventBuilder,
     requestHeaders = requestHeaders,
     commandBasicInfo = commandBasicInfo,
     events = events,
@@ -35,12 +35,15 @@ internal class RequestMeetingContext(
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
 
-    override fun runCommand(): CommandOutput =
-        this.slackApiRequester.requestMeetingFormRequest(
+    override fun runCommand(): CommandOutput{
+        val event = this.slackEventBuilder.requestMeetingFormRequest(
             commandBasicInfo = this.commandBasicInfo,
             commandType = this.commandType,
             commandDetailType = this.commandDetailType
-            )
+        )
+        this.addNewEvent(commandEvent = event)
+        return CommandOutput.success(payload = event.payload)
+    }
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
         val participants = this.getParticipants(
@@ -122,7 +125,7 @@ internal class RequestMeetingContext(
 
     private fun sendNotice(participants: Set<String>, title: String, reason: String): CommandOutput =
         ApprovalCallbackContext(
-            slackApiRequester = this.slackApiRequester, participants = participants,
+            slackEventBuilder = this.slackEventBuilder, participants = participants,
             commandBasicInfo = this.commandBasicInfo,
             approvalContents = ApprovalContents(
                 headLineText = "Meeting Request!", reason = reason, subTitle = title,

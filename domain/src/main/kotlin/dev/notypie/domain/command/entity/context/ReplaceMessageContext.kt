@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
@@ -9,18 +10,17 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
-import java.util.Queue
 
 internal class ReplaceMessageContext(
     commandBasicInfo: CommandBasicInfo,
     requestHeaders: SlackRequestHeaders,
-    slackApiRequester: SlackApiRequester,
-    events: Queue<CommandEvent<EventPayload>>,
+    slackEventBuilder: SlackEventBuilder,
+    events: EventQueue<CommandEvent<EventPayload>>,
     private val responseUrl: String,
     private val markdownMessage: String
 ): CommandContext(
     requestHeaders = requestHeaders,
-    slackApiRequester = slackApiRequester,
+    slackEventBuilder = slackEventBuilder,
     commandBasicInfo = commandBasicInfo,
     events = events
 ) {
@@ -35,12 +35,15 @@ internal class ReplaceMessageContext(
      *
      * @return A SlackApiResponse indicating the result of the replace text operation.
      */
-    private fun replaceText(): CommandOutput =
-        this.slackApiRequester.replaceOriginalText(
+    private fun replaceText(): CommandOutput {
+        val event = this.slackEventBuilder.replaceOriginalText(
             markdownText = this.markdownMessage,
             responseUrl = this.responseUrl,
             commandBasicInfo = this.commandBasicInfo,
             commandDetailType = this.commandDetailType,
             commandType = this.commandType
         )
+        this.addNewEvent(commandEvent = event)
+        return CommandOutput.success(payload = event.payload)
+    }
 }

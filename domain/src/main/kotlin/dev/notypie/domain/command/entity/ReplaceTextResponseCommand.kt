@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -11,20 +11,20 @@ import java.util.UUID
 class ReplaceTextResponseCommand(
     idempotencyKey: UUID,
     commandData: SlackCommandData,
-    slackApiRequester: SlackApiRequester,
+    slackEventBuilder: SlackEventBuilder,
     eventPublisher: EventPublisher,
     private val markdownMessage: String,
     private val responseUrl: String,
 ): Command(
     idempotencyKey = idempotencyKey,
     commandData = commandData,
-    slackApiRequester = slackApiRequester,
+    slackEventBuilder = slackEventBuilder,
     eventPublisher = eventPublisher
 ) {
     override fun parseContext(): CommandContext = ReplaceMessageContext(
         commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
         requestHeaders = SlackRequestHeaders(),
-        slackApiRequester = this.slackApiRequester, markdownMessage = markdownMessage,
+        slackEventBuilder = this.slackEventBuilder, markdownMessage = markdownMessage,
         responseUrl = responseUrl, events = this.events
     )
 }

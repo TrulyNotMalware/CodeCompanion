@@ -41,5 +41,6 @@ data class SendSlackMessageEvent(
     override val payload: SlackEventPayload,
     override val isInternal: Boolean = false,
     override val destination: String,
-    override val timestamp: Long
+    override val timestamp: Long,
+    val eventType: MessageType
 ): CommandEvent<SlackEventPayload>

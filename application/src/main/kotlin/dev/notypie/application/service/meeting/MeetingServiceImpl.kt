@@ -1,7 +1,7 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.IdempotencyCreator
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.Command
@@ -18,7 +18,7 @@ import org.springframework.util.MultiValueMap
 
 @Service
 class MeetingServiceImpl(
-    private val slackApiRequester: SlackApiRequester,
+    private val slackEventBuilder: SlackEventBuilder,
     private val meetingRepository: MeetingRepository,
     private val retryService: RetryService,
     private val eventPublisher: EventPublisher
@@ -29,7 +29,7 @@ class MeetingServiceImpl(
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command: Command = RequestMeetingCommand(
             commandData = slackCommandData, idempotencyKey = idempotencyKey,
-            slackApiRequester = this.slackApiRequester, eventPublisher = this.eventPublisher
+            slackEventBuilder = this.slackEventBuilder, eventPublisher = this.eventPublisher
         )
         val result = command.handleEvent()
     }

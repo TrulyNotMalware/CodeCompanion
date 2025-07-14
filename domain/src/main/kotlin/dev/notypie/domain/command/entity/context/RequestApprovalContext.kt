@@ -1,7 +1,8 @@
 package dev.notypie.domain.command.entity.context
 
+import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContentType
@@ -16,12 +17,12 @@ internal class RequestApprovalContext(
     private val users: Queue<String>,
     private val commands: Queue<String>,
 
-    slackApiRequester: SlackApiRequester,
+    slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     basicInfo: CommandBasicInfo,
-    events: Queue<CommandEvent<EventPayload>>
+    events: EventQueue<CommandEvent<EventPayload>>
 ): CommandContext(
-    slackApiRequester = slackApiRequester,
+    slackEventBuilder = slackEventBuilder,
     requestHeaders = requestHeaders,
     commandBasicInfo = basicInfo,
     events = events,
@@ -32,13 +33,15 @@ internal class RequestApprovalContext(
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType() = CommandDetailType.REQUEST_APPLY_FORM
 
-    override fun runCommand(): CommandOutput
-        = this.slackApiRequester.simpleApplyRejectRequest(
+    override fun runCommand(): CommandOutput {
+        val event = this.slackEventBuilder.simpleApplyRejectRequest(
             approvalContents = this.approvalContents,
             commandType = this.commandType, commandDetailType = this.commandDetailType,
             commandBasicInfo = this.commandBasicInfo,
         )
-
+        this.addNewEvent(commandEvent = event)
+        return CommandOutput.success(payload = event.payload)
+    }
 
     private fun buildContents(type: ApprovalContentType = ApprovalContentType.SIMPLE_REQUEST_FORM): ApprovalContents{//FIXME Changed to receive input from Modal. 7.15 test for approval button.
         val command = this.commands.poll()

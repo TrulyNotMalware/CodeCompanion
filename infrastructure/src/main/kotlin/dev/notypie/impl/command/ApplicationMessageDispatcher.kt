@@ -145,10 +145,10 @@ class ApplicationMessageDispatcher(
     }
 
     private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEventPayload)=
-        if(result.isOk) CommandOutput.success(event = event)
+        if(result.isOk) CommandOutput.success(payload = event)
         else CommandOutput.fail(event=event, reason = result.error)
 
     private fun returnSuccessOrFailed(result: Response, event: SlackEventPayload) =
-        if(result.isSuccessful) CommandOutput.success(event = event)
+        if(result.isSuccessful) CommandOutput.success(payload = event)
         else CommandOutput.fail(event=event, reason = result.message)
 }

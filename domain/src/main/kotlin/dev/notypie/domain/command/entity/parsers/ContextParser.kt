@@ -7,5 +7,5 @@ import java.util.Queue
 import java.util.UUID
 
 internal interface ContextParser {
-    fun parseContext(events: Queue<CommandEvent<EventPayload>>, idempotencyKey: UUID): CommandContext
+    fun parseContext(idempotencyKey: UUID): CommandContext
 }

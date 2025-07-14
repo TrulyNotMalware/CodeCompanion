@@ -49,11 +49,11 @@ open class CommandOutput(
             )
 
 
-        fun success(event: SlackEventPayload) = CommandOutput(
-            ok = true, apiAppId = event.apiAppId, status = Status.SUCCESS,
-            channel = event.channel, commandType = CommandType.SIMPLE,
+        fun success(payload: SlackEventPayload) = CommandOutput(
+            ok = true, apiAppId = payload.apiAppId, status = Status.SUCCESS,
+            channel = payload.channel, commandType = CommandType.SIMPLE,
             commandDetailType = CommandDetailType.NOTHING,
-            idempotencyKey = event.idempotencyKey, publisherId = event.publisherId
+            idempotencyKey = payload.idempotencyKey, publisherId = payload.publisherId
             )
     }
 }

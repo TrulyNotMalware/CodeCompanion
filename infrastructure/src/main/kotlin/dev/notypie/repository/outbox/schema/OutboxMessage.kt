@@ -9,6 +9,8 @@ import dev.notypie.domain.common.event.MessageType
 import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.common.event.SlackEventPayload
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.common.event.DelayHandleEventPayloadContents
+import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
@@ -100,6 +102,15 @@ class OutboxMessage(
             eventId = UUID.randomUUID()
         )
 }
+
+fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
+    when(this.payload){
+        is PostEventPayloadContents ->
+            (this.payload as PostEventPayloadContents).toOutboxMessage().outboxMessage
+        is ActionEventPayloadContents ->
+            (this.payload as ActionEventPayloadContents).toOutboxMessage().outboxMessage
+        is DelayHandleEventPayloadContents -> TODO()
+    }
 
 
 fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =

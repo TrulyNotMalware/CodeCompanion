@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.context.form
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
@@ -12,17 +13,16 @@ import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.history.entity.Status
-import java.util.Queue
 
 internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
-    slackApiRequester: SlackApiRequester,
+    slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     approvalContents: ApprovalContents? = null,
-    events: Queue<CommandEvent<EventPayload>>,
+    events: EventQueue<CommandEvent<EventPayload>>,
     private val participants: Set<String> = emptySet(),
 ) : ReactionContext(
-    slackApiRequester = slackApiRequester,
+    slackEventBuilder = slackEventBuilder,
     requestHeaders = requestHeaders,
     commandBasicInfo = commandBasicInfo,
     events = events,
@@ -64,11 +64,12 @@ internal class ApprovalCallbackContext(
     }
 
     private fun sendNoticeToParticipants(commandDetailType: CommandDetailType = this.commandDetailType) =
-        this.participants.map {
-                participant -> this.slackApiRequester.simpleApplyRejectRequest(
-                    commandDetailType = commandDetailType,
-                    approvalContents = this.approvalContents, commandBasicInfo = this.commandBasicInfo,
-                    commandType = this.commandType, targetUserId = participant
-                )
-            }
+        this.participants.map { participant ->
+            val event = this.slackEventBuilder.simpleApplyRejectRequest(
+                commandDetailType = commandDetailType,
+                approvalContents = this.approvalContents, commandBasicInfo = this.commandBasicInfo,
+                commandType = this.commandType, targetUserId = participant )
+            this.addNewEvent(commandEvent = event)
+            CommandOutput.success(payload = event.payload)
+        }
 }

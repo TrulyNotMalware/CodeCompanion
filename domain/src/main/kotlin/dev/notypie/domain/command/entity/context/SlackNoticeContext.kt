@@ -1,8 +1,9 @@
 package dev.notypie.domain.command.entity.context
 
+import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -15,11 +16,11 @@ internal class SlackNoticeContext(
     val commands: Queue<String>,
 
     commandBasicInfo: CommandBasicInfo,
-    slackApiRequester: SlackApiRequester,
+    slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    events: Queue<CommandEvent<EventPayload>>
+    events: EventQueue<CommandEvent<EventPayload>>
 ): CommandContext(
-    slackApiRequester = slackApiRequester,
+    slackEventBuilder = slackEventBuilder,
     requestHeaders = requestHeaders,
     commandBasicInfo = commandBasicInfo,
     events = events
@@ -29,12 +30,14 @@ internal class SlackNoticeContext(
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
-        return this.slackApiRequester.simpleTextRequest(
+        val event = this.slackEventBuilder.simpleTextRequest(
             headLineText = "Notice!",
             simpleString = this.createResponseText(),
             commandType = this.commandType,
             commandBasicInfo = this.commandBasicInfo, commandDetailType = this.commandDetailType
         )
+        this.addNewEvent(commandEvent = event)
+        return CommandOutput.success(payload = event.payload)
     }
 
 

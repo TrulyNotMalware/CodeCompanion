@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.parsers
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -13,20 +14,19 @@ internal class InteractionCommandParser(
     val baseUrl: String,
     val commandId: UUID,
     val idempotencyKey: UUID,
-    private val slackApiRequester: SlackApiRequester,
-    private val events: Queue<CommandEvent<EventPayload>>
+    private val slackEventBuilder: SlackEventBuilder,
+    private val events: EventQueue<CommandEvent<EventPayload>>
 ): ContextParser{
     private val interactionPayload = slackCommandData.body as InteractionPayload
 
     override fun parseContext(
-        events: Queue<CommandEvent<EventPayload>>,
         idempotencyKey: UUID
     ): CommandContext {
         val basicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey)
         return interactionPayload.type.createContext(
-            slackApiRequester = this.slackApiRequester,
+            slackEventBuilder = this.slackEventBuilder,
             commandBasicInfo = basicInfo,
-            events = events,
+            events = this.events,
             requestHeaders = slackCommandData.rawHeader
         )
     }

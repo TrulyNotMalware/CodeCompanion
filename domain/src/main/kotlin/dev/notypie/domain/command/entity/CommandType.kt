@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.SlackApiRequester
+import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -10,7 +11,6 @@ import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
-import java.util.Queue
 
 enum class CommandType {
     SIMPLE,
@@ -31,34 +31,34 @@ enum class CommandDetailType {
 
 
     internal fun createContext(
-        slackApiRequester: SlackApiRequester,
+        slackEventBuilder: SlackEventBuilder,
         commandBasicInfo: CommandBasicInfo,
-        events: Queue<CommandEvent<EventPayload>>,
+        events: EventQueue<CommandEvent<EventPayload>>,
         requestHeaders: SlackRequestHeaders,
     ): CommandContext = when (this) {
         APPROVAL_FORM ->
             SlackApprovalFormContext(
-                slackApiRequester = slackApiRequester,
+                slackEventBuilder = slackEventBuilder,
                 commandBasicInfo = commandBasicInfo,
                 events = events,
             )
         MEETING_APPROVAL_NOTICE_FORM,
         REQUEST_MEETING_FORM ->
             RequestMeetingContext(
-                slackApiRequester = slackApiRequester,
+                slackEventBuilder = slackEventBuilder,
                 commandBasicInfo = commandBasicInfo,
                 events = events,
             )
         NOTICE_FORM ->
             ApprovalCallbackContext(
-                slackApiRequester = slackApiRequester,
+                slackEventBuilder = slackEventBuilder,
                 commandBasicInfo = commandBasicInfo,
                 events = events,
             )
         else -> EmptyContext(
             commandBasicInfo = commandBasicInfo,
             requestHeaders = requestHeaders,
-            slackApiRequester = slackApiRequester,
+            slackEventBuilder = slackEventBuilder,
             events = events,
         )
     }
