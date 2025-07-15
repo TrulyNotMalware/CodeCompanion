@@ -125,22 +125,6 @@ class SlackApiEventConstructor(
             layout = layout, replaceOriginal = true, responseUrl = responseUrl)
     }
 
-    @Deprecated("for removal")
-    private fun doAction( commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
-                          commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
-                          targetUserId: String? = null) =
-        this.messageDispatcher.dispatch(
-            event = this.toEventContents(commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
-                replaceOriginal = replaceOriginal,
-                body = this.extractBodyData(
-                    chatPostMessageRequest = this.chatPostMessageBuilder(channel = commandBasicInfo.channel, blocks = layout.template,
-                        idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
-                        targetUserId = targetUserId)),
-                messageType = if(targetUserId == null) MessageType.CHANNEL_ALERT else MessageType.DIRECT_MESSAGE
-            ),
-            commandType = commandType
-        )
-
     private fun buildMessage(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                              commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
                              targetUserId: String? = null): SendSlackMessageEvent {
@@ -161,24 +145,6 @@ class SlackApiEventConstructor(
             eventType = messageType
         )
     }
-
-    @Deprecated("for removal")
-    private fun doEphemeralAction(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
-                                  commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
-                                  targetUserId: String? = null) =
-        this.messageDispatcher.dispatch(
-            event = this.toEventContents(
-                commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
-                replaceOriginal = replaceOriginal,
-                body = this.extractBodyData(
-                    chatPostEphemeralRequest = this.chatPostEphemeralBuilder(channel = targetUserId ?: commandBasicInfo.channel, blocks = layout.template,
-                        idempotencyKey = commandBasicInfo.idempotencyKey, commandDetailType = commandDetailType,
-                        userId = targetUserId ?: commandBasicInfo.publisherId)
-                ),
-                messageType = MessageType.EPHEMERAL_MESSAGE
-            ),
-            commandType = commandType
-        )
 
     private fun buildEphemeralMessage(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                                       commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
@@ -201,21 +167,6 @@ class SlackApiEventConstructor(
             eventType = MessageType.EPHEMERAL_MESSAGE
         )
     }
-
-    @Deprecated("for removal")
-    private fun doActionResponse(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
-                                 commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
-                                 responseUrl: String) =
-        this.messageDispatcher.dispatch(
-            event = this.toEventContents(commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
-                body = this.toSnakeCaseJsonString(
-                    ActionResponse.builder()
-                        .blocks(layout.template).replaceOriginal(replaceOriginal).build()
-                ),
-                responseUrl = responseUrl
-            ),
-            commandType = commandType,
-        )
 
     private fun buildActionResponse(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                                     commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,

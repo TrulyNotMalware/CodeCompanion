@@ -2,6 +2,7 @@ package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
@@ -16,13 +17,15 @@ internal class ReplaceMessageContext(
     requestHeaders: SlackRequestHeaders,
     slackEventBuilder: SlackEventBuilder,
     events: EventQueue<CommandEvent<EventPayload>>,
+    subCommand: SubCommand,
     private val responseUrl: String,
     private val markdownMessage: String
 ): CommandContext(
     requestHeaders = requestHeaders,
     slackEventBuilder = slackEventBuilder,
     commandBasicInfo = commandBasicInfo,
-    events = events
+    events = events,
+    subCommand = subCommand,
 ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
@@ -31,7 +34,7 @@ internal class ReplaceMessageContext(
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = replaceText()
 
     /**
-     * Replaces the original text of a Slack message with the specified markdown content.
+     * Replaces the original text of a Slack message with the specified Markdown content.
      *
      * @return A SlackApiResponse indicating the result of the replace text operation.
      */

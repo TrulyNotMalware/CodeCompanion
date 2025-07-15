@@ -47,11 +47,7 @@ class SlackMessageRelayServiceImpl(
         this.outboxRepository.save(event.outboxMessage)
     }
 
-//    @Retryable(
-//        maxAttempts = 5,
-//        backoff = Backoff(delay = 1000),
-//        retryFor = [ObjectOptimisticLockingFailureException::class]
-//    )
+
     @Transactional
     @EventListener
     fun updateOutboxMessageStatus(event: OutboxUpdateEvent) =
@@ -70,7 +66,7 @@ class SlackMessageRelayServiceImpl(
     //Domain Event Listener
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun saveOutboxMessage(event: SendSlackMessageEvent){
-        val result = this.retryService.execute(
+        this.retryService.execute(
             action = { outboxRepository.save(event.toOutboxMessage()) },
             maxAttempts = 3
         )

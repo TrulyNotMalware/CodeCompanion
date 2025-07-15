@@ -2,6 +2,7 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -35,6 +36,7 @@ enum class CommandDetailType {
         commandBasicInfo: CommandBasicInfo,
         events: EventQueue<CommandEvent<EventPayload>>,
         requestHeaders: SlackRequestHeaders,
+        subCommand: SubCommand
     ): CommandContext = when (this) {
         APPROVAL_FORM ->
             SlackApprovalFormContext(
@@ -47,7 +49,7 @@ enum class CommandDetailType {
             RequestMeetingContext(
                 slackEventBuilder = slackEventBuilder,
                 commandBasicInfo = commandBasicInfo,
-                events = events,
+                events = events, subCommand = subCommand
             )
         NOTICE_FORM ->
             ApprovalCallbackContext(

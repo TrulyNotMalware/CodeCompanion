@@ -1,6 +1,8 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -21,10 +23,14 @@ class ReplaceTextResponseCommand(
     slackEventBuilder = slackEventBuilder,
     eventPublisher = eventPublisher
 ) {
-    override fun parseContext(): CommandContext = ReplaceMessageContext(
+    override fun parseContext(subCommand: SubCommand): CommandContext = ReplaceMessageContext(
         commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
         requestHeaders = SlackRequestHeaders(),
         slackEventBuilder = this.slackEventBuilder, markdownMessage = markdownMessage,
-        responseUrl = responseUrl, events = this.events
+        responseUrl = responseUrl, events = this.events, subCommand = subCommand
     )
+
+    override fun findSubCommandDefinition(): SubCommandDefinition {
+        TODO("Not yet implemented")
+    }
 }

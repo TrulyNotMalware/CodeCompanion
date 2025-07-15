@@ -2,6 +2,7 @@ package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
@@ -25,17 +26,19 @@ internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
     slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    events: EventQueue<CommandEvent<EventPayload>>
+    events: EventQueue<CommandEvent<EventPayload>>,
+    subCommand: SubCommand
 ) : CommandContext(
     slackEventBuilder = slackEventBuilder,
     requestHeaders = requestHeaders,
     commandBasicInfo = commandBasicInfo,
     events = events,
+    subCommand = subCommand
 ){
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
 
-    override fun runCommand(): CommandOutput{
+    override fun runCommand(): CommandOutput {
         val event = this.slackEventBuilder.requestMeetingFormRequest(
             commandBasicInfo = this.commandBasicInfo,
             commandType = this.commandType,

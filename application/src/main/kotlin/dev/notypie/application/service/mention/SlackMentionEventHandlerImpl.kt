@@ -10,7 +10,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
-import dev.notypie.domain.command.entity.CompositeCommand
+import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.common.event.EventPublisher
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.mapper.mapHistory
@@ -55,7 +55,7 @@ class SlackMentionEventHandlerImpl(
     }
 
     private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
-        CompositeCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
+        InteractionCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
             commandData = commandData, slackEventBuilder = slackEventBuilder, eventPublisher = eventPublisher)
 
     @Transactional

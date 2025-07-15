@@ -1,7 +1,10 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
@@ -16,7 +19,8 @@ internal abstract class CommandContext(
     val tracking: Boolean = true,
     val requestHeaders: SlackRequestHeaders,
     val slackEventBuilder: SlackEventBuilder,
-    internal val events: EventQueue<CommandEvent<EventPayload>>
+    val subCommand: SubCommand = SubCommand(subCommandDefinition = NoSubCommands()),
+    val events: EventQueue<CommandEvent<EventPayload>>
 ) {
     val commandType: CommandType = this.parseCommandType()
     val commandDetailType: CommandDetailType = this.parseCommandDetailType()
@@ -47,7 +51,7 @@ internal abstract class CommandContext(
         ReplaceMessageContext(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
             slackEventBuilder = this.slackEventBuilder, responseUrl = responseUrl,
-            markdownMessage = mkdMessage, events = events
+            markdownMessage = mkdMessage, events = events, subCommand = this.subCommand
         ).runCommand()
 
     internal fun interactionSuccessResponse(responseUrl: String,
@@ -56,7 +60,7 @@ internal abstract class CommandContext(
         ReplaceMessageContext(
             commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
             slackEventBuilder = this.slackEventBuilder, responseUrl = responseUrl,
-            markdownMessage = mkdMessage, events = events
+            markdownMessage = mkdMessage, events = events, subCommand = this.subCommand
         ).runCommand()
         return results
     }

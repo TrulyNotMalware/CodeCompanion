@@ -4,6 +4,8 @@ import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SlackCommandType
+import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -23,7 +25,18 @@ abstract class Command(
     internal val events: EventQueue<CommandEvent<EventPayload>> = DefaultEventQueue()
 
     val commandId = this.generateIdValue()
-    internal abstract fun parseContext(): CommandContext
+    internal abstract fun parseContext(subCommand: SubCommand): CommandContext
+    internal abstract fun findSubCommandDefinition(): SubCommandDefinition
+
+    private fun createSubCommand(): SubCommand {
+        val definition = this.findSubCommandDefinition()
+        val options = this.commandData.subCommands.drop(1)
+        return SubCommand(
+            subCommandDefinition = definition,
+            options = options
+        )
+    }
+
 
     fun handleEvent() = runCatching { executeCommand() }
         .onSuccess { publishEvents() }
@@ -39,7 +52,8 @@ abstract class Command(
 
 
     internal open fun executeCommand(): CommandOutput{
-        val context = this.parseContext()
+        val subCommand = this.createSubCommand()
+        val context = this.parseContext(subCommand = subCommand)
         return if( commandData.slackCommandType == SlackCommandType.INTERACTION_RESPONSE )
             context.handleInteraction(this.commandData.body as InteractionPayload)
         else context.runCommand()
