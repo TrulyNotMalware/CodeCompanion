@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.entity
 
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
@@ -30,7 +31,5 @@ class ReplaceTextResponseCommand(
         responseUrl = responseUrl, events = this.events, subCommand = subCommand
     )
 
-    override fun findSubCommandDefinition(): SubCommandDefinition {
-        TODO("Not yet implemented")
-    }
+    override fun findSubCommandDefinition(): SubCommandDefinition = NoSubCommands()
 }
