@@ -11,6 +11,7 @@ import dev.notypie.domain.common.event.EventPublisher
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.schema.newMeeting
+import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -24,6 +25,7 @@ class MeetingServiceImpl(
     private val eventPublisher: EventPublisher
 ): MeetingService {
 
+    @Transactional
     override fun handleMeeting(headers: MultiValueMap<String, String>,
                                payload: SlashCommandRequestBody, slackCommandData: SlackCommandData) {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)

@@ -39,7 +39,7 @@ data class SelectMeetingListEvent(
 data class SendSlackMessageEvent(
     override val idempotencyKey: UUID,
     override val payload: SlackEventPayload,
-    override val isInternal: Boolean = false,
+    override val isInternal: Boolean = true,
     override val destination: String,
     override val timestamp: Long,
     val eventType: MessageType
