@@ -18,5 +18,6 @@ interface SlackTemplateBuilder {
     fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,
         approvalContents: ApprovalContents): LayoutBlocks
-
+    // task form template added.
+    fun requestTaskFormTemplate(): LayoutBlocks
 }

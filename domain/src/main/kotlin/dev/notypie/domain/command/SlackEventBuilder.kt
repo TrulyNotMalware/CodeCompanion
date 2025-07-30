@@ -22,4 +22,6 @@ interface SlackEventBuilder {
 
     //Replace message
     fun replaceOriginalText(markdownText: String, responseUrl: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SendSlackMessageEvent
+    // task form request added.
+    fun requestTaskFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SendSlackMessageEvent
 }

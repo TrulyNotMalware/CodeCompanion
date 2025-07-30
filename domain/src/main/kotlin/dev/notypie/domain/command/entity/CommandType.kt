@@ -10,6 +10,7 @@ import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.context.form.RequestTaskContext
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 
@@ -27,6 +28,8 @@ enum class CommandDetailType {
     REQUEST_APPLY_FORM,
 
     REQUEST_MEETING_FORM,
+    // REQUEST_TASK_FORM added.
+    REQUEST_TASK_FORM,
     MEETING_APPROVAL_NOTICE_FORM,
     NOTICE_FORM;
 
@@ -50,6 +53,13 @@ enum class CommandDetailType {
                 slackEventBuilder = slackEventBuilder,
                 commandBasicInfo = commandBasicInfo,
                 events = events, subCommand = subCommand
+            )
+        REQUEST_TASK_FORM ->
+            RequestTaskContext(
+                slackEventBuilder = slackEventBuilder,
+                commandBasicInfo = commandBasicInfo,
+                events = events,
+                subCommand = subCommand
             )
         NOTICE_FORM ->
             ApprovalCallbackContext(

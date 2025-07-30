@@ -125,6 +125,19 @@ class SlackApiEventConstructor(
             layout = layout, replaceOriginal = true, responseUrl = responseUrl)
     }
 
+    // task form request added.
+    override fun requestTaskFormRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandType: CommandType,
+        commandDetailType: CommandDetailType
+    ): SendSlackMessageEvent {
+        // request task form template
+        val layout = this.templateBuilder.requestTaskFormTemplate()
+        TODO("Not yet Done")
+        return this.buildEphemeralMessage(commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
+            commandType = commandType, layout = layout, replaceOriginal = false)
+    }
+
     private fun buildMessage(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                              commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
                              targetUserId: String? = null): SendSlackMessageEvent {

@@ -23,7 +23,7 @@ class ModalTemplateBuilder(
         baseUrl = SLACK_API_BASE_URL
     ),
     private val slackApiToken: String
-): SlackTemplateBuilder {
+) : SlackTemplateBuilder {
     companion object {
         const val DEFAULT_PLACEHOLDER_TEXT = "SELECT"
     }
@@ -33,17 +33,17 @@ class ModalTemplateBuilder(
     private fun toLayoutBlocks(vararg blocks: LayoutBlock, states: List<States> = listOf()) =
         LayoutBlocks(interactionStates = states, template = this.createLayouts(blocks = blocks))
 
-    override fun onlyTextTemplate(message: String, isMarkDown: Boolean) : LayoutBlocks =
+    override fun onlyTextTemplate(message: String, isMarkDown: Boolean): LayoutBlocks =
         this.toLayoutBlocks(
             this.modalBlockBuilder.simpleText(text = message, isMarkDown = isMarkDown)
         )
 
-    override fun simpleTextResponseTemplate( headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks
-    = this.toLayoutBlocks(
-        this.modalBlockBuilder.headerBlock(text = headLineText),
-        this.modalBlockBuilder.dividerBlock(),
-        this.modalBlockBuilder.simpleText(text = body, isMarkDown = isMarkDown)
-    )
+    override fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks =
+        this.toLayoutBlocks(
+            this.modalBlockBuilder.headerBlock(text = headLineText),
+            this.modalBlockBuilder.dividerBlock(),
+            this.modalBlockBuilder.simpleText(text = body, isMarkDown = isMarkDown)
+        )
 
     override fun simpleScheduleNoticeTemplate(headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks =
         this.toLayoutBlocks(
@@ -53,10 +53,17 @@ class ModalTemplateBuilder(
         )
 
     //Username with thumbnail Requires Role users.profile.get. Reference from https://api.slack.com/methods/users.profile.get
-    override fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: UUID, commandDetailType: CommandDetailType): LayoutBlocks{
+    override fun approvalTemplate(
+        headLineText: String,
+        approvalContents: ApprovalContents,
+        idempotencyKey: UUID,
+        commandDetailType: CommandDetailType
+    ): LayoutBlocks {
         val buttonLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
-        val user = this.restRequester.get(uri = "users.profile.get?user=${approvalContents.publisherId}",
-            authorizationHeader = this.slackApiToken, responseType = SlackUserProfileDto::class.java)
+        val user = this.restRequester.get(
+            uri = "users.profile.get?user=${approvalContents.publisherId}",
+            authorizationHeader = this.slackApiToken, responseType = SlackUserProfileDto::class.java
+        )
             .body ?: throw IllegalArgumentException("User profile is not found.")
         return this.toLayoutBlocks(
             this.modalBlockBuilder.headerBlock(text = headLineText),
@@ -71,7 +78,7 @@ class ModalTemplateBuilder(
         )
     }
 
-    override fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks{
+    override fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks {
         val blocks = mutableListOf(
             this.modalBlockBuilder.headerBlock(text = headLineText),
             this.modalBlockBuilder.dividerBlock(),
@@ -85,14 +92,18 @@ class ModalTemplateBuilder(
 
     override fun requestApprovalFormTemplate(
         headLineText: String, selectionFields: List<SelectionContents>, approvalContents: ApprovalContents,
-        approvalTargetUser: MultiUserSelectContents?, reasonInput: TextInputContents? ): LayoutBlocks
-    {
+        approvalTargetUser: MultiUserSelectContents?, reasonInput: TextInputContents?
+    ): LayoutBlocks {
         val approvalLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         val userSelectLayout = this.modalBlockBuilder.multiUserSelectBlock(
-            contents = approvalTargetUser ?:
-            MultiUserSelectContents(title = "Select target user", placeholderText = DEFAULT_PLACEHOLDER_TEXT))
+            contents = approvalTargetUser ?: MultiUserSelectContents(
+                title = "Select target user",
+                placeholderText = DEFAULT_PLACEHOLDER_TEXT
+            )
+        )
 
-        val selectionLayouts: List<InteractionLayoutBlock> = selectionFields.map { this.modalBlockBuilder.selectionBlock(selectionContents = it) }
+        val selectionLayouts: List<InteractionLayoutBlock> =
+            selectionFields.map { this.modalBlockBuilder.selectionBlock(selectionContents = it) }
 
         val blocks = mutableListOf(
             this.modalBlockBuilder.headerBlock(text = headLineText),
@@ -115,12 +126,15 @@ class ModalTemplateBuilder(
 
     override fun requestMeetingFormTemplate(
         approvalContents: ApprovalContents
-    ): LayoutBlocks
-    {
+    ): LayoutBlocks {
         val callbackCheckboxes = this.modalBlockBuilder.checkBoxesBlock(
-            CheckBoxOptions(text = "*Confirmation CallBack*", description = "Send confirmation request to all participants and receive result")
+            CheckBoxOptions(
+                text = "*Confirmation CallBack*",
+                description = "Send confirmation request to all participants and receive result"
+            )
         )
-        val multiUserSelectionContents = this.modalBlockBuilder.multiUserSelectBlock(contents =
+        val multiUserSelectionContents = this.modalBlockBuilder.multiUserSelectBlock(
+            contents =
             MultiUserSelectContents(title = "Select meeting members", placeholderText = DEFAULT_PLACEHOLDER_TEXT)
         )
         val timeScheduleBlock = this.modalBlockBuilder.selectDateTimeScheduleBlock()
@@ -181,5 +195,24 @@ class ModalTemplateBuilder(
             addAll(radioButtonLayout.interactiveObjects)
         }
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
+    }
+
+    override fun requestTaskFormTemplate(): LayoutBlocks {
+        val blocks = listOf(
+            this.modalBlockBuilder.headerBlock(text = "Create new task"),
+            this.modalBlockBuilder.dividerBlock(),
+            this.modalBlockBuilder.calendarThumbnailBlock(
+                title = "Schedule a new task",
+                markdownBody = "Create new task.\n Please select the assignees and the due date."
+            ),
+            this.modalBlockBuilder.plainTextInputBlock(
+                TextInputContents(title = "Task name", placeholderText = "Task name")
+            ),
+            this.modalBlockBuilder.plainTextInputBlock(
+                TextInputContents(title = "Description", placeholderText = "")
+            )
+
+        )
+        return this.toLayoutBlocks(*blocks.toTypedArray())
     }
 }

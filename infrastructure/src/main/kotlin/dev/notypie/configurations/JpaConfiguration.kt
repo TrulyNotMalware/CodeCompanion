@@ -3,6 +3,8 @@ package dev.notypie.configurations
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.repository.meeting.JpaMeetingRepository
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
+import dev.notypie.repository.task.JpaTaskRepository
+import dev.notypie.repository.task.TaskRepositoryImpl
 import dev.notypie.repository.user.JpaTeamEntityRepository
 import dev.notypie.repository.user.JpaTeamRepository
 import dev.notypie.repository.user.JpaUserEntityRepository
@@ -59,6 +61,15 @@ class JpaConfiguration {
         jpaMeetingRepository: JpaMeetingRepository
     ) = MeetingRepositoryImpl(
         jpaMeetingRepository = jpaMeetingRepository
+    )
+
+    // task repository added.
+    @Bean
+    @Primary
+    fun taskRepository(
+        jpaTaskRepository: JpaTaskRepository
+    ) = TaskRepositoryImpl(
+        jpaTaskRepository = jpaTaskRepository
     )
     // Multi datasource
 //    @Bean
