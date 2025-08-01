@@ -14,8 +14,11 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
+import dev.notypie.domain.common.event.GetMeetingEventPayload
+import dev.notypie.domain.common.event.GetMeetingListEvent
 import dev.notypie.domain.history.entity.Status
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -44,9 +47,19 @@ internal class RequestMeetingContext(
             commandType = this.commandType,
             commandDetailType = this.commandDetailType
         )
+        if(this.subCommand.subCommandDefinition == MeetingSubCommandDefinition.LIST)
+            this.addNewEvent(commandEvent = this.getListCommand())
+
         this.addNewEvent(commandEvent = event)
         return CommandOutput.success(payload = event.payload)
     }
+
+    private fun getListCommand() = GetMeetingListEvent(
+        idempotencyKey = this.commandBasicInfo.idempotencyKey,
+        payload = GetMeetingEventPayload(
+            slackEventModifier = this.slackEventBuilder::getMeetingListFormRequest
+        )
+    )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
         val participants = this.getParticipants(

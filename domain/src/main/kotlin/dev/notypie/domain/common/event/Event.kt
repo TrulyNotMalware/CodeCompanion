@@ -1,5 +1,9 @@
 package dev.notypie.domain.common.event
 
+import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.CommandType
+import java.time.LocalDateTime
 import java.util.UUID
 
 interface EventPayload {
@@ -17,23 +21,25 @@ interface CommandEvent<out T: EventPayload>{
 abstract class MeetingPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val meetingId: UUID,
-    val publisherId: String
+    val publisherId: String,
 ): EventPayload
 
-class GetMeetingEventPayload(
-    //조회 기간
+class GetMeetingEventPayload( //FIXME slackEventModifier
+    val slackEventModifier: (commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType) -> SendSlackMessageEvent,
+    val startDate: LocalDateTime = LocalDateTime.now(),
+    val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L)
 ): MeetingPayload(
     eventId = UUID.randomUUID(),
     meetingId = UUID.randomUUID(),
-    publisherId = ""
+    publisherId = "",
 )
 
-data class SelectMeetingListEvent(
+data class GetMeetingListEvent(
     override val idempotencyKey: UUID,
     override val timestamp: Long = System.currentTimeMillis(),
     override val isInternal: Boolean = true,
     override val destination: String = "",
-    override val payload: MeetingPayload,
+    override val payload: GetMeetingEventPayload,
 ): CommandEvent<MeetingPayload>
 
 data class SendSlackMessageEvent(
