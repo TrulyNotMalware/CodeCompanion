@@ -48,7 +48,7 @@ class SlackRequestBuilderConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(SlackEventBuilder::class)
-    fun slackRequestBuilder(slackTemplateBuilder: SlackTemplateBuilder,
+    fun slackEventBuilder(slackTemplateBuilder: SlackTemplateBuilder,
                             applicationEventPublisher: ApplicationEventPublisher,
                             slackMessageDispatcher: MessageDispatcher): SlackEventBuilder = SlackApiEventConstructor(
         botToken = appConfig.api.token, templateBuilder = slackTemplateBuilder,

@@ -22,7 +22,7 @@ class ModalBlockBuilder(
      * @param text The text content of the headline.
      * @return A `HeaderBlock` object representing the header block with the specified headline.
      */
-    fun headerBlock(text: String ): HeaderBlock = header{
+    fun headerBlock(text: String ): HeaderBlock = header {
         it.text(this.modalElementBuilder.plainTextObject( text = text ))
     }
 

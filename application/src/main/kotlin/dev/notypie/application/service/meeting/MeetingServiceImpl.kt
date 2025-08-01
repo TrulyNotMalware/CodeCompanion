@@ -29,7 +29,7 @@ class MeetingServiceImpl(
     override fun handleMeeting(headers: MultiValueMap<String, String>,
                                payload: SlashCommandRequestBody, slackCommandData: SlackCommandData) {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
-        val command: Command = RequestMeetingCommand(
+        val command = RequestMeetingCommand(
             commandData = slackCommandData, idempotencyKey = idempotencyKey,
             slackEventBuilder = this.slackEventBuilder, eventPublisher = this.eventPublisher
         )

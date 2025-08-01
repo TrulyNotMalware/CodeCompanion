@@ -51,7 +51,7 @@ abstract class Command(
     private fun publishEvents() = this.eventPublisher.publishEvent(events = this.events)
 
 
-    internal fun executeCommand(): CommandOutput{
+    internal fun executeCommand(): CommandOutput {
         val subCommand = this.createSubCommand()
         val context = this.parseContext(subCommand = subCommand)
         return if( commandData.slackCommandType == SlackCommandType.INTERACTION_RESPONSE )

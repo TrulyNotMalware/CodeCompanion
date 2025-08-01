@@ -112,6 +112,14 @@ class SlackApiEventConstructor(
             commandType = commandType, layout = layout, replaceOriginal = false)
     }
 
+    override fun getMeetingListFormRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandType: CommandType,
+        commandDetailType: CommandDetailType
+    ): SendSlackMessageEvent {
+        TODO() //FIXME
+    }
+
     override fun replaceOriginalText(
         markdownText: String,
         responseUrl: String,
