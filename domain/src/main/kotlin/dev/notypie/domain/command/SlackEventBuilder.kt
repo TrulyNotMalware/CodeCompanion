@@ -18,7 +18,10 @@ interface SlackEventBuilder {
     fun simpleApplyRejectRequest(commandDetailType: CommandDetailType, commandBasicInfo: CommandBasicInfo, approvalContents: ApprovalContents, commandType: CommandType, targetUserId: String? = null): SendSlackMessageEvent
     fun simpleApprovalFormRequest(commandDetailType: CommandDetailType, headLineText: String, commandBasicInfo: CommandBasicInfo,
                                   selectionFields: List<SelectionContents>, commandType: CommandType, reasonInput: TextInputContents? = null, approvalContents: ApprovalContents? = null): SendSlackMessageEvent
+
+    //Meeting
     fun requestMeetingFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType, approvalContents: ApprovalContents? = null): SendSlackMessageEvent
+    fun getMeetingListFormRequest(commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SendSlackMessageEvent
 
     //Replace message
     fun replaceOriginalText(markdownText: String, responseUrl: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SendSlackMessageEvent

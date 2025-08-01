@@ -113,6 +113,10 @@ class ModalTemplateBuilder(
         return this.toLayoutBlocks(*blocks.toTypedArray(), states = states)
     }
 
+    override fun meetingListFormTemplate(): LayoutBlocks {
+        TODO()
+    }
+
     override fun requestMeetingFormTemplate(
         approvalContents: ApprovalContents
     ): LayoutBlocks
