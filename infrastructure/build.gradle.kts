@@ -24,6 +24,8 @@ dependencies {
     runtimeOnly("com.h2database:h2")
     //MariaDB
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
+    //MCP Server
+    api("org.springframework.ai:spring-ai-starter-mcp-server-webmvc:1.0.1")
 }
 
 allOpen {

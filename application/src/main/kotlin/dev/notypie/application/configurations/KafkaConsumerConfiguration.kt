@@ -54,7 +54,7 @@ class KafkaConsumerConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)
-    fun concurrentKafkaListenerContainerFactory(kafkaProperties: KafkaProperties) =
+    fun concurrentKafkaListenerContainerFactory() =
         ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
             consumerFactory = consumerFactory()
             containerProperties.isObservationEnabled = true
