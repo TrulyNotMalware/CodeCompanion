@@ -6,6 +6,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  ai:
+    mcp:
+      server:
+        enabled: true
+        sse-endpoint: /mcp
 
   datasource:
     driver-class-name: org.mariadb.jdbc.Driver
