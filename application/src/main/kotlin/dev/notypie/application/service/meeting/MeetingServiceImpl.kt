@@ -1,6 +1,7 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.IdempotencyCreator
+import dev.notypie.application.controllers.dto.GetMeetupListRequestDto
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
@@ -34,6 +35,11 @@ class MeetingServiceImpl(
             slackEventBuilder = this.slackEventBuilder, eventPublisher = this.eventPublisher
         )
         val result = command.handleEvent()
+    }
+
+    override fun getMyMeetingList(meetingRequestDto: GetMeetupListRequestDto) {
+        val meetings = this.meetingRepository.getAllMeetingByUserId(userId = meetingRequestDto.userId)
+
     }
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
