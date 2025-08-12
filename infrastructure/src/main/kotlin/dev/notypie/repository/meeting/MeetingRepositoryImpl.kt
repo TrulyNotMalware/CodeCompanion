@@ -16,6 +16,10 @@ open class MeetingRepositoryImpl(
         TODO("Not yet implemented")
     }
 
+    override fun getAllMeetingByUserId(userId: String): List<MeetingSchema>
+    = this.jpaMeetingRepository.findAllMeetingByUserId(userId=userId)
+
+
     override fun getParticipants(meetingId: Long): List<String> {
         TODO("Not yet implemented")
     }

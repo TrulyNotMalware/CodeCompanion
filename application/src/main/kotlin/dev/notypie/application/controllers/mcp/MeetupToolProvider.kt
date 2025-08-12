@@ -13,8 +13,8 @@ class MeetupToolProvider(
         description = "Fetches meetup lists assigned to the user."
     )
     fun getMyMeetupList(
-        @ToolParam(description = "User id", required = true) requestDto: GetMeetupListRequestDto
+        @ToolParam(description = "Meeting request dto", required = true) requestDto: GetMeetupListRequestDto
     ){
-        TODO()
+        this.meetingService.getMyMeetingList(meetingRequestDto = requestDto)
     }
 }
