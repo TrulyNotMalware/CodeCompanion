@@ -19,6 +19,9 @@ class MeetingSchema(
     @field:Column(name = "idempotency_key", unique = true, nullable = false)
     val idempotencyKey: UUID,
 
+    @field:Column(name = "name", nullable = false)
+    val name: String,
+
     @field:Column(name = "start_at", nullable = false)
     val startAt: LocalDateTime,
 
@@ -59,6 +62,7 @@ fun RequestMeetingContextResult.newMeeting(
         isCanceled = isCanceled,
         publisherId = this.publisherId,
         channel = this.channel,
+        name = this.name
     )
     val participants = this.participants.map {
         ParticipantsSchema(

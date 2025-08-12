@@ -5,7 +5,6 @@ import dev.notypie.application.controllers.dto.GetMeetupListRequestDto
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
-import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContextResult
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.common.event.EventPublisher
