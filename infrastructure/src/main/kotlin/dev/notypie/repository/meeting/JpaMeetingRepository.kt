@@ -19,4 +19,13 @@ interface JpaMeetingRepository: JpaRepository<MeetingSchema, Long> {
     fun findMeetingWithParticipants(
         @Param("meetingId") meetingId: Long,
     ): MeetingSchema?
+
+    @Query("""
+        SELECT DISTINCT m
+        FROM meetings m
+        JOIN FETCH m.participants p
+        WHERE m.publisherId = :userId
+        OR p.userId = :userId
+    """)
+    fun findAllMeetingByUserId(userId: String): List<MeetingSchema>
 }
