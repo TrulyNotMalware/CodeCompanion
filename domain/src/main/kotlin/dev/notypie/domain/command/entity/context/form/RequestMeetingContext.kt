@@ -77,21 +77,24 @@ internal class RequestMeetingContext(
                 return this.createErrorResponse(
                     errMessage = "Failed to send notice. Please try again later",
                     results = this.interactionResults(
-                        status = Status.FAILED, participants = participants, startAt = startAt)
+                        status = Status.FAILED, participants = participants,
+                        name = title, startAt = startAt)
                 )
         }
         return this.interactionSuccessResponse(
             responseUrl = interactionPayload.responseUrl,
             results = this.interactionResults(
-                status = Status.SUCCESS, participants = participants, startAt = startAt
+                status = Status.SUCCESS, name = title,
+                participants = participants, startAt = startAt
             )
         )
     }
 
-    private fun interactionResults(status: Status, participants: Set<String>, startAt: LocalDateTime) =
+    private fun interactionResults(status: Status, name: String,
+                                   participants: Set<String>, startAt: LocalDateTime) =
         RequestMeetingContextResult(
             ok = true, status = status, commandBasicInfo = this.commandBasicInfo,
-            participants = participants, startAt = startAt
+            participants = participants, startAt = startAt, name = name
         )
 
     private fun getParticipants(states: List<States>, publisher: String): Set<String> =
@@ -119,10 +122,10 @@ internal class RequestMeetingContext(
     private fun getTitleAndReason(interactionPayload: InteractionPayload): Pair<String, String> =
         interactionPayload.states.filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
             .takeIf { it.size >= 2 }?.let {
-                val title = it[0].selectedValue.ifBlank { "Request Meeting" }
+                val title = it[0].selectedValue.ifBlank { "New Meeting" }
                 val reason = it[1].selectedValue.ifBlank { "request meeting" }
                 title to reason
-            } ?: ("Request Meeting" to "request meeting")
+            } ?: ("New Meeting" to "request meeting")
 
 
     private fun isFutureTime(dateString: String, timeString: String): Boolean{
@@ -160,7 +163,8 @@ data class RequestMeetingContextResult(
     override val status: Status,
     val commandBasicInfo: CommandBasicInfo,
     val participants: Set<String> = emptySet(),
-    val startAt: LocalDateTime
+    val startAt: LocalDateTime,
+    val name: String
 ): CommandOutput(
     ok = ok,
     status = status,
