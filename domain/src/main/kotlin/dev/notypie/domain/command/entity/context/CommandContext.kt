@@ -22,8 +22,8 @@ internal abstract class CommandContext(
     val subCommand: SubCommand = SubCommand(subCommandDefinition = NoSubCommands()),
     val events: EventQueue<CommandEvent<EventPayload>>
 ) {
-    val commandType: CommandType = this.parseCommandType()
-    val commandDetailType: CommandDetailType = this.parseCommandDetailType()
+    val commandType: CommandType by lazy { this.parseCommandType() }
+    val commandDetailType: CommandDetailType by lazy { this.parseCommandDetailType() }
 
     internal abstract fun parseCommandType(): CommandType
     internal abstract fun parseCommandDetailType(): CommandDetailType

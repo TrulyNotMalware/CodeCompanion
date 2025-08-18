@@ -24,18 +24,14 @@ abstract class Command(
 ) {
     internal val events: EventQueue<CommandEvent<EventPayload>> = DefaultEventQueue()
 
-    val commandId = this.generateIdValue()
+    val commandId: UUID = UUID.randomUUID()
     internal abstract fun parseContext(subCommand: SubCommand): CommandContext
     internal abstract fun findSubCommandDefinition(): SubCommandDefinition
 
-    private fun createSubCommand(): SubCommand {
-        val definition = this.findSubCommandDefinition()
-        val options = this.commandData.subCommands.drop(1)
-        return SubCommand(
-            subCommandDefinition = definition,
-            options = options
-        )
-    }
+    private fun createSubCommand() = SubCommand(
+        subCommandDefinition = this.findSubCommandDefinition(),
+        options = this.commandData.subCommands.drop(1)
+    )
 
 
     fun handleEvent() = runCatching { executeCommand() }
@@ -58,6 +54,4 @@ abstract class Command(
             context.handleInteraction(this.commandData.body as InteractionPayload)
         else context.runCommand()
     }
-
-    private fun generateIdValue(): UUID = UUID.randomUUID()
 }

@@ -57,7 +57,6 @@ class ModalTemplateBuilder(
         val buttonLayout = this.modalBlockBuilder.approvalBlock(approvalContents = approvalContents)
         val user = this.restRequester.get(uri = "users.profile.get?user=${approvalContents.publisherId}",
             authorizationHeader = this.slackApiToken, responseType = SlackUserProfileDto::class.java)
-            .body ?: throw IllegalArgumentException("User profile is not found.")
         return this.toLayoutBlocks(
             this.modalBlockBuilder.headerBlock(text = headLineText),
             this.modalBlockBuilder.dividerBlock(),
