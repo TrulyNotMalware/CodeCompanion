@@ -27,15 +27,6 @@ class RetryService(
         }
     }
 
-    private fun configureRetryTemplate(
-        maxAttempts: Int,
-        exceptions: List<Class<out Throwable>>,
-        interval: Long
-    ): RetryTemplate = this.retryTemplate.apply {
-        setBackOffPolicy(createExponentialBackOffPolicy(interval))
-        setRetryPolicy(createRetryPolicy(maxAttempts, exceptions))
-    }
-
     private fun createExponentialBackOffPolicy(interval: Long) =
         ExponentialBackOffPolicy().apply {
             initialInterval = 300L

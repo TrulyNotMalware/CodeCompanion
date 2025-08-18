@@ -19,27 +19,26 @@ class DefaultEventQueue<T: CommandEvent<EventPayload>>(
     private val eventQueue: ArrayDeque<T> = ArrayDeque(),
 ): EventQueue<T> {
     //Cache
-    private var hasExternalEvent: Boolean = false
+    private var externalEventCount: Int = 0
 
     override fun iterator(): Iterator<T> = this.eventQueue.iterator()
 
     override fun offer(event: T){
-        this.eventQueue.addLast(element = event)
-        if( !event.isInternal ) hasExternalEvent = true
+        eventQueue.addLast(event)
+        if (!event.isInternal) externalEventCount++
     }
 
     override fun poll(): T?{
-        val polled = this.eventQueue.removeFirstOrNull()
-        if( polled != null && !polled.isInternal )
-            hasExternalEvent = eventQueue.any { !it.isInternal }
+        val polled = eventQueue.removeFirstOrNull()
+        if (polled != null && !polled.isInternal) externalEventCount--
         return polled
     }
+
+    override fun containsExternalEvent(): Boolean = externalEventCount > 0
 
     override fun peek(): T? = this.eventQueue.firstOrNull()
 
     override fun isEmpty(): Boolean = this.eventQueue.isEmpty()
-
-    override fun containsExternalEvent(): Boolean = this.hasExternalEvent
 
     override fun snapshot(): List<T> = this.eventQueue.toList()
 
