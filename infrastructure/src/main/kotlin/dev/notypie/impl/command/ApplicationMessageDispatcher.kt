@@ -29,8 +29,6 @@ import org.springframework.context.event.EventListener
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import java.time.Instant
 
-private val logger = KotlinLogging.logger {  }
-
 class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,

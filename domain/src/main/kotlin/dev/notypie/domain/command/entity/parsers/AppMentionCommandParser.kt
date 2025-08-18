@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.mention.PlainText
 import dev.notypie.domain.command.dto.mention.TextObject
+import dev.notypie.domain.command.dto.mention.extractText
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
@@ -34,15 +35,11 @@ internal class AppMentionCommandParser(
 
         const val COMMAND_DELIMITER = " "
     }
-    private val slackAppMentionRequestData: SlackEventCallBackRequest
-    private val botId: String
-    private val parsedContext: CommandContext
-
-    init{
-        this.slackAppMentionRequestData = this.slackCommandData.body as SlackEventCallBackRequest
-        this.botId = slackAppMentionRequestData.authorizations.find { it.isBot }?.userId ?: ""
-        this.parsedContext = this.parseContext(idempotencyKey = idempotencyKey)
-    }
+    private val slackAppMentionRequestData: SlackEventCallBackRequest by lazy {
+        slackCommandData.body as? SlackEventCallBackRequest
+            ?: throw IllegalArgumentException("Invalid body type for AppMention") }
+    private val botId: String by lazy { slackAppMentionRequestData.authorizations.find { it.isBot }?.userId ?: "" }
+    private val parsedContext: CommandContext by lazy { parseContext(idempotencyKey = idempotencyKey) }
 
     override fun parseContext(idempotencyKey: UUID): CommandContext =
         this.slackAppMentionRequestData.event.blocks
@@ -67,14 +64,9 @@ internal class AppMentionCommandParser(
             ?.forEach { element ->
                 when (element.type) {
                     ELEMENT_TYPE_USER -> if (element.userId != this.botId) userQueue.offer(element.userId)
-                    ELEMENT_TYPE_TEXT -> {
-                        val text = when( val textValue = element.text ) {
-                            is PlainText -> textValue.value
-                            is TextObject -> textValue.text
-                            else -> null
-                        }
-                        text?.split(COMMAND_DELIMITER)?.forEach { if(it.isNotBlank()) commandQueue.offer(it) }
-                    }
+                    ELEMENT_TYPE_TEXT -> element.extractText()?.split(COMMAND_DELIMITER)
+                            ?.filter{ it.isNotBlank() }
+                            ?.forEach { commandQueue.offer(it) }
                 }
             }
         this.verifyCommandQueue(commandQueue = commandQueue)

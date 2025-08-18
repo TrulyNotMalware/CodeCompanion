@@ -35,6 +35,12 @@ data class Element(
     val elements: List<Element> = listOf()
 )
 
+fun Element.extractText(): String? = when(val textVal = this.text){
+    is PlainText -> textVal.value
+    is TextObject -> textVal.text
+    else -> null
+}
+
 @JsonDeserialize(using = TextValueDeserializer::class)
 sealed class TextElement
 
