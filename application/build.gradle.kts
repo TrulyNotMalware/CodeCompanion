@@ -13,6 +13,8 @@ dependencies {
     //AOP
     implementation("org.springframework.boot:spring-boot-starter-aop")
 
+    //rest docs
+    testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
 }
 
