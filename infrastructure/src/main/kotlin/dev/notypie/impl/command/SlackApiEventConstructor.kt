@@ -7,7 +7,6 @@ import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
 import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
-import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.common.event.ActionEventPayloadContents
 import dev.notypie.domain.common.event.MessageType
@@ -19,6 +18,7 @@ import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.command.toMessageTypeByTargetUser
 import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
@@ -28,7 +28,6 @@ import java.util.UUID
 class SlackApiEventConstructor(
     private val botToken: String,
     private val templateBuilder: SlackTemplateBuilder,
-    private val messageDispatcher: MessageDispatcher
 ): SlackEventBuilder {
 
     private val slackConfig = Slack.getInstance().config
@@ -136,7 +135,7 @@ class SlackApiEventConstructor(
     private fun buildMessage(commandBasicInfo: CommandBasicInfo, commandDetailType: CommandDetailType,
                              commandType: CommandType, layout: LayoutBlocks, replaceOriginal: Boolean,
                              targetUserId: String? = null): SendSlackMessageEvent {
-        val messageType = if(targetUserId == null) MessageType.CHANNEL_ALERT else MessageType.DIRECT_MESSAGE
+        val messageType = toMessageTypeByTargetUser(targetUserId = targetUserId)
         val payload = this.toEventContents(commandBasicInfo = commandBasicInfo, commandDetailType = commandDetailType,
             replaceOriginal = replaceOriginal,
             body = this.extractBodyData(
@@ -149,8 +148,8 @@ class SlackApiEventConstructor(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             payload = payload,
             destination = "",
-            timestamp = 1L,
-            eventType = messageType
+            timestamp = System.currentTimeMillis(),
+            name = commandDetailType.toString() + commandType.toString()
         )
     }
 
@@ -171,8 +170,8 @@ class SlackApiEventConstructor(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             payload = payload,
             destination = "",
-            timestamp = 1L,
-            eventType = MessageType.EPHEMERAL_MESSAGE
+            timestamp = System.currentTimeMillis(),
+            name = commandDetailType.toString() + commandType.toString()
         )
     }
 
@@ -190,8 +189,8 @@ class SlackApiEventConstructor(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             payload = payload,
             destination = "",
-            timestamp = 1L,
-            eventType = MessageType.ACTION_RESPONSE
+            timestamp = System.currentTimeMillis(),
+            name = commandDetailType.toString() + commandType.toString()
         )
     }
 

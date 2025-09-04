@@ -8,6 +8,7 @@ import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.common.event.MessageType
 import dev.notypie.domain.common.event.SendSlackMessageEvent
 
 interface SlackEventBuilder {
@@ -26,3 +27,6 @@ interface SlackEventBuilder {
     //Replace message
     fun replaceOriginalText(markdownText: String, responseUrl: String, commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType): SendSlackMessageEvent
 }
+
+fun toMessageTypeByTargetUser(targetUserId: String?): MessageType =
+    if (targetUserId.isNullOrBlank()) MessageType.CHANNEL_ALERT else MessageType.DIRECT_MESSAGE

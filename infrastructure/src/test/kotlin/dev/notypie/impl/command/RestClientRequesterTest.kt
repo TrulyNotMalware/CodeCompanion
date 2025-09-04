@@ -1,15 +1,15 @@
 package dev.notypie.impl.command
 
-import dev.notypie.impl.command.dto.PostDomainCreateRequestBody
-import dev.notypie.impl.command.dto.PostDomainResponse
-import dev.notypie.impl.command.dto.PostDomainUpdateRequestBody
+import dev.notypie.dto.PostDomainCreateRequestBody
+import dev.notypie.dto.PostDomainResponse
+import dev.notypie.dto.PostDomainUpdateRequestBody
 import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.web.client.HttpClientErrorException
+import org.springframework.web.client.RestClientException
 
 class RestClientRequesterTest: BehaviorSpec({
     val restRequester: RestRequester = RestClientRequester(
@@ -21,8 +21,10 @@ class RestClientRequesterTest: BehaviorSpec({
     given("Rest API Requester"){
         `when`("get request"){
             then("successfully works"){
-                val response = restRequester.get(uri = "/1", authorizationHeader = null, responseType = PostDomainResponse::class.java)
-                val responseList = restRequester.get(uri = "", authorizationHeader = null, responseType = List::class.java)
+                val response = restRequester.safeGet(uri = "/1", authorizationHeader = null, responseType = PostDomainResponse::class.java)
+                    .getOrThrow()
+                val responseList = restRequester.safeGet(uri = "", authorizationHeader = null, responseType = Array<PostDomainResponse>::class.java)
+                    .getOrThrow()
                 response.statusCode shouldBe HttpStatus.OK
                 response.body shouldNotBe null
 
@@ -35,7 +37,8 @@ class RestClientRequesterTest: BehaviorSpec({
 
         `when`("post request"){
             then("successfully works"){
-                val response = restRequester.post(uri = "", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = createRequestBody, responseType = PostDomainResponse::class.java)
+                val response = restRequester.safePost(uri = "", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = createRequestBody, responseType = PostDomainResponse::class.java)
+                    .getOrThrow()
                 response.statusCode shouldBe HttpStatus.CREATED
                 response.body?.apply {
                     userId shouldBe createRequestBody.userId
@@ -44,7 +47,7 @@ class RestClientRequesterTest: BehaviorSpec({
             }
 
             then("throws exceptions when uri is invalid"){
-                shouldThrowExactly<HttpClientErrorException.NotFound> {
+                shouldThrowExactly<RestClientException> {
                     restRequester.post(uri = "/1" , authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = createRequestBody, responseType = PostDomainResponse::class.java)
                 }
             }
@@ -52,8 +55,10 @@ class RestClientRequesterTest: BehaviorSpec({
 
         `when`("update request"){
             then("successfully works"){
-                val putRequest = restRequester.put(uri = "/1", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = updateRequestBody, responseType = PostDomainResponse::class.java)
-                val patchResponse = restRequester.patch(uri = "/1", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = updateRequestBody, responseType = PostDomainResponse::class.java)
+                val putRequest = restRequester.safePut(uri = "/1", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = updateRequestBody, responseType = PostDomainResponse::class.java)
+                    .getOrThrow()
+                val patchResponse = restRequester.safePatch(uri = "/1", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = updateRequestBody, responseType = PostDomainResponse::class.java)
+                    .getOrThrow()
 
                 with (putRequest) {
                     statusCode shouldBe HttpStatus.OK
@@ -81,7 +86,8 @@ class RestClientRequesterTest: BehaviorSpec({
 
         `when`("delete request"){
             then("successfully works"){
-                val response = restRequester.delete(uri = "/1", authorizationHeader = null, responseType = Void::class.java)
+                val response = restRequester.safeDelete(uri = "/1", authorizationHeader = null, responseType = Void::class.java)
+                    .getOrThrow()
                 response.statusCode shouldBe HttpStatus.OK
                 response.body shouldBe null
             }
