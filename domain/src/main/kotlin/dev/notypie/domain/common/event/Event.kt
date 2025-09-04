@@ -12,6 +12,7 @@ interface EventPayload {
 
 interface CommandEvent<out T: EventPayload>{
     val idempotencyKey: UUID
+    val name: String
     val payload: T
     val destination: String
     val isInternal: Boolean
@@ -36,6 +37,7 @@ class GetMeetingEventPayload( //FIXME slackEventModifier
 
 data class GetMeetingListEvent(
     override val idempotencyKey: UUID,
+    override val name: String = GetMeetingListEvent::class.java.simpleName,
     override val timestamp: Long = System.currentTimeMillis(),
     override val isInternal: Boolean = true,
     override val destination: String = "",
@@ -44,9 +46,9 @@ data class GetMeetingListEvent(
 
 data class SendSlackMessageEvent(
     override val idempotencyKey: UUID,
+    override val name: String = SendSlackMessageEvent::class.java.simpleName,
     override val payload: SlackEventPayload,
     override val isInternal: Boolean = true,
     override val destination: String,
-    override val timestamp: Long,
-    val eventType: MessageType
+    override val timestamp: Long
 ): CommandEvent<SlackEventPayload>

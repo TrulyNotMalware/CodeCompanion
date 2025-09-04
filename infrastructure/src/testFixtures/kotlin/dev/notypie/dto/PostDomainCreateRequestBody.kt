@@ -1,4 +1,4 @@
-package dev.notypie.impl.command.dto
+package dev.notypie.dto
 
 data class PostDomainCreateRequestBody(
     val title: String,

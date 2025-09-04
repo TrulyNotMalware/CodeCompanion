@@ -12,7 +12,7 @@ data class TestCommandEvent(
     override val destination: String = "",
     override val isInternal: Boolean = true,
     override val timestamp: Long = System.currentTimeMillis(),
-    val name: String
+    override val name: String
 ): CommandEvent<TestPayload>
 
 const val INTERNAL_EVENT_NAME="I_AM_INTERNAL_EVENT"
@@ -23,4 +23,10 @@ fun createInternalTestEvent(name: String = INTERNAL_EVENT_NAME) =
 fun createExternalTestEvent(name: String = EXTERNAL_EVENT_NAME) =
     TestCommandEvent(isInternal = false, name = EXTERNAL_EVENT_NAME)
 
-fun createDomainEventQueue(): EventQueue<TestCommandEvent> = DefaultEventQueue()
+fun createDomainEventQueue(): EventQueue<CommandEvent<EventPayload>> = DefaultEventQueue()
+
+fun EventQueue<CommandEvent<EventPayload>>.flushQueue() {
+    while (this.poll() != null) {
+        // keep polling until queue is empty
+    }
+}

@@ -24,7 +24,7 @@ class SlackInteractionRequestParser
         val timestampDouble = unixTimeStamp.toDouble()
         val team = Team(domain = blockActionPayload.team.domain, id = blockActionPayload.team.id)
         val user = User(id = blockActionPayload.user.id, name = blockActionPayload.user.name,
-            teamId = blockActionPayload.user.teamId, username = blockActionPayload.user.username)
+            teamId = blockActionPayload.user.teamId, userName = blockActionPayload.user.username)
 
         val seconds = timestampDouble.toLong()
         val nanos = ((timestampDouble - seconds) * 1_000_000_000).toInt()
