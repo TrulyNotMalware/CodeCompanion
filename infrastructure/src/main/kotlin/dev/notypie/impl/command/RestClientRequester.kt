@@ -125,7 +125,10 @@ class RestClientRequester(
         }
     }
 
-    private fun validateUri( uri: String ) = require(uri.isNotBlank()) { "Uri cannot be blank." }
+    private fun validateUri(uri: String) =
+        require(!(baseUrl.isBlank() && uri.isBlank())) {
+            "Both baseUrl and uri cannot be blank."
+        }
 }
 
 fun <T> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request"): T =

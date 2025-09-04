@@ -42,6 +42,7 @@ class EventQueueTest: BehaviorSpec(body={
 
             then("the first event should be removed and size decreases"){
                 first shouldNotBe null
+                first?.javaClass shouldBe TestCommandEvent::class.java
                 first?.name shouldBe INTERNAL_EVENT_NAME
                 eventQueue.size shouldBe 1
             }

@@ -38,6 +38,12 @@ internal class RequestMeetingContext(
     events = events,
     subCommand = subCommand
 ){
+    companion object {
+        private const val DATE_PATTERN = "yyyy-MM-dd"
+        private const val SIMPLE_TIME_PATTERN = "HH:mm"
+        private const val DEFAULT_MEETING_TITLE = "New Meeting"
+        private const val DEFAULT_MEETING_REASON = "request meeting"
+    }
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
 
@@ -49,8 +55,7 @@ internal class RequestMeetingContext(
         )
         if(this.subCommand.subCommandDefinition == MeetingSubCommandDefinition.LIST)
             this.addNewEvent(commandEvent = this.getListCommand())
-
-        this.addNewEvent(commandEvent = event)
+        else this.addNewEvent(commandEvent = event)
         return CommandOutput.success(payload = event.payload)
     }
 
@@ -62,32 +67,49 @@ internal class RequestMeetingContext(
     )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
-        val participants = this.getParticipants(
-            states = interactionPayload.states, publisher = interactionPayload.user.id
-        ).ifEmpty { return this.createErrorResponse(errMessage = "Select participants") }
-        val startAt = this.getDateTimeOrNull(interactionPayload = interactionPayload)
-            ?: return this.createErrorResponse(errMessage = "Make sure to choose a time in the *future* rather than now.")
-        if( !interactionPayload.isCompleted() )
-            return this.createErrorResponse(errMessage = "Please select *all options.*")
-        val (title, reason) = getTitleAndReason(interactionPayload = interactionPayload)
+        val meetingRequest = validateAndExtractMeetingRequest(interactionPayload)
+            ?: return createValidationErrorResponse(interactionPayload)
+
         // send notice
-        if(isNoticeRequired(interactionPayload = interactionPayload)){
-            val sendNoticeResults = sendNotice(participants = participants, title = title, reason = reason)
-            if(sendNoticeResults.status != Status.SUCCESS)
+        if(isNoticeRequired(interactionPayload = interactionPayload)
+            && !sendNotice(meetingRequest = meetingRequest))
                 return this.createErrorResponse(
                     errMessage = "Failed to send notice. Please try again later",
                     results = this.interactionResults(
-                        status = Status.FAILED, participants = participants,
-                        name = title, startAt = startAt)
+                        status = Status.FAILED, participants = meetingRequest.participants,
+                        name = meetingRequest.title, startAt = meetingRequest.startAt)
                 )
-        }
+
         return this.interactionSuccessResponse(
             responseUrl = interactionPayload.responseUrl,
             results = this.interactionResults(
-                status = Status.SUCCESS, name = title,
-                participants = participants, startAt = startAt
+                status = Status.SUCCESS, name = meetingRequest.title,
+                participants = meetingRequest.participants, startAt = meetingRequest.startAt
             )
         )
+    }
+
+    private fun createValidationErrorResponse(payload: InteractionPayload): CommandOutput {
+        val errorMessage = when {
+            getParticipants(states = payload.states, publisher = payload.user.id).isEmpty() -> "Select participants"
+            getDateTimeOrNull(interactionPayload = payload) == null -> "Make sure to choose a time in the *future* rather than now."
+            !payload.isCompleted() -> "Please select *all options.*"
+            else -> "Unknown error occurred. Please try again later."
+        }
+        return this.createErrorResponse(errMessage=errorMessage)
+    }
+
+    private fun validateAndExtractMeetingRequest(payload: InteractionPayload): MeetingRequest? {
+        val participants = getParticipants(states = payload.states, publisher = payload.user.id)
+        val startAt = getDateTimeOrNull(interactionPayload = payload)
+        val (title, reason) = getTitleAndReason(interactionPayload = payload)
+
+        return when {
+            participants.isEmpty() -> null
+            startAt == null -> null
+            !payload.isCompleted() -> null
+            else -> MeetingRequest(participants, startAt, title, reason, payload.user.id)
+        }
     }
 
     private fun interactionResults(status: Status, name: String,
@@ -122,15 +144,15 @@ internal class RequestMeetingContext(
     private fun getTitleAndReason(interactionPayload: InteractionPayload): Pair<String, String> =
         interactionPayload.states.filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
             .takeIf { it.size >= 2 }?.let {
-                val title = it[0].selectedValue.ifBlank { "New Meeting" }
-                val reason = it[1].selectedValue.ifBlank { "request meeting" }
+                val title = it[0].selectedValue.ifBlank { DEFAULT_MEETING_TITLE }
+                val reason = it[1].selectedValue.ifBlank { DEFAULT_MEETING_REASON }
                 title to reason
-            } ?: ("New Meeting" to "request meeting")
+            } ?: (DEFAULT_MEETING_TITLE to DEFAULT_MEETING_REASON)
 
 
     private fun isFutureTime(dateString: String, timeString: String): Boolean{
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        val dateFormatter = DateTimeFormatter.ofPattern(DATE_PATTERN)
+        val timeFormatter = DateTimeFormatter.ofPattern(SIMPLE_TIME_PATTERN)
 
         val date = LocalDate.parse(dateString, dateFormatter)
         val time = LocalTime.parse(timeString, timeFormatter)
@@ -142,21 +164,31 @@ internal class RequestMeetingContext(
             .firstOrNull { it.type == ActionElementTypes.CHECKBOX }
             ?.isSelected ?: false
 
-    private fun sendNotice(participants: Set<String>, title: String, reason: String): CommandOutput =
+    private fun sendNotice(meetingRequest: MeetingRequest): Boolean =
         ApprovalCallbackContext(
-            slackEventBuilder = this.slackEventBuilder, participants = participants,
+            slackEventBuilder = this.slackEventBuilder, participants = meetingRequest.participants,
             commandBasicInfo = this.commandBasicInfo,
             approvalContents = ApprovalContents(
-                headLineText = "Meeting Request!", reason = reason, subTitle = title,
+                headLineText = "Meeting Request!", reason = meetingRequest.reason,
+                subTitle = meetingRequest.title,
                 idempotencyKey = this.commandBasicInfo.idempotencyKey,
                 publisherId = this.commandBasicInfo.publisherId,
                 commandDetailType = CommandDetailType.NOTICE_FORM,
             ),
             events = this.events
         ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
+            .status == Status.SUCCESS
 
 
 }
+
+private data class MeetingRequest(
+    val participants: Set<String>,
+    val startAt: LocalDateTime,
+    val title: String,
+    val reason: String,
+    val publisherId: String
+)
 
 data class RequestMeetingContextResult(
     override val ok: Boolean,

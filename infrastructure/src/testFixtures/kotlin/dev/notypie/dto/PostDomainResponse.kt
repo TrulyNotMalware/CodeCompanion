@@ -1,4 +1,4 @@
-package dev.notypie.impl.command.dto
+package dev.notypie.dto
 
 // Reference from https://jsonplaceholder.typicode.com/posts
 data class PostDomainResponse(
