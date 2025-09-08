@@ -22,11 +22,13 @@ enum class CommandType {
 enum class CommandDetailType {
     NOTHING,
     SIMPLE_TEXT,
+    REPLACE_TEXT,
     ERROR_RESPONSE,
     APPROVAL_FORM,
     REQUEST_APPLY_FORM,
 
     REQUEST_MEETING_FORM,
+    GET_MEETING_LIST,
     MEETING_APPROVAL_NOTICE_FORM,
     NOTICE_FORM;
 

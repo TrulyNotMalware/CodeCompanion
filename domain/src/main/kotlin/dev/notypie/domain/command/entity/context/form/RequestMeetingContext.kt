@@ -39,10 +39,10 @@ internal class RequestMeetingContext(
     subCommand = subCommand
 ){
     companion object {
-        private const val DATE_PATTERN = "yyyy-MM-dd"
-        private const val SIMPLE_TIME_PATTERN = "HH:mm"
-        private const val DEFAULT_MEETING_TITLE = "New Meeting"
-        private const val DEFAULT_MEETING_REASON = "request meeting"
+        internal const val DATE_PATTERN = "yyyy-MM-dd"
+        internal const val SIMPLE_TIME_PATTERN = "HH:mm"
+        internal const val DEFAULT_MEETING_TITLE = "New Meeting"
+        internal const val DEFAULT_MEETING_REASON = "request meeting"
     }
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
@@ -63,7 +63,8 @@ internal class RequestMeetingContext(
         idempotencyKey = this.commandBasicInfo.idempotencyKey,
         payload = GetMeetingEventPayload(
             slackEventModifier = this.slackEventBuilder::getMeetingListFormRequest
-        )
+        ),
+        type = CommandDetailType.GET_MEETING_LIST
     )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
@@ -137,7 +138,7 @@ internal class RequestMeetingContext(
             .firstOrNull { it.type == ActionElementTypes.DATE_PICKER }
             ?.selectedValue
         return if (timeString != null && dateString != null && isFutureTime(dateString, timeString))
-                LocalDateTime.parse("$dateString $timeString", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                LocalDateTime.parse("$dateString $timeString", DateTimeFormatter.ofPattern("$DATE_PATTERN $SIMPLE_TIME_PATTERN"))
             else null
     }
 
