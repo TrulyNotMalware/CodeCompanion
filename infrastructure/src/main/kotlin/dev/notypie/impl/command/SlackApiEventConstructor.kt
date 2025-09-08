@@ -149,7 +149,7 @@ class SlackApiEventConstructor(
             payload = payload,
             destination = "",
             timestamp = System.currentTimeMillis(),
-            name = commandDetailType.toString() + commandType.toString()
+            type = commandDetailType
         )
     }
 
@@ -171,7 +171,7 @@ class SlackApiEventConstructor(
             payload = payload,
             destination = "",
             timestamp = System.currentTimeMillis(),
-            name = commandDetailType.toString() + commandType.toString()
+            type = commandDetailType
         )
     }
 
@@ -190,7 +190,7 @@ class SlackApiEventConstructor(
             payload = payload,
             destination = "",
             timestamp = System.currentTimeMillis(),
-            name = commandDetailType.toString() + commandType.toString()
+            type = commandDetailType
         )
     }
 

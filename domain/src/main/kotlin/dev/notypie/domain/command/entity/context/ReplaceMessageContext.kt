@@ -28,7 +28,7 @@ internal class ReplaceMessageContext(
     subCommand = subCommand,
 ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REPLACE_TEXT
 
     override fun runCommand(): CommandOutput = replaceText()
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = replaceText()
