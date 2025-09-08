@@ -61,9 +61,9 @@ class EventQueueTest: BehaviorSpec(body={
         }
 
         `when`("multiple events are offered"){
-            val e1 = TestCommandEvent(name = "e1")
-            val e2 = TestCommandEvent(name = "e2")
-            val e3 = TestCommandEvent(name = "e3")
+            val e1 = createInternalTestEvent(name = "e1")
+            val e2 = createInternalTestEvent(name = "e2")
+            val e3 = createInternalTestEvent(name = "e3")
 
             eventQueue.offer(event=e1)
             eventQueue.offer(event=e2)

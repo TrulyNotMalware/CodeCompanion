@@ -81,9 +81,10 @@ fun createSendSlackMessageEvent(
     payload = if(isPostEventPayload) createPostEventPayloadContents(
         appId=appId, publisherId=publisherId, channel=channel, targetUserId = targetUserId,
         commandDetailType = commandDetailType)
-    else createActionEventPayloadContents(
-        appId=appId, publisherId=publisherId, channel=channel,
-        commandDetailType = commandDetailType),
+        else createActionEventPayloadContents(
+            appId=appId, publisherId=publisherId, channel=channel,
+            commandDetailType = commandDetailType),
     destination = "",
-    timestamp = System.currentTimeMillis()
+    timestamp = System.currentTimeMillis(),
+    type = commandDetailType
 )
