@@ -61,6 +61,16 @@ management:
       path-mapping:
         loggers: logs
         httptrace: trace
+  info:
+    build:
+      enabled: true
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Code Companion-local
+    version: local
 
 slack:
   app:
