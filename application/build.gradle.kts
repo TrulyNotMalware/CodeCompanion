@@ -1,3 +1,13 @@
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+
+val jarName: String? = findProperty("jarName") as String?
+
+tasks.named<BootJar>("bootJar") {
+    if (!jarName.isNullOrBlank()) {
+        archiveFileName.set("$jarName.jar")
+    }
+}
+
 dependencies {
     implementation(project(":domain"))
     implementation(project(":infrastructure"))

@@ -79,6 +79,19 @@ management:
       path-mapping:
         loggers: logs
         httptrace: trace
+  info:
+    build:
+      enabled: true
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Code Companion-dev
+    version: ${VERSION:unknown}
+    build-date: ${BUILD_DATE:unknown}
+    git-ref: ${GIT_REF:unknown}
+    build-number: ${BUILD_NUMBER:unknown}
 
 slack:
   app:
