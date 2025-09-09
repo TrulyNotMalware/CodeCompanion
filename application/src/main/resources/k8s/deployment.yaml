@@ -15,7 +15,7 @@ spec:
         - name: dockercred
       containers:
         - name: code-companion-deploy
-          image: your_image_repository
+          image: $IMAGE_NAME
           ports:
             - containerPort: 80
           imagePullPolicy: IfNotPresent
