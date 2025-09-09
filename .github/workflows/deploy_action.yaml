@@ -141,7 +141,6 @@ jobs:
           tags: |
             type=ref,event=pr
             type=sha,prefix={{branch}}-
-#            type=raw,value=latest #if you want to always have the latest tag, uncomment this line
             type=raw,value=${{ env.STATIC_DOCKER_TAG }}
 
       - name: Build and push Docker image
