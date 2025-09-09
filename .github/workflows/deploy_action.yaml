@@ -37,8 +37,8 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     outputs:
-      should-deploy: ${{ steps.changes.outputs.should-deploy }}
-      modules-changed: ${{ steps.changes.outputs.modules }}
+      should-deploy: ${{ steps.determine.outputs.should-deploy }}
+      modules-changed: ${{ steps.determine.outputs.modules }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -56,7 +56,7 @@ jobs:
               - 'gradle/**'
 
       - name: Determine deployment
-        id: changes
+        id: determine
         run: |
           if [[ "${{ steps.changes.outputs.app }}" == "true" || "${{ steps.changes.outputs.domain }}" == "true" || "${{ steps.changes.outputs.infra }}" == "true" || "${{ steps.changes.outputs.gradle }}" == "true" ]]; then
             echo "should-deploy=true" >> $GITHUB_OUTPUT
