@@ -6,7 +6,7 @@ data class EventCallbackData(
     /**
      * Required scopes : app_mention:read
      */
-    @JsonProperty("client_msg_id")
+    @field:JsonProperty("client_msg_id")
     val clientMessageId: String? = null,
 
     @field:JsonProperty("type")

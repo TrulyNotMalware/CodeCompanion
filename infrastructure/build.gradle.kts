@@ -7,6 +7,10 @@ bootJar.enabled = false
 jar.enabled = true
 
 dependencies {
+    //Spring-boot bom
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"))
+    testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"))
+
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
     api("org.springframework.retry:spring-retry")

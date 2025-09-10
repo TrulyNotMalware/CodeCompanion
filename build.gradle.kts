@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("org.springframework.boot") version "3.5.5" apply false
-    id("io.spring.dependency-management") version "1.1.7" apply false
     id("java-library")
     id("java-test-fixtures")
     kotlin("jvm") version "2.2.10"
@@ -18,6 +17,8 @@ ext{
     set("kotestVersion", "6.0.3") // https://kotest.io/docs/changelog.html
     set("slackSdkVersion", "1.45.3")
     set("mockkVersion", "1.14.5")
+    set("springBootVersion", "3.5.5")
+    set("jacksonVersion","2.19.2")
 }
 
 kotlin {
@@ -43,13 +44,17 @@ allprojects {
         useJUnitPlatform()
     }
 }
-
+/*
+* Removed the `io.spring.dependency-management` plugin to explicitly override the
+* BOM version for kotlinx-coroutines. When that plugin is applied, Spring’s dependency
+* management can pin or supersede BOM coordinates, which makes it hard to import and
+* control the desired kotlinx-coroutines BOM via Gradle platforms.
+* */
 subprojects {
     apply(plugin = "kotlin")
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "org.jetbrains.kotlin.plugin.spring")
     apply(plugin = "org.springframework.boot")
-    apply(plugin = "io.spring.dependency-management")
     apply(plugin = "java-library")
     apply(plugin = "java-test-fixtures")
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
@@ -57,6 +62,8 @@ subprojects {
     dependencies {
         //Kotest-bom
         implementation(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
+        //Jackson-bom
+        implementation(platform("com.fasterxml.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
 
         implementation(kotlin("reflect"))
         implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
