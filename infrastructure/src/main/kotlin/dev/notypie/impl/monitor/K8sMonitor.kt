@@ -16,7 +16,7 @@ class K8sMonitor(
     override fun getLog(){
         val list: V1PodList = this.coreV1Api.listPodForAllNamespaces().execute()
         for (item in list.items) {
-            println(item.metadata.name)
+            println(item.metadata?.name)
         }
     }
 
