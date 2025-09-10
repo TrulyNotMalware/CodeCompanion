@@ -9,6 +9,10 @@ tasks.named<BootJar>("bootJar") {
 }
 
 dependencies {
+    //Spring-boot bom
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"))
+    testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"))
+
     implementation(project(":domain"))
     implementation(project(":infrastructure"))
 
