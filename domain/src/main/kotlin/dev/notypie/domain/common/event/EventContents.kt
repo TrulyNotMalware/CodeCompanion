@@ -9,8 +9,8 @@ sealed class SlackEventPayload(
     open val commandDetailType: CommandDetailType,
     open val idempotencyKey: UUID,
     open val publisherId: String,
-    open val channel: String
-): EventPayload
+    open val channel: String,
+) : EventPayload
 
 data class PostEventPayloadContents(
     override val eventId: UUID,
@@ -20,13 +20,15 @@ data class PostEventPayloadContents(
     override val idempotencyKey: UUID,
     override val publisherId: String,
     override val channel: String,
-
     val replaceOriginal: Boolean,
     val body: Map<String, Any>,
-): SlackEventPayload(
-    apiAppId=apiAppId, commandDetailType=commandDetailType,
-    idempotencyKey=idempotencyKey, publisherId=publisherId, channel=channel
-)
+) : SlackEventPayload(
+        apiAppId = apiAppId,
+        commandDetailType = commandDetailType,
+        idempotencyKey = idempotencyKey,
+        publisherId = publisherId,
+        channel = channel,
+    )
 
 data class ActionEventPayloadContents(
     override val eventId: UUID,
@@ -35,14 +37,15 @@ data class ActionEventPayloadContents(
     override val idempotencyKey: UUID,
     override val publisherId: String,
     override val channel: String,
-
     val responseUrl: String,
     val body: String,
-): SlackEventPayload(
-    apiAppId=apiAppId, commandDetailType=commandDetailType,
-    idempotencyKey=idempotencyKey, publisherId=publisherId, channel=channel
-)
-
+) : SlackEventPayload(
+        apiAppId = apiAppId,
+        commandDetailType = commandDetailType,
+        idempotencyKey = idempotencyKey,
+        publisherId = publisherId,
+        channel = channel,
+    )
 
 data class DelayHandleEventPayloadContents(
     override val eventId: UUID,
@@ -53,15 +56,17 @@ data class DelayHandleEventPayloadContents(
     override val idempotencyKey: UUID,
     override val channel: String,
     override val publisherId: String,
-): SlackEventPayload(
-    apiAppId=apiAppId, commandDetailType=commandDetailType,
-    idempotencyKey=idempotencyKey, publisherId=publisherId, channel=channel
-)
+) : SlackEventPayload(
+        apiAppId = apiAppId,
+        commandDetailType = commandDetailType,
+        idempotencyKey = idempotencyKey,
+        publisherId = publisherId,
+        channel = channel,
+    )
 
-
-enum class MessageType{
+enum class MessageType {
     CHANNEL_ALERT,
     EPHEMERAL_MESSAGE,
     DIRECT_MESSAGE,
-    ACTION_RESPONSE
+    ACTION_RESPONSE,
 }

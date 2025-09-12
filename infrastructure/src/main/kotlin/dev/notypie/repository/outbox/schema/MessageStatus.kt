@@ -1,8 +1,8 @@
 package dev.notypie.repository.outbox.schema
 
-enum class MessageStatus{
+enum class MessageStatus {
     INIT,
     FAILURE,
     SUCCESS,
-    PENDING
+    PENDING,
 }

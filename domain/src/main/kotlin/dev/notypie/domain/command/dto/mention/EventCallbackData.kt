@@ -8,38 +8,27 @@ data class EventCallbackData(
      */
     @field:JsonProperty("client_msg_id")
     val clientMessageId: String? = null,
-
     @field:JsonProperty("type")
     val type: String,
-
     @field:JsonProperty("text")
     val rawText: String? = null,
-
     @field:JsonProperty("user")
     val userId: String,
-
     @field:JsonProperty("app_id")
     val appId: String,
-
     @field:JsonProperty("bot_id")
     val botId: String,
-
     @field:JsonProperty("bot_profile")
     val botProfile: BotProfile,
     val ts: Double,
-
     @field:JsonProperty("blocks")
     val blocks: List<Block>,
-
     @field:JsonProperty("team")
     val team: String,
-
     @field:JsonProperty("channel")
     val channel: String,
-
     @field:JsonProperty("event_ts")
     val eventTs: Double,
-
     @field:JsonProperty("channel_type")
     val channelType: String,
 )
@@ -56,7 +45,7 @@ data class BotProfile(
     @field:JsonProperty("team_id")
     val teamId: String,
     @field:JsonProperty("icons")
-    val icons: Icons
+    val icons: Icons,
 )
 
 data class Icons(

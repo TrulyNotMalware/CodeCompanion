@@ -1,17 +1,15 @@
 package dev.notypie.domain.command.entity.parsers
 
 import dev.notypie.domain.command.EventQueue
-import dev.notypie.domain.command.entity.CommandSet
+import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
-import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.SlackEventBuilder
-import dev.notypie.domain.command.dto.mention.PlainText
-import dev.notypie.domain.command.dto.mention.TextObject
 import dev.notypie.domain.command.dto.mention.extractText
-import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
+import dev.notypie.domain.command.entity.CommandSet
+import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
+import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.common.event.CommandEvent
@@ -24,9 +22,9 @@ internal class AppMentionCommandParser(
     val commandId: UUID,
     val idempotencyKey: UUID,
     private val slackEventBuilder: SlackEventBuilder,
-    private val events: EventQueue<CommandEvent<EventPayload>>
-): ContextParser {
-    companion object{
+    private val events: EventQueue<CommandEvent<EventPayload>>,
+) : ContextParser {
+    companion object {
         const val BLOCK_TYPE_RICH_TEXT = "rich_text"
         const val ELEMENT_TYPE_TEXT_SECTION = "rich_text_section"
 
@@ -35,70 +33,85 @@ internal class AppMentionCommandParser(
 
         const val COMMAND_DELIMITER = " "
     }
+
     private val slackAppMentionRequestData: SlackEventCallBackRequest by lazy {
         slackCommandData.body as? SlackEventCallBackRequest
-            ?: throw IllegalArgumentException("Invalid body type for AppMention") }
+            ?: throw IllegalArgumentException("Invalid body type for AppMention")
+    }
     private val botId: String by lazy { slackAppMentionRequestData.authorizations.find { it.isBot }?.userId ?: "" }
     private val parsedContext: CommandContext by lazy { parseContext(idempotencyKey = idempotencyKey) }
 
     override fun parseContext(idempotencyKey: UUID): CommandContext =
-        this.slackAppMentionRequestData.event.blocks
-        .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
-        ?.elements?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
-        ?.let { this.extractUserAndCommand(elements = it.elements) }
-        ?.let { this.buildContext(userQueue = it.first, commandQueue = it.second) }
-        ?: this.handleNotSupportedCommand()
+        slackAppMentionRequestData.event.blocks
+            .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
+            ?.elements
+            ?.find { element -> element.type == ELEMENT_TYPE_TEXT_SECTION }
+            ?.let { extractUserAndCommand(elements = it.elements) }
+            ?.let { buildContext(userQueue = it.first, commandQueue = it.second) }
+            ?: handleNotSupportedCommand()
 
-    private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
-        requestHeaders = this.slackCommandData.rawHeader,
-        slackEventBuilder = this.slackEventBuilder, text = "Command Not supported.",
-        commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
-        events = this.events
-    )
+    private fun handleNotSupportedCommand(): SlackTextResponseContext =
+        SlackTextResponseContext(
+            requestHeaders = slackCommandData.rawHeader,
+            slackEventBuilder = slackEventBuilder,
+            text = "Command Not supported.",
+            commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+            events = events,
+        )
 
-    private fun extractUserAndCommand(elements : List<Element>?):
-            Pair<Queue<String>, Queue<String>> {
+    private fun extractUserAndCommand(elements: List<Element>?): Pair<Queue<String>, Queue<String>> {
         val userQueue: Queue<String> = LinkedList()
         val commandQueue: Queue<String> = LinkedList()
         elements
             ?.forEach { element ->
                 when (element.type) {
-                    ELEMENT_TYPE_USER -> if (element.userId != this.botId) userQueue.offer(element.userId)
-                    ELEMENT_TYPE_TEXT -> element.extractText()?.split(COMMAND_DELIMITER)
-                            ?.filter{ it.isNotBlank() }
+                    ELEMENT_TYPE_USER -> if (element.userId != botId) userQueue.offer(element.userId)
+                    ELEMENT_TYPE_TEXT ->
+                        element
+                            .extractText()
+                            ?.split(COMMAND_DELIMITER)
+                            ?.filter { it.isNotBlank() }
                             ?.forEach { commandQueue.offer(it) }
                 }
             }
-        this.verifyCommandQueue(commandQueue = commandQueue)
+
+        verifyCommandQueue(commandQueue = commandQueue)
         return userQueue to commandQueue
     }
 
     private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext {
         val command: String = commandQueue.poll().replace(" ", "")
-        return when(CommandSet.parseCommand(command)){ //FIXME Later when block
-            CommandSet.NOTICE -> SlackNoticeContext(
-                    users = userQueue, commands = commandQueue,
-                commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
-                requestHeaders = this.slackCommandData.rawHeader, slackEventBuilder = this.slackEventBuilder,
-                events = this.events
-            )
-            CommandSet.APPROVAL -> SlackApprovalFormContext(
-                commandBasicInfo = this.slackCommandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
-                requestHeaders = this.slackCommandData.rawHeader,
-                slackEventBuilder = this.slackEventBuilder,
-                events = this.events
-            )
-            CommandSet.UNKNOWN -> DetailErrorAlertContext(
-                slackCommandData = this.slackCommandData, errorMessage = "Command \"$command\" not found",
-                targetClassName = this::class.simpleName ?: "SlackAppMentionContext", details = null,
-                slackEventBuilder = this.slackEventBuilder, idempotencyKey = this.idempotencyKey,
-                events = this.events
-            )
+        return when (CommandSet.parseCommand(command)) { // FIXME Later when block
+            CommandSet.NOTICE ->
+                SlackNoticeContext(
+                    users = userQueue,
+                    commands = commandQueue,
+                    commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+                    requestHeaders = slackCommandData.rawHeader,
+                    slackEventBuilder = slackEventBuilder,
+                    events = events,
+                )
+            CommandSet.APPROVAL ->
+                SlackApprovalFormContext(
+                    commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+                    requestHeaders = slackCommandData.rawHeader,
+                    slackEventBuilder = slackEventBuilder,
+                    events = events,
+                )
+            CommandSet.UNKNOWN ->
+                DetailErrorAlertContext(
+                    slackCommandData = slackCommandData,
+                    errorMessage = "Command \"$command\" not found",
+                    targetClassName = this::class.simpleName ?: "SlackAppMentionContext",
+                    details = null,
+                    slackEventBuilder = slackEventBuilder,
+                    idempotencyKey = idempotencyKey,
+                    events = events,
+                )
         }
     }
 
     private fun verifyCommandQueue(commandQueue: Queue<String>) {
         if (commandQueue.isEmpty()) throw IllegalArgumentException("Command Queue is empty")
     }
-
 }

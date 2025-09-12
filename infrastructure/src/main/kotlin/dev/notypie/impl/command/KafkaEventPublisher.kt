@@ -9,15 +9,18 @@ import org.springframework.kafka.core.KafkaTemplate
 
 class KafkaEventPublisher(
     private val kafkaTemplate: KafkaTemplate<String, Any>,
-    private val applicationEventPublisher: ApplicationEventPublisher
-): EventPublisher{
+    private val applicationEventPublisher: ApplicationEventPublisher,
+) : EventPublisher {
     override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>) {
         events.forEach { event ->
-            when(event.isInternal) {
-                true -> this.applicationEventPublisher.publishEvent(event)
-                false -> this.kafkaTemplate.send(
-                    event.destination, event.idempotencyKey.toString(),event.payload
-                )
+            when (event.isInternal) {
+                true -> applicationEventPublisher.publishEvent(event)
+                false ->
+                    kafkaTemplate.send(
+                        event.destination,
+                        event.idempotencyKey.toString(),
+                        event.payload,
+                    )
             }
         }
     }

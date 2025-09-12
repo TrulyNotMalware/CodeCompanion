@@ -22,11 +22,12 @@ const val SEPARATOR = ","
 
 const val TEST_BASE_URL = "https://hooks.example.com/actions"
 
-fun createTestContainer() = Container(
-    type = "block_actions",
-    isEphemeral = false,
-    messageTime = Instant.now()
-)
+fun createTestContainer() =
+    Container(
+        type = "block_actions",
+        isEphemeral = false,
+        messageTime = Instant.now(),
+    )
 
 fun createInteractionPayloadInput(
     commandDetailType: CommandDetailType,
@@ -43,9 +44,9 @@ fun createInteractionPayloadInput(
     responseUrl: String = TEST_BASE_URL,
     idempotencyKey: String = UUID.randomUUID().toString(),
     triggerId: String = "",
-    isEnterprise: Boolean = false
-): InteractionPayload {
-    return InteractionPayload(
+    isEnterprise: Boolean = false,
+): InteractionPayload =
+    InteractionPayload(
         type = commandDetailType,
         team = team,
         user = user,
@@ -60,38 +61,45 @@ fun createInteractionPayloadInput(
         channel = channel,
         responseUrl = responseUrl,
         states = states,
-        currentAction = currentAction
+        currentAction = currentAction,
     )
-}
 
 private fun ActionElementTypes.toStates(isSelected: Boolean = false, selectedValue: String = "") =
     States(
         type = this,
         isSelected = isSelected,
-        selectedValue = selectedValue
+        selectedValue = selectedValue,
     )
 
-fun selectedApplyButtonStates() =
-    ActionElementTypes.APPLY_BUTTON.toStates(isSelected = true, selectedValue = "apply")
-fun selectedRejectButtonStates() =
-    ActionElementTypes.REJECT_BUTTON.toStates(isSelected = true)
+fun selectedApplyButtonStates() = ActionElementTypes.APPLY_BUTTON.toStates(isSelected = true, selectedValue = "apply")
+
+fun selectedRejectButtonStates() = ActionElementTypes.REJECT_BUTTON.toStates(isSelected = true)
+
 fun selectedMultiUserSelectStates(selectedUsers: List<User>) =
-    ActionElementTypes.MULTI_USERS_SELECT.toStates(isSelected = true,
-        selectedValue = selectedUsers.joinToString(SEPARATOR) { user -> user.userName })
+    ActionElementTypes.MULTI_USERS_SELECT.toStates(
+        isSelected = true,
+        selectedValue = selectedUsers.joinToString(SEPARATOR) { user -> user.userName },
+    )
+
 fun selectedMultiUserSelectStates(user: User, maximumSequence: Int) =
     ActionElementTypes.MULTI_USERS_SELECT.toStates(
         isSelected = true,
-        selectedValue = if (maximumSequence > 0)
-            (1..maximumSequence).joinToString(SEPARATOR) { "${user.userName}$it" }
-        else
-            user.userName
+        selectedValue =
+            if (maximumSequence > 0) {
+                (1..maximumSequence).joinToString(SEPARATOR) { "${user.userName}$it" }
+            } else {
+                user.userName
+            },
     )
+
 fun selectedPlainTextStates(text: String) =
     ActionElementTypes.PLAIN_TEXT_INPUT.toStates(isSelected = true, selectedValue = text)
+
 fun selectedDatePickerStates(date: LocalDate, format: String): States {
     val formatted = date.format(DateTimeFormatter.ofPattern(format))
     return ActionElementTypes.DATE_PICKER.toStates(isSelected = true, selectedValue = formatted)
 }
+
 fun selectedTimePickerStates(time: LocalTime, format: String): States {
     val formatted = time.format(DateTimeFormatter.ofPattern(format))
     return ActionElementTypes.TIME_PICKER.toStates(isSelected = true, selectedValue = formatted)

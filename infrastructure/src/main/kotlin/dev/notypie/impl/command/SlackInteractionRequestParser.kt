@@ -10,122 +10,179 @@ import dev.notypie.templates.ButtonType
 import org.apache.commons.text.StringTokenizer
 import java.time.Instant
 
-class SlackInteractionRequestParser
-: InteractionPayloadParser {
-    
+class SlackInteractionRequestParser : InteractionPayloadParser {
     override fun parseStringPayload(payload: String): InteractionPayload {
         val blockActionPayload = GsonFactory.createSnakeCase().fromJson(payload, BlockActionPayload::class.java)
-        return this.toInteractionPayloads(blockActionPayload = blockActionPayload)
+        return toInteractionPayloads(blockActionPayload = blockActionPayload)
     }
 
-    private fun toInteractionPayloads(blockActionPayload: BlockActionPayload): InteractionPayload{
+    private fun toInteractionPayloads(blockActionPayload: BlockActionPayload): InteractionPayload {
         val channel = Channel(id = blockActionPayload.channel.id, name = blockActionPayload.channel.name)
         val unixTimeStamp = blockActionPayload.container.messageTs
         val timestampDouble = unixTimeStamp.toDouble()
         val team = Team(domain = blockActionPayload.team.domain, id = blockActionPayload.team.id)
-        val user = User(id = blockActionPayload.user.id, name = blockActionPayload.user.name,
-            teamId = blockActionPayload.user.teamId, userName = blockActionPayload.user.username)
+        val user =
+            User(
+                id = blockActionPayload.user.id,
+                name = blockActionPayload.user.name,
+                teamId = blockActionPayload.user.teamId,
+                userName = blockActionPayload.user.username,
+            )
 
         val seconds = timestampDouble.toLong()
         val nanos = ((timestampDouble - seconds) * 1_000_000_000).toInt()
         val messageTime: Instant = Instant.ofEpochSecond(seconds, nanos.toLong())
-        val container = Container(isEphemeral = blockActionPayload.container.isEphemeral, messageTime = messageTime, type = blockActionPayload.container.type)
+        val container =
+            Container(
+                isEphemeral = blockActionPayload.container.isEphemeral,
+                messageTime = messageTime,
+                type = blockActionPayload.container.type,
+            )
 
-        //Ephemeral contents does not include message sections.
-        val currentAction = this.parseCurrentAction(blockActionPayload.actions)
-        val botId = if(container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
+        // Ephemeral contents does not include message sections.
+        val currentAction = parseCurrentAction(blockActionPayload.actions)
+        val botId = if (container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
         val messageTokenizer =
-            if (container.isEphemeral){
-                if(currentAction.type.isPrimary) StringTokenizer(currentAction.selectedValue, ",")
-                else StringTokenizer("${CommandDetailType.NOTHING},${CommandDetailType.NOTHING}",",")
-            }else StringTokenizer(blockActionPayload.message.text, ",")
+            if (container.isEphemeral) {
+                if (currentAction.type.isPrimary) {
+                    StringTokenizer(currentAction.selectedValue, ",")
+                } else {
+                    StringTokenizer("${CommandDetailType.NOTHING},${CommandDetailType.NOTHING}", ",")
+                }
+            } else {
+                StringTokenizer(blockActionPayload.message.text, ",")
+            }
         val idempotencyKey = messageTokenizer.nextToken()
         val type = messageTokenizer.nextToken().replace("\\s".toRegex(), "")
-        return InteractionPayload(type = CommandDetailType.valueOf(type), apiAppId = blockActionPayload.apiAppId, channel = channel,
-            container = container, responseUrl = blockActionPayload.responseUrl, token = blockActionPayload.token, triggerId = blockActionPayload.triggerId,
-            isEnterprise = blockActionPayload.isEnterpriseInstall, team = team, user = user,
-            states = this.parseStates(blockActionPayload.state),
+        return InteractionPayload(
+            type = CommandDetailType.valueOf(type),
+            apiAppId = blockActionPayload.apiAppId,
+            channel = channel,
+            container = container,
+            responseUrl = blockActionPayload.responseUrl,
+            token = blockActionPayload.token,
+            triggerId = blockActionPayload.triggerId,
+            isEnterprise = blockActionPayload.isEnterpriseInstall,
+            team = team,
+            user = user,
+            states = parseStates(blockActionPayload.state),
             currentAction = currentAction,
             botId = botId,
-            idempotencyKey = idempotencyKey)
+            idempotencyKey = idempotencyKey,
+        )
     }
 
-    private fun parseStates(viewState: ViewState): List<States>{
-        return viewState.values.values.flatMap { innerMap ->
+    private fun parseStates(viewState: ViewState): List<States> =
+        viewState.values.values.flatMap { innerMap ->
             innerMap.values.mapNotNull { value ->
-                when(value.type){
+                when (value.type) {
                     ActionElementTypes.MULTI_STATIC_SELECT.elementName -> {
-                        if(value.selectedOptions.isEmpty()) States(type = ActionElementTypes.MULTI_STATIC_SELECT)
-                        else{
+                        if (value.selectedOptions.isEmpty()) {
+                            States(type = ActionElementTypes.MULTI_STATIC_SELECT)
+                        } else {
                             val selectedValue = value.selectedOptions.joinToString { it.value }
-                            States(type = ActionElementTypes.MULTI_STATIC_SELECT, isSelected = true, selectedValue = selectedValue)
+                            States(
+                                type = ActionElementTypes.MULTI_STATIC_SELECT,
+                                isSelected = true,
+                                selectedValue = selectedValue,
+                            )
                         }
                     }
-                    ActionElementTypes.PLAIN_TEXT_INPUT.elementName ->{
-                        States(type = ActionElementTypes.PLAIN_TEXT_INPUT, isSelected = true, selectedValue = value.value ?: "")
+                    ActionElementTypes.PLAIN_TEXT_INPUT.elementName -> {
+                        States(
+                            type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            isSelected = true,
+                            selectedValue =
+                                value.value ?: "",
+                        )
                     }
                     ActionElementTypes.MULTI_USERS_SELECT.elementName -> {
-                        if(value.selectedUsers.isEmpty()) States(type = ActionElementTypes.MULTI_USERS_SELECT)
-                        else States(type = ActionElementTypes.MULTI_USERS_SELECT, isSelected = true, selectedValue = value.selectedUsers.joinToString(","))
+                        if (value.selectedUsers.isEmpty()) {
+                            States(type = ActionElementTypes.MULTI_USERS_SELECT)
+                        } else {
+                            States(
+                                type = ActionElementTypes.MULTI_USERS_SELECT,
+                                isSelected = true,
+                                selectedValue = value.selectedUsers.joinToString(","),
+                            )
+                        }
                     }
                     ActionElementTypes.DATE_PICKER.elementName ->
-                        States(type = ActionElementTypes.DATE_PICKER, isSelected = true, selectedValue = value.selectedDate)
+                        States(
+                            type = ActionElementTypes.DATE_PICKER,
+                            isSelected = true,
+                            selectedValue = value.selectedDate,
+                        )
                     ActionElementTypes.TIME_PICKER.elementName ->
-                        States(type = ActionElementTypes.TIME_PICKER, isSelected = true, selectedValue = value.selectedTime)
+                        States(
+                            type = ActionElementTypes.TIME_PICKER,
+                            isSelected = true,
+                            selectedValue = value.selectedTime,
+                        )
                     ActionElementTypes.CHECKBOX.elementName ->
-                        if(value.selectedOptions.isEmpty()) States(type = ActionElementTypes.CHECKBOX)
-                        else States(type = ActionElementTypes.CHECKBOX, isSelected = value.selectedOptions.isNotEmpty(),
-                            selectedValue = value.selectedOptions.joinToString { it.text.text })
+                        if (value.selectedOptions.isEmpty()) {
+                            States(type = ActionElementTypes.CHECKBOX)
+                        } else {
+                            States(
+                                type = ActionElementTypes.CHECKBOX,
+                                isSelected = value.selectedOptions.isNotEmpty(),
+                                selectedValue = value.selectedOptions.joinToString { it.text.text },
+                            )
+                        }
                     else -> States(type = ActionElementTypes.UNKNOWN)
                 }
             }
         }
-    }
 
-    private fun parseCurrentAction(actions: List<Action>): States
-        = actions.firstNotNullOfOrNull { action ->
+    private fun parseCurrentAction(actions: List<Action>): States =
+        actions.firstNotNullOfOrNull { action ->
             when (action.type) {
                 ActionElementTypes.MULTI_STATIC_SELECT.elementName ->
                     States(
                         type = ActionElementTypes.MULTI_STATIC_SELECT,
                         isSelected = true,
-                        selectedValue = action.selectedOptions.joinToString { it.value })
+                        selectedValue = action.selectedOptions.joinToString { it.value },
+                    )
 
                 ActionElementTypes.MULTI_USERS_SELECT.elementName ->
                     States(
                         type = ActionElementTypes.MULTI_USERS_SELECT,
                         isSelected = true,
-                        selectedValue = action.selectedUsers.joinToString(", ")
+                        selectedValue = action.selectedUsers.joinToString(", "),
                     )
 
-                ActionElementTypes.BUTTON.elementName -> this.buttonParser(action = action)
+                ActionElementTypes.BUTTON.elementName -> buttonParser(action = action)
                 else -> null
             }
         } ?: States(type = ActionElementTypes.UNKNOWN)
 
-
     private fun buttonParser(action: Action): States =
-        if(action.type != ActionElementTypes.BUTTON.elementName) throw IllegalArgumentException("Action type is not button.")
-        else when (action.style) {
-            ButtonType.PRIMARY.name.lowercase() ->
-                States(
-                    type = ActionElementTypes.APPLY_BUTTON,
-                    isSelected = true,
-                    selectedValue = action.value
-                )
+        if (action.type !=
+            ActionElementTypes.BUTTON.elementName
+        ) {
+            throw IllegalArgumentException("Action type is not button.")
+        } else {
+            when (action.style) {
+                ButtonType.PRIMARY.name.lowercase() ->
+                    States(
+                        type = ActionElementTypes.APPLY_BUTTON,
+                        isSelected = true,
+                        selectedValue = action.value,
+                    )
 
-            ButtonType.DANGER.name.lowercase() ->
-                States(
-                    type = ActionElementTypes.REJECT_BUTTON,
-                    isSelected = true,
-                    selectedValue = action.value
-                )
+                ButtonType.DANGER.name.lowercase() ->
+                    States(
+                        type = ActionElementTypes.REJECT_BUTTON,
+                        isSelected = true,
+                        selectedValue = action.value,
+                    )
 
-            else -> States(
-                type = ActionElementTypes.BUTTON,
-                isSelected = true,
-                selectedValue = action.value
-            )
+                else ->
+                    States(
+                        type = ActionElementTypes.BUTTON,
+                        isSelected = true,
+                        selectedValue = action.value,
+                    )
+            }
         }
-
 }

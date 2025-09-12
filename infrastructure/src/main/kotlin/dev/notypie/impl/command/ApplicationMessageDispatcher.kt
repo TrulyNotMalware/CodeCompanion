@@ -18,7 +18,6 @@ import dev.notypie.domain.history.entity.Status
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
-import io.github.oshai.kotlinlogging.KotlinLogging
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -34,19 +33,19 @@ class ApplicationMessageDispatcher(
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val taskScheduler: ThreadPoolTaskScheduler,
     private val retryService: RetryService,
-    private val outboxRepository: MessageOutboxRepository
-): MessageDispatcher {
-
+    private val outboxRepository: MessageOutboxRepository,
+) : MessageDispatcher {
     private val slack: Slack = Slack.getInstance()
-    private val okHttpClient = buildOkHttpClient(this.slack.config)
-    private val MEDIA_TYPE_JSON = "application/json; charset=utf-8".toMediaType()
+    private val okHttpClient = buildOkHttpClient(slack.config)
+    private val mediaTypeJson = "application/json; charset=utf-8".toMediaType()
 
-    override fun dispatch(event: PostEventPayloadContents, commandType: CommandType): CommandOutput{
-//        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
-        val result = this.retryService.execute(
-            action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
-            maxAttempts = 3
-        )
+    override fun dispatch(event: PostEventPayloadContents, commandType: CommandType): CommandOutput {
+//        applicationEventPublisher.publishEvent(event.toOutboxMessage())
+        val result =
+            retryService.execute(
+                action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
+                maxAttempts = 3,
+            )
         return CommandOutput(
             ok = true,
             apiAppId = event.apiAppId,
@@ -59,11 +58,11 @@ class ApplicationMessageDispatcher(
         )
     }
 
-    override fun dispatch(event: ActionEventPayloadContents, commandType: CommandType): CommandOutput{
-//        this.applicationEventPublisher.publishEvent(event.toOutboxMessage())
-        this.retryService.execute(
+    override fun dispatch(event: ActionEventPayloadContents, commandType: CommandType): CommandOutput {
+//        applicationEventPublisher.publishEvent(event.toOutboxMessage())
+        retryService.execute(
             action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
-            maxAttempts = 3
+            maxAttempts = 3,
         )
         return CommandOutput(
             ok = true,
@@ -79,8 +78,8 @@ class ApplicationMessageDispatcher(
 
     @Deprecated("for removal")
     override fun dispatch(event: DelayHandleEventPayloadContents, commandType: CommandType): CommandOutput {
-        this.taskScheduler.schedule({
-            this.applicationEventPublisher.publishEvent(event)
+        taskScheduler.schedule({
+            applicationEventPublisher.publishEvent(event)
         }, Instant.now().plus(event.delayTime, event.timeUnit))
         return CommandOutput(
             ok = true,
@@ -95,58 +94,81 @@ class ApplicationMessageDispatcher(
     }
 
     override fun dispatch(event: SlackEventPayload): CommandOutput =
-        this.retryService.execute(
+        retryService.execute(
             action = {
-                when(event){
-                    is ActionEventPayloadContents -> this.dispatchActionResponseContents(event = event)
+                when (event) {
+                    is ActionEventPayloadContents -> dispatchActionResponseContents(event = event)
                     is DelayHandleEventPayloadContents -> TODO()
                     is PostEventPayloadContents ->
-                        when(event.messageType){
-                            MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event=event)
-                            MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event=event)
-                            MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event=event)
+                        when (event.messageType) {
+                            MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
+                            MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
+                            MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
                             MessageType.ACTION_RESPONSE -> TODO()
                         }
                 }
-            }
+            },
         )
 
     @EventListener
-    fun listenSlackEvent(event: SlackEventPayload) = this.dispatch(event = event)
+    fun listenSlackEvent(event: SlackEventPayload) = dispatch(event = event)
 
-    private fun dispatchEphemeralContents(event: PostEventPayloadContents): CommandOutput{
-        val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
+    private fun dispatchEphemeralContents(event: PostEventPayloadContents): CommandOutput {
+        val requestConfigurer =
+            RequestConfigurator<FormBody.Builder> { builder ->
                 for ((key, value) in event.body) builder.add(key, value.toString())
                 builder
-        }
-        val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
-            "chat.postEphemeral", this.botToken, ChatPostEphemeralResponse::class.java)
+            }
+        val result =
+            slack.methods().postFormWithTokenAndParseResponse(
+                requestConfigurer,
+                "chat.postEphemeral",
+                botToken,
+                ChatPostEphemeralResponse::class.java,
+            )
         return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun dispatchChatPostMessageContents(event: PostEventPayloadContents): CommandOutput{
-        val requestConfigurer = RequestConfigurator<FormBody.Builder> { builder ->
-            for ((key, value) in event.body) builder.add(key, value.toString())
-            builder
-        }
-        val result = slack.methods().postFormWithTokenAndParseResponse(requestConfigurer,
-            "chat.postMessage", this.botToken, ChatPostMessageResponse::class.java)
+    private fun dispatchChatPostMessageContents(event: PostEventPayloadContents): CommandOutput {
+        val requestConfigurer =
+            RequestConfigurator<FormBody.Builder> { builder ->
+                for ((key, value) in event.body) builder.add(key, value.toString())
+                builder
+            }
+        val result =
+            slack.methods().postFormWithTokenAndParseResponse(
+                requestConfigurer,
+                "chat.postMessage",
+                botToken,
+                ChatPostMessageResponse::class.java,
+            )
         return returnSuccessOrFailed(result = result, event = event)
     }
 
     private fun dispatchActionResponseContents(event: ActionEventPayloadContents): CommandOutput {
-        val requestBody = event.body.toRequestBody(MEDIA_TYPE_JSON)
-        val request = Request.Builder().url(event.responseUrl).post(requestBody).build()
-        val result = this.okHttpClient.newCall(request).execute()
+        val requestBody = event.body.toRequestBody(mediaTypeJson)
+        val request =
+            Request
+                .Builder()
+                .url(event.responseUrl)
+                .post(requestBody)
+                .build()
+        val result = okHttpClient.newCall(request).execute()
         result.close()
         return returnSuccessOrFailed(result = result, event = event)
     }
 
-    private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEventPayload)=
-        if(result.isOk) CommandOutput.success(payload = event)
-        else CommandOutput.fail(event=event, reason = result.error)
+    private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEventPayload) =
+        if (result.isOk) {
+            CommandOutput.success(payload = event)
+        } else {
+            CommandOutput.fail(event = event, reason = result.error)
+        }
 
     private fun returnSuccessOrFailed(result: Response, event: SlackEventPayload) =
-        if(result.isSuccessful) CommandOutput.success(payload = event)
-        else CommandOutput.fail(event=event, reason = result.message)
+        if (result.isSuccessful) {
+            CommandOutput.success(payload = event)
+        } else {
+            CommandOutput.fail(event = event, reason = result.message)
+        }
 }

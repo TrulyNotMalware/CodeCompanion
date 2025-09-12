@@ -18,18 +18,22 @@ class ReplaceTextResponseCommand(
     eventPublisher: EventPublisher,
     private val markdownMessage: String,
     private val responseUrl: String,
-): Command(
-    idempotencyKey = idempotencyKey,
-    commandData = commandData,
-    slackEventBuilder = slackEventBuilder,
-    eventPublisher = eventPublisher
-) {
-    override fun parseContext(subCommand: SubCommand): CommandContext = ReplaceMessageContext(
-        commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-        requestHeaders = SlackRequestHeaders(),
-        slackEventBuilder = this.slackEventBuilder, markdownMessage = markdownMessage,
-        responseUrl = responseUrl, events = this.events, subCommand = subCommand
-    )
+) : Command(
+        idempotencyKey = idempotencyKey,
+        commandData = commandData,
+        slackEventBuilder = slackEventBuilder,
+        eventPublisher = eventPublisher,
+    ) {
+    override fun parseContext(subCommand: SubCommand): CommandContext =
+        ReplaceMessageContext(
+            commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+            requestHeaders = SlackRequestHeaders(),
+            slackEventBuilder = slackEventBuilder,
+            markdownMessage = markdownMessage,
+            responseUrl = responseUrl,
+            events = events,
+            subCommand = subCommand,
+        )
 
     override fun findSubCommandDefinition(): SubCommandDefinition = NoSubCommands()
 }

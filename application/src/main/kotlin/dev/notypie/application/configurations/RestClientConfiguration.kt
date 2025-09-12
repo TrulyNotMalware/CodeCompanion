@@ -8,7 +8,6 @@ import org.springframework.context.annotation.Configuration
 
 @Configuration
 class RestClientConfiguration {
-
     @Bean
     fun restRequester(): RestRequester = RestClientRequester(baseUrl = SLACK_API_BASE_URL)
 }

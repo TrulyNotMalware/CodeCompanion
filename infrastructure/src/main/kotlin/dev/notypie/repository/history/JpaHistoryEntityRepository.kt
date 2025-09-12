@@ -6,4 +6,4 @@ import org.springframework.stereotype.Repository
 import java.util.*
 
 @Repository
-interface JpaHistoryEntityRepository: JpaRepository<JpaHistoryEntity, UUID>
+interface JpaHistoryEntityRepository : JpaRepository<JpaHistoryEntity, UUID>

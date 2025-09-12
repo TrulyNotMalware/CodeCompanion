@@ -10,11 +10,11 @@ import dev.notypie.templates.dto.InteractiveObject
 
 class ModalBlockBuilder(
     private val modalElementBuilder: ModalElementBuilder = ModalElementBuilder(),
-){
-    companion object{
+) {
+    companion object {
         const val DEFAULT_CALENDAR_IMAGE_URLS = "https://api.slack.com/img/blocks/bkb_template_images/notifications.png"
     }
-    //Reference from https://api.slack.com/reference/block-kit/blocks
+    // Reference from https://api.slack.com/reference/block-kit/blocks
 
     /**
      * Creates a header block with the specified text as the headline.
@@ -22,9 +22,10 @@ class ModalBlockBuilder(
      * @param text The text content of the headline.
      * @return A `HeaderBlock` object representing the header block with the specified headline.
      */
-    fun headerBlock(text: String ): HeaderBlock = header {
-        it.text(this.modalElementBuilder.plainTextObject( text = text ))
-    }
+    fun headerBlock(text: String): HeaderBlock =
+        header {
+            it.text(modalElementBuilder.plainTextObject(text = text))
+        }
 
     /**
      * Generates a section block for time schedule information.
@@ -34,11 +35,17 @@ class ModalBlockBuilder(
      * @return A `SectionBlock` object representing the section block with the time schedule information.
      */
     fun timeScheduleBlock(timeScheduleInfo: TimeScheduleInfo, isMarkDown: Boolean = false): SectionBlock =
-        section{
-            if(isMarkDown) it.text( this.modalElementBuilder.markdownTextObject( markdownText = timeScheduleInfo.toString() ))
-            else it.text( this.modalElementBuilder.plainTextObject( text = timeScheduleInfo.toString() ))
+        section {
+            if (isMarkDown) {
+                it.text(modalElementBuilder.markdownTextObject(markdownText = timeScheduleInfo.toString()))
+            } else {
+                it.text(modalElementBuilder.plainTextObject(text = timeScheduleInfo.toString()))
+            }
             it.accessory(
-                this.modalElementBuilder.imageBlockElement(imageUrl = DEFAULT_CALENDAR_IMAGE_URLS, altText = "calendar thumbnail")
+                modalElementBuilder.imageBlockElement(
+                    imageUrl = DEFAULT_CALENDAR_IMAGE_URLS,
+                    altText = "calendar thumbnail",
+                ),
             )
         }
 
@@ -49,22 +56,27 @@ class ModalBlockBuilder(
      * @return An `ActionsBlock` object representing the approval block.
      */
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
-        val approvalButton: InteractiveObject = this.modalElementBuilder.approvalButtonElement(
-            approvalButtonName = approvalContents.approvalButtonName,
-            interactionPayload = approvalContents.interactionValue)
-        val rejectButton: InteractiveObject = this.modalElementBuilder.rejectButtonElement(
-            rejectButtonName = approvalContents.rejectButtonName,
-            interactionPayload = approvalContents.interactionValue)
-
-        val layout = actions {
-            it.elements(
-                listOf(
-                    approvalButton.element,
-                    rejectButton.element
-                )
+        val approvalButton: InteractiveObject =
+            modalElementBuilder.approvalButtonElement(
+                approvalButtonName = approvalContents.approvalButtonName,
+                interactionPayload = approvalContents.interactionValue,
             )
-        }
-        return this.toInteractionLayout(approvalButton.state, rejectButton.state, layout = layout)
+        val rejectButton: InteractiveObject =
+            modalElementBuilder.rejectButtonElement(
+                rejectButtonName = approvalContents.rejectButtonName,
+                interactionPayload = approvalContents.interactionValue,
+            )
+
+        val layout =
+            actions {
+                it.elements(
+                    listOf(
+                        approvalButton.element,
+                        rejectButton.element,
+                    ),
+                )
+            }
+        return toInteractionLayout(approvalButton.state, rejectButton.state, layout = layout)
     }
 
     /**
@@ -74,10 +86,14 @@ class ModalBlockBuilder(
      * @param isMarkDown A flag indicating whether the text is in Markdown format or not. Default is false.
      * @return A `SectionBlock` object representing the section block with the specified text.
      */
-    fun simpleText(text: String, isMarkDown: Boolean = false ): SectionBlock = section {
-        if(isMarkDown) it.text( this.modalElementBuilder.markdownTextObject( markdownText = text))
-        else it.text( this.modalElementBuilder.plainTextObject( text = text ))
-    }
+    fun simpleText(text: String, isMarkDown: Boolean = false): SectionBlock =
+        section {
+            if (isMarkDown) {
+                it.text(modalElementBuilder.markdownTextObject(markdownText = text))
+            } else {
+                it.text(modalElementBuilder.plainTextObject(text = text))
+            }
+        }
 
     /**
      * A function that generates a section block with multiple texts.
@@ -86,14 +102,19 @@ class ModalBlockBuilder(
      * @param isMarkDown A flag indicating whether the texts should be formatted as Markdown. The default value is false.
      * @return A `SectionBlock` object representing the section block with the specified texts.
      */
-    fun textBlock(vararg texts: String, isMarkDown: Boolean = false): SectionBlock = section {
-        it.fields(
-            texts.map { text ->
-                if (isMarkDown) modalElementBuilder.markdownTextObject(markdownText = text)
-                else modalElementBuilder.plainTextObject(text = text)
-            }
-        )
-    }
+    fun textBlock(vararg texts: String, isMarkDown: Boolean = false): SectionBlock =
+        section {
+            it.fields(
+                texts.map { text ->
+                    if (isMarkDown) {
+                        modalElementBuilder.markdownTextObject(markdownText = text)
+                    } else {
+                        modalElementBuilder.plainTextObject(text = text)
+                    }
+                },
+            )
+        }
+
     /**
      * Creates a divider block for Slack templates.
      *
@@ -107,14 +128,22 @@ class ModalBlockBuilder(
      * @param selectionContents The contents of the selection element.
      * @return The created section block.
      */
-    fun selectionBlock(selectionContents: SelectionContents): InteractionLayoutBlock{
-        val multiSelection = this.modalElementBuilder.selectionElement(
-            placeholderText = selectionContents.placeholderText, contents = selectionContents.contents)
-        val layout = section {
-            it.text(this.modalElementBuilder.markdownTextObject( markdownText = "*${selectionContents.title}*\n${selectionContents.explanation}"))
-            it.accessory(multiSelection.element)
-        }
-        return this.toInteractionLayout(multiSelection.state, layout = layout)
+    fun selectionBlock(selectionContents: SelectionContents): InteractionLayoutBlock {
+        val multiSelection =
+            modalElementBuilder.selectionElement(
+                placeholderText = selectionContents.placeholderText,
+                contents = selectionContents.contents,
+            )
+        val layout =
+            section {
+                it.text(
+                    modalElementBuilder.markdownTextObject(
+                        markdownText = "*${selectionContents.title}*\n${selectionContents.explanation}",
+                    ),
+                )
+                it.accessory(multiSelection.element)
+            }
+        return toInteractionLayout(multiSelection.state, layout = layout)
     }
 
     /**
@@ -124,12 +153,13 @@ class ModalBlockBuilder(
      * @return A `SectionBlock` object representing the section block with the multi-user selection element.
      */
     fun multiUserSelectBlock(contents: MultiUserSelectContents): InteractionLayoutBlock {
-        val multiUserSelection = this.modalElementBuilder.multiUserSelectionElement(contents = contents)
-        val layout = input {
-            it.label(this.modalElementBuilder.plainTextObject(text = contents.title))
-            it.element(multiUserSelection.element)
-        }
-        return this.toInteractionLayout(multiUserSelection.state, layout = layout)
+        val multiUserSelection = modalElementBuilder.multiUserSelectionElement(contents = contents)
+        val layout =
+            input {
+                it.label(modalElementBuilder.plainTextObject(text = contents.title))
+                it.element(multiUserSelection.element)
+            }
+        return toInteractionLayout(multiUserSelection.state, layout = layout)
     }
 
     /**
@@ -138,70 +168,98 @@ class ModalBlockBuilder(
      * @param contents The contents of the plain text input element.
      * @return The generated section block.
      */
-    fun plainTextInputBlock(contents: TextInputContents): InputBlock = input {
-        it.label(this.modalElementBuilder.plainTextObject(text = contents.title))
-        it.element(this.modalElementBuilder.plainTextInputElement(contents = contents))
-    }
+    fun plainTextInputBlock(contents: TextInputContents): InputBlock =
+        input {
+            it.label(modalElementBuilder.plainTextObject(text = contents.title))
+            it.element(modalElementBuilder.plainTextInputElement(contents = contents))
+        }
 
-    fun calendarThumbnailBlock(title: String, markdownBody: String): SectionBlock = section {
-        it.text(this.modalElementBuilder.markdownTextObject(markdownText = "*${title}*\n${markdownBody}"))
-        it.accessory(this.modalElementBuilder.imageBlockElement(imageUrl = DEFAULT_CALENDAR_IMAGE_URLS, altText = "calendar thumbnail"))
-    }
-
-    fun userNameWithThumbnailBlock(userName: String, userThumbnailUrl: String, mkdIntroduceComment: String = "") = context {
-        it.elements(
-            listOf(
-                this.modalElementBuilder.markdownTextObject(markdownText = mkdIntroduceComment),
-                this.modalElementBuilder.markdownTextObject(markdownText = "*$userName* "),
-                this.modalElementBuilder.imageBlockElement(
-                    imageUrl = userThumbnailUrl,
-                    altText = "thumbnail"
+    fun calendarThumbnailBlock(title: String, markdownBody: String): SectionBlock =
+        section {
+            it.text(modalElementBuilder.markdownTextObject(markdownText = "*$title*\n$markdownBody"))
+            it.accessory(
+                modalElementBuilder.imageBlockElement(
+                    imageUrl = DEFAULT_CALENDAR_IMAGE_URLS,
+                    altText = "calendar thumbnail",
                 ),
             )
-        )
-    }
+        }
 
-    fun selectDateTimeScheduleBlock():InteractionLayoutBlock{
-        val datePickerElement = this.modalElementBuilder.datePickerElement()
-        val timePickerElement = this.modalElementBuilder.timePickerElement()
-        val layout = actions {
+    fun userNameWithThumbnailBlock(userName: String, userThumbnailUrl: String, mkdIntroduceComment: String = "") =
+        context {
             it.elements(
                 listOf(
-                    datePickerElement.element, timePickerElement.element
-                )
+                    modalElementBuilder.markdownTextObject(markdownText = mkdIntroduceComment),
+                    modalElementBuilder.markdownTextObject(markdownText = "*$userName* "),
+                    modalElementBuilder.imageBlockElement(
+                        imageUrl = userThumbnailUrl,
+                        altText = "thumbnail",
+                    ),
+                ),
             )
         }
+
+    fun selectDateTimeScheduleBlock(): InteractionLayoutBlock {
+        val datePickerElement = modalElementBuilder.datePickerElement()
+        val timePickerElement = modalElementBuilder.timePickerElement()
+        val layout =
+            actions {
+                it.elements(
+                    listOf(
+                        datePickerElement.element,
+                        timePickerElement.element,
+                    ),
+                )
+            }
         return toInteractionLayout(
-            datePickerElement.state, timePickerElement.state, layout = layout
+            datePickerElement.state,
+            timePickerElement.state,
+            layout = layout,
         )
     }
 
-    fun checkBoxesBlock( vararg options: CheckBoxOptions, isMarkDown: Boolean = true ): InteractionLayoutBlock {
-        val checkboxElements = this.modalElementBuilder.checkboxElements( options = options, isMarkDown = isMarkDown )
-        val layout = actions {
-            it.elements(listOf(checkboxElements.element))
-        }
-        return this.toInteractionLayout(
-            checkboxElements.state, layout = layout
+    fun checkBoxesBlock(vararg options: CheckBoxOptions, isMarkDown: Boolean = true): InteractionLayoutBlock {
+        val checkboxElements = modalElementBuilder.checkboxElements(options = options, isMarkDown = isMarkDown)
+        val layout =
+            actions {
+                it.elements(listOf(checkboxElements.element))
+            }
+        return toInteractionLayout(
+            checkboxElements.state,
+            layout = layout,
         )
     }
 
-    fun radioButtonBlock( vararg options: String, description: String, isMarkDown: Boolean = true ) : InteractionLayoutBlock {
-        val radioButtonElements = this.modalElementBuilder.radioButtonElements( options = toCheckBoxOptions(stringOption = options), description = description )
-        val layout = section {
-            it.text(this.modalElementBuilder.textObject( text = description, isMarkDown = isMarkDown))
-            it.accessory(radioButtonElements.element)
-        }
-        return this.toInteractionLayout(
-            radioButtonElements.state, layout = layout
+    fun radioButtonBlock(
+        vararg options: String,
+        description: String,
+        isMarkDown: Boolean = true,
+    ): InteractionLayoutBlock {
+        val radioButtonElements =
+            modalElementBuilder.radioButtonElements(
+                options = toCheckBoxOptions(stringOption = options),
+                description = description,
+            )
+        val layout =
+            section {
+                it.text(modalElementBuilder.textObject(text = description, isMarkDown = isMarkDown))
+                it.accessory(radioButtonElements.element)
+            }
+        return toInteractionLayout(
+            radioButtonElements.state,
+            layout = layout,
         )
     }
 
-    private fun toCheckBoxOptions(vararg stringOption: String) = stringOption.map { CheckBoxOptions(text = it) }.toTypedArray()
+    private fun toCheckBoxOptions(vararg stringOption: String) =
+        stringOption
+            .map {
+                CheckBoxOptions(text = it)
+            }.toTypedArray()
 
     private fun toInteractionLayout(vararg states: States, layout: LayoutBlock): InteractionLayoutBlock =
         InteractionLayoutBlock(
             layout = layout,
-            interactiveObjects = listOf(*states)
+            interactiveObjects = listOf(*states),
         )
 }

@@ -5,27 +5,36 @@ import org.springframework.restdocs.payload.JsonFieldType
 import org.springframework.restdocs.payload.PayloadDocumentation
 import kotlin.reflect.KClass
 
-
 sealed class DocsFieldType(
-    val type: JsonFieldType
+    val type: JsonFieldType,
 )
 
-object ARRAY: DocsFieldType(type=JsonFieldType.ARRAY)
-object BOOLEAN: DocsFieldType(type=JsonFieldType.BOOLEAN)
-object NUMBER: DocsFieldType(type=JsonFieldType.NUMBER)
-object STRING: DocsFieldType(type=JsonFieldType.STRING)
-object OBJECT: DocsFieldType(type=JsonFieldType.OBJECT)
-object NULL: DocsFieldType(type=JsonFieldType.NULL)
-object ANY: DocsFieldType(type=JsonFieldType.VARIES)
-object DATE: DocsFieldType(type=JsonFieldType.STRING)
-object DATETIME: DocsFieldType(type=JsonFieldType.STRING)
+object ARRAY : DocsFieldType(type = JsonFieldType.ARRAY)
 
-data class ENUM<T : Enum<T>>(val enums: Collection<T>) : DocsFieldType(type=JsonFieldType.STRING) {
+object BOOLEAN : DocsFieldType(type = JsonFieldType.BOOLEAN)
+
+object NUMBER : DocsFieldType(type = JsonFieldType.NUMBER)
+
+object STRING : DocsFieldType(type = JsonFieldType.STRING)
+
+object OBJECT : DocsFieldType(type = JsonFieldType.OBJECT)
+
+object NULL : DocsFieldType(type = JsonFieldType.NULL)
+
+object ANY : DocsFieldType(type = JsonFieldType.VARIES)
+
+object DATE : DocsFieldType(type = JsonFieldType.STRING)
+
+object DATETIME : DocsFieldType(type = JsonFieldType.STRING)
+
+data class ENUM<T : Enum<T>>(
+    val enums: Collection<T>,
+) : DocsFieldType(type = JsonFieldType.STRING) {
     constructor(clazz: KClass<T>) : this(clazz.java.enumConstants.asList())
 }
 
 infix fun String.type(docsFieldType: DocsFieldType): Field {
-    val field = createField(value=this, type=docsFieldType.type)
+    val field = createField(value = this, type = docsFieldType.type)
     when (docsFieldType) {
         is DATE -> field formattedAs RestDocsUtils.DATE_FORMAT
         is DATETIME -> field formattedAs RestDocsUtils.DATETIME_FORMAT
@@ -35,16 +44,18 @@ infix fun String.type(docsFieldType: DocsFieldType): Field {
 }
 
 infix fun <T : Enum<T>> String.type(enumFieldType: ENUM<T>): Field {
-    val field = createField(value=this, type=JsonFieldType.STRING, optional=false)
+    val field = createField(value = this, type = JsonFieldType.STRING, optional = false)
     field.format = EnumFormattingUtils.enumFormat(enumFieldType.enums)
     return field
 }
 
 private fun createField(value: String, type: JsonFieldType, optional: Boolean = true): Field {
-    val descriptor = PayloadDocumentation.fieldWithPath(value)
-        .type(type)
-        .attributes(RestDocsUtils.emptySample(), RestDocsUtils.emptyFormat(), RestDocsUtils.emptyDefaultValue())
-        .description("")
+    val descriptor =
+        PayloadDocumentation
+            .fieldWithPath(value)
+            .type(type)
+            .attributes(RestDocsUtils.emptySample(), RestDocsUtils.emptyFormat(), RestDocsUtils.emptyDefaultValue())
+            .description("")
 
     if (optional) descriptor.optional()
 
@@ -75,9 +86,7 @@ open class Field(
             descriptor.attributes(RestDocsUtils.customSample(value))
         }
 
-    open infix fun means(value: String): Field {
-        return description(value)
-    }
+    open infix fun means(value: String): Field = description(value)
 
     open infix fun attributes(block: Field.() -> Unit): Field {
         block()
@@ -85,17 +94,17 @@ open class Field(
     }
 
     open infix fun withDefaultValue(value: String): Field {
-        this.default = value
+        default = value
         return this
     }
 
     open infix fun formattedAs(value: String): Field {
-        this.format = value
+        format = value
         return this
     }
 
     open infix fun example(value: String): Field {
-        this.sample = value
+        sample = value
         return this
     }
 
@@ -113,5 +122,4 @@ open class Field(
         descriptor.description(value)
         return this
     }
-
 }

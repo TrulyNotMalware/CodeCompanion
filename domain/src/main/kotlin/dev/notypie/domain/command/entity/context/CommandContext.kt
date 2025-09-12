@@ -4,7 +4,6 @@ import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
-import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
@@ -20,52 +19,71 @@ internal abstract class CommandContext(
     val requestHeaders: SlackRequestHeaders,
     val slackEventBuilder: SlackEventBuilder,
     val subCommand: SubCommand = SubCommand(subCommandDefinition = NoSubCommands()),
-    val events: EventQueue<CommandEvent<EventPayload>>
+    val events: EventQueue<CommandEvent<EventPayload>>,
 ) {
-    val commandType: CommandType by lazy { this.parseCommandType() }
-    val commandDetailType: CommandDetailType by lazy { this.parseCommandDetailType() }
+    val commandType: CommandType by lazy { parseCommandType() }
+    val commandDetailType: CommandDetailType by lazy { parseCommandDetailType() }
 
     internal abstract fun parseCommandType(): CommandType
+
     internal abstract fun parseCommandDetailType(): CommandDetailType
 
     internal open fun runCommand(): CommandOutput = CommandOutput.empty()
+
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
-    internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
-        CommandOutput.empty()
+
+    internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = CommandOutput.empty()
 
     internal fun createErrorResponse(errMessage: String): CommandOutput =
         EphemeralTextResponse(
-            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-            slackEventBuilder = this.slackEventBuilder, textMessage = errMessage, events = events
+            commandBasicInfo = commandBasicInfo,
+            requestHeaders = requestHeaders,
+            slackEventBuilder = slackEventBuilder,
+            textMessage = errMessage,
+            events = events,
         ).runCommand()
 
     internal fun createErrorResponse(errMessage: String, results: CommandOutput): CommandOutput {
         EphemeralTextResponse(
-            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-            slackEventBuilder = this.slackEventBuilder, textMessage = errMessage, events = events
+            commandBasicInfo = commandBasicInfo,
+            requestHeaders = requestHeaders,
+            slackEventBuilder = slackEventBuilder,
+            textMessage = errMessage,
+            events = events,
         ).runCommand()
         return results
     }
 
-    internal fun interactionSuccessResponse(responseUrl: String, mkdMessage: String = "Successfully processed."): CommandOutput =
+    internal fun interactionSuccessResponse(
+        responseUrl: String,
+        mkdMessage: String = "Successfully processed.",
+    ): CommandOutput =
         ReplaceMessageContext(
-            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-            slackEventBuilder = this.slackEventBuilder, responseUrl = responseUrl,
-            markdownMessage = mkdMessage, events = events, subCommand = this.subCommand
+            commandBasicInfo = commandBasicInfo,
+            requestHeaders = requestHeaders,
+            slackEventBuilder = slackEventBuilder,
+            responseUrl = responseUrl,
+            markdownMessage = mkdMessage,
+            events = events,
+            subCommand = subCommand,
         ).runCommand()
 
-    internal fun interactionSuccessResponse(responseUrl: String,
-                                            mkdMessage: String = "Successfully processed.",
-                                            results :CommandOutput): CommandOutput {
+    internal fun interactionSuccessResponse(
+        responseUrl: String,
+        mkdMessage: String = "Successfully processed.",
+        results: CommandOutput,
+    ): CommandOutput {
         ReplaceMessageContext(
-            commandBasicInfo = this.commandBasicInfo, requestHeaders = this.requestHeaders,
-            slackEventBuilder = this.slackEventBuilder, responseUrl = responseUrl,
-            markdownMessage = mkdMessage, events = events, subCommand = this.subCommand
+            commandBasicInfo = commandBasicInfo,
+            requestHeaders = requestHeaders,
+            slackEventBuilder = slackEventBuilder,
+            responseUrl = responseUrl,
+            markdownMessage = mkdMessage,
+            events = events,
+            subCommand = subCommand,
         ).runCommand()
         return results
     }
 
-    internal fun addNewEvent(commandEvent: CommandEvent<EventPayload>) =
-        this.events.offer(event = commandEvent)
-
+    internal fun addNewEvent(commandEvent: CommandEvent<EventPayload>) = events.offer(event = commandEvent)
 }

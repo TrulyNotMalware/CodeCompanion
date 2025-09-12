@@ -10,19 +10,16 @@ data class ApprovalContents(
     val reason: String,
     val subTitle: String = "",
     val publisherId: String,
-
     val approvalButtonName: String = "Approval",
     val rejectButtonName: String = "Deny",
     val idempotencyKey: UUID,
     val commandDetailType: CommandDetailType,
-
-    val time: LocalDateTime = LocalDateTime.now()
-){
+    val time: LocalDateTime = LocalDateTime.now(),
+) {
     val interactionValue: String = "$idempotencyKey, $commandDetailType"
 }
 
-enum class ApprovalContentType{
+enum class ApprovalContentType {
     SIMPLE_REQUEST_FORM,
     FINAL_CONFIRM_FORM,
-
 }

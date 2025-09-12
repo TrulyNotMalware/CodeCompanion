@@ -8,7 +8,5 @@ class User(
     val slackUserId: String,
     val userName: String,
     val isAdmin: Boolean = false,
-    val role: UserRole = UserRole.MEMBER
-) {
-
-}
+    val role: UserRole = UserRole.MEMBER,
+)

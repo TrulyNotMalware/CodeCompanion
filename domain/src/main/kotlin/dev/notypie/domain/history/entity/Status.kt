@@ -3,7 +3,8 @@ package dev.notypie.domain.history.entity
 enum class Status {
     IN_PROGRESSED,
     SUCCESS,
-    FAILED;
+    FAILED,
+    ;
 
     companion object {
         fun isOk(status: Status) =

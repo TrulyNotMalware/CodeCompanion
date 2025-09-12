@@ -5,5 +5,5 @@ import dev.notypie.domain.command.dto.interactions.States
 
 data class LayoutBlocks(
     val interactionStates: List<States> = listOf(),
-    val template: List<LayoutBlock>
+    val template: List<LayoutBlock>,
 )

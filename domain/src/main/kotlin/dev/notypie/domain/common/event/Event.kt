@@ -10,7 +10,7 @@ interface EventPayload {
     val eventId: UUID
 }
 
-interface CommandEvent<out T: EventPayload>{
+interface CommandEvent<out T : EventPayload> {
     val idempotencyKey: UUID
     val name: String
     val type: CommandDetailType
@@ -24,17 +24,21 @@ abstract class MeetingPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val meetingId: UUID,
     val publisherId: String,
-): EventPayload
+) : EventPayload
 
-class GetMeetingEventPayload( //FIXME slackEventModifier
-    val slackEventModifier: (commandBasicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType) -> SendSlackMessageEvent,
+class GetMeetingEventPayload( // FIXME slackEventModifier
+    val slackEventModifier: (
+        commandBasicInfo: CommandBasicInfo,
+        commandType: CommandType,
+        commandDetailType: CommandDetailType,
+    ) -> SendSlackMessageEvent,
     val startDate: LocalDateTime = LocalDateTime.now(),
-    val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L)
-): MeetingPayload(
-    eventId = UUID.randomUUID(),
-    meetingId = UUID.randomUUID(),
-    publisherId = "",
-)
+    val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
+) : MeetingPayload(
+        eventId = UUID.randomUUID(),
+        meetingId = UUID.randomUUID(),
+        publisherId = "",
+    )
 
 data class GetMeetingListEvent(
     override val idempotencyKey: UUID,
@@ -43,8 +47,8 @@ data class GetMeetingListEvent(
     override val isInternal: Boolean = true,
     override val destination: String = "",
     override val payload: GetMeetingEventPayload,
-    override val type: CommandDetailType
-): CommandEvent<MeetingPayload>
+    override val type: CommandDetailType,
+) : CommandEvent<MeetingPayload>
 
 data class SendSlackMessageEvent(
     override val idempotencyKey: UUID,
@@ -53,5 +57,5 @@ data class SendSlackMessageEvent(
     override val isInternal: Boolean = true,
     override val destination: String,
     override val timestamp: Long,
-    override val type: CommandDetailType
-): CommandEvent<SlackEventPayload>
+    override val type: CommandDetailType,
+) : CommandEvent<SlackEventPayload>
