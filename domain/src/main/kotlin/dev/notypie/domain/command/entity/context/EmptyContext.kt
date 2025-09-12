@@ -13,13 +13,14 @@ internal class EmptyContext(
     commandBasicInfo: CommandBasicInfo,
     requestHeaders: SlackRequestHeaders,
     slackEventBuilder: SlackEventBuilder,
-    events: EventQueue<CommandEvent<EventPayload>>
-): CommandContext(
-    requestHeaders = requestHeaders,
-    slackEventBuilder = slackEventBuilder,
-    commandBasicInfo = commandBasicInfo,
-    events = events
-) {
+    events: EventQueue<CommandEvent<EventPayload>>,
+) : CommandContext(
+        requestHeaders = requestHeaders,
+        slackEventBuilder = slackEventBuilder,
+        commandBasicInfo = commandBasicInfo,
+        events = events,
+    ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
+
     override fun parseCommandDetailType() = CommandDetailType.NOTHING
 }

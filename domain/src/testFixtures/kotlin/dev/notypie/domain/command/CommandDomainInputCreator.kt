@@ -22,13 +22,13 @@ fun createCommandBasicInfo(
     appToken: String = TEST_TOKEN,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
-    idempotencyKey: UUID = UUID.randomUUID()
+    idempotencyKey: UUID = UUID.randomUUID(),
 ) = CommandBasicInfo(
     appId = appId,
     appToken = appToken,
     publisherId = publisherId,
     channel = channel,
-    idempotencyKey = idempotencyKey
+    idempotencyKey = idempotencyKey,
 )
 
 fun createPostEventPayloadContents(
@@ -37,7 +37,7 @@ fun createPostEventPayloadContents(
     appId: String = TEST_APP_ID,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
-    idempotencyKey: UUID = UUID.randomUUID()
+    idempotencyKey: UUID = UUID.randomUUID(),
 ) = PostEventPayloadContents(
     apiAppId = appId,
     commandDetailType = commandDetailType,
@@ -47,7 +47,7 @@ fun createPostEventPayloadContents(
     eventId = UUID.randomUUID(),
     messageType = toMessageTypeByTargetUser(targetUserId = targetUserId),
     replaceOriginal = false,
-    body = mapOf()
+    body = mapOf(),
 )
 
 fun createActionEventPayloadContents(
@@ -56,7 +56,7 @@ fun createActionEventPayloadContents(
     appId: String = TEST_APP_ID,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
-    idempotencyKey: UUID = UUID.randomUUID()
+    idempotencyKey: UUID = UUID.randomUUID(),
 ) = ActionEventPayloadContents(
     eventId = UUID.randomUUID(),
     apiAppId = appId,
@@ -65,7 +65,7 @@ fun createActionEventPayloadContents(
     idempotencyKey = idempotencyKey,
     commandDetailType = commandDetailType,
     body = body,
-    responseUrl = ""
+    responseUrl = "",
 )
 
 fun createSendSlackMessageEvent(
@@ -75,16 +75,27 @@ fun createSendSlackMessageEvent(
     appId: String = TEST_APP_ID,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
-    idempotencyKey: UUID = UUID.randomUUID()
+    idempotencyKey: UUID = UUID.randomUUID(),
 ) = SendSlackMessageEvent(
     idempotencyKey = idempotencyKey,
-    payload = if(isPostEventPayload) createPostEventPayloadContents(
-        appId=appId, publisherId=publisherId, channel=channel, targetUserId = targetUserId,
-        commandDetailType = commandDetailType)
-        else createActionEventPayloadContents(
-            appId=appId, publisherId=publisherId, channel=channel,
-            commandDetailType = commandDetailType),
+    payload =
+        if (isPostEventPayload) {
+            createPostEventPayloadContents(
+                appId = appId,
+                publisherId = publisherId,
+                channel = channel,
+                targetUserId = targetUserId,
+                commandDetailType = commandDetailType,
+            )
+        } else {
+            createActionEventPayloadContents(
+                appId = appId,
+                publisherId = publisherId,
+                channel = channel,
+                commandDetailType = commandDetailType,
+            )
+        },
     destination = "",
     timestamp = System.currentTimeMillis(),
-    type = commandDetailType
+    type = commandDetailType,
 )

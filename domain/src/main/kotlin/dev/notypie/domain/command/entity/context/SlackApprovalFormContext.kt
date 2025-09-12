@@ -16,33 +16,41 @@ internal class SlackApprovalFormContext(
     commandBasicInfo: CommandBasicInfo,
     slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    events: EventQueue<CommandEvent<EventPayload>>
-): CommandContext(
-    slackEventBuilder = slackEventBuilder,
-    requestHeaders = requestHeaders,
-    commandBasicInfo = commandBasicInfo,
-    events = events,
-) {
+    events: EventQueue<CommandEvent<EventPayload>>,
+) : CommandContext(
+        slackEventBuilder = slackEventBuilder,
+        requestHeaders = requestHeaders,
+        commandBasicInfo = commandBasicInfo,
+        events = events,
+    ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
+
     override fun parseCommandDetailType() = CommandDetailType.APPROVAL_FORM
 
     override fun runCommand(): CommandOutput {
-        val event = this.slackEventBuilder.simpleApprovalFormRequest(
-            headLineText = "Approve Form",
-            selectionFields = this.buildSelectionFields(), commandType = this.commandType,
-            commandBasicInfo = this.commandBasicInfo, commandDetailType = this.commandDetailType
-        )
-        this.addNewEvent(commandEvent = event)
+        val event =
+            slackEventBuilder.simpleApprovalFormRequest(
+                headLineText = "Approve Form",
+                selectionFields = buildSelectionFields(),
+                commandType = commandType,
+                commandBasicInfo = commandBasicInfo,
+                commandDetailType = commandDetailType,
+            )
+        addNewEvent(commandEvent = event)
         return CommandOutput.success(payload = event.payload)
     }
 
-    private fun buildSelectionFields(): List<SelectionContents> = listOf(
-        SelectionContents(title = "Purpose", explanation = "Please select the purpose of this form.",
-            placeholderText = "SELECT", contents = listOf(
-                SelectBoxDetails(name = "Pull Requests", value = "GIT_PULL_REQUEST"),
-                SelectBoxDetails(name = "Logs", value = "GET_LOGS")
-            )
+    private fun buildSelectionFields(): List<SelectionContents> =
+        listOf(
+            SelectionContents(
+                title = "Purpose",
+                explanation = "Please select the purpose of this form.",
+                placeholderText = "SELECT",
+                contents =
+                    listOf(
+                        SelectBoxDetails(name = "Pull Requests", value = "GIT_PULL_REQUEST"),
+                        SelectBoxDetails(name = "Logs", value = "GET_LOGS"),
+                    ),
+            ),
         )
-    )
-
 }

@@ -5,7 +5,4 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 
 @Repository
-interface JpaTeamEntityRepository: JpaRepository<JpaTeamSchema, Long> {
-
-
-}
+interface JpaTeamEntityRepository : JpaRepository<JpaTeamSchema, Long>

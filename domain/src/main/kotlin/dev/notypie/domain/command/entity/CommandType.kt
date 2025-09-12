@@ -16,7 +16,7 @@ import dev.notypie.domain.common.event.EventPayload
 enum class CommandType {
     SIMPLE,
     PIPELINE,
-    SCHEDULED
+    SCHEDULED,
 }
 
 enum class CommandDetailType {
@@ -30,40 +30,44 @@ enum class CommandDetailType {
     REQUEST_MEETING_FORM,
     GET_MEETING_LIST,
     MEETING_APPROVAL_NOTICE_FORM,
-    NOTICE_FORM;
-
+    NOTICE_FORM,
+    ;
 
     internal fun createContext(
         slackEventBuilder: SlackEventBuilder,
         commandBasicInfo: CommandBasicInfo,
         events: EventQueue<CommandEvent<EventPayload>>,
         requestHeaders: SlackRequestHeaders,
-        subCommand: SubCommand
-    ): CommandContext = when (this) {
-        APPROVAL_FORM ->
-            SlackApprovalFormContext(
-                slackEventBuilder = slackEventBuilder,
-                commandBasicInfo = commandBasicInfo,
-                events = events,
-            )
-        MEETING_APPROVAL_NOTICE_FORM,
-        REQUEST_MEETING_FORM ->
-            RequestMeetingContext(
-                slackEventBuilder = slackEventBuilder,
-                commandBasicInfo = commandBasicInfo,
-                events = events, subCommand = subCommand
-            )
-        NOTICE_FORM ->
-            ApprovalCallbackContext(
-                slackEventBuilder = slackEventBuilder,
-                commandBasicInfo = commandBasicInfo,
-                events = events,
-            )
-        else -> EmptyContext(
-            commandBasicInfo = commandBasicInfo,
-            requestHeaders = requestHeaders,
-            slackEventBuilder = slackEventBuilder,
-            events = events,
-        )
-    }
+        subCommand: SubCommand,
+    ): CommandContext =
+        when (this) {
+            APPROVAL_FORM ->
+                SlackApprovalFormContext(
+                    slackEventBuilder = slackEventBuilder,
+                    commandBasicInfo = commandBasicInfo,
+                    events = events,
+                )
+            MEETING_APPROVAL_NOTICE_FORM,
+            REQUEST_MEETING_FORM,
+            ->
+                RequestMeetingContext(
+                    slackEventBuilder = slackEventBuilder,
+                    commandBasicInfo = commandBasicInfo,
+                    events = events,
+                    subCommand = subCommand,
+                )
+            NOTICE_FORM ->
+                ApprovalCallbackContext(
+                    slackEventBuilder = slackEventBuilder,
+                    commandBasicInfo = commandBasicInfo,
+                    events = events,
+                )
+            else ->
+                EmptyContext(
+                    commandBasicInfo = commandBasicInfo,
+                    requestHeaders = requestHeaders,
+                    slackEventBuilder = slackEventBuilder,
+                    events = events,
+                )
+        }
 }

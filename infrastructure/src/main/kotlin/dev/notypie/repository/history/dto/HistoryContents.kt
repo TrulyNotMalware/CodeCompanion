@@ -10,7 +10,6 @@ data class HistoryContents(
     val channel: String,
     val apiAppId: String,
     val status: Status,
-
     val commandDetailType: CommandDetailType,
-    val commandType: CommandType
+    val commandType: CommandType,
 )

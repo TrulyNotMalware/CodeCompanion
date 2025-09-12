@@ -4,6 +4,5 @@ data class SelectionContents(
     val title: String,
     val explanation: String,
     val placeholderText: String,
-
-    val contents: List<SelectBoxDetails>
+    val contents: List<SelectBoxDetails>,
 )

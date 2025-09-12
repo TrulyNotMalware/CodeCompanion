@@ -7,26 +7,20 @@ import org.springframework.scheduling.annotation.Scheduled
 
 class PollingMessageProcessor(
     private val outboxRepository: MessageOutboxRepository,
-    private val messageRelayService: SlackMessageRelayServiceImpl
-): MessageProcessor{
+    private val messageRelayService: SlackMessageRelayServiceImpl,
+) : MessageProcessor {
     @Scheduled(fixedRate = 5000)
-    fun scheduleDispatch() = this.getPendingMessages(
-        messageParameter = NoParameter
-    )
+    fun scheduleDispatch() = getPendingMessages(messageParameter = NoParameter)
 
     override fun getPendingMessages(messageParameter: MessageProcessorParameter) {
         val pageSize = 100
         var offset = 0
         while (true) {
-            val pendingMessages = this.outboxRepository.findPendingMessages(
-                limit = pageSize,
-                offset = offset
-            )
+            val pendingMessages =
+                this.outboxRepository.findPendingMessages(limit = pageSize, offset = offset)
             if (pendingMessages.isEmpty()) break
 
-            this.messageRelayService.batchPendingMessages(
-                pendingMessages = pendingMessages
-            )
+            this.messageRelayService.batchPendingMessages(pendingMessages = pendingMessages)
             offset += pendingMessages.size
         }
     }

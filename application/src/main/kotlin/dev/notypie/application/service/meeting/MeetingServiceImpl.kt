@@ -22,33 +22,37 @@ class MeetingServiceImpl(
     private val slackEventBuilder: SlackEventBuilder,
     private val meetingRepository: MeetingRepository,
     private val retryService: RetryService,
-    private val eventPublisher: EventPublisher
-): MeetingService {
-
+    private val eventPublisher: EventPublisher,
+) : MeetingService {
     @Transactional
-    override fun handleMeeting(headers: MultiValueMap<String, String>,
-                               payload: SlashCommandRequestBody, slackCommandData: SlackCommandData) {
+    override fun handleMeeting(
+        headers: MultiValueMap<String, String>,
+        payload: SlashCommandRequestBody,
+        slackCommandData: SlackCommandData,
+    ) {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
-        val command = RequestMeetingCommand(
-            commandData = slackCommandData, idempotencyKey = idempotencyKey,
-            slackEventBuilder = this.slackEventBuilder, eventPublisher = this.eventPublisher
-        )
+        val command =
+            RequestMeetingCommand(
+                commandData = slackCommandData,
+                idempotencyKey = idempotencyKey,
+                slackEventBuilder = this.slackEventBuilder,
+                eventPublisher = this.eventPublisher,
+            )
         val result = command.handleEvent()
     }
 
     override fun getMyMeetingList(meetingRequestDto: GetMeetupListRequestDto) {
         val meetings = this.meetingRepository.getAllMeetingByUserId(userId = meetingRequestDto.userId)
-
     }
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
-    fun createNewMeeting(result: RequestMeetingContextResult){
+    fun createNewMeeting(result: RequestMeetingContextResult) {
         val meeting = result.newMeeting()
         this.retryService.execute(
             action = { meetingRepository.createNewMeeting(meetingSchema = meeting) },
             recoveryCallBack = {
 //                slackApiRequester.simpleTextRequest()
-            }
+            },
         )
     }
 }

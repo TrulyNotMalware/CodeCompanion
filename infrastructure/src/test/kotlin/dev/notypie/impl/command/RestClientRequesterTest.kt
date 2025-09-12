@@ -11,86 +11,126 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.client.RestClientException
 
-class RestClientRequesterTest: BehaviorSpec({
-    val restRequester: RestRequester = RestClientRequester(
-        baseUrl = "https://jsonplaceholder.typicode.com/posts"
-    )
-    val createRequestBody = PostDomainCreateRequestBody.getDefault()
-    val updateRequestBody = PostDomainUpdateRequestBody.getDefault()
+class RestClientRequesterTest :
+    BehaviorSpec({
+        val restRequester: RestRequester =
+            RestClientRequester(
+                baseUrl = "https://jsonplaceholder.typicode.com/posts",
+            )
+        val createRequestBody = PostDomainCreateRequestBody.getDefault()
+        val updateRequestBody = PostDomainUpdateRequestBody.getDefault()
 
-    given("Rest API Requester"){
-        `when`("get request"){
-            then("successfully works"){
-                val response = restRequester.safeGet(uri = "/1", authorizationHeader = null, responseType = PostDomainResponse::class.java)
-                    .getOrThrow()
-                val responseList = restRequester.safeGet(uri = "", authorizationHeader = null, responseType = Array<PostDomainResponse>::class.java)
-                    .getOrThrow()
-                response.statusCode shouldBe HttpStatus.OK
-                response.body shouldNotBe null
+        given("Rest API Requester") {
+            `when`("get request") {
+                then("successfully works") {
+                    val response =
+                        restRequester
+                            .safeGet(
+                                uri = "/1",
+                                authorizationHeader = null,
+                                responseType = PostDomainResponse::class.java,
+                            ).getOrThrow()
+                    val responseList =
+                        restRequester
+                            .safeGet(
+                                uri = "",
+                                authorizationHeader = null,
+                                responseType = Array<PostDomainResponse>::class.java,
+                            ).getOrThrow()
+                    response.statusCode shouldBe HttpStatus.OK
+                    response.body shouldNotBe null
 
-                responseList.statusCode shouldBe HttpStatus.OK
-                responseList.body shouldNotBe null
-                responseList.body?.size shouldNotBe 0
-            }
-
-        }
-
-        `when`("post request"){
-            then("successfully works"){
-                val response = restRequester.safePost(uri = "", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = createRequestBody, responseType = PostDomainResponse::class.java)
-                    .getOrThrow()
-                response.statusCode shouldBe HttpStatus.CREATED
-                response.body?.apply {
-                    userId shouldBe createRequestBody.userId
-                    body shouldBe createRequestBody.body
+                    responseList.statusCode shouldBe HttpStatus.OK
+                    responseList.body shouldNotBe null
+                    responseList.body?.size shouldNotBe 0
                 }
             }
 
-            then("throws exceptions when uri is invalid"){
-                shouldThrowExactly<RestClientException> {
-                    restRequester.post(uri = "/1" , authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = createRequestBody, responseType = PostDomainResponse::class.java)
-                }
-            }
-        }
-
-        `when`("update request"){
-            then("successfully works"){
-                val putRequest = restRequester.safePut(uri = "/1", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = updateRequestBody, responseType = PostDomainResponse::class.java)
-                    .getOrThrow()
-                val patchResponse = restRequester.safePatch(uri = "/1", authorizationHeader = null, contentType = MediaType.APPLICATION_JSON, body = updateRequestBody, responseType = PostDomainResponse::class.java)
-                    .getOrThrow()
-
-                with (putRequest) {
-                    statusCode shouldBe HttpStatus.OK
-                    body shouldNotBe null
-                    body?.apply {
-                        userId shouldBe updateRequestBody.userId
-                        id shouldBe updateRequestBody.id
-                        title shouldBe updateRequestBody.title
-                        body shouldBe updateRequestBody.body
+            `when`("post request") {
+                then("successfully works") {
+                    val response =
+                        restRequester
+                            .safePost(
+                                uri = "",
+                                authorizationHeader = null,
+                                contentType = MediaType.APPLICATION_JSON,
+                                body = createRequestBody,
+                                responseType = PostDomainResponse::class.java,
+                            ).getOrThrow()
+                    response.statusCode shouldBe HttpStatus.CREATED
+                    response.body?.apply {
+                        userId shouldBe createRequestBody.userId
+                        body shouldBe createRequestBody.body
                     }
                 }
 
-                with (patchResponse) {
-                    statusCode shouldBe HttpStatus.OK
-                    body shouldNotBe null
-                    body?.apply {
-                        userId shouldBe updateRequestBody.userId
-                        id shouldBe updateRequestBody.id
-                        title shouldBe updateRequestBody.title
-                        body shouldBe updateRequestBody.body
+                then("throws exceptions when uri is invalid") {
+                    shouldThrowExactly<RestClientException> {
+                        restRequester.post(
+                            uri = "/1",
+                            authorizationHeader = null,
+                            contentType = MediaType.APPLICATION_JSON,
+                            body = createRequestBody,
+                            responseType = PostDomainResponse::class.java,
+                        )
                     }
                 }
             }
-        }
 
-        `when`("delete request"){
-            then("successfully works"){
-                val response = restRequester.safeDelete(uri = "/1", authorizationHeader = null, responseType = Void::class.java)
-                    .getOrThrow()
-                response.statusCode shouldBe HttpStatus.OK
-                response.body shouldBe null
+            `when`("update request") {
+                then("successfully works") {
+                    val putRequest =
+                        restRequester
+                            .safePut(
+                                uri = "/1",
+                                authorizationHeader = null,
+                                contentType = MediaType.APPLICATION_JSON,
+                                body = updateRequestBody,
+                                responseType = PostDomainResponse::class.java,
+                            ).getOrThrow()
+                    val patchResponse =
+                        restRequester
+                            .safePatch(
+                                uri = "/1",
+                                authorizationHeader = null,
+                                contentType = MediaType.APPLICATION_JSON,
+                                body = updateRequestBody,
+                                responseType = PostDomainResponse::class.java,
+                            ).getOrThrow()
+
+                    with(putRequest) {
+                        statusCode shouldBe HttpStatus.OK
+                        body shouldNotBe null
+                        body?.apply {
+                            userId shouldBe updateRequestBody.userId
+                            id shouldBe updateRequestBody.id
+                            title shouldBe updateRequestBody.title
+                            body shouldBe updateRequestBody.body
+                        }
+                    }
+
+                    with(patchResponse) {
+                        statusCode shouldBe HttpStatus.OK
+                        body shouldNotBe null
+                        body?.apply {
+                            userId shouldBe updateRequestBody.userId
+                            id shouldBe updateRequestBody.id
+                            title shouldBe updateRequestBody.title
+                            body shouldBe updateRequestBody.body
+                        }
+                    }
+                }
+            }
+
+            `when`("delete request") {
+                then("successfully works") {
+                    val response =
+                        restRequester
+                            .safeDelete(uri = "/1", authorizationHeader = null, responseType = Void::class.java)
+                            .getOrThrow()
+                    response.statusCode shouldBe HttpStatus.OK
+                    response.body shouldBe null
+                }
             }
         }
-    }
-})
+    })

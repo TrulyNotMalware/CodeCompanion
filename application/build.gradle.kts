@@ -9,9 +9,13 @@ tasks.named<BootJar>("bootJar") {
 }
 
 dependencies {
-    //Spring-boot bom
-    implementation(platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"))
-    testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"))
+    // Spring-boot bom
+    implementation(
+        platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"),
+    )
+    testFixturesImplementation(
+        platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"),
+    )
 
     implementation(project(":domain"))
     implementation(project(":infrastructure"))
@@ -19,15 +23,15 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web") {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
     }
-    //Undertow
+    // Undertow
     implementation("org.springframework.boot:spring-boot-starter-undertow")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    testImplementation ("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
 
-    //AOP
+    // AOP
     implementation("org.springframework.boot:spring-boot-starter-aop")
 
-    //rest docs
+    // rest docs
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
 }

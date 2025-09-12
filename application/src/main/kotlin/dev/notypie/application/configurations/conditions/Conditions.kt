@@ -9,10 +9,8 @@ import org.springframework.context.annotation.ConditionContext
 import org.springframework.core.env.Environment
 import org.springframework.core.type.AnnotatedTypeMetadata
 
-
-fun Environment.extractAppConfig(): AppConfig
-= Binder.get(this).bind("slack.app", AppConfig::class.java).orElse(AppConfig())
-
+fun Environment.extractAppConfig(): AppConfig =
+    Binder.get(this).bind("slack.app", AppConfig::class.java).orElse(AppConfig())
 
 /**
  * A condition that determines whether the application is running in StandAlone mode.
@@ -24,8 +22,7 @@ fun Environment.extractAppConfig(): AppConfig
  * Spring beans or configurations only when the application is configured
  * to run in StandAlone mode.
  */
-class OnStandAloneCondition: Condition {
-
+class OnStandAloneCondition : Condition {
     /**
      * Evaluates whether the current application mode is set to standalone.
      * This method checks the configuration properties under "slack.app"
@@ -36,7 +33,9 @@ class OnStandAloneCondition: Condition {
      * @return true if the application mode is set to standalone, false otherwise
      */
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
-        context.environment.extractAppConfig().mode.standAlone
+        context.environment
+            .extractAppConfig()
+            .mode.standAlone
 }
 
 /**
@@ -49,7 +48,7 @@ class OnStandAloneCondition: Condition {
  * Spring beans or configurations only when the application is configured
  * to run in MicroService mode.
  */
-class OnMicroServiceCondition: Condition{
+class OnMicroServiceCondition : Condition {
     /**
      * Evaluates whether the current application mode is set to microservice.
      * This method checks the configuration properties under "slack.app"
@@ -60,8 +59,9 @@ class OnMicroServiceCondition: Condition{
      * @return true if the application mode is set to microservice, false otherwise
      */
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
-        !context.environment.extractAppConfig().mode.standAlone
-
+        !context.environment
+            .extractAppConfig()
+            .mode.standAlone
 }
 
 /**
@@ -74,8 +74,7 @@ class OnMicroServiceCondition: Condition{
  * Typically used with the `@Conditional` annotation to conditionally load application components
  * or beans defined under specific configuration setups.
  */
-class OnPollingConsumer: Condition{
-
+class OnPollingConsumer : Condition {
     /**
      * Evaluates whether the given condition matches based on the application configuration.
      *
@@ -84,8 +83,9 @@ class OnPollingConsumer: Condition{
      * @return true if the configured publisher mode is `PublisherType.POOLING`; false otherwise
      */
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
-        context.environment.extractAppConfig().mode.outboxReadingStrategy == OutboxReaderStrategy.POLLING
-
+        context.environment
+            .extractAppConfig()
+            .mode.outboxReadingStrategy == OutboxReaderStrategy.POLLING
 }
 
 /**
@@ -94,8 +94,7 @@ class OnPollingConsumer: Condition{
  * This condition checks the application's configuration to verify
  * if the publisher mode is set to `PublisherType.CDC`.
  */
-class OnCdcConsumer: Condition{
-
+class OnCdcConsumer : Condition {
     /**
      * Evaluates whether the condition is met based on the given context and metadata.
      * The condition checks if the application configuration specifies the publisher mode as `PublisherType.CDC`.
@@ -105,7 +104,9 @@ class OnCdcConsumer: Condition{
      * @return `true` if the publisher mode is `PublisherType.CDC`, otherwise `false`.
      */
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
-        context.environment.extractAppConfig().mode.outboxReadingStrategy == OutboxReaderStrategy.CDC
+        context.environment
+            .extractAppConfig()
+            .mode.outboxReadingStrategy == OutboxReaderStrategy.CDC
 }
 
 /**
@@ -117,8 +118,7 @@ class OnCdcConsumer: Condition{
  * This is useful for selectively enabling or configuring Kafka-related beans or features
  * based on the application's current operational mode.
  */
-class OnKafkaEventPublisher: Condition{
-
+class OnKafkaEventPublisher : Condition {
     /**
      * Evaluates whether the current condition matches based on the application configuration's eventPublisher mode.
      *
@@ -127,7 +127,9 @@ class OnKafkaEventPublisher: Condition{
      * @return true if the eventPublisher mode is set to KAFKA, false otherwise
      */
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
-        context.environment.extractAppConfig().mode.eventPublisher == EventPublisherType.KAFKA
+        context.environment
+            .extractAppConfig()
+            .mode.eventPublisher == EventPublisherType.KAFKA
 }
 
 /**
@@ -139,8 +141,7 @@ class OnKafkaEventPublisher: Condition{
  * This can be used as a condition for defining specific beans or configurations that depend on the
  * application using the Spring event-driven mechanism for publishing events.
  */
-class OnApplicationEventPublisher: Condition{
-
+class OnApplicationEventPublisher : Condition {
     /**
      * Determines if the condition is met based on the application's configuration.
      *
@@ -154,5 +155,7 @@ class OnApplicationEventPublisher: Condition{
      * @return `true` if the condition is met; otherwise, `false`.
      */
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
-        context.environment.extractAppConfig().mode.eventPublisher == EventPublisherType.APPLICATION_EVENT
+        context.environment
+            .extractAppConfig()
+            .mode.eventPublisher == EventPublisherType.APPLICATION_EVENT
 }

@@ -11,5 +11,5 @@ data class Container(
     val threadTs: String? = null,
     val attachmentId: Int? = null,
     val viewId: String? = null,
-    val text: String? = null
+    val text: String? = null,
 )

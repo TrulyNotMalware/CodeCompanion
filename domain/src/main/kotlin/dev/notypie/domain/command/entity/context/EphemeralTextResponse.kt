@@ -16,23 +16,25 @@ internal class EphemeralTextResponse(
     slackEventBuilder: SlackEventBuilder,
     events: EventQueue<CommandEvent<EventPayload>>,
     private val textMessage: String,
-): CommandContext(
-    requestHeaders = requestHeaders,
-    slackEventBuilder = slackEventBuilder,
-    commandBasicInfo = commandBasicInfo,
-    events = events
-) {
+) : CommandContext(
+        requestHeaders = requestHeaders,
+        slackEventBuilder = slackEventBuilder,
+        commandBasicInfo = commandBasicInfo,
+        events = events,
+    ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
+
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
-    override fun runCommand(): CommandOutput{
-        val event = this.slackEventBuilder.simpleEphemeralTextRequest(
-            commandBasicInfo = this.commandBasicInfo,
-            commandDetailType = this.commandDetailType,
-            commandType = this.commandType,
-            textMessage = this.textMessage
-        )
-        this.addNewEvent(commandEvent = event)
+    override fun runCommand(): CommandOutput {
+        val event =
+            slackEventBuilder.simpleEphemeralTextRequest(
+                commandBasicInfo = commandBasicInfo,
+                commandDetailType = commandDetailType,
+                commandType = commandType,
+                textMessage = textMessage,
+            )
+        addNewEvent(commandEvent = event)
         return CommandOutput.success(payload = event.payload)
     }
 }

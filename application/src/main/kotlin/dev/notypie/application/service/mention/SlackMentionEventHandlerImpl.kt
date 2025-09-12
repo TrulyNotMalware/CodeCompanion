@@ -23,56 +23,70 @@ import java.util.UUID
 class SlackMentionEventHandlerImpl(
     private val slackEventBuilder: SlackEventBuilder,
     private val historyHandler: HistoryHandler,
-    private val eventPublisher: EventPublisher
-): AppMentionEventHandler {
+    private val eventPublisher: EventPublisher,
+) : AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
         const val SLACK_APP_NAME = "CodeCompanion"
         const val REQUEST_TYPE = "APP_MENTION"
     }
 
-    //FIXME Remove AppMention Events.
+    // FIXME Remove AppMention Events.
 
     @Transactional
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
-        val slackCommandData = this.parseAppMentionEvent(headers = headers, payload = payload)
-        return this.handleEvent(slackCommandData = slackCommandData)
+        val slackCommandData = parseAppMentionEvent(headers = headers, payload = payload)
+        return handleEvent(slackCommandData = slackCommandData)
     }
 
     override fun parseAppMentionEvent(
-        headers: MultiValueMap<String, String>, payload: Map<String, Any>
-    ): SlackCommandData{
-        val appId = this.resolveAppId(payload = payload)
-        val body = this.convertBodyData(payload = payload)
+        headers: MultiValueMap<String, String>,
+        payload: Map<String, Any>,
+    ): SlackCommandData {
+        val appId = resolveAppId(payload = payload)
+        val body = convertBodyData(payload = payload)
         val commandType = SlackCommandType.valueOf(body.type.uppercase())
         return SlackCommandData(
-            appId = appId, appToken = body.token, publisherId = body.event.userId, channel = body.event.channel,
-            slackCommandType = commandType, rawHeader = SlackRequestHeaders(headers = headers),
-            rawBody = payload, body = body,
-            publisherName = payload["user_name"].toString(), //FIXME
-            channelName = payload["channel_name"].toString() //FIXME
+            appId = appId,
+            appToken = body.token,
+            publisherId = body.event.userId,
+            channel = body.event.channel,
+            slackCommandType = commandType,
+            rawHeader = SlackRequestHeaders(headers = headers),
+            rawBody = payload,
+            body = body,
+            publisherName = payload["user_name"].toString(), // FIXME
+            channelName = payload["channel_name"].toString(), // FIXME
         )
     }
 
     private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
-        InteractionCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
-            commandData = commandData, slackEventBuilder = slackEventBuilder, eventPublisher = eventPublisher)
+        InteractionCommand(
+            appName = SLACK_APP_NAME,
+            idempotencyKey = idempotencyKey,
+            commandData = commandData,
+            slackEventBuilder = slackEventBuilder,
+            eventPublisher = eventPublisher,
+        )
 
     @Transactional
-    override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput{
+    override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
-        val command = this.buildCommand(idempotencyKey = idempotencyKey,commandData = slackCommandData)
+        val command = buildCommand(idempotencyKey = idempotencyKey, commandData = slackCommandData)
         val result: CommandOutput = command.handleEvent()
         val history: History = mapHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
-        this.historyHandler.saveNewHistory(history = history)
+        historyHandler.saveNewHistory(history = history)
         return result
     }
 
-    private fun resolveAppId(payload: Map<String, Any>): String{
-        if(payload[SLACK_APPID_KEY_NAME] != null) return payload[SLACK_APPID_KEY_NAME].toString()
-        else throw RuntimeException("COMMAND_TYPE_NOT_DETECTED")
+    private fun resolveAppId(payload: Map<String, Any>): String {
+        if (payload[SLACK_APPID_KEY_NAME] != null) {
+            return payload[SLACK_APPID_KEY_NAME].toString()
+        } else {
+            throw RuntimeException("COMMAND_TYPE_NOT_DETECTED")
+        }
     }
 
-    private fun convertBodyData( payload : Map<String, Any> ) = objectMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
-
+    private fun convertBodyData(payload: Map<String, Any>) =
+        objectMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
 }

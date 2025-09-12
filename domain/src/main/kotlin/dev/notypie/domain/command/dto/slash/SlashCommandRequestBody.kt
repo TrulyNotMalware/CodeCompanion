@@ -11,7 +11,6 @@ data class SlashCommandRequestBody(
     val teamId: String,
     @field:JsonProperty("team_domain")
     val teamDomainName: String,
-
     @field:JsonProperty("channel_id")
     val channel: String,
     @field:JsonProperty("channel_name")
@@ -19,39 +18,35 @@ data class SlashCommandRequestBody(
     @field:JsonProperty("api_app_id")
     val apiAppId: String,
     @field:JsonProperty("is_enterprise_install")
-    val isEnterpriseInstall : String,
-
+    val isEnterpriseInstall: String,
     @field:JsonProperty("user_id")
     val userId: String,
     @field:JsonProperty("user_name")
     val userName: String,
-
     val command: String,
     @field:JsonProperty("text")
     val subCommands: String,
-
     @field:JsonProperty("response_url")
     val responseUrl: String,
     @field:JsonProperty("trigger_id")
-    val triggerId: String
-){
+    val triggerId: String,
+) {
     fun toSlackCommandData(
         rawBody: Map<String, String> = mapOf(),
         rawHeader: SlackRequestHeaders = SlackRequestHeaders(),
     ) = SlackCommandData(
-        appId = this.apiAppId,
-        appToken = this.token,
-        channel = this.channel,
-        channelName = this.channelName,
-        publisherId = this.userId,
-        publisherName = this.userName,
+        appId = apiAppId,
+        appToken = token,
+        channel = channel,
+        channelName = channelName,
+        publisherId = userId,
+        publisherName = userName,
         slackCommandType = SlackCommandType.SLASH,
         body = this,
         rawBody = rawBody,
         rawHeader = rawHeader,
-        subCommands = subCommandList()
+        subCommands = subCommandList(),
     )
 
-    fun subCommandList() = this.subCommands.split(" ")
-
+    fun subCommandList() = subCommands.split(" ")
 }

@@ -17,15 +17,14 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/slack")
 class SlackEventController(
     private val eventHandler: AppMentionEventHandler,
-    private val interactionHandler: InteractionHandler
+    private val interactionHandler: InteractionHandler,
 ) {
-
     @PostMapping(value = ["/events"], produces = [MediaType.APPLICATION_JSON_VALUE])
     fun handleAppMentionEvents(
         @RequestHeader headers: MultiValueMap<String, String>,
-        @RequestBody payload: Map<String, Any>
+        @RequestBody payload: Map<String, Any>,
     ): ResponseEntity<*> {
-        if(isChallengeRequest(payload = payload)) return ResponseEntity.ok().body(payload)//FIXME logging.
+        if (isChallengeRequest(payload = payload)) return ResponseEntity.ok().body(payload) // FIXME logging.
         val slackCommandData = this.eventHandler.handleEvent(headers = headers, payload = payload)
         return ResponseEntity.ok().body(slackCommandData)
     }
@@ -33,11 +32,12 @@ class SlackEventController(
     @PostMapping(value = ["/interaction"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun handleInteractions(
         @RequestHeader headers: MultiValueMap<String, String>,
-        @RequestParam payload: String
+        @RequestParam payload: String,
     ): ResponseEntity<*> {
         this.interactionHandler.handleInteraction(headers = headers, payload = payload)
         return ResponseEntity.ok().body("")
     }
 
-    private fun isChallengeRequest(payload: Map<String, Any>) = payload["type"] == SlackCommandType.URL_VERIFICATION.toString().lowercase()
+    private fun isChallengeRequest(payload: Map<String, Any>) =
+        payload["type"] == SlackCommandType.URL_VERIFICATION.toString().lowercase()
 }

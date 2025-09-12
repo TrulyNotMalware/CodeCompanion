@@ -6,8 +6,7 @@ data class SlackEventContents(
     val error: String? = null,
     val needed: String? = null,
     val provided: String? = null,
-
-    //EventResponse type
+    // EventResponse type
     val type: String,
-    val data: Any
+    val data: Any,
 )

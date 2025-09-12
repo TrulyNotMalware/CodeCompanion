@@ -10,11 +10,10 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/log")
 class LogController(
-    private val monitoring: Monitoring
+    private val monitoring: Monitoring,
 ) {
-
-    @GetMapping(value = [""], produces = [ MediaType.APPLICATION_JSON_VALUE] )
-    fun test(){
+    @GetMapping(value = [""], produces = [ MediaType.APPLICATION_JSON_VALUE])
+    fun test() {
         this.monitoring.getLog()
     }
 }

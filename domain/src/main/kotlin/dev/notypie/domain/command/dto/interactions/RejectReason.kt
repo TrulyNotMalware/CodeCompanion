@@ -1,7 +1,7 @@
 package dev.notypie.domain.command.dto.interactions
 
 enum class RejectReason(
-    val showMessage: String
+    val showMessage: String,
 ) {
     ATTENDING("Attending"),
 
@@ -12,5 +12,5 @@ enum class RejectReason(
     REQUEST_DELAY("Delay request"),
     VACATION("Vacation"),
     PERSONAL_REASON("PERSONAL reason"),
-    OTHER("Other")
+    OTHER("Other"),
 }

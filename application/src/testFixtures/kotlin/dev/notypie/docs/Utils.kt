@@ -7,11 +7,15 @@ object RestDocsUtils {
     const val DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss"
 
     fun emptySample(): Attributes.Attribute = Attributes.key("sample").value("")
+
     fun emptyFormat(): Attributes.Attribute = Attributes.key("format").value("")
+
     fun emptyDefaultValue(): Attributes.Attribute = Attributes.key("default").value("")
 
     fun customSample(value: String): Attributes.Attribute = Attributes.key("sample").value(value)
+
     fun customFormat(value: String): Attributes.Attribute = Attributes.key("format").value(value)
+
     fun defaultValue(value: String): Attributes.Attribute = Attributes.key("default").value(value)
 }
 
@@ -22,7 +26,5 @@ object RestDocsAttributeKeys {
 }
 
 object EnumFormattingUtils {
-    fun <T : Enum<T>> enumFormat(enums: Collection<T>): String {
-        return enums.joinToString(" | ") { it.name }
-    }
+    fun <T : Enum<T>> enumFormat(enums: Collection<T>): String = enums.joinToString(" | ") { it.name }
 }
