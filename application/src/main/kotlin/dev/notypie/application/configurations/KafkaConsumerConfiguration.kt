@@ -23,7 +23,7 @@ import org.springframework.kafka.support.micrometer.KafkaListenerObservationConv
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
 import java.lang.Exception
 
-private val logger = KotlinLogging.logger {  }
+private val logger = KotlinLogging.logger { }
 
 @Configuration
 @Conditional(OnCdcConsumer::class)
@@ -37,20 +37,18 @@ class CdcConsumerConfiguration
 @Import(
     KafkaProducerConfiguration::class,
     KafkaObservationConvention::class,
-    KafkaConsumerConfiguration::class
-    )
+    KafkaConsumerConfiguration::class,
+)
 class KafkaEventPublisherConfiguration
 
 class KafkaConsumerConfiguration(
     private val convention: KafkaObservationConvention,
-    private val kafkaProperties: KafkaProperties
+    private val kafkaProperties: KafkaProperties,
 ) {
-
     @Bean
     @ConditionalOnMissingBean(ConsumerFactory::class)
     fun consumerFactory(): ConsumerFactory<String, Any> =
         DefaultKafkaConsumerFactory(this.kafkaProperties.buildConsumerProperties())
-
 
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)
@@ -62,12 +60,11 @@ class KafkaConsumerConfiguration(
             containerProperties.observationConvention = convention
             setCommonErrorHandler(KafkaErrorHandler())
         }
-
 }
 
 class KafkaProducerConfiguration(
-    private val kafkaProperties: KafkaProperties
-){
+    private val kafkaProperties: KafkaProperties,
+) {
     @Bean
     @ConditionalOnMissingBean(ProducerFactory::class)
     fun producerFactory(): ProducerFactory<String, Any> =
@@ -76,7 +73,7 @@ class KafkaProducerConfiguration(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to this.kafkaProperties.bootstrapServers,
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to this.kafkaProperties.producer.keySerializer,
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to this.kafkaProperties.producer.valueSerializer,
-            )
+            ),
         )
 
     @Bean
@@ -88,43 +85,37 @@ class KafkaProducerConfiguration(
         }
 }
 
-class KafkaObservationConvention: KafkaListenerObservationConvention{
-
+class KafkaObservationConvention : KafkaListenerObservationConvention {
     override fun getName(): String = "code.companion.listener"
-    override fun getContextualName(context: KafkaRecordReceiverContext) = context.source + " receive"
-    override fun getLowCardinalityKeyValues(context: KafkaRecordReceiverContext): KeyValues =
-        KeyValues.of(
-            KafkaListenerObservation.ListenerLowCardinalityTags.LISTENER_ID.asString(),
-            context.listenerId
-        )
 
+    override fun getContextualName(context: KafkaRecordReceiverContext) = context.source + " receive"
+
+    override fun getLowCardinalityKeyValues(context: KafkaRecordReceiverContext): KeyValues =
+        KeyValues.of(KafkaListenerObservation.ListenerLowCardinalityTags.LISTENER_ID.asString(), context.listenerId)
 }
 
-class KafkaErrorHandler: CommonErrorHandler{
-
+class KafkaErrorHandler : CommonErrorHandler {
     override fun handleOtherException(
         thrownException: Exception,
         consumer: Consumer<*, *>,
         container: MessageListenerContainer,
-        batchListener: Boolean
-    ) {
-        super.handleOtherException(thrownException, consumer, container, batchListener)
-    }
+        batchListener: Boolean,
+    ) = super.handleOtherException(thrownException, consumer, container, batchListener)
 
     override fun handleOne(
         thrownException: Exception,
         record: ConsumerRecord<*, *>,
         consumer: Consumer<*, *>,
-        container: MessageListenerContainer
+        container: MessageListenerContainer,
     ): Boolean {
-        if(record.value() == null || record.value().toString().isBlank()){
-            logger.warn { "Received null or blank message. topic: ${record.topic()}, partition: ${record.partition()}, offset: ${record.offset()}" }
+        if (record.value() == null || record.value().toString().isBlank()) {
+            logger.warn {
+                "Received null or blank message. topic: ${record.topic()}, partition: ${record.partition()}, offset: ${record.offset()}"
+            }
             return true
         }
         return super.handleOne(thrownException, record, consumer, container)
     }
 
-    override fun seeksAfterHandling(): Boolean {
-        return super.seeksAfterHandling()
-    }
+    override fun seeksAfterHandling(): Boolean = super.seeksAfterHandling()
 }

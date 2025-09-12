@@ -7,10 +7,9 @@ import org.springframework.util.MultiValueMap
 
 class DefaultUserServiceImpl(
     private val slackEventBuilder: SlackEventBuilder,
-    private val teamRepository: TeamRepository
-): UserService {
-
-    override fun createNewTeam(headers: MultiValueMap<String, String>, data: Map<String, String>){
+    private val teamRepository: TeamRepository,
+) : UserService {
+    override fun createNewTeam(headers: MultiValueMap<String, String>, data: Map<String, String>) {
         val body = parseRequestBodyData(data = data)
         val subCommands = body.subCommandList()
     }

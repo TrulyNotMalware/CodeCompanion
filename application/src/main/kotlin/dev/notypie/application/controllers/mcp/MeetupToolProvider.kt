@@ -6,15 +6,16 @@ import org.springframework.ai.tool.annotation.Tool
 import org.springframework.ai.tool.annotation.ToolParam
 
 class MeetupToolProvider(
-    private val meetingService: MeetingService
+    private val meetingService: MeetingService,
 ) {
     @Tool(
         name = "getMyMeetupLists",
-        description = "Fetches meetup lists assigned to the user."
+        description = "Fetches meetup lists assigned to the user.",
     )
     fun getMyMeetupList(
-        @ToolParam(description = "Meeting request dto", required = true) requestDto: GetMeetupListRequestDto
-    ){
+        @ToolParam(description = "Meeting request dto", required = true)
+        requestDto: GetMeetupListRequestDto,
+    ) {
         this.meetingService.getMyMeetingList(meetingRequestDto = requestDto)
     }
 }

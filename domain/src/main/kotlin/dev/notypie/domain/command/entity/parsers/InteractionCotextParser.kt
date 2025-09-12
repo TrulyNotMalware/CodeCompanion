@@ -16,23 +16,19 @@ internal class InteractionCotextParser(
     val commandId: UUID,
     val idempotencyKey: UUID,
     private val slackEventBuilder: SlackEventBuilder,
-    private val events: EventQueue<CommandEvent<EventPayload>>
-): ContextParser{
+    private val events: EventQueue<CommandEvent<EventPayload>>,
+) : ContextParser {
     private val subCommand = SubCommand.empty()
     private val interactionPayload = slackCommandData.body as InteractionPayload
 
-    override fun parseContext(
-        idempotencyKey: UUID
-    ): CommandContext {
+    override fun parseContext(idempotencyKey: UUID): CommandContext {
         val basicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey)
         return interactionPayload.type.createContext(
-            slackEventBuilder = this.slackEventBuilder,
+            slackEventBuilder = slackEventBuilder,
             commandBasicInfo = basicInfo,
-            events = this.events,
-            requestHeaders = this.slackCommandData.rawHeader,
-            subCommand = this.subCommand
+            events = events,
+            requestHeaders = slackCommandData.rawHeader,
+            subCommand = subCommand,
         )
     }
-
-
 }

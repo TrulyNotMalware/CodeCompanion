@@ -16,46 +16,49 @@ class RequestMeetingCommand(
     idempotencyKey: UUID,
     commandData: SlackCommandData,
     slackEventBuilder: SlackEventBuilder,
-    eventPublisher: EventPublisher
-): Command(
-    idempotencyKey = idempotencyKey,
-    commandData = commandData,
-    slackEventBuilder = slackEventBuilder,
-    eventPublisher = eventPublisher
-) {
-    override fun parseContext(subCommand: SubCommand): CommandContext = RequestMeetingContext(
-        commandBasicInfo = this.commandData.extractBasicInfo(idempotencyKey = this.idempotencyKey),
-        slackEventBuilder = this.slackEventBuilder, events = this.events, subCommand = subCommand
-    )
+    eventPublisher: EventPublisher,
+) : Command(
+        idempotencyKey = idempotencyKey,
+        commandData = commandData,
+        slackEventBuilder = slackEventBuilder,
+        eventPublisher = eventPublisher,
+    ) {
+    override fun parseContext(subCommand: SubCommand): CommandContext =
+        RequestMeetingContext(
+            commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+            slackEventBuilder = slackEventBuilder,
+            events = events,
+            subCommand = subCommand,
+        )
 
     override fun findSubCommandDefinition(): SubCommandDefinition {
-        val identifier = this.commandData.subCommands.firstOrNull()
-            ?: return NoSubCommands()
+        val identifier =
+            commandData.subCommands.firstOrNull()
+                ?: return NoSubCommands()
         return findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier)
             ?: NoSubCommands()
     }
-
 }
 
 internal const val MEETING_COMMAND_IDENTIFIER: String = "meetup"
+
 enum class MeetingSubCommandDefinition(
     override val subCommandIdentifier: String,
     override val usage: String,
     override val requiresArguments: Boolean = false,
     override val minRequiredArgs: Int = 0,
-): SubCommandDefinition {
-
-    LIST(subCommandIdentifier = "list",
-        usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]")
-
+) : SubCommandDefinition {
+    LIST(
+        subCommandIdentifier = "list",
+        usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]",
+    ),
 }
 
-
-//internal class MeetingSubCommandParser(
+// internal class MeetingSubCommandParser(
 //
-//): SubCommandParser<MeetingSubCommand>{
+// ): SubCommandParser<MeetingSubCommand>{
 //
 //    override fun parse(subCommands: List<String>): Pair<MeetingSubCommand, List<String>> {
 //
 //    }
-//}
+// }

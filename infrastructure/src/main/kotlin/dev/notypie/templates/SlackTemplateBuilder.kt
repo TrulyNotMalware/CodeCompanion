@@ -7,19 +7,36 @@ import dev.notypie.templates.dto.TimeScheduleAlertContents
 import java.util.UUID
 
 interface SlackTemplateBuilder {
-    fun onlyTextTemplate(message: String, isMarkDown: Boolean) : LayoutBlocks
-    fun simpleTextResponseTemplate( headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks
-    fun simpleScheduleNoticeTemplate( headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks
-    fun approvalTemplate(headLineText: String, approvalContents: ApprovalContents, idempotencyKey: UUID, commandDetailType: CommandDetailType): LayoutBlocks
-    fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks
-    fun requestApprovalFormTemplate(headLineText: String, selectionFields: List<SelectionContents>, approvalContents: ApprovalContents,
-                                    approvalTargetUser: MultiUserSelectContents? = null, reasonInput: TextInputContents? = null): LayoutBlocks
+    fun onlyTextTemplate(message: String, isMarkDown: Boolean): LayoutBlocks
 
-    //Meets
+    fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks
+
+    fun simpleScheduleNoticeTemplate(headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks
+
+    fun approvalTemplate(
+        headLineText: String,
+        approvalContents: ApprovalContents,
+        idempotencyKey: UUID,
+        commandDetailType: CommandDetailType,
+    ): LayoutBlocks
+
+    fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks
+
+    fun requestApprovalFormTemplate(
+        headLineText: String,
+        selectionFields: List<SelectionContents>,
+        approvalContents: ApprovalContents,
+        approvalTargetUser: MultiUserSelectContents? = null,
+        reasonInput: TextInputContents? = null,
+    ): LayoutBlocks
+
+    // Meets
     fun meetingListFormTemplate(): LayoutBlocks
-    fun requestMeetingFormTemplate(approvalContents: ApprovalContents):LayoutBlocks
+
+    fun requestMeetingFormTemplate(approvalContents: ApprovalContents): LayoutBlocks
+
     fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,
-        approvalContents: ApprovalContents): LayoutBlocks
-
+        approvalContents: ApprovalContents,
+    ): LayoutBlocks
 }

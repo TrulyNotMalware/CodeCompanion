@@ -4,15 +4,15 @@ import com.fasterxml.jackson.annotation.JsonProperty
 
 data class Envelope(
     val schema: Schema,
-    val payload: Payload
-):MessageProcessorParameter()
+    val payload: Payload,
+) : MessageProcessorParameter()
 
 data class Schema(
     val type: String,
     val fields: List<Field> = emptyList(),
     val optional: Boolean,
     val name: String,
-    val version: Int
+    val version: Int,
 )
 
 data class Field(
@@ -24,7 +24,7 @@ data class Field(
     val parameters: Parameters? = null,
     @field:JsonProperty("default")
     val defaultValue: String? = null,
-    val field: String
+    val field: String,
 )
 
 data class SubField(
@@ -35,14 +35,12 @@ data class SubField(
     val version: Int? = null,
     val parameters: Parameters? = null,
     @field:JsonProperty("default")
-    val defaultValue: String? = null
+    val defaultValue: String? = null,
 )
-
 
 data class Parameters(
-    val allowed: String
+    val allowed: String,
 )
-
 
 data class Payload(
     val before: Map<String, Any>? = null,
@@ -55,9 +53,8 @@ data class Payload(
     @field:JsonProperty("ts_us")
     val timeMicrosecond: Long,
     @field:JsonProperty("ts_ns")
-    val timeNanosecond: Long
+    val timeNanosecond: Long,
 )
-
 
 data class Source(
     val version: String,
@@ -79,14 +76,13 @@ data class Source(
     val pos: Int,
     val row: Int,
     val thread: String? = null,
-    val query: String? = null
+    val query: String? = null,
 )
-
 
 data class Transaction(
     val id: String,
     @field:JsonProperty("total_order")
     val totalOrder: Long,
     @field:JsonProperty("data_collection_order")
-    val dataCollectionOrder: Long
+    val dataCollectionOrder: Long,
 )

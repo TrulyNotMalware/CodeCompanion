@@ -19,18 +19,20 @@ internal class ReplaceMessageContext(
     events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand,
     private val responseUrl: String,
-    private val markdownMessage: String
-): CommandContext(
-    requestHeaders = requestHeaders,
-    slackEventBuilder = slackEventBuilder,
-    commandBasicInfo = commandBasicInfo,
-    events = events,
-    subCommand = subCommand,
-) {
+    private val markdownMessage: String,
+) : CommandContext(
+        requestHeaders = requestHeaders,
+        slackEventBuilder = slackEventBuilder,
+        commandBasicInfo = commandBasicInfo,
+        events = events,
+        subCommand = subCommand,
+    ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
+
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REPLACE_TEXT
 
     override fun runCommand(): CommandOutput = replaceText()
+
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = replaceText()
 
     /**
@@ -39,14 +41,15 @@ internal class ReplaceMessageContext(
      * @return A SlackApiResponse indicating the result of the replace text operation.
      */
     private fun replaceText(): CommandOutput {
-        val event = this.slackEventBuilder.replaceOriginalText(
-            markdownText = this.markdownMessage,
-            responseUrl = this.responseUrl,
-            commandBasicInfo = this.commandBasicInfo,
-            commandDetailType = this.commandDetailType,
-            commandType = this.commandType
-        )
-        this.addNewEvent(commandEvent = event)
+        val event =
+            slackEventBuilder.replaceOriginalText(
+                markdownText = markdownMessage,
+                responseUrl = responseUrl,
+                commandBasicInfo = commandBasicInfo,
+                commandDetailType = commandDetailType,
+                commandType = commandType,
+            )
+        addNewEvent(commandEvent = event)
         return CommandOutput.success(payload = event.payload)
     }
 }

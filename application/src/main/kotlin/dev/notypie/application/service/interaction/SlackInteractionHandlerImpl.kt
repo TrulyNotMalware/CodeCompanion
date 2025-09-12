@@ -19,48 +19,51 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 import java.util.UUID
 
-private val logger = KotlinLogging.logger {  }
+private val logger = KotlinLogging.logger { }
 
 @Service
 class SlackInteractionHandlerImpl(
     private val interactionPayloadParser: InteractionPayloadParser,
     private val slackEventBuilder: SlackEventBuilder,
     private val applicationEventPublisher: ApplicationEventPublisher,
-    private val eventPublisher: EventPublisher
-): InteractionHandler {
-
+    private val eventPublisher: EventPublisher,
+) : InteractionHandler {
     @Transactional
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String) {
         val interactionPayload = this.interactionPayloadParser.parseStringPayload(payload = payload)
         val slackCommandData = interactionPayload.toSlackCommandData()
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
 
-        if( interactionPayload.isCanceled() )
-            this.rejectCommand(
-                idempotencyKey = idempotencyKey, commandData = slackCommandData,
-                responseUrl = interactionPayload.responseUrl
-            ).handleEvent()
-
-        else if( interactionPayload.isPrimary() ){
-            val command = this.buildCommand(
+        if (interactionPayload.isCanceled()) {
+            rejectCommand(
                 idempotencyKey = idempotencyKey,
-                commandData = slackCommandData
-            )
+                commandData = slackCommandData,
+                responseUrl = interactionPayload.responseUrl,
+            ).handleEvent()
+        } else if (interactionPayload.isPrimary()) {
+            val command = buildCommand(idempotencyKey = idempotencyKey, commandData = slackCommandData)
             val result = command.handleEvent()
-            //FIXME Event publisher
-            result.takeIf { it.ok }?.let {
-                applicationEventPublisher.publishEvent(it)
-            }
+            // FIXME Event publisher
+            result.takeIf { it.ok }?.let { applicationEventPublisher.publishEvent(it) }
         }
     }
 
-    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData) : Command =
-        InteractionCommand(appName = SLACK_APP_NAME, idempotencyKey = idempotencyKey,
-            commandData = commandData, slackEventBuilder = slackEventBuilder, eventPublisher = eventPublisher)
+    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
+        InteractionCommand(
+            appName = SLACK_APP_NAME,
+            idempotencyKey = idempotencyKey,
+            commandData = commandData,
+            slackEventBuilder = slackEventBuilder,
+            eventPublisher = eventPublisher,
+        )
 
-    private fun rejectCommand(idempotencyKey: UUID, commandData: SlackCommandData,
-                              responseUrl: String): Command =
-        ReplaceTextResponseCommand(idempotencyKey = idempotencyKey, commandData = commandData,
-            slackEventBuilder = this.slackEventBuilder, markdownMessage = "Canceled.", responseUrl = responseUrl,
-            eventPublisher = eventPublisher)
+    private fun rejectCommand(idempotencyKey: UUID, commandData: SlackCommandData, responseUrl: String): Command =
+        ReplaceTextResponseCommand(
+            idempotencyKey = idempotencyKey,
+            commandData = commandData,
+            slackEventBuilder = this.slackEventBuilder,
+            markdownMessage = "Canceled.",
+            responseUrl = responseUrl,
+            eventPublisher = eventPublisher,
+        )
 }

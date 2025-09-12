@@ -12,10 +12,10 @@ internal abstract class ReactionContext(
     slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     commandBasicInfo: CommandBasicInfo,
-    events: EventQueue<CommandEvent<EventPayload>>
-): CommandContext(
-    commandBasicInfo = commandBasicInfo.withNewKey(),
-    requestHeaders = requestHeaders,
-    slackEventBuilder = slackEventBuilder,
-    events = events
-)
+    events: EventQueue<CommandEvent<EventPayload>>,
+) : CommandContext(
+        commandBasicInfo = commandBasicInfo.withNewKey(),
+        requestHeaders = requestHeaders,
+        slackEventBuilder = slackEventBuilder,
+        events = events,
+    )

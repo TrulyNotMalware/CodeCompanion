@@ -5,7 +5,7 @@ import java.util.UUID
 
 data class TeamMemberRole(
     val userId: Long,
-    val role: UserRole
+    val role: UserRole,
 )
 
 class Team(
@@ -15,6 +15,5 @@ class Team(
     val teamDomain: String,
     val slackTeamId: String,
     val members: List<User>,
-    val description: String? = null
-) {
-}
+    val description: String? = null,
+)

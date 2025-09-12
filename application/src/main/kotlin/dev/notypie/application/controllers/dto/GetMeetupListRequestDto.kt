@@ -17,30 +17,29 @@ import javax.validation.constraints.Pattern
  */
 @Schema(
     name = "GetMeetupListRequestDto",
-    description = "Fetch my meeting list"
+    description = "Fetch my meeting list",
 )
 data class GetMeetupListRequestDto(
     @field:Schema(
         description = "slack's user id value",
         example = "U0123456789",
         required = true,
-        pattern = "^U[0-9A-Z]+$"
+        pattern = "^U[0-9A-Z]+$",
     )
     @field:Pattern(regexp = "^U[0-9A-Z]+$", message = "slack's user id value must start with U")
     val userId: String,
-
     @field:Schema(
         description = "start date and time",
         example = "2025-08-05T10:00:00",
         required = false,
-        defaultValue = "now"
+        defaultValue = "now",
     )
     val startDate: LocalDateTime = LocalDateTime.now(),
     @field:Schema(
         description = "end date and time",
         example = "2025-08-12T10:00:00",
         required = false,
-        defaultValue = "one week after now"
+        defaultValue = "one week after now",
     )
-    val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L)
+    val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
 )

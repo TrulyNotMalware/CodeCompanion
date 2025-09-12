@@ -7,11 +7,9 @@ import dev.notypie.domain.common.event.EventPublisher
 import org.springframework.context.ApplicationEventPublisher
 
 class AppEventPublisher(
-    private val applicationEventPublisher: ApplicationEventPublisher
-): EventPublisher {
-
-    override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>){
+    private val applicationEventPublisher: ApplicationEventPublisher,
+) : EventPublisher {
+    override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>) {
         events.forEach { applicationEventPublisher.publishEvent(it) }
     }
-
 }

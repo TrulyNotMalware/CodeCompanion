@@ -12,12 +12,12 @@ import org.springframework.retry.support.RetryTemplate
 @EnableRetry
 @Configuration
 class RetryConfiguration {
-
     @Bean
     @ConditionalOnMissingBean(RetryTemplate::class)
-    fun retryTemplate(): RetryTemplate{
-        val fixedBackOffPolicy = FixedBackOffPolicy()
-            .apply { backOffPeriod = 2000L }
+    fun retryTemplate(): RetryTemplate {
+        val fixedBackOffPolicy =
+            FixedBackOffPolicy()
+                .apply { backOffPeriod = 2000L }
         val retryPolicy = SimpleRetryPolicy(3, mapOf(Exception::class.java to true))
         return RetryTemplate()
             .apply {
@@ -27,7 +27,5 @@ class RetryConfiguration {
     }
 
     @Bean
-    fun retryService(
-        retryTemplate: RetryTemplate
-    ): RetryService = RetryService(retryTemplate = retryTemplate)
+    fun retryService(retryTemplate: RetryTemplate): RetryService = RetryService(retryTemplate = retryTemplate)
 }

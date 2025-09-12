@@ -2,7 +2,7 @@ package dev.notypie.domain.command.dto.interactions
 
 enum class ActionElementTypes(
     val elementName: String,
-    val isPrimary: Boolean,//Primary Element means that can run the events
+    val isPrimary: Boolean, // Primary Element means that can run the events
 ) {
     APPLY_BUTTON("button", true),
     REJECT_BUTTON("button", true),
@@ -14,5 +14,5 @@ enum class ActionElementTypes(
     CHECKBOX("checkboxes", false),
     RADIO_BUTTONS("radio_buttons", false),
     PLAIN_TEXT_INPUT("plain_text_input", false),
-    UNKNOWN("unknown", false)
+    UNKNOWN("unknown", false),
 }

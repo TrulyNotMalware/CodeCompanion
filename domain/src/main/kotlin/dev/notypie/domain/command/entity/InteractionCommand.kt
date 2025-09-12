@@ -9,8 +9,8 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
+import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.parsers.ContextParser
 import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
 import dev.notypie.domain.common.event.EventPublisher
@@ -22,41 +22,44 @@ class InteractionCommand(
     commandData: SlackCommandData,
     slackEventBuilder: SlackEventBuilder,
     eventPublisher: EventPublisher,
-): Command(
-    idempotencyKey = idempotencyKey,
-    commandData = commandData,
-    slackEventBuilder = slackEventBuilder,
-    eventPublisher = eventPublisher
-) {
-    companion object{
+) : Command(
+        idempotencyKey = idempotencyKey,
+        commandData = commandData,
+        slackEventBuilder = slackEventBuilder,
+        eventPublisher = eventPublisher,
+    ) {
+    companion object {
         const val BASE_URL: String = "https://slack.com/api/"
     }
 
-    private val commandParser: ContextParser = this.buildParser(this.commandData)
+    private val commandParser: ContextParser = buildParser(commandData)
 
     override fun parseContext(subCommand: SubCommand): CommandContext =
-        this.commandParser.parseContext(idempotencyKey = this.idempotencyKey)
+        commandParser.parseContext(idempotencyKey = idempotencyKey)
 
     override fun findSubCommandDefinition(): SubCommandDefinition = NoSubCommands()
 
-    private fun buildParser(commandData: SlackCommandData): ContextParser {
-        return when(commandData.slackCommandType){
-            //Removal challenge requests.
-            SlackCommandType.EVENT_CALLBACK -> this.handleEventCallBackContext(commandData = commandData)
-            SlackCommandType.INTERACTION_RESPONSE -> this.handleInteractions(commandData = commandData)
+    private fun buildParser(commandData: SlackCommandData): ContextParser =
+        when (commandData.slackCommandType) {
+            // Removal challenge requests.
+            SlackCommandType.EVENT_CALLBACK -> handleEventCallBackContext(commandData = commandData)
+            SlackCommandType.INTERACTION_RESPONSE -> handleInteractions(commandData = commandData)
             else -> TODO()
         }
-    }
 
-    private fun handleEventCallBackContext( commandData: SlackCommandData ): ContextParser {
+    private fun handleEventCallBackContext(commandData: SlackCommandData): ContextParser {
         val eventCallBack = commandData.body as SlackEventCallBackRequest
         val type = SlackCommandType.valueOf(eventCallBack.event.type.uppercase())
-        return when(type){
-            SlackCommandType.APP_MENTION -> AppMentionCommandParser(
-                slackCommandData = commandData, baseUrl = BASE_URL,
-                slackEventBuilder = this.slackEventBuilder, commandId = this.commandId,
-                idempotencyKey = this.idempotencyKey, events = this.events
-            )
+        return when (type) {
+            SlackCommandType.APP_MENTION ->
+                AppMentionCommandParser(
+                    slackCommandData = commandData,
+                    baseUrl = BASE_URL,
+                    slackEventBuilder = slackEventBuilder,
+                    commandId = commandId,
+                    idempotencyKey = idempotencyKey,
+                    events = events,
+                )
             else -> TODO()
         }
     }
@@ -64,22 +67,28 @@ class InteractionCommand(
     private fun handleInteractions(commandData: SlackCommandData): ContextParser {
         val interactionPayload = commandData.body as InteractionPayload
         val type = interactionPayload.type
-        return InteractionCotextParser(slackCommandData = commandData,
-            baseUrl = BASE_URL, commandId = this.commandId,
-            idempotencyKey = this.idempotencyKey, slackEventBuilder = this.slackEventBuilder,
-            events = this.events
+        return InteractionCotextParser(
+            slackCommandData = commandData,
+            baseUrl = BASE_URL,
+            commandId = commandId,
+            idempotencyKey = idempotencyKey,
+            slackEventBuilder = slackEventBuilder,
+            events = events,
         )
 //        return when(type){
 //            CommandDetailType.APPROVAL_FORM
 //        }
     }
 
-    private fun handleNotSupportedCommand(): SlackTextResponseContext = SlackTextResponseContext(
-        requestHeaders = this.commandData.rawHeader,
-        slackEventBuilder = this.slackEventBuilder, text = "Command Not supported.",
-        commandBasicInfo = this.commandData.extractBasicInfo(
-            idempotencyKey = this.idempotencyKey,
-        ),
-        events = this.events
-    )
+    private fun handleNotSupportedCommand(): SlackTextResponseContext =
+        SlackTextResponseContext(
+            requestHeaders = commandData.rawHeader,
+            slackEventBuilder = slackEventBuilder,
+            text = "Command Not supported.",
+            commandBasicInfo =
+                commandData.extractBasicInfo(
+                    idempotencyKey = idempotencyKey,
+                ),
+            events = events,
+        )
 }

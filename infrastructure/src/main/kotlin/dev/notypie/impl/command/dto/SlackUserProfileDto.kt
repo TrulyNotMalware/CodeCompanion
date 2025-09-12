@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 
 data class SlackUserProfileDto(
     val ok: Boolean,
-    val profile: Profile
+    val profile: Profile,
 )
 
 data class Profile(
@@ -48,10 +48,10 @@ data class Profile(
     @field:JsonProperty("image_512")
     val imageSize512: String,
     @field:JsonProperty("status_text_canonical")
-    val statusTextCanonical: String
+    val statusTextCanonical: String,
 )
 
 data class Field(
     val value: String,
-    val alt: String
+    val alt: String,
 )

@@ -4,6 +4,7 @@ enum class CommandStatus {
     INITIALIZED,
     QUEUED,
     SUCCESS,
-    //Failed
+
+    // Failed
     UNAUTHORIZED,
 }

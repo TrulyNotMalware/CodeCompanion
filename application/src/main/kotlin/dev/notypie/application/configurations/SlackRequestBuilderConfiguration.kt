@@ -17,22 +17,18 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 class SlackRequestBuilderConfiguration(
     private val appConfig: AppConfig,
 ) {
-
     @Bean
     @ConditionalOnMissingBean(SlackTemplateBuilder::class)
-    fun slackTemplateBuilder(
-        restRequester: RestRequester
-    ) : SlackTemplateBuilder = ModalTemplateBuilder(
-        restRequester = restRequester, slackApiToken = appConfig.api.token
-    )
+    fun slackTemplateBuilder(restRequester: RestRequester): SlackTemplateBuilder =
+        ModalTemplateBuilder(restRequester = restRequester, slackApiToken = appConfig.api.token)
 
     @Bean
-    fun taskScheduler(): ThreadPoolTaskScheduler
-    = ThreadPoolTaskScheduler().apply {
+    fun taskScheduler(): ThreadPoolTaskScheduler =
+        ThreadPoolTaskScheduler().apply {
             poolSize = 5
             threadNamePrefix = "ThreadPoolTaskScheduler-"
             initialize()
-    }
+        }
 
     @Bean
     @ConditionalOnMissingBean(MessageDispatcher::class)
@@ -40,18 +36,19 @@ class SlackRequestBuilderConfiguration(
         applicationEventPublisher: ApplicationEventPublisher,
         threadPoolTaskScheduler: ThreadPoolTaskScheduler,
         outboxRepository: MessageOutboxRepository,
-        retryService: RetryService
+        retryService: RetryService,
     ) = ApplicationMessageDispatcher(
-        botToken = appConfig.api.token, applicationEventPublisher = applicationEventPublisher,
-        taskScheduler = threadPoolTaskScheduler, retryService = retryService,
-        outboxRepository = outboxRepository)
+        botToken = appConfig.api.token,
+        applicationEventPublisher = applicationEventPublisher,
+        taskScheduler = threadPoolTaskScheduler,
+        retryService = retryService,
+        outboxRepository = outboxRepository,
+    )
 
     @Bean
     @ConditionalOnMissingBean(SlackEventBuilder::class)
-    fun slackEventBuilder(slackTemplateBuilder: SlackTemplateBuilder): SlackEventBuilder
-    = SlackApiEventConstructor(
-        botToken = appConfig.api.token, templateBuilder = slackTemplateBuilder
-    )
+    fun slackEventBuilder(slackTemplateBuilder: SlackTemplateBuilder): SlackEventBuilder =
+        SlackApiEventConstructor(botToken = appConfig.api.token, templateBuilder = slackTemplateBuilder)
 
     @Bean
     @ConditionalOnMissingBean(InteractionPayloadParser::class)

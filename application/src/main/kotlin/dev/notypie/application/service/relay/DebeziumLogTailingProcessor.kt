@@ -11,22 +11,26 @@ import org.springframework.kafka.annotation.KafkaListener
 
 class DebeziumLogTailingProcessor(
     private val messageDispatcher: MessageDispatcher,
-    private val eventPublisher: ApplicationEventPublisher
-): MessageProcessor {
-
+    private val eventPublisher: ApplicationEventPublisher,
+) : MessageProcessor {
     @KafkaListener(
-        topics = ["\${slack.app.mode.cdc.topic}"], containerFactory = "concurrentKafkaListenerContainerFactory",
+        topics = ["\${slack.app.mode.cdc.topic}"],
+        containerFactory = "concurrentKafkaListenerContainerFactory",
         properties = [
             "spring.json.use.type.headers:false",
-            "spring.json.value.default.type=dev.notypie.application.service.relay.dto.Envelope"
-        ]
+            "spring.json.value.default.type=dev.notypie.application.service.relay.dto.Envelope",
+        ],
     )
     override fun getPendingMessages(messageParameter: MessageProcessorParameter) {
         val consumeRecord = messageParameter as Envelope
-        val outboxMessage = consumeRecord.payload.after?.toMutableMap()?.toOutboxMessage()
-        outboxMessage?.takeIf { it.status == MessageStatus.PENDING.name }
-                ?.toSlackEvent()
-                ?.let { this.messageDispatcher.dispatch(event = it) }
-                ?.also { eventPublisher.publishEvent(it.toOutboxUpdateEvent()) }
+        val outboxMessage =
+            consumeRecord.payload.after
+                ?.toMutableMap()
+                ?.toOutboxMessage()
+        outboxMessage
+            ?.takeIf { it.status == MessageStatus.PENDING.name }
+            ?.toSlackEvent()
+            ?.let { messageDispatcher.dispatch(event = it) }
+            ?.also { eventPublisher.publishEvent(it.toOutboxUpdateEvent()) }
     }
 }

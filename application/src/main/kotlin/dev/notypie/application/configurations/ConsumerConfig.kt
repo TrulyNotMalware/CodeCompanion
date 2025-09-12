@@ -24,52 +24,52 @@ import org.springframework.scheduling.annotation.EnableScheduling
 @Configuration
 @Conditional(OnPollingConsumer::class)
 @EnableScheduling
-class PoolingPublisherConfig{
-
+class PoolingPublisherConfig {
     @Bean
     @ConditionalOnMissingBean(MessageProcessor::class)
     fun poolingOutboxMessageProcessor(
         outboxRepository: MessageOutboxRepository,
-        messageRelayService: SlackMessageRelayServiceImpl
-    )
-    = PollingMessageProcessor(
-        outboxRepository = outboxRepository, messageRelayService = messageRelayService
+        messageRelayService: SlackMessageRelayServiceImpl,
+    ) = PollingMessageProcessor(
+        outboxRepository = outboxRepository,
+        messageRelayService = messageRelayService,
     )
 }
 
 @Configuration
 @Conditional(OnCdcConsumer::class)
-class CdcPublisherConfig{
-
+class CdcPublisherConfig {
     @Bean
     fun debeziumLogTailingProcessor(
         applicationEventPublisher: ApplicationEventPublisher,
-        messageDispatcher: MessageDispatcher
+        messageDispatcher: MessageDispatcher,
     ) = DebeziumLogTailingProcessor(
         messageDispatcher = messageDispatcher,
-        eventPublisher = applicationEventPublisher
+        eventPublisher = applicationEventPublisher,
     )
 }
 
 @Configuration
 @Conditional(OnKafkaEventPublisher::class)
-class KafkaEventPublisherConfig{
-
+class KafkaEventPublisherConfig {
     @Bean
     fun eventPublisher(
         kafkaTemplate: KafkaTemplate<String, Any>,
-        applicationEventPublisher: ApplicationEventPublisher
-    ): EventPublisher = KafkaEventPublisher(
-        kafkaTemplate = kafkaTemplate, applicationEventPublisher = applicationEventPublisher
-    )
+        applicationEventPublisher: ApplicationEventPublisher,
+    ): EventPublisher =
+        KafkaEventPublisher(
+            kafkaTemplate = kafkaTemplate,
+            applicationEventPublisher = applicationEventPublisher,
+        )
 }
 
 @Configuration
 @Conditional(OnApplicationEventPublisher::class)
-class ApplicationEventPublisherConfig{
-
+class ApplicationEventPublisherConfig {
     @Bean
     @ConditionalOnMissingBean(EventPublisher::class)
-    fun eventPublisher(applicationEventPublisher: ApplicationEventPublisher): EventPublisher
-    = AppEventPublisher(applicationEventPublisher = applicationEventPublisher)
+    fun eventPublisher(applicationEventPublisher: ApplicationEventPublisher): EventPublisher =
+        AppEventPublisher(
+            applicationEventPublisher = applicationEventPublisher,
+        )
 }

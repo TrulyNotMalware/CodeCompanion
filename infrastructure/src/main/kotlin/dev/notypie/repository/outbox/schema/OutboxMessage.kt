@@ -4,13 +4,13 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.objectMapper
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.common.event.ActionEventPayloadContents
+import dev.notypie.domain.common.event.DelayHandleEventPayloadContents
 import dev.notypie.domain.common.event.MessageType
 import dev.notypie.domain.common.event.PostEventPayloadContents
-import dev.notypie.domain.common.event.SlackEventPayload
-import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.common.event.DelayHandleEventPayloadContents
 import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.common.event.SlackEventPayload
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
@@ -21,136 +21,132 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.*
 
-private val logger = KotlinLogging.logger {  }
+private val logger = KotlinLogging.logger { }
 
 @Entity
 class OutboxMessage(
     @field:Id
     @field:JsonProperty("idempotency_key")
     val idempotencyKey: String,
-
     @field:Column(name = "publisher_id", nullable = false)
     @field:JsonProperty("publisher_id")
     val publisherId: String,
-
     @field:Convert(converter = JPAJsonConverter::class)
     @field:Column(name = "payload", columnDefinition = "JSON")
     val payload: Map<String, Any>,
-
     @field:Convert(converter = JPAJsonConverter::class)
     @field:Column(name = "metadata", columnDefinition = "JSON")
     val metadata: Map<String, Any>,
-
     @field:Column(name = "command_detail_type")
 //    @field:Enumerated(value = EnumType.STRING)
-    /**
-     * Debezium cdc enum type cause Null pointer exception.
-     */
+    // Debezium cdc enum type cause Null pointer exception.
     @field:JsonProperty("command_detail_type")
     val commandDetailType: String,
-
-    @field:Column(name = "type")
 //    @field:Enumerated(value = EnumType.STRING)
+    @field:Column(name = "type")
     val type: String,
-
     @field:CreationTimestamp
     @field:JsonProperty("created_at")
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime,
-
     @field:UpdateTimestamp
     @field:JsonProperty("updated_at")
     @field:Column(name = "updated_at")
-    val updatedAt: LocalDateTime? = null
-){
+    val updatedAt: LocalDateTime? = null,
+) {
     @field:Version
     @field:Column(name = "version", nullable = false)
     var version: Long = 0L
         protected set
 
+    //    @field:Enumerated(value = EnumType.STRING)
     @field:Column(name = "status")
-//    @field:Enumerated(value = EnumType.STRING)
     var status: String = MessageStatus.PENDING.name
         protected set
 
-    //FIXME change final variables
+    // FIXME change final variables
     fun updateMessageStatus(status: MessageStatus) {
         this.status = status.name
     }
 
     fun toSlackEvent(): SlackEventPayload =
-        if(this.type == MessageType.ACTION_RESPONSE.name )
+        if (type == MessageType.ACTION_RESPONSE.name) {
             ActionEventPayloadContents(
-                idempotencyKey = UUID.fromString(this.idempotencyKey),
-                publisherId = this.publisherId,
-                commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
-                body = objectMapper.writeValueAsString(this.payload),
-                apiAppId = this.metadata["api_app_id"].toString(),
-                responseUrl = this.metadata["response_url"].toString(),
-                channel = this.metadata["channel"].toString(),
-                eventId = UUID.randomUUID()
+                idempotencyKey = UUID.fromString(idempotencyKey),
+                publisherId = publisherId,
+                commandDetailType = CommandDetailType.valueOf(commandDetailType),
+                body = objectMapper.writeValueAsString(payload),
+                apiAppId = metadata["api_app_id"].toString(),
+                responseUrl = metadata["response_url"].toString(),
+                channel = metadata["channel"].toString(),
+                eventId = UUID.randomUUID(),
             )
-        else PostEventPayloadContents(
-            idempotencyKey = UUID.fromString(this.idempotencyKey),
-            publisherId = this.publisherId,
-            messageType = MessageType.valueOf(this.type),
-            apiAppId = this.metadata["api_app_id"].toString(),
-            commandDetailType = CommandDetailType.valueOf(this.commandDetailType),
-            body = this.payload,
-            channel = this.metadata["channel"].toString(),
-            replaceOriginal = this.metadata["replace_original"].toString().toBoolean(),
-            eventId = UUID.randomUUID()
-        )
+        } else {
+            PostEventPayloadContents(
+                idempotencyKey = UUID.fromString(idempotencyKey),
+                publisherId = publisherId,
+                messageType = MessageType.valueOf(type),
+                apiAppId = metadata["api_app_id"].toString(),
+                commandDetailType = CommandDetailType.valueOf(commandDetailType),
+                body = payload,
+                channel = metadata["channel"].toString(),
+                replaceOriginal = metadata["replace_original"].toString().toBoolean(),
+                eventId = UUID.randomUUID(),
+            )
+        }
 }
 
 fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
-    when(this.payload){
+    when (payload) {
         is PostEventPayloadContents ->
-            (this.payload as PostEventPayloadContents).toOutboxMessage().outboxMessage
+            (payload as PostEventPayloadContents).toOutboxMessage().outboxMessage
         is ActionEventPayloadContents ->
-            (this.payload as ActionEventPayloadContents).toOutboxMessage().outboxMessage
+            (payload as ActionEventPayloadContents).toOutboxMessage().outboxMessage
         is DelayHandleEventPayloadContents -> TODO()
     }
 
-
 fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
-        outboxMessage = OutboxMessage(
-            idempotencyKey = this.idempotencyKey.toString(),
-            publisherId = this.publisherId,
-            commandDetailType = this.commandDetailType.name,
-            payload = this.body,
-            metadata = mapOf(
-                "api_app_id" to this.apiAppId,
-                "channel" to this.channel,
-                "replace_original" to this.replaceOriginal
-            ),
-            type = this.messageType.name,
+        outboxMessage =
+            OutboxMessage(
+                idempotencyKey = idempotencyKey.toString(),
+                publisherId = publisherId,
+                commandDetailType = commandDetailType.name,
+                payload = body,
+                metadata =
+                    mapOf(
+                        "api_app_id" to apiAppId,
+                        "channel" to channel,
+                        "replace_original" to replaceOriginal,
+                    ),
+                type = messageType.name,
 //            status = status,
-            createdAt = LocalDateTime.now()
-        ),
+                createdAt = LocalDateTime.now(),
+            ),
         reason = "PostEventContents",
-        slackEventPayload = this
+        slackEventPayload = this,
     )
 
 fun ActionEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
     NewMessagePublishedEvent(
-        outboxMessage = OutboxMessage(
-            idempotencyKey = this.idempotencyKey.toString(),
-            publisherId = this.publisherId,
-            commandDetailType = this.commandDetailType.name,
-            payload = objectMapper.readValue<Map<String, Any>>(this.body),
-            metadata = mapOf(
-                "api_app_id" to this.apiAppId,
-                "channel" to this.channel,
-                "response_url" to this.responseUrl
-            ),
-            type = MessageType.ACTION_RESPONSE.name,
+        outboxMessage =
+            OutboxMessage(
+                idempotencyKey = idempotencyKey.toString(),
+                publisherId = publisherId,
+                commandDetailType = commandDetailType.name,
+                payload = objectMapper.readValue<Map<String, Any>>(body),
+                metadata =
+                    mapOf(
+                        "api_app_id" to apiAppId,
+                        "channel" to channel,
+                        "response_url" to responseUrl,
+                    ),
+                type = MessageType.ACTION_RESPONSE.name,
 //            status = status,
-            createdAt = LocalDateTime.now()
-        ),
+                createdAt = LocalDateTime.now(),
+            ),
         reason = "ActionEventContents",
-        slackEventPayload = this
+        slackEventPayload = this,
     )
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
@@ -172,12 +168,11 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
 
         val createdAt = this["created_at"]
         val updatedAt = this["updated_at"]
-        if(createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
-        if(updatedAt is Long) this["updated_at"] = updatedAt.toLocalDateTime()
+        if (createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
+        if (updatedAt is Long) this["updated_at"] = updatedAt.toLocalDateTime()
 
         objectMapper.convertValue(this, OutboxMessage::class.java)
     }.getOrElse { e ->
         logger.error { "Failed to convert to OutboxMessage. ${e.message}" }
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }
-
