@@ -26,7 +26,7 @@ class SlackRequestBuilderConfiguration(
     fun taskScheduler(): ThreadPoolTaskScheduler =
         ThreadPoolTaskScheduler().apply {
             poolSize = 5
-            threadNamePrefix = "ThreadPoolTaskScheduler-"
+//            threadNamePrefix = "ThreadPoolTaskScheduler-" // val cannot be reassigned issue.
             initialize()
         }
 
