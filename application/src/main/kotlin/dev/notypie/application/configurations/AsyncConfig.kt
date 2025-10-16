@@ -24,7 +24,7 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             corePoolSize = 10
             maxPoolSize = 10
             queueCapacity = 10000
-            threadNamePrefix = "AsyncThread-"
+//            threadNamePrefix = "AsyncThread-" val cannot be reassigned issue.
             setWaitForTasksToCompleteOnShutdown(true)
             setAwaitTerminationSeconds(10)
             initialize()

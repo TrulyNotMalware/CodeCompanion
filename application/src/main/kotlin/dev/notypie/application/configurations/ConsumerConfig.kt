@@ -69,7 +69,5 @@ class ApplicationEventPublisherConfig {
     @Bean
     @ConditionalOnMissingBean(EventPublisher::class)
     fun eventPublisher(applicationEventPublisher: ApplicationEventPublisher): EventPublisher =
-        AppEventPublisher(
-            applicationEventPublisher = applicationEventPublisher,
-        )
+        AppEventPublisher(applicationEventPublisher = applicationEventPublisher)
 }

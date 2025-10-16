@@ -33,7 +33,7 @@ dependencies {
 
     // rest docs
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
-    developmentOnly("org.springframework.boot:spring-boot-devtools")
+    developmentOnly("org.springframework.boot:spring-boot-devtools:${rootProject.extra.get("springBootVersion")}")
 }
 
 allOpen {
