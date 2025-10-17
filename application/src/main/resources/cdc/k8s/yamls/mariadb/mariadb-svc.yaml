@@ -1,0 +1,54 @@
+# Master database ( Read/Write )
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-master
+  namespace: database
+  labels:
+    app: mariadb
+    role: master
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    app: mariadb
+    role: master
+  type: ClusterIP # Change if you need to access from the outside.
+---
+# Slave database ( Read Only )
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-slave
+  namespace: mariadb
+  labels:
+    app: mariadb
+    role: slave
+spec:
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+  selector:
+    app: mariadb
+    role: slave
+  type: ClusterIP # Change if you need to access from the outside.
+---
+# Headless service for sts
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-headless-svc
+  namespace: database
+  labels:
+    app: mariadb
+spec:
+  clusterIP: None
+  selector:
+    app: mariadb
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+---

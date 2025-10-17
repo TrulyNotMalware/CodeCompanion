@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb
+  namespace: database
+spec:
+  serviceName: mariadb-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      # Anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - mariadb
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: init-mariadb
+          image: mariadb:12.0.2
+          command:
+            - bash
+            - "-c"
+            - |
+              set -ex
+              echo "Setting up MariaDB configuration..."
+
+              # Generate server ID based on pod ordinal
+              [[ $(hostname) =~ -([0-9]+)$ ]] || exit 1
+              ordinal=${BASH_REMATCH[1]}
+
+              echo "Pod ordinal: $ordinal"
+
+              # Create mysql config directory
+              mkdir -p /mnt/conf.d
+
+              # Copy base configuration and add server-id
+              if [[ $ordinal -eq 0 ]]; then
+                echo "Configuring as Master (server-id: 1)"
+                cp /mnt/config-map/master.cnf /mnt/conf.d/server.cnf
+                echo "server-id=1" >> /mnt/conf.d/server.cnf
+                echo "Master configuration completed"
+              else
+                echo "Configuring as Slave (server-id: $((ordinal + 1000)))"
+                cp /mnt/config-map/slave.cnf /mnt/conf.d/server.cnf
+                echo "server-id=$((ordinal + 1000))" >> /mnt/conf.d/server.cnf
+                echo "Slave configuration completed"
+              fi
+
+              # Verify configuration file
+              echo "=== Generated Configuration ==="
+              cat /mnt/conf.d/server.cnf
+              echo "=== End Configuration ==="
+
+              echo "Configuration setup complete"
+          volumeMounts:
+            - name: conf
+              mountPath: /mnt/conf.d
+            - name: config-map
+              mountPath: /mnt/config-map
+      containers:
+        - name: mariadb
+          image: mariadb:12.0.2
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: root-password
+            - name: MYSQL_REPLICATION_USER
+              value: "replicator"
+            - name: MYSQL_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: replication-password
+          ports:
+            - name: mysql
+              containerPort: 3306
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "500m"
+            limits:
+              memory: "16Gi"
+              cpu: "1000m"
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mariadb-admin ping -u root -p"$MYSQL_ROOT_PASSWORD"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mariadb -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1"
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - mariadb-admin shutdown -u root -p"$MYSQL_ROOT_PASSWORD"
+
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: conf
+              mountPath: /etc/mysql/conf.d
+            - name: logs
+              mountPath: /var/log/mysql
+      volumes:
+        - name: conf
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: config-map
+          configMap:
+            name: mariadb-config
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "your-storage-class-name"  # Change storage class name here.
+        resources:
+          requests:
+            storage: 50Gi
+    - metadata:
+        name: logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "your-storage-class-name" # Change storage class name here.
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mariadb-pdb
+  namespace: database
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: mariadb
