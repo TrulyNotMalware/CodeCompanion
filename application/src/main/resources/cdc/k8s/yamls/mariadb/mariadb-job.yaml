@@ -1,0 +1,100 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-mariadb-replication
+  namespace: database
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: replication-setup
+          image: mariadb:12.0.2
+          command:
+            - bash
+            - "-c"
+            - |
+              set -ex
+              echo "Starting replication setup..."
+
+              # Wait for all MariaDB instances to be ready (simple approach)
+              for i in 0 1 2; do
+                echo "Waiting for mariadb-$i to be ready..."
+                until mariadb -h mariadb-$i.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1" >/dev/null 2>&1; do
+                  echo "MariaDB mariadb-$i not ready yet, waiting..."
+                  sleep 10
+                done
+                echo "mariadb-$i is ready!"
+              done
+
+              echo "All MariaDB instances are ready. Setting up replication..."
+
+              # Setup Master (mariadb-0)
+              echo "Setting up Master..."
+              mariadb -h mariadb-0.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+                CREATE USER IF NOT EXISTS '$MYSQL_REPLICATION_USER'@'%' IDENTIFIED BY '$MYSQL_REPLICATION_PASSWORD';
+                GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REPLICATION_USER'@'%';
+                FLUSH PRIVILEGES;
+              "
+
+              # Get master status
+              echo "Getting master status..."
+              master_status=$(mariadb -h mariadb-0.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "SHOW MASTER STATUS\G")
+              master_file=$(echo "$master_status" | grep "File:" | awk '{print $2}')
+              master_pos=$(echo "$master_status" | grep "Position:" | awk '{print $2}')
+
+              echo "Master status - File: $master_file, Position: $master_pos"
+
+              # Setup Slaves
+              for i in 1 2; do
+                echo "Setting up Slave mariadb-$i..."
+
+                mariadb -h mariadb-$i.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+                  STOP SLAVE;
+                  RESET SLAVE ALL;
+                  CHANGE MASTER TO
+                    MASTER_HOST='mariadb-0.mariadb-headless.database.svc.cluster.local',
+                    MASTER_USER='$MYSQL_REPLICATION_USER',
+                    MASTER_PASSWORD='$MYSQL_REPLICATION_PASSWORD',
+                    MASTER_LOG_FILE='$master_file',
+                    MASTER_LOG_POS=$master_pos;
+                  START SLAVE;
+                "
+
+                # Check slave status
+                echo "Checking slave status for mariadb-$i..."
+                mariadb -h mariadb-$i.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "SHOW SLAVE STATUS\G" | grep -E "(Slave_IO_Running|Slave_SQL_Running|Seconds_Behind_Master)"
+              done
+
+              echo "Replication setup completed!"
+
+              # Test replication
+              echo "Testing replication..."
+              mariadb -h mariadb-0.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+                CREATE DATABASE IF NOT EXISTS test_replication;
+                USE test_replication;
+                CREATE TABLE IF NOT EXISTS test_table (id INT PRIMARY KEY, message VARCHAR(100), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                INSERT INTO test_table (id, message) VALUES (1, 'Replication test from job');
+              "
+
+              sleep 5
+
+              # Check replication on slaves
+              for i in 1 2; do
+                echo "Checking replication test on mariadb-$i..."
+                mariadb -h mariadb-$i.mariadb-headless.database.svc.cluster.local -u root -p"$MYSQL_ROOT_PASSWORD" -e "USE test_replication; SELECT * FROM test_table;" || echo "Replication not working on mariadb-$i"
+              done
+
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: root-password
+            - name: MYSQL_REPLICATION_USER
+              value: "replicator"
+            - name: MYSQL_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: replication-password

@@ -71,7 +71,7 @@ Fine-tune Kotlin compilation performance:
 
 ### Common Issues
 
-**"UseTransparentHugePages" error on macOS/Windows:**
+**"UseTransparentHugePages" error on macOS:**
 - Use `gradle-macos.properties`
 - This option is Linux-only
 
@@ -186,7 +186,7 @@ Kotlin 컴파일 성능 미세 조정:
 
 ### 일반적인 문제
 
-**macOS/Windows에서 "UseTransparentHugePages" 오류:**
+**macOS에서 "UseTransparentHugePages" 오류:**
 - `gradle-macos.properties` 사용
 - 이 옵션은 Linux 전용입니다
 

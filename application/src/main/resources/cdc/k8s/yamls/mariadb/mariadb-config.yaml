@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: database
+---
+# ConfigMap for Mariadb configuration.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-config
+  namespace: database
+data:
+  master.cnf: |
+    [mysqld]
+    log-bin=binlog
+    binlog_format=ROW
+    binlog_row_image=FULL
+
+    expire_logs_days=7
+    max_binlog_size=100M
+    binlog_cache_size=32K
+    sync_binlog=1
+
+    # Replication Settings
+    gtid_strict_mode=1
+    log_slave_updates=1
+
+    # Performance
+    max_connections=1000
+    innodb_buffer_pool_size=5G
+    innodb_log_file_size=64M
+    innodb_flush_log_at_trx_commit=1
+    innodb_flush_method=O_DIRECT
+
+    # Logging
+    slow_query_log=1
+    slow_query_log_file=/var/log/mysql/mysql-slow.log
+    long_query_time=5
+    log_error=/var/log/mysql/mysql-error.log
+
+  slave.cnf: |
+    [mysqld]
+    log-bin=binlog
+    binlog_format=ROW
+    binlog_row_image=FULL
+
+    expire_logs_days=7
+    max_binlog_size=100M
+    binlog_cache_size=32K
+    binlog_stmt_cache_size=32K
+    sync_binlog=1
+
+    # Replication Settings
+    gtid_strict_mode=1
+    slave_parallel_workers=4
+    slave_parallel_mode=optimistic
+
+    # Slave
+    read_only=1
+    relay-log=relay-bin
+    log_slave_updates=1
+
+    # Performance
+    max_connections=1000
+    innodb_buffer_pool_size=5G
+    innodb_log_file_size=64M
+    innodb_flush_log_at_trx_commit=1
+    innodb_flush_method=O_DIRECT
+
+    # Logging
+    slow_query_log=1
+    slow_query_log_file=/var/log/mysql/slow.log
+    long_query_time=2
+    log_error=/var/log/mysql/error.log
+    general_log=0
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mariadb-secret
+  namespace: database
+type: Opaque
+data:
+  root-password: YOUR_ROOT_PASSWORD
+  replication-password: REPLICATION_PASSWORD
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logs-mariadb-pvc
+  namespace: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: your-storage-class-name
