@@ -1,5 +1,12 @@
 package dev.notypie.domain.command
 
+import dev.notypie.domain.TEST_APP_ID
+import dev.notypie.domain.TEST_BASE_URL
+import dev.notypie.domain.TEST_BOT_ID
+import dev.notypie.domain.TEST_CHANNEL
+import dev.notypie.domain.TEST_TEAM
+import dev.notypie.domain.TEST_TOKEN
+import dev.notypie.domain.TEST_USER
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.Channel
 import dev.notypie.domain.command.dto.interactions.Container
@@ -15,12 +22,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-val TEST_USER = User(id = TEST_USER_ID, userName = TEST_USER_NAME, name = TEST_USER_NAME, teamId = TEST_TEAM_ID)
-val TEST_TEAM = Team(id = TEST_TEAM_ID, domain = TEST_TEAM_DOMAIN)
-val TEST_CHANNEL = Channel(id = TEST_CHANNEL_ID, name = TEST_CHANNEL_NAME)
 const val SEPARATOR = ","
-
-const val TEST_BASE_URL = "https://hooks.example.com/actions"
 
 fun createTestContainer() =
     Container(

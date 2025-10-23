@@ -1,21 +1,15 @@
 package dev.notypie.domain.command
 
+import dev.notypie.domain.TEST_APP_ID
+import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_TOKEN
+import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.common.event.ActionEventPayloadContents
 import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.common.event.SendSlackMessageEvent
 import java.util.UUID
-
-const val TEST_APP_ID = "A12ABCDEFG" // starts with A
-const val TEST_USER_ID = "U012ABCDEFG" // starts with U
-const val TEST_USER_NAME = "I_AM_TEST_USER"
-const val TEST_CHANNEL_ID = "C012ABCDEFG" // starts with C
-const val TEST_CHANNEL_NAME = "I_AM_TEST_CHANNEL"
-const val TEST_TOKEN = "I_AM_TEST_TOKEN"
-const val TEST_TEAM_ID = "T012ABCDEFG" // starts with T
-const val TEST_TEAM_DOMAIN = "I_AM_TEST_TEAM_DOMAIN"
-const val TEST_BOT_ID = "B012ABCDEFG"
 
 fun createCommandBasicInfo(
     appId: String = TEST_APP_ID,

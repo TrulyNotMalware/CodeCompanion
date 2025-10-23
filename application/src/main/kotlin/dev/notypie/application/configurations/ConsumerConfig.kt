@@ -10,6 +10,9 @@ import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.exception.ErrorBroadcaster
+import dev.notypie.exception.KafkaErrorBroadcaster
+import dev.notypie.exception.StdoutErrorBroadcaster
 import dev.notypie.impl.command.AppEventPublisher
 import dev.notypie.impl.command.KafkaEventPublisher
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -61,6 +64,10 @@ class KafkaEventPublisherConfig {
             kafkaTemplate = kafkaTemplate,
             applicationEventPublisher = applicationEventPublisher,
         )
+
+    @Bean
+    fun kafkaErrorBroadcaster(kafkaTemplate: KafkaTemplate<String, Any>): ErrorBroadcaster =
+        KafkaErrorBroadcaster(kafkaTemplate = kafkaTemplate)
 }
 
 @Configuration
@@ -70,4 +77,8 @@ class ApplicationEventPublisherConfig {
     @ConditionalOnMissingBean(EventPublisher::class)
     fun eventPublisher(applicationEventPublisher: ApplicationEventPublisher): EventPublisher =
         AppEventPublisher(applicationEventPublisher = applicationEventPublisher)
+
+    @Bean
+    @ConditionalOnMissingBean(ErrorBroadcaster::class)
+    fun stdoutErrorBroadcaster(): ErrorBroadcaster = StdoutErrorBroadcaster()
 }
