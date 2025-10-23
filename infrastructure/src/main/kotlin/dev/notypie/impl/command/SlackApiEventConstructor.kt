@@ -20,6 +20,7 @@ import dev.notypie.domain.common.event.ActionEventPayloadContents
 import dev.notypie.domain.common.event.MessageType
 import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.meet.dto.Meeting
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import okhttp3.FormBody
@@ -201,6 +202,7 @@ class SlackApiEventConstructor(
     }
 
     override fun getMeetingListFormRequest(
+        myMeetings: List<Meeting>,
         commandBasicInfo: CommandBasicInfo,
         commandType: CommandType,
         commandDetailType: CommandDetailType,

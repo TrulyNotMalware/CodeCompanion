@@ -13,6 +13,11 @@ dependencies {
             "org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}",
         ),
     )
+    testImplementation(
+        platform(
+            "org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}",
+        ),
+    )
     testFixturesImplementation(
         platform(
             "org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}",
@@ -46,6 +51,14 @@ dependencies {
     api(
         "org.springframework.ai:spring-ai-starter-mcp-server-webmvc:1.0.1",
     )
+
+    // Domain test fixtures
+    testApi(testFixtures(project(":domain")))
+    testFixturesApi(testFixtures(project(":domain")))
+
+    // Kotest extensions
+    implementation("io.kotest:kotest-extensions-spring:${rootProject.extra.get("kotestVersion")}")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
 allOpen {

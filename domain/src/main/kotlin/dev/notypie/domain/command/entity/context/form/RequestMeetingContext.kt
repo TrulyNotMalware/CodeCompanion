@@ -19,7 +19,9 @@ import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.common.event.GetMeetingEventPayload
 import dev.notypie.domain.common.event.GetMeetingListEvent
+import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.domain.history.entity.Status
+import dev.notypie.domain.meet.dto.Meeting
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -56,11 +58,11 @@ internal class RequestMeetingContext(
                 commandType = commandType,
                 commandDetailType = commandDetailType,
             )
-        if (subCommand.subCommandDefinition == MeetingSubCommandDefinition.LIST) {
-            addNewEvent(commandEvent = getListCommand())
-        } else {
-            addNewEvent(commandEvent = event)
+        when (subCommand.subCommandDefinition) {
+            MeetingSubCommandDefinition.LIST -> addNewEvent(commandEvent = getListCommand())
+            else -> addNewEvent(commandEvent = event)
         }
+
         return CommandOutput.success(payload = event.payload)
     }
 
@@ -69,9 +71,18 @@ internal class RequestMeetingContext(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             payload =
                 GetMeetingEventPayload(
-                    slackEventModifier = slackEventBuilder::getMeetingListFormRequest,
+                    slackEventModifier = this::apply,
+                    publisherId = commandBasicInfo.publisherId,
                 ),
             type = CommandDetailType.GET_MEETING_LIST,
+        )
+
+    private fun apply(myMeetings: List<Meeting>): SendSlackMessageEvent =
+        slackEventBuilder.getMeetingListFormRequest(
+            commandBasicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+            myMeetings = myMeetings,
         )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {

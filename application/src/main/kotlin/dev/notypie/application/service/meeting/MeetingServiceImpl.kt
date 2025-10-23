@@ -8,10 +8,12 @@ import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContextResult
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.domain.common.event.GetMeetingListEvent
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.schema.newMeeting
 import jakarta.transaction.Transactional
+import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -54,5 +56,11 @@ class MeetingServiceImpl(
 //                slackApiRequester.simpleTextRequest()
             },
         )
+    }
+
+    @EventListener
+    fun getMeetingListEvent(getMeetingListEvent: GetMeetingListEvent) {
+        val meetings = this.meetingRepository.getAllMeetingByUserId(getMeetingListEvent.payload.publisherId)
+//        getMeetingListEvent.payload.slackEventModifier()
     }
 }
