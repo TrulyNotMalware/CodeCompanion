@@ -43,6 +43,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Apply Gradle configuration for CI
+        run: |
+          chmod +x gradle-config/apply.sh
+          ./gradle-config/apply.sh
+
       - name: Collect test modules
         id: collect
         run: |
