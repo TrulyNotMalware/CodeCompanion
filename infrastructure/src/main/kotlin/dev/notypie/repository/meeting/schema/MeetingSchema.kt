@@ -3,6 +3,7 @@ package dev.notypie.repository.meeting.schema
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContextResult
+import dev.notypie.domain.meet.dto.Meeting
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
@@ -66,6 +67,19 @@ fun RequestMeetingContextResult.newMeeting(isCanceled: Boolean = false, endAt: L
     meetingSchema.participants.addAll(participants)
     return meetingSchema
 }
+
+fun MeetingSchema.toMeetingDto() =
+    Meeting(
+        meetingId = id,
+        idempotencyKey = idempotencyKey,
+        startAt = startAt,
+        endAt = endAt,
+        isCanceled = isCanceled,
+        title = name,
+        creator = publisherId,
+        reason = "",
+        participantIds = participants.map { it.userId },
+    )
 
 @Entity(name = "meeting_participants")
 class ParticipantsSchema(

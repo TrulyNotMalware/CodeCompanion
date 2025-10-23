@@ -8,7 +8,7 @@ interface ErrorCode {
 data class ExceptionArgument(
     val fieldName: String,
     val value: String,
-    val reason: String,
+    var reason: String = "",
 )
 
 sealed class ErrorResponse(
@@ -18,7 +18,8 @@ sealed class ErrorResponse(
     val detail: List<ExceptionArgument> = emptyList(),
 )
 
-sealed class CodeCompanionRuntimeException(
-    val errorCode: ErrorCode,
+// Base Exception
+abstract class CodeCompanionRuntimeException(
+    errorCode: ErrorCode,
     val details: List<ExceptionArgument> = emptyList(),
 ) : RuntimeException(errorCode.message)
