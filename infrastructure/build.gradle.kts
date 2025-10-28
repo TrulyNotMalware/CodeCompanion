@@ -56,8 +56,6 @@ dependencies {
     testApi(testFixtures(project(":domain")))
     testFixturesApi(testFixtures(project(":domain")))
 
-    // Kotest extensions
-    implementation("io.kotest:kotest-extensions-spring:${rootProject.extra.get("kotestVersion")}")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 

@@ -82,6 +82,6 @@ internal class ApprovalCallbackContext(
                     targetUserId = participant,
                 )
             addNewEvent(commandEvent = event)
-            CommandOutput.success(payload = event.payload)
+            CommandOutput.success(payload = event.payload, commandType = commandType)
         }
 }

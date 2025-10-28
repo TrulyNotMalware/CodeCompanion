@@ -8,8 +8,34 @@ interface ErrorCode {
 data class ExceptionArgument(
     val fieldName: String,
     val value: String,
-    var reason: String = "",
+    val reason: String = "",
 )
+
+fun exceptionDetails(configure: ExceptionDetailsBuilder.() -> Unit): List<ExceptionArgument> =
+    ExceptionDetailsBuilder().apply(configure).details
+
+class ExceptionDetailsBuilder {
+    internal val details = mutableListOf<ExceptionArgument>()
+
+    infix fun String.value(fieldValue: String): ReasonBuilder =
+        ReasonBuilder(fieldName = this, fieldValue = fieldValue, parent = this@ExceptionDetailsBuilder)
+
+    class ReasonBuilder(
+        private val fieldName: String,
+        private val fieldValue: String,
+        private val parent: ExceptionDetailsBuilder,
+    ) {
+        infix fun because(reason: String) {
+            parent.details.add(
+                ExceptionArgument(
+                    fieldName = fieldName,
+                    value = fieldValue,
+                    reason = reason,
+                ),
+            )
+        }
+    }
+}
 
 sealed class ErrorResponse(
     errorCode: ErrorCode,

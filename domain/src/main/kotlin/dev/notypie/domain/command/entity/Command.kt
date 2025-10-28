@@ -2,6 +2,7 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
@@ -10,12 +11,14 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.exceptions.CommandErrorCode
+import dev.notypie.domain.command.exceptions.SubCommandParseException
+import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
-// Aggregate Root
 abstract class Command(
     val idempotencyKey: UUID,
     val commandData: SlackCommandData,
@@ -28,13 +31,7 @@ abstract class Command(
 
     internal abstract fun parseContext(subCommand: SubCommand): CommandContext
 
-    internal abstract fun findSubCommandDefinition(): SubCommandDefinition
-
-    private fun createSubCommand() =
-        SubCommand(
-            subCommandDefinition = findSubCommandDefinition(),
-            options = commandData.subCommands.drop(1),
-        )
+    internal open fun findSubCommandDefinition(): SubCommandDefinition = NoSubCommands()
 
     fun handleEvent() =
         runCatching { executeCommand() }
@@ -57,6 +54,28 @@ abstract class Command(
             context.handleInteraction(commandData.body as InteractionPayload)
         } else {
             context.runCommand()
+        }
+    }
+
+    private fun createSubCommand(): SubCommand {
+        val options = commandData.subCommands.drop(1)
+        val subCommand =
+            SubCommand(
+                subCommandDefinition = findSubCommandDefinition(),
+                options = options,
+            )
+        return if (subCommand.isValid()) {
+            subCommand
+        } else {
+            throw SubCommandParseException(
+                commandName = this::class.java.simpleName,
+                subCommandName = subCommand.subCommandDefinition.subCommandIdentifier,
+                errorCode = CommandErrorCode.SUBCOMMAND_NOT_VALID,
+                details =
+                    exceptionDetails {
+                        "subcommand options" value options.joinToString { "," } because "sub command validation failed"
+                    },
+            )
         }
     }
 }

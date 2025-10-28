@@ -50,6 +50,6 @@ internal class ReplaceMessageContext(
                 commandType = commandType,
             )
         addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload)
+        return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
 }
