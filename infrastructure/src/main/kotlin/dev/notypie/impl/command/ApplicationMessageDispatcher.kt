@@ -39,6 +39,7 @@ class ApplicationMessageDispatcher(
     private val okHttpClient = buildOkHttpClient(slack.config)
     private val mediaTypeJson = "application/json; charset=utf-8".toMediaType()
 
+    @Deprecated("for removal")
     override fun dispatch(event: PostEventPayloadContents, commandType: CommandType): CommandOutput {
 //        applicationEventPublisher.publishEvent(event.toOutboxMessage())
         val result =
@@ -58,6 +59,7 @@ class ApplicationMessageDispatcher(
         )
     }
 
+    @Deprecated("for removal")
     override fun dispatch(event: ActionEventPayloadContents, commandType: CommandType): CommandOutput {
 //        applicationEventPublisher.publishEvent(event.toOutboxMessage())
         retryService.execute(
@@ -160,14 +162,14 @@ class ApplicationMessageDispatcher(
 
     private fun returnSuccessOrFailed(result: SlackApiTextResponse, event: SlackEventPayload) =
         if (result.isOk) {
-            CommandOutput.success(payload = event)
+            CommandOutput.success(payload = event, commandType = CommandType.EXTERNAL_API)
         } else {
             CommandOutput.fail(event = event, reason = result.error)
         }
 
     private fun returnSuccessOrFailed(result: Response, event: SlackEventPayload) =
         if (result.isSuccessful) {
-            CommandOutput.success(payload = event)
+            CommandOutput.success(payload = event, commandType = CommandType.EXTERNAL_API)
         } else {
             CommandOutput.fail(event = event, reason = result.message)
         }

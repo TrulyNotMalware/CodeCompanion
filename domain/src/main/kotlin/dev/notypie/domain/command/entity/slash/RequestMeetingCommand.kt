@@ -8,7 +8,10 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.exceptions.CommandErrorCode
+import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
+import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
@@ -36,7 +39,15 @@ class RequestMeetingCommand(
             commandData.subCommands.firstOrNull()
                 ?: return NoSubCommands()
         return findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier)
-            ?: NoSubCommands()
+            ?: throw SubCommandParseException(
+                commandName = this::class.java.simpleName,
+                subCommandName = identifier,
+                errorCode = CommandErrorCode.SUBCOMMAND_NOT_FOUND,
+                details =
+                    exceptionDetails {
+                        "subCommandIdentifier" value identifier because "subcommand $identifier not found"
+                    },
+            )
     }
 }
 
@@ -53,12 +64,3 @@ enum class MeetingSubCommandDefinition(
         usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]",
     ),
 }
-
-// internal class MeetingSubCommandParser(
-//
-// ): SubCommandParser<MeetingSubCommand>{
-//
-//    override fun parse(subCommands: List<String>): Pair<MeetingSubCommand, List<String>> {
-//
-//    }
-// }

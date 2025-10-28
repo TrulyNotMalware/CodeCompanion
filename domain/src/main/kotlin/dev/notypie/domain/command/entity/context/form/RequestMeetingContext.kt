@@ -39,6 +39,7 @@ internal class RequestMeetingContext(
         commandBasicInfo = commandBasicInfo,
         events = events,
         subCommand = subCommand,
+        requiredSubCommandType = MeetingSubCommandDefinition::class,
     ) {
     companion object {
         internal const val DATE_PATTERN = "yyyy-MM-dd"
@@ -50,6 +51,8 @@ internal class RequestMeetingContext(
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
+
+    override fun runCommand(commandDetailType: CommandDetailType): CommandOutput = runCommand()
 
     override fun runCommand(): CommandOutput {
         val event =
@@ -63,7 +66,7 @@ internal class RequestMeetingContext(
             else -> addNewEvent(commandEvent = event)
         }
 
-        return CommandOutput.success(payload = event.payload)
+        return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
 
     private fun getListCommand() =

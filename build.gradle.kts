@@ -27,6 +27,7 @@ ext {
     set("mockkVersion", "1.14.6")
     set("springBootVersion", "3.5.6")
     set("jacksonVersion", "2.19.2")
+    set("kotlinLoggingVersion", "7.0.13")
 }
 
 kotlin {
@@ -93,6 +94,11 @@ allprojects {
         jvmArgs(
             "-Xmx4g",
             "-Dfile.encoding=UTF-8",
+            "-XX:+EnableDynamicAgentLoading",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
         )
     }
 }
@@ -123,10 +129,11 @@ subprojects {
         implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
         // Kotlin logging
-        implementation("io.github.oshai:kotlin-logging-jvm:7.0.13")
+        implementation("io.github.oshai:kotlin-logging-jvm:${rootProject.extra.get("kotlinLoggingVersion")}")
         testFixturesImplementation(kotlin("reflect"))
 
         testImplementation("io.mockk:mockk:${rootProject.extra.get("mockkVersion")}")
+        testFixturesImplementation("io.mockk:mockk:${rootProject.extra.get("mockkVersion")}")
         testImplementation("io.kotest:kotest-runner-junit5")
         testImplementation("io.kotest:kotest-extensions-spring")
         testImplementation("io.kotest:kotest-assertions-core")

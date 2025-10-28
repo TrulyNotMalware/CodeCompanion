@@ -10,7 +10,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 
-internal class EphemeralTextResponse(
+internal class EphemeralTextResponseContext(
     commandBasicInfo: CommandBasicInfo,
     requestHeaders: SlackRequestHeaders,
     slackEventBuilder: SlackEventBuilder,
@@ -35,6 +35,6 @@ internal class EphemeralTextResponse(
                 textMessage = textMessage,
             )
         addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload)
+        return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
 }

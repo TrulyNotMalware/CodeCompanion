@@ -1,10 +1,8 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
-import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
@@ -36,8 +34,6 @@ class InteractionCommand(
 
     override fun parseContext(subCommand: SubCommand): CommandContext =
         commandParser.parseContext(idempotencyKey = idempotencyKey)
-
-    override fun findSubCommandDefinition(): SubCommandDefinition = NoSubCommands()
 
     private fun buildParser(commandData: SlackCommandData): ContextParser =
         when (commandData.slackCommandType) {

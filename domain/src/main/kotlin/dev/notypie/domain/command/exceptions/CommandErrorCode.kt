@@ -7,7 +7,22 @@ enum class CommandErrorCode(
     override val message: String,
 ) : ErrorCode {
     COMMAND_NOT_FOUND(
-        500,
-        "Command not found.",
+        statusCode = 500,
+        message = "Command not found.",
+    ),
+
+    SUBCOMMAND_NOT_VALID(
+        statusCode = 500,
+        message = "Subcommand not valid.",
+    ),
+
+    SUBCOMMAND_NOT_FOUND(
+        statusCode = 404,
+        message = "Subcommand not found.",
+    ),
+
+    UNKNOWN_SUBCOMMAND_TYPE(
+        statusCode = 500,
+        message = "Unknown subcommand type.",
     ),
 }
