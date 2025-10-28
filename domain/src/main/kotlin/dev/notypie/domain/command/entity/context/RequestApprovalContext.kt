@@ -41,7 +41,7 @@ internal class RequestApprovalContext(
                 commandBasicInfo = commandBasicInfo,
             )
         addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload)
+        return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
 
     // FIXME Changed to receive input from Modal. 7.15 test for approval button.

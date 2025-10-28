@@ -22,8 +22,10 @@ internal data class SubCommand(
     val options: List<String> = listOf(),
 ) {
     companion object {
-        fun empty() = SubCommand(NoSubCommands())
+        fun empty() = SubCommand(subCommandDefinition = NoSubCommands())
     }
+
+    fun isValid() = subCommandDefinition.validateArguments(subCommands = options)
 }
 
 internal inline fun <reified T> findSubCommandByIdentifier(

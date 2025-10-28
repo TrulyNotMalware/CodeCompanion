@@ -17,6 +17,7 @@ enum class CommandType {
     SIMPLE,
     PIPELINE,
     SCHEDULED,
+    EXTERNAL_API,
 }
 
 enum class CommandDetailType {

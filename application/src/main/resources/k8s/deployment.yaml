@@ -3,6 +3,7 @@ kind: Deployment
 metadata:
   name: code-companion-deploy
 spec:
+  replicas: 2 # Change replicas
   selector:
     matchLabels:
       app: code-companion-deploy
@@ -31,3 +32,13 @@ spec:
         - name: tz-seoul
           hostPath:
             path: /usr/share/zoneinfo/Asia/Seoul
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: code-companion-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: code-companion-deploy

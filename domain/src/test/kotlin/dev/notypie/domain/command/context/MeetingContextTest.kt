@@ -4,6 +4,7 @@ import dev.notypie.domain.TEST_USER
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.UnknownSubCommandDefinition
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createDomainEventQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
@@ -11,7 +12,9 @@ import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
+import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.flushQueue
+import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedDatePickerStates
 import dev.notypie.domain.command.selectedMultiUserSelectStates
@@ -22,11 +25,12 @@ import dev.notypie.domain.common.event.GetMeetingEventPayload
 import dev.notypie.domain.common.event.GetMeetingListEvent
 import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.dto.TestValidationData
+import dev.notypie.domain.dto.shouldMatchExpected
+import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.mockk.every
-import io.mockk.mockk
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -35,42 +39,27 @@ const val VALID_TEST_REASON = "Test Reason"
 
 class MeetingContextTest :
     BehaviorSpec(body = {
-
-        val eventBuilder = mockk<SlackEventBuilder>(relaxed = false)
         val eventQueue = createDomainEventQueue()
-
-        every {
-            eventBuilder.requestMeetingFormRequest(
-                commandBasicInfo = any(),
-                commandType = any(),
-                commandDetailType = any(),
-            )
-        } returns createSendSlackMessageEvent(commandDetailType = CommandDetailType.REQUEST_MEETING_FORM)
-
-        every {
-            eventBuilder.simpleEphemeralTextRequest(
-                commandBasicInfo = any(),
-                textMessage = any(),
-                commandType = any(),
-                commandDetailType = any(),
-            )
-        } returns createSendSlackMessageEvent(commandDetailType = CommandDetailType.SIMPLE_TEXT)
-
-        every {
-            eventBuilder.replaceOriginalText(
-                markdownText = any(),
-                responseUrl = any(),
-                commandBasicInfo = any(),
-                commandDetailType = any(),
-                commandType = any(),
-            )
-        } returns
-            createSendSlackMessageEvent(
-                isPostEventPayload = false,
-                commandDetailType = CommandDetailType.REPLACE_TEXT,
-            )
-
         val testCommandBasicInfo = createCommandBasicInfo()
+        val eventBuilder =
+            mockEventBuilder {
+                SlackEventBuilder::requestMeetingFormRequest returns
+                    createSendSlackMessageEvent(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                    )
+                SlackEventBuilder::simpleEphemeralTextRequest returns
+                    createSendSlackMessageEvent(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+                SlackEventBuilder::replaceOriginalText returns
+                    createSendSlackMessageEvent(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        isPostEventPayload = false,
+                        commandDetailType = CommandDetailType.REPLACE_TEXT,
+                    )
+            }
         given("Meeting Context with no sub command") {
             val noSubCommandContext =
                 RequestMeetingContext(
@@ -80,15 +69,21 @@ class MeetingContextTest :
                     subCommand = SubCommand(subCommandDefinition = NoSubCommands()),
                 )
 
-            `when`("runCommand() with no sub command") {
+            `when`("runCommand with no sub command") {
                 val result = noSubCommandContext.runCommand()
 
                 then("should return success result and create meeting context event") {
                     val event = noSubCommandContext.events.poll()
-                    result.ok shouldBe true
+                    val validationData =
+                        TestValidationData(
+                            commandDetailType = noSubCommandContext.commandDetailType,
+                            commandType = noSubCommandContext.commandType,
+                            commandBasicInfo = testCommandBasicInfo,
+                        )
+                    (result shouldMatchExpected validationData) shouldBe true
                     eventQueue.size shouldBe 0
                     event shouldNotBe null
-                    event?.type shouldBe CommandDetailType.REQUEST_MEETING_FORM
+                    event?.type shouldBe noSubCommandContext.commandDetailType
                     event?.name shouldBe SendSlackMessageEvent::class.java.simpleName
                     event?.payload?.javaClass shouldBe PostEventPayloadContents::class.java
                 }
@@ -111,7 +106,13 @@ class MeetingContextTest :
 
                 then("should return success result and get meeting list event") {
                     val event = listSubCommandContext.events.poll()
-                    result.ok shouldBe true
+                    val validationData =
+                        TestValidationData(
+                            commandDetailType = listSubCommandContext.commandDetailType,
+                            commandType = listSubCommandContext.commandType,
+                            commandBasicInfo = testCommandBasicInfo,
+                        )
+                    (result shouldMatchExpected validationData) shouldBe true
                     eventQueue.size shouldBe 0 // Only one event is created.
                     event shouldNotBe null
                     event?.name shouldBe GetMeetingListEvent::class.java.simpleName // shouldBe GetMeetingListEvent
@@ -120,6 +121,21 @@ class MeetingContextTest :
                     event?.isInternal shouldBe true
                 }
                 eventQueue.flushQueue()
+            }
+        }
+
+        given("Meeting Context with Unknown sub command") {
+            `when`("create new object") {
+                then("throw SubCommandParseException") {
+                    shouldThrowExactly<SubCommandParseException> {
+                        RequestMeetingContext(
+                            commandBasicInfo = testCommandBasicInfo,
+                            slackEventBuilder = eventBuilder,
+                            events = eventQueue,
+                            subCommand = SubCommand(subCommandDefinition = UnknownSubCommandDefinition.UNKNOWN),
+                        )
+                    }
+                }
             }
         }
 
@@ -156,7 +172,13 @@ class MeetingContextTest :
                 val result = context.handleInteraction(interactionPayload = interactionPayload)
                 then("should return success result and create meeting context event") {
                     val event = eventQueue.poll()
-                    result.ok shouldBe true
+                    val validationData =
+                        TestValidationData(
+                            commandDetailType = context.commandDetailType,
+                            commandBasicInfo = testCommandBasicInfo,
+                            commandType = context.commandType,
+                        )
+                    (result shouldMatchExpected validationData) shouldBe true
                     eventQueue.size shouldBe 0 // Only one event is created.
                     event shouldNotBe null
                     event?.type shouldBe CommandDetailType.REPLACE_TEXT

@@ -37,7 +37,7 @@ internal class SlackApprovalFormContext(
                 commandDetailType = commandDetailType,
             )
         addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload)
+        return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
 
     private fun buildSelectionFields(): List<SelectionContents> =

@@ -36,6 +36,6 @@ internal class SlackTextResponseContext(
                 commandDetailType = commandDetailType,
             )
         addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload)
+        return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
 }

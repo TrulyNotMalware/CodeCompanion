@@ -31,6 +31,13 @@ fun createTestContainer() =
         messageTime = Instant.now(),
     )
 
+fun createInteractionPayloadInput() =
+    createInteractionPayloadInput(
+        commandDetailType = CommandDetailType.NOTHING,
+        currentAction = emptyStates(),
+        states = emptyList(),
+    )
+
 fun createInteractionPayloadInput(
     commandDetailType: CommandDetailType,
     currentAction: States,
@@ -106,3 +113,8 @@ fun selectedTimePickerStates(time: LocalTime, format: String): States {
     val formatted = time.format(DateTimeFormatter.ofPattern(format))
     return ActionElementTypes.TIME_PICKER.toStates(isSelected = true, selectedValue = formatted)
 }
+
+fun emptyStates() =
+    States(
+        type = ActionElementTypes.UNKNOWN,
+    )

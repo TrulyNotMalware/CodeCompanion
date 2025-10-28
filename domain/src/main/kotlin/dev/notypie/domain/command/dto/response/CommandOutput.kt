@@ -24,9 +24,9 @@ open class CommandOutput(
     companion object {
         fun empty() =
             CommandOutput(
-                ok = true,
+                ok = false,
                 apiAppId = "",
-                status = Status.SUCCESS,
+                status = Status.DO_NOTHING,
                 channel = "",
                 commandType = CommandType.SIMPLE,
                 commandDetailType = CommandDetailType.NOTHING,
@@ -64,14 +64,14 @@ open class CommandOutput(
             errorReason = reason,
         )
 
-        fun success(payload: SlackEventPayload) =
+        fun success(payload: SlackEventPayload, commandType: CommandType) =
             CommandOutput(
                 ok = true,
                 apiAppId = payload.apiAppId,
                 status = Status.SUCCESS,
                 channel = payload.channel,
-                commandType = CommandType.SIMPLE,
-                commandDetailType = CommandDetailType.NOTHING,
+                commandType = commandType,
+                commandDetailType = payload.commandDetailType,
                 idempotencyKey = payload.idempotencyKey,
                 publisherId = payload.publisherId,
             )

@@ -64,17 +64,18 @@ fun createActionEventPayloadContents(
 
 fun createSendSlackMessageEvent(
     commandDetailType: CommandDetailType,
+    idempotencyKey: UUID,
     isPostEventPayload: Boolean = true,
     targetUserId: String? = null,
     appId: String = TEST_APP_ID,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
-    idempotencyKey: UUID = UUID.randomUUID(),
 ) = SendSlackMessageEvent(
     idempotencyKey = idempotencyKey,
     payload =
         if (isPostEventPayload) {
             createPostEventPayloadContents(
+                idempotencyKey = idempotencyKey,
                 appId = appId,
                 publisherId = publisherId,
                 channel = channel,
@@ -83,6 +84,7 @@ fun createSendSlackMessageEvent(
             )
         } else {
             createActionEventPayloadContents(
+                idempotencyKey = idempotencyKey,
                 appId = appId,
                 publisherId = publisherId,
                 channel = channel,
