@@ -13,7 +13,7 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
@@ -33,7 +33,7 @@ internal class RequestMeetingContext(
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand,
-) : CommandContext(
+) : ReactionContext(
         slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
@@ -52,9 +52,7 @@ internal class RequestMeetingContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
 
-    override fun runCommand(commandDetailType: CommandDetailType): CommandOutput = runCommand()
-
-    override fun runCommand(): CommandOutput {
+    override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
         val event =
             slackEventBuilder.requestMeetingFormRequest(
                 commandBasicInfo = commandBasicInfo,
@@ -68,6 +66,8 @@ internal class RequestMeetingContext(
 
         return CommandOutput.success(payload = event.payload, commandType = commandType)
     }
+
+    override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
     private fun getListCommand() =
         GetMeetingListEvent(

@@ -21,3 +21,12 @@ class SubCommandParseException(
         errorCode = errorCode,
         details = details,
     )
+
+class UnSupportedCommandException(
+    val commandType: String,
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+) : CommandException(
+        errorCode = errorCode,
+        details = details,
+    )

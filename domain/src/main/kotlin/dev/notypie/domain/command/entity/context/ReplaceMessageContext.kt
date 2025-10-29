@@ -20,7 +20,7 @@ internal class ReplaceMessageContext(
     subCommand: SubCommand,
     private val responseUrl: String,
     private val markdownMessage: String,
-) : CommandContext(
+) : ReactionContext(
         requestHeaders = requestHeaders,
         slackEventBuilder = slackEventBuilder,
         commandBasicInfo = commandBasicInfo,
