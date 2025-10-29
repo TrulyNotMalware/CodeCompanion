@@ -6,3 +6,8 @@ data class User(
     val name: String,
     val teamId: String,
 )
+
+data class Team(
+    val id: String,
+    val domain: String,
+)

@@ -59,6 +59,10 @@ enum class MeetingSubCommandDefinition(
     override val requiresArguments: Boolean = false,
     override val minRequiredArgs: Int = 0,
 ) : SubCommandDefinition {
+    NONE(
+        subCommandIdentifier = "",
+        usage = "",
+    ),
     LIST(
         subCommandIdentifier = "list",
         usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]",

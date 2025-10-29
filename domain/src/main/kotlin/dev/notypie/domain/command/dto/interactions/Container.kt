@@ -13,3 +13,13 @@ data class Container(
     val viewId: String? = null,
     val text: String? = null,
 )
+
+data class Channel(
+    val id: String,
+    val name: String,
+)
+
+data class Enterprise(
+    val id: String,
+    val name: String,
+)

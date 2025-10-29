@@ -15,18 +15,20 @@ internal class EphemeralTextResponseContext(
     requestHeaders: SlackRequestHeaders,
     slackEventBuilder: SlackEventBuilder,
     events: EventQueue<CommandEvent<EventPayload>>,
+    isOk: Boolean = true,
     private val textMessage: String,
-) : CommandContext(
+) : ResponseContext(
         requestHeaders = requestHeaders,
         slackEventBuilder = slackEventBuilder,
         commandBasicInfo = commandBasicInfo,
         events = events,
+        isOk = isOk,
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
-    override fun runCommand(): CommandOutput {
+    override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
         val event =
             slackEventBuilder.simpleEphemeralTextRequest(
                 commandBasicInfo = commandBasicInfo,
@@ -35,6 +37,10 @@ internal class EphemeralTextResponseContext(
                 textMessage = textMessage,
             )
         addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload, commandType = commandType)
+        return if (isOk) {
+            CommandOutput.success(payload = event.payload, commandType = commandType)
+        } else {
+            CommandOutput.fail(event = event.payload, reason = textMessage)
+        }
     }
 }

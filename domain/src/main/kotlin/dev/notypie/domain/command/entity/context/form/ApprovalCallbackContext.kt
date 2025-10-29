@@ -4,7 +4,6 @@ import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -44,9 +43,6 @@ internal class ApprovalCallbackContext(
     override fun runCommand() = handleCommand()
 
     override fun runCommand(commandDetailType: CommandDetailType) = handleCommand(commandDetailType = commandDetailType)
-
-    override fun handleInteraction(interactionPayload: InteractionPayload) =
-        interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
 
     private fun handleCommand(commandDetailType: CommandDetailType = this.commandDetailType): CommandOutput {
         val results = sendNoticeToParticipants(commandDetailType = commandDetailType)
