@@ -48,8 +48,7 @@ enum class CommandDetailType {
                     commandBasicInfo = commandBasicInfo,
                     events = events,
                 )
-            MEETING_APPROVAL_NOTICE_FORM,
-            REQUEST_MEETING_FORM,
+            MEETING_APPROVAL_NOTICE_FORM, REQUEST_MEETING_FORM,
             ->
                 RequestMeetingContext(
                     slackEventBuilder = slackEventBuilder,

@@ -9,6 +9,7 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.dto.isEmpty
 import io.kotest.core.spec.style.BehaviorSpec
@@ -34,31 +35,17 @@ class AbstractCommandContextTest :
 
             `when`("runCommand") {
                 val res = abstractCommandContext.runCommand()
-                val resWithDetailType =
-                    abstractCommandContext.runCommand(commandDetailType = CommandDetailType.NOTHING)
-                then("should return CommandOutput.empty") {
-                    res.isEmpty() shouldBe true
-                    resWithDetailType.isEmpty() shouldBe true
-                }
-            }
-
-            `when`("handleInteraction") {
-                val res =
-                    abstractCommandContext.handleInteraction(
-                        interactionPayload = createInteractionPayloadInput(),
-                    )
                 then("should return CommandOutput.empty") {
                     res.isEmpty() shouldBe true
                 }
             }
         }
         /**
-         * Contract Test: Ensures runCommand() and handleInteraction() remain overridable.
+         * Contract Test: Ensures runCommand() remain overridable.
          * Protects against accidental removal of 'open' keyword during refactoring.
          */
-        given("Override runCommand and handleInteraction function") {
+        given("Override runCommand function") {
             val runCommandReturnValue = CommandOutput.empty()
-            val handleInteractionReturnValue = CommandOutput.empty()
             val overrideContext =
                 object : CommandContext(
                     commandBasicInfo = createCommandBasicInfo(),
@@ -71,25 +58,49 @@ class AbstractCommandContextTest :
                     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTHING
 
                     override fun runCommand(): CommandOutput = runCommandReturnValue
-
-                    override fun runCommand(commandDetailType: CommandDetailType) = runCommandReturnValue
-
-                    override fun handleInteraction(interactionPayload: InteractionPayload) =
-                        handleInteractionReturnValue
                 }
             `when`("runCommand") {
                 val res = overrideContext.runCommand()
-                val resWithDetailType =
-                    overrideContext.runCommand(commandDetailType = CommandDetailType.NOTHING)
                 then("should return override value") {
                     res shouldBe runCommandReturnValue
-                    resWithDetailType shouldBe runCommandReturnValue
                 }
             }
+        }
+    })
 
+class AbstractReactionCommandContextTest :
+    BehaviorSpec({
+        val eventBuilder = mockEventBuilder(relaxed = true) {}
+        val eventQueue = createDomainEventQueue()
+
+        given("Not implemented abstract reaction context") {
+            val runCommandReturnValue = CommandOutput.empty()
+            val handleInteractionReturnValue = CommandOutput.empty()
+            val reactionContext =
+                object : ReactionContext(
+                    slackEventBuilder = eventBuilder,
+                    requestHeaders = SlackRequestHeaders(),
+                    commandBasicInfo = createCommandBasicInfo(),
+                    events = eventQueue,
+                ) {
+                    override fun parseCommandType(): CommandType = CommandType.SIMPLE
+
+                    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTHING
+
+                    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
+                        handleInteractionReturnValue
+
+                    override fun runCommand(): CommandOutput = runCommandReturnValue
+                }
+            `when`("runCommand") {
+                val res = reactionContext.runCommand()
+                then("should return override value") {
+                    res shouldBe runCommandReturnValue
+                }
+            }
             `when`("handleInteraction") {
                 val res =
-                    overrideContext.handleInteraction(
+                    reactionContext.handleInteraction(
                         interactionPayload = createInteractionPayloadInput(),
                     )
                 then("should return override value") {

@@ -25,4 +25,9 @@ enum class CommandErrorCode(
         statusCode = 500,
         message = "Unknown subcommand type.",
     ),
+
+    UNSUPPORTED_COMMAND_TYPE(
+        statusCode = 400,
+        message = "Unsupported command type.",
+    ),
 }

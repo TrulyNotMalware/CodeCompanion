@@ -7,7 +7,6 @@ import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -48,66 +47,33 @@ internal abstract class CommandContext(
         }
     }
 
-    internal abstract fun parseCommandType(): CommandType
+    protected abstract fun parseCommandType(): CommandType
 
-    internal abstract fun parseCommandDetailType(): CommandDetailType
+    protected abstract fun parseCommandDetailType(): CommandDetailType
 
     internal open fun runCommand(): CommandOutput = CommandOutput.empty()
 
-    internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
-
-    internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = CommandOutput.empty()
-
-    internal fun createErrorResponse(errMessage: String): CommandOutput =
+    protected fun createErrorResponse(errMessage: String): CommandOutput =
         EphemeralTextResponseContext(
             commandBasicInfo = commandBasicInfo,
             requestHeaders = requestHeaders,
             slackEventBuilder = slackEventBuilder,
             textMessage = errMessage,
             events = events,
+            isOk = false,
         ).runCommand()
 
-    internal fun createErrorResponse(errMessage: String, results: CommandOutput): CommandOutput {
+    protected fun createErrorResponse(errMessage: String, results: CommandOutput): CommandOutput {
         EphemeralTextResponseContext(
             commandBasicInfo = commandBasicInfo,
             requestHeaders = requestHeaders,
             slackEventBuilder = slackEventBuilder,
             textMessage = errMessage,
             events = events,
+            isOk = false,
         ).runCommand()
         return results
     }
 
-    internal fun interactionSuccessResponse(
-        responseUrl: String,
-        mkdMessage: String = "Successfully processed.",
-    ): CommandOutput =
-        ReplaceMessageContext(
-            commandBasicInfo = commandBasicInfo,
-            requestHeaders = requestHeaders,
-            slackEventBuilder = slackEventBuilder,
-            responseUrl = responseUrl,
-            markdownMessage = mkdMessage,
-            events = events,
-            subCommand = subCommand,
-        ).runCommand()
-
-    internal fun interactionSuccessResponse(
-        responseUrl: String,
-        mkdMessage: String = "Successfully processed.",
-        results: CommandOutput,
-    ): CommandOutput {
-        ReplaceMessageContext(
-            commandBasicInfo = commandBasicInfo,
-            requestHeaders = requestHeaders,
-            slackEventBuilder = slackEventBuilder,
-            responseUrl = responseUrl,
-            markdownMessage = mkdMessage,
-            events = events,
-            subCommand = subCommand,
-        ).runCommand()
-        return results
-    }
-
-    internal fun addNewEvent(commandEvent: CommandEvent<EventPayload>) = events.offer(event = commandEvent)
+    protected fun addNewEvent(commandEvent: CommandEvent<EventPayload>) = events.offer(event = commandEvent)
 }

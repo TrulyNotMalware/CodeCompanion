@@ -41,7 +41,7 @@ open class CommandOutput(
                 status = Status.FAILED,
                 channel = event.channel,
                 commandType = CommandType.SIMPLE,
-                commandDetailType = CommandDetailType.NOTHING,
+                commandDetailType = event.commandDetailType,
                 idempotencyKey = event.idempotencyKey,
                 publisherId = event.publisherId,
                 errorReason = reason,

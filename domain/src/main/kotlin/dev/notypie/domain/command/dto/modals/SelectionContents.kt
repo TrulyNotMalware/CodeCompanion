@@ -6,3 +6,14 @@ data class SelectionContents(
     val placeholderText: String,
     val contents: List<SelectBoxDetails>,
 )
+
+data class SelectBoxDetails(
+    val name: String,
+    val isMarkDown: Boolean = false,
+    val value: Any,
+)
+
+data class MultiUserSelectContents(
+    val title: String,
+    val placeholderText: String,
+)

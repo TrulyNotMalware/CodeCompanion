@@ -3,7 +3,6 @@ package dev.notypie.domain.command.context
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createDomainEventQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -13,7 +12,6 @@ import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.domain.dto.TestValidationData
-import dev.notypie.domain.dto.isEmpty
 import dev.notypie.domain.dto.shouldMatchExpected
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -59,17 +57,6 @@ class EphemeralTextContextTest :
                     event?.payload?.javaClass shouldBe PostEventPayloadContents::class.java
 
                     eventQueue.flushQueue()
-                }
-            }
-
-            `when`("handleInteraction with no sub command") {
-                val res =
-                    noSubCommandContext.handleInteraction(
-                        interactionPayload = createInteractionPayloadInput(),
-                    )
-                then("do nothing") {
-                    res.isEmpty() shouldBe true
-                    eventQueue.isEmpty() shouldBe true
                 }
             }
         }

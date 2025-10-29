@@ -1,7 +1,6 @@
 package dev.notypie.domain.command.context
 
 import dev.notypie.domain.TEST_USER
-import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.UnknownSubCommandDefinition
@@ -66,7 +65,7 @@ class MeetingContextTest :
                     commandBasicInfo = testCommandBasicInfo,
                     slackEventBuilder = eventBuilder,
                     events = eventQueue,
-                    subCommand = SubCommand(subCommandDefinition = NoSubCommands()),
+                    subCommand = SubCommand.empty(),
                 )
 
             `when`("runCommand with no sub command") {
@@ -146,7 +145,7 @@ class MeetingContextTest :
                     commandBasicInfo = testCommandBasicInfo,
                     slackEventBuilder = eventBuilder,
                     events = eventQueue,
-                    subCommand = SubCommand(subCommandDefinition = NoSubCommands()),
+                    subCommand = SubCommand.empty(),
                 )
 
             `when`("handleInteraction with successful data") {
