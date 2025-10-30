@@ -1,8 +1,10 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -10,6 +12,7 @@ import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
 
@@ -39,8 +42,8 @@ enum class CommandDetailType {
         commandBasicInfo: CommandBasicInfo,
         events: EventQueue<CommandEvent<EventPayload>>,
         requestHeaders: SlackRequestHeaders,
-        subCommand: SubCommand,
-    ): CommandContext =
+        subCommand: SubCommand<NoSubCommands>,
+    ): CommandContext<out SubCommandDefinition> =
         when (this) {
             APPROVAL_FORM ->
                 SlackApprovalFormContext(
@@ -54,13 +57,17 @@ enum class CommandDetailType {
                     slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
                     events = events,
-                    subCommand = subCommand,
+                    subCommand =
+                        SubCommand(
+                            subCommandDefinition = MeetingSubCommandDefinition.NONE,
+                        ),
                 )
             NOTICE_FORM ->
                 ApprovalCallbackContext(
                     slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
                     events = events,
+                    subCommand = subCommand,
                 )
             else ->
                 EmptyContext(

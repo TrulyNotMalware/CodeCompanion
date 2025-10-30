@@ -1,8 +1,10 @@
 package dev.notypie.domain.command.entity
 
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
@@ -11,6 +13,7 @@ import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.parsers.ContextParser
 import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
+import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
@@ -20,7 +23,7 @@ class InteractionCommand(
     commandData: SlackCommandData,
     slackEventBuilder: SlackEventBuilder,
     eventPublisher: EventPublisher,
-) : Command(
+) : Command<SubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
         slackEventBuilder = slackEventBuilder,
@@ -32,8 +35,21 @@ class InteractionCommand(
 
     private val commandParser: ContextParser = buildParser(commandData)
 
-    override fun parseContext(subCommand: SubCommand): CommandContext =
+    override fun parseContext(subCommand: SubCommand<SubCommandDefinition>): CommandContext<out SubCommandDefinition> =
         commandParser.parseContext(idempotencyKey = idempotencyKey)
+
+    override fun findSubCommandDefinition(): SubCommandDefinition {
+        val payload =
+            commandData.body as? InteractionPayload
+                ?: return NoSubCommands()
+
+        return when (payload.type) {
+            CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+            CommandDetailType.REQUEST_MEETING_FORM,
+            -> MeetingSubCommandDefinition.NONE
+            else -> NoSubCommands()
+        }
+    }
 
     private fun buildParser(commandData: SlackCommandData): ContextParser =
         when (commandData.slackCommandType) {

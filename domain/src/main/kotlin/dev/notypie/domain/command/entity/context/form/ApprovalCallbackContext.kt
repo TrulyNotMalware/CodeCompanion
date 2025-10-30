@@ -1,7 +1,9 @@
 package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContents
@@ -20,11 +22,13 @@ internal class ApprovalCallbackContext(
     approvalContents: ApprovalContents? = null,
     events: EventQueue<CommandEvent<EventPayload>>,
     private val participants: Set<String> = emptySet(),
-) : ReactionContext(
+    subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
+) : ReactionContext<NoSubCommands>(
         slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         events = events,
+        subCommand = subCommand,
     ) {
     private val approvalContents: ApprovalContents = approvalContents ?: createDefaultApprovalContents()
 

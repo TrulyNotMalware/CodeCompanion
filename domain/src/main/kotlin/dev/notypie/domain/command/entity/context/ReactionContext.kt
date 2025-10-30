@@ -13,21 +13,18 @@ import dev.notypie.domain.command.dto.withNewKey
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.common.event.CommandEvent
 import dev.notypie.domain.common.event.EventPayload
-import kotlin.reflect.KClass
 
-internal abstract class ReactionContext(
+internal abstract class ReactionContext<T : SubCommandDefinition>(
     slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     commandBasicInfo: CommandBasicInfo,
     events: EventQueue<CommandEvent<EventPayload>>,
-    requiredSubCommandType: KClass<out SubCommandDefinition> = NoSubCommands::class,
-    subCommand: SubCommand = SubCommand.empty(),
-) : CommandContext(
-        commandBasicInfo = commandBasicInfo.withNewKey(),
+    subCommand: SubCommand<T>,
+) : CommandContext<T>(
+        commandBasicInfo = commandBasicInfo,
         requestHeaders = requestHeaders,
         slackEventBuilder = slackEventBuilder,
         events = events,
-        requiredSubCommandType = requiredSubCommandType,
         subCommand = subCommand,
     ) {
     protected fun interactionSuccessResponse(
@@ -41,7 +38,6 @@ internal abstract class ReactionContext(
             responseUrl = responseUrl,
             markdownMessage = mkdMessage,
             events = events,
-            subCommand = subCommand,
         ).runCommand()
 
     protected fun interactionSuccessResponse(
@@ -56,7 +52,6 @@ internal abstract class ReactionContext(
             responseUrl = responseUrl,
             markdownMessage = mkdMessage,
             events = events,
-            subCommand = subCommand,
         ).runCommand()
         return results
     }
@@ -64,7 +59,10 @@ internal abstract class ReactionContext(
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
 
     internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
-        interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
+        interactionSuccessResponse(
+//            idempotencyKey = commandBasicInfo.idempotencyKey,
+            responseUrl = interactionPayload.responseUrl,
+        )
 }
 
 internal abstract class ResponseContext(
@@ -72,12 +70,14 @@ internal abstract class ResponseContext(
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     commandBasicInfo: CommandBasicInfo,
     events: EventQueue<CommandEvent<EventPayload>>,
+    subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     val isOk: Boolean = false,
-) : CommandContext(
+) : CommandContext<NoSubCommands>(
         commandBasicInfo = commandBasicInfo.withNewKey(),
         requestHeaders = requestHeaders,
         slackEventBuilder = slackEventBuilder,
         events = events,
+        subCommand = subCommand,
     ) {
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
 

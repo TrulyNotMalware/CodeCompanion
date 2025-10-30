@@ -1,5 +1,7 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.NoSubCommands
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createDomainEventQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
@@ -22,11 +24,12 @@ class AbstractCommandContextTest :
 
         given("Not implemented abstract command context") {
             val abstractCommandContext =
-                object : CommandContext(
+                object : CommandContext<NoSubCommands>(
                     commandBasicInfo = createCommandBasicInfo(),
                     requestHeaders = SlackRequestHeaders(),
                     slackEventBuilder = eventBuilder,
                     events = eventQueue,
+                    subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
@@ -47,11 +50,12 @@ class AbstractCommandContextTest :
         given("Override runCommand function") {
             val runCommandReturnValue = CommandOutput.empty()
             val overrideContext =
-                object : CommandContext(
+                object : CommandContext<NoSubCommands>(
                     commandBasicInfo = createCommandBasicInfo(),
                     requestHeaders = SlackRequestHeaders(),
                     slackEventBuilder = eventBuilder,
                     events = eventQueue,
+                    subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
@@ -77,11 +81,12 @@ class AbstractReactionCommandContextTest :
             val runCommandReturnValue = CommandOutput.empty()
             val handleInteractionReturnValue = CommandOutput.empty()
             val reactionContext =
-                object : ReactionContext(
+                object : ReactionContext<NoSubCommands>(
                     slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
                     commandBasicInfo = createCommandBasicInfo(),
                     events = eventQueue,
+                    subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 

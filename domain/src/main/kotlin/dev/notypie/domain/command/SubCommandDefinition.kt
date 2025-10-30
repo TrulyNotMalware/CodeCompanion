@@ -1,6 +1,6 @@
 package dev.notypie.domain.command
 
-internal interface SubCommandDefinition {
+interface SubCommandDefinition {
     val subCommandIdentifier: String
     val requiresArguments: Boolean
     val minRequiredArgs: Int
@@ -10,19 +10,25 @@ internal interface SubCommandDefinition {
         !requiresArguments || subCommands.size >= minRequiredArgs
 }
 
-internal class NoSubCommands(
+class NoSubCommands(
     override val subCommandIdentifier: String = "",
     override val requiresArguments: Boolean = false,
     override val minRequiredArgs: Int = 0,
     override val usage: String = "",
 ) : SubCommandDefinition
 
-internal data class SubCommand(
-    val subCommandDefinition: SubCommandDefinition,
+internal data class SubCommand<out T : SubCommandDefinition>(
+    val subCommandDefinition: T,
     val options: List<String> = listOf(),
 ) {
     companion object {
-        fun empty() = SubCommand(subCommandDefinition = NoSubCommands())
+        fun empty(): SubCommand<NoSubCommands> = SubCommand(subCommandDefinition = NoSubCommands())
+
+        fun <T : SubCommandDefinition> of(definition: T, options: List<String> = listOf()) =
+            SubCommand(
+                subCommandDefinition = definition,
+                options = options,
+            )
     }
 
     fun isValid() = subCommandDefinition.validateArguments(subCommands = options)

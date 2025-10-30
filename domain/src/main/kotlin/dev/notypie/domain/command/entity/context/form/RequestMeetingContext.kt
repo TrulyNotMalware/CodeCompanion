@@ -32,14 +32,16 @@ internal class RequestMeetingContext(
     slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     events: EventQueue<CommandEvent<EventPayload>>,
-    subCommand: SubCommand,
-) : ReactionContext(
+    subCommand: SubCommand<MeetingSubCommandDefinition> =
+        SubCommand(
+            subCommandDefinition = MeetingSubCommandDefinition.NONE,
+        ),
+) : ReactionContext<MeetingSubCommandDefinition>(
         slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         events = events,
         subCommand = subCommand,
-        requiredSubCommandType = MeetingSubCommandDefinition::class,
     ) {
     companion object {
         internal const val DATE_PATTERN = "yyyy-MM-dd"
@@ -229,6 +231,7 @@ internal class RequestMeetingContext(
                     commandDetailType = CommandDetailType.NOTICE_FORM,
                 ),
             events = events,
+            subCommand = SubCommand.empty(),
         ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
             .status == Status.SUCCESS
 }
