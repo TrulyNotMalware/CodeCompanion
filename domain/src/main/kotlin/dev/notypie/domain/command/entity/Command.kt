@@ -2,7 +2,6 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.EventQueue
-import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
@@ -21,7 +20,7 @@ import dev.notypie.domain.common.event.EventPayload
 import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
-abstract class Command(
+abstract class Command<T : SubCommandDefinition>(
     val idempotencyKey: UUID,
     val commandData: SlackCommandData,
     internal val slackEventBuilder: SlackEventBuilder,
@@ -31,9 +30,9 @@ abstract class Command(
 
     val commandId: UUID = UUID.randomUUID()
 
-    internal abstract fun parseContext(subCommand: SubCommand): CommandContext
+    internal abstract fun parseContext(subCommand: SubCommand<T>): CommandContext<out T>
 
-    internal open fun findSubCommandDefinition(): SubCommandDefinition = NoSubCommands()
+    internal abstract fun findSubCommandDefinition(): T
 
     fun handleEvent() =
         runCatching { executeCommand() }
@@ -58,8 +57,8 @@ abstract class Command(
         }
     }
 
-    private fun CommandContext.executeInteraction(): CommandOutput =
-        if (this is ReactionContext) {
+    private fun CommandContext<out T>.executeInteraction(): CommandOutput =
+        if (this is ReactionContext<out T>) {
             handleInteraction(commandData.body as InteractionPayload)
         } else {
             throw UnSupportedCommandException(
@@ -73,7 +72,7 @@ abstract class Command(
             )
         }
 
-    private fun createSubCommand(): SubCommand {
+    private fun createSubCommand(): SubCommand<T> {
         val options = commandData.subCommands.drop(1)
         val subCommand =
             SubCommand(

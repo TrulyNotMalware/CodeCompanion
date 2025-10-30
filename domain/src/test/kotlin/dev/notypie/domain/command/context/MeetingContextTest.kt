@@ -3,7 +3,6 @@ package dev.notypie.domain.command.context
 import dev.notypie.domain.TEST_USER
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
-import dev.notypie.domain.command.UnknownSubCommandDefinition
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createDomainEventQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
@@ -11,7 +10,6 @@ import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.flushQueue
 import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.command.selectedApplyButtonStates
@@ -26,7 +24,6 @@ import dev.notypie.domain.common.event.PostEventPayloadContents
 import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.domain.dto.TestValidationData
 import dev.notypie.domain.dto.shouldMatchExpected
-import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -65,7 +62,7 @@ class MeetingContextTest :
                     commandBasicInfo = testCommandBasicInfo,
                     slackEventBuilder = eventBuilder,
                     events = eventQueue,
-                    subCommand = SubCommand.empty(),
+                    subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
                 )
 
             `when`("runCommand with no sub command") {
@@ -122,21 +119,23 @@ class MeetingContextTest :
                 eventQueue.flushQueue()
             }
         }
-
-        given("Meeting Context with Unknown sub command") {
-            `when`("create new object") {
-                then("throw SubCommandParseException") {
-                    shouldThrowExactly<SubCommandParseException> {
-                        RequestMeetingContext(
-                            commandBasicInfo = testCommandBasicInfo,
-                            slackEventBuilder = eventBuilder,
-                            events = eventQueue,
-                            subCommand = SubCommand(subCommandDefinition = UnknownSubCommandDefinition.UNKNOWN),
-                        )
-                    }
-                }
-            }
-        }
+        // This test is no longer possible because type checking occurs at compile time,
+        // preventing UnknownSubCommandDefinition.UNKNOWN from being passed to RequestMeetingContext
+        // which expects SubCommand<MeetingSubCommandDefinition>.
+//        given("Meeting Context with Unknown sub command") {
+//            `when`("create new object") {
+//                then("throw SubCommandParseException") {
+//                    shouldThrowExactly<SubCommandParseException> {
+//                        RequestMeetingContext(
+//                            commandBasicInfo = testCommandBasicInfo,
+//                            slackEventBuilder = eventBuilder,
+//                            events = eventQueue,
+//                            subCommand = SubCommand(subCommandDefinition = UnknownSubCommandDefinition.UNKNOWN),
+//                        )
+//                    }
+//                }
+//            }
+//        }
 
         given("Meeting Context with interactionPayload") {
 
@@ -145,12 +144,13 @@ class MeetingContextTest :
                     commandBasicInfo = testCommandBasicInfo,
                     slackEventBuilder = eventBuilder,
                     events = eventQueue,
-                    subCommand = SubCommand.empty(),
+                    subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
                 )
 
             `when`("handleInteraction with successful data") {
                 val interactionPayload =
                     createInteractionPayloadInput(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
                         commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
                         currentAction = selectedApplyButtonStates(),
                         states =
@@ -168,7 +168,7 @@ class MeetingContextTest :
                                 selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
                             ),
                     )
-                val result = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interactionPayload = interactionPayload)
                 then("should return success result and create meeting context event") {
                     val event = eventQueue.poll()
                     val validationData =
@@ -177,7 +177,7 @@ class MeetingContextTest :
                             commandBasicInfo = testCommandBasicInfo,
                             commandType = context.commandType,
                         )
-                    (result shouldMatchExpected validationData) shouldBe true
+                    (res shouldMatchExpected validationData) shouldBe true
                     eventQueue.size shouldBe 0 // Only one event is created.
                     event shouldNotBe null
                     event?.type shouldBe CommandDetailType.REPLACE_TEXT

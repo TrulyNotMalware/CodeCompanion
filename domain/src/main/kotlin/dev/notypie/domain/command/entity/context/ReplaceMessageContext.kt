@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -17,10 +18,10 @@ internal class ReplaceMessageContext(
     requestHeaders: SlackRequestHeaders,
     slackEventBuilder: SlackEventBuilder,
     events: EventQueue<CommandEvent<EventPayload>>,
-    subCommand: SubCommand,
+    subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     private val responseUrl: String,
     private val markdownMessage: String,
-) : ReactionContext(
+) : ReactionContext<NoSubCommands>(
         requestHeaders = requestHeaders,
         slackEventBuilder = slackEventBuilder,
         commandBasicInfo = commandBasicInfo,

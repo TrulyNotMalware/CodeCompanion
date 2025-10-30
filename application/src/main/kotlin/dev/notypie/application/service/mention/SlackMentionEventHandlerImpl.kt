@@ -9,7 +9,6 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
-import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.common.event.EventPublisher
 import dev.notypie.domain.history.entity.History
@@ -32,7 +31,6 @@ class SlackMentionEventHandlerImpl(
     }
 
     // FIXME Remove AppMention Events.
-
     @Transactional
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
         val slackCommandData = parseAppMentionEvent(headers = headers, payload = payload)
@@ -60,7 +58,7 @@ class SlackMentionEventHandlerImpl(
         )
     }
 
-    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
+    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData) =
         InteractionCommand(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
