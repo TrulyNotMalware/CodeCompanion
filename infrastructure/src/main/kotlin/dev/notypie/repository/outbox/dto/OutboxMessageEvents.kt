@@ -1,7 +1,7 @@
 package dev.notypie.repository.outbox.dto
 
 import dev.notypie.domain.command.dto.response.CommandOutput
-import dev.notypie.domain.common.event.SlackEventPayload
+import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import java.util.UUID

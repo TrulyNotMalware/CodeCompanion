@@ -4,10 +4,10 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 data class MeetingListDto(
-    val meetings: List<Meeting>,
+    val meetings: List<MeetingDto>,
 )
 
-data class Meeting(
+data class MeetingDto(
     val meetingId: Long,
     val idempotencyKey: UUID,
     val creator: String,

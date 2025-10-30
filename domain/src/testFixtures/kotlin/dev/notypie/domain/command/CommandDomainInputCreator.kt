@@ -6,9 +6,9 @@ import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.common.event.ActionEventPayloadContents
-import dev.notypie.domain.common.event.PostEventPayloadContents
-import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
+import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import java.util.UUID
 
 fun createCommandBasicInfo(

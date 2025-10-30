@@ -9,6 +9,11 @@ import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
+import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
+import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.flushQueue
 import dev.notypie.domain.command.mockEventBuilder
@@ -17,11 +22,6 @@ import dev.notypie.domain.command.selectedDatePickerStates
 import dev.notypie.domain.command.selectedMultiUserSelectStates
 import dev.notypie.domain.command.selectedPlainTextStates
 import dev.notypie.domain.command.selectedTimePickerStates
-import dev.notypie.domain.common.event.ActionEventPayloadContents
-import dev.notypie.domain.common.event.GetMeetingEventPayload
-import dev.notypie.domain.common.event.GetMeetingListEvent
-import dev.notypie.domain.common.event.PostEventPayloadContents
-import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.domain.dto.TestValidationData
 import dev.notypie.domain.dto.shouldMatchExpected
 import io.kotest.core.spec.style.BehaviorSpec

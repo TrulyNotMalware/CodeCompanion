@@ -1,8 +1,8 @@
 package dev.notypie.domain.command
 
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.common.event.CommandEvent
-import dev.notypie.domain.common.event.EventPayload
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import java.util.UUID
 
 data class TestPayload(

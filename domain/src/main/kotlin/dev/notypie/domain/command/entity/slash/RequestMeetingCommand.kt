@@ -3,15 +3,21 @@ package dev.notypie.domain.command.entity.slash
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
 import dev.notypie.domain.common.error.exceptionDetails
-import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.domain.history.entity.Status
+import java.time.LocalDateTime
 import java.util.UUID
 
 class RequestMeetingCommand(
@@ -69,3 +75,22 @@ enum class MeetingSubCommandDefinition(
         usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]",
     ),
 }
+
+data class RequestMeetingContextResult(
+    override val ok: Boolean,
+    override val status: Status,
+    val commandBasicInfo: CommandBasicInfo,
+    val participants: Set<String> = emptySet(),
+    val startAt: LocalDateTime,
+    val name: String,
+) : CommandOutput(
+        ok = ok,
+        status = status,
+        apiAppId = commandBasicInfo.appId,
+        idempotencyKey = commandBasicInfo.idempotencyKey,
+        publisherId = commandBasicInfo.publisherId,
+        channel = commandBasicInfo.channel,
+        token = commandBasicInfo.appToken,
+        commandType = CommandType.PIPELINE,
+        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+    )

@@ -7,9 +7,9 @@ import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.common.event.MessageType
-import dev.notypie.domain.common.event.SendSlackMessageEvent
-import dev.notypie.domain.meet.dto.Meeting
+import dev.notypie.domain.command.entity.event.MessageType
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.domain.meet.dto.MeetingDto
 
 interface SlackEventBuilder {
     fun simpleTextRequest(
@@ -72,7 +72,7 @@ interface SlackEventBuilder {
     ): SendSlackMessageEvent
 
     fun getMeetingListFormRequest(
-        myMeetings: List<Meeting>,
+        myMeetings: List<MeetingDto>,
         commandBasicInfo: CommandBasicInfo,
         commandType: CommandType,
         commandDetailType: CommandDetailType,
