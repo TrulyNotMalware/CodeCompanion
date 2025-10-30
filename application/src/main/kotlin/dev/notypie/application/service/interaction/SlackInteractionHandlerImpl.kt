@@ -7,7 +7,6 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.isCanceled
 import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.interactions.toSlackCommandData
-import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.common.event.EventPublisher
@@ -48,7 +47,7 @@ class SlackInteractionHandlerImpl(
         }
     }
 
-    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): Command =
+    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): InteractionCommand =
         InteractionCommand(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
@@ -57,7 +56,11 @@ class SlackInteractionHandlerImpl(
             eventPublisher = eventPublisher,
         )
 
-    private fun rejectCommand(idempotencyKey: UUID, commandData: SlackCommandData, responseUrl: String): Command =
+    private fun rejectCommand(
+        idempotencyKey: UUID,
+        commandData: SlackCommandData,
+        responseUrl: String,
+    ): ReplaceTextResponseCommand =
         ReplaceTextResponseCommand(
             idempotencyKey = idempotencyKey,
             commandData = commandData,

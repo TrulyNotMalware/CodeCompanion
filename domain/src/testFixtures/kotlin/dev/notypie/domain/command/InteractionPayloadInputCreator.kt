@@ -35,6 +35,7 @@ fun createInteractionPayloadInput() =
     createInteractionPayloadInput(
         commandDetailType = CommandDetailType.NOTHING,
         currentAction = emptyStates(),
+        idempotencyKey = UUID.randomUUID(),
         states = emptyList(),
     )
 
@@ -51,7 +52,7 @@ fun createInteractionPayloadInput(
     botId: String = TEST_BOT_ID,
     token: String = TEST_TOKEN,
     responseUrl: String = TEST_BASE_URL,
-    idempotencyKey: String = UUID.randomUUID().toString(),
+    idempotencyKey: UUID,
     triggerId: String = "",
     isEnterprise: Boolean = false,
 ): InteractionPayload =
@@ -62,7 +63,7 @@ fun createInteractionPayloadInput(
         triggerId = triggerId,
         isEnterprise = isEnterprise,
         enterprise = enterprise,
-        idempotencyKey = idempotencyKey,
+        idempotencyKey = idempotencyKey.toString(),
         apiAppId = apiAppId,
         botId = botId,
         token = token,

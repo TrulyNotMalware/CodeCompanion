@@ -1,6 +1,5 @@
 package dev.notypie.domain.command.entity.slash
 
-import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
@@ -20,13 +19,15 @@ class RequestMeetingCommand(
     commandData: SlackCommandData,
     slackEventBuilder: SlackEventBuilder,
     eventPublisher: EventPublisher,
-) : Command(
+) : Command<MeetingSubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
         slackEventBuilder = slackEventBuilder,
         eventPublisher = eventPublisher,
     ) {
-    override fun parseContext(subCommand: SubCommand): CommandContext =
+    override fun parseContext(
+        subCommand: SubCommand<MeetingSubCommandDefinition>,
+    ): CommandContext<MeetingSubCommandDefinition> =
         RequestMeetingContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             slackEventBuilder = slackEventBuilder,
@@ -34,10 +35,10 @@ class RequestMeetingCommand(
             subCommand = subCommand,
         )
 
-    override fun findSubCommandDefinition(): SubCommandDefinition {
+    override fun findSubCommandDefinition(): MeetingSubCommandDefinition {
         val identifier =
             commandData.subCommands.firstOrNull()
-                ?: return NoSubCommands()
+                ?: return MeetingSubCommandDefinition.NONE
         return findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier)
             ?: throw SubCommandParseException(
                 commandName = this::class.java.simpleName,

@@ -1,7 +1,9 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -16,11 +18,12 @@ internal class SlackTextResponseContext(
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     slackEventBuilder: SlackEventBuilder,
     events: EventQueue<CommandEvent<EventPayload>>,
-) : CommandContext(
+) : CommandContext<NoSubCommands>(
         slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         events = events,
+        subCommand = SubCommand.empty(),
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 

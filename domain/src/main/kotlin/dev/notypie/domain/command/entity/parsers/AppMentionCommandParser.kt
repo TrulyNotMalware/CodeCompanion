@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.parsers
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
@@ -39,9 +40,8 @@ internal class AppMentionCommandParser(
             ?: throw IllegalArgumentException("Invalid body type for AppMention")
     }
     private val botId: String by lazy { slackAppMentionRequestData.authorizations.find { it.isBot }?.userId ?: "" }
-    private val parsedContext: CommandContext by lazy { parseContext(idempotencyKey = idempotencyKey) }
 
-    override fun parseContext(idempotencyKey: UUID): CommandContext =
+    override fun parseContext(idempotencyKey: UUID): CommandContext<NoSubCommands> =
         slackAppMentionRequestData.event.blocks
             .find { blocks -> blocks.elements.isNotEmpty() && blocks.type == BLOCK_TYPE_RICH_TEXT }
             ?.elements
@@ -79,7 +79,7 @@ internal class AppMentionCommandParser(
         return userQueue to commandQueue
     }
 
-    private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext {
+    private fun buildContext(userQueue: Queue<String>, commandQueue: Queue<String>): CommandContext<NoSubCommands> {
         val command: String = commandQueue.poll().replace(" ", "")
         return when (CommandSet.parseCommand(command)) { // FIXME Later when block
             CommandSet.NOTICE ->

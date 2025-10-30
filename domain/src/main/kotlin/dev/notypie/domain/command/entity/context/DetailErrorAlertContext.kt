@@ -1,7 +1,9 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.EventQueue
+import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -18,11 +20,12 @@ internal class DetailErrorAlertContext(
     events: EventQueue<CommandEvent<EventPayload>>,
     slackEventBuilder: SlackEventBuilder,
     idempotencyKey: UUID,
-) : CommandContext(
+) : CommandContext<NoSubCommands>(
         requestHeaders = slackCommandData.rawHeader,
         slackEventBuilder = slackEventBuilder,
         commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
         events = events,
+        subCommand = SubCommand.empty(),
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
