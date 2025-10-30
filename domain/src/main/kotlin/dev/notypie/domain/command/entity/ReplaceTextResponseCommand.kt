@@ -7,7 +7,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReplaceMessageContext
-import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.domain.command.entity.event.EventPublisher
 import java.util.UUID
 
 class ReplaceTextResponseCommand(

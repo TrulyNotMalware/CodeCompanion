@@ -4,7 +4,7 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.common.event.SlackEventPayload
+import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.domain.history.entity.Status
 import java.util.UUID
 

@@ -1,6 +1,6 @@
 package dev.notypie.domain.command
 
-import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import io.mockk.every
 import io.mockk.mockk
 import kotlin.reflect.KFunction

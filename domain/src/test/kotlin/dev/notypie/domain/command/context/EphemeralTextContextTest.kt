@@ -7,10 +7,10 @@ import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.EphemeralTextResponseContext
+import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.flushQueue
 import dev.notypie.domain.command.mockEventBuilder
-import dev.notypie.domain.common.event.PostEventPayloadContents
-import dev.notypie.domain.common.event.SendSlackMessageEvent
 import dev.notypie.domain.dto.TestValidationData
 import dev.notypie.domain.dto.shouldMatchExpected
 import io.kotest.core.spec.style.BehaviorSpec
