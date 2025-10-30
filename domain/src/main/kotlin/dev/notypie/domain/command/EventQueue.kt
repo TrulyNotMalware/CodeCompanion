@@ -1,7 +1,7 @@
 package dev.notypie.domain.command
 
-import dev.notypie.domain.common.event.CommandEvent
-import dev.notypie.domain.common.event.EventPayload
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 
 interface EventQueue<T : CommandEvent<EventPayload>> : Iterable<T> {
     fun offer(event: T)

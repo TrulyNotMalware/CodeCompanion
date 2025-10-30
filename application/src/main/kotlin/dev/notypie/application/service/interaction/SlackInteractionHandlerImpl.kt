@@ -9,7 +9,7 @@ import dev.notypie.domain.command.dto.interactions.isPrimary
 import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
-import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.impl.command.InteractionPayloadParser
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher

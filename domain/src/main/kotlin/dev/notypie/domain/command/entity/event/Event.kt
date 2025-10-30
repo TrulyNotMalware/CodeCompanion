@@ -1,7 +1,7 @@
-package dev.notypie.domain.common.event
+package dev.notypie.domain.command.entity.event
 
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.meet.dto.Meeting
+import dev.notypie.domain.meet.dto.MeetingDto
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -26,7 +26,7 @@ abstract class MeetingPayload(
 ) : EventPayload
 
 class GetMeetingEventPayload( // FIXME slackEventModifier
-    val slackEventModifier: (List<Meeting>) -> SendSlackMessageEvent,
+    val slackEventModifier: (List<MeetingDto>) -> SendSlackMessageEvent,
     val startDate: LocalDateTime = LocalDateTime.now(),
     val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
     publisherId: String,

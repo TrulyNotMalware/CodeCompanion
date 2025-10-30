@@ -9,7 +9,7 @@ import dev.notypie.application.service.relay.MessageProcessor
 import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.domain.command.MessageDispatcher
-import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.exception.ErrorBroadcaster
 import dev.notypie.exception.KafkaErrorBroadcaster
 import dev.notypie.exception.StdoutErrorBroadcaster

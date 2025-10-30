@@ -1,7 +1,7 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.domain.command.MessageDispatcher
-import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent

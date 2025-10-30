@@ -10,7 +10,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.InteractionCommand
-import dev.notypie.domain.common.event.EventPublisher
+import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.mapper.mapHistory
 import org.springframework.stereotype.Service

@@ -11,8 +11,8 @@ import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.withNewKey
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.common.event.CommandEvent
-import dev.notypie.domain.common.event.EventPayload
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 
 internal abstract class ReactionContext<T : SubCommandDefinition>(
     slackEventBuilder: SlackEventBuilder,
@@ -59,10 +59,7 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
 
     internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
-        interactionSuccessResponse(
-//            idempotencyKey = commandBasicInfo.idempotencyKey,
-            responseUrl = interactionPayload.responseUrl,
-        )
+        interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
 }
 
 internal abstract class ResponseContext(

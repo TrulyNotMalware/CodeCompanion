@@ -9,11 +9,11 @@ import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.common.event.ActionEventPayloadContents
-import dev.notypie.domain.common.event.DelayHandleEventPayloadContents
-import dev.notypie.domain.common.event.MessageType
-import dev.notypie.domain.common.event.PostEventPayloadContents
-import dev.notypie.domain.common.event.SlackEventPayload
+import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
+import dev.notypie.domain.command.entity.event.DelayHandleEventPayloadContents
+import dev.notypie.domain.command.entity.event.MessageType
+import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.domain.history.entity.Status
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository

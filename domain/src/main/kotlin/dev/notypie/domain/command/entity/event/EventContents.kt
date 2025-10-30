@@ -1,4 +1,4 @@
-package dev.notypie.domain.common.event
+package dev.notypie.domain.command.entity.event
 
 import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.temporal.ChronoUnit

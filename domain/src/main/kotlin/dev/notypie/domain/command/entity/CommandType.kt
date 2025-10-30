@@ -12,9 +12,9 @@ import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.common.event.CommandEvent
-import dev.notypie.domain.common.event.EventPayload
 
 enum class CommandType {
     SIMPLE,

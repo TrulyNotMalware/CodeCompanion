@@ -10,11 +10,11 @@ import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
+import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.entity.parsers.ContextParser
 import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.common.event.EventPublisher
 import java.util.UUID
 
 class InteractionCommand(

@@ -13,8 +13,8 @@ import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
-import dev.notypie.domain.common.event.CommandEvent
-import dev.notypie.domain.common.event.EventPayload
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import java.util.*
 
 internal class AppMentionCommandParser(

@@ -14,14 +14,15 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
+import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.common.event.CommandEvent
-import dev.notypie.domain.common.event.EventPayload
-import dev.notypie.domain.common.event.GetMeetingEventPayload
-import dev.notypie.domain.common.event.GetMeetingListEvent
-import dev.notypie.domain.common.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.history.entity.Status
-import dev.notypie.domain.meet.dto.Meeting
+import dev.notypie.domain.meet.dto.MeetingDto
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -82,7 +83,7 @@ internal class RequestMeetingContext(
             type = CommandDetailType.GET_MEETING_LIST,
         )
 
-    private fun apply(myMeetings: List<Meeting>): SendSlackMessageEvent =
+    private fun apply(myMeetings: List<MeetingDto>): SendSlackMessageEvent =
         slackEventBuilder.getMeetingListFormRequest(
             commandBasicInfo = commandBasicInfo,
             commandType = commandType,
@@ -243,22 +244,3 @@ private data class MeetingRequest(
     val reason: String,
     val publisherId: String,
 )
-
-data class RequestMeetingContextResult(
-    override val ok: Boolean,
-    override val status: Status,
-    val commandBasicInfo: CommandBasicInfo,
-    val participants: Set<String> = emptySet(),
-    val startAt: LocalDateTime,
-    val name: String,
-) : CommandOutput(
-        ok = ok,
-        status = status,
-        apiAppId = commandBasicInfo.appId,
-        idempotencyKey = commandBasicInfo.idempotencyKey,
-        publisherId = commandBasicInfo.publisherId,
-        channel = commandBasicInfo.channel,
-        token = commandBasicInfo.appToken,
-        commandType = CommandType.PIPELINE,
-        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-    )
