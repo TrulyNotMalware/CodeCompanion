@@ -29,7 +29,7 @@ class SlackInteractionHandlerImpl(
 ) : InteractionHandler {
     @Transactional
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String) {
-        val interactionPayload = this.interactionPayloadParser.parseStringPayload(payload = payload)
+        val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
         val slackCommandData = interactionPayload.toSlackCommandData()
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
 
@@ -64,7 +64,7 @@ class SlackInteractionHandlerImpl(
         ReplaceTextResponseCommand(
             idempotencyKey = idempotencyKey,
             commandData = commandData,
-            slackEventBuilder = this.slackEventBuilder,
+            slackEventBuilder = slackEventBuilder,
             markdownMessage = "Canceled.",
             responseUrl = responseUrl,
             eventPublisher = eventPublisher,

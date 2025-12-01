@@ -35,7 +35,7 @@ class RestClientRequester(
                 }
             }.build()
 
-    override fun <T> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>) =
+    override fun <T : Any> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>) =
         performRequest(
             method = restClient.get(),
             uri = uri,
@@ -43,7 +43,7 @@ class RestClientRequester(
             responseType = responseType,
         )
 
-    override fun <T> safePost(
+    override fun <T : Any> safePost(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -58,7 +58,7 @@ class RestClientRequester(
         responseType = responseType,
     )
 
-    override fun <T> safeDelete(uri: String, authorizationHeader: String?, responseType: Class<T>) =
+    override fun <T : Any> safeDelete(uri: String, authorizationHeader: String?, responseType: Class<T>) =
         performRequest(
             method = restClient.delete(),
             uri = uri,
@@ -66,7 +66,7 @@ class RestClientRequester(
             responseType = responseType,
         )
 
-    override fun <T> safePut(
+    override fun <T : Any> safePut(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -81,7 +81,7 @@ class RestClientRequester(
         responseType = responseType,
     )
 
-    override fun <T> safePatch(
+    override fun <T : Any> safePatch(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -96,7 +96,7 @@ class RestClientRequester(
         responseType = responseType,
     )
 
-    override fun <T> get(uri: String, authorizationHeader: String?, responseType: Class<T>): T =
+    override fun <T : Any> get(uri: String, authorizationHeader: String?, responseType: Class<T>): T =
         this
             .performRequest(
                 method = restClient.get(),
@@ -105,7 +105,7 @@ class RestClientRequester(
                 responseType = responseType,
             ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
-    override fun <T> post(
+    override fun <T : Any> post(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -122,7 +122,7 @@ class RestClientRequester(
                 responseType = responseType,
             ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
-    override fun <T> delete(uri: String, authorizationHeader: String?, responseType: Class<T>): T =
+    override fun <T : Any> delete(uri: String, authorizationHeader: String?, responseType: Class<T>): T =
         this
             .performRequest(
                 method = restClient.delete(),
@@ -131,7 +131,7 @@ class RestClientRequester(
                 responseType = responseType,
             ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
-    override fun <T> put(
+    override fun <T : Any> put(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -148,7 +148,7 @@ class RestClientRequester(
                 responseType = responseType,
             ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
-    override fun <T> patch(
+    override fun <T : Any> patch(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -165,7 +165,7 @@ class RestClientRequester(
                 responseType = responseType,
             ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
-    private fun <T> performRequest(
+    private fun <T : Any> performRequest(
         method: RestClient.RequestHeadersUriSpec<*>,
         uri: String,
         authorizationHeader: String?,
@@ -185,7 +185,7 @@ class RestClientRequester(
         logger.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
     }
 
-    private fun <T> performRequest(
+    private fun <T : Any> performRequest(
         method: RestClient.RequestBodyUriSpec,
         uri: String,
         authorizationHeader: String?,
@@ -228,15 +228,15 @@ class RestClientRequester(
         }
 }
 
-fun <T> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request"): T =
+fun <T : Any> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request"): T =
     this
         .getOrElse { throw RestClientException(msg, it) }
         .body ?: throw RestClientException("Response body is null")
 
-fun <T> Result<ResponseEntity<T>>.getBodyOrNull(): T? = getOrNull()?.body
+fun <T : Any> Result<ResponseEntity<T>>.getBodyOrNull(): T? = getOrNull()?.body
 
-fun <T> Result<ResponseEntity<T>>.onHttpSuccess(action: (ResponseEntity<T>) -> Unit): Result<ResponseEntity<T>> =
+fun <T : Any> Result<ResponseEntity<T>>.onHttpSuccess(action: (ResponseEntity<T>) -> Unit): Result<ResponseEntity<T>> =
     onSuccess(action)
 
-fun <T> Result<ResponseEntity<T>>.onHttpFailure(action: (Throwable) -> Unit): Result<ResponseEntity<T>> =
+fun <T : Any> Result<ResponseEntity<T>>.onHttpFailure(action: (Throwable) -> Unit): Result<ResponseEntity<T>> =
     onFailure(action)

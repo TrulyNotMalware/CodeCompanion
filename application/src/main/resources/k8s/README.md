@@ -96,7 +96,7 @@ Configure:
 
 ## Prerequisites
 
-- Kubernetes cluster (v1.21+)
+- Kubernetes cluster (v1.31+)
 - kubectl configured
 - For Gateway API: Gateway API CRDs installed
 - For Ingress: NGINX Ingress Controller and cert-manager installed
@@ -216,7 +216,7 @@ k8s/
 
 ## 사전 요구사항
 
-- Kubernetes 클러스터 (v1.21+)
+- Kubernetes 클러스터 (v1.31+)
 - kubectl 설정 완료
 - Gateway API의 경우: Gateway API CRD 설치 필요
 - Ingress의 경우: NGINX Ingress Controller 및 cert-manager 설치 필요

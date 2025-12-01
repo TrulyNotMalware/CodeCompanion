@@ -1,10 +1,11 @@
 package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.dto.MeetingDto
-import dev.notypie.repository.meeting.schema.MeetingSchema
+import dev.notypie.domain.meet.entity.Meeting
+import java.util.UUID
 
 interface MeetingRepository {
-    fun createNewMeeting(meetingSchema: MeetingSchema): MeetingDto
+    fun createNewMeeting(meeting: Meeting, idempotencyKey: UUID, channel: String): Meeting
 
     fun getMeeting(meetingId: Long): MeetingDto
 

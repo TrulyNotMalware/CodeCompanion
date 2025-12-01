@@ -4,7 +4,16 @@ import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.common.error.ErrorCode
 import dev.notypie.domain.common.error.ExceptionArgument
 
-abstract class CommandException(
+sealed class CommandException(
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )
+
+sealed class DomainException(
+    val domain: String,
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
 ) : CodeCompanionRuntimeException(
@@ -27,6 +36,16 @@ class UnSupportedCommandException(
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
 ) : CommandException(
+        errorCode = errorCode,
+        details = details,
+    )
+
+class DomainValidationException(
+    domain: String,
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+) : DomainException(
+        domain = domain,
         errorCode = errorCode,
         details = details,
     )

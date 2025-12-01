@@ -26,9 +26,10 @@ dependencies {
 
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
-    api("org.springframework.retry:spring-retry")
+//    api("org.springframework.retry:spring-retry") now spring core
+
     // CDC
-    api("org.springframework.kafka:spring-kafka")
+    api("org.springframework.boot:spring-boot-starter-kafka")
     // Slack API
     implementation(
         "com.slack.api:bolt:${rootProject.extra.get(
@@ -36,26 +37,22 @@ dependencies {
         )}",
     )
     // Springboot starter jpa
-    api(
-        "org.springframework.boot:spring-boot-starter-data-jpa",
-    )
-
-    // https://mvnrepository.com/artifact/io.kubernetes/client-java
-    implementation("io.kubernetes:client-java:22.0.0")
+    api("org.springframework.boot:spring-boot-starter-data-jpa")
 
     // Local & Test database
     runtimeOnly("com.h2database:h2")
     // MariaDB
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
     // MCP Server
-    api(
-        "org.springframework.ai:spring-ai-starter-mcp-server-webmvc:1.0.1",
-    )
+    api("org.springframework.ai:spring-ai-starter-mcp-server-webmvc:1.0.1")
+
+    // Test code
+    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
 
     // Domain test fixtures
-    testApi(testFixtures(project(":domain")))
-    testFixturesApi(testFixtures(project(":domain")))
-
+    testImplementation(testFixtures(project(":domain")))
+    testFixturesImplementation(testFixtures(project(":domain")))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 

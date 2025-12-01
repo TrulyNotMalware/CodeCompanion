@@ -5,9 +5,9 @@ import org.springframework.http.ResponseEntity
 
 interface RestRequester {
     // safe methods
-    fun <T> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>): Result<ResponseEntity<T>>
+    fun <T : Any> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>): Result<ResponseEntity<T>>
 
-    fun <T> safePost(
+    fun <T : Any> safePost(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -15,9 +15,13 @@ interface RestRequester {
         responseType: Class<T>,
     ): Result<ResponseEntity<T>>
 
-    fun <T> safeDelete(uri: String, authorizationHeader: String?, responseType: Class<T>): Result<ResponseEntity<T>>
+    fun <T : Any> safeDelete(
+        uri: String,
+        authorizationHeader: String?,
+        responseType: Class<T>,
+    ): Result<ResponseEntity<T>>
 
-    fun <T> safePut(
+    fun <T : Any> safePut(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -25,7 +29,7 @@ interface RestRequester {
         responseType: Class<T>,
     ): Result<ResponseEntity<T>>
 
-    fun <T> safePatch(
+    fun <T : Any> safePatch(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -33,9 +37,9 @@ interface RestRequester {
         responseType: Class<T>,
     ): Result<ResponseEntity<T>>
 
-    fun <T> get(uri: String, authorizationHeader: String?, responseType: Class<T>): T
+    fun <T : Any> get(uri: String, authorizationHeader: String?, responseType: Class<T>): T
 
-    fun <T> post(
+    fun <T : Any> post(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -43,9 +47,9 @@ interface RestRequester {
         responseType: Class<T>,
     ): T
 
-    fun <T> delete(uri: String, authorizationHeader: String?, responseType: Class<T>): T
+    fun <T : Any> delete(uri: String, authorizationHeader: String?, responseType: Class<T>): T
 
-    fun <T> put(
+    fun <T : Any> put(
         uri: String,
         authorizationHeader: String?,
         body: Any?,
@@ -53,7 +57,7 @@ interface RestRequester {
         responseType: Class<T>,
     ): T
 
-    fun <T> patch(
+    fun <T : Any> patch(
         uri: String,
         authorizationHeader: String?,
         body: Any?,

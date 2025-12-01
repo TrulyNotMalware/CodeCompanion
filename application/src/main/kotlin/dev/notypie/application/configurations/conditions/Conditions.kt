@@ -10,7 +10,9 @@ import org.springframework.core.env.Environment
 import org.springframework.core.type.AnnotatedTypeMetadata
 
 fun Environment.extractAppConfig(): AppConfig =
-    Binder.get(this).bind("slack.app", AppConfig::class.java).orElse(AppConfig())
+    Binder.get(this).bind("slack.app", AppConfig::class.java).orElseGet {
+        AppConfig()
+    }
 
 /**
  * A condition that determines whether the application is running in StandAlone mode.

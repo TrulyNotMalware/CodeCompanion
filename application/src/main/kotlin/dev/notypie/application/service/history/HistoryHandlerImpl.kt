@@ -14,8 +14,8 @@ class HistoryHandlerImpl(
     }
 
     override fun saveNewHistory(history: History) {
-        this.historyRepository.insertNewHistory(history = history)
+        historyRepository.insertNewHistory(history = history)
     }
 
-    override fun getHistory(id: UUID): History = this.historyRepository.getHistoryById(id = id)
+    override fun getHistory(id: UUID): History = historyRepository.getHistoryById(id = id)
 }

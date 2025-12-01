@@ -19,21 +19,21 @@ class ExceptionDetailsBuilder {
 
     infix fun String.value(fieldValue: String): ReasonBuilder =
         ReasonBuilder(fieldName = this, fieldValue = fieldValue, parent = this@ExceptionDetailsBuilder)
+}
 
-    class ReasonBuilder(
-        private val fieldName: String,
-        private val fieldValue: String,
-        private val parent: ExceptionDetailsBuilder,
-    ) {
-        infix fun because(reason: String) {
-            parent.details.add(
-                ExceptionArgument(
-                    fieldName = fieldName,
-                    value = fieldValue,
-                    reason = reason,
-                ),
-            )
-        }
+class ReasonBuilder(
+    private val fieldName: String,
+    private val fieldValue: String,
+    private val parent: ExceptionDetailsBuilder,
+) {
+    infix fun because(reason: String) {
+        parent.details.add(
+            ExceptionArgument(
+                fieldName = fieldName,
+                value = fieldValue,
+                reason = reason,
+            ),
+        )
     }
 }
 

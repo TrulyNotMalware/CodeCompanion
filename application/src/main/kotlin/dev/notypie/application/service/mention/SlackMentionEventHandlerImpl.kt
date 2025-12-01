@@ -2,7 +2,7 @@ package dev.notypie.application.service.mention
 
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.history.HistoryHandler
-import dev.notypie.common.objectMapper
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
@@ -86,5 +86,5 @@ class SlackMentionEventHandlerImpl(
     }
 
     private fun convertBodyData(payload: Map<String, Any>) =
-        objectMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
+        jsonMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
 }
