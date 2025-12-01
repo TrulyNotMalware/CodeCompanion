@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21.0.4_7-jdk-alpine
+FROM eclipse-temurin:25.0.1_8-jre-alpine
 ARG JAR_FILE_NAME=application-alpha
 ARG SERVER_PORT=80
 # from CI/CD pipeline

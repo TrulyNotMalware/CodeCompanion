@@ -5,4 +5,5 @@ enum class UserRole {
     ADMIN,
     DEVELOPER, // Developer
     MEMBER, // Default Role
+    GUEST,
 }

@@ -2,8 +2,8 @@ package dev.notypie.repository.meeting.schema
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.notypie.domain.command.dto.interactions.RejectReason
-import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.entity.Meeting
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
@@ -37,6 +37,8 @@ class MeetingSchema(
     val publisherId: String,
     @field:Column(name = "channel", nullable = false)
     val channel: String,
+    @field:Column(name = "reason")
+    val reason: String? = null,
     @field:CreationTimestamp
     @field:JsonProperty("created_at")
     @field:Column(name = "created_at", nullable = false, updatable = false)
@@ -46,19 +48,21 @@ class MeetingSchema(
     val updatedAt: LocalDateTime? = null,
 )
 
-fun RequestMeetingContextResult.newMeeting(isCanceled: Boolean = false, endAt: LocalDateTime? = null): MeetingSchema {
+fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
     val meetingSchema =
         MeetingSchema(
             idempotencyKey = idempotencyKey,
             startAt = startAt,
             endAt = endAt,
             isCanceled = isCanceled,
-            publisherId = publisherId,
+            publisherId = host.userId,
             channel = channel,
-            name = name,
+            name = title,
+            reason = reason,
         )
+
     val participants =
-        participants.map {
+        memberIdSnapshot().map {
             ParticipantsSchema(
                 meeting = meetingSchema,
                 userId = it,
@@ -67,6 +71,17 @@ fun RequestMeetingContextResult.newMeeting(isCanceled: Boolean = false, endAt: L
     meetingSchema.participants.addAll(participants)
     return meetingSchema
 }
+
+fun MeetingSchema.toDomainEntity() =
+    Meeting(
+        startAt = startAt,
+        endAt = endAt ?: startAt.plusHours(1),
+        isCanceled = isCanceled,
+        publisher = publisherId,
+        title = name,
+        members = participants.map { it.userId }.toSet(),
+        reason = reason ?: "",
+    )
 
 fun MeetingSchema.toMeetingDto() =
     MeetingDto(

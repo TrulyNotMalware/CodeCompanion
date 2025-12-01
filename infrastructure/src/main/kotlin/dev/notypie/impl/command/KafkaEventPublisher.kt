@@ -11,7 +11,7 @@ class KafkaEventPublisher(
     private val kafkaTemplate: KafkaTemplate<String, Any>,
     private val applicationEventPublisher: ApplicationEventPublisher,
 ) : EventPublisher {
-    override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>) {
+    override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>) =
         events.forEach { event ->
             when (event.isInternal) {
                 true -> applicationEventPublisher.publishEvent(event)
@@ -23,5 +23,4 @@ class KafkaEventPublisher(
                     )
             }
         }
-    }
 }

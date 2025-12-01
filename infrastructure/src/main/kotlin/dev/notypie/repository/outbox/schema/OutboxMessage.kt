@@ -1,9 +1,8 @@
 package dev.notypie.repository.outbox.schema
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.module.kotlin.readValue
 import dev.notypie.common.JPAJsonConverter
-import dev.notypie.common.objectMapper
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.DelayHandleEventPayloadContents
@@ -16,6 +15,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
+import tools.jackson.module.kotlin.readValue
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -75,7 +75,7 @@ class OutboxMessage(
                 idempotencyKey = UUID.fromString(idempotencyKey),
                 publisherId = publisherId,
                 commandDetailType = CommandDetailType.valueOf(commandDetailType),
-                body = objectMapper.writeValueAsString(payload),
+                body = jsonMapper.writeValueAsString(payload),
                 apiAppId = metadata["api_app_id"].toString(),
                 responseUrl = metadata["response_url"].toString(),
                 channel = metadata["channel"].toString(),
@@ -134,7 +134,7 @@ fun ActionEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageSt
                 idempotencyKey = idempotencyKey.toString(),
                 publisherId = publisherId,
                 commandDetailType = commandDetailType.name,
-                payload = objectMapper.readValue<Map<String, Any>>(body),
+                payload = jsonMapper.readValue<Map<String, Any>>(body),
                 metadata =
                     mapOf(
                         "api_app_id" to apiAppId,
@@ -151,18 +151,6 @@ fun ActionEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageSt
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
     runCatching {
-        fun MutableMap<String, Any>.parseJsonField(key: String) {
-            this[key]?.takeIf { it is String }?.let {
-                this[key] = objectMapper.readValue<Map<String, Any>>(it as String)
-            }
-        }
-
-        fun Long.toLocalDateTime(): LocalDateTime {
-            val seconds = this / 1_000_000
-            val nanos = (this % 1_000_000) * 1_000
-            return Instant.ofEpochSecond(seconds, nanos).atZone(ZoneId.systemDefault()).toLocalDateTime()
-        }
-
         parseJsonField("metadata")
         parseJsonField("payload")
 
@@ -171,8 +159,20 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
         if (createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
         if (updatedAt is Long) this["updated_at"] = updatedAt.toLocalDateTime()
 
-        objectMapper.convertValue(this, OutboxMessage::class.java)
+        jsonMapper.convertValue(this, OutboxMessage::class.java)
     }.getOrElse { e ->
         logger.error { "Failed to convert to OutboxMessage. ${e.message}" }
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }
+
+private fun MutableMap<String, Any>.parseJsonField(key: String) {
+    this[key]?.takeIf { it is String }?.let {
+        this[key] = jsonMapper.readValue<Map<String, Any>>(it as String)
+    }
+}
+
+private fun Long.toLocalDateTime(): LocalDateTime {
+    val seconds = this / 1_000_000
+    val nanos = (this % 1_000_000) * 1_000
+    return Instant.ofEpochSecond(seconds, nanos).atZone(ZoneId.systemDefault()).toLocalDateTime()
+}

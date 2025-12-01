@@ -23,13 +23,14 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web") {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
     }
-    // Undertow
-    implementation("org.springframework.boot:spring-boot-starter-undertow")
+    // Springboot 4 does not support undertow.
+    implementation("org.springframework.boot:spring-boot-starter-jetty")
+
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 
     // AOP
-    implementation("org.springframework.boot:spring-boot-starter-aop")
+    implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
     // rest docs
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")

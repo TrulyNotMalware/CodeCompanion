@@ -119,23 +119,6 @@ class MeetingContextTest :
                 eventQueue.flushQueue()
             }
         }
-        // This test is no longer possible because type checking occurs at compile time,
-        // preventing UnknownSubCommandDefinition.UNKNOWN from being passed to RequestMeetingContext
-        // which expects SubCommand<MeetingSubCommandDefinition>.
-//        given("Meeting Context with Unknown sub command") {
-//            `when`("create new object") {
-//                then("throw SubCommandParseException") {
-//                    shouldThrowExactly<SubCommandParseException> {
-//                        RequestMeetingContext(
-//                            commandBasicInfo = testCommandBasicInfo,
-//                            slackEventBuilder = eventBuilder,
-//                            events = eventQueue,
-//                            subCommand = SubCommand(subCommandDefinition = UnknownSubCommandDefinition.UNKNOWN),
-//                        )
-//                    }
-//                }
-//            }
-//        }
 
         given("Meeting Context with interactionPayload") {
 

@@ -1,12 +1,12 @@
 package dev.notypie.domain.command.dto.mention
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.core.JsonParser
-import com.fasterxml.jackson.core.JsonToken
-import com.fasterxml.jackson.databind.DeserializationContext
-import com.fasterxml.jackson.databind.JsonDeserializer
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import tools.jackson.core.JsonParser
+import tools.jackson.core.JsonToken
+import tools.jackson.databind.DeserializationContext
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.ValueDeserializer
+import tools.jackson.databind.annotation.JsonDeserialize
 
 // FIXME Element to sealed class, require subType
 data class Element(
@@ -52,18 +52,19 @@ data class PlainText(
     val value: String,
 ) : TextElement()
 
-class TextValueDeserializer : JsonDeserializer<TextElement>() {
+class TextValueDeserializer : ValueDeserializer<TextElement>() {
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): TextElement =
         when (parser.currentToken()) {
-            JsonToken.VALUE_STRING -> PlainText(parser.text)
+            JsonToken.VALUE_STRING -> PlainText(parser.string)
             JsonToken.START_OBJECT -> {
-                val node: JsonNode = parser.codec.readTree(parser)
-                val type = node["type"].asText()
-                val text = node["text"].asText()
-                val emoji = node["emoji"]?.asBoolean() ?: true
-                val verbatim = node["verbatim"]?.asBoolean() ?: true
-                TextObject(type = type, text = text, verbatim = verbatim, emoji = emoji)
+                val node: JsonNode = parser.readValueAsTree()
+                TextObject(
+                    type = node["type"].asString(),
+                    text = node["text"].asString(),
+                    verbatim = node["verbatim"]?.booleanValue() ?: true,
+                    emoji = node["emoji"]?.booleanValue() ?: true,
+                )
             }
-            else -> throw IllegalArgumentException("Unexpected token for TextValue: ${parser.currentToken}")
+            else -> throw IllegalArgumentException("Unexpected token for TextValue: ${parser.currentToken()}")
         }
 }

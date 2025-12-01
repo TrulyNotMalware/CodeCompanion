@@ -8,7 +8,7 @@ import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
@@ -48,17 +48,17 @@ class KafkaConsumerConfiguration(
     @Bean
     @ConditionalOnMissingBean(ConsumerFactory::class)
     fun consumerFactory(): ConsumerFactory<String, Any> =
-        DefaultKafkaConsumerFactory(this.kafkaProperties.buildConsumerProperties())
+        DefaultKafkaConsumerFactory(kafkaProperties.buildConsumerProperties())
 
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)
     fun concurrentKafkaListenerContainerFactory() =
         ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
-            consumerFactory = consumerFactory()
             containerProperties.isObservationEnabled = true
             containerProperties.isMicrometerEnabled = false
-            containerProperties.observationConvention = convention
             setCommonErrorHandler(KafkaErrorHandler())
+            setConsumerFactory(consumerFactory())
+            containerProperties.setObservationConvention(convention)
         }
 }
 
@@ -70,9 +70,9 @@ class KafkaProducerConfiguration(
     fun producerFactory(): ProducerFactory<String, Any> =
         DefaultKafkaProducerFactory(
             mapOf(
-                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to this.kafkaProperties.bootstrapServers,
-                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to this.kafkaProperties.producer.keySerializer,
-                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to this.kafkaProperties.producer.valueSerializer,
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to kafkaProperties.bootstrapServers,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to kafkaProperties.producer.keySerializer,
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to kafkaProperties.producer.valueSerializer,
             ),
         )
 

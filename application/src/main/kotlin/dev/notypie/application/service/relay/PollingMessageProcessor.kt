@@ -17,10 +17,10 @@ class PollingMessageProcessor(
         var offset = 0
         while (true) {
             val pendingMessages =
-                this.outboxRepository.findPendingMessages(limit = pageSize, offset = offset)
+                outboxRepository.findPendingMessages(limit = pageSize, offset = offset)
             if (pendingMessages.isEmpty()) break
 
-            this.messageRelayService.batchPendingMessages(pendingMessages = pendingMessages)
+            messageRelayService.batchPendingMessages(pendingMessages = pendingMessages)
             offset += pendingMessages.size
         }
     }

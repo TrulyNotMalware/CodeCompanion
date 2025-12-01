@@ -3,20 +3,20 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "3.5.6" apply false
+    id("org.springframework.boot") version "4.0.0" apply false
     id("java-library")
     id("java-test-fixtures")
-    id("org.jlleitschuh.gradle.ktlint").version("13.1.0")
-    kotlin("jvm") version "2.2.20"
-    kotlin("plugin.spring") version "2.2.20" apply false
-    kotlin("plugin.jpa") version "2.2.20" apply false
+    id("org.jlleitschuh.gradle.ktlint").version("14.0.1")
+    kotlin("jvm") version "2.3.0-RC"
+    kotlin("plugin.spring") version "2.3.0-RC" apply false
+    kotlin("plugin.jpa") version "2.3.0-RC" apply false
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
         vendor = JvmVendorSpec.ADOPTIUM
     }
 }
@@ -25,16 +25,16 @@ ext {
     set("kotestVersion", "6.0.3") // https://kotest.io/docs/changelog.html
     set("slackSdkVersion", "1.45.4")
     set("mockkVersion", "1.14.6")
-    set("springBootVersion", "3.5.6")
-    set("jacksonVersion", "2.19.2")
+    set("springBootVersion", "4.0.0")
+    set("jacksonVersion", "3.0.2")
     set("kotlinLoggingVersion", "7.0.13")
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
-        jvmTarget = JvmTarget.JVM_21
+        jvmTarget = JvmTarget.JVM_25
     }
 }
 allprojects {
@@ -65,32 +65,19 @@ allprojects {
         )
     }
 
-    tasks.withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
-
-        options.apply {
-            encoding = "UTF-8"
-            compilerArgs.addAll(
-                listOf(
-                    "-parameters",
-                ),
-            )
-        }
-    }
-
     tasks.withType<KotlinJvmCompile> {
         compilerOptions {
+            jvmTarget = JvmTarget.JVM_25
             freeCompilerArgs.addAll(
                 "-Xjsr305=strict",
-                "-Xjvm-default=all",
+                "-jvm-default=enable",
+                "-java-parameters",
             )
         }
     }
 
     tasks.withType<Test> {
         useJUnitPlatform()
-
         jvmArgs(
             "-Xmx4g",
             "-Dfile.encoding=UTF-8",
@@ -121,12 +108,10 @@ subprojects {
         // Kotest-bom
         implementation(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
         // Jackson-bom
-        implementation(platform("com.fasterxml.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+        implementation(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
 
         implementation(kotlin("reflect"))
-        implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-        implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8")
-        implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+        implementation("tools.jackson.module:jackson-module-kotlin")
 
         // Kotlin logging
         implementation("io.github.oshai:kotlin-logging-jvm:${rootProject.extra.get("kotlinLoggingVersion")}")
