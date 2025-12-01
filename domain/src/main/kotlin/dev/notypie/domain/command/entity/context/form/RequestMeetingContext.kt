@@ -23,6 +23,7 @@ import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.history.entity.Status
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -34,9 +35,7 @@ internal class RequestMeetingContext(
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand<MeetingSubCommandDefinition> =
-        SubCommand(
-            subCommandDefinition = MeetingSubCommandDefinition.NONE,
-        ),
+        SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
 ) : ReactionContext<MeetingSubCommandDefinition>(
         slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
@@ -92,22 +91,18 @@ internal class RequestMeetingContext(
         )
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
-        val meetingRequest =
-            validateAndExtractMeetingRequest(interactionPayload)
-                ?: return createValidationErrorResponse(interactionPayload)
+        val meeting = toMeetingEntity(payload = interactionPayload)
 
         // send notice
         if (isNoticeRequired(interactionPayload = interactionPayload) &&
-            !sendNotice(meetingRequest = meetingRequest)
+            !sendNotice(meeting = meeting)
         ) {
             return createErrorResponse(
                 errMessage = "Failed to send notice. Please try again later",
                 results =
                     interactionResults(
                         status = Status.FAILED,
-                        participants = meetingRequest.participants,
-                        name = meetingRequest.title,
-                        startAt = meetingRequest.startAt,
+                        meeting = meeting,
                     ),
             )
         }
@@ -117,9 +112,7 @@ internal class RequestMeetingContext(
             results =
                 interactionResults(
                     status = Status.SUCCESS,
-                    name = meetingRequest.title,
-                    participants = meetingRequest.participants,
-                    startAt = meetingRequest.startAt,
+                    meeting = meeting,
                 ),
         )
     }
@@ -137,32 +130,28 @@ internal class RequestMeetingContext(
         return createErrorResponse(errMessage = errorMessage)
     }
 
-    private fun validateAndExtractMeetingRequest(payload: InteractionPayload): MeetingRequest? {
+    private fun toMeetingEntity(payload: InteractionPayload): Meeting {
+        val publisher = payload.user.id
         val participants = getParticipants(states = payload.states, publisher = payload.user.id)
         val startAt = getDateTimeOrNull(interactionPayload = payload)
         val (title, reason) = getTitleAndReason(interactionPayload = payload)
 
-        return when {
-            participants.isEmpty() -> null
-            startAt == null -> null
-            !payload.isCompleted() -> null
-            else -> MeetingRequest(participants, startAt, title, reason, payload.user.id)
-        }
+        return Meeting(
+            publisher = publisher,
+            title = title,
+            reason = reason,
+            startAt = startAt ?: LocalDateTime.now(),
+            members = participants,
+        )
     }
 
-    private fun interactionResults(
-        status: Status,
-        name: String,
-        participants: Set<String>,
-        startAt: LocalDateTime,
-    ) = RequestMeetingContextResult(
-        ok = true,
-        status = status,
-        commandBasicInfo = commandBasicInfo,
-        participants = participants,
-        startAt = startAt,
-        name = name,
-    )
+    private fun interactionResults(status: Status, meeting: Meeting) =
+        RequestMeetingContextResult(
+            ok = true,
+            status = status,
+            commandBasicInfo = commandBasicInfo,
+            meeting = meeting,
+        )
 
     private fun getParticipants(states: List<States>, publisher: String): Set<String> =
         states
@@ -217,16 +206,16 @@ internal class RequestMeetingContext(
             .firstOrNull { it.type == ActionElementTypes.CHECKBOX }
             ?.isSelected ?: false
 
-    private fun sendNotice(meetingRequest: MeetingRequest): Boolean =
+    private fun sendNotice(meeting: Meeting): Boolean =
         ApprovalCallbackContext(
             slackEventBuilder = slackEventBuilder,
-            participants = meetingRequest.participants,
+            participants = meeting.memberIdSnapshot(),
             commandBasicInfo = commandBasicInfo,
             approvalContents =
                 ApprovalContents(
                     headLineText = "Meeting Request!",
-                    reason = meetingRequest.reason,
-                    subTitle = meetingRequest.title,
+                    reason = meeting.reason,
+                    subTitle = meeting.title,
                     idempotencyKey = commandBasicInfo.idempotencyKey,
                     publisherId = commandBasicInfo.publisherId,
                     commandDetailType = CommandDetailType.NOTICE_FORM,
@@ -236,11 +225,3 @@ internal class RequestMeetingContext(
         ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
             .status == Status.SUCCESS
 }
-
-private data class MeetingRequest(
-    val participants: Set<String>,
-    val startAt: LocalDateTime,
-    val title: String,
-    val reason: String,
-    val publisherId: String,
-)

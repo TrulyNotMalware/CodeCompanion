@@ -26,9 +26,9 @@ data class InteractionPayload(
 )
 
 fun InteractionPayload.isCompleted(): Boolean =
-    this.currentAction.type.isPrimary &&
-        this.currentAction.isSelected &&
-        this.states.all {
+    currentAction.type.isPrimary &&
+        currentAction.isSelected &&
+        states.all {
             it.isSelected ||
                 it.type == ActionElementTypes.CHECKBOX || // Checkbox is considered true
                 it.type == ActionElementTypes.PLAIN_TEXT_INPUT // PlainTextInput considered true

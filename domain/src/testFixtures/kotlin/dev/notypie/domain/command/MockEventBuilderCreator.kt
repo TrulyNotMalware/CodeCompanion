@@ -12,7 +12,7 @@ class MockEventBuilderCreator {
     private val mocks = mutableMapOf<String, SendSlackMessageEvent>()
 
     infix fun KFunction<*>.returns(event: SendSlackMessageEvent) {
-        mocks[this.name] = event
+        mocks[name] = event
     }
 
     fun build(relaxed: Boolean = false): SlackEventBuilder {

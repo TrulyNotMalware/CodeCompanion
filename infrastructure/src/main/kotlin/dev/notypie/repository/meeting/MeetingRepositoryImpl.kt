@@ -1,17 +1,23 @@
 package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
-import dev.notypie.repository.meeting.schema.MeetingSchema
+import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
+import dev.notypie.repository.meeting.schema.toSchema
 import jakarta.transaction.Transactional
+import java.util.UUID
 
 open class MeetingRepositoryImpl(
     private val jpaMeetingRepository: JpaMeetingRepository,
 ) : MeetingRepository {
     @Transactional
-    override fun createNewMeeting(meetingSchema: MeetingSchema): MeetingDto =
-        jpaMeetingRepository.save(meetingSchema).toMeetingDto()
+    override fun createNewMeeting(meeting: Meeting, idempotencyKey: UUID, channel: String): Meeting =
+        jpaMeetingRepository
+            .save(
+                meeting.toSchema(idempotencyKey = idempotencyKey, channel = channel),
+            ).toDomainEntity()
 
     override fun getMeeting(meetingId: Long): MeetingDto =
         jpaMeetingRepository

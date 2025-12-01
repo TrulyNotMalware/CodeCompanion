@@ -11,7 +11,6 @@ import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.MeetingRepository
-import dev.notypie.repository.meeting.schema.newMeeting
 import jakarta.transaction.Transactional
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -37,30 +36,33 @@ class MeetingServiceImpl(
             RequestMeetingCommand(
                 commandData = slackCommandData,
                 idempotencyKey = idempotencyKey,
-                slackEventBuilder = this.slackEventBuilder,
-                eventPublisher = this.eventPublisher,
+                slackEventBuilder = slackEventBuilder,
+                eventPublisher = eventPublisher,
             )
         val result = command.handleEvent()
     }
 
     override fun getMyMeetingList(meetingRequestDto: GetMeetupListRequestDto) {
-        val meetings = this.meetingRepository.getAllMeetingByUserId(userId = meetingRequestDto.userId)
+        val meetings = meetingRepository.getAllMeetingByUserId(userId = meetingRequestDto.userId)
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
-    fun createNewMeeting(result: RequestMeetingContextResult) {
-        val meeting = result.newMeeting()
-        this.retryService.execute(
-            action = { meetingRepository.createNewMeeting(meetingSchema = meeting) },
-            recoveryCallBack = {
-//                slackApiRequester.simpleTextRequest()
-            },
-        )
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
+    fun createNewMeeting(event: RequestMeetingContextResult) {
+        val meeting =
+            retryService.execute(
+                action = {
+                    meetingRepository.createNewMeeting(
+                        meeting = event.meeting,
+                        idempotencyKey = event.idempotencyKey,
+                        channel = event.commandBasicInfo.channel,
+                    )
+                },
+            )
     }
 
     @EventListener
     fun getMeetingListEvent(getMeetingListEvent: GetMeetingListEvent) {
-        val meetings = this.meetingRepository.getAllMeetingByUserId(getMeetingListEvent.payload.publisherId)
+        val meetings = meetingRepository.getAllMeetingByUserId(getMeetingListEvent.payload.publisherId)
 //        getMeetingListEvent.payload.slackEventModifier()
     }
 }

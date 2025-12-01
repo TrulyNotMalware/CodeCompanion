@@ -16,6 +16,6 @@ class MeetupToolProvider(
         @ToolParam(description = "Meeting request dto", required = true)
         requestDto: GetMeetupListRequestDto,
     ) {
-        this.meetingService.getMyMeetingList(meetingRequestDto = requestDto)
+        meetingService.getMyMeetingList(meetingRequestDto = requestDto)
     }
 }

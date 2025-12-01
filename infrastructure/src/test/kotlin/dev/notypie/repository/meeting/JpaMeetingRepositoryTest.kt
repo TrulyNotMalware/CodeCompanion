@@ -7,7 +7,7 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
@@ -24,6 +24,7 @@ class JpaMeetingRepositoryTest
                         val saved = repository.save(meetingSchema)
 
                         saved.id shouldNotBe null
+                        saved.id shouldNotBe 0L
                         saved.publisherId shouldBe meetingSchema.publisherId
                     }
                 }

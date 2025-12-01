@@ -9,7 +9,6 @@ import org.springframework.context.ApplicationEventPublisher
 class AppEventPublisher(
     private val applicationEventPublisher: ApplicationEventPublisher,
 ) : EventPublisher {
-    override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>) {
+    override fun publishEvent(events: EventQueue<CommandEvent<EventPayload>>) =
         events.forEach { applicationEventPublisher.publishEvent(it) }
-    }
 }

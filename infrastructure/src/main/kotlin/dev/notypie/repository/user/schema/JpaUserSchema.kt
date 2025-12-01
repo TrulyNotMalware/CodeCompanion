@@ -22,7 +22,7 @@ class JpaUserSchema(
 
 fun JpaUserSchema.toDomainEntity(role: UserRole? = null): User =
     User(
-        id = id,
+//        id = id,
         slackUserId = slackUserId,
         userName = userName,
         isAdmin = isAdmin,
@@ -31,7 +31,7 @@ fun JpaUserSchema.toDomainEntity(role: UserRole? = null): User =
 
 fun User.toJpaEntity(): JpaUserSchema =
     JpaUserSchema(
-        id = id,
+        id = 0L,
         slackUserId = slackUserId,
         userName = userName,
         isAdmin = isAdmin,

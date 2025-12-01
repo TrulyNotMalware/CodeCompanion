@@ -3,7 +3,7 @@ package dev.notypie.impl.retry
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import org.springframework.retry.support.RetryTemplate
+import org.springframework.core.retry.RetryTemplate
 
 class RetryServiceTest :
     BehaviorSpec({
@@ -43,7 +43,7 @@ class RetryServiceTest :
             }
 
             `when`("run exception action that fails N times and succeeds afterwards") {
-                val maxFailures = 3
+                val maxFailures = 3L
                 var failingCounter = 0
                 val countExceptionAction = {
                     if (failingCounter < maxFailures) {

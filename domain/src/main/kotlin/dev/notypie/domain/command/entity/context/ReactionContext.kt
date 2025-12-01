@@ -9,7 +9,6 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
-import dev.notypie.domain.command.dto.withNewKey
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -70,7 +69,7 @@ internal abstract class ResponseContext(
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     val isOk: Boolean = false,
 ) : CommandContext<NoSubCommands>(
-        commandBasicInfo = commandBasicInfo.withNewKey(),
+        commandBasicInfo = commandBasicInfo,
         requestHeaders = requestHeaders,
         slackEventBuilder = slackEventBuilder,
         events = events,

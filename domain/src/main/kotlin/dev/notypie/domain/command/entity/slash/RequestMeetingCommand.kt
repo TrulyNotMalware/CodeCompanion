@@ -17,7 +17,7 @@ import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
 import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.history.entity.Status
-import java.time.LocalDateTime
+import dev.notypie.domain.meet.entity.Meeting
 import java.util.UUID
 
 class RequestMeetingCommand(
@@ -79,10 +79,8 @@ enum class MeetingSubCommandDefinition(
 data class RequestMeetingContextResult(
     override val ok: Boolean,
     override val status: Status,
+    val meeting: Meeting,
     val commandBasicInfo: CommandBasicInfo,
-    val participants: Set<String> = emptySet(),
-    val startAt: LocalDateTime,
-    val name: String,
 ) : CommandOutput(
         ok = ok,
         status = status,

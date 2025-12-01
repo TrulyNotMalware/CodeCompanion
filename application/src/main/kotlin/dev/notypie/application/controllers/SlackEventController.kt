@@ -25,7 +25,7 @@ class SlackEventController(
         @RequestBody payload: Map<String, Any>,
     ): ResponseEntity<*> {
         if (isChallengeRequest(payload = payload)) return ResponseEntity.ok().body(payload) // FIXME logging.
-        val slackCommandData = this.eventHandler.handleEvent(headers = headers, payload = payload)
+        val slackCommandData = eventHandler.handleEvent(headers = headers, payload = payload)
         return ResponseEntity.ok().body(slackCommandData)
     }
 
@@ -34,7 +34,7 @@ class SlackEventController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam payload: String,
     ): ResponseEntity<*> {
-        this.interactionHandler.handleInteraction(headers = headers, payload = payload)
+        interactionHandler.handleInteraction(headers = headers, payload = payload)
         return ResponseEntity.ok().body("")
     }
 

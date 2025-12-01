@@ -15,6 +15,6 @@ class UserController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        this.userService.createNewTeam(headers = headers, data = data)
+        userService.createNewTeam(headers = headers, data = data)
     }
 }

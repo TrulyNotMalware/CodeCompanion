@@ -1,8 +1,11 @@
 package dev.notypie.impl.retry
 
-import org.springframework.retry.backoff.ExponentialBackOffPolicy
-import org.springframework.retry.policy.SimpleRetryPolicy
-import org.springframework.retry.support.RetryTemplate
+import dev.notypie.configurations.RetryOptions
+import org.springframework.core.retry.RetryException
+import org.springframework.core.retry.RetryPolicy
+import org.springframework.core.retry.RetryTemplate
+import org.springframework.util.backoff.FixedBackOff
+import java.time.Duration
 
 class RetryService(
     private val retryTemplate: RetryTemplate,
@@ -10,32 +13,30 @@ class RetryService(
     fun <T> execute(
         action: () -> T,
         recoveryCallBack: (() -> T)? = null,
-        maxAttempts: Int = 3,
+        maxAttempts: Long = RetryOptions.MAX_ATTEMPTS.default,
+        initialDelay: Long = RetryOptions.INITIAL_DELAY.default,
+        multiplier: Double = RetryOptions.MULTIPLIER.default.toDouble(),
+        maxDelay: Long = RetryOptions.MAX_DELAY.default,
+        jitter: Long = RetryOptions.JITTER.default,
         exceptions: List<Class<out Throwable>> = listOf(Exception::class.java),
-        interval: Long = 2000L,
-    ): T =
-        retryTemplate
-            .apply {
-                setBackOffPolicy(createExponentialBackOffPolicy(interval))
-                setRetryPolicy(createRetryPolicy(maxAttempts, exceptions))
-            }.let {
-                if (recoveryCallBack != null) {
-                    it.execute<T, Throwable>(
-                        { action() },
-                        { recoveryCallBack() },
-                    )
-                } else {
-                    it.execute<T, Throwable> { action() }
-                }
-            }
-
-    private fun createExponentialBackOffPolicy(interval: Long) =
-        ExponentialBackOffPolicy().apply {
-            initialInterval = 300L
-            maxInterval = interval
-            multiplier = 2.0
+    ): T {
+        val policy =
+            RetryPolicy
+                .builder()
+                .maxRetries(maxAttempts)
+                .delay(Duration.ofMillis(initialDelay))
+                .multiplier(multiplier)
+                .maxDelay(Duration.ofMillis(maxDelay))
+                .jitter(Duration.ofMillis(jitter))
+                .includes(exceptions)
+                .build()
+        retryTemplate.retryPolicy = policy
+        return try {
+            retryTemplate.execute { action() }
+        } catch (e: RetryException) {
+            recoveryCallBack?.invoke() ?: throw e
         }
+    }
 
-    private fun createRetryPolicy(maxAttempts: Int, exceptions: List<Class<out Throwable>>) =
-        SimpleRetryPolicy(maxAttempts, exceptions.associateWith { true })
+    private fun createFixedBackOffPolicy(interval: Long) = FixedBackOff(interval)
 }

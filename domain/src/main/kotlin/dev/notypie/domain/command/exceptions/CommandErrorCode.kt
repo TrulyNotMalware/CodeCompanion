@@ -30,4 +30,8 @@ enum class CommandErrorCode(
         statusCode = 400,
         message = "Unsupported command type.",
     ),
+    VALIDATION_FAILED(
+        statusCode = 400,
+        message = "Validation failed.",
+    ),
 }
