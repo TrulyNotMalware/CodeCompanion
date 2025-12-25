@@ -3,13 +3,13 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "4.0.0" apply false
+    id("org.springframework.boot") version "4.0.1" apply false
     id("java-library")
     id("java-test-fixtures")
     id("org.jlleitschuh.gradle.ktlint").version("14.0.1")
-    kotlin("jvm") version "2.3.0-RC"
-    kotlin("plugin.spring") version "2.3.0-RC" apply false
-    kotlin("plugin.jpa") version "2.3.0-RC" apply false
+    kotlin("jvm") version "2.3.0"
+    kotlin("plugin.spring") version "2.3.0" apply false
+    kotlin("plugin.jpa") version "2.3.0" apply false
 }
 
 java {

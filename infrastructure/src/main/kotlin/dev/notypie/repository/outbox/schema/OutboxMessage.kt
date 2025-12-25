@@ -98,11 +98,17 @@ class OutboxMessage(
 
 fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
     when (payload) {
-        is PostEventPayloadContents ->
+        is PostEventPayloadContents -> {
             (payload as PostEventPayloadContents).toOutboxMessage().outboxMessage
-        is ActionEventPayloadContents ->
+        }
+
+        is ActionEventPayloadContents -> {
             (payload as ActionEventPayloadContents).toOutboxMessage().outboxMessage
-        is DelayHandleEventPayloadContents -> TODO()
+        }
+
+        is DelayHandleEventPayloadContents -> {
+            TODO()
+        }
     }
 
 fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =

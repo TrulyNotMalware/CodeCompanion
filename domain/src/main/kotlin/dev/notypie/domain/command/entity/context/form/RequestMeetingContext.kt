@@ -121,10 +121,13 @@ internal class RequestMeetingContext(
         val errorMessage =
             when {
                 getParticipants(states = payload.states, publisher = payload.user.id).isEmpty() -> "Select participants"
+
                 getDateTimeOrNull(
                     interactionPayload = payload,
                 ) == null -> "Make sure to choose a time in the *future* rather than now."
+
                 !payload.isCompleted() -> "Please select *all options.*"
+
                 else -> "Unknown error occurred. Please try again later."
             }
         return createErrorResponse(errMessage = errorMessage)
