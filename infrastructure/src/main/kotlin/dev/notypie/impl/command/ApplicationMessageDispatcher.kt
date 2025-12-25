@@ -99,15 +99,22 @@ class ApplicationMessageDispatcher(
         retryService.execute(
             action = {
                 when (event) {
-                    is ActionEventPayloadContents -> dispatchActionResponseContents(event = event)
-                    is DelayHandleEventPayloadContents -> TODO()
-                    is PostEventPayloadContents ->
+                    is ActionEventPayloadContents -> {
+                        dispatchActionResponseContents(event = event)
+                    }
+
+                    is DelayHandleEventPayloadContents -> {
+                        TODO()
+                    }
+
+                    is PostEventPayloadContents -> {
                         when (event.messageType) {
                             MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
                             MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
                             MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
                             MessageType.ACTION_RESPONSE -> TODO()
                         }
+                    }
                 }
             },
         )
