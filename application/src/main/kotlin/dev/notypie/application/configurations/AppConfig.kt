@@ -10,6 +10,8 @@ import dev.notypie.domain.user.repository.TeamRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.*
 
+const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
+
 @ConfigurationProperties(prefix = "slack.app")
 data class AppConfig(
     val api: Api = Api(),

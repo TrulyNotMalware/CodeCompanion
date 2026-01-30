@@ -1,6 +1,6 @@
 # OS-Specific Gradle Configuration
 
-This directory contains OS-optimized Gradle configuration files and automated setup scripts for Java 21 + Kotlin 2.2.20 + Spring Boot 3.5.6 projects.
+This directory contains OS-optimized Gradle configuration files and automated setup scripts for Java 25 + Kotlin 2.3.0 + Spring Boot 4 projects.
 
 ## Quick Start
 
@@ -100,9 +100,9 @@ Fine-tune Kotlin compilation performance:
 
 ### Supported Versions
 - **Gradle:** 9.1.0+
-- **Java:** 21 LTS (Eclipse Temurin recommended)
-- **Kotlin:** 2.2.20
-- **Spring Boot:** 3.5.6
+- **Java:** 21 LTS+ (Eclipse Temurin recommended)
+- **Kotlin:** 2.2.20+
+- **Spring Boot:** 3.5.6+
 
 ### OS Support Matrix
 | OS                        | File | Status | Notes |
@@ -115,7 +115,7 @@ Fine-tune Kotlin compilation performance:
 
 # OS별 Gradle 설정
 
-Java 21 + Kotlin 2.2.20 + Spring Boot 3.5.6 프로젝트를 위한 OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디렉토리입니다.
+Java 25 + Kotlin 2.3.0 + Spring Boot 4 프로젝트를 위한 OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디렉토리입니다.
 
 ## 빠른 시작
 
@@ -215,9 +215,9 @@ Kotlin 컴파일 성능 미세 조정:
 
 ### 지원 버전
 - **Gradle:** 9.1.0+
-- **Java:** 21 LTS (Eclipse Temurin 권장)
-- **Kotlin:** 2.2.20
-- **Spring Boot:** 3.5.6
+- **Java:** 21 LTS+ (Eclipse Temurin 권장)
+- **Kotlin:** 2.2.20+
+- **Spring Boot:** 3.5.6+
 
 ### OS 지원 매트릭스
 | OS | 파일 | 상태 | 비고 |

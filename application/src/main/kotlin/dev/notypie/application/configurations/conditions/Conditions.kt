@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations.conditions
 
+import dev.notypie.application.configurations.APP_CONFIG_PROPERTIES_PREFIX
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.EventPublisherType
 import dev.notypie.application.configurations.OutboxReaderStrategy
@@ -10,7 +11,7 @@ import org.springframework.core.env.Environment
 import org.springframework.core.type.AnnotatedTypeMetadata
 
 fun Environment.extractAppConfig(): AppConfig =
-    Binder.get(this).bind("slack.app", AppConfig::class.java).orElseGet {
+    Binder.get(this).bind(APP_CONFIG_PROPERTIES_PREFIX, AppConfig::class.java).orElseGet {
         AppConfig()
     }
 
