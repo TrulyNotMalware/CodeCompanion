@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
@@ -33,10 +31,15 @@ ext {
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        freeCompilerArgs.addAll("-Xjsr305=strict")
-        jvmTarget = JvmTarget.JVM_25
+        freeCompilerArgs.addAll(
+            "-Xjsr305=strict",
+            "-Xannotation-default-target=param-property",
+            "-java-parameters",
+            "-Xjvm-default=all",
+        )
     }
 }
+
 allprojects {
     group = "dev.notypie"
     version = "alpha"
@@ -63,17 +66,6 @@ allprojects {
                 "reports/ktlint/${project.name}",
             ),
         )
-    }
-
-    tasks.withType<KotlinJvmCompile> {
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_25
-            freeCompilerArgs.addAll(
-                "-Xjsr305=strict",
-                "-jvm-default=enable",
-                "-java-parameters",
-            )
-        }
     }
 
     tasks.withType<Test> {
