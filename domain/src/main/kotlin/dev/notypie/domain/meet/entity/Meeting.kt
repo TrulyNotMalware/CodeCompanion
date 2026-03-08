@@ -17,7 +17,7 @@ class Meeting(
 
     init {
 
-        validate(domain = this.javaClass.simpleName) {
+        validate(className = this.javaClass.simpleName) {
             notBlank {
                 "publisher" of publisher
                 "title" of title
@@ -39,7 +39,7 @@ class Meeting(
     }
 
     fun addParticipant(user: Member) {
-        validate(domain = this.javaClass.simpleName) {
+        validate(className = this.javaClass.simpleName) {
             "meeting participants" of (participants.size + 1) shouldBeLessThanOrEqualTo MAX_PARTICIPANTS
         }
         participants.add(user)
@@ -56,7 +56,7 @@ class Member(
     val isHost: Boolean = false,
 ) {
     init {
-        validate(domain = this.javaClass.simpleName) {
+        validate(className = this.javaClass.simpleName) {
             notBlank {
                 "userId" of userId
             }
