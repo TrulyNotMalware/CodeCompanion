@@ -1,11 +1,12 @@
 package dev.notypie.domain.common
 
-import dev.notypie.domain.command.exceptions.CommandErrorCode
-import dev.notypie.domain.command.exceptions.DomainValidationException
+import dev.notypie.domain.command.exceptions.ValidationException
+import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
+import dev.notypie.domain.common.error.CommonErrorCode
 import dev.notypie.domain.common.error.ExceptionArgument
 import java.time.LocalDateTime
 
-internal class DomainValidationBuilder {
+class ValidationBuilder {
     private val errors = mutableListOf<ExceptionArgument>()
 
     data class Field<T>(
@@ -15,6 +16,46 @@ internal class DomainValidationBuilder {
 
     infix fun <T> String.of(value: T): Field<T> = Field(name = this, value = value)
 
+    // ============ And / Or Chaining ============
+    infix fun <T> Field<T>.and(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
+        block(this)
+        return this
+    }
+
+    infix fun <T> Field<T>.or(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
+        val before = errors.size
+        block(this)
+        if (before < errors.size) {
+            repeat(times = errors.size - before) { errors.removeLast() }
+        }
+        return this
+    }
+
+    infix fun <T> Field<T?>.shouldNotBeNullAnd(block: ValidationBuilder.(Field<T>) -> Unit): Field<T?> {
+        if (value == null) {
+            errors.add(
+                ExceptionArgument(
+                    fieldName = name,
+                    value = "null",
+                    reason = "must not be null",
+                ),
+            )
+        } else {
+            @Suppress("UNCHECKED_CAST")
+            block(Field(name, value as T))
+        }
+        return this
+    }
+
+    infix fun <T> Field<T?>.ifNotNull(block: ValidationBuilder.(Field<T>) -> Unit): Field<T?> {
+        if (value != null) {
+            @Suppress("UNCHECKED_CAST")
+            block(Field(name, value as T))
+        }
+        return this
+    }
+
+    // ============ String Validations ============
     fun notBlank(block: StringFieldsBuilder.() -> Unit) {
         val builder = StringFieldsBuilder()
         builder.block()
@@ -39,7 +80,7 @@ internal class DomainValidationBuilder {
         }
     }
 
-    infix fun Field<String>.shouldBeShorterThan(max: Int) {
+    infix fun Field<String>.shouldBeShorterThan(max: Int): Field<String> {
         if (value.length > max) {
             errors.add(
                 ExceptionArgument(
@@ -49,9 +90,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<String>.shouldBeLongerThan(min: Int) {
+    infix fun Field<String>.shouldBeLongerThan(min: Int): Field<String> {
         if (value.length < min) {
             errors.add(
                 ExceptionArgument(
@@ -61,9 +103,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<String>.shouldMatchPattern(pattern: Regex) {
+    infix fun Field<String>.shouldMatchPattern(pattern: Regex): Field<String> {
         if (!pattern.matches(input = value)) {
             errors.add(
                 ExceptionArgument(
@@ -73,9 +116,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<String>.shouldMatchPattern(pattern: String) {
+    infix fun Field<String>.shouldMatchPattern(pattern: String): Field<String> {
         if (!pattern.toRegex().matches(input = value)) {
             errors.add(
                 ExceptionArgument(
@@ -85,9 +129,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    fun Field<String>.shouldBeEmail() {
+    fun Field<String>.shouldBeEmail(): Field<String> {
         val emailPattern = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
         if (!emailPattern.matches(value)) {
             errors.add(
@@ -98,21 +143,24 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<String>.shouldBeOneOf(options: Collection<String>) {
-        if (value !in options) {
+    fun Field<String?>.shouldNotBeNullOrBlank(): Field<String?> {
+        if (value.isNullOrBlank()) {
             errors.add(
                 ExceptionArgument(
                     fieldName = name,
-                    value = value,
-                    reason = "must be one of: ${options.joinToString(", ")}",
+                    value = value ?: "null",
+                    reason = "must not be null or blank",
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<Int>.shouldBeLessThan(max: Int) {
+    // ============ Int Validations ============
+    infix fun Field<Int>.shouldBeLessThan(max: Int): Field<Int> {
         if (value >= max) {
             errors.add(
                 ExceptionArgument(
@@ -122,9 +170,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<Int>.shouldBeLessThanOrEqualTo(max: Int) {
+    infix fun Field<Int>.shouldBeLessThanOrEqualTo(max: Int): Field<Int> {
         if (value > max) {
             errors.add(
                 ExceptionArgument(
@@ -134,9 +183,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<Int>.shouldBeGreaterThan(min: Int) {
+    infix fun Field<Int>.shouldBeGreaterThan(min: Int): Field<Int> {
         if (value <= min) {
             errors.add(
                 ExceptionArgument(
@@ -146,9 +196,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<Int>.shouldBeGreaterThanOrEqualTo(min: Int) {
+    infix fun Field<Int>.shouldBeGreaterThanOrEqualTo(min: Int): Field<Int> {
         if (value < min) {
             errors.add(
                 ExceptionArgument(
@@ -158,9 +209,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<Int>.shouldBeBetween(range: IntRange) {
+    infix fun Field<Int>.shouldBeBetween(range: IntRange): Field<Int> {
         if (value !in range) {
             errors.add(
                 ExceptionArgument(
@@ -170,9 +222,13 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    fun Field<Int>.shouldBePositive() {
+    /**
+     * Validates that the integer field is positive (greater than zero).
+     */
+    fun Field<Int>.shouldBePositive(): Field<Int> {
         if (value <= 0) {
             errors.add(
                 ExceptionArgument(
@@ -182,9 +238,23 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    fun Field<Int>.shouldBeNonNegative() {
+    fun Field<Int>.shouldBeNegative(): Field<Int> {
+        if (value >= 0) {
+            errors.add(
+                ExceptionArgument(
+                    fieldName = name,
+                    value = value.toString(),
+                    reason = "must be positive",
+                ),
+            )
+        }
+        return this
+    }
+
+    fun Field<Int>.shouldBeNonNegative(): Field<Int> {
         if (value < 0) {
             errors.add(
                 ExceptionArgument(
@@ -194,9 +264,11 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<LocalDateTime>.shouldBeAfter(other: LocalDateTime) {
+    // ============ LocalDateTime Validations ============
+    infix fun Field<LocalDateTime>.shouldBeAfter(other: LocalDateTime): Field<LocalDateTime> {
         if (!value.isAfter(other)) {
             errors.add(
                 ExceptionArgument(
@@ -206,9 +278,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun Field<LocalDateTime>.shouldBeBefore(other: LocalDateTime) {
+    infix fun Field<LocalDateTime>.shouldBeBefore(other: LocalDateTime): Field<LocalDateTime> {
         if (!value.isBefore(other)) {
             errors.add(
                 ExceptionArgument(
@@ -218,9 +291,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    fun Field<LocalDateTime>.shouldBeInFuture() {
+    fun Field<LocalDateTime>.shouldBeInFuture(): Field<LocalDateTime> {
         val now = LocalDateTime.now()
         if (!value.isAfter(now)) {
             errors.add(
@@ -231,9 +305,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    fun Field<LocalDateTime>.shouldBeInPast() {
+    fun Field<LocalDateTime>.shouldBeInPast(): Field<LocalDateTime> {
         val now = LocalDateTime.now()
         if (!value.isBefore(now)) {
             errors.add(
@@ -244,22 +319,11 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
     // ============ Collection Validations ============
-    infix fun <T> Field<Collection<T>>.shouldNotBeEmpty(message: String = "must not be empty") {
-        if (value.isEmpty()) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = "[]",
-                    reason = message,
-                ),
-            )
-        }
-    }
-
-    infix fun <T> Field<Collection<T>>.shouldHaveSize(size: Int) {
+    infix fun <T, C : Collection<T>> Field<C>.shouldHaveSize(size: Int): Field<C> {
         if (value.size != size) {
             errors.add(
                 ExceptionArgument(
@@ -269,9 +333,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun <T> Field<Collection<T>>.shouldHaveMinSize(min: Int) {
+    infix fun <T, C : Collection<T>> Field<C>.shouldHaveMinSize(min: Int): Field<C> {
         if (value.size < min) {
             errors.add(
                 ExceptionArgument(
@@ -281,9 +346,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    infix fun <T> Field<Collection<T>>.shouldHaveMaxSize(max: Int) {
+    infix fun <T, C : Collection<T>> Field<C>.shouldHaveMaxSize(max: Int): Field<C> {
         if (value.size > max) {
             errors.add(
                 ExceptionArgument(
@@ -293,10 +359,37 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
+    }
+
+    fun <T, C : Collection<T>> Field<C>.shouldNotBeEmpty(message: String = "must not be empty"): Field<C> {
+        if (value.isEmpty()) {
+            errors.add(
+                ExceptionArgument(
+                    fieldName = name,
+                    value = "[]",
+                    reason = message,
+                ),
+            )
+        }
+        return this
     }
 
     // ============ Custom Validations ============
-    infix fun <T> Field<T>.shouldSatisfy(predicate: (T) -> Boolean) {
+    infix fun <T> Field<T>.shouldBeOneOf(options: Collection<T>): Field<T> {
+        if (value !in options) {
+            errors.add(
+                ExceptionArgument(
+                    fieldName = name,
+                    value = value.toString(),
+                    reason = "must be one of: ${options.joinToString(", ")}",
+                ),
+            )
+        }
+        return this
+    }
+
+    infix fun <T> Field<T>.shouldSatisfy(predicate: (T) -> Boolean): Field<T> {
         if (!predicate(value)) {
             errors.add(
                 ExceptionArgument(
@@ -306,9 +399,10 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
-    fun <T> Field<T>.shouldSatisfy(message: String, predicate: (T) -> Boolean) {
+    fun <T> Field<T>.shouldSatisfy(message: String, predicate: (T) -> Boolean): Field<T> {
         if (!predicate(value)) {
             errors.add(
                 ExceptionArgument(
@@ -318,6 +412,7 @@ internal class DomainValidationBuilder {
                 ),
             )
         }
+        return this
     }
 
     fun addError(fieldName: String, value: String, reason: String) {
@@ -328,20 +423,33 @@ internal class DomainValidationBuilder {
 
     fun getErrors(): List<ExceptionArgument> = errors.toList()
 
-    fun validate(domain: String) {
+    fun validate(className: String = "") {
         if (errors.isNotEmpty()) {
-            throw DomainValidationException(
-                domain = domain,
-                details = errors,
-                errorCode = CommandErrorCode.VALIDATION_FAILED,
-            )
+            throw when {
+                className.isBlank() -> {
+                    ValidationException(
+                        details = errors,
+                        errorCode = CommonErrorCode.VALIDATION_FAILED,
+                    )
+                }
+
+                else -> {
+                    ValidationExceptionWithName(
+                        className = className,
+                        details = errors,
+                        errorCode = CommonErrorCode.VALIDATION_FAILED,
+                    )
+                }
+            }
         }
     }
 }
 
-internal fun validate(domain: String, block: DomainValidationBuilder.() -> Unit) {
-    DomainValidationBuilder().apply(block).validate(domain)
+// Entrypoint
+fun validate(className: String = "", block: ValidationBuilder.() -> Unit) {
+    ValidationBuilder().apply(block).validate(className = className)
 }
 
-internal fun validateAndReturn(domain: String, block: DomainValidationBuilder.() -> Unit): List<ExceptionArgument> =
-    DomainValidationBuilder().apply(block).getErrors()
+// Entrypoint
+fun validateAndReturn(className: String = "", block: ValidationBuilder.() -> Unit): List<ExceptionArgument> =
+    ValidationBuilder().apply(block).getErrors()

@@ -11,7 +11,7 @@ class User(
     val role: UserRole = UserRole.MEMBER,
 ) {
     init {
-        validate(domain = this.javaClass.simpleName) {
+        validate(className = this.javaClass.simpleName) {
             notBlank {
                 "userName" of userName
                 "slackUserId" of slackUserId

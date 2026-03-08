@@ -12,15 +12,6 @@ sealed class CommandException(
         details = details,
     )
 
-sealed class DomainException(
-    val domain: String,
-    errorCode: ErrorCode,
-    details: List<ExceptionArgument>,
-) : CodeCompanionRuntimeException(
-        errorCode = errorCode,
-        details = details,
-    )
-
 class SubCommandParseException(
     val commandName: String,
     val subCommandName: String,
@@ -40,12 +31,19 @@ class UnSupportedCommandException(
         details = details,
     )
 
-class DomainValidationException(
-    domain: String,
+class ValidationException(
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
-) : DomainException(
-        domain = domain,
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )
+
+class ValidationExceptionWithName(
+    val className: String,
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument> = emptyList(),
+) : CodeCompanionRuntimeException(
         errorCode = errorCode,
         details = details,
     )
