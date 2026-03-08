@@ -5,6 +5,13 @@ interface ErrorCode {
     val message: String
 }
 
+enum class CommonErrorCode(
+    override val statusCode: Int,
+    override val message: String,
+) : ErrorCode {
+    VALIDATION_FAILED(statusCode = 400, message = "Validation failed"),
+}
+
 data class ExceptionArgument(
     val fieldName: String,
     val value: String,
@@ -12,7 +19,7 @@ data class ExceptionArgument(
 )
 
 fun exceptionDetails(configure: ExceptionDetailsBuilder.() -> Unit): List<ExceptionArgument> =
-    ExceptionDetailsBuilder().apply(configure).details
+    ExceptionDetailsBuilder().apply(block = configure).details
 
 class ExceptionDetailsBuilder {
     internal val details = mutableListOf<ExceptionArgument>()
