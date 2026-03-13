@@ -12,6 +12,11 @@ import org.springframework.context.annotation.*
 
 const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
 
+enum class OutboxReaderStrategy {
+    POLLING,
+    CDC,
+}
+
 @ConfigurationProperties(prefix = "slack.app")
 data class AppConfig(
     val api: Api = Api(),

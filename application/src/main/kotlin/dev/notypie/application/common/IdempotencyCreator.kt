@@ -1,5 +1,6 @@
 package dev.notypie.application.common
 
+import tools.jackson.databind.json.JsonMapper
 import java.io.ByteArrayOutputStream
 import java.io.ObjectOutputStream
 import java.security.MessageDigest
@@ -33,6 +34,19 @@ object DefaultIdempotencyDataSerializer : IdempotencyDataSerializer {
 
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(bytes)
+
+        return hashBytes.joinToString(separator = "") { "%02x".format(it) }
+    }
+}
+
+class JacksonIdempotencyDataSerializer(
+    private val jsonMapper: JsonMapper,
+) : IdempotencyDataSerializer {
+    override fun serialize(data: Any): String {
+        val json = jsonMapper.writeValueAsBytes(data)
+
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(json)
 
         return hashBytes.joinToString(separator = "") { "%02x".format(it) }
     }
