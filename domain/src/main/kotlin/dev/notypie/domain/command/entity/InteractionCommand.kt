@@ -47,6 +47,7 @@ class InteractionCommand(
             CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
             CommandDetailType.REQUEST_MEETING_FORM,
             -> MeetingSubCommandDefinition.NONE
+
             else -> NoSubCommands()
         }
     }
@@ -55,7 +56,9 @@ class InteractionCommand(
         when (commandData.slackCommandType) {
             // Removal challenge requests.
             SlackCommandType.EVENT_CALLBACK -> handleEventCallBackContext(commandData = commandData)
+
             SlackCommandType.INTERACTION_RESPONSE -> handleInteractions(commandData = commandData)
+
             else -> TODO()
         }
 
@@ -63,7 +66,7 @@ class InteractionCommand(
         val eventCallBack = commandData.body as SlackEventCallBackRequest
         val type = SlackCommandType.valueOf(eventCallBack.event.type.uppercase())
         return when (type) {
-            SlackCommandType.APP_MENTION ->
+            SlackCommandType.APP_MENTION -> {
                 AppMentionCommandParser(
                     slackCommandData = commandData,
                     baseUrl = BASE_URL,
@@ -72,7 +75,11 @@ class InteractionCommand(
                     idempotencyKey = idempotencyKey,
                     events = events,
                 )
-            else -> TODO()
+            }
+
+            else -> {
+                TODO()
+            }
         }
     }
 
