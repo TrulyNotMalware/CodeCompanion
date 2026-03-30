@@ -4,7 +4,7 @@ plugins {
     id("org.springframework.boot") version "4.0.3" apply false
     id("java-library")
     id("java-test-fixtures")
-    id("org.jlleitschuh.gradle.ktlint").version("14.0.1")
+    id("org.jlleitschuh.gradle.ktlint") version "14.0.1"
     kotlin("jvm") version "2.3.10"
     kotlin("plugin.spring") version "2.3.10" apply false
     kotlin("plugin.jpa") version "2.3.10" apply false
@@ -81,14 +81,14 @@ allprojects {
         )
     }
 }
+
 /*
-* Removed the `io.spring.dependency-management` plugin to explicitly override the
-* BOM version for kotlinx-coroutines. When that plugin is applied, Spring’s dependency
-* management can pin or supersede BOM coordinates, which makes it hard to import and
-* control the desired kotlinx-coroutines BOM via Gradle platforms.
-* */
+ * Removed the `io.spring.dependency-management` plugin to explicitly override the
+ * BOM version for kotlinx-coroutines. When that plugin is applied, Spring's dependency
+ * management can pin or supersede BOM coordinates, which makes it hard to import and
+ * control the desired kotlinx-coroutines BOM via Gradle platforms.
+ */
 subprojects {
-    apply(plugin = "kotlin")
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "org.jetbrains.kotlin.plugin.spring")
     apply(plugin = "org.springframework.boot")
@@ -97,10 +97,9 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        // Kotest-bom
-        implementation(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
-        // Jackson-bom
-        implementation(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+        // BOM platforms — use api so they propagate to testFixtures and other configurations
+        api(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
+        api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
 
         implementation(kotlin("reflect"))
         implementation("tools.jackson.module:jackson-module-kotlin")
