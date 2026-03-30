@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -12,10 +13,13 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.flushQueue
 import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.dto.isEmpty
+import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 
 class AbstractCommandContextTest :
     BehaviorSpec({
@@ -43,10 +47,9 @@ class AbstractCommandContextTest :
                 }
             }
         }
-        /**
-         * Contract Test: Ensures runCommand() remain overridable.
-         * Protects against accidental removal of 'open' keyword during refactoring.
-         */
+
+        // Contract Test: Ensures runCommand() remain overridable.
+        // Protects against accidental removal of 'open' keyword during refactoring.
         given("Override runCommand function") {
             val runCommandReturnValue = CommandOutput.empty()
             val overrideContext =
@@ -110,6 +113,86 @@ class AbstractReactionCommandContextTest :
                     )
                 then("should return override value") {
                     res shouldBe handleInteractionReturnValue
+                }
+            }
+        }
+
+        given("ReactionContext interactionSuccessResponse") {
+            val testCommandBasicInfo = createCommandBasicInfo()
+            val testEventQueue = createDomainEventQueue()
+
+            val reactionContext =
+                object : ReactionContext<NoSubCommands>(
+                    slackEventBuilder = eventBuilder,
+                    requestHeaders = SlackRequestHeaders(),
+                    commandBasicInfo = testCommandBasicInfo,
+                    events = testEventQueue,
+                    subCommand = SubCommand.empty(),
+                ) {
+                    override fun parseCommandType(): CommandType = CommandType.SIMPLE
+
+                    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REPLACE_TEXT
+
+                    fun callInteractionSuccessResponse(
+                        responseUrl: String,
+                        mkdMessage: String = "Successfully processed.",
+                    ) = interactionSuccessResponse(
+                        responseUrl = responseUrl,
+                        mkdMessage = mkdMessage,
+                    )
+
+                    fun callInteractionSuccessResponseWithResults(
+                        responseUrl: String,
+                        mkdMessage: String = "Successfully processed.",
+                        results: CommandOutput,
+                    ) = interactionSuccessResponse(
+                        responseUrl = responseUrl,
+                        mkdMessage = mkdMessage,
+                        results = results,
+                    )
+                }
+
+            `when`("interactionSuccessResponse without results") {
+                val result =
+                    reactionContext.callInteractionSuccessResponse(
+                        responseUrl = TEST_BASE_URL,
+                    )
+
+                then("should return success CommandOutput") {
+                    result.ok shouldBe true
+                }
+
+                then("should add replace message event to the queue") {
+                    testEventQueue.poll() shouldNotBe null
+                    testEventQueue.flushQueue()
+                }
+            }
+
+            `when`("interactionSuccessResponse with results") {
+                val expectedResults =
+                    CommandOutput(
+                        ok = true,
+                        apiAppId = testCommandBasicInfo.appId,
+                        status = Status.DO_NOTHING,
+                        channel = testCommandBasicInfo.channel,
+                        commandType = CommandType.SIMPLE,
+                        commandDetailType = CommandDetailType.NOTHING,
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        publisherId = testCommandBasicInfo.publisherId,
+                    )
+                val result =
+                    reactionContext.callInteractionSuccessResponseWithResults(
+                        responseUrl = TEST_BASE_URL,
+                        results = expectedResults,
+                    )
+
+                then("should return the provided results instead of replace command output") {
+                    result shouldBe expectedResults
+                }
+
+                then("should still add replace message event to the queue") {
+                    testEventQueue.poll() shouldNotBe null
+                    testEventQueue.flushQueue()
                 }
             }
         }

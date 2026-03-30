@@ -24,14 +24,12 @@ class RestClientRequester(
             .builder()
             .baseUrl(baseUrl)
             .defaultHeaders { headers ->
-                run {
-                    headers.add(HttpHeaders.CONTENT_TYPE, DEFAULT_CONTENT_TYPE)
-                    if (!authorization.isNullOrBlank()) {
-                        headers.add(
-                            HttpHeaders.AUTHORIZATION,
-                            authorization,
-                        )
-                    }
+                headers.add(HttpHeaders.CONTENT_TYPE, DEFAULT_CONTENT_TYPE)
+                if (!authorization.isNullOrBlank()) {
+                    headers.add(
+                        HttpHeaders.AUTHORIZATION,
+                        authorization,
+                    )
                 }
             }.build()
 
@@ -96,14 +94,9 @@ class RestClientRequester(
         responseType = responseType,
     )
 
-    override fun <T : Any> get(uri: String, authorizationHeader: String?, responseType: Class<T>): T =
-        this
-            .performRequest(
-                method = restClient.get(),
-                uri = uri,
-                authorizationHeader = authorizationHeader,
-                responseType = responseType,
-            ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
+    override fun <T : Any> get(uri: String, authorizationHeader: String?, responseType: Class<T>) =
+        safeGet(uri = uri, authorizationHeader = authorizationHeader, responseType = responseType)
+            .bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
     override fun <T : Any> post(
         uri: String,
@@ -111,25 +104,17 @@ class RestClientRequester(
         body: Any?,
         contentType: MediaType?,
         responseType: Class<T>,
-    ): T =
-        this
-            .performRequest(
-                method = restClient.post(),
-                uri = uri,
-                authorizationHeader = authorizationHeader,
-                body = body,
-                contentType = contentType,
-                responseType = responseType,
-            ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
+    ) = safePost(
+        uri = uri,
+        authorizationHeader = authorizationHeader,
+        body = body,
+        contentType = contentType,
+        responseType = responseType,
+    ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
-    override fun <T : Any> delete(uri: String, authorizationHeader: String?, responseType: Class<T>): T =
-        this
-            .performRequest(
-                method = restClient.delete(),
-                uri = uri,
-                authorizationHeader = authorizationHeader,
-                responseType = responseType,
-            ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
+    override fun <T : Any> delete(uri: String, authorizationHeader: String?, responseType: Class<T>) =
+        safeDelete(uri = uri, authorizationHeader = authorizationHeader, responseType = responseType)
+            .bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
     override fun <T : Any> put(
         uri: String,
@@ -137,16 +122,13 @@ class RestClientRequester(
         body: Any?,
         contentType: MediaType?,
         responseType: Class<T>,
-    ): T =
-        this
-            .performRequest(
-                method = restClient.put(),
-                uri = uri,
-                authorizationHeader = authorizationHeader,
-                body = body,
-                contentType = contentType,
-                responseType = responseType,
-            ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
+    ) = safePut(
+        uri = uri,
+        authorizationHeader = authorizationHeader,
+        body = body,
+        contentType = contentType,
+        responseType = responseType,
+    ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
     override fun <T : Any> patch(
         uri: String,
@@ -154,16 +136,13 @@ class RestClientRequester(
         body: Any?,
         contentType: MediaType?,
         responseType: Class<T>,
-    ): T =
-        this
-            .performRequest(
-                method = restClient.patch(),
-                uri = uri,
-                authorizationHeader = authorizationHeader,
-                body = body,
-                contentType = contentType,
-                responseType = responseType,
-            ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
+    ) = safePatch(
+        uri = uri,
+        authorizationHeader = authorizationHeader,
+        body = body,
+        contentType = contentType,
+        responseType = responseType,
+    ).bodyOrThrow(msg = "Failed to execute Http request to $uri")
 
     private fun <T : Any> performRequest(
         method: RestClient.RequestHeadersUriSpec<*>,
@@ -228,9 +207,8 @@ class RestClientRequester(
         }
 }
 
-fun <T : Any> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request"): T =
-    this
-        .getOrElse { throw RestClientException(msg, it) }
+fun <T : Any> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request") =
+    getOrElse { throw RestClientException(msg, it) }
         .body ?: throw RestClientException("Response body is null")
 
 fun <T : Any> Result<ResponseEntity<T>>.getBodyOrNull(): T? = getOrNull()?.body

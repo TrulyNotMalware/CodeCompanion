@@ -1,6 +1,7 @@
 package dev.notypie.domain.command
 
 import dev.notypie.domain.TEST_APP_ID
+import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
@@ -32,6 +33,7 @@ fun createPostEventPayloadContents(
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     idempotencyKey: UUID = UUID.randomUUID(),
+    body: Map<String, Any> = mapOf(),
 ) = PostEventPayloadContents(
     apiAppId = appId,
     commandDetailType = commandDetailType,
@@ -41,7 +43,7 @@ fun createPostEventPayloadContents(
     eventId = UUID.randomUUID(),
     messageType = toMessageTypeByTargetUser(targetUserId = targetUserId),
     replaceOriginal = false,
-    body = mapOf(),
+    body = body,
 )
 
 fun createActionEventPayloadContents(
@@ -51,6 +53,7 @@ fun createActionEventPayloadContents(
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     idempotencyKey: UUID = UUID.randomUUID(),
+    responseUrl: String = TEST_BASE_URL,
 ) = ActionEventPayloadContents(
     eventId = UUID.randomUUID(),
     apiAppId = appId,
@@ -59,7 +62,7 @@ fun createActionEventPayloadContents(
     idempotencyKey = idempotencyKey,
     commandDetailType = commandDetailType,
     body = body,
-    responseUrl = "",
+    responseUrl = responseUrl,
 )
 
 fun createSendSlackMessageEvent(

@@ -132,5 +132,60 @@ class RestClientRequesterTest :
                     response.body shouldBe null
                 }
             }
+
+            `when`("non-safe get request") {
+                then("returns body directly") {
+                    val response =
+                        restRequester.get(
+                            uri = "/1",
+                            authorizationHeader = null,
+                            responseType = PostDomainResponse::class.java,
+                        )
+                    response shouldNotBe null
+                    response.id shouldBe 1
+                }
+            }
+
+            `when`("non-safe put request") {
+                then("returns body directly") {
+                    val response =
+                        restRequester.put(
+                            uri = "/1",
+                            authorizationHeader = null,
+                            contentType = MediaType.APPLICATION_JSON,
+                            body = updateRequestBody,
+                            responseType = PostDomainResponse::class.java,
+                        )
+                    response shouldNotBe null
+                    response.userId shouldBe updateRequestBody.userId
+                }
+            }
+
+            `when`("non-safe patch request") {
+                then("returns body directly") {
+                    val response =
+                        restRequester.patch(
+                            uri = "/1",
+                            authorizationHeader = null,
+                            contentType = MediaType.APPLICATION_JSON,
+                            body = updateRequestBody,
+                            responseType = PostDomainResponse::class.java,
+                        )
+                    response shouldNotBe null
+                    response.userId shouldBe updateRequestBody.userId
+                }
+            }
+
+            `when`("non-safe delete request") {
+                then("throws exception when response body is null") {
+                    shouldThrowExactly<RestClientException> {
+                        restRequester.delete(
+                            uri = "/1",
+                            authorizationHeader = null,
+                            responseType = Void::class.java,
+                        )
+                    }
+                }
+            }
         }
     })
