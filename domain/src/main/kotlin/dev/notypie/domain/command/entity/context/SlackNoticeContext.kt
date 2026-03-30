@@ -27,7 +27,7 @@ internal class SlackNoticeContext(
         events = events,
         subCommand = SubCommand.empty(),
     ) {
-    private val responseText: String = commands.joinToString { " " }
+    private val responseText: String = commands.joinToString(separator = " ")
 
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
