@@ -19,7 +19,7 @@ import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 enum class CommandType {
     SIMPLE,
     PIPELINE,
-    SCHEDULED,
+    RESPONSE,
     EXTERNAL_API,
 }
 
@@ -45,14 +45,16 @@ enum class CommandDetailType {
         subCommand: SubCommand<NoSubCommands>,
     ): CommandContext<out SubCommandDefinition> =
         when (this) {
-            APPROVAL_FORM ->
+            APPROVAL_FORM -> {
                 SlackApprovalFormContext(
                     slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
                     events = events,
                 )
+            }
+
             MEETING_APPROVAL_NOTICE_FORM, REQUEST_MEETING_FORM,
-            ->
+            -> {
                 RequestMeetingContext(
                     slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
@@ -62,19 +64,24 @@ enum class CommandDetailType {
                             subCommandDefinition = MeetingSubCommandDefinition.NONE,
                         ),
                 )
-            NOTICE_FORM ->
+            }
+
+            NOTICE_FORM -> {
                 ApprovalCallbackContext(
                     slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
                     events = events,
                     subCommand = subCommand,
                 )
-            else ->
+            }
+
+            else -> {
                 EmptyContext(
                     commandBasicInfo = commandBasicInfo,
                     requestHeaders = requestHeaders,
                     slackEventBuilder = slackEventBuilder,
                     events = events,
                 )
+            }
         }
 }

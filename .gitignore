@@ -43,3 +43,5 @@ out/
 todo
 gradle.properties
 logs
+
+.DS_Store

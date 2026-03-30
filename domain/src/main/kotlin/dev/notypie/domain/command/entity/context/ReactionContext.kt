@@ -26,24 +26,19 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
         events = events,
         subCommand = subCommand,
     ) {
-    protected fun interactionSuccessResponse(
-        responseUrl: String,
-        mkdMessage: String = "Successfully processed.",
-    ): CommandOutput =
-        ReplaceMessageContext(
-            commandBasicInfo = commandBasicInfo,
-            requestHeaders = requestHeaders,
-            slackEventBuilder = slackEventBuilder,
-            responseUrl = responseUrl,
-            markdownMessage = mkdMessage,
-            events = events,
-        ).runCommand()
+    protected fun interactionSuccessResponse(responseUrl: String, mkdMessage: String = "Successfully processed.") =
+        replaceMessage(responseUrl = responseUrl, mkdMessage = mkdMessage)
 
     protected fun interactionSuccessResponse(
         responseUrl: String,
         mkdMessage: String = "Successfully processed.",
         results: CommandOutput,
     ): CommandOutput {
+        replaceMessage(responseUrl = responseUrl, mkdMessage = mkdMessage)
+        return results
+    }
+
+    private fun replaceMessage(responseUrl: String, mkdMessage: String) =
         ReplaceMessageContext(
             commandBasicInfo = commandBasicInfo,
             requestHeaders = requestHeaders,
@@ -52,8 +47,6 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
             markdownMessage = mkdMessage,
             events = events,
         ).runCommand()
-        return results
-    }
 
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
 

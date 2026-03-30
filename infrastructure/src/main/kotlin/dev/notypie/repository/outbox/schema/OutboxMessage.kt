@@ -112,48 +112,53 @@ fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
     }
 
 fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
-    NewMessagePublishedEvent(
-        outboxMessage =
-            OutboxMessage(
-                idempotencyKey = idempotencyKey.toString(),
-                publisherId = publisherId,
-                commandDetailType = commandDetailType.name,
-                payload = body,
-                metadata =
-                    mapOf(
-                        "api_app_id" to apiAppId,
-                        "channel" to channel,
-                        "replace_original" to replaceOriginal,
-                    ),
-                type = messageType.name,
-//            status = status,
-                createdAt = LocalDateTime.now(),
-            ),
-        reason = "PostEventContents",
+    createNewMessagePublishedEvent(
         slackEventPayload = this,
+        payload = body,
+        metadata =
+            mapOf(
+                "api_app_id" to apiAppId,
+                "channel" to channel,
+                "replace_original" to replaceOriginal,
+            ),
+        type = messageType.name,
+        reason = "PostEventContents",
     )
 
 fun ActionEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
-    NewMessagePublishedEvent(
-        outboxMessage =
-            OutboxMessage(
-                idempotencyKey = idempotencyKey.toString(),
-                publisherId = publisherId,
-                commandDetailType = commandDetailType.name,
-                payload = jsonMapper.readValue<Map<String, Any>>(body),
-                metadata =
-                    mapOf(
-                        "api_app_id" to apiAppId,
-                        "channel" to channel,
-                        "response_url" to responseUrl,
-                    ),
-                type = MessageType.ACTION_RESPONSE.name,
-//            status = status,
-                createdAt = LocalDateTime.now(),
-            ),
-        reason = "ActionEventContents",
+    createNewMessagePublishedEvent(
         slackEventPayload = this,
+        payload = jsonMapper.readValue<Map<String, Any>>(content = body),
+        metadata =
+            mapOf(
+                "api_app_id" to apiAppId,
+                "channel" to channel,
+                "response_url" to responseUrl,
+            ),
+        type = MessageType.ACTION_RESPONSE.name,
+        reason = "ActionEventContents",
     )
+
+private fun createNewMessagePublishedEvent(
+    slackEventPayload: SlackEventPayload,
+    payload: Map<String, Any>,
+    metadata: Map<String, Any>,
+    type: String,
+    reason: String,
+) = NewMessagePublishedEvent(
+    outboxMessage =
+        OutboxMessage(
+            idempotencyKey = slackEventPayload.idempotencyKey.toString(),
+            publisherId = slackEventPayload.publisherId,
+            commandDetailType = slackEventPayload.commandDetailType.name,
+            payload = payload,
+            metadata = metadata,
+            type = type,
+            createdAt = LocalDateTime.now(),
+        ),
+    reason = reason,
+    slackEventPayload = slackEventPayload,
+)
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
     runCatching {

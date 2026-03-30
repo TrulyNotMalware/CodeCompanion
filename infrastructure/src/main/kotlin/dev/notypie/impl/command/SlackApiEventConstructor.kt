@@ -19,6 +19,7 @@ import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.domain.command.toMessageTypeByTargetUser
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.templates.SlackTemplateBuilder
@@ -255,12 +256,9 @@ class SlackApiEventConstructor(
                     ),
                 messageType = messageType,
             )
-        return SendSlackMessageEvent(
-            idempotencyKey = commandBasicInfo.idempotencyKey,
-            payload = payload,
-            destination = "",
-            timestamp = System.currentTimeMillis(),
-            type = commandDetailType,
+        return payload.toSlackMessageEvent(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
         )
     }
 
@@ -291,12 +289,9 @@ class SlackApiEventConstructor(
                     ),
                 messageType = MessageType.EPHEMERAL_MESSAGE,
             )
-        return SendSlackMessageEvent(
-            idempotencyKey = commandBasicInfo.idempotencyKey,
-            payload = payload,
-            destination = "",
-            timestamp = System.currentTimeMillis(),
-            type = commandDetailType,
+        return payload.toSlackMessageEvent(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
         )
     }
 
@@ -322,14 +317,22 @@ class SlackApiEventConstructor(
                     ),
                 responseUrl = responseUrl,
             )
-        return SendSlackMessageEvent(
-            idempotencyKey = commandBasicInfo.idempotencyKey,
-            payload = payload,
-            destination = "",
-            timestamp = System.currentTimeMillis(),
-            type = commandDetailType,
+        return payload.toSlackMessageEvent(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
         )
     }
+
+    private fun SlackEventPayload.toSlackMessageEvent(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+    ) = SendSlackMessageEvent(
+        idempotencyKey = commandBasicInfo.idempotencyKey,
+        payload = this,
+        destination = "",
+        timestamp = System.currentTimeMillis(),
+        type = commandDetailType,
+    )
 
     private fun extractBodyData(chatPostEphemeralRequest: ChatPostEphemeralRequest) =
         toMap(formBody = RequestFormBuilder.toForm(chatPostEphemeralRequest).build())

@@ -13,6 +13,7 @@ const val TEST_TOKEN = "I_AM_TEST_TOKEN"
 const val TEST_TEAM_ID = "T012ABCDEFG" // starts with T
 const val TEST_TEAM_DOMAIN = "I_AM_TEST_TEAM_DOMAIN"
 const val TEST_BOT_ID = "B012ABCDEFG"
+const val TEST_BOT_TOKEN = "xoxb-test-bot-token"
 const val TEST_BASE_URL = "https://hooks.example.com/actions"
 const val UNKNOWN_SUB_COMMAND_IDENTIFIER = "I_AM_ONLY_FOR_TEST_UNKNOWN_COMMAND"
 val TEST_USER = User(id = TEST_USER_ID, userName = TEST_USER_NAME, name = TEST_USER_NAME, teamId = TEST_TEAM_ID)
