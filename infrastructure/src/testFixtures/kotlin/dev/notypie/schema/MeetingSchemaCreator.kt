@@ -49,12 +49,14 @@ fun createParticipants(
 )
 
 fun createMeetingSchema(member: Int, startIterator: Int = 1): MeetingSchema {
+    val meeting =
+        createMeetingSchema(
+            publisherId = TEST_USER_ID + startIterator,
+        )
     val participantsList =
-        MutableList(
-            size = member,
-        ) { iterator -> createParticipants(userId = TEST_USER_ID + (startIterator + iterator)) }
-    return createMeetingSchema(
-        publisherId = TEST_USER_ID + startIterator,
-        participants = participantsList,
-    )
+        MutableList(size = member) { iterator ->
+            createParticipants(meeting = meeting, userId = TEST_USER_ID + (startIterator + iterator))
+        }
+    meeting.participants.addAll(participantsList)
+    return meeting
 }
