@@ -1,6 +1,5 @@
 package dev.notypie.repository.meeting
 
-import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.exception.meeting.DatabaseException
 import dev.notypie.schema.createMeetingSchema
@@ -10,8 +9,6 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
-import java.util.UUID
 
 class MeetingRepositoryImplTest :
     BehaviorSpec({

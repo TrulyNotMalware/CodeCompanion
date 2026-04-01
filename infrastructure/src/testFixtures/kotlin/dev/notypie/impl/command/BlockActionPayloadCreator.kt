@@ -22,37 +22,26 @@ fun buttonActionJson(
     actionId: String = "action_approve",
 ) = """[{"type":"button","action_id":"$actionId","style":"${buttonType.name.lowercase()}","value":"$value"}]"""
 
-fun buttonActionJsonWithoutStyle(
-    value: String = "",
-    actionId: String = "action_btn",
-) = """[{"type":"button","action_id":"$actionId","value":"$value"}]"""
+fun buttonActionJsonWithoutStyle(value: String = "", actionId: String = "action_btn") =
+    """[{"type":"button","action_id":"$actionId","value":"$value"}]"""
 
-fun multiStaticSelectActionJson(
-    selectedValues: List<String>,
-    actionId: String = "static_select",
-) = """[{"type":"multi_static_select","action_id":"$actionId","selected_options":[${
-    selectedValues.joinToString(",") { """{"value":"$it"}""" }
-}]}]"""
+fun multiStaticSelectActionJson(selectedValues: List<String>, actionId: String = "static_select") =
+    """[{"type":"multi_static_select","action_id":"$actionId","selected_options":[${
+        selectedValues.joinToString(",") { """{"value":"$it"}""" }
+    }]}]"""
 
-fun multiUsersSelectActionJson(
-    selectedUsers: List<String>,
-    actionId: String = "user_select",
-) = """[{"type":"multi_users_select","action_id":"$actionId","selected_users":[${
-    selectedUsers.joinToString(",") { """"$it"""" }
-}]}]"""
+fun multiUsersSelectActionJson(selectedUsers: List<String>, actionId: String = "user_select") =
+    """[{"type":"multi_users_select","action_id":"$actionId","selected_users":[${
+        selectedUsers.joinToString(",") { """"$it"""" }
+    }]}]"""
 
-fun unknownActionJson(
-    type: String = "overflow",
-    actionId: String = "overflow_1",
-) = """[{"type":"$type","action_id":"$actionId"}]"""
+fun unknownActionJson(type: String = "overflow", actionId: String = "overflow_1") =
+    """[{"type":"$type","action_id":"$actionId"}]"""
 
 // ============ State Value JSON Builders ============
 
-fun stateValuesJson(
-    blockId: String = "block_1",
-    actionId: String = "action_1",
-    stateEntry: String,
-) = """{"$blockId":{"$actionId":$stateEntry}}"""
+fun stateValuesJson(blockId: String = "block_1", actionId: String = "action_1", stateEntry: String) =
+    """{"$blockId":{"$actionId":$stateEntry}}"""
 
 fun multiStaticSelectStateJson(selectedOptions: List<Pair<String, String>>) =
     if (selectedOptions.isEmpty()) {
@@ -74,14 +63,11 @@ fun multiUsersSelectStateJson(selectedUsers: List<String>) =
         }]}"""
     }
 
-fun plainTextInputStateJson(value: String) =
-    """{"type":"plain_text_input","value":"$value"}"""
+fun plainTextInputStateJson(value: String) = """{"type":"plain_text_input","value":"$value"}"""
 
-fun datepickerStateJson(selectedDate: String) =
-    """{"type":"datepicker","selected_date":"$selectedDate"}"""
+fun datepickerStateJson(selectedDate: String) = """{"type":"datepicker","selected_date":"$selectedDate"}"""
 
-fun timepickerStateJson(selectedTime: String) =
-    """{"type":"timepicker","selected_time":"$selectedTime"}"""
+fun timepickerStateJson(selectedTime: String) = """{"type":"timepicker","selected_time":"$selectedTime"}"""
 
 fun checkboxesStateJson(selectedOptions: List<Pair<String, String>>) =
     if (selectedOptions.isEmpty()) {
@@ -94,8 +80,7 @@ fun checkboxesStateJson(selectedOptions: List<Pair<String, String>>) =
         }]}"""
     }
 
-fun unknownStateJson(type: String = "some_unknown_type") =
-    """{"type":"$type"}"""
+fun unknownStateJson(type: String = "some_unknown_type") = """{"type":"$type"}"""
 
 // ============ Full Payload Builder ============
 

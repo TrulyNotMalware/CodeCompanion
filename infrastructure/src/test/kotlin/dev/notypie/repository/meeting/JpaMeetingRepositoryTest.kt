@@ -1,6 +1,5 @@
 package dev.notypie.repository.meeting
 
-import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.schema.createMeetingSchema
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
