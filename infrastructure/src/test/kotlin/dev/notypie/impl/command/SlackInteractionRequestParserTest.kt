@@ -1,0 +1,365 @@
+package dev.notypie.impl.command
+
+import dev.notypie.domain.TEST_APP_ID
+import dev.notypie.domain.TEST_BASE_URL
+import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_CHANNEL_NAME
+import dev.notypie.domain.TEST_TEAM_DOMAIN
+import dev.notypie.domain.TEST_TEAM_ID
+import dev.notypie.domain.TEST_TOKEN
+import dev.notypie.domain.TEST_USER_ID
+import dev.notypie.domain.TEST_USER_NAME
+import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.templates.ButtonType
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
+import java.util.UUID
+
+class SlackInteractionRequestParserTest :
+    BehaviorSpec({
+        val parser = SlackInteractionRequestParser()
+
+        given("parseStringPayload") {
+            `when`("payload contains a primary button action") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        buttonType = ButtonType.PRIMARY,
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("should parse basic fields correctly") {
+                    result.apiAppId shouldBe TEST_APP_ID
+                    result.token shouldBe TEST_TOKEN
+                    result.channel.id shouldBe TEST_CHANNEL_ID
+                    result.channel.name shouldBe TEST_CHANNEL_NAME
+                    result.team.id shouldBe TEST_TEAM_ID
+                    result.team.domain shouldBe TEST_TEAM_DOMAIN
+                    result.user.id shouldBe TEST_USER_ID
+                    result.user.userName shouldBe TEST_USER_NAME
+                    result.responseUrl shouldBe TEST_BASE_URL
+                }
+
+                then("should parse command detail type from message text") {
+                    result.type shouldBe CommandDetailType.APPROVAL_FORM
+                    result.idempotencyKey shouldBe idempotencyKey.toString()
+                }
+
+                then("current action should be APPLY_BUTTON") {
+                    result.currentAction.type shouldBe ActionElementTypes.APPLY_BUTTON
+                    result.currentAction.isSelected shouldBe true
+                }
+            }
+
+            `when`("payload contains a danger button action") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        buttonType = ButtonType.DANGER,
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("current action should be REJECT_BUTTON") {
+                    result.currentAction.type shouldBe ActionElementTypes.REJECT_BUTTON
+                    result.currentAction.isSelected shouldBe true
+                }
+            }
+
+            `when`("payload contains a button with no style") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                        actions =
+                            buttonActionJsonWithoutStyle(
+                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT}",
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("current action should be BUTTON") {
+                    result.currentAction.type shouldBe ActionElementTypes.BUTTON
+                    result.currentAction.isSelected shouldBe true
+                }
+            }
+
+            `when`("payload is ephemeral with primary button") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        isEphemeral = true,
+                        buttonType = ButtonType.PRIMARY,
+                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_FORM}",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("should use button value for idempotency key and type") {
+                    result.idempotencyKey shouldBe idempotencyKey.toString()
+                    result.type shouldBe CommandDetailType.APPROVAL_FORM
+                }
+
+                then("container should be ephemeral") {
+                    result.container.isEphemeral shouldBe true
+                }
+
+                then("botId should come from apiAppId for ephemeral") {
+                    result.botId shouldBe TEST_APP_ID
+                }
+            }
+
+            `when`("payload is ephemeral with non-primary action") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        isEphemeral = true,
+                        actions = multiStaticSelectActionJson(selectedValues = listOf("opt1")),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("type should be NOTHING for non-primary ephemeral action") {
+                    result.type shouldBe CommandDetailType.NOTHING
+                }
+            }
+
+            `when`("payload contains multi_static_select state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry =
+                                    multiStaticSelectStateJson(
+                                        selectedOptions = listOf("A" to "a", "B" to "b"),
+                                    ),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain MULTI_STATIC_SELECT with selected values") {
+                    val state = result.states.first { it.type == ActionElementTypes.MULTI_STATIC_SELECT }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "a, b"
+                }
+            }
+
+            `when`("payload contains empty multi_static_select state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = multiStaticSelectStateJson(selectedOptions = emptyList()),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain unselected MULTI_STATIC_SELECT") {
+                    val state = result.states.first { it.type == ActionElementTypes.MULTI_STATIC_SELECT }
+                    state.isSelected shouldBe false
+                }
+            }
+
+            `when`("payload contains multi_users_select state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = multiUsersSelectStateJson(selectedUsers = listOf("U001", "U002")),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain MULTI_USERS_SELECT with joined user ids") {
+                    val state = result.states.first { it.type == ActionElementTypes.MULTI_USERS_SELECT }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "U001,U002"
+                }
+            }
+
+            `when`("payload contains plain_text_input state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = plainTextInputStateJson(value = "user input text"),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain PLAIN_TEXT_INPUT with value") {
+                    val state = result.states.first { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "user input text"
+                }
+            }
+
+            `when`("payload contains datepicker state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = datepickerStateJson(selectedDate = "2026-04-01"),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain DATE_PICKER with selected date") {
+                    val state = result.states.first { it.type == ActionElementTypes.DATE_PICKER }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "2026-04-01"
+                }
+            }
+
+            `when`("payload contains timepicker state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = timepickerStateJson(selectedTime = "14:30"),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain TIME_PICKER with selected time") {
+                    val state = result.states.first { it.type == ActionElementTypes.TIME_PICKER }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "14:30"
+                }
+            }
+
+            `when`("payload contains checkboxes state with selections") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry =
+                                    checkboxesStateJson(
+                                        selectedOptions = listOf("Option A" to "a", "Option B" to "b"),
+                                    ),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain CHECKBOX with selected option texts") {
+                    val state = result.states.first { it.type == ActionElementTypes.CHECKBOX }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "Option A, Option B"
+                }
+            }
+
+            `when`("payload contains empty checkboxes state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = checkboxesStateJson(selectedOptions = emptyList()),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain unselected CHECKBOX") {
+                    val state = result.states.first { it.type == ActionElementTypes.CHECKBOX }
+                    state.isSelected shouldBe false
+                }
+            }
+
+            `when`("payload contains unknown state type") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues = stateValuesJson(stateEntry = unknownStateJson()),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain UNKNOWN type") {
+                    val state = result.states.first()
+                    state.type shouldBe ActionElementTypes.UNKNOWN
+                }
+            }
+
+            `when`("payload contains multi_users_select action") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        actions = multiUsersSelectActionJson(selectedUsers = listOf("U001", "U002")),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("current action should be MULTI_USERS_SELECT") {
+                    result.currentAction.type shouldBe ActionElementTypes.MULTI_USERS_SELECT
+                    result.currentAction.isSelected shouldBe true
+                    result.currentAction.selectedValue shouldBe "U001, U002"
+                }
+            }
+
+            `when`("payload contains multi_static_select action") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        actions = multiStaticSelectActionJson(selectedValues = listOf("opt1", "opt2")),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("current action should be MULTI_STATIC_SELECT") {
+                    result.currentAction.type shouldBe ActionElementTypes.MULTI_STATIC_SELECT
+                    result.currentAction.isSelected shouldBe true
+                    result.currentAction.selectedValue shouldBe "opt1, opt2"
+                }
+            }
+
+            `when`("payload contains unrecognized action type") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        actions = unknownActionJson(),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("current action should be UNKNOWN") {
+                    result.currentAction.type shouldBe ActionElementTypes.UNKNOWN
+                }
+            }
+
+            `when`("payload is invalid JSON") {
+                then("should throw JsonSyntaxException") {
+                    shouldThrow<com.google.gson.JsonSyntaxException> {
+                        parser.parseStringPayload(payload = "{ invalid json }")
+                    }
+                }
+            }
+
+            `when`("message text contains invalid CommandDetailType") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = "$idempotencyKey, INVALID_TYPE",
+                    )
+
+                then("should throw IllegalArgumentException") {
+                    shouldThrow<IllegalArgumentException> {
+                        parser.parseStringPayload(payload = payload)
+                    }
+                }
+            }
+        }
+    })

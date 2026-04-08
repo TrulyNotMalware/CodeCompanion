@@ -1,6 +1,8 @@
 package dev.notypie.application.service.mention
 
 import dev.notypie.application.common.IdempotencyCreator
+import dev.notypie.application.exception.AppIdNotFoundException
+import dev.notypie.application.exception.PayloadParseErrorCode
 import dev.notypie.application.service.history.HistoryHandler
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.SlackCommandType
@@ -11,6 +13,7 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.mapper.mapHistory
 import org.springframework.stereotype.Service
@@ -77,13 +80,12 @@ class SlackMentionEventHandlerImpl(
         return result
     }
 
-    private fun resolveAppId(payload: Map<String, Any>): String {
-        if (payload[SLACK_APPID_KEY_NAME] != null) {
-            return payload[SLACK_APPID_KEY_NAME].toString()
-        } else {
-            throw RuntimeException("COMMAND_TYPE_NOT_DETECTED")
-        }
-    }
+    private fun resolveAppId(payload: Map<String, Any>) =
+        payload[SLACK_APPID_KEY_NAME]?.toString()
+            ?: throw AppIdNotFoundException(
+                errorCode = PayloadParseErrorCode.APP_ID_NOT_FOUND,
+                details = exceptionDetails { SLACK_APPID_KEY_NAME value "" because "Missing api_app_id in payload" },
+            )
 
     private fun convertBodyData(payload: Map<String, Any>) =
         jsonMapper.convertValue(payload, SlackEventCallBackRequest::class.java)

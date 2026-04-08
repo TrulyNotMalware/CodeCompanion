@@ -1,5 +1,7 @@
 package dev.notypie.application.common
 
+import dev.notypie.common.jsonMapper
+import dev.notypie.domain.common.IdempotencyData
 import tools.jackson.databind.json.JsonMapper
 import java.io.ByteArrayOutputStream
 import java.io.ObjectOutputStream
@@ -16,16 +18,16 @@ object IdempotencyCreator {
         return UUID.nameUUIDFromBytes(combinedInput.toByteArray())
     }
 
-    fun create(data: Any, currentTimeMillis: Long = System.currentTimeMillis()): UUID =
+    fun create(data: IdempotencyData, currentTimeMillis: Long = System.currentTimeMillis()): UUID =
         create(data = DefaultIdempotencyDataSerializer.serialize(data), currentTimeMillis = currentTimeMillis)
 }
 
 interface IdempotencyDataSerializer {
-    fun serialize(data: Any): String
+    fun serialize(data: IdempotencyData): String
 }
 
 object DefaultIdempotencyDataSerializer : IdempotencyDataSerializer {
-    override fun serialize(data: Any): String {
+    override fun serialize(data: IdempotencyData): String {
         val byteArrayOutputStream = ByteArrayOutputStream()
         ObjectOutputStream(byteArrayOutputStream).use {
             it.writeObject(data)
@@ -40,10 +42,10 @@ object DefaultIdempotencyDataSerializer : IdempotencyDataSerializer {
 }
 
 class JacksonIdempotencyDataSerializer(
-    private val jsonMapper: JsonMapper,
+    private val mapper: JsonMapper = jsonMapper,
 ) : IdempotencyDataSerializer {
-    override fun serialize(data: Any): String {
-        val json = jsonMapper.writeValueAsBytes(data)
+    override fun serialize(data: IdempotencyData): String {
+        val json = mapper.writeValueAsBytes(data)
 
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(json)
