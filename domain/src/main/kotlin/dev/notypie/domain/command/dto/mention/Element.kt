@@ -55,7 +55,10 @@ data class PlainText(
 class TextValueDeserializer : ValueDeserializer<TextElement>() {
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): TextElement =
         when (parser.currentToken()) {
-            JsonToken.VALUE_STRING -> PlainText(parser.string)
+            JsonToken.VALUE_STRING -> {
+                PlainText(value = parser.string)
+            }
+
             JsonToken.START_OBJECT -> {
                 val node: JsonNode = parser.readValueAsTree()
                 TextObject(
@@ -65,6 +68,9 @@ class TextValueDeserializer : ValueDeserializer<TextElement>() {
                     emoji = node["emoji"]?.booleanValue() ?: true,
                 )
             }
-            else -> throw IllegalArgumentException("Unexpected token for TextValue: ${parser.currentToken()}")
+
+            else -> {
+                throw IllegalArgumentException("Unexpected token for TextValue: ${parser.currentToken()}")
+            }
         }
 }
