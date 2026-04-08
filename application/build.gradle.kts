@@ -29,6 +29,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 
+    // Domain test fixtures
+    testImplementation(testFixtures(project(":domain")))
+    testFixturesImplementation(testFixtures(project(":domain")))
+
     // AOP
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 

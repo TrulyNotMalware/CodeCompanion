@@ -1,0 +1,134 @@
+package dev.notypie.domain.command.entity
+
+import dev.notypie.domain.command.SlackCommandType
+import dev.notypie.domain.command.createInteractionPayloadInput
+import dev.notypie.domain.command.dto.SlackCommandData
+import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
+import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
+import dev.notypie.domain.command.exceptions.SubCommandParseException
+import dev.notypie.domain.command.mockEventBuilder
+import dev.notypie.domain.history.entity.Status
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.mockk
+import java.util.UUID
+
+class RequestMeetingCommandTest :
+    BehaviorSpec({
+        val eventBuilder = mockEventBuilder(relaxed = true) {}
+        val eventPublisher = mockk<EventPublisher>(relaxed = true)
+
+        fun createMeetingCommandData(subCommands: List<String> = emptyList()) =
+            SlackCommandData(
+                appId = "A_TEST",
+                appToken = "TOKEN",
+                publisherId = "U_TEST",
+                publisherName = "tester",
+                channel = "C_TEST",
+                channelName = "general",
+                slackCommandType = SlackCommandType.SLASH,
+                subCommands = subCommands,
+                rawHeader = SlackRequestHeaders(),
+                rawBody = emptyMap(),
+                body = "",
+            )
+
+        given("RequestMeetingCommand findSubCommandDefinition") {
+            `when`("no subcommands provided") {
+                val commandData = createMeetingCommandData()
+                val command =
+                    RequestMeetingCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = commandData,
+                        slackEventBuilder = eventBuilder,
+                        eventPublisher = eventPublisher,
+                    )
+
+                val definition = command.findSubCommandDefinition()
+
+                then("should return MeetingSubCommandDefinition.NONE") {
+                    definition shouldBe MeetingSubCommandDefinition.NONE
+                }
+            }
+
+            `when`("subcommand is 'list'") {
+                val commandData = createMeetingCommandData(subCommands = listOf("list"))
+                val command =
+                    RequestMeetingCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = commandData,
+                        slackEventBuilder = eventBuilder,
+                        eventPublisher = eventPublisher,
+                    )
+
+                val definition = command.findSubCommandDefinition()
+
+                then("should return MeetingSubCommandDefinition.LIST") {
+                    definition shouldBe MeetingSubCommandDefinition.LIST
+                }
+            }
+
+            `when`("subcommand is unknown") {
+                val commandData = createMeetingCommandData(subCommands = listOf("unknown_sub"))
+                val command =
+                    RequestMeetingCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = commandData,
+                        slackEventBuilder = eventBuilder,
+                        eventPublisher = eventPublisher,
+                    )
+
+                then("should throw SubCommandParseException") {
+                    shouldThrow<SubCommandParseException> {
+                        command.findSubCommandDefinition()
+                    }
+                }
+            }
+        }
+
+        given("RequestMeetingCommand handleEvent with INTERACTION_RESPONSE") {
+            val idempotencyKey = UUID.randomUUID()
+            val interactionPayload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states = emptyList(),
+                    idempotencyKey = idempotencyKey,
+                )
+            val commandData =
+                SlackCommandData(
+                    appId = "A_TEST",
+                    appToken = "TOKEN",
+                    publisherId = "U_TEST",
+                    publisherName = "tester",
+                    channel = "C_TEST",
+                    channelName = "general",
+                    slackCommandType = SlackCommandType.SLASH,
+                    rawHeader = SlackRequestHeaders(),
+                    rawBody = emptyMap(),
+                    body = interactionPayload,
+                )
+
+            val command =
+                RequestMeetingCommand(
+                    idempotencyKey = idempotencyKey,
+                    commandData = commandData,
+                    slackEventBuilder = eventBuilder,
+                    eventPublisher = eventPublisher,
+                )
+
+            `when`("handleEvent") {
+                val result = command.handleEvent()
+
+                then("should return success") {
+                    result.ok shouldBe true
+                    result.status shouldBe Status.SUCCESS
+                }
+            }
+        }
+    })

@@ -31,6 +31,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::simpleEphemeralTextRequest.name -> {
                     every {
                         eventBuilder.simpleEphemeralTextRequest(
@@ -42,6 +43,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::detailErrorTextRequest.name -> {
                     every {
                         eventBuilder.detailErrorTextRequest(
@@ -54,6 +56,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::simpleTimeScheduleRequest.name -> {
                     every {
                         eventBuilder.simpleTimeScheduleRequest(
@@ -65,6 +68,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::simpleApplyRejectRequest.name -> {
                     every {
                         eventBuilder.simpleApplyRejectRequest(
@@ -76,6 +80,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::simpleApprovalFormRequest.name -> {
                     every {
                         eventBuilder.simpleApprovalFormRequest(
@@ -89,6 +94,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::requestMeetingFormRequest.name -> {
                     every {
                         eventBuilder.requestMeetingFormRequest(
@@ -99,6 +105,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::getMeetingListFormRequest.name -> {
                     every {
                         eventBuilder.getMeetingListFormRequest(
@@ -109,6 +116,7 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
+
                 SlackEventBuilder::replaceOriginalText.name -> {
                     every {
                         eventBuilder.replaceOriginalText(
@@ -120,7 +128,10 @@ class MockEventBuilderCreator {
                         )
                     } returns returnValue
                 }
-                else -> error("Unknown function: $functionName. Add it to the when clause!")
+
+                else -> {
+                    error("Unknown function: $functionName. Add it to the when clause!")
+                }
             }
         }
 
