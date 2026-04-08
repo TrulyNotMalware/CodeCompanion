@@ -31,11 +31,9 @@ dependencies {
     // CDC
     api("org.springframework.boot:spring-boot-starter-kafka")
     // Slack API
-    implementation(
-        "com.slack.api:bolt:${rootProject.extra.get(
-            "slackSdkVersion",
-        )}",
-    )
+    implementation("com.slack.api:slack-api-model:${rootProject.extra.get("slackSdkVersion")}")
+    implementation("com.slack.api:slack-api-client:${rootProject.extra.get("slackSdkVersion")}")
+    implementation("com.slack.api:slack-app-backend:${rootProject.extra.get("slackSdkVersion")}")
     // Springboot starter jpa
     api("org.springframework.boot:spring-boot-starter-data-jpa")
 

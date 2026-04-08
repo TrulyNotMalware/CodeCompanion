@@ -7,7 +7,6 @@ import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.interactions.*
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.ButtonType
-import org.apache.commons.text.StringTokenizer
 import java.time.Instant
 
 class SlackInteractionRequestParser : InteractionPayloadParser {
@@ -42,18 +41,18 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         // Ephemeral contents does not include message sections.
         val currentAction = parseCurrentAction(blockActionPayload.actions)
         val botId = if (container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
-        val messageTokenizer =
+        val messageTokens =
             if (container.isEphemeral) {
                 if (currentAction.type.isPrimary) {
-                    StringTokenizer(currentAction.selectedValue, ",")
+                    currentAction.selectedValue.split(",")
                 } else {
-                    StringTokenizer("${CommandDetailType.NOTHING},${CommandDetailType.NOTHING}", ",")
+                    listOf(CommandDetailType.NOTHING.name, CommandDetailType.NOTHING.name)
                 }
             } else {
-                StringTokenizer(blockActionPayload.message.text, ",")
+                blockActionPayload.message.text.split(",")
             }
-        val idempotencyKey = messageTokenizer.nextToken()
-        val type = messageTokenizer.nextToken().replace("\\s".toRegex(), "")
+        val idempotencyKey = messageTokens[0].trim()
+        val type = messageTokens[1].trim()
         return InteractionPayload(
             type = CommandDetailType.valueOf(type),
             apiAppId = blockActionPayload.apiAppId,

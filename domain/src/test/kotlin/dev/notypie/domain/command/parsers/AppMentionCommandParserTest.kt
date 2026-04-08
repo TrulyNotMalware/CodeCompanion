@@ -1,8 +1,8 @@
 package dev.notypie.domain.command.parsers
 
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.createAppMentionSlackCommandData
+import dev.notypie.domain.command.createDomainEventQueue
 import dev.notypie.domain.command.createEventCallbackData
 import dev.notypie.domain.command.createRichTextBlock
 import dev.notypie.domain.command.createSlackEventCallBackRequest
@@ -12,8 +12,6 @@ import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
 import dev.notypie.domain.command.mockEventBuilder
 import io.kotest.assertions.throwables.shouldThrow
@@ -25,7 +23,7 @@ class AppMentionCommandParserTest :
     BehaviorSpec({
         val idempotencyKey = UUID.randomUUID()
         val slackEventBuilder = mockEventBuilder(relaxed = true) {}
-        val events = DefaultEventQueue<CommandEvent<EventPayload>>()
+        val events = createDomainEventQueue()
 
         given("parseContext") {
             `when`("command is 'notice' with users") {

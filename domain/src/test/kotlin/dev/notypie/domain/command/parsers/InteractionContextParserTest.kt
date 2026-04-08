@@ -1,14 +1,12 @@
 package dev.notypie.domain.command.parsers
 
-import dev.notypie.domain.command.DefaultEventQueue
+import dev.notypie.domain.command.createDomainEventQueue
 import dev.notypie.domain.command.createInteractionSlackCommandData
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
 import dev.notypie.domain.command.mockEventBuilder
 import io.kotest.core.spec.style.BehaviorSpec
@@ -19,7 +17,7 @@ class InteractionContextParserTest :
     BehaviorSpec({
         val idempotencyKey = UUID.randomUUID()
         val slackEventBuilder = mockEventBuilder(relaxed = true) {}
-        val events = DefaultEventQueue<CommandEvent<EventPayload>>()
+        val events = createDomainEventQueue()
 
         given("parseContext") {
             `when`("interaction type is APPROVAL_FORM") {
