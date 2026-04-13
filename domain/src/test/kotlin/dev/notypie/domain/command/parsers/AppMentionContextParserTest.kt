@@ -12,14 +12,14 @@ import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
-import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
+import dev.notypie.domain.command.entity.parsers.AppMentionContextParser
 import dev.notypie.domain.command.mockEventBuilder
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
-class AppMentionCommandParserTest :
+class AppMentionContextParserTest :
     BehaviorSpec({
         val idempotencyKey = UUID.randomUUID()
         val slackEventBuilder = mockEventBuilder(relaxed = true) {}
@@ -42,7 +42,7 @@ class AppMentionCommandParserTest :
                     )
                 val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionCommandParser(
+                    AppMentionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -73,7 +73,7 @@ class AppMentionCommandParserTest :
                     )
                 val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionCommandParser(
+                    AppMentionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -104,7 +104,7 @@ class AppMentionCommandParserTest :
                     )
                 val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionCommandParser(
+                    AppMentionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -127,7 +127,7 @@ class AppMentionCommandParserTest :
                     )
                 val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionCommandParser(
+                    AppMentionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -158,7 +158,7 @@ class AppMentionCommandParserTest :
                     )
                 val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionCommandParser(
+                    AppMentionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -180,7 +180,7 @@ class AppMentionCommandParserTest :
                         body = createSlackEventCallBackRequest(),
                     ).copy(body = "invalid body")
                 val parser =
-                    AppMentionCommandParser(
+                    AppMentionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),

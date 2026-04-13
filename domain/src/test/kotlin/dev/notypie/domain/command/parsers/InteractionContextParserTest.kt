@@ -7,7 +7,7 @@ import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
+import dev.notypie.domain.command.entity.parsers.InteractionContextParser
 import dev.notypie.domain.command.mockEventBuilder
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -27,7 +27,7 @@ class InteractionContextParserTest :
                         idempotencyKey = idempotencyKey,
                     )
                 val parser =
-                    InteractionCotextParser(
+                    InteractionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -50,7 +50,7 @@ class InteractionContextParserTest :
                         idempotencyKey = idempotencyKey,
                     )
                 val parser =
-                    InteractionCotextParser(
+                    InteractionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -73,7 +73,7 @@ class InteractionContextParserTest :
                         idempotencyKey = idempotencyKey,
                     )
                 val parser =
-                    InteractionCotextParser(
+                    InteractionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
@@ -96,7 +96,7 @@ class InteractionContextParserTest :
                         idempotencyKey = idempotencyKey,
                     )
                 val parser =
-                    InteractionCotextParser(
+                    InteractionContextParser(
                         slackCommandData = commandData,
                         baseUrl = "",
                         commandId = UUID.randomUUID(),

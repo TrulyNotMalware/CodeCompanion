@@ -11,9 +11,9 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
+import dev.notypie.domain.command.entity.parsers.AppMentionContextParser
 import dev.notypie.domain.command.entity.parsers.ContextParser
-import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
+import dev.notypie.domain.command.entity.parsers.InteractionContextParser
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import java.util.UUID
 
@@ -67,7 +67,7 @@ class InteractionCommand(
         val type = SlackCommandType.valueOf(eventCallBack.event.type.uppercase())
         return when (type) {
             SlackCommandType.APP_MENTION -> {
-                AppMentionCommandParser(
+                AppMentionContextParser(
                     slackCommandData = commandData,
                     baseUrl = BASE_URL,
                     slackEventBuilder = slackEventBuilder,
@@ -86,7 +86,7 @@ class InteractionCommand(
     private fun handleInteractions(commandData: SlackCommandData): ContextParser {
         val interactionPayload = commandData.body as InteractionPayload
         val type = interactionPayload.type
-        return InteractionCotextParser(
+        return InteractionContextParser(
             slackCommandData = commandData,
             baseUrl = BASE_URL,
             commandId = commandId,

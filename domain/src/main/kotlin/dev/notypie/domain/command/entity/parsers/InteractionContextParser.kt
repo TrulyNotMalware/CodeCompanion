@@ -11,7 +11,7 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import java.util.*
 
-internal class InteractionCotextParser(
+internal class InteractionContextParser(
     private val slackCommandData: SlackCommandData,
     val baseUrl: String,
     val commandId: UUID,
