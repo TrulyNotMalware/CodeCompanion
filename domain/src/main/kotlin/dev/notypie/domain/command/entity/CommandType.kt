@@ -1,8 +1,6 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -12,9 +10,8 @@ import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
+import dev.notypie.domain.command.intent.IntentQueue
 
 enum class CommandType {
     SIMPLE,
@@ -38,40 +35,36 @@ enum class CommandDetailType {
     ;
 
     internal fun createContext(
-        slackEventBuilder: SlackEventBuilder,
         commandBasicInfo: CommandBasicInfo,
-        events: EventQueue<CommandEvent<EventPayload>>,
         requestHeaders: SlackRequestHeaders,
         subCommand: SubCommand<NoSubCommands>,
+        intents: IntentQueue,
     ): CommandContext<out SubCommandDefinition> =
         when (this) {
             APPROVAL_FORM -> {
                 SlackApprovalFormContext(
-                    slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
-                    events = events,
+                    intents = intents,
                 )
             }
 
             MEETING_APPROVAL_NOTICE_FORM, REQUEST_MEETING_FORM,
             -> {
                 RequestMeetingContext(
-                    slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
-                    events = events,
                     subCommand =
                         SubCommand(
                             subCommandDefinition = MeetingSubCommandDefinition.NONE,
                         ),
+                    intents = intents,
                 )
             }
 
             NOTICE_FORM -> {
                 ApprovalCallbackContext(
-                    slackEventBuilder = slackEventBuilder,
                     commandBasicInfo = commandBasicInfo,
-                    events = events,
                     subCommand = subCommand,
+                    intents = intents,
                 )
             }
 
@@ -79,8 +72,7 @@ enum class CommandDetailType {
                 EmptyContext(
                     commandBasicInfo = commandBasicInfo,
                     requestHeaders = requestHeaders,
-                    slackEventBuilder = slackEventBuilder,
-                    events = events,
+                    intents = intents,
                 )
             }
         }

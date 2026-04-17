@@ -1,8 +1,6 @@
 package dev.notypie.domain.command.entity.parsers
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.mention.Element
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
@@ -13,8 +11,7 @@ import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.intent.IntentQueue
 import java.util.*
 
 internal class AppMentionContextParser(
@@ -22,8 +19,7 @@ internal class AppMentionContextParser(
     val baseUrl: String,
     val commandId: UUID,
     val idempotencyKey: UUID,
-    private val slackEventBuilder: SlackEventBuilder,
-    private val events: EventQueue<CommandEvent<EventPayload>>,
+    private val intents: IntentQueue,
 ) : ContextParser {
     companion object {
         const val BLOCK_TYPE_RICH_TEXT = "rich_text"
@@ -53,10 +49,9 @@ internal class AppMentionContextParser(
     private fun handleNotSupportedCommand(): SlackTextResponseContext =
         SlackTextResponseContext(
             requestHeaders = slackCommandData.rawHeader,
-            slackEventBuilder = slackEventBuilder,
             text = "Command Not supported.",
             commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            events = events,
+            intents = intents,
         )
 
     private fun extractUserAndCommand(elements: List<Element>?): Pair<Queue<String>, Queue<String>> {
@@ -92,8 +87,7 @@ internal class AppMentionContextParser(
                     commands = commandQueue,
                     commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                     requestHeaders = slackCommandData.rawHeader,
-                    slackEventBuilder = slackEventBuilder,
-                    events = events,
+                    intents = intents,
                 )
             }
 
@@ -101,8 +95,7 @@ internal class AppMentionContextParser(
                 SlackApprovalFormContext(
                     commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                     requestHeaders = slackCommandData.rawHeader,
-                    slackEventBuilder = slackEventBuilder,
-                    events = events,
+                    intents = intents,
                 )
             }
 
@@ -112,9 +105,8 @@ internal class AppMentionContextParser(
                     errorMessage = "Command \"$command\" not found",
                     targetClassName = this::class.simpleName ?: "SlackAppMentionContext",
                     details = null,
-                    slackEventBuilder = slackEventBuilder,
                     idempotencyKey = idempotencyKey,
-                    events = events,
+                    intents = intents,
                 )
             }
         }

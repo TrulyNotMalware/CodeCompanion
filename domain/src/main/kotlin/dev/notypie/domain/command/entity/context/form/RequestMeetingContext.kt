@@ -1,7 +1,5 @@
 package dev.notypie.domain.command.entity.context.form
 
-import dev.notypie.domain.command.EventQueue
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
@@ -14,15 +12,11 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
-import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
-import dev.notypie.domain.command.entity.event.GetMeetingListEvent
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
+import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.history.entity.Status
-import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -31,17 +25,15 @@ import java.time.format.DateTimeFormatter
 
 internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
-    slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
-    events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand<MeetingSubCommandDefinition> =
         SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+    intents: IntentQueue,
 ) : ReactionContext<MeetingSubCommandDefinition>(
-        slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
-        events = events,
         subCommand = subCommand,
+        intents = intents,
     ) {
     companion object {
         internal const val DATE_PATTERN = "yyyy-MM-dd"
@@ -55,42 +47,31 @@ internal class RequestMeetingContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
 
     override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
-        val event =
-            slackEventBuilder.requestMeetingFormRequest(
-                commandBasicInfo = commandBasicInfo,
-                commandType = commandType,
-                commandDetailType = commandDetailType,
-            )
         when (subCommand.subCommandDefinition) {
-            MeetingSubCommandDefinition.LIST -> addNewEvent(commandEvent = getListCommand())
-            else -> addNewEvent(commandEvent = event)
-        }
+            MeetingSubCommandDefinition.LIST -> {
+                addIntent(
+                    CommandIntent.MeetingListRequest(
+                        publisherId = commandBasicInfo.publisherId,
+                    ),
+                )
+            }
 
-        return CommandOutput.success(payload = event.payload, commandType = commandType)
+            else -> {
+                addIntent(CommandIntent.MeetingForm())
+            }
+        }
+        return CommandOutput.success(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+        )
     }
 
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
-    private fun getListCommand() =
-        GetMeetingListEvent(
-            idempotencyKey = commandBasicInfo.idempotencyKey,
-            payload =
-                GetMeetingEventPayload(
-                    slackEventModifier = this::apply,
-                    publisherId = commandBasicInfo.publisherId,
-                ),
-            type = CommandDetailType.GET_MEETING_LIST,
-        )
-
-    private fun apply(myMeetings: List<MeetingDto>): SendSlackMessageEvent =
-        slackEventBuilder.getMeetingListFormRequest(
-            commandBasicInfo = commandBasicInfo,
-            commandType = commandType,
-            commandDetailType = commandDetailType,
-            myMeetings = myMeetings,
-        )
-
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+        validationErrorOrNull(payload = interactionPayload)?.let { return it }
+
         val meeting = toMeetingEntity(payload = interactionPayload)
 
         // send notice
@@ -117,33 +98,49 @@ internal class RequestMeetingContext(
         )
     }
 
-    private fun createValidationErrorResponse(payload: InteractionPayload): CommandOutput {
+    /**
+     * Returns an error CommandOutput when the meeting form input is invalid, or null when the
+     * payload passes validation and can be converted into a Meeting entity safely.
+     */
+    private fun validationErrorOrNull(payload: InteractionPayload): CommandOutput? {
         val errorMessage =
             when {
-                getParticipants(states = payload.states, publisher = payload.user.id).isEmpty() -> "Select participants"
+                getParticipants(states = payload.states, publisher = payload.user.id).isEmpty() -> {
+                    "Select participants"
+                }
 
-                getDateTimeOrNull(
-                    interactionPayload = payload,
-                ) == null -> "Make sure to choose a time in the *future* rather than now."
+                getDateTimeOrNull(interactionPayload = payload) == null -> {
+                    "Make sure to choose a time in the *future* rather than now."
+                }
 
-                !payload.isCompleted() -> "Please select *all options.*"
+                !payload.isCompleted() -> {
+                    "Please select *all options.*"
+                }
 
-                else -> "Unknown error occurred. Please try again later."
+                else -> {
+                    return null
+                }
             }
         return createErrorResponse(errMessage = errorMessage)
     }
 
+    /**
+     * Precondition: [validationErrorOrNull] returned null. Guaranteed to have a non-null future datetime.
+     */
     private fun toMeetingEntity(payload: InteractionPayload): Meeting {
         val publisher = payload.user.id
         val participants = getParticipants(states = payload.states, publisher = payload.user.id)
-        val startAt = getDateTimeOrNull(interactionPayload = payload)
+        val startAt =
+            requireNotNull(getDateTimeOrNull(interactionPayload = payload)) {
+                "Meeting startAt must be validated before building Meeting entity"
+            }
         val (title, reason) = getTitleAndReason(interactionPayload = payload)
 
         return Meeting(
             publisher = publisher,
             title = title,
             reason = reason,
-            startAt = startAt ?: LocalDateTime.now(),
+            startAt = startAt,
             members = participants,
         )
     }
@@ -211,7 +208,6 @@ internal class RequestMeetingContext(
 
     private fun sendNotice(meeting: Meeting): Boolean =
         ApprovalCallbackContext(
-            slackEventBuilder = slackEventBuilder,
             participants = meeting.memberIdSnapshot(),
             commandBasicInfo = commandBasicInfo,
             approvalContents =
@@ -221,10 +217,12 @@ internal class RequestMeetingContext(
                     subTitle = meeting.title,
                     idempotencyKey = commandBasicInfo.idempotencyKey,
                     publisherId = commandBasicInfo.publisherId,
-                    commandDetailType = CommandDetailType.NOTICE_FORM,
+                    // Must match the runCommand commandDetailType below so that the button
+                    // value embedded by the Slack template routes clicks to the same context.
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
                 ),
-            events = events,
             subCommand = SubCommand.empty(),
+            intents = intents,
         ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
             .status == Status.SUCCESS
 }

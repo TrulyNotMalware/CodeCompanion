@@ -10,6 +10,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.toMessageTypeByTargetUser
 import java.util.UUID
 
 fun createCommandBasicInfo(

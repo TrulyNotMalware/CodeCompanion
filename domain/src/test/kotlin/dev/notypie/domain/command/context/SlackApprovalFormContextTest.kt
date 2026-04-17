@@ -1,32 +1,29 @@
 package dev.notypie.domain.command.context
 
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
+import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 
 class SlackApprovalFormContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
 
         given("SlackApprovalFormContext") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val context =
                 SlackApprovalFormContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("checking command metadata") {
@@ -51,9 +48,13 @@ class SlackApprovalFormContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("should add approval form event to queue") {
-                    eventQueue.poll() shouldNotBe null
-                    eventQueue.flushQueue()
+                then("should add ApprovalForm intent to the queue") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.ApprovalForm>()
+                    val formIntent = intents.first() as CommandIntent.ApprovalForm
+                    formIntent.headLine shouldBe "Approve Form"
+                    formIntent.selectionFields.size shouldBe 1
                 }
             }
         }

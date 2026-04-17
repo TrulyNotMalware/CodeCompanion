@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.parsers
 
-import dev.notypie.domain.command.createDomainEventQueue
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionSlackCommandData
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.EmptyContext
@@ -8,7 +8,6 @@ import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.parsers.InteractionContextParser
-import dev.notypie.domain.command.mockEventBuilder
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
@@ -16,8 +15,7 @@ import java.util.UUID
 class InteractionContextParserTest :
     BehaviorSpec({
         val idempotencyKey = UUID.randomUUID()
-        val slackEventBuilder = mockEventBuilder(relaxed = true) {}
-        val events = createDomainEventQueue()
+        val intents = createIntentQueue()
 
         given("parseContext") {
             `when`("interaction type is APPROVAL_FORM") {
@@ -32,8 +30,7 @@ class InteractionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -55,8 +52,7 @@ class InteractionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -78,8 +74,7 @@ class InteractionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -101,8 +96,7 @@ class InteractionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)

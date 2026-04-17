@@ -3,16 +3,16 @@ package dev.notypie.application.service.mention
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.exception.AppIdNotFoundException
 import dev.notypie.application.exception.PayloadParseErrorCode
+import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
+import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.history.HistoryHandler
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.InteractionCommand
-import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.history.entity.History
 import dev.notypie.domain.history.mapper.mapHistory
@@ -23,9 +23,8 @@ import java.util.UUID
 
 @Service
 class SlackMentionEventHandlerImpl(
-    private val slackEventBuilder: SlackEventBuilder,
     private val historyHandler: HistoryHandler,
-    private val eventPublisher: EventPublisher,
+    private val commandExecutor: CommandExecutor,
 ) : AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
@@ -46,7 +45,7 @@ class SlackMentionEventHandlerImpl(
     ): SlackCommandData {
         val appId = resolveAppId(payload = payload)
         val body = convertBodyData(payload = payload)
-        val commandType = SlackCommandType.valueOf(body.type.uppercase())
+        val commandType = resolveCommandType(rawType = body.type)
         return SlackCommandData(
             appId = appId,
             appToken = body.token,
@@ -66,15 +65,13 @@ class SlackMentionEventHandlerImpl(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
             commandData = commandData,
-            slackEventBuilder = slackEventBuilder,
-            eventPublisher = eventPublisher,
         )
 
     @Transactional
     override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command = buildCommand(idempotencyKey = idempotencyKey, commandData = slackCommandData)
-        val result: CommandOutput = command.handleEvent()
+        val result: CommandOutput = commandExecutor.execute(command = command)
         val history: History = mapHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
         historyHandler.saveNewHistory(history = history)
         return result
@@ -86,6 +83,20 @@ class SlackMentionEventHandlerImpl(
                 errorCode = PayloadParseErrorCode.APP_ID_NOT_FOUND,
                 details = exceptionDetails { SLACK_APPID_KEY_NAME value "" because "Missing api_app_id in payload" },
             )
+
+    private fun resolveCommandType(rawType: String): SlackCommandType =
+        runCatching { SlackCommandType.valueOf(rawType.uppercase()) }
+            .getOrElse { cause ->
+                throw UnsupportedSlackCommandTypeException(
+                    rawCommandType = rawType,
+                    errorCode = PayloadParseErrorCode.UNSUPPORTED_SLACK_COMMAND_TYPE,
+                    details =
+                        exceptionDetails {
+                            "type" value rawType because
+                                "Unknown SlackCommandType value: ${cause.message}"
+                        },
+                )
+            }
 
     private fun convertBodyData(payload: Map<String, Any>) =
         jsonMapper.convertValue(payload, SlackEventCallBackRequest::class.java)

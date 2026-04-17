@@ -1,9 +1,6 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.DefaultEventQueue
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.SlackCommandData
@@ -11,24 +8,25 @@ import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
-import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.exceptions.UnSupportedCommandException
+import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.DefaultIntentQueue
+import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.common.error.exceptionDetails
 import java.util.UUID
 
 abstract class Command<T : SubCommandDefinition>(
     val idempotencyKey: UUID,
     val commandData: SlackCommandData,
-    internal val slackEventBuilder: SlackEventBuilder,
-    internal val eventPublisher: EventPublisher,
 ) {
-    internal val events: EventQueue<CommandEvent<EventPayload>> = DefaultEventQueue()
+    internal val intents: IntentQueue = DefaultIntentQueue()
 
     val commandId: UUID = UUID.randomUUID()
+
+    /** Returns a defensive copy of accumulated intents and clears the queue. Idempotent for retries. */
+    fun drainIntents(): List<CommandIntent> = intents.drainSnapshot()
 
     internal abstract fun parseContext(subCommand: SubCommand<T>): CommandContext<out T>
 
@@ -36,7 +34,6 @@ abstract class Command<T : SubCommandDefinition>(
 
     fun handleEvent() =
         runCatching { executeCommand() }
-            .onSuccess { publishEvents() }
             .getOrElse { exception ->
                 CommandOutput.fail(
                     slackCommandData = commandData,
@@ -45,8 +42,6 @@ abstract class Command<T : SubCommandDefinition>(
                     reason = exception.toString(),
                 )
             }
-
-    private fun publishEvents() = eventPublisher.publishEvent(events = events)
 
     private fun executeCommand(): CommandOutput {
         val subCommand = createSubCommand()

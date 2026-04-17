@@ -24,8 +24,18 @@ import java.util.*
 private val logger = KotlinLogging.logger { }
 
 @Entity
+@Table(
+    name = "outbox_message",
+    indexes = [
+        Index(name = "idx_outbox_idempotency_key", columnList = "idempotency_key"),
+    ],
+)
 class OutboxMessage(
     @field:Id
+    @field:Column(name = "event_id")
+    @field:JsonProperty("event_id")
+    val eventId: String,
+    @field:Column(name = "idempotency_key", nullable = false)
     @field:JsonProperty("idempotency_key")
     val idempotencyKey: String,
     @field:Column(name = "publisher_id", nullable = false)
@@ -79,7 +89,7 @@ class OutboxMessage(
                 apiAppId = metadata["api_app_id"].toString(),
                 responseUrl = metadata["response_url"].toString(),
                 channel = metadata["channel"].toString(),
-                eventId = UUID.randomUUID(),
+                eventId = UUID.fromString(eventId),
             )
         } else {
             PostEventPayloadContents(
@@ -91,7 +101,7 @@ class OutboxMessage(
                 body = payload,
                 channel = metadata["channel"].toString(),
                 replaceOriginal = metadata["replace_original"].toString().toBoolean(),
-                eventId = UUID.randomUUID(),
+                eventId = UUID.fromString(eventId),
             )
         }
 }
@@ -107,11 +117,14 @@ fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
         }
 
         is DelayHandleEventPayloadContents -> {
-            TODO()
+            throw UnsupportedOperationException(
+                "DelayHandleEventPayloadContents is not persisted to the outbox; " +
+                    "schedule it via TaskScheduler instead. idempotencyKey=$idempotencyKey",
+            )
         }
     }
 
-fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
+fun PostEventPayloadContents.toOutboxMessage() =
     createNewMessagePublishedEvent(
         slackEventPayload = this,
         payload = body,
@@ -125,7 +138,7 @@ fun PostEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStat
         reason = "PostEventContents",
     )
 
-fun ActionEventPayloadContents.toOutboxMessage(status: MessageStatus = MessageStatus.PENDING) =
+fun ActionEventPayloadContents.toOutboxMessage() =
     createNewMessagePublishedEvent(
         slackEventPayload = this,
         payload = jsonMapper.readValue<Map<String, Any>>(content = body),
@@ -148,6 +161,7 @@ private fun createNewMessagePublishedEvent(
 ) = NewMessagePublishedEvent(
     outboxMessage =
         OutboxMessage(
+            eventId = slackEventPayload.eventId.toString(),
             idempotencyKey = slackEventPayload.idempotencyKey.toString(),
             publisherId = slackEventPayload.publisherId,
             commandDetailType = slackEventPayload.commandDetailType.name,
@@ -162,8 +176,8 @@ private fun createNewMessagePublishedEvent(
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
     runCatching {
-        parseJsonField("metadata")
-        parseJsonField("payload")
+        parseJsonField(key = "metadata")
+        parseJsonField(key = "payload")
 
         val createdAt = this["created_at"]
         val updatedAt = this["updated_at"]
@@ -178,7 +192,7 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
 
 private fun MutableMap<String, Any>.parseJsonField(key: String) {
     this[key]?.takeIf { it is String }?.let {
-        this[key] = jsonMapper.readValue<Map<String, Any>>(it as String)
+        this[key] = jsonMapper.readValue<Map<String, Any>>(content = it as String)
     }
 }
 

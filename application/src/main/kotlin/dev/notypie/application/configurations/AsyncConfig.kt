@@ -2,6 +2,7 @@ package dev.notypie.application.configurations
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
 import org.springframework.context.event.ApplicationEventMulticaster
 import org.springframework.context.event.SimpleApplicationEventMulticaster
 import org.springframework.context.support.AbstractApplicationContext.APPLICATION_EVENT_MULTICASTER_BEAN_NAME
@@ -19,6 +20,7 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
         SimpleApplicationEventMulticaster().apply { setTaskExecutor(getAsyncExecutor()) }
 
     @Bean(name = ["threadPoolTaskExecutor"])
+    @Primary
     override fun getAsyncExecutor(): Executor =
         ThreadPoolTaskExecutor().apply {
             corePoolSize = 10

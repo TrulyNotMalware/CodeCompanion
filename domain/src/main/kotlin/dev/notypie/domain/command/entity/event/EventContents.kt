@@ -70,3 +70,6 @@ enum class MessageType {
     DIRECT_MESSAGE,
     ACTION_RESPONSE,
 }
+
+fun toMessageTypeByTargetUser(targetUserId: String?): MessageType =
+    if (targetUserId.isNullOrBlank()) MessageType.CHANNEL_ALERT else MessageType.DIRECT_MESSAGE

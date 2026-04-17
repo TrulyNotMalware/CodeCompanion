@@ -84,7 +84,10 @@ class ApplicationMessageDispatcher(
                     }
 
                     is DelayHandleEventPayloadContents -> {
-                        TODO()
+                        throw UnsupportedOperationException(
+                            "DelayHandleEventPayloadContents dispatch is not supported via the outbox relay path " +
+                                "(idempotencyKey=${event.idempotencyKey})",
+                        )
                     }
 
                     is PostEventPayloadContents -> {
@@ -92,7 +95,12 @@ class ApplicationMessageDispatcher(
                             MessageType.EPHEMERAL_MESSAGE -> dispatchEphemeralContents(event = event)
                             MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
                             MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
-                            MessageType.ACTION_RESPONSE -> TODO()
+                            MessageType.ACTION_RESPONSE ->
+                                throw IllegalStateException(
+                                    "PostEventPayloadContents with ACTION_RESPONSE messageType is invalid; " +
+                                        "ACTION_RESPONSE must be dispatched as ActionEventPayloadContents " +
+                                        "(idempotencyKey=${event.idempotencyKey})",
+                                )
                         }
                     }
                 }

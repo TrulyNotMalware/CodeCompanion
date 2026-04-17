@@ -5,7 +5,6 @@ import dev.notypie.application.configurations.conditions.OnStandAloneCondition
 import dev.notypie.application.service.user.DefaultUserServiceImpl
 import dev.notypie.application.service.user.MicroUserServiceImpl
 import dev.notypie.application.service.user.UserService
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.user.repository.TeamRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.*
@@ -47,8 +46,8 @@ enum class EventPublisherType {
 @Conditional(OnStandAloneCondition::class)
 class ApplicationOptionConfiguration {
     @Bean
-    fun userService(slackEventBuilder: SlackEventBuilder, teamRepository: TeamRepository): UserService =
-        DefaultUserServiceImpl(slackEventBuilder = slackEventBuilder, teamRepository = teamRepository)
+    fun userService(teamRepository: TeamRepository): UserService =
+        DefaultUserServiceImpl(teamRepository = teamRepository)
 }
 
 @Configuration

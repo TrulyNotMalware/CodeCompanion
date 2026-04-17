@@ -13,19 +13,13 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.mockk
-import io.mockk.verify
 import java.util.UUID
 
 class CommandTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
-        val eventPublisher = mockk<EventPublisher>(relaxed = true)
 
         given("Command.handleEvent with non-interaction command") {
             val commandData = createAppMentionSlackCommandData()
@@ -35,8 +29,6 @@ class CommandTest :
                 object : Command<NoSubCommands>(
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
                 ) {
                     override fun parseContext(
                         subCommand: SubCommand<NoSubCommands>,
@@ -44,8 +36,7 @@ class CommandTest :
                         EmptyContext(
                             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                             requestHeaders = SlackRequestHeaders(),
-                            slackEventBuilder = slackEventBuilder,
-                            events = events,
+                            intents = intents,
                         )
 
                     override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
@@ -53,10 +44,6 @@ class CommandTest :
 
             `when`("handleEvent succeeds") {
                 val result = command.handleEvent()
-
-                then("should call publishEvents") {
-                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
-                }
 
                 then("should return CommandOutput from context.runCommand") {
                     result.ok shouldBe false // EmptyContext returns CommandOutput.empty()
@@ -92,17 +79,14 @@ class CommandTest :
                     object : Command<NoSubCommands>(
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     ) {
                         override fun parseContext(
                             subCommand: SubCommand<NoSubCommands>,
                         ): CommandContext<out NoSubCommands> =
                             object : ReactionContext<NoSubCommands>(
-                                slackEventBuilder = slackEventBuilder,
                                 commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-                                events = events,
                                 subCommand = subCommand,
+                                intents = intents,
                             ) {
                                 override fun parseCommandType() = CommandType.SIMPLE
 
@@ -126,8 +110,6 @@ class CommandTest :
                     object : Command<NoSubCommands>(
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     ) {
                         override fun parseContext(
                             subCommand: SubCommand<NoSubCommands>,
@@ -135,8 +117,7 @@ class CommandTest :
                             EmptyContext(
                                 commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                                 requestHeaders = SlackRequestHeaders(),
-                                slackEventBuilder = slackEventBuilder,
-                                events = events,
+                                intents = intents,
                             )
 
                         override fun findSubCommandDefinition() = NoSubCommands()
@@ -160,8 +141,6 @@ class CommandTest :
                 object : Command<NoSubCommands>(
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
                 ) {
                     override fun parseContext(
                         subCommand: SubCommand<NoSubCommands>,
@@ -181,10 +160,6 @@ class CommandTest :
 
                 then("error reason should contain the exception message") {
                     result.errorReason.contains("Test exception") shouldBe true
-                }
-
-                then("should not call publishEvents") {
-                    // publishEvent was called once in previous test, so verify no additional call
                 }
             }
         }

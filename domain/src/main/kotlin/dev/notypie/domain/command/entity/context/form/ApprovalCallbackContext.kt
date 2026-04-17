@@ -1,8 +1,6 @@
 package dev.notypie.domain.command.entity.context.form
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackRequestHeaders
@@ -11,24 +9,22 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.history.entity.Status
 
 internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
-    slackEventBuilder: SlackEventBuilder,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     approvalContents: ApprovalContents? = null,
-    events: EventQueue<CommandEvent<EventPayload>>,
     private val participants: Set<String> = emptySet(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
+    intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        slackEventBuilder = slackEventBuilder,
         requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
-        events = events,
         subCommand = subCommand,
+        intents = intents,
     ) {
     private val approvalContents: ApprovalContents = approvalContents ?: createDefaultApprovalContents()
 
@@ -71,17 +67,25 @@ internal class ApprovalCallbackContext(
         )
     }
 
-    private fun sendNoticeToParticipants(commandDetailType: CommandDetailType = this.commandDetailType) =
+    /**
+     * The intent's routing type is derived from [approvalContents.commandDetailType]
+     * (single source of truth between the envelope and the Slack button value).
+     * [commandDetailType] here is used only for [CommandOutput] metadata.
+     */
+    private fun sendNoticeToParticipants(
+        commandDetailType: CommandDetailType = this.commandDetailType,
+    ): List<CommandOutput> =
         participants.map { participant ->
-            val event =
-                slackEventBuilder.simpleApplyRejectRequest(
-                    commandDetailType = commandDetailType,
+            addIntent(
+                CommandIntent.ApplyReject(
                     approvalContents = approvalContents,
-                    commandBasicInfo = commandBasicInfo,
-                    commandType = commandType,
                     targetUserId = participant,
-                )
-            addNewEvent(commandEvent = event)
-            CommandOutput.success(payload = event.payload, commandType = commandType)
+                ),
+            )
+            CommandOutput.success(
+                basicInfo = commandBasicInfo,
+                commandType = commandType,
+                commandDetailType = commandDetailType,
+            )
         }
 }

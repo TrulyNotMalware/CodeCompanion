@@ -7,7 +7,6 @@ import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
 import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
@@ -20,7 +19,7 @@ import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.SlackEventPayload
-import dev.notypie.domain.command.toMessageTypeByTargetUser
+import dev.notypie.domain.command.entity.event.toMessageTypeByTargetUser
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
@@ -30,10 +29,10 @@ import java.util.UUID
 class SlackApiEventConstructor(
     private val botToken: String,
     private val templateBuilder: SlackTemplateBuilder,
-) : SlackEventBuilder {
+) {
     private val slackConfig = Slack.getInstance().config
 
-    override fun simpleTextRequest(
+    fun simpleTextRequest(
         commandDetailType: CommandDetailType,
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
@@ -55,12 +54,12 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun simpleEphemeralTextRequest(
+    fun simpleEphemeralTextRequest(
         textMessage: String,
         commandBasicInfo: CommandBasicInfo,
         commandType: CommandType,
         commandDetailType: CommandDetailType,
-        targetUserId: String?,
+        targetUserId: String? = null,
     ): SendSlackMessageEvent {
         val layout = templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
         return buildEphemeralMessage(
@@ -73,7 +72,7 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun detailErrorTextRequest(
+    fun detailErrorTextRequest(
         commandDetailType: CommandDetailType,
         errorClassName: String,
         errorMessage: String,
@@ -97,7 +96,7 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun simpleTimeScheduleRequest(
+    fun simpleTimeScheduleRequest(
         commandDetailType: CommandDetailType,
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
@@ -118,12 +117,12 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun simpleApplyRejectRequest(
+    fun simpleApplyRejectRequest(
         commandDetailType: CommandDetailType,
         commandBasicInfo: CommandBasicInfo,
         approvalContents: ApprovalContents,
         commandType: CommandType,
-        targetUserId: String?,
+        targetUserId: String? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.approvalTemplate(
@@ -142,14 +141,14 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun simpleApprovalFormRequest(
+    fun simpleApprovalFormRequest(
         commandDetailType: CommandDetailType,
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         selectionFields: List<SelectionContents>,
         commandType: CommandType,
-        reasonInput: TextInputContents?,
-        approvalContents: ApprovalContents?,
+        reasonInput: TextInputContents? = null,
+        approvalContents: ApprovalContents? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.requestApprovalFormTemplate(
@@ -177,11 +176,11 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun requestMeetingFormRequest(
+    fun requestMeetingFormRequest(
         commandBasicInfo: CommandBasicInfo,
         commandType: CommandType,
         commandDetailType: CommandDetailType,
-        approvalContents: ApprovalContents?,
+        approvalContents: ApprovalContents? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.requestMeetingFormTemplate(
@@ -202,16 +201,39 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun getMeetingListFormRequest(
+    fun getMeetingListFormRequest(
         myMeetings: List<MeetingDto>,
         commandBasicInfo: CommandBasicInfo,
         commandType: CommandType,
         commandDetailType: CommandDetailType,
     ): SendSlackMessageEvent {
-        TODO() // FIXME
+        val body = renderMeetingListBody(myMeetings = myMeetings)
+        val layout =
+            templateBuilder.simpleTextResponseTemplate(
+                headLineText = "My Meetings",
+                body = body,
+                isMarkDown = true,
+            )
+
+        return buildEphemeralMessage(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            commandType = commandType,
+            layout = layout,
+            replaceOriginal = false,
+        )
     }
 
-    override fun replaceOriginalText(
+    private fun renderMeetingListBody(myMeetings: List<MeetingDto>): String {
+        if (myMeetings.isEmpty()) return "_No upcoming meetings found._"
+        return myMeetings.joinToString(separator = "\n") { meeting ->
+            val endSuffix = meeting.endAt?.let { " ~ $it" }.orEmpty()
+            val cancelledMark = if (meeting.isCanceled) " *[CANCELED]*" else ""
+            "• *${meeting.title}* — ${meeting.startAt}$endSuffix$cancelledMark"
+        }
+    }
+
+    fun replaceOriginalText(
         markdownText: String,
         responseUrl: String,
         commandBasicInfo: CommandBasicInfo,

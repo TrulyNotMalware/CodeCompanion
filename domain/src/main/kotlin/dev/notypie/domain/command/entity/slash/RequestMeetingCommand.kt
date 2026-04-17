@@ -1,6 +1,5 @@
 package dev.notypie.domain.command.entity.slash
 
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -11,7 +10,6 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
@@ -23,22 +21,17 @@ import java.util.UUID
 class RequestMeetingCommand(
     idempotencyKey: UUID,
     commandData: SlackCommandData,
-    slackEventBuilder: SlackEventBuilder,
-    eventPublisher: EventPublisher,
 ) : Command<MeetingSubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
-        slackEventBuilder = slackEventBuilder,
-        eventPublisher = eventPublisher,
     ) {
     override fun parseContext(
         subCommand: SubCommand<MeetingSubCommandDefinition>,
     ): CommandContext<MeetingSubCommandDefinition> =
         RequestMeetingContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            slackEventBuilder = slackEventBuilder,
-            events = events,
             subCommand = subCommand,
+            intents = intents,
         )
 
     override fun findSubCommandDefinition(): MeetingSubCommandDefinition {

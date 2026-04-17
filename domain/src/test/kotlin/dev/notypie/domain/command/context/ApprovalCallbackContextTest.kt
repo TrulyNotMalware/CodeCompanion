@@ -1,33 +1,31 @@
 package dev.notypie.domain.command.context
 
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
+import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 
 class ApprovalCallbackContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
 
         given("ApprovalCallbackContext with no participants") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = emptySet(),
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -49,24 +47,23 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("no events should be added to the queue") {
-                    eventQueue.poll() shouldBe null
+                then("no intents should be added to the queue") {
+                    intentQueue.isEmpty() shouldBe true
                 }
             }
         }
 
         given("ApprovalCallbackContext with participants") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val participants = setOf("U001", "U002", "U003")
 
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = participants,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -85,16 +82,20 @@ class ApprovalCallbackContextTest :
                     result.apiAppId shouldBe basicInfo.appId
                 }
 
-                then("events should be added for each participant") {
-                    var eventCount = 0
-                    while (eventQueue.poll() != null) eventCount++
-                    eventCount shouldBe 3
+                then("intents should be added for each participant") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 3
+                    intents.forEach { intent ->
+                        intent.shouldBeInstanceOf<CommandIntent.ApplyReject>()
+                    }
+                    val targetUsers = intents.map { (it as CommandIntent.ApplyReject).targetUserId }.toSet()
+                    targetUsers shouldBe participants
                 }
             }
         }
 
         given("ApprovalCallbackContext with custom ApprovalContents") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val customApprovalContents =
@@ -109,11 +110,10 @@ class ApprovalCallbackContextTest :
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = setOf("U001"),
                     approvalContents = customApprovalContents,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -124,23 +124,26 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("event should be added") {
-                    eventQueue.flushQueue()
+                then("intent should contain custom approval contents") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val intent = intents.first() as CommandIntent.ApplyReject
+                    intent.approvalContents.reason shouldBe "Custom approval reason"
+                    intent.targetUserId shouldBe "U001"
                 }
             }
         }
 
         given("ApprovalCallbackContext with default ApprovalContents") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = setOf("U001"),
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -150,8 +153,10 @@ class ApprovalCallbackContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add event to queue") {
-                    eventQueue.flushQueue()
+                then("should add ApplyReject intent to the queue") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.ApplyReject>()
                 }
             }
         }

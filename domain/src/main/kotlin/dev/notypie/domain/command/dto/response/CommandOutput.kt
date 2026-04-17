@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.dto.response
 
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -64,6 +65,23 @@ open class CommandOutput(
             errorReason = reason,
         )
 
+        fun fail(
+            basicInfo: CommandBasicInfo,
+            commandDetailType: CommandDetailType,
+            reason: String,
+            commandType: CommandType = CommandType.SIMPLE,
+        ) = CommandOutput(
+            ok = false,
+            apiAppId = basicInfo.appId,
+            status = Status.FAILED,
+            channel = basicInfo.channel,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+            idempotencyKey = basicInfo.idempotencyKey,
+            publisherId = basicInfo.publisherId,
+            errorReason = reason,
+        )
+
         fun success(payload: SlackEventPayload, commandType: CommandType) =
             CommandOutput(
                 ok = true,
@@ -74,6 +92,18 @@ open class CommandOutput(
                 commandDetailType = payload.commandDetailType,
                 idempotencyKey = payload.idempotencyKey,
                 publisherId = payload.publisherId,
+            )
+
+        fun success(basicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType) =
+            CommandOutput(
+                ok = true,
+                apiAppId = basicInfo.appId,
+                status = Status.SUCCESS,
+                channel = basicInfo.channel,
+                commandType = commandType,
+                commandDetailType = commandDetailType,
+                idempotencyKey = basicInfo.idempotencyKey,
+                publisherId = basicInfo.publisherId,
             )
     }
 }

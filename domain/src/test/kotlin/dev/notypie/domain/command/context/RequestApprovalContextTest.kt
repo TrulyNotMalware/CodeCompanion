@@ -1,25 +1,23 @@
 package dev.notypie.domain.command.context
 
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.RequestApprovalContext
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
+import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.LinkedList
 
 class RequestApprovalContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
 
         given("RequestApprovalContext") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val users = LinkedList(listOf("U001", "U002"))
             val commands = LinkedList(listOf("approve this PR"))
@@ -28,10 +26,9 @@ class RequestApprovalContextTest :
                 RequestApprovalContext(
                     users = users,
                     commands = commands,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
                     basicInfo = basicInfo,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("checking command metadata") {
@@ -56,15 +53,18 @@ class RequestApprovalContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("should add apply/reject event to queue") {
-                    eventQueue.poll() shouldNotBe null
-                    eventQueue.flushQueue()
+                then("should add ApplyReject intent to the queue") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.ApplyReject>()
+                    val applyRejectIntent = intents.first() as CommandIntent.ApplyReject
+                    applyRejectIntent.approvalContents.reason shouldBe "approve this PR"
                 }
             }
         }
 
         given("RequestApprovalContext with empty commands queue") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val users = LinkedList<String>()
             val commands = LinkedList(listOf("reason text"))
@@ -73,10 +73,9 @@ class RequestApprovalContextTest :
                 RequestApprovalContext(
                     users = users,
                     commands = commands,
-                    slackEventBuilder = eventBuilder,
                     requestHeaders = SlackRequestHeaders(),
                     basicInfo = basicInfo,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand with a reason in commands") {
@@ -86,9 +85,10 @@ class RequestApprovalContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add event to queue") {
-                    eventQueue.poll() shouldNotBe null
-                    eventQueue.flushQueue()
+                then("should add ApplyReject intent to the queue") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.ApplyReject>()
                 }
             }
         }

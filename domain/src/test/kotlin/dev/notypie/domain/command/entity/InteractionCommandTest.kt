@@ -12,20 +12,15 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
-import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import io.mockk.mockk
 import java.util.UUID
 
 class InteractionCommandTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
-        val eventPublisher = mockk<EventPublisher>(relaxed = true)
 
         given("InteractionCommand with EVENT_CALLBACK (app_mention)") {
             val body =
@@ -51,8 +46,6 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
                 )
 
             `when`("handleEvent") {
@@ -93,8 +86,6 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
                 )
 
             `when`("handleEvent") {
@@ -134,8 +125,6 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
                 )
 
             `when`("handleEvent") {
@@ -178,8 +167,6 @@ class InteractionCommandTest :
                         appName = "TestApp",
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     )
 
                 val definition = command.findSubCommandDefinition()
@@ -212,8 +199,6 @@ class InteractionCommandTest :
                         appName = "TestApp",
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     )
 
                 val definition = command.findSubCommandDefinition()

@@ -2,8 +2,8 @@ package dev.notypie.domain.command.parsers
 
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createDomainEventQueue
 import dev.notypie.domain.command.createEventCallbackData
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createRichTextBlock
 import dev.notypie.domain.command.createSlackEventCallBackRequest
 import dev.notypie.domain.command.createTextElement
@@ -13,7 +13,6 @@ import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.AppMentionContextParser
-import dev.notypie.domain.command.mockEventBuilder
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -22,8 +21,7 @@ import java.util.UUID
 class AppMentionContextParserTest :
     BehaviorSpec({
         val idempotencyKey = UUID.randomUUID()
-        val slackEventBuilder = mockEventBuilder(relaxed = true) {}
-        val events = createDomainEventQueue()
+        val intents = createIntentQueue()
 
         given("parseContext") {
             `when`("command is 'notice' with users") {
@@ -47,8 +45,7 @@ class AppMentionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -78,8 +75,7 @@ class AppMentionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -109,8 +105,7 @@ class AppMentionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -132,8 +127,7 @@ class AppMentionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -163,8 +157,7 @@ class AppMentionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 then("should throw IllegalArgumentException (empty command queue)") {
@@ -185,8 +178,7 @@ class AppMentionContextParserTest :
                         baseUrl = "",
                         commandId = UUID.randomUUID(),
                         idempotencyKey = idempotencyKey,
-                        slackEventBuilder = slackEventBuilder,
-                        events = events,
+                        intents = intents,
                     )
 
                 then("should throw IllegalArgumentException") {

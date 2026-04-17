@@ -1,14 +1,13 @@
 package dev.notypie.application.service.mention
 
 import dev.notypie.application.exception.AppIdNotFoundException
+import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
+import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.history.HistoryHandler
-import dev.notypie.application.service.mention.createAppMentionPayload
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.SlackEventBuilder
-import dev.notypie.domain.command.entity.event.EventPublisher
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -18,15 +17,13 @@ import org.springframework.util.LinkedMultiValueMap
 
 class SlackMentionEventHandlerImplTest :
     BehaviorSpec({
-        val slackEventBuilder = mockk<SlackEventBuilder>()
         val historyHandler = mockk<HistoryHandler>(relaxed = true)
-        val eventPublisher = mockk<EventPublisher>(relaxed = true)
+        val commandExecutor = mockk<CommandExecutor>(relaxed = true)
 
         val handler =
             SlackMentionEventHandlerImpl(
-                slackEventBuilder = slackEventBuilder,
                 historyHandler = historyHandler,
-                eventPublisher = eventPublisher,
+                commandExecutor = commandExecutor,
             )
 
         val testHeaders =
@@ -58,6 +55,18 @@ class SlackMentionEventHandlerImplTest :
                     shouldThrow<AppIdNotFoundException> {
                         handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
                     }
+                }
+            }
+
+            `when`("payload type is not a known SlackCommandType") {
+                val payload = createAppMentionPayload(type = "not_a_real_type")
+
+                then("should throw UnsupportedSlackCommandTypeException") {
+                    val exception =
+                        shouldThrow<UnsupportedSlackCommandTypeException> {
+                            handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+                        }
+                    exception.rawCommandType shouldBe "not_a_real_type"
                 }
             }
 

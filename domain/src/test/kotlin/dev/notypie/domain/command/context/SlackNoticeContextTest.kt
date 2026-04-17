@@ -1,49 +1,34 @@
 package dev.notypie.domain.command.context
 
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
-import dev.notypie.domain.command.createSendSlackMessageEvent
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
-import dev.notypie.domain.dto.TestValidationData
-import dev.notypie.domain.dto.shouldMatchExpected
+import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.LinkedList
 
 class SlackNoticeContextTest :
     BehaviorSpec({
         val testCommandBasicInfo = createCommandBasicInfo()
-        val eventBuilder =
-            mockEventBuilder {
-                SlackEventBuilder::simpleTextRequest returns
-                    createSendSlackMessageEvent(
-                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                    )
-            }
 
         given("SlackNoticeContext with users and commands") {
             val users = LinkedList(listOf("U001", "U002"))
             val commands = LinkedList(listOf("deploy", "notify", "check"))
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
 
             val context =
                 SlackNoticeContext(
                     users = users,
                     commands = commands,
                     commandBasicInfo = testCommandBasicInfo,
-                    slackEventBuilder = eventBuilder,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("parseCommandType is called") {
@@ -62,22 +47,19 @@ class SlackNoticeContextTest :
                 val result = context.runCommand()
 
                 then("should return success result") {
-                    val validationData =
-                        TestValidationData(
-                            commandDetailType = context.commandDetailType,
-                            commandType = context.commandType,
-                            commandBasicInfo = testCommandBasicInfo,
-                        )
-                    (result shouldMatchExpected validationData) shouldBe true
+                    result.ok shouldBe true
+                    result.status shouldBe Status.SUCCESS
+                    result.commandType shouldBe CommandType.SIMPLE
+                    result.commandDetailType shouldBe CommandDetailType.SIMPLE_TEXT
                 }
 
-                then("should add event to the queue") {
-                    val event = eventQueue.poll()
-                    event shouldNotBe null
-                    event?.type shouldBe CommandDetailType.SIMPLE_TEXT
-                    event?.name shouldBe SendSlackMessageEvent::class.java.simpleName
-                    event?.payload?.javaClass shouldBe PostEventPayloadContents::class.java
-                    eventQueue.flushQueue()
+                then("should add Notice intent to the queue") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.Notice>()
+                    val noticeIntent = intents.first() as CommandIntent.Notice
+                    noticeIntent.targetUserIds shouldBe listOf("U001", "U002")
+                    noticeIntent.message shouldBe "deploy notify check"
                 }
             }
         }
@@ -85,15 +67,14 @@ class SlackNoticeContextTest :
         given("SlackNoticeContext responseText uses space separator") {
             val users = LinkedList(listOf("U001"))
             val commands = LinkedList(listOf("alpha", "beta", "gamma"))
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
 
             val context =
                 SlackNoticeContext(
                     users = users,
                     commands = commands,
                     commandBasicInfo = testCommandBasicInfo,
-                    slackEventBuilder = eventBuilder,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand is called") {
@@ -110,15 +91,14 @@ class SlackNoticeContextTest :
         given("SlackNoticeContext with empty users and commands") {
             val users = LinkedList<String>()
             val commands = LinkedList<String>()
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
 
             val context =
                 SlackNoticeContext(
                     users = users,
                     commands = commands,
                     commandBasicInfo = testCommandBasicInfo,
-                    slackEventBuilder = eventBuilder,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand is called with empty inputs") {
@@ -128,10 +108,12 @@ class SlackNoticeContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add event to the queue") {
-                    val event = eventQueue.poll()
-                    event shouldNotBe null
-                    eventQueue.flushQueue()
+                then("should add Notice intent with empty targets") {
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.Notice>()
+                    val noticeIntent = intents.first() as CommandIntent.Notice
+                    noticeIntent.targetUserIds shouldBe emptyList()
                 }
             }
         }

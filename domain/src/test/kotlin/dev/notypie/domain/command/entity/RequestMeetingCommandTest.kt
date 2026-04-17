@@ -6,22 +6,17 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
-import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.exceptions.SubCommandParseException
-import dev.notypie.domain.command.mockEventBuilder
 import dev.notypie.domain.history.entity.Status
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.mockk
 import java.util.UUID
 
 class RequestMeetingCommandTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
-        val eventPublisher = mockk<EventPublisher>(relaxed = true)
 
         fun createMeetingCommandData(subCommands: List<String> = emptyList()) =
             SlackCommandData(
@@ -45,8 +40,6 @@ class RequestMeetingCommandTest :
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     )
 
                 val definition = command.findSubCommandDefinition()
@@ -62,8 +55,6 @@ class RequestMeetingCommandTest :
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     )
 
                 val definition = command.findSubCommandDefinition()
@@ -79,8 +70,6 @@ class RequestMeetingCommandTest :
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
                     )
 
                 then("should throw SubCommandParseException") {
@@ -118,8 +107,6 @@ class RequestMeetingCommandTest :
                 RequestMeetingCommand(
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
                 )
 
             `when`("handleEvent") {

@@ -1,7 +1,8 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.MessageDispatcher
-import dev.notypie.domain.command.SlackEventBuilder
+import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.impl.command.*
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -46,11 +47,27 @@ class SlackRequestBuilderConfiguration(
     )
 
     @Bean
-    @ConditionalOnMissingBean(SlackEventBuilder::class)
-    fun slackEventBuilder(slackTemplateBuilder: SlackTemplateBuilder): SlackEventBuilder =
-        SlackApiEventConstructor(botToken = appConfig.api.token, templateBuilder = slackTemplateBuilder)
-
-    @Bean
     @ConditionalOnMissingBean(InteractionPayloadParser::class)
     fun interactionRequestParser(): InteractionPayloadParser = SlackInteractionRequestParser()
+
+    @Bean
+    @ConditionalOnMissingBean(SlackApiEventConstructor::class)
+    fun slackApiEventConstructor(slackTemplateBuilder: SlackTemplateBuilder): SlackApiEventConstructor =
+        SlackApiEventConstructor(
+            botToken = appConfig.api.token,
+            templateBuilder = slackTemplateBuilder,
+        )
+
+    @Bean
+    @ConditionalOnMissingBean(SlackIntentResolver::class)
+    fun slackIntentResolver(slackApiEventConstructor: SlackApiEventConstructor): SlackIntentResolver =
+        SlackIntentResolver(slackEventBuilder = slackApiEventConstructor)
+
+    @Bean
+    @ConditionalOnMissingBean(CommandExecutor::class)
+    fun commandExecutor(slackIntentResolver: SlackIntentResolver, eventPublisher: EventPublisher): CommandExecutor =
+        CommandExecutor(
+            intentResolver = slackIntentResolver,
+            eventPublisher = eventPublisher,
+        )
 }

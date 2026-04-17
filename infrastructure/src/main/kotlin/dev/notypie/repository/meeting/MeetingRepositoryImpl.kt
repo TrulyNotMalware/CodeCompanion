@@ -7,6 +7,7 @@ import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
 import jakarta.transaction.Transactional
+import java.time.LocalDateTime
 import java.util.UUID
 
 open class MeetingRepositoryImpl(
@@ -28,6 +29,16 @@ open class MeetingRepositoryImpl(
     override fun getAllMeetingByUserId(userId: String): List<MeetingDto> =
         jpaMeetingRepository
             .findAllMeetingByUserId(userId = userId)
+            .map { it.toMeetingDto() }
+            .toList()
+
+    override fun getMeetingsByUserIdInRange(
+        userId: String,
+        startAt: LocalDateTime,
+        endAt: LocalDateTime,
+    ): List<MeetingDto> =
+        jpaMeetingRepository
+            .findMeetingsByUserIdAndDateRange(userId = userId, startAt = startAt, endAt = endAt)
             .map { it.toMeetingDto() }
             .toList()
 
