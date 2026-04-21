@@ -41,20 +41,23 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         // Ephemeral contents does not include message sections.
         val currentAction = parseCurrentAction(blockActionPayload.actions)
         val botId = if (container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
-        val messageTokens =
-            if (container.isEphemeral) {
-                if (currentAction.type.isPrimary) {
-                    currentAction.selectedValue.split(",")
-                } else {
-                    listOf(CommandDetailType.NOTHING.name, CommandDetailType.NOTHING.name)
-                }
-            } else {
-                blockActionPayload.message.text.split(",")
+        val rawEmbeddedText: String =
+            when {
+                container.isEphemeral && currentAction.type.isPrimary -> currentAction.selectedValue
+                container.isEphemeral -> ""
+                else -> blockActionPayload.message.text
             }
-        val idempotencyKey = messageTokens[0].trim()
-        val type = messageTokens[1].trim()
+        val tokens = rawEmbeddedText.split(",").map { it.trim() }
+        val idempotencyKey = tokens.getOrNull(0)?.takeIf { it.isNotBlank() } ?: ""
+        val type =
+            tokens
+                .getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { CommandDetailType.valueOf(it) }.getOrDefault(CommandDetailType.NOTHING) }
+                ?: CommandDetailType.NOTHING
+        val routingExtras = if (tokens.size > 2) tokens.subList(2, tokens.size) else emptyList()
         return InteractionPayload(
-            type = CommandDetailType.valueOf(type),
+            type = type,
             apiAppId = blockActionPayload.apiAppId,
             channel = channel,
             container = container,
@@ -68,6 +71,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             currentAction = currentAction,
             botId = botId,
             idempotencyKey = idempotencyKey,
+            routingExtras = routingExtras,
         )
     }
 

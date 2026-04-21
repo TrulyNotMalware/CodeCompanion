@@ -2,6 +2,7 @@ package dev.notypie.templates
 
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import java.util.UUID
@@ -31,7 +32,7 @@ interface SlackTemplateBuilder {
     ): LayoutBlocks
 
     // Meets
-    fun meetingListFormTemplate(): LayoutBlocks
+    fun meetingListFormTemplate(meetings: List<MeetingDto>): LayoutBlocks
 
     fun requestMeetingFormTemplate(approvalContents: ApprovalContents): LayoutBlocks
 

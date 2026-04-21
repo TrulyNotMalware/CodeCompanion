@@ -12,6 +12,7 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.command.intent.CommandIntent
@@ -48,13 +49,7 @@ internal class RequestMeetingContext(
 
     override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
         when (subCommand.subCommandDefinition) {
-            MeetingSubCommandDefinition.LIST -> {
-                addIntent(
-                    CommandIntent.MeetingListRequest(
-                        publisherId = commandBasicInfo.publisherId,
-                    ),
-                )
-            }
+            MeetingSubCommandDefinition.LIST -> return runListSubCommand(commandDetailType = commandDetailType)
 
             else -> {
                 addIntent(CommandIntent.MeetingForm())
@@ -64,6 +59,52 @@ internal class RequestMeetingContext(
             basicInfo = commandBasicInfo,
             commandType = commandType,
             commandDetailType = commandDetailType,
+        )
+    }
+
+    private fun runListSubCommand(commandDetailType: CommandDetailType): CommandOutput {
+        val nonBlankOptions = subCommand.options.filter { option -> option.isNotBlank() }
+        if (nonBlankOptions.size > 1) {
+            return listArgumentError(
+                commandDetailType = commandDetailType,
+                message = "Too many arguments. Usage: /meetup list [${MeetingListRange.usageTokens()}]",
+            )
+        }
+        val token = nonBlankOptions.firstOrNull().orEmpty()
+        val range =
+            when {
+                token.isBlank() -> MeetingListRange.DEFAULT
+                else ->
+                    MeetingListRange.parseOrNull(token = token)
+                        ?: return listArgumentError(
+                            commandDetailType = commandDetailType,
+                            message = "Unknown range '$token'. Usage: /meetup list [${MeetingListRange.usageTokens()}]",
+                        )
+            }
+        val (startAt, endAt) = range.dateRange(now = LocalDateTime.now())
+        addIntent(
+            CommandIntent.MeetingListRequest(
+                publisherId = commandBasicInfo.publisherId,
+                startDate = startAt,
+                endDate = endAt,
+            ),
+        )
+        return CommandOutput.success(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+        )
+    }
+
+    private fun listArgumentError(commandDetailType: CommandDetailType, message: String): CommandOutput {
+        // Leave targetUserId null so the ephemeral posts into the command's channel and is
+        // visible only to publisherId — chat.postEphemeral requires a channel ID, not a user ID.
+        addIntent(CommandIntent.EphemeralResponse(message = message))
+        return CommandOutput.fail(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+            reason = message,
         )
     }
 

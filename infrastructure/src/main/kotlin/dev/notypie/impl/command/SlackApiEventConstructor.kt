@@ -207,14 +207,7 @@ class SlackApiEventConstructor(
         commandType: CommandType,
         commandDetailType: CommandDetailType,
     ): SendSlackMessageEvent {
-        val body = renderMeetingListBody(myMeetings = myMeetings)
-        val layout =
-            templateBuilder.simpleTextResponseTemplate(
-                headLineText = "My Meetings",
-                body = body,
-                isMarkDown = true,
-            )
-
+        val layout = templateBuilder.meetingListFormTemplate(meetings = myMeetings)
         return buildEphemeralMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
@@ -222,15 +215,6 @@ class SlackApiEventConstructor(
             layout = layout,
             replaceOriginal = false,
         )
-    }
-
-    private fun renderMeetingListBody(myMeetings: List<MeetingDto>): String {
-        if (myMeetings.isEmpty()) return "_No upcoming meetings found._"
-        return myMeetings.joinToString(separator = "\n") { meeting ->
-            val endSuffix = meeting.endAt?.let { " ~ $it" }.orEmpty()
-            val cancelledMark = if (meeting.isCanceled) " *[CANCELED]*" else ""
-            "• *${meeting.title}* — ${meeting.startAt}$endSuffix$cancelledMark"
-        }
     }
 
     fun replaceOriginalText(

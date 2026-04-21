@@ -23,6 +23,14 @@ data class InteractionPayload(
     val responseUrl: String,
     val states: List<States>,
     val currentAction: States,
+    /**
+     * Extra routing tokens decoded from the embedded message-text payload after
+     * `idempotencyKey` and `commandDetailType`. Non-null: empty list means no extra
+     * tokens were present (standard 2-token interaction). Feature contexts that
+     * need extra routing context (e.g. a meetingId for participant notices) read
+     * the first element of this list and parse it into their own typed value.
+     */
+    val routingExtras: List<String> = emptyList(),
 )
 
 fun InteractionPayload.isCompleted(): Boolean =

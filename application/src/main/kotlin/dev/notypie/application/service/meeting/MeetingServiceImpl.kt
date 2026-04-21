@@ -71,25 +71,33 @@ class MeetingServiceImpl(
     @EventListener
     fun getMeetingListEvent(event: GetMeetingListEvent) {
         val payload = event.payload
-        val meetings =
+        val slackEvent =
             runCatching {
                 meetingRepository.getMeetingsByUserIdInRange(
                     userId = payload.publisherId,
                     startAt = payload.startDate,
                     endAt = payload.endDate,
                 )
-            }.getOrElse { exception ->
-                log.error(exception) {
-                    "Failed to fetch meeting list for publisherId=${payload.publisherId} idempotencyKey=${event.idempotencyKey}"
-                }
-                return
-            }
-        val slackEvent =
-            slackEventBuilder.getMeetingListFormRequest(
-                myMeetings = meetings,
-                commandBasicInfo = payload.responseBasicInfo,
-                commandType = CommandType.PIPELINE,
-                commandDetailType = CommandDetailType.GET_MEETING_LIST,
+            }.fold(
+                onSuccess = { meetings ->
+                    slackEventBuilder.getMeetingListFormRequest(
+                        myMeetings = meetings,
+                        commandBasicInfo = payload.responseBasicInfo,
+                        commandType = CommandType.PIPELINE,
+                        commandDetailType = CommandDetailType.GET_MEETING_LIST,
+                    )
+                },
+                onFailure = { exception ->
+                    log.error(exception) {
+                        "Failed to fetch meeting list for publisherId=${payload.publisherId} idempotencyKey=${event.idempotencyKey}"
+                    }
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = "Failed to fetch your meetings. Please try again later.",
+                        commandBasicInfo = payload.responseBasicInfo,
+                        commandType = CommandType.PIPELINE,
+                        commandDetailType = CommandDetailType.ERROR_RESPONSE,
+                    )
+                },
             )
         val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
         @Suppress("UNCHECKED_CAST")

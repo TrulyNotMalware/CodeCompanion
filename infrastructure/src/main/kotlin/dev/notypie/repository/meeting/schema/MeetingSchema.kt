@@ -16,6 +16,8 @@ class MeetingSchema(
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
     @field:Column(name = "id")
     val id: Long = 0,
+    @field:Column(name = "meeting_uid", unique = true, nullable = false, length = 36)
+    val meetingUid: UUID,
     @field:Column(name = "idempotency_key", unique = true, nullable = false)
     val idempotencyKey: UUID,
     @field:Column(name = "name", nullable = false)
@@ -51,6 +53,7 @@ class MeetingSchema(
 fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
     val meetingSchema =
         MeetingSchema(
+            meetingUid = meetingUid,
             idempotencyKey = idempotencyKey,
             startAt = startAt,
             endAt = endAt,
@@ -81,11 +84,13 @@ fun MeetingSchema.toDomainEntity() =
         title = name,
         members = participants.map { it.userId }.toSet(),
         reason = reason ?: "",
+        meetingUid = meetingUid,
     )
 
 fun MeetingSchema.toMeetingDto() =
     MeetingDto(
         meetingId = id,
+        meetingUid = meetingUid,
         idempotencyKey = idempotencyKey,
         startAt = startAt,
         endAt = endAt,

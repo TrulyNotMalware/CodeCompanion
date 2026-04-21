@@ -1,5 +1,9 @@
 package dev.notypie.templates
 
+import com.slack.api.model.block.DividerBlock
+import com.slack.api.model.block.HeaderBlock
+import com.slack.api.model.block.SectionBlock
+import com.slack.api.model.block.composition.MarkdownTextObject
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
@@ -8,6 +12,7 @@ import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.Profile
 import dev.notypie.impl.command.dto.SlackUserProfileDto
@@ -15,6 +20,8 @@ import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import java.time.LocalDateTime
@@ -254,6 +261,144 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, and text blocks") {
                     result.template.size shouldBe 3
+                }
+            }
+        }
+
+        given("meetingListFormTemplate") {
+            `when`("called with an empty meeting list") {
+                val result = templateBuilder.meetingListFormTemplate(meetings = emptyList())
+
+                then("template has header, divider, and empty-state section (3 blocks)") {
+                    result.template.size shouldBe 3
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    val emptySection = result.template[2].shouldBeInstanceOf<SectionBlock>()
+                    val mrkdwn = emptySection.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "No upcoming meetings found"
+                }
+
+                then("interactionStates is empty") {
+                    result.interactionStates shouldBe emptyList()
+                }
+            }
+
+            `when`("called with a single non-canceled meeting") {
+                val meetingUid = UUID.fromString("11111111-2222-3333-4444-555555555555")
+                val meeting =
+                    createMeetingDto(
+                        meetingUid = meetingUid,
+                        title = "Project sync",
+                        startAt = LocalDateTime.of(2026, 4, 20, 10, 0),
+                        endAt = LocalDateTime.of(2026, 4, 20, 11, 0),
+                        isCanceled = false,
+                    )
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+
+                then("template has header + divider + single meeting section (3 blocks, no trailing divider)") {
+                    result.template.size shouldBe 3
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    result.template[2].shouldBeInstanceOf<SectionBlock>()
+                }
+
+                then("meeting section renders title, formatted times, and meetingUid in backticks") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "*Project sync*"
+                    mrkdwn.text shouldContain "2026-04-20 10:00"
+                    mrkdwn.text shouldContain "~ 2026-04-20 11:00"
+                    mrkdwn.text shouldContain "`$meetingUid`"
+                }
+
+                then("no CANCELED marker appears") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text as MarkdownTextObject
+                    (mrkdwn.text.contains("CANCELED")) shouldBe false
+                }
+            }
+
+            `when`("called with a canceled meeting") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Standup",
+                        isCanceled = true,
+                    )
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+
+                then("meeting section includes [CANCELED] marker") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "*[CANCELED]*"
+                }
+            }
+
+            `when`("called with multiple meetings") {
+                val meetings =
+                    listOf(
+                        createMeetingDto(title = "First"),
+                        createMeetingDto(title = "Second"),
+                        createMeetingDto(title = "Third"),
+                    )
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = meetings)
+
+                then("template has header + divider + (section+divider)*2 + section (7 blocks)") {
+                    // 1 header + 1 top divider + 3 sections + 2 inter-meeting dividers = 7
+                    result.template.size shouldBe 7
+                }
+
+                then("dividers separate consecutive meetings but not the last") {
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    result.template[2].shouldBeInstanceOf<SectionBlock>()
+                    result.template[3].shouldBeInstanceOf<DividerBlock>()
+                    result.template[4].shouldBeInstanceOf<SectionBlock>()
+                    result.template[5].shouldBeInstanceOf<DividerBlock>()
+                    result.template[6].shouldBeInstanceOf<SectionBlock>()
+                }
+            }
+
+            `when`("called with more meetings than MAX_MEETINGS_PER_LIST (24)") {
+                val overflowSize = ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 5
+                val meetings = (1..overflowSize).map { createMeetingDto(title = "M$it") }
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = meetings)
+
+                then("renders only the first 24 meetings plus a truncation notice") {
+                    // header(1) + top divider(1) + 24 meeting sections + 23 inter-dividers
+                    // + overflow-notice section(1) = 50 blocks exactly. No divider before notice.
+                    val sectionCount = result.template.count { it is SectionBlock }
+                    sectionCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 1 // meetings + notice
+                    val lastBlock = result.template.last()
+                    val lastSection = lastBlock.shouldBeInstanceOf<SectionBlock>()
+                    val mrkdwn = lastSection.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Showing the first ${ModalTemplateBuilder.MAX_MEETINGS_PER_LIST}"
+                    mrkdwn.text shouldContain "5 more omitted"
+                }
+
+                then("total block count must not exceed Slack's 50-block message limit") {
+                    (result.template.size <= 50) shouldBe true
+                }
+            }
+
+            `when`("meeting has no endAt") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Half-open",
+                        startAt = LocalDateTime.of(2026, 4, 20, 10, 0),
+                        endAt = null,
+                    )
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+
+                then("section omits the end-time suffix") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text as MarkdownTextObject
+                    mrkdwn.text shouldContain "2026-04-20 10:00"
+                    (mrkdwn.text.contains("~")) shouldBe false
                 }
             }
         }

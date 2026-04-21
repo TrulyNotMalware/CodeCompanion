@@ -10,6 +10,7 @@ import java.util.UUID
 
 fun createMeetingSchema(
     id: Long = 0L,
+    meetingUid: UUID = UUID.randomUUID(),
     idempotencyKey: UUID = UUID.randomUUID(),
     name: String = "test meeting schema",
     startAt: LocalDateTime = LocalDateTime.now(),
@@ -20,6 +21,7 @@ fun createMeetingSchema(
     participants: MutableList<ParticipantsSchema> = mutableListOf(),
 ) = MeetingSchema(
     id = id,
+    meetingUid = meetingUid,
     idempotencyKey = idempotencyKey,
     name = name,
     startAt = startAt,

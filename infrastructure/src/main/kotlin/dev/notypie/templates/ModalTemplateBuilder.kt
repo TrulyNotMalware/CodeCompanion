@@ -4,6 +4,7 @@ import com.slack.api.model.block.LayoutBlock
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.RestClientRequester.Companion.SLACK_API_BASE_URL
 import dev.notypie.impl.command.RestRequester
@@ -12,6 +13,7 @@ import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
@@ -28,6 +30,20 @@ class ModalTemplateBuilder(
 ) : SlackTemplateBuilder {
     companion object {
         const val DEFAULT_PLACEHOLDER_TEXT = "SELECT"
+        private val MEETING_LIST_TIMESTAMP_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+        /**
+         * Slack Block Kit caps each message at 50 blocks. Each meeting renders as:
+         *   header(1) + top-divider(1) + N sections + (N-1) inter-dividers = 2N + 1
+         * Plus, when overflow occurs, we add a single extra truncation-notice section
+         * (no preceding divider — the italic notice is already visually distinct),
+         * bringing the total to 2N + 2.
+         * For 50-block safety we must keep 2N + 2 <= 50, i.e. N <= 24.
+         * We choose 24 and, in the overflow branch, emit the notice without a leading
+         * divider so the worst-case total is exactly 50 blocks.
+         */
+        internal const val MAX_MEETINGS_PER_LIST: Int = 24
     }
 
     private fun createLayouts(vararg blocks: LayoutBlock) =
@@ -195,8 +211,59 @@ class ModalTemplateBuilder(
         )
     }
 
-    override fun meetingListFormTemplate(): LayoutBlocks {
-        TODO()
+    override fun meetingListFormTemplate(meetings: List<MeetingDto>): LayoutBlocks {
+        val blocks =
+            mutableListOf(
+                modalBlockBuilder.headerBlock(text = "My Meetings"),
+                modalBlockBuilder.dividerBlock(),
+            )
+        if (meetings.isEmpty()) {
+            blocks.add(
+                modalBlockBuilder.simpleText(
+                    text = "_No upcoming meetings found._",
+                    isMarkDown = true,
+                ),
+            )
+            return toLayoutBlocks(*blocks.toTypedArray())
+        }
+        val displayed = meetings.take(n = MAX_MEETINGS_PER_LIST)
+        displayed.forEachIndexed { index, meeting ->
+            blocks.add(
+                modalBlockBuilder.simpleText(
+                    text = renderMeetingSection(meeting = meeting),
+                    isMarkDown = true,
+                ),
+            )
+            if (index != displayed.lastIndex) {
+                blocks.add(modalBlockBuilder.dividerBlock())
+            }
+        }
+        if (meetings.size > MAX_MEETINGS_PER_LIST) {
+            val hidden = meetings.size - MAX_MEETINGS_PER_LIST
+            val notice =
+                "_Showing the first $MAX_MEETINGS_PER_LIST of ${meetings.size} meetings. " +
+                    "$hidden more omitted — narrow the range to see them._"
+            // No preceding divider: the italic notice is visually distinct, and skipping
+            // the divider keeps worst-case total at 2*MAX+2 = 50 blocks (Slack's cap).
+            blocks.add(modalBlockBuilder.simpleText(text = notice, isMarkDown = true))
+        }
+        return toLayoutBlocks(*blocks.toTypedArray())
+    }
+
+    private fun renderMeetingSection(meeting: MeetingDto): String {
+        val titleLine =
+            if (meeting.isCanceled) {
+                "*${meeting.title}* *[CANCELED]*"
+            } else {
+                "*${meeting.title}*"
+            }
+        val timeLine =
+            buildString {
+                append(meeting.startAt.format(MEETING_LIST_TIMESTAMP_FORMAT))
+                meeting.endAt?.let { append(" ~ ${it.format(MEETING_LIST_TIMESTAMP_FORMAT)}") }
+            }
+        val uidLine = "`${meeting.meetingUid}`"
+        return "$titleLine\n$timeLine\n$uidLine"
     }
 
     override fun requestMeetingFormTemplate(approvalContents: ApprovalContents): LayoutBlocks {

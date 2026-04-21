@@ -1,6 +1,8 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingSchema
+import dev.notypie.schema.createParticipants
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -9,6 +11,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import java.time.LocalDateTime
+import java.util.UUID
 
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
@@ -98,6 +102,122 @@ class JpaMeetingRepositoryTest
 
                 `when`("user has no meetings") {
                     val result = repository.findAllMeetingByUserId(userId = "U_NONEXISTENT_USER")
+
+                    then("should return empty list") {
+                        result shouldBe emptyList()
+                    }
+                }
+            }
+
+            given("meetingUid persistence") {
+                `when`("meeting is saved with an explicit meetingUid") {
+                    val explicitUid = UUID.randomUUID()
+                    val meetingSchema =
+                        createMeetingSchema(
+                            meetingUid = explicitUid,
+                            publisherId = "U_UID_PUB",
+                        )
+                    meetingSchema.participants.add(
+                        createParticipants(meeting = meetingSchema, userId = "U_UID_PART"),
+                    )
+                    val saved = repository.save(meetingSchema)
+
+                    then("meetingUid should round-trip through persistence") {
+                        saved.meetingUid shouldBe explicitUid
+                        val found = repository.findMeetingWithParticipants(meetingId = saved.id)
+                        found shouldNotBe null
+                        found!!.meetingUid shouldBe explicitUid
+                    }
+                }
+            }
+
+            given("findMeetingsByUserIdAndDateRange") {
+                val owner = "U_RANGE_OWNER"
+                val outsider = "U_RANGE_OUTSIDER"
+                val participant = "U_RANGE_PART"
+                val now = LocalDateTime.now()
+
+                fun meetingWithParticipant(
+                    publisherId: String,
+                    participantUserId: String,
+                    name: String,
+                    startAt: LocalDateTime,
+                ): MeetingSchema {
+                    val meeting =
+                        createMeetingSchema(
+                            publisherId = publisherId,
+                            name = name,
+                            startAt = startAt,
+                        )
+                    meeting.participants.add(
+                        createParticipants(meeting = meeting, userId = participantUserId),
+                    )
+                    return meeting
+                }
+
+                // Meeting 1: starts inside [now, now+7d) — owner is publisher
+                repository.save(
+                    meetingWithParticipant(
+                        publisherId = owner,
+                        participantUserId = participant,
+                        name = "inside",
+                        startAt = now.plusDays(1L),
+                    ),
+                )
+                // Meeting 2: starts after the window — should be excluded
+                repository.save(
+                    meetingWithParticipant(
+                        publisherId = owner,
+                        participantUserId = participant,
+                        name = "outsideLater",
+                        startAt = now.plusDays(10L),
+                    ),
+                )
+                // Meeting 3: starts inside window, owner is participant only (not publisher)
+                repository.save(
+                    meetingWithParticipant(
+                        publisherId = outsider,
+                        participantUserId = owner,
+                        name = "participantMatch",
+                        startAt = now.plusDays(2L),
+                    ),
+                )
+                // Meeting 4: starts inside window but owner is unrelated — should be excluded
+                repository.save(
+                    meetingWithParticipant(
+                        publisherId = outsider,
+                        participantUserId = "U_OTHER",
+                        name = "unrelated",
+                        startAt = now.plusDays(3L),
+                    ),
+                )
+
+                `when`("querying [now, now+7d)") {
+                    val result =
+                        repository.findMeetingsByUserIdAndDateRange(
+                            userId = owner,
+                            startAt = now,
+                            endAt = now.plusDays(7L),
+                        )
+
+                    then("should return only meetings in the window where user is publisher or participant") {
+                        val names = result.map { it.name }.toSet()
+                        names shouldBe setOf("inside", "participantMatch")
+                    }
+
+                    then("should be ordered by startAt ascending") {
+                        val startTimes = result.map { it.startAt }
+                        startTimes shouldBe startTimes.sorted()
+                    }
+                }
+
+                `when`("querying a narrow window that excludes all matching meetings") {
+                    val result =
+                        repository.findMeetingsByUserIdAndDateRange(
+                            userId = owner,
+                            startAt = now.plusDays(100L),
+                            endAt = now.plusDays(110L),
+                        )
 
                     then("should return empty list") {
                         result shouldBe emptyList()

@@ -355,10 +355,42 @@ class SlackInteractionRequestParserTest :
                         messageText = "$idempotencyKey, INVALID_TYPE",
                     )
 
-                then("should throw IllegalArgumentException") {
-                    shouldThrow<IllegalArgumentException> {
-                        parser.parseStringPayload(payload = payload)
-                    }
+                then("should fall back to NOTHING instead of throwing (graceful degrade)") {
+                    val result = parser.parseStringPayload(payload = payload)
+                    result.type shouldBe CommandDetailType.NOTHING
+                    result.idempotencyKey shouldBe idempotencyKey.toString()
+                    result.routingExtras shouldBe emptyList()
+                }
+            }
+
+            `when`("message text contains routing extras (3rd token meetingId)") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = "$idempotencyKey,${CommandDetailType.SIMPLE_TEXT},42",
+                    )
+
+                then("routingExtras should expose the meetingId token") {
+                    val result = parser.parseStringPayload(payload = payload)
+                    result.type shouldBe CommandDetailType.SIMPLE_TEXT
+                    result.routingExtras shouldBe listOf("42")
+                }
+            }
+
+            `when`("message text is only an idempotencyKey (1 token)") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = idempotencyKey.toString(),
+                    )
+
+                then("type falls back to NOTHING, no throw") {
+                    val result = parser.parseStringPayload(payload = payload)
+                    result.idempotencyKey shouldBe idempotencyKey.toString()
+                    result.type shouldBe CommandDetailType.NOTHING
+                    result.routingExtras shouldBe emptyList()
                 }
             }
         }

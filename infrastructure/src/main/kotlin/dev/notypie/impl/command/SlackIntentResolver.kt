@@ -18,7 +18,7 @@ class SlackIntentResolver(
      * Resolves each intent individually using [CommandIntent.commandDetailType] so that a
      * heterogeneous batch produces events with correctly-typed routing metadata.
      * [commandType] remains per-command because it identifies the originating command's
-     * category (simple vs pipeline), not per-event behaviour.
+     * category (simple vs pipeline), not per-event behavior.
      */
     fun resolveAll(
         intents: List<CommandIntent>,

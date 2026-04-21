@@ -4,7 +4,9 @@ import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import java.time.LocalDateTime
+import java.util.UUID
 
 class MeetingTest :
     BehaviorSpec({
@@ -25,6 +27,7 @@ class MeetingTest :
 
                 then("host should be the publisher") {
                     meeting.host.userId shouldBe "U001"
+                    meeting.host.isHost shouldBe true
                 }
 
                 then("memberSnapshot should contain all members") {
@@ -37,6 +40,53 @@ class MeetingTest :
 
                 then("isCanceled should be false by default") {
                     meeting.isCanceled shouldBe false
+                }
+
+                then("meetingUid should be a non-null UUID generated at construction") {
+                    meeting.meetingUid shouldNotBe null
+                }
+            }
+
+            `when`("two meetings are created without explicit meetingUid") {
+                val first =
+                    Meeting(
+                        title = "First",
+                        publisher = "U001",
+                        members = setOf("U002"),
+                        reason = "reason",
+                        startAt = futureStart,
+                        endAt = futureEnd,
+                    )
+                val second =
+                    Meeting(
+                        title = "Second",
+                        publisher = "U001",
+                        members = setOf("U002"),
+                        reason = "reason",
+                        startAt = futureStart,
+                        endAt = futureEnd,
+                    )
+
+                then("each meeting gets a distinct meetingUid") {
+                    first.meetingUid shouldNotBe second.meetingUid
+                }
+            }
+
+            `when`("meetingUid is supplied explicitly") {
+                val explicitUid = UUID.fromString("11111111-1111-1111-1111-111111111111")
+                val meeting =
+                    Meeting(
+                        title = "Explicit uid",
+                        publisher = "U001",
+                        members = setOf("U002"),
+                        reason = "reason",
+                        startAt = futureStart,
+                        endAt = futureEnd,
+                        meetingUid = explicitUid,
+                    )
+
+                then("meetingUid reflects the supplied value") {
+                    meeting.meetingUid shouldBe explicitUid
                 }
             }
 

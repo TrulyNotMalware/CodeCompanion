@@ -9,10 +9,14 @@ import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.exceptions.SubCommandParseException
+import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.history.entity.Status
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 class RequestMeetingCommandTest :
@@ -76,6 +80,49 @@ class RequestMeetingCommandTest :
                     shouldThrow<SubCommandParseException> {
                         command.findSubCommandDefinition()
                     }
+                }
+            }
+        }
+
+        given("RequestMeetingCommand handleEvent with LIST sub command and range option") {
+            `when`("subcommand text is 'list today'") {
+                val commandData = createMeetingCommandData(subCommands = listOf("list", "today"))
+                val command =
+                    RequestMeetingCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = commandData,
+                    )
+                val before = LocalDateTime.now()
+                val result = command.handleEvent()
+                val intents = command.drainIntents()
+
+                then("should succeed and emit MeetingListRequest intent scoped to TODAY range") {
+                    result.ok shouldBe true
+                    result.status shouldBe Status.SUCCESS
+                    intents.size shouldBe 1
+                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
+                    intent.publisherId shouldBe "U_TEST"
+                    // TODAY range spans exactly one day starting at start-of-day
+                    ChronoUnit.DAYS.between(intent.startDate, intent.endDate) shouldBe 1L
+                    intent.startDate shouldBe before.toLocalDate().atStartOfDay()
+                }
+            }
+
+            `when`("subcommand text is 'list bogus'") {
+                val commandData = createMeetingCommandData(subCommands = listOf("list", "bogus"))
+                val command =
+                    RequestMeetingCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = commandData,
+                    )
+                val result = command.handleEvent()
+                val intents = command.drainIntents()
+
+                then("should fail and emit EphemeralResponse with Unknown range message") {
+                    result.ok shouldBe false
+                    intents.size shouldBe 1
+                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
+                    intent.message.contains("Unknown range 'bogus'") shouldBe true
                 }
             }
         }

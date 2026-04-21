@@ -65,7 +65,7 @@ enum class MeetingSubCommandDefinition(
     ),
     LIST(
         subCommandIdentifier = "list",
-        usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]",
+        usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | tomorrow | week | month]",
     ),
 }
 

@@ -8,6 +8,7 @@ import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.selectedApplyButtonStates
@@ -17,10 +18,13 @@ import dev.notypie.domain.command.selectedPlainTextStates
 import dev.notypie.domain.command.selectedTimePickerStates
 import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 const val VALID_TEST_TITLE = "Test Meeting Title"
 const val VALID_TEST_REASON = "Test Reason"
@@ -54,7 +58,7 @@ class MeetingContextTest :
             }
         }
 
-        given("Meeting Context with LIST sub command") {
+        given("Meeting Context with LIST sub command and no options") {
             val intentQueue = createIntentQueue()
             val listSubCommandContext =
                 RequestMeetingContext(
@@ -63,10 +67,12 @@ class MeetingContextTest :
                     intents = intentQueue,
                 )
 
-            `when`("run command with LIST sub command") {
+            `when`("run command with empty options") {
+                val nowBefore = LocalDateTime.now()
                 val result = listSubCommandContext.runCommand()
+                val nowAfter = LocalDateTime.now()
 
-                then("should return success result and create MeetingListRequest intent") {
+                then("should emit MeetingListRequest intent with DEFAULT (WEEK) range") {
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
@@ -74,9 +80,133 @@ class MeetingContextTest :
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
-                    val listIntent = intents.first() as CommandIntent.MeetingListRequest
+                    val listIntent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
                     listIntent.publisherId shouldBe testCommandBasicInfo.publisherId
+                    // DEFAULT is WEEK → endDate ≈ startDate + 7d (within 1-second window around "now")
+                    ChronoUnit.SECONDS
+                        .between(nowBefore, listIntent.startDate)
+                        .shouldBeLessThanOrEqual(ChronoUnit.SECONDS.between(nowBefore, nowAfter) + 1)
+                    ChronoUnit.DAYS
+                        .between(listIntent.startDate, listIntent.endDate) shouldBe 7L
+                }
+            }
+        }
+
+        given("Meeting Context with LIST sub command and valid range tokens") {
+            listOf(
+                MeetingListRange.TODAY.token to MeetingListRange.TODAY,
+                MeetingListRange.TOMORROW.token to MeetingListRange.TOMORROW,
+                MeetingListRange.WEEK.token to MeetingListRange.WEEK,
+                MeetingListRange.MONTH.token to MeetingListRange.MONTH,
+            ).forEach { (tokenValue, expectedRange) ->
+                `when`("run command with options=[\"$tokenValue\"]") {
+                    val intentQueue = createIntentQueue()
+                    val context =
+                        RequestMeetingContext(
+                            commandBasicInfo = testCommandBasicInfo,
+                            subCommand =
+                                SubCommand(
+                                    subCommandDefinition = MeetingSubCommandDefinition.LIST,
+                                    options = listOf(tokenValue),
+                                ),
+                            intents = intentQueue,
+                        )
+                    val before = LocalDateTime.now()
+                    val result = context.runCommand()
+                    val after = LocalDateTime.now()
+
+                    then("should emit MeetingListRequest with $expectedRange range") {
+                        result.ok shouldBe true
+                        val intents = intentQueue.snapshot()
+                        intents.size shouldBe 1
+                        val intent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
+                        val (expectedStart, expectedEnd) = expectedRange.dateRange(now = before)
+                        val (expectedStartAfter, expectedEndAfter) = expectedRange.dateRange(now = after)
+                        // startDate/endDate must fall between dateRange(before) and dateRange(after)
+                        (intent.startDate in expectedStart..expectedStartAfter) shouldBe true
+                        (intent.endDate in expectedEnd..expectedEndAfter) shouldBe true
+                    }
+                }
+            }
+        }
+
+        given("Meeting Context with LIST sub command and blank option (e.g. double space)") {
+            val intentQueue = createIntentQueue()
+            val context =
+                RequestMeetingContext(
+                    commandBasicInfo = testCommandBasicInfo,
+                    subCommand =
+                        SubCommand(
+                            subCommandDefinition = MeetingSubCommandDefinition.LIST,
+                            options = listOf(""),
+                        ),
+                    intents = intentQueue,
+                )
+
+            `when`("run command is called") {
+                val result = context.runCommand()
+
+                then("should fall back to DEFAULT range (blank filtered out)") {
+                    result.ok shouldBe true
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
+                    ChronoUnit.DAYS.between(intent.startDate, intent.endDate) shouldBe 7L
+                }
+            }
+        }
+
+        given("Meeting Context with LIST sub command and unknown range token") {
+            val intentQueue = createIntentQueue()
+            val context =
+                RequestMeetingContext(
+                    commandBasicInfo = testCommandBasicInfo,
+                    subCommand =
+                        SubCommand(
+                            subCommandDefinition = MeetingSubCommandDefinition.LIST,
+                            options = listOf("yesterday"),
+                        ),
+                    intents = intentQueue,
+                )
+
+            `when`("run command is called") {
+                val result = context.runCommand()
+
+                then("should fail and emit EphemeralResponse with usage hint") {
+                    result.ok shouldBe false
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
+                    intent.message.contains("Unknown range 'yesterday'") shouldBe true
+                    intent.message.contains("today | tomorrow | week | month") shouldBe true
+                    // targetUserId must stay null: chat.postEphemeral `channel` needs a channel ID
+                    intent.targetUserId shouldBe null
+                }
+            }
+        }
+
+        given("Meeting Context with LIST sub command and too many arguments") {
+            val intentQueue = createIntentQueue()
+            val context =
+                RequestMeetingContext(
+                    commandBasicInfo = testCommandBasicInfo,
+                    subCommand =
+                        SubCommand(
+                            subCommandDefinition = MeetingSubCommandDefinition.LIST,
+                            options = listOf("today", "extra"),
+                        ),
+                    intents = intentQueue,
+                )
+
+            `when`("run command is called") {
+                val result = context.runCommand()
+
+                then("should fail and emit EphemeralResponse for too many args") {
+                    result.ok shouldBe false
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
+                    intent.message.contains("Too many arguments") shouldBe true
                 }
             }
         }
