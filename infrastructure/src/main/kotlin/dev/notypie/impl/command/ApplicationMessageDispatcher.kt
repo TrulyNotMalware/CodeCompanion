@@ -24,7 +24,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.event.EventListener
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import java.time.Instant
 
@@ -106,9 +105,6 @@ class ApplicationMessageDispatcher(
                 }
             },
         )
-
-    @EventListener
-    fun listenSlackEvent(event: SlackEventPayload) = dispatch(event = event)
 
     private fun dispatchEphemeralContents(event: PostEventPayloadContents) =
         dispatchPostContents(

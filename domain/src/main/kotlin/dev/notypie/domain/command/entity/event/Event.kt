@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.event
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.LocalDateTime
 import java.util.UUID
@@ -59,3 +60,21 @@ data class SendSlackMessageEvent(
     override val timestamp: Long,
     override val type: CommandDetailType,
 ) : CommandEvent<SlackEventPayload>
+
+class UpdateMeetingAttendancePayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val meetingIdempotencyKey: UUID,
+    val participantUserId: String,
+    val isAttending: Boolean,
+    val absentReason: RejectReason,
+) : EventPayload
+
+data class UpdateMeetingAttendanceEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = UpdateMeetingAttendanceEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: UpdateMeetingAttendancePayload,
+    override val type: CommandDetailType,
+) : CommandEvent<UpdateMeetingAttendancePayload>

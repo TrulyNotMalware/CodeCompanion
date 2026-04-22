@@ -1,11 +1,15 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
+import java.util.UUID
 
 @Repository
 interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
@@ -47,4 +51,22 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("startAt") startAt: LocalDateTime,
         @Param("endAt") endAt: LocalDateTime,
     ): List<MeetingSchema>
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE meeting_participants p
+        SET p.isAttending = :isAttending,
+            p.absentReason = :absentReason
+        WHERE p.userId = :userId
+          AND p.meeting.idempotencyKey = :meetingIdempotencyKey
+    """,
+    )
+    fun updateParticipantAttendance(
+        @Param("meetingIdempotencyKey") meetingIdempotencyKey: UUID,
+        @Param("userId") userId: String,
+        @Param("isAttending") isAttending: Boolean,
+        @Param("absentReason") absentReason: RejectReason,
+    ): Int
 }

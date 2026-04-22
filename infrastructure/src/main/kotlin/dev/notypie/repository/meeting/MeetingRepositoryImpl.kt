@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
@@ -44,4 +45,18 @@ open class MeetingRepositoryImpl(
 
     // FIXME direct select from participant table
     override fun getParticipants(meetingId: Long): List<String> = getMeeting(meetingId = meetingId).participantIds
+
+    @Transactional
+    override fun updateParticipantAttendance(
+        meetingIdempotencyKey: UUID,
+        userId: String,
+        isAttending: Boolean,
+        absentReason: RejectReason,
+    ): Int =
+        jpaMeetingRepository.updateParticipantAttendance(
+            meetingIdempotencyKey = meetingIdempotencyKey,
+            userId = userId,
+            isAttending = isAttending,
+            absentReason = absentReason,
+        )
 }

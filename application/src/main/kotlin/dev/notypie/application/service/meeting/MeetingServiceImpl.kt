@@ -12,6 +12,7 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.impl.command.SlackApiEventConstructor
@@ -66,6 +67,34 @@ class MeetingServiceImpl(
                 )
             },
         )
+    }
+
+    /**
+     * Persists a participant's Accept/Decline decision atomically with the enclosing
+     * `@Transactional` boundary of the interaction handler that produced this event.
+     *
+     * Throws if zero rows matched so the enclosing transaction rolls back instead of
+     * silently acknowledging a decision that was never recorded. Practical triggers:
+     * meeting deleted, participant removed, idempotencyKey corruption in button value.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
+    fun updateParticipantAttendance(event: UpdateMeetingAttendanceEvent) {
+        val payload = event.payload
+        val rowsUpdated =
+            retryService.execute(
+                action = {
+                    meetingRepository.updateParticipantAttendance(
+                        meetingIdempotencyKey = payload.meetingIdempotencyKey,
+                        userId = payload.participantUserId,
+                        isAttending = payload.isAttending,
+                        absentReason = payload.absentReason,
+                    )
+                },
+            )
+        check(rowsUpdated > 0) {
+            "No participant row matched meetingIdempotencyKey=${payload.meetingIdempotencyKey} " +
+                "userId=${payload.participantUserId}; refusing to acknowledge an unrecorded decision."
+        }
     }
 
     @EventListener

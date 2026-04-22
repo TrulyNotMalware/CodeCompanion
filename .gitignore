@@ -45,3 +45,5 @@ gradle.properties
 logs
 
 .DS_Store
+.omc
+.claude

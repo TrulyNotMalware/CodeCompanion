@@ -1,11 +1,13 @@
 package dev.notypie.domain.command.intent
 
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * Abstract input to the infrastructure resolver.
@@ -82,6 +84,20 @@ sealed class CommandIntent {
         val startDate: LocalDateTime = LocalDateTime.now(),
         val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
         override val commandDetailType: CommandDetailType = CommandDetailType.GET_MEETING_LIST,
+    ) : CommandIntent()
+
+    /**
+     * Participant's attendance decision from a meeting-notice DM. Emitted by
+     * [dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext] when
+     * the participant clicks Accept or Decline; persisted by the application-layer
+     * listener that binds to the caller's `@Transactional` boundary via BEFORE_COMMIT.
+     */
+    data class MeetingAttendanceUpdate(
+        val meetingIdempotencyKey: UUID,
+        val participantUserId: String,
+        val isAttending: Boolean,
+        val absentReason: RejectReason,
+        override val commandDetailType: CommandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
     ) : CommandIntent()
 
     data class Notice(

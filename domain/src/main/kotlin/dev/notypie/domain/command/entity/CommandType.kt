@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
+import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
@@ -48,14 +49,21 @@ enum class CommandDetailType {
                 )
             }
 
-            MEETING_APPROVAL_NOTICE_FORM, REQUEST_MEETING_FORM,
-            -> {
+            REQUEST_MEETING_FORM -> {
                 RequestMeetingContext(
                     commandBasicInfo = commandBasicInfo,
                     subCommand =
                         SubCommand(
                             subCommandDefinition = MeetingSubCommandDefinition.NONE,
                         ),
+                    intents = intents,
+                )
+            }
+
+            MEETING_APPROVAL_NOTICE_FORM -> {
+                MeetingApprovalResponseContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
                     intents = intents,
                 )
             }

@@ -6,6 +6,8 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
+import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
 import dev.notypie.domain.command.intent.CommandIntent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -133,6 +135,20 @@ class SlackIntentResolver(
                             startDate = intent.startDate,
                             endDate = intent.endDate,
                             responseBasicInfo = basicInfo,
+                        ),
+                    type = intent.commandDetailType,
+                )
+            }
+
+            is CommandIntent.MeetingAttendanceUpdate -> {
+                UpdateMeetingAttendanceEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        UpdateMeetingAttendancePayload(
+                            meetingIdempotencyKey = intent.meetingIdempotencyKey,
+                            participantUserId = intent.participantUserId,
+                            isAttending = intent.isAttending,
+                            absentReason = intent.absentReason,
                         ),
                     type = intent.commandDetailType,
                 )

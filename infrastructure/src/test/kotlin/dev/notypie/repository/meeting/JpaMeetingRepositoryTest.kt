@@ -224,4 +224,57 @@ class JpaMeetingRepositoryTest
                     }
                 }
             }
+
+            given("updateParticipantAttendance") {
+                `when`("a matching participant exists") {
+                    val meetingKey = UUID.randomUUID()
+                    val participantUserId = "U_ATTENDANCE_PART"
+                    val meeting =
+                        createMeetingSchema(
+                            idempotencyKey = meetingKey,
+                            publisherId = "U_ATTENDANCE_PUB",
+                        )
+                    meeting.participants.add(
+                        createParticipants(meeting = meeting, userId = participantUserId),
+                    )
+                    repository.save(meeting)
+
+                    val rowsUpdated =
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = participantUserId,
+                            isAttending = false,
+                            absentReason = dev.notypie.domain.command.dto.interactions.RejectReason.OTHER,
+                        )
+
+                    then("should report 1 row updated") {
+                        rowsUpdated shouldBe 1
+                    }
+
+                    then("persisted row should reflect the new attendance flags") {
+                        val found =
+                            repository
+                                .findMeetingWithParticipants(meetingId = meeting.id)!!
+                                .participants
+                                .single { p -> p.userId == participantUserId }
+                        found.isAttending shouldBe false
+                        found.absentReason shouldBe
+                            dev.notypie.domain.command.dto.interactions.RejectReason.OTHER
+                    }
+                }
+
+                `when`("no participant matches (stale/unknown meeting or user)") {
+                    val rowsUpdated =
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = UUID.randomUUID(),
+                            userId = "U_DOES_NOT_EXIST",
+                            isAttending = false,
+                            absentReason = dev.notypie.domain.command.dto.interactions.RejectReason.OTHER,
+                        )
+
+                    then("should report 0 rows updated and not throw") {
+                        rowsUpdated shouldBe 0
+                    }
+                }
+            }
         })

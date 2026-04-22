@@ -47,6 +47,11 @@ class SlackRequestBuilderConfiguration(
     )
 
     @Bean
+    @ConditionalOnMissingBean(SlackEventAsyncDispatcher::class)
+    fun slackEventAsyncDispatcher(messageDispatcher: MessageDispatcher): SlackEventAsyncDispatcher =
+        SlackEventAsyncDispatcher(messageDispatcher = messageDispatcher)
+
+    @Bean
     @ConditionalOnMissingBean(InteractionPayloadParser::class)
     fun interactionRequestParser(): InteractionPayloadParser = SlackInteractionRequestParser()
 
