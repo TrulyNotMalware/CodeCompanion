@@ -201,19 +201,27 @@ class ModalBlockBuilder(
 
     fun selectDateTimeScheduleBlock(): InteractionLayoutBlock {
         val datePickerElement = modalElementBuilder.datePickerElement()
-        val timePickerElement = modalElementBuilder.timePickerElement()
+        val startTimePickerElement =
+            modalElementBuilder.timePickerElement(placeholderText = "Start time")
+        val endTimePickerElement =
+            modalElementBuilder.timePickerElement(
+                placeholderText = "End time (optional)",
+                initialTime = null,
+            )
         val layout =
             actions {
                 it.elements(
                     listOf(
                         datePickerElement.element,
-                        timePickerElement.element,
+                        startTimePickerElement.element,
+                        endTimePickerElement.element,
                     ),
                 )
             }
         return toInteractionLayout(
             datePickerElement.state,
-            timePickerElement.state,
+            startTimePickerElement.state,
+            endTimePickerElement.state,
             layout = layout,
         )
     }

@@ -125,16 +125,19 @@ class ModalElementBuilder {
             .multiline(multiline)
             .build()
 
-    fun timePickerElement(placeholderText: String = "Select time") =
-        toInteractiveObject(
-            state = States(type = ActionElementTypes.TIME_PICKER),
-            element =
-                TimePickerElement
-                    .builder()
-                    .initialTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")))
-                    .placeholder(plainTextObject(text = placeholderText))
-                    .build(),
-        )
+    fun timePickerElement(
+        placeholderText: String = "Select time",
+        initialTime: String? = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")),
+    ) = toInteractiveObject(
+        state = States(type = ActionElementTypes.TIME_PICKER),
+        element =
+            TimePickerElement
+                .builder()
+                .apply {
+                    if (initialTime != null) initialTime(initialTime)
+                    placeholder(plainTextObject(text = placeholderText))
+                }.build(),
+    )
 
     fun datePickerElement(placeholderText: String = "Select a date") =
         toInteractiveObject(

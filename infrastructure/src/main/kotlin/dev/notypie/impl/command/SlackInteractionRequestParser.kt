@@ -119,8 +119,8 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                     ActionElementTypes.TIME_PICKER.elementName ->
                         States(
                             type = ActionElementTypes.TIME_PICKER,
-                            isSelected = true,
-                            selectedValue = value.selectedTime,
+                            isSelected = value.selectedTime != null,
+                            selectedValue = value.selectedTime ?: "",
                         )
                     ActionElementTypes.CHECKBOX.elementName ->
                         if (value.selectedOptions.isEmpty()) {

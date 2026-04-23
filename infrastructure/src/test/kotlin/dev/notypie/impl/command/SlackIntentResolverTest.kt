@@ -2,6 +2,7 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
@@ -10,6 +11,7 @@ import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
@@ -20,6 +22,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import java.time.LocalDateTime
+import java.util.UUID
 
 class SlackIntentResolverTest :
     BehaviorSpec({
@@ -378,6 +381,68 @@ class SlackIntentResolverTest :
                     event.payload.responseBasicInfo shouldBe basicInfo
                     event.idempotencyKey shouldBe basicInfo.idempotencyKey
                     event.type shouldBe CommandDetailType.GET_MEETING_LIST
+                }
+            }
+        }
+
+        given("MeetingAttendanceUpdate intent") {
+            `when`("participant declines (isAttending = false)") {
+                val meetingKey = UUID.randomUUID()
+                val intent =
+                    CommandIntent.MeetingAttendanceUpdate(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_PARTICIPANT",
+                        isAttending = false,
+                        absentReason = RejectReason.OTHER,
+                    )
+
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(intent),
+                        basicInfo = basicInfo,
+                        commandType = commandType,
+                    )
+
+                then("produces UpdateMeetingAttendanceEvent (isAttending=false) without touching slackEventBuilder") {
+                    events shouldHaveSize 1
+                    val event = events.first()
+                    event.shouldBeInstanceOf<UpdateMeetingAttendanceEvent>()
+                    event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    event.type shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    event.payload.meetingIdempotencyKey shouldBe meetingKey
+                    event.payload.participantUserId shouldBe "U_PARTICIPANT"
+                    event.payload.isAttending shouldBe false
+                    event.payload.absentReason shouldBe RejectReason.OTHER
+                }
+            }
+
+            `when`("participant accepts (isAttending = true)") {
+                val meetingKey = UUID.randomUUID()
+                val intent =
+                    CommandIntent.MeetingAttendanceUpdate(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_ACCEPTOR",
+                        isAttending = true,
+                        absentReason = RejectReason.ATTENDING,
+                    )
+
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(intent),
+                        basicInfo = basicInfo,
+                        commandType = commandType,
+                    )
+
+                then("produces UpdateMeetingAttendanceEvent (isAttending=true) without touching slackEventBuilder") {
+                    events shouldHaveSize 1
+                    val event = events.first()
+                    event.shouldBeInstanceOf<UpdateMeetingAttendanceEvent>()
+                    event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    event.type shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    event.payload.meetingIdempotencyKey shouldBe meetingKey
+                    event.payload.participantUserId shouldBe "U_ACCEPTOR"
+                    event.payload.isAttending shouldBe true
+                    event.payload.absentReason shouldBe RejectReason.ATTENDING
                 }
             }
         }

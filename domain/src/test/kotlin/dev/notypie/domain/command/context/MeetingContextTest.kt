@@ -255,6 +255,140 @@ class MeetingContextTest :
             }
         }
 
+        given("Meeting Context with interactionPayload including end time") {
+            `when`("end time is after start time") {
+                val intentQueue = createIntentQueue()
+                val context =
+                    RequestMeetingContext(
+                        commandBasicInfo = testCommandBasicInfo,
+                        subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                        intents = intentQueue,
+                    )
+                val meetingDate = LocalDate.now().plusDays(1)
+                val startTime = LocalTime.of(10, 0)
+                val endTime = LocalTime.of(11, 30)
+                val interactionPayload =
+                    createInteractionPayloadInput(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        currentAction = selectedApplyButtonStates(),
+                        states =
+                            listOf(
+                                selectedPlainTextStates(text = VALID_TEST_TITLE),
+                                selectedPlainTextStates(text = VALID_TEST_REASON),
+                                selectedDatePickerStates(
+                                    date = meetingDate,
+                                    format = RequestMeetingContext.DATE_PATTERN,
+                                ),
+                                selectedTimePickerStates(
+                                    time = startTime,
+                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                ),
+                                selectedTimePickerStates(
+                                    time = endTime,
+                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                ),
+                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                            ),
+                    )
+                val res = context.handleInteraction(interactionPayload = interactionPayload)
+
+                then("succeeds and emits ReplaceMessage") {
+                    res.ok shouldBe true
+                    res.status shouldBe Status.SUCCESS
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                }
+            }
+
+            `when`("end time is not after start time") {
+                val intentQueue = createIntentQueue()
+                val context =
+                    RequestMeetingContext(
+                        commandBasicInfo = testCommandBasicInfo,
+                        subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                        intents = intentQueue,
+                    )
+                val meetingDate = LocalDate.now().plusDays(1)
+                val sameTime = LocalTime.of(10, 0)
+                val interactionPayload =
+                    createInteractionPayloadInput(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        currentAction = selectedApplyButtonStates(),
+                        states =
+                            listOf(
+                                selectedPlainTextStates(text = VALID_TEST_TITLE),
+                                selectedPlainTextStates(text = VALID_TEST_REASON),
+                                selectedDatePickerStates(
+                                    date = meetingDate,
+                                    format = RequestMeetingContext.DATE_PATTERN,
+                                ),
+                                selectedTimePickerStates(
+                                    time = sameTime,
+                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                ),
+                                selectedTimePickerStates(
+                                    time = sameTime,
+                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                ),
+                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                            ),
+                    )
+                val res = context.handleInteraction(interactionPayload = interactionPayload)
+
+                then("fails with End time must be after start time ephemeral") {
+                    res.ok shouldBe false
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val errorIntent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
+                    errorIntent.message shouldBe "End time must be after start time."
+                }
+            }
+
+            `when`("no end time is selected") {
+                val intentQueue = createIntentQueue()
+                val context =
+                    RequestMeetingContext(
+                        commandBasicInfo = testCommandBasicInfo,
+                        subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                        intents = intentQueue,
+                    )
+                val meetingDate = LocalDate.now().plusDays(1)
+                val startTime = LocalTime.of(10, 0)
+                val interactionPayload =
+                    createInteractionPayloadInput(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        currentAction = selectedApplyButtonStates(),
+                        states =
+                            listOf(
+                                selectedPlainTextStates(text = VALID_TEST_TITLE),
+                                selectedPlainTextStates(text = VALID_TEST_REASON),
+                                selectedDatePickerStates(
+                                    date = meetingDate,
+                                    format = RequestMeetingContext.DATE_PATTERN,
+                                ),
+                                selectedTimePickerStates(
+                                    time = startTime,
+                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                ),
+                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                            ),
+                    )
+                val res = context.handleInteraction(interactionPayload = interactionPayload)
+
+                then("succeeds — end time defaults to startAt + 1h in the domain entity") {
+                    res.ok shouldBe true
+                    res.status shouldBe Status.SUCCESS
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                }
+            }
+        }
+
         given("Meeting Context with invalid interaction payload (missing participants)") {
             val intentQueue = createIntentQueue()
             val context =

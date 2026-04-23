@@ -144,14 +144,20 @@ internal class RequestMeetingContext(
      * payload passes validation and can be converted into a Meeting entity safely.
      */
     private fun validationErrorOrNull(payload: InteractionPayload): CommandOutput? {
+        val startAt = getStartDateTimeOrNull(interactionPayload = payload)
+        val endAt = getEndDateTimeOrNull(interactionPayload = payload, startAt = startAt)
         val errorMessage =
             when {
                 getParticipants(states = payload.states, publisher = payload.user.id).isEmpty() -> {
                     "Select participants"
                 }
 
-                getDateTimeOrNull(interactionPayload = payload) == null -> {
+                startAt == null -> {
                     "Make sure to choose a time in the *future* rather than now."
+                }
+
+                endAt != null && !endAt.isAfter(startAt) -> {
+                    "End time must be after start time."
                 }
 
                 !payload.isCompleted() -> {
@@ -166,24 +172,37 @@ internal class RequestMeetingContext(
     }
 
     /**
-     * Precondition: [validationErrorOrNull] returned null. Guaranteed to have a non-null future datetime.
+     * Precondition: [validationErrorOrNull] returned null. Guaranteed to have a non-null future startAt
+     * and (if present) an endAt strictly after startAt.
      */
     private fun toMeetingEntity(payload: InteractionPayload): Meeting {
         val publisher = payload.user.id
         val participants = getParticipants(states = payload.states, publisher = payload.user.id)
         val startAt =
-            requireNotNull(getDateTimeOrNull(interactionPayload = payload)) {
+            requireNotNull(getStartDateTimeOrNull(interactionPayload = payload)) {
                 "Meeting startAt must be validated before building Meeting entity"
             }
+        val endAt = getEndDateTimeOrNull(interactionPayload = payload, startAt = startAt)
         val (title, reason) = getTitleAndReason(interactionPayload = payload)
 
-        return Meeting(
-            publisher = publisher,
-            title = title,
-            reason = reason,
-            startAt = startAt,
-            members = participants,
-        )
+        return if (endAt != null) {
+            Meeting(
+                publisher = publisher,
+                title = title,
+                reason = reason,
+                startAt = startAt,
+                endAt = endAt,
+                members = participants,
+            )
+        } else {
+            Meeting(
+                publisher = publisher,
+                title = title,
+                reason = reason,
+                startAt = startAt,
+                members = participants,
+            )
+        }
     }
 
     private fun interactionResults(status: Status, meeting: Meeting) =
@@ -204,24 +223,57 @@ internal class RequestMeetingContext(
             ?.toSet()
             ?: emptySet()
 
-    private fun getDateTimeOrNull(interactionPayload: InteractionPayload): LocalDateTime? {
+    /**
+     * Extracts the meeting start datetime from the payload.
+     *
+     * The modal exposes two TIME_PICKERs (start, end) in order. This reads the first one.
+     * Returns null if date/start-time is missing or the combined moment is not strictly in the future.
+     */
+    private fun getStartDateTimeOrNull(interactionPayload: InteractionPayload): LocalDateTime? {
         val timeString =
             interactionPayload.states
-                .firstOrNull { it.type == ActionElementTypes.TIME_PICKER }
+                .filter { it.type == ActionElementTypes.TIME_PICKER && it.selectedValue.isNotBlank() }
+                .getOrNull(index = 0)
                 ?.selectedValue
         val dateString =
             interactionPayload.states
                 .firstOrNull { it.type == ActionElementTypes.DATE_PICKER }
                 ?.selectedValue
         return if (timeString != null && dateString != null && isFutureTime(dateString, timeString)) {
-            LocalDateTime.parse(
-                "$dateString $timeString",
-                DateTimeFormatter.ofPattern("$DATE_PATTERN $SIMPLE_TIME_PATTERN"),
-            )
+            parseLocalDateTime(dateString = dateString, timeString = timeString)
         } else {
             null
         }
     }
+
+    /**
+     * Extracts the optional meeting end datetime from the payload.
+     *
+     * The modal exposes two TIME_PICKERs (start, end) in order. This reads the second one.
+     * End uses the same DATE_PICKER as start. Returns null when the end-time picker is empty,
+     * when no valid [startAt] was supplied, or when the date picker is missing.
+     */
+    private fun getEndDateTimeOrNull(interactionPayload: InteractionPayload, startAt: LocalDateTime?): LocalDateTime? {
+        if (startAt == null) return null
+        val endTimeString =
+            interactionPayload.states
+                .filter { it.type == ActionElementTypes.TIME_PICKER && it.selectedValue.isNotBlank() }
+                .getOrNull(index = 1)
+                ?.selectedValue
+                ?: return null
+        val dateString =
+            interactionPayload.states
+                .firstOrNull { it.type == ActionElementTypes.DATE_PICKER }
+                ?.selectedValue
+                ?: return null
+        return parseLocalDateTime(dateString = dateString, timeString = endTimeString)
+    }
+
+    private fun parseLocalDateTime(dateString: String, timeString: String): LocalDateTime =
+        LocalDateTime.parse(
+            "$dateString $timeString",
+            DateTimeFormatter.ofPattern("$DATE_PATTERN $SIMPLE_TIME_PATTERN"),
+        )
 
     private fun getTitleAndReason(interactionPayload: InteractionPayload): Pair<String, String> =
         interactionPayload.states

@@ -291,6 +291,7 @@ class ModalTemplateBuilderTest :
                         title = "Project sync",
                         startAt = LocalDateTime.of(2026, 4, 20, 10, 0),
                         endAt = LocalDateTime.of(2026, 4, 20, 11, 0),
+                        participantIds = listOf("U1", "U2", "U3"),
                         isCanceled = false,
                     )
 
@@ -303,12 +304,13 @@ class ModalTemplateBuilderTest :
                     result.template[2].shouldBeInstanceOf<SectionBlock>()
                 }
 
-                then("meeting section renders title, formatted times, and meetingUid in backticks") {
+                then("meeting section renders title, formatted times, participant count, and meetingUid in backticks") {
                     val section = result.template[2] as SectionBlock
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
                     mrkdwn.text shouldContain "*Project sync*"
                     mrkdwn.text shouldContain "2026-04-20 10:00"
                     mrkdwn.text shouldContain "~ 2026-04-20 11:00"
+                    mrkdwn.text shouldContain "Participants: 3"
                     mrkdwn.text shouldContain "`$meetingUid`"
                 }
 
@@ -316,6 +318,22 @@ class ModalTemplateBuilderTest :
                     val section = result.template[2] as SectionBlock
                     val mrkdwn = section.text as MarkdownTextObject
                     (mrkdwn.text.contains("CANCELED")) shouldBe false
+                }
+            }
+
+            `when`("meeting has no participants") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Solo sync",
+                        participantIds = emptyList(),
+                    )
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+
+                then("participant line renders as zero") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Participants: 0"
                 }
             }
 

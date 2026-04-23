@@ -223,17 +223,23 @@ class ModalBlockBuilderTest :
             `when`("called") {
                 val result = builder.selectDateTimeScheduleBlock()
 
-                then("layout is ActionsBlock") {
-                    result.layout.shouldBeInstanceOf<ActionsBlock>()
+                then("layout is ActionsBlock with 3 elements (date, start time, end time)") {
+                    val actionsBlock = result.layout.shouldBeInstanceOf<ActionsBlock>()
+                    actionsBlock.elements.size shouldBe 3
                 }
 
-                then("interactiveObjects contain DATE_PICKER and TIME_PICKER") {
+                then("interactiveObjects are DATE_PICKER followed by two TIME_PICKERs in order") {
                     val types = result.interactiveObjects.map { it.type }
-                    types.shouldContainAll(ActionElementTypes.DATE_PICKER, ActionElementTypes.TIME_PICKER)
+                    types shouldBe
+                        listOf(
+                            ActionElementTypes.DATE_PICKER,
+                            ActionElementTypes.TIME_PICKER,
+                            ActionElementTypes.TIME_PICKER,
+                        )
                 }
 
-                then("interactiveObjects size is 2") {
-                    result.interactiveObjects.size shouldBe 2
+                then("interactiveObjects size is 3") {
+                    result.interactiveObjects.size shouldBe 3
                 }
             }
         }

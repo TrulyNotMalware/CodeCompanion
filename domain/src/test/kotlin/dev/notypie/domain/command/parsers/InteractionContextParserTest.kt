@@ -6,6 +6,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
+import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.parsers.InteractionContextParser
 import io.kotest.core.spec.style.BehaviorSpec
@@ -81,6 +82,28 @@ class InteractionContextParserTest :
 
                 then("should return RequestMeetingContext") {
                     result.shouldBeInstanceOf<RequestMeetingContext>()
+                }
+            }
+
+            `when`("interaction type is MEETING_APPROVAL_NOTICE_FORM") {
+                val commandData =
+                    createInteractionSlackCommandData(
+                        commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                        idempotencyKey = idempotencyKey,
+                    )
+                val parser =
+                    InteractionContextParser(
+                        slackCommandData = commandData,
+                        baseUrl = "",
+                        commandId = UUID.randomUUID(),
+                        idempotencyKey = idempotencyKey,
+                        intents = intents,
+                    )
+
+                val result = parser.parseContext(idempotencyKey = idempotencyKey)
+
+                then("should return MeetingApprovalResponseContext") {
+                    result.shouldBeInstanceOf<MeetingApprovalResponseContext>()
                 }
             }
 

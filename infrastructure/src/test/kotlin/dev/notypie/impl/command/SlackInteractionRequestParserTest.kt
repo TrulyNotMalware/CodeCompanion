@@ -244,6 +244,42 @@ class SlackInteractionRequestParserTest :
                 }
             }
 
+            `when`("payload contains two timepicker entries in the same block") {
+                val stateValues =
+                    """{"block_1":{""" +
+                        """"action_1":${timepickerStateJson(selectedTime = "10:00")},""" +
+                        """"action_2":${timepickerStateJson(selectedTime = "11:30")}""" +
+                        """}}"""
+                val payload = createBlockActionPayloadJson(stateValues = stateValues)
+
+                val result = parser.parseStringPayload(payload = payload)
+                val timePickers = result.states.filter { it.type == ActionElementTypes.TIME_PICKER }
+
+                then("both TIME_PICKERs are preserved in insertion order (start, end)") {
+                    timePickers.size shouldBe 2
+                    timePickers[0].selectedValue shouldBe "10:00"
+                    timePickers[1].selectedValue shouldBe "11:30"
+                }
+            }
+
+            `when`("payload contains an empty timepicker state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = """{"type":"timepicker","selected_time":null}""",
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("TIME_PICKER state is not selected and carries an empty value") {
+                    val state = result.states.first { it.type == ActionElementTypes.TIME_PICKER }
+                    state.isSelected shouldBe false
+                    state.selectedValue shouldBe ""
+                }
+            }
+
             `when`("payload contains checkboxes state with selections") {
                 val payload =
                     createBlockActionPayloadJson(

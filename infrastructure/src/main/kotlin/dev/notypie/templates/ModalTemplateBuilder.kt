@@ -262,8 +262,9 @@ class ModalTemplateBuilder(
                 append(meeting.startAt.format(MEETING_LIST_TIMESTAMP_FORMAT))
                 meeting.endAt?.let { append(" ~ ${it.format(MEETING_LIST_TIMESTAMP_FORMAT)}") }
             }
+        val participantsLine = "Participants: ${meeting.participantIds.size}"
         val uidLine = "`${meeting.meetingUid}`"
-        return "$titleLine\n$timeLine\n$uidLine"
+        return "$titleLine\n$timeLine\n$participantsLine\n$uidLine"
     }
 
     override fun requestMeetingFormTemplate(approvalContents: ApprovalContents): LayoutBlocks {

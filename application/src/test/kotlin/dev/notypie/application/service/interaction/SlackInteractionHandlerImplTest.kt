@@ -126,6 +126,62 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
+        given("handleInteraction for APPLY on MEETING_APPROVAL_NOTICE_FORM") {
+            `when`("handler processes the payload") {
+                then("routes APPLY through InteractionCommand, not the legacy path") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
+                    val payload =
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            currentAction = selectedApplyButtonStates(),
+                            states = listOf(selectedApplyButtonStates()),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { payloadParser.parseStringPayload(payload = any()) } returns payload
+
+                    handler.handleInteraction(
+                        headers = LinkedMultiValueMap(),
+                        payload = "dummy-payload",
+                    )
+
+                    verify(exactly = 1) {
+                        commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
+                    }
+                    verify(exactly = 0) {
+                        commandExecutor.execute(command = match<Command<*>> { it is ReplaceTextResponseCommand })
+                    }
+                }
+            }
+        }
+
+        given("handleInteraction for REJECT on MEETING_APPROVAL_NOTICE_FORM") {
+            `when`("handler processes the payload") {
+                then("routes REJECT through InteractionCommand, not the legacy path") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
+                    val payload =
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            currentAction = selectedRejectButtonStates(),
+                            states = listOf(selectedRejectButtonStates()),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { payloadParser.parseStringPayload(payload = any()) } returns payload
+
+                    handler.handleInteraction(
+                        headers = LinkedMultiValueMap(),
+                        payload = "dummy-payload",
+                    )
+
+                    verify(exactly = 1) {
+                        commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
+                    }
+                    verify(exactly = 0) {
+                        commandExecutor.execute(command = match<Command<*>> { it is ReplaceTextResponseCommand })
+                    }
+                }
+            }
+        }
+
         given("handleInteraction for REJECT on a context-routed type (REQUEST_MEETING_FORM)") {
             `when`("handler processes the payload") {
                 then("commandExecutor routes the reject through an InteractionCommand, not the legacy path") {
