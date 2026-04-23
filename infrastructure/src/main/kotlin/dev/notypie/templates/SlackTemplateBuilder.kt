@@ -40,4 +40,26 @@ interface SlackTemplateBuilder {
         timeScheduleInfo: TimeScheduleAlertContents,
         approvalContents: ApprovalContents,
     ): LayoutBlocks
+
+    /**
+     * Builds the full Slack `view` payload JSON used by `views.open` when a participant
+     * clicks Deny on a meeting notice. Returns a serialized JSON string (not [LayoutBlocks])
+     * because the modal envelope requires top-level `type`, `callback_id`, `title`, `submit`,
+     * `close`, and `private_metadata` fields that are not expressible as a block list.
+     *
+     * `private_metadata` uses the same comma-tokenized format as the embedded-text routing
+     * string used in DM notices:
+     *   `"<meetingIdempotencyKey>,DECLINE_REASON_MODAL,<participantUserId>,<noticeChannel>,<noticeMessageTs>"`.
+     * The view_submission parser then treats it with the same tokenization rules, surfacing
+     * the extras as `routingExtras[0..2]` for [DeclineReasonSubmissionContext] to pick up.
+     * `noticeChannel` + `noticeMessageTs` let the submission handler `chat.update` the
+     * original Accept/Deny notice; empty values skip the update.
+     */
+    fun declineReasonModalViewJson(
+        meetingTitle: String,
+        meetingIdempotencyKey: UUID,
+        participantUserId: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+    ): String
 }

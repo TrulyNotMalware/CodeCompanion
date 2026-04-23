@@ -3,6 +3,7 @@ package dev.notypie.repository.meeting.schema
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.dto.MeetingParticipantDto
 import dev.notypie.domain.meet.entity.Meeting
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
@@ -98,7 +99,10 @@ fun MeetingSchema.toMeetingDto() =
         title = name,
         creator = publisherId,
         reason = "",
-        participantIds = participants.map { it.userId },
+        participants =
+            participants.map { p ->
+                MeetingParticipantDto(userId = p.userId, isAttending = p.isAttending)
+            },
     )
 
 @Entity(name = "meeting_participants")

@@ -31,6 +31,13 @@ data class InteractionPayload(
      * the first element of this list and parse it into their own typed value.
      */
     val routingExtras: List<String> = emptyList(),
+    /**
+     * Raw `private_metadata` string carried by Slack modals (view_submission payloads).
+     * Null for block_actions payloads. Populated by the interaction parser when
+     * processing a `view_submission`; downstream contexts tokenize it the same way
+     * they tokenize `idempotencyKey`-prefixed routing strings.
+     */
+    val privateMetadata: String? = null,
 )
 
 fun InteractionPayload.isCompleted(): Boolean =

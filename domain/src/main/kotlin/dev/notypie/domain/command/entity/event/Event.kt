@@ -78,3 +78,34 @@ data class UpdateMeetingAttendanceEvent(
     override val payload: UpdateMeetingAttendancePayload,
     override val type: CommandDetailType,
 ) : CommandEvent<UpdateMeetingAttendancePayload>
+
+/**
+ * Synchronous-dispatch command event carrying a `views.open` payload. Must be consumed on
+ * the request thread because [OpenViewPayloadContents.triggerId] expires in 3 seconds.
+ * `isInternal = true` so the event is routed through the in-process Spring event bus
+ * (never staged in the outbox) and picked up by a dedicated non-`@Async` listener.
+ */
+data class OpenViewEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = OpenViewEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: OpenViewPayloadContents,
+    override val type: CommandDetailType,
+) : CommandEvent<OpenViewPayloadContents>
+
+/**
+ * Published by the dispatcher when `views.open` fails (trigger_id expired, Slack API
+ * error, network failure, etc.). The application-layer listener is responsible for
+ * recording the decline with [dev.notypie.domain.command.dto.interactions.RejectReason.OTHER]
+ * and sending an ephemeral notice so the user knows the decline was still accepted.
+ */
+data class DeclineModalOpenFailedEvent(
+    val meetingIdempotencyKey: UUID,
+    val participantUserId: String,
+    val apiAppId: String,
+    val channel: String,
+    val idempotencyKey: UUID,
+    val reason: String,
+)

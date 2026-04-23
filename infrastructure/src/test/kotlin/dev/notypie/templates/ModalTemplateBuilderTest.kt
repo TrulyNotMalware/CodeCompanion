@@ -13,6 +13,7 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.Profile
 import dev.notypie.impl.command.dto.SlackUserProfileDto
@@ -291,7 +292,12 @@ class ModalTemplateBuilderTest :
                         title = "Project sync",
                         startAt = LocalDateTime.of(2026, 4, 20, 10, 0),
                         endAt = LocalDateTime.of(2026, 4, 20, 11, 0),
-                        participantIds = listOf("U1", "U2", "U3"),
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(userId = "U1"),
+                                createMeetingParticipantDto(userId = "U2"),
+                                createMeetingParticipantDto(userId = "U3"),
+                            ),
                         isCanceled = false,
                     )
 
@@ -304,13 +310,14 @@ class ModalTemplateBuilderTest :
                     result.template[2].shouldBeInstanceOf<SectionBlock>()
                 }
 
-                then("meeting section renders title, formatted times, participant count, and meetingUid in backticks") {
+                then("meeting section renders title, times, accepted/total count, and meetingUid in backticks") {
                     val section = result.template[2] as SectionBlock
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
                     mrkdwn.text shouldContain "*Project sync*"
                     mrkdwn.text shouldContain "2026-04-20 10:00"
                     mrkdwn.text shouldContain "~ 2026-04-20 11:00"
-                    mrkdwn.text shouldContain "Participants: 3"
+                    // host(1) + 3 attending invitees = 4/4
+                    mrkdwn.text shouldContain "Participants: 4/4"
                     mrkdwn.text shouldContain "`$meetingUid`"
                 }
 
@@ -321,19 +328,41 @@ class ModalTemplateBuilderTest :
                 }
             }
 
-            `when`("meeting has no participants") {
+            `when`("a participant has declined the invitation") {
                 val meeting =
                     createMeetingDto(
-                        title = "Solo sync",
-                        participantIds = emptyList(),
+                        title = "Mixed response",
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(userId = "U1", isAttending = true),
+                                createMeetingParticipantDto(userId = "U2", isAttending = false),
+                                createMeetingParticipantDto(userId = "U3", isAttending = true),
+                            ),
                     )
 
                 val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
 
-                then("participant line renders as zero") {
+                then("decliner is subtracted from accepted but stays in the denominator") {
                     val section = result.template[2] as SectionBlock
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
-                    mrkdwn.text shouldContain "Participants: 0"
+                    // host(1) + 2 attending invitees = 3; total = host(1) + 3 invitees = 4
+                    mrkdwn.text shouldContain "Participants: 3/4"
+                }
+            }
+
+            `when`("meeting has no participants") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Solo sync",
+                        participants = emptyList(),
+                    )
+
+                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+
+                then("participant line renders host-only count") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Participants: 1/1"
                 }
             }
 
@@ -445,6 +474,138 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, text, and detail blocks") {
                     result.template.size shouldBe 4
+                }
+            }
+        }
+
+        given("declineReasonModalViewJson") {
+            val meetingKey = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+            val participantUserId = "U_PARTICIPANT"
+            val noticeChannel = "C_NOTICE"
+            val noticeMessageTs = "1700000000.000100"
+
+            `when`("called with a non-blank meeting title") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "Project sync",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+
+                then("the view envelope carries modal metadata plus the tokenized private_metadata") {
+                    json shouldContain "\"type\":\"modal\""
+                    json shouldContain "\"callback_id\":\"decline_reason_modal\""
+                    // tokenized as meetingKey,DECLINE_REASON_MODAL,participantUserId,noticeChannel,noticeMessageTs
+                    // so DeclineReasonSubmissionContext can chat.update the notice DM.
+                    json shouldContain
+                        "\"private_metadata\":\"$meetingKey,DECLINE_REASON_MODAL," +
+                        "$participantUserId,$noticeChannel,$noticeMessageTs\""
+                    json shouldContain "\"title\""
+                    json shouldContain "Why can't you attend?"
+                    json shouldContain "\"submit\""
+                    json shouldContain "\"close\""
+                }
+
+                then("a title section is rendered before the input block") {
+                    json shouldContain "*Project sync*"
+                }
+
+                then("the input block uses the agreed block_id and action_id so parser can read state") {
+                    json shouldContain "\"block_id\":\"decline_reason_block\""
+                    json shouldContain "\"action_id\":\"decline_reason_select\""
+                    json shouldContain "\"type\":\"static_select\""
+                    json shouldContain "\"placeholder\""
+                }
+
+                then("dropdown options include all reject reasons except ATTENDING") {
+                    json shouldContain "\"value\":\"SCHEDULE_CONFLICT\""
+                    json shouldContain "\"value\":\"UNEXPECTED_EMERGENCY\""
+                    json shouldContain "\"value\":\"HEALTH_ISSUE\""
+                    json shouldContain "\"value\":\"PRIOR_COMMITMENT\""
+                    json shouldContain "\"value\":\"REQUEST_DELAY\""
+                    json shouldContain "\"value\":\"VACATION\""
+                    json shouldContain "\"value\":\"PERSONAL_REASON\""
+                    json shouldContain "\"value\":\"OTHER\""
+                    (json.contains("\"value\":\"ATTENDING\"")) shouldBe false
+                }
+            }
+
+            `when`("called with a blank meeting title") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+
+                then("the meeting-title section is omitted so the modal is dropdown-only") {
+                    // a blank title would otherwise render "**" which Slack renders as empty
+                    (json.contains("\"type\":\"section\"")) shouldBe false
+                    json shouldContain "\"type\":\"static_select\""
+                }
+            }
+
+            `when`("called with blank notice channel and message_ts") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "Project sync",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = "",
+                        noticeMessageTs = "",
+                    )
+
+                then("private_metadata keeps all 5 positions so parser indices stay stable") {
+                    // trailing empty tokens are intentional — routingExtras[1..2] read as ""
+                    json shouldContain
+                        "\"private_metadata\":\"$meetingKey,DECLINE_REASON_MODAL," +
+                        "$participantUserId,,\""
+                }
+            }
+
+            `when`("the emitted JSON is fed back through the Slack SDK's view deserializer") {
+                // Block Kit validator test: proves our hand-built JSON structurally matches
+                // Slack's official `View` schema. Guards against typos like missing "type",
+                // malformed element payloads, or option shapes Slack would reject at views.open.
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "Project sync",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+                val view =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(json, com.slack.api.model.view.View::class.java)
+
+                then("top-level envelope parses into a View with the callback_id and private_metadata") {
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe "decline_reason_modal"
+                    view.privateMetadata shouldBe
+                        "$meetingKey,DECLINE_REASON_MODAL,$participantUserId," +
+                        "$noticeChannel,$noticeMessageTs"
+                    view.title.text shouldBe "Why can't you attend?"
+                    view.submit.text shouldBe "Submit"
+                    view.close.text shouldBe "Cancel"
+                }
+
+                then("blocks include the title section and the dropdown input with the expected action_id") {
+                    val inputBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single()
+                    inputBlock.blockId shouldBe "decline_reason_block"
+                    val dropdown =
+                        inputBlock.element as com.slack.api.model.block.element.StaticSelectElement
+                    dropdown.actionId shouldBe "decline_reason_select"
+                    // All RejectReason entries except ATTENDING (8 options).
+                    dropdown.options.size shouldBe 8
                 }
             }
         }

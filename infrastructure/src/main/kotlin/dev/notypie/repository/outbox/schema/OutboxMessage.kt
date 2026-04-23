@@ -7,6 +7,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.DelayHandleEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
+import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.SlackEventPayload
@@ -120,6 +121,14 @@ fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
             throw UnsupportedOperationException(
                 "DelayHandleEventPayloadContents is not persisted to the outbox; " +
                     "schedule it via TaskScheduler instead. idempotencyKey=$idempotencyKey",
+            )
+        }
+
+        is OpenViewPayloadContents -> {
+            throw UnsupportedOperationException(
+                "OpenViewPayloadContents is not persisted to the outbox — trigger_id expires in 3s. " +
+                    "Use MessageDispatcher.dispatchImmediate on the request thread. " +
+                    "idempotencyKey=$idempotencyKey",
             )
         }
     }

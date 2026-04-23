@@ -19,8 +19,9 @@ interface MeetingRepository {
 
     /**
      * Updates a single participant's attendance decision on the meeting identified by
-     * [meetingIdempotencyKey]. Returns the number of rows affected: 1 on success, 0 if
-     * no matching participant row existed.
+     * [meetingIdempotencyKey]. Returns the number of rows actually modified — which is 0
+     * both when the row is missing AND when the update is a no-op (same values). Callers
+     * that need to distinguish those cases must also call [participantExists].
      */
     fun updateParticipantAttendance(
         meetingIdempotencyKey: UUID,
@@ -28,4 +29,7 @@ interface MeetingRepository {
         isAttending: Boolean,
         absentReason: RejectReason,
     ): Int
+
+    /** True if a participant row exists for `(meetingIdempotencyKey, userId)`. */
+    fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean
 }

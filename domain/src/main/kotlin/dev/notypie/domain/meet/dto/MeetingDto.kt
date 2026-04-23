@@ -16,6 +16,11 @@ data class MeetingDto(
     val reason: String,
     val startAt: LocalDateTime,
     val endAt: LocalDateTime? = null,
-    val participantIds: List<String>,
+    val participants: List<MeetingParticipantDto>,
     val isCanceled: Boolean,
+)
+
+data class MeetingParticipantDto(
+    val userId: String,
+    val isAttending: Boolean,
 )

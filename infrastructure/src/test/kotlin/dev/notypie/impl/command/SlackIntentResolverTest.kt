@@ -11,6 +11,11 @@ import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.MessageType
+import dev.notypie.domain.command.entity.event.OpenViewEvent
+import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
+import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
@@ -381,6 +386,147 @@ class SlackIntentResolverTest :
                     event.payload.responseBasicInfo shouldBe basicInfo
                     event.idempotencyKey shouldBe basicInfo.idempotencyKey
                     event.type shouldBe CommandDetailType.GET_MEETING_LIST
+                }
+            }
+        }
+
+        given("OpenDeclineReasonModal intent") {
+            val meetingKey = UUID.randomUUID()
+            val triggerId = "trigger_xyz_123"
+            val noticeChannel = "C_NOTICE"
+            val noticeMessageTs = "1700000000.000200"
+            val intent =
+                CommandIntent.OpenDeclineReasonModal(
+                    triggerId = triggerId,
+                    meetingIdempotencyKey = meetingKey,
+                    participantUserId = "U_PARTICIPANT_X",
+                    meetingTitle = "Weekly sync",
+                    noticeChannel = noticeChannel,
+                    noticeMessageTs = noticeMessageTs,
+                )
+            val stubOpenViewEvent =
+                OpenViewEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        OpenViewPayloadContents(
+                            eventId = UUID.randomUUID(),
+                            apiAppId = basicInfo.appId,
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            idempotencyKey = basicInfo.idempotencyKey,
+                            publisherId = basicInfo.publisherId,
+                            channel = basicInfo.channel,
+                            triggerId = triggerId,
+                            viewJson = "{}",
+                            meetingIdempotencyKey = meetingKey,
+                            participantUserId = "U_PARTICIPANT_X",
+                        ),
+                    type = CommandDetailType.DECLINE_REASON_MODAL,
+                )
+
+            `when`("resolveAll is called") {
+                every {
+                    slackEventBuilder.openDeclineReasonModalRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                        triggerId = triggerId,
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_PARTICIPANT_X",
+                        meetingTitle = "Weekly sync",
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+                } returns stubOpenViewEvent
+
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(intent),
+                        basicInfo = basicInfo,
+                        commandType = commandType,
+                    )
+
+                then("produces an OpenViewEvent by delegating to SlackApiEventConstructor") {
+                    events shouldHaveSize 1
+                    events.first().shouldBeInstanceOf<OpenViewEvent>()
+                    verify(exactly = 1) {
+                        slackEventBuilder.openDeclineReasonModalRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            triggerId = triggerId,
+                            meetingIdempotencyKey = meetingKey,
+                            participantUserId = "U_PARTICIPANT_X",
+                            meetingTitle = "Weekly sync",
+                            noticeChannel = noticeChannel,
+                            noticeMessageTs = noticeMessageTs,
+                        )
+                    }
+                }
+            }
+        }
+
+        given("UpdateNoticeMessage intent") {
+            val channel = "C_UPDATE"
+            val messageTs = "1700000000.000300"
+            val markdown = "You declined the meeting — *Reason:* Other"
+            val intent =
+                CommandIntent.UpdateNoticeMessage(
+                    channel = channel,
+                    messageTs = messageTs,
+                    markdownText = markdown,
+                )
+            val stubUpdateEvent =
+                SendSlackMessageEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        PostEventPayloadContents(
+                            eventId = UUID.randomUUID(),
+                            apiAppId = basicInfo.appId,
+                            messageType = MessageType.UPDATE_MESSAGE,
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            idempotencyKey = basicInfo.idempotencyKey,
+                            publisherId = basicInfo.publisherId,
+                            channel = channel,
+                            replaceOriginal = false,
+                            body = emptyMap(),
+                        ),
+                    destination = "",
+                    timestamp = System.currentTimeMillis(),
+                    type = CommandDetailType.DECLINE_REASON_MODAL,
+                )
+
+            `when`("resolveAll is called") {
+                every {
+                    slackEventBuilder.updateNoticeMessageRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                        channel = channel,
+                        messageTs = messageTs,
+                        markdownText = markdown,
+                    )
+                } returns stubUpdateEvent
+
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(intent),
+                        basicInfo = basicInfo,
+                        commandType = commandType,
+                    )
+
+                then("routes through SlackApiEventConstructor.updateNoticeMessageRequest") {
+                    events shouldHaveSize 1
+                    val sendEvent = events.first()
+                    sendEvent.shouldBeInstanceOf<SendSlackMessageEvent>()
+                    val payload = sendEvent.payload
+                    payload.shouldBeInstanceOf<PostEventPayloadContents>()
+                    payload.messageType shouldBe MessageType.UPDATE_MESSAGE
+                    verify(exactly = 1) {
+                        slackEventBuilder.updateNoticeMessageRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            channel = channel,
+                            messageTs = messageTs,
+                            markdownText = markdown,
+                        )
+                    }
                 }
             }
         }

@@ -78,13 +78,23 @@ class MeetingApprovalResponseContextTest :
                     intents = intentQueue,
                 )
             val meetingKey = UUID.randomUUID()
+            // The notice DM is sent with ApprovalContents.subTitle propagated through the
+            // routing text by SlackIntentResolver; the parser surfaces it as routingExtras[0].
             val payload =
                 createInteractionPayloadInput(
                     commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
                     currentAction = selectedRejectButtonStates(),
                     states = listOf(selectedRejectButtonStates()),
                     idempotencyKey = meetingKey,
-                )
+                ).let { base ->
+                    base.copy(
+                        routingExtras = listOf("Weekly sync"),
+                        // Container.messageTs is what lets DeclineReasonSubmissionContext later
+                        // chat.update the original notice — carry it through the intent so the
+                        // modal's private_metadata can round-trip it.
+                        container = base.container.copy(messageTs = "1700000000.000050"),
+                    )
+                }
 
             `when`("handleInteraction is invoked") {
                 val result = context.handleInteraction(interactionPayload = payload)
@@ -95,7 +105,25 @@ class MeetingApprovalResponseContextTest :
                     result.commandDetailType shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
                 }
 
-                then("a MeetingAttendanceUpdate intent with isAttending=false is emitted") {
+                then("an OpenDeclineReasonModal intent is emitted with trigger/meeting/user/title context") {
+                    val open =
+                        intents
+                            .filterIsInstance<CommandIntent.OpenDeclineReasonModal>()
+                            .single()
+                    open.meetingIdempotencyKey shouldBe meetingKey
+                    open.participantUserId shouldBe payload.user.id
+                    open.triggerId shouldBe payload.triggerId
+                    open.commandDetailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    // Title flows end-to-end from ApprovalContents.subTitle → routing text →
+                    // parser.routingExtras[0] → intent so the modal can render it.
+                    open.meetingTitle shouldBe "Weekly sync"
+                    // Channel + message_ts must flow through so the modal submission can later
+                    // chat.update the original notice instead of leaving stale buttons.
+                    open.noticeChannel shouldBe payload.channel.id
+                    open.noticeMessageTs shouldBe "1700000000.000050"
+                }
+
+                then("a provisional MeetingAttendanceUpdate(OTHER) is emitted so the Deny is always recorded") {
                     val update =
                         intents
                             .filterIsInstance<CommandIntent.MeetingAttendanceUpdate>()
@@ -106,12 +134,15 @@ class MeetingApprovalResponseContextTest :
                     update.absentReason shouldBe RejectReason.OTHER
                 }
 
-                then("a ReplaceMessage intent with declined copy is emitted") {
-                    val replace =
-                        intents
-                            .filterIsInstance<CommandIntent.ReplaceMessage>()
-                            .single()
-                    replace.markdownText shouldBe "You declined the meeting invitation."
+                then("OpenDeclineReasonModal enqueued before provisional update (views.open wins the trigger race)") {
+                    val openIndex = intents.indexOfFirst { it is CommandIntent.OpenDeclineReasonModal }
+                    val updateIndex = intents.indexOfFirst { it is CommandIntent.MeetingAttendanceUpdate }
+                    openIndex shouldBe 0
+                    (openIndex < updateIndex) shouldBe true
+                }
+
+                then("no ReplaceMessage is emitted — the original notice must stay readable if the modal fails") {
+                    intents.filterIsInstance<CommandIntent.ReplaceMessage>() shouldBe emptyList()
                 }
             }
         }

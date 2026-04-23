@@ -44,7 +44,8 @@ open class MeetingRepositoryImpl(
             .toList()
 
     // FIXME direct select from participant table
-    override fun getParticipants(meetingId: Long): List<String> = getMeeting(meetingId = meetingId).participantIds
+    override fun getParticipants(meetingId: Long): List<String> =
+        getMeeting(meetingId = meetingId).participants.map { it.userId }
 
     @Transactional
     override fun updateParticipantAttendance(
@@ -58,5 +59,11 @@ open class MeetingRepositoryImpl(
             userId = userId,
             isAttending = isAttending,
             absentReason = absentReason,
+        )
+
+    override fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean =
+        jpaMeetingRepository.existsParticipant(
+            meetingIdempotencyKey = meetingIdempotencyKey,
+            userId = userId,
         )
 }

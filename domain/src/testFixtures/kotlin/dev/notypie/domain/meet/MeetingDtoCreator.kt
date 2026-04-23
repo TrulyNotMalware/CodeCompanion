@@ -2,6 +2,7 @@ package dev.notypie.domain.meet
 
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.dto.MeetingParticipantDto
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -14,7 +15,7 @@ fun createMeetingDto(
     reason: String = "Test reason",
     startAt: LocalDateTime = LocalDateTime.now().plusDays(1L),
     endAt: LocalDateTime? = startAt.plusHours(1L),
-    participantIds: List<String> = listOf(),
+    participants: List<MeetingParticipantDto> = listOf(),
     isCanceled: Boolean = false,
 ) = MeetingDto(
     meetingId = meetingId,
@@ -25,6 +26,9 @@ fun createMeetingDto(
     reason = reason,
     startAt = startAt,
     endAt = endAt,
-    participantIds = participantIds,
+    participants = participants,
     isCanceled = isCanceled,
 )
+
+fun createMeetingParticipantDto(userId: String, isAttending: Boolean = true) =
+    MeetingParticipantDto(userId = userId, isAttending = isAttending)

@@ -106,6 +106,47 @@ sealed class CommandIntent {
         override val commandDetailType: CommandDetailType = CommandDetailType.SIMPLE_TEXT,
     ) : CommandIntent()
 
+    /**
+     * Request to open the decline-reason modal for a participant who clicked the Deny button
+     * on a meeting-notice DM. The `triggerId` must be consumed within Slack's 3-second window
+     * via the synchronous dispatch path (outbox is bypassed). On `views.open` failure, the
+     * application layer falls back to recording the decline with `RejectReason.OTHER`.
+     */
+    data class OpenDeclineReasonModal(
+        val triggerId: String,
+        val meetingIdempotencyKey: UUID,
+        val participantUserId: String,
+        /**
+         * Optional meeting title shown as a header section in the modal. Empty means the
+         * section is omitted — the REJECT_BUTTON handler doesn't currently carry the title
+         * (it only has the tokenized idempotencyKey from the notice's message.text), so
+         * callers may pass "" rather than round-tripping a DB fetch.
+         */
+        val meetingTitle: String = "",
+        /**
+         * Channel + message_ts of the originating notice DM. Carried through the modal's
+         * `private_metadata` so [DeclineReasonSubmissionContext] can `chat.update` the
+         * original Accept/Deny notice once the user submits a reason. Empty strings mean
+         * the caller has no notice message to update (e.g. synthesized payloads in tests).
+         */
+        val noticeChannel: String = "",
+        val noticeMessageTs: String = "",
+        override val commandDetailType: CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+    ) : CommandIntent()
+
+    /**
+     * Replaces an existing Slack message in place via `chat.update`. Used after the decline
+     * modal submits so the original Accept/Deny notice DM collapses into a decline summary —
+     * prevents the user from clicking Accept on a stale notice after they've already declined.
+     * Routed through the outbox (not latency-sensitive like `views.open`).
+     */
+    data class UpdateNoticeMessage(
+        val channel: String,
+        val messageTs: String,
+        val markdownText: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+    ) : CommandIntent()
+
     data class ReplaceMessage(
         val markdownText: String,
         val responseUrl: String,

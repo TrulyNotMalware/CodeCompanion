@@ -5,6 +5,7 @@ import com.slack.api.app_backend.interactive_components.response.ActionResponse
 import com.slack.api.methods.RequestFormBuilder
 import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
+import com.slack.api.methods.request.chat.ChatUpdateRequest
 import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -16,6 +17,8 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
+import dev.notypie.domain.command.entity.event.OpenViewEvent
+import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.SlackEventPayload
@@ -123,6 +126,7 @@ class SlackApiEventConstructor(
         approvalContents: ApprovalContents,
         commandType: CommandType,
         targetUserId: String? = null,
+        routingExtras: List<String> = emptyList(),
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.approvalTemplate(
@@ -138,6 +142,7 @@ class SlackApiEventConstructor(
             layout = layout,
             replaceOriginal = false,
             targetUserId = targetUserId,
+            routingExtras = routingExtras,
         )
     }
 
@@ -217,6 +222,86 @@ class SlackApiEventConstructor(
         )
     }
 
+    fun openDeclineReasonModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        meetingIdempotencyKey: UUID,
+        participantUserId: String,
+        meetingTitle: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.declineReasonModalViewJson(
+                meetingTitle = meetingTitle,
+                meetingIdempotencyKey = meetingIdempotencyKey,
+                participantUserId = participantUserId,
+                noticeChannel = noticeChannel,
+                noticeMessageTs = noticeMessageTs,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                meetingIdempotencyKey = meetingIdempotencyKey,
+                participantUserId = participantUserId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    /**
+     * Builds a `chat.update` request that rewrites the notice DM with a plain markdown body.
+     * Routed through the outbox like any other [PostEventPayloadContents] — not latency-bound
+     * (no trigger_id involved). The dispatcher branches on [MessageType.UPDATE_MESSAGE] to
+     * call `chat.update` instead of `chat.postMessage`.
+     */
+    fun updateNoticeMessageRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        channel: String,
+        messageTs: String,
+        markdownText: String,
+    ): SendSlackMessageEvent {
+        val layout = templateBuilder.onlyTextTemplate(message = markdownText, isMarkDown = true)
+        val body =
+            extractBodyData(
+                chatUpdateRequest =
+                    chatUpdateBuilder(
+                        channel = channel,
+                        ts = messageTs,
+                        blocks = layout.template,
+                        fallbackText = markdownText,
+                    ),
+            )
+        val payload =
+            PostEventPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                messageType = MessageType.UPDATE_MESSAGE,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = channel,
+                replaceOriginal = false,
+                body = body,
+            )
+        return payload.toSlackMessageEvent(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+        )
+    }
+
     fun replaceOriginalText(
         markdownText: String,
         responseUrl: String,
@@ -242,6 +327,7 @@ class SlackApiEventConstructor(
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         targetUserId: String? = null,
+        routingExtras: List<String> = emptyList(),
     ): SendSlackMessageEvent {
         val messageType = toMessageTypeByTargetUser(targetUserId = targetUserId)
         val payload =
@@ -258,6 +344,7 @@ class SlackApiEventConstructor(
                                 idempotencyKey = commandBasicInfo.idempotencyKey,
                                 commandDetailType = commandDetailType,
                                 targetUserId = targetUserId,
+                                routingExtras = routingExtras,
                             ),
                     ),
                 messageType = messageType,
@@ -346,6 +433,9 @@ class SlackApiEventConstructor(
     private fun extractBodyData(chatPostMessageRequest: ChatPostMessageRequest) =
         toMap(formBody = RequestFormBuilder.toForm(chatPostMessageRequest).build())
 
+    private fun extractBodyData(chatUpdateRequest: ChatUpdateRequest) =
+        toMap(formBody = RequestFormBuilder.toForm(chatUpdateRequest).build())
+
     private fun toSnakeCaseJsonString(actionResponse: ActionResponse) =
         GsonFactory.createSnakeCase(slackConfig).toJson(actionResponse)
 
@@ -395,13 +485,33 @@ class SlackApiEventConstructor(
         channel: String,
         blocks: List<LayoutBlock>,
         targetUserId: String? = null,
+        routingExtras: List<String> = emptyList(),
     ) = ChatPostMessageRequest
         .builder()
         .channel(targetUserId ?: channel)
-        .text("$idempotencyKey,$commandDetailType")
+        .text(buildRoutingText(idempotencyKey, commandDetailType, routingExtras))
         .token(botToken)
         .blocks(blocks)
         .build()
+
+    /**
+     * Builds the comma-separated routing text embedded in `message.text`. The parser mirrors
+     * this format by splitting on `,` — every extra must therefore be URL-encoded so that
+     * values with commas (meeting titles typed by users) don't collide with delimiters.
+     */
+    private fun buildRoutingText(
+        idempotencyKey: UUID,
+        commandDetailType: CommandDetailType,
+        routingExtras: List<String>,
+    ): String {
+        val prefix = "$idempotencyKey,$commandDetailType"
+        if (routingExtras.isEmpty()) return prefix
+        val encoded =
+            routingExtras.joinToString(",") {
+                java.net.URLEncoder.encode(it, java.nio.charset.StandardCharsets.UTF_8)
+            }
+        return "$prefix,$encoded"
+    }
 
     // FIXME Ephemeral message cannot include any texts with blocks field
     private fun chatPostEphemeralBuilder(
@@ -417,5 +527,20 @@ class SlackApiEventConstructor(
         .token(botToken)
         .blocks(blocks)
         .user(userId)
+        .build()
+
+    // https://api.slack.com/methods/chat.update — requires the original message's channel + ts.
+    private fun chatUpdateBuilder(
+        channel: String,
+        ts: String,
+        blocks: List<LayoutBlock>,
+        fallbackText: String,
+    ) = ChatUpdateRequest
+        .builder()
+        .channel(channel)
+        .ts(ts)
+        .text(fallbackText)
+        .token(botToken)
+        .blocks(blocks)
         .build()
 }

@@ -4,11 +4,13 @@ import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.controllers.dto.GetMeetupListRequestDto
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.DefaultEventQueue
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
@@ -91,10 +93,60 @@ class MeetingServiceImpl(
                     )
                 },
             )
-        check(rowsUpdated > 0) {
-            "No participant row matched meetingIdempotencyKey=${payload.meetingIdempotencyKey} " +
-                "userId=${payload.participantUserId}; refusing to acknowledge an unrecorded decision."
+        // MariaDB's default CLIENT_FOUND_ROWS=false makes UPDATE return 0 both when
+        // no row matches AND when the row already holds the requested values (a no-op).
+        // A no-op is legitimate here — it happens every time a user re-submits the same
+        // reason, or picks OTHER after the provisional-OTHER write recorded by Deny click.
+        // We only fail the transaction when the participant row truly doesn't exist.
+        if (rowsUpdated == 0 &&
+            !meetingRepository.participantExists(
+                meetingIdempotencyKey = payload.meetingIdempotencyKey,
+                userId = payload.participantUserId,
+            )
+        ) {
+            error(
+                "No participant row matched meetingIdempotencyKey=${payload.meetingIdempotencyKey} " +
+                    "userId=${payload.participantUserId}; refusing to acknowledge an unrecorded decision.",
+            )
         }
+    }
+
+    /**
+     * Fallback path invoked when `views.open` for the decline-reason modal fails (trigger_id
+     * expired, Slack API error, network). Persistence is NOT re-published here — the Deny
+     * click already emitted a provisional [UpdateMeetingAttendanceEvent] with
+     * [RejectReason.OTHER] from [MeetingApprovalResponseContext.handleDecline], so by the
+     * time this listener runs the decline is either already durable in the txn or about to
+     * be committed alongside it. We only surface the failure to the user so they can retry
+     * and pick a specific reason.
+     */
+    @EventListener
+    fun onDeclineModalOpenFailed(event: DeclineModalOpenFailedEvent) {
+        log.warn {
+            "views.open fallback triggered: meetingIdempotencyKey=${event.meetingIdempotencyKey} " +
+                "participantUserId=${event.participantUserId} reason=${event.reason}"
+        }
+        val ephemeralEvent =
+            slackEventBuilder.simpleEphemeralTextRequest(
+                textMessage =
+                    "We couldn't open the reason picker. Your decline was noted as *Other*. " +
+                        "_Tip: Click Deny again to pick a specific reason._",
+                commandBasicInfo =
+                    CommandBasicInfo(
+                        appId = event.apiAppId,
+                        appToken = "",
+                        publisherId = event.participantUserId,
+                        channel = event.channel,
+                        idempotencyKey = event.idempotencyKey,
+                    ),
+                commandType = CommandType.PIPELINE,
+                commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                targetUserId = event.participantUserId,
+            )
+        val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
+        @Suppress("UNCHECKED_CAST")
+        queue.offer(event = ephemeralEvent as CommandEvent<EventPayload>)
+        eventPublisher.publishEvent(events = queue)
     }
 
     @EventListener

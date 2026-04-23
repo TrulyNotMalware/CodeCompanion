@@ -69,4 +69,23 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("isAttending") isAttending: Boolean,
         @Param("absentReason") absentReason: RejectReason,
     ): Int
+
+    /**
+     * Existence probe used to disambiguate `updateParticipantAttendance` returning 0:
+     *  - row exists AND new values equal current ones → UPDATE is a no-op and still returns 0
+     *    on MariaDB's default `CLIENT_FOUND_ROWS=false`; we must not treat this as missing data.
+     *  - row doesn't exist → genuine routing failure; caller should throw to trigger rollback.
+     */
+    @Query(
+        """
+        SELECT CASE WHEN COUNT(p) > 0 THEN true ELSE false END
+        FROM meeting_participants p
+        WHERE p.userId = :userId
+          AND p.meeting.idempotencyKey = :meetingIdempotencyKey
+    """,
+    )
+    fun existsParticipant(
+        @Param("meetingIdempotencyKey") meetingIdempotencyKey: UUID,
+        @Param("userId") userId: String,
+    ): Boolean
 }

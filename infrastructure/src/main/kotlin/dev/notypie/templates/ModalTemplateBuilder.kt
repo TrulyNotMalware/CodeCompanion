@@ -1,6 +1,8 @@
 package dev.notypie.templates
 
 import com.slack.api.model.block.LayoutBlock
+import dev.notypie.common.jsonMapper
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -262,7 +264,11 @@ class ModalTemplateBuilder(
                 append(meeting.startAt.format(MEETING_LIST_TIMESTAMP_FORMAT))
                 meeting.endAt?.let { append(" ~ ${it.format(MEETING_LIST_TIMESTAMP_FORMAT)}") }
             }
-        val participantsLine = "Participants: ${meeting.participantIds.size}"
+        // Host is always counted as attending; invitees contribute to the denominator in full
+        // and to the numerator only while `isAttending` remains true (decliners subtract out).
+        val totalCount = 1 + meeting.participants.size
+        val acceptedCount = 1 + meeting.participants.count { it.isAttending }
+        val participantsLine = "Participants: $acceptedCount/$totalCount"
         val uidLine = "`${meeting.meetingUid}`"
         return "$titleLine\n$timeLine\n$participantsLine\n$uidLine"
     }
@@ -336,6 +342,76 @@ class ModalTemplateBuilder(
             *blocks.toTypedArray(),
             states = states,
         )
+    }
+
+    override fun declineReasonModalViewJson(
+        meetingTitle: String,
+        meetingIdempotencyKey: UUID,
+        participantUserId: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+    ): String {
+        // Token order must match SlackInteractionRequestParser: idempotencyKey, detailType,
+        // then routingExtras[0..n]. DeclineReasonSubmissionContext reads routingExtras[0] as
+        // participantUserId, [1] as noticeChannel, [2] as noticeMessageTs. Extras are
+        // URL-decoded on the parser side; we emit Slack IDs (URL-safe ASCII) raw, which is a
+        // no-op for URL-decode. Blank channel/ts still occupy a position so indices stay stable.
+        val privateMetadata =
+            listOf(
+                meetingIdempotencyKey.toString(),
+                CommandDetailType.DECLINE_REASON_MODAL.name,
+                participantUserId,
+                noticeChannel,
+                noticeMessageTs,
+            ).joinToString(",")
+        val options =
+            RejectReason.entries
+                .filter { it != RejectReason.ATTENDING }
+                .map { reason ->
+                    mapOf(
+                        "text" to mapOf("type" to "plain_text", "text" to reason.showMessage),
+                        "value" to reason.name,
+                    )
+                }
+        val view =
+            mapOf(
+                "type" to "modal",
+                "callback_id" to DeclineReasonModalIds.CALLBACK_ID,
+                "private_metadata" to privateMetadata,
+                "title" to mapOf("type" to "plain_text", "text" to "Why can't you attend?"),
+                "submit" to mapOf("type" to "plain_text", "text" to "Submit"),
+                "close" to mapOf("type" to "plain_text", "text" to "Cancel"),
+                "blocks" to
+                    buildList {
+                        if (meetingTitle.isNotBlank()) {
+                            add(
+                                mapOf(
+                                    "type" to "section",
+                                    "text" to mapOf("type" to "mrkdwn", "text" to "*$meetingTitle*"),
+                                ),
+                            )
+                        }
+                        add(
+                            mapOf(
+                                "type" to "input",
+                                "block_id" to DeclineReasonModalIds.BLOCK_ID,
+                                "label" to mapOf("type" to "plain_text", "text" to "Reason"),
+                                // static_select (dropdown) scales better than radio_buttons for 8
+                                // options — radios stack vertically and push the Submit button
+                                // below the fold on narrower clients.
+                                "element" to
+                                    mapOf(
+                                        "type" to "static_select",
+                                        "action_id" to DeclineReasonModalIds.ACTION_ID,
+                                        "placeholder" to
+                                            mapOf("type" to "plain_text", "text" to "Pick a reason"),
+                                        "options" to options,
+                                    ),
+                            ),
+                        )
+                    },
+            )
+        return jsonMapper.writeValueAsString(view)
     }
 
     override fun timeScheduleNoticeTemplate(

@@ -82,6 +82,77 @@ fun checkboxesStateJson(selectedOptions: List<Pair<String, String>>) =
 
 fun unknownStateJson(type: String = "some_unknown_type") = """{"type":"$type"}"""
 
+// ============ View Submission Payload Builder ============
+
+/**
+ * Builds a minimal `view_submission` payload for the decline-reason modal. The block_id /
+ * action_id constants match [dev.notypie.templates.ModalTemplateBuilder]'s companion object
+ * so that the parser can locate the selected radio value.
+ */
+fun createDeclineReasonViewSubmissionJson(
+    meetingIdempotencyKey: UUID,
+    participantUserId: String,
+    selectedReason: String,
+    noticeChannel: String = "",
+    noticeMessageTs: String = "",
+    teamId: String = TEST_TEAM_ID,
+    teamDomain: String = TEST_TEAM_DOMAIN,
+    userId: String = TEST_USER_ID,
+    userName: String = TEST_USER_NAME,
+    appId: String = TEST_APP_ID,
+    token: String = TEST_TOKEN,
+): String {
+    // Default to the legacy 3-token format so existing tests keep working; when the caller
+    // supplies channel/ts, emit the 5-token Wave 2 format.
+    val privateMetadata =
+        if (noticeChannel.isBlank() && noticeMessageTs.isBlank()) {
+            "$meetingIdempotencyKey,DECLINE_REASON_MODAL,$participantUserId"
+        } else {
+            "$meetingIdempotencyKey,DECLINE_REASON_MODAL,$participantUserId,$noticeChannel,$noticeMessageTs"
+        }
+    val stateValues =
+        if (selectedReason.isNotBlank()) {
+            """
+            {
+                "decline_reason_block": {
+                    "decline_reason_select": {
+                        "type": "static_select",
+                        "selected_option": {
+                            "text": {"type": "plain_text", "text": "$selectedReason"},
+                            "value": "$selectedReason"
+                        }
+                    }
+                }
+            }
+            """.trimIndent()
+        } else {
+            "{}"
+        }
+    return """
+        {
+            "type": "view_submission",
+            "token": "$token",
+            "api_app_id": "$appId",
+            "trigger_id": "trigger_view_submission_123",
+            "is_enterprise_install": false,
+            "team": {"id": "$teamId", "domain": "$teamDomain"},
+            "user": {
+                "id": "$userId",
+                "username": "$userName",
+                "name": "$userName",
+                "team_id": "$teamId"
+            },
+            "view": {
+                "id": "V_TEST_123",
+                "type": "modal",
+                "callback_id": "decline_reason_modal",
+                "private_metadata": "$privateMetadata",
+                "state": { "values": $stateValues }
+            }
+        }
+        """.trimIndent()
+}
+
 // ============ Full Payload Builder ============
 
 fun createBlockActionPayloadJson(

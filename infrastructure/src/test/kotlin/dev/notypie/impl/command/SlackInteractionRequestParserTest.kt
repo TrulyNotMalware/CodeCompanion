@@ -430,4 +430,106 @@ class SlackInteractionRequestParserTest :
                 }
             }
         }
+
+        given("parseStringPayload for view_submission") {
+            `when`("a decline-reason modal submission arrives with a selected radio value") {
+                val meetingKey = UUID.randomUUID()
+                val participantUserId = "U_PARTICIPANT_A"
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        selectedReason = "HEALTH_ISSUE",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("routing type is recovered from private_metadata, not message text") {
+                    result.type shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    result.idempotencyKey shouldBe meetingKey.toString()
+                    result.routingExtras shouldBe listOf(participantUserId)
+                    result.privateMetadata shouldBe
+                        "$meetingKey,DECLINE_REASON_MODAL,$participantUserId"
+                }
+
+                then("currentAction is synthesized as APPLY_BUTTON so routing treats submission as primary") {
+                    result.currentAction.type shouldBe ActionElementTypes.APPLY_BUTTON
+                    result.currentAction.isSelected shouldBe true
+                }
+
+                then("dropdown selection is surfaced as a STATIC_SELECT state carrying the enum name") {
+                    val selection =
+                        result.states.single { it.type == ActionElementTypes.STATIC_SELECT }
+                    selection.isSelected shouldBe true
+                    selection.selectedValue shouldBe "HEALTH_ISSUE"
+                }
+            }
+
+            `when`("a submission arrives with no radio selection") {
+                val meetingKey = UUID.randomUUID()
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_P",
+                        selectedReason = "",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("the STATIC_SELECT state marks isSelected=false with a blank value") {
+                    val selection =
+                        result.states.single { it.type == ActionElementTypes.STATIC_SELECT }
+                    selection.isSelected shouldBe false
+                    selection.selectedValue shouldBe ""
+                }
+
+                then("routing still resolves from private_metadata") {
+                    result.type shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                }
+            }
+
+            `when`("a submission carries the 5-token private_metadata (Wave 2 chat.update format)") {
+                val meetingKey = UUID.randomUUID()
+                val participantUserId = "U_WAVE2"
+                val noticeChannel = "C_NOTICE_WAVE2"
+                val noticeMessageTs = "1700000000.000400"
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        selectedReason = "HEALTH_ISSUE",
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("routingExtras surfaces participant + channel + messageTs in order") {
+                    // DeclineReasonSubmissionContext reads by index: [0]=user, [1]=channel, [2]=ts.
+                    result.routingExtras shouldBe listOf(participantUserId, noticeChannel, noticeMessageTs)
+                    result.privateMetadata shouldBe
+                        "$meetingKey,DECLINE_REASON_MODAL,$participantUserId," +
+                        "$noticeChannel,$noticeMessageTs"
+                }
+            }
+        }
+
+        given("parseStringPayload for block_actions — Container.messageTs") {
+            `when`("a non-ephemeral block_actions arrives with a message_ts") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = "$idempotencyKey,${CommandDetailType.MEETING_APPROVAL_NOTICE_FORM}",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("Container.messageTs carries the raw ts string so chat.update can use it later") {
+                    // Wave 2: MeetingApprovalResponseContext pulls this into OpenDeclineReasonModal
+                    // so the submission handler can chat.update the notice DM.
+                    result.container.messageTs shouldBe "1234567890.123"
+                }
+            }
+        }
     })
