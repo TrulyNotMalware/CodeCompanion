@@ -15,13 +15,9 @@ import java.nio.charset.StandardCharsets
 import java.time.Instant
 
 class SlackInteractionRequestParser : InteractionPayloadParser {
-    companion object {
-        private const val VIEW_SUBMISSION_TYPE: String = "view_submission"
-    }
-
     override fun parseStringPayload(payload: String): InteractionPayload {
         val rootType = peekPayloadType(payload = payload)
-        return if (rootType == VIEW_SUBMISSION_TYPE) {
+        return if (rootType == InteractionTypes.VIEW_SUBMISSION) {
             val viewSubmission =
                 GsonFactory.createSnakeCase().fromJson(payload, ViewSubmissionPayload::class.java)
             toInteractionPayloads(viewSubmission = viewSubmission)
@@ -102,7 +98,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             )
         val container =
             Container(
-                type = VIEW_SUBMISSION_TYPE,
+                type = InteractionTypes.VIEW_SUBMISSION,
                 messageTime = Instant.now(),
                 isEphemeral = false,
                 viewId = viewSubmission.view?.id,

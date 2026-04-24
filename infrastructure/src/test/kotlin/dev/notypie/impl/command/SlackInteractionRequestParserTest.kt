@@ -10,6 +10,7 @@ import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.ButtonType
 import io.kotest.assertions.throwables.shouldThrow
@@ -439,7 +440,7 @@ class SlackInteractionRequestParserTest :
                     createDeclineReasonViewSubmissionJson(
                         meetingIdempotencyKey = meetingKey,
                         participantUserId = participantUserId,
-                        selectedReason = "HEALTH_ISSUE",
+                        selectedReason = RejectReason.HEALTH_ISSUE.name,
                     )
 
                 val result = parser.parseStringPayload(payload = payload)
@@ -461,7 +462,7 @@ class SlackInteractionRequestParserTest :
                     val selection =
                         result.states.single { it.type == ActionElementTypes.STATIC_SELECT }
                     selection.isSelected shouldBe true
-                    selection.selectedValue shouldBe "HEALTH_ISSUE"
+                    selection.selectedValue shouldBe RejectReason.HEALTH_ISSUE.name
                 }
             }
 
@@ -497,7 +498,7 @@ class SlackInteractionRequestParserTest :
                     createDeclineReasonViewSubmissionJson(
                         meetingIdempotencyKey = meetingKey,
                         participantUserId = participantUserId,
-                        selectedReason = "HEALTH_ISSUE",
+                        selectedReason = RejectReason.HEALTH_ISSUE.name,
                         noticeChannel = noticeChannel,
                         noticeMessageTs = noticeMessageTs,
                     )

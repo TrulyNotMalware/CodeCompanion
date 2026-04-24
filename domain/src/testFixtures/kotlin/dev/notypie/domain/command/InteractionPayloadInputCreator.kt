@@ -12,6 +12,7 @@ import dev.notypie.domain.command.dto.interactions.Channel
 import dev.notypie.domain.command.dto.interactions.Container
 import dev.notypie.domain.command.dto.interactions.Enterprise
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
+import dev.notypie.domain.command.dto.interactions.InteractionTypes
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.interactions.Team
 import dev.notypie.domain.command.dto.interactions.User
@@ -26,7 +27,7 @@ const val SEPARATOR = ","
 
 fun createTestContainer() =
     Container(
-        type = "block_actions",
+        type = InteractionTypes.BLOCK_ACTIONS,
         isEphemeral = false,
         messageTime = Instant.now(),
     )

@@ -1,9 +1,8 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.SlackCommandType
+import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.createSlashCommandData
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
@@ -22,24 +21,9 @@ import java.util.UUID
 class RequestMeetingCommandTest :
     BehaviorSpec({
 
-        fun createMeetingCommandData(subCommands: List<String> = emptyList()) =
-            SlackCommandData(
-                appId = "A_TEST",
-                appToken = "TOKEN",
-                publisherId = "U_TEST",
-                publisherName = "tester",
-                channel = "C_TEST",
-                channelName = "general",
-                slackCommandType = SlackCommandType.SLASH,
-                subCommands = subCommands,
-                rawHeader = SlackRequestHeaders(),
-                rawBody = emptyMap(),
-                body = "",
-            )
-
         given("RequestMeetingCommand findSubCommandDefinition") {
             `when`("no subcommands provided") {
-                val commandData = createMeetingCommandData()
+                val commandData = createSlashCommandData()
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -54,7 +38,7 @@ class RequestMeetingCommandTest :
             }
 
             `when`("subcommand is 'list'") {
-                val commandData = createMeetingCommandData(subCommands = listOf("list"))
+                val commandData = createSlashCommandData(subCommands = listOf("list"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -69,7 +53,7 @@ class RequestMeetingCommandTest :
             }
 
             `when`("subcommand is unknown") {
-                val commandData = createMeetingCommandData(subCommands = listOf("unknown_sub"))
+                val commandData = createSlashCommandData(subCommands = listOf("unknown_sub"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -86,7 +70,7 @@ class RequestMeetingCommandTest :
 
         given("RequestMeetingCommand handleEvent with LIST sub command and range option") {
             `when`("subcommand text is 'list today'") {
-                val commandData = createMeetingCommandData(subCommands = listOf("list", "today"))
+                val commandData = createSlashCommandData(subCommands = listOf("list", "today"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -101,7 +85,7 @@ class RequestMeetingCommandTest :
                     result.status shouldBe Status.SUCCESS
                     intents.size shouldBe 1
                     val intent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
-                    intent.publisherId shouldBe "U_TEST"
+                    intent.publisherId shouldBe TEST_USER_ID
                     // TODAY range spans exactly one day starting at start-of-day
                     ChronoUnit.DAYS.between(intent.startDate, intent.endDate) shouldBe 1L
                     intent.startDate shouldBe before.toLocalDate().atStartOfDay()
@@ -109,7 +93,7 @@ class RequestMeetingCommandTest :
             }
 
             `when`("subcommand text is 'list bogus'") {
-                val commandData = createMeetingCommandData(subCommands = listOf("list", "bogus"))
+                val commandData = createSlashCommandData(subCommands = listOf("list", "bogus"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -136,19 +120,7 @@ class RequestMeetingCommandTest :
                     states = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData =
-                SlackCommandData(
-                    appId = "A_TEST",
-                    appToken = "TOKEN",
-                    publisherId = "U_TEST",
-                    publisherName = "tester",
-                    channel = "C_TEST",
-                    channelName = "general",
-                    slackCommandType = SlackCommandType.SLASH,
-                    rawHeader = SlackRequestHeaders(),
-                    rawBody = emptyMap(),
-                    body = interactionPayload,
-                )
+            val commandData = createSlashCommandData(body = interactionPayload)
 
             val command =
                 RequestMeetingCommand(

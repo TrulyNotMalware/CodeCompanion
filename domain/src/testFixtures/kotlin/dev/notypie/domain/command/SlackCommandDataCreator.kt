@@ -3,6 +3,7 @@ package dev.notypie.domain.command
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_BOT_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_TEAM_ID
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
@@ -10,6 +11,7 @@ import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.mention.Authorization
 import dev.notypie.domain.command.dto.mention.Block
@@ -162,4 +164,49 @@ fun createInteractionSlackCommandData(
             states = states,
             idempotencyKey = idempotencyKey,
         ),
+)
+
+fun createInteractionResponseSlackCommandData(
+    interactionPayload: InteractionPayload,
+    slackCommandType: SlackCommandType = SlackCommandType.INTERACTION_RESPONSE,
+    appId: String = TEST_APP_ID,
+    appToken: String = TEST_TOKEN,
+    publisherId: String = TEST_USER_ID,
+    publisherName: String = TEST_USER_NAME,
+    channel: String = TEST_CHANNEL_ID,
+    channelName: String = TEST_CHANNEL_NAME,
+) = SlackCommandData(
+    appId = appId,
+    appToken = appToken,
+    publisherId = publisherId,
+    publisherName = publisherName,
+    channel = channel,
+    channelName = channelName,
+    slackCommandType = slackCommandType,
+    rawHeader = SlackRequestHeaders(),
+    rawBody = emptyMap(),
+    body = interactionPayload,
+)
+
+fun createSlashCommandData(
+    subCommands: List<String> = emptyList(),
+    body: Any = "",
+    appId: String = TEST_APP_ID,
+    appToken: String = TEST_TOKEN,
+    publisherId: String = TEST_USER_ID,
+    publisherName: String = TEST_USER_NAME,
+    channel: String = TEST_CHANNEL_ID,
+    channelName: String = TEST_CHANNEL_NAME,
+) = SlackCommandData(
+    appId = appId,
+    appToken = appToken,
+    publisherId = publisherId,
+    publisherName = publisherName,
+    channel = channel,
+    channelName = channelName,
+    slackCommandType = SlackCommandType.SLASH,
+    subCommands = subCommands,
+    rawHeader = SlackRequestHeaders(),
+    rawBody = emptyMap(),
+    body = body,
 )

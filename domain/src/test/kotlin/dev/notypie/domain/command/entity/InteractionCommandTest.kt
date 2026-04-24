@@ -5,11 +5,10 @@ import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.createAppMentionSlackCommandData
 import dev.notypie.domain.command.createEventCallbackData
 import dev.notypie.domain.command.createInteractionPayloadInput
+import dev.notypie.domain.command.createInteractionResponseSlackCommandData
 import dev.notypie.domain.command.createRichTextBlock
 import dev.notypie.domain.command.createSlackEventCallBackRequest
 import dev.notypie.domain.command.createTextElement
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
@@ -67,19 +66,7 @@ class InteractionCommandTest :
                     states = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData =
-                SlackCommandData(
-                    appId = "A_TEST",
-                    appToken = "TOKEN",
-                    publisherId = "U_TEST",
-                    publisherName = "tester",
-                    channel = "C_TEST",
-                    channelName = "general",
-                    slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                    rawHeader = SlackRequestHeaders(),
-                    rawBody = emptyMap(),
-                    body = interactionPayload,
-                )
+            val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
 
             val command =
                 InteractionCommand(
@@ -106,19 +93,7 @@ class InteractionCommandTest :
                     states = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData =
-                SlackCommandData(
-                    appId = "A_TEST",
-                    appToken = "TOKEN",
-                    publisherId = "U_TEST",
-                    publisherName = "tester",
-                    channel = "C_TEST",
-                    channelName = "general",
-                    slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                    rawHeader = SlackRequestHeaders(),
-                    rawBody = emptyMap(),
-                    body = interactionPayload,
-                )
+            val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
 
             val command =
                 InteractionCommand(
@@ -148,19 +123,7 @@ class InteractionCommandTest :
                         states = emptyList(),
                         idempotencyKey = idempotencyKey,
                     )
-                val commandData =
-                    SlackCommandData(
-                        appId = "A_TEST",
-                        appToken = "TOKEN",
-                        publisherId = "U_TEST",
-                        publisherName = "tester",
-                        channel = "C_TEST",
-                        channelName = "general",
-                        slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                        rawHeader = SlackRequestHeaders(),
-                        rawBody = emptyMap(),
-                        body = interactionPayload,
-                    )
+                val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
 
                 val command =
                     InteractionCommand(

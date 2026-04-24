@@ -10,8 +10,11 @@ import dev.notypie.domain.TEST_TEAM_ID
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
+import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.InteractionTypes
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.ButtonType
+import dev.notypie.templates.DeclineReasonModalIds
 import java.util.UUID
 
 // ============ Action JSON Builders ============
@@ -20,15 +23,18 @@ fun buttonActionJson(
     buttonType: ButtonType = ButtonType.PRIMARY,
     value: String = "",
     actionId: String = "action_approve",
-) = """[{"type":"button","action_id":"$actionId","style":"${buttonType.name.lowercase()}","value":"$value"}]"""
+) =
+    """[{"type":"${ActionElementTypes.BUTTON.elementName}","action_id":"$actionId","style":"${buttonType.name.lowercase()}","value":"$value"}]"""
 
 fun buttonActionJsonWithoutStyle(value: String = "", actionId: String = "action_btn") =
-    """[{"type":"button","action_id":"$actionId","value":"$value"}]"""
+    """[{"type":"${ActionElementTypes.BUTTON.elementName}","action_id":"$actionId","value":"$value"}]"""
 
-fun multiStaticSelectActionJson(selectedValues: List<String>, actionId: String = "static_select") =
-    """[{"type":"multi_static_select","action_id":"$actionId","selected_options":[${
-        selectedValues.joinToString(",") { """{"value":"$it"}""" }
-    }]}]"""
+fun multiStaticSelectActionJson(
+    selectedValues: List<String>,
+    actionId: String = ActionElementTypes.STATIC_SELECT.elementName,
+) = """[{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","action_id":"$actionId","selected_options":[${
+    selectedValues.joinToString(",") { """{"value":"$it"}""" }
+}]}]"""
 
 fun multiUsersSelectActionJson(selectedUsers: List<String>, actionId: String = "user_select") =
     """[{"type":"multi_users_select","action_id":"$actionId","selected_users":[${
@@ -45,9 +51,9 @@ fun stateValuesJson(blockId: String = "block_1", actionId: String = "action_1", 
 
 fun multiStaticSelectStateJson(selectedOptions: List<Pair<String, String>>) =
     if (selectedOptions.isEmpty()) {
-        """{"type":"multi_static_select","selected_options":[]}"""
+        """{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","selected_options":[]}"""
     } else {
-        """{"type":"multi_static_select","selected_options":[${
+        """{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","selected_options":[${
             selectedOptions.joinToString(",") { (text, value) ->
                 """{"text":{"type":"plain_text","text":"$text"},"value":"$value"}"""
             }
@@ -114,9 +120,9 @@ fun createDeclineReasonViewSubmissionJson(
         if (selectedReason.isNotBlank()) {
             """
             {
-                "decline_reason_block": {
-                    "decline_reason_select": {
-                        "type": "static_select",
+                "${DeclineReasonModalIds.BLOCK_ID}": {
+                    "${DeclineReasonModalIds.ACTION_ID}": {
+                        "type": "${ActionElementTypes.STATIC_SELECT.elementName}",
                         "selected_option": {
                             "text": {"type": "plain_text", "text": "$selectedReason"},
                             "value": "$selectedReason"
@@ -130,7 +136,7 @@ fun createDeclineReasonViewSubmissionJson(
         }
     return """
         {
-            "type": "view_submission",
+            "type": "${InteractionTypes.VIEW_SUBMISSION}",
             "token": "$token",
             "api_app_id": "$appId",
             "trigger_id": "trigger_view_submission_123",
@@ -145,7 +151,7 @@ fun createDeclineReasonViewSubmissionJson(
             "view": {
                 "id": "V_TEST_123",
                 "type": "modal",
-                "callback_id": "decline_reason_modal",
+                "callback_id": "${DeclineReasonModalIds.CALLBACK_ID}",
                 "private_metadata": "$privateMetadata",
                 "state": { "values": $stateValues }
             }
@@ -196,7 +202,7 @@ fun createBlockActionPayloadJson(
 
     return """
         {
-            "type": "block_actions",
+            "type": "${InteractionTypes.BLOCK_ACTIONS}",
             "token": "$token",
             "trigger_id": "trigger_123",
             "api_app_id": "$appId",

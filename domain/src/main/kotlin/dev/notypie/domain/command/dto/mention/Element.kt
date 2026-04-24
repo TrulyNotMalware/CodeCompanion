@@ -29,7 +29,7 @@ data class Element(
     val elements: List<Element> = listOf(),
 )
 
-fun Element.extractText(): String? =
+internal fun Element.extractText(): String? =
     when (val textVal = text) {
         is PlainText -> textVal.value
         is TextObject -> textVal.text
@@ -39,7 +39,7 @@ fun Element.extractText(): String? =
 @JsonDeserialize(using = TextValueDeserializer::class)
 sealed class TextElement
 
-data class TextObject(
+internal data class TextObject(
     val type: String,
     val text: String,
     @field:JsonProperty("verbatim")
@@ -48,11 +48,11 @@ data class TextObject(
     val emoji: Boolean = true,
 ) : TextElement()
 
-data class PlainText(
+internal data class PlainText(
     val value: String,
 ) : TextElement()
 
-class TextValueDeserializer : ValueDeserializer<TextElement>() {
+internal class TextValueDeserializer : ValueDeserializer<TextElement>() {
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): TextElement =
         when (parser.currentToken()) {
             JsonToken.VALUE_STRING -> {

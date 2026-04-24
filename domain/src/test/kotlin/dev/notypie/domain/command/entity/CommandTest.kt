@@ -1,11 +1,10 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.createAppMentionSlackCommandData
 import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.SlackCommandData
+import dev.notypie.domain.command.createInteractionResponseSlackCommandData
 import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
@@ -60,19 +59,7 @@ class CommandTest :
                     states = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData =
-                SlackCommandData(
-                    appId = "A_TEST",
-                    appToken = "TOKEN",
-                    publisherId = "U_TEST",
-                    publisherName = "tester",
-                    channel = "C_TEST",
-                    channelName = "general",
-                    slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                    rawHeader = SlackRequestHeaders(),
-                    rawBody = emptyMap(),
-                    body = interactionPayload,
-                )
+            val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
 
             `when`("context is ReactionContext") {
                 val command =

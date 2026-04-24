@@ -586,7 +586,7 @@ class ModalTemplateBuilderTest :
 
                 then("top-level envelope parses into a View with the callback_id and private_metadata") {
                     view.type shouldBe "modal"
-                    view.callbackId shouldBe "decline_reason_modal"
+                    view.callbackId shouldBe DeclineReasonModalIds.CALLBACK_ID
                     view.privateMetadata shouldBe
                         "$meetingKey,DECLINE_REASON_MODAL,$participantUserId," +
                         "$noticeChannel,$noticeMessageTs"
@@ -600,10 +600,10 @@ class ModalTemplateBuilderTest :
                         view.blocks
                             .filterIsInstance<com.slack.api.model.block.InputBlock>()
                             .single()
-                    inputBlock.blockId shouldBe "decline_reason_block"
+                    inputBlock.blockId shouldBe DeclineReasonModalIds.BLOCK_ID
                     val dropdown =
                         inputBlock.element as com.slack.api.model.block.element.StaticSelectElement
-                    dropdown.actionId shouldBe "decline_reason_select"
+                    dropdown.actionId shouldBe DeclineReasonModalIds.ACTION_ID
                     // All RejectReason entries except ATTENDING (8 options).
                     dropdown.options.size shouldBe 8
                 }
