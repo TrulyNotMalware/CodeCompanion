@@ -4,7 +4,7 @@ import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.common.error.ErrorCode
 import dev.notypie.domain.common.error.ExceptionArgument
 
-sealed class CommandException(
+internal sealed class CommandException(
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
 ) : CodeCompanionRuntimeException(
@@ -12,7 +12,7 @@ sealed class CommandException(
         details = details,
     )
 
-class SubCommandParseException(
+internal class SubCommandParseException(
     val commandName: String,
     val subCommandName: String,
     errorCode: ErrorCode,
@@ -22,7 +22,7 @@ class SubCommandParseException(
         details = details,
     )
 
-class UnSupportedCommandException(
+internal class UnSupportedCommandException(
     val commandType: String,
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
@@ -31,7 +31,7 @@ class UnSupportedCommandException(
         details = details,
     )
 
-class ValidationException(
+internal class ValidationException(
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
 ) : CodeCompanionRuntimeException(
@@ -39,7 +39,7 @@ class ValidationException(
         details = details,
     )
 
-class ValidationExceptionWithName(
+internal class ValidationExceptionWithName(
     val className: String,
     errorCode: ErrorCode,
     details: List<ExceptionArgument> = emptyList(),

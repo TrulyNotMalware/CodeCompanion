@@ -9,7 +9,7 @@ import java.time.LocalDateTime
  * `LocalDateTime`. TODAY/TOMORROW snap to the day boundary; WEEK/MONTH are rolling windows
  * anchored at `now` (not calendar boundaries).
  */
-enum class MeetingListRange(
+internal enum class MeetingListRange(
     val token: String,
 ) {
     TODAY(token = "today") {

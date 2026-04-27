@@ -451,5 +451,5 @@ fun validate(className: String = "", block: ValidationBuilder.() -> Unit) {
 }
 
 // Entrypoint
-fun validateAndReturn(className: String = "", block: ValidationBuilder.() -> Unit): List<ExceptionArgument> =
+internal fun validateAndReturn(className: String = "", block: ValidationBuilder.() -> Unit): List<ExceptionArgument> =
     ValidationBuilder().apply(block).getErrors()

@@ -5,7 +5,7 @@ interface ErrorCode {
     val message: String
 }
 
-enum class CommonErrorCode(
+internal enum class CommonErrorCode(
     override val statusCode: Int,
     override val message: String,
 ) : ErrorCode {
@@ -44,7 +44,7 @@ class ReasonBuilder(
     }
 }
 
-sealed class ErrorResponse(
+internal sealed class ErrorResponse(
     errorCode: ErrorCode,
     val code: Int = errorCode.statusCode,
     val message: String = errorCode.message,

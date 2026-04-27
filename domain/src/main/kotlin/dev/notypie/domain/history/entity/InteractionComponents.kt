@@ -3,6 +3,6 @@ package dev.notypie.domain.history.entity
 import dev.notypie.domain.command.dto.interactions.States
 
 // Not Implemented Yet
-class InteractionComponents(
+internal class InteractionComponents(
     private val actionStates: List<States>,
 )

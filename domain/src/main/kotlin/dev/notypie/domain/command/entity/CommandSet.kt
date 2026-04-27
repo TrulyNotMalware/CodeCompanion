@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.entity
 
-enum class CommandSet {
+internal enum class CommandSet {
     UNKNOWN,
     NOTICE,
     APPROVAL,

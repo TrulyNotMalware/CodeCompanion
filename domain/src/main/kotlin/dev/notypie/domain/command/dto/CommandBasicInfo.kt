@@ -10,5 +10,5 @@ data class CommandBasicInfo(
     val idempotencyKey: UUID,
 )
 
-fun CommandBasicInfo.withNewKey(): CommandBasicInfo =
+internal fun CommandBasicInfo.withNewKey(): CommandBasicInfo =
     CommandBasicInfo(appId, appToken, publisherId, channel, UUID.randomUUID())

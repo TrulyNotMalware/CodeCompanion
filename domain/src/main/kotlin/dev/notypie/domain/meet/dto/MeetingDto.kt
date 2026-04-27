@@ -3,7 +3,7 @@ package dev.notypie.domain.meet.dto
 import java.time.LocalDateTime
 import java.util.UUID
 
-data class MeetingListDto(
+internal data class MeetingListDto(
     val meetings: List<MeetingDto>,
 )
 

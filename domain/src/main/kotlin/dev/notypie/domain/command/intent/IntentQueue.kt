@@ -14,7 +14,7 @@ interface IntentQueue {
 }
 
 // Thread Unsafe — same contract as existing EventQueue
-class DefaultIntentQueue : IntentQueue {
+internal class DefaultIntentQueue : IntentQueue {
     private val queue: ArrayDeque<CommandIntent> = ArrayDeque()
 
     override fun offer(intent: CommandIntent) {
