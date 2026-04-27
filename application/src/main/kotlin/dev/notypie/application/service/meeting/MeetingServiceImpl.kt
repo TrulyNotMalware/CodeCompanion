@@ -8,7 +8,6 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -139,7 +138,6 @@ class MeetingServiceImpl(
                         channel = event.channel,
                         idempotencyKey = event.idempotencyKey,
                     ),
-                commandType = CommandType.PIPELINE,
                 commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 targetUserId = event.participantUserId,
             )
@@ -164,7 +162,6 @@ class MeetingServiceImpl(
                     slackEventBuilder.getMeetingListFormRequest(
                         myMeetings = meetings,
                         commandBasicInfo = payload.responseBasicInfo,
-                        commandType = CommandType.PIPELINE,
                         commandDetailType = CommandDetailType.GET_MEETING_LIST,
                     )
                 },
@@ -175,7 +172,6 @@ class MeetingServiceImpl(
                     slackEventBuilder.simpleEphemeralTextRequest(
                         textMessage = "Failed to fetch your meetings. Please try again later.",
                         commandBasicInfo = payload.responseBasicInfo,
-                        commandType = CommandType.PIPELINE,
                         commandDetailType = CommandDetailType.ERROR_RESPONSE,
                     )
                 },

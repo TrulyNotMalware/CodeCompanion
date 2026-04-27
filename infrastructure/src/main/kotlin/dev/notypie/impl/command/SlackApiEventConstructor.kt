@@ -14,7 +14,6 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
@@ -40,7 +39,6 @@ class SlackApiEventConstructor(
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         simpleString: String,
-        commandType: CommandType,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.simpleTextResponseTemplate(
@@ -51,7 +49,6 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
@@ -60,14 +57,12 @@ class SlackApiEventConstructor(
     fun simpleEphemeralTextRequest(
         textMessage: String,
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
         targetUserId: String? = null,
     ): SendSlackMessageEvent {
         val layout = templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
         return buildEphemeralMessage(
             commandDetailType = commandDetailType,
-            commandType = commandType,
             commandBasicInfo = commandBasicInfo,
             layout = layout,
             replaceOriginal = false,
@@ -80,7 +75,6 @@ class SlackApiEventConstructor(
         errorClassName: String,
         errorMessage: String,
         details: String?,
-        commandType: CommandType,
         commandBasicInfo: CommandBasicInfo,
     ): SendSlackMessageEvent {
         val errorHeaderText = "Error : $errorClassName"
@@ -93,7 +87,6 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
@@ -104,7 +97,6 @@ class SlackApiEventConstructor(
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         timeScheduleInfo: TimeScheduleInfo,
-        commandType: CommandType,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.simpleScheduleNoticeTemplate(
@@ -114,7 +106,6 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
@@ -124,7 +115,6 @@ class SlackApiEventConstructor(
         commandDetailType: CommandDetailType,
         commandBasicInfo: CommandBasicInfo,
         approvalContents: ApprovalContents,
-        commandType: CommandType,
         targetUserId: String? = null,
         routingExtras: List<String> = emptyList(),
     ): SendSlackMessageEvent {
@@ -138,7 +128,6 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
             targetUserId = targetUserId,
@@ -151,7 +140,6 @@ class SlackApiEventConstructor(
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         selectionFields: List<SelectionContents>,
-        commandType: CommandType,
         reasonInput: TextInputContents? = null,
         approvalContents: ApprovalContents? = null,
     ): SendSlackMessageEvent {
@@ -175,7 +163,6 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
@@ -183,7 +170,6 @@ class SlackApiEventConstructor(
 
     fun requestMeetingFormRequest(
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
         approvalContents: ApprovalContents? = null,
     ): SendSlackMessageEvent {
@@ -200,7 +186,6 @@ class SlackApiEventConstructor(
         return buildEphemeralMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
@@ -209,14 +194,12 @@ class SlackApiEventConstructor(
     fun getMeetingListFormRequest(
         myMeetings: List<MeetingDto>,
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
     ): SendSlackMessageEvent {
         val layout = templateBuilder.meetingListFormTemplate(meetings = myMeetings)
         return buildEphemeralMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
@@ -306,14 +289,12 @@ class SlackApiEventConstructor(
         markdownText: String,
         responseUrl: String,
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
     ): SendSlackMessageEvent {
         val layout = templateBuilder.onlyTextTemplate(message = markdownText, isMarkDown = true)
         return buildActionResponse(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = true,
             responseUrl = responseUrl,
@@ -323,7 +304,6 @@ class SlackApiEventConstructor(
     private fun buildMessage(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
-        commandType: CommandType,
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         targetUserId: String? = null,
@@ -358,7 +338,6 @@ class SlackApiEventConstructor(
     private fun buildEphemeralMessage(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
-        commandType: CommandType,
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         targetUserId: String? = null,
@@ -391,7 +370,6 @@ class SlackApiEventConstructor(
     private fun buildActionResponse(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
-        commandType: CommandType,
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         responseUrl: String,

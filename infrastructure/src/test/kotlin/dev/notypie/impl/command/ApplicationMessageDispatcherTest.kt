@@ -18,7 +18,6 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.retry.RetryTemplate
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import java.util.UUID
 
 class ApplicationMessageDispatcherTest :
@@ -30,7 +29,6 @@ class ApplicationMessageDispatcherTest :
             ApplicationMessageDispatcher(
                 botToken = TEST_BOT_TOKEN,
                 applicationEventPublisher = mockk<ApplicationEventPublisher>(relaxed = true),
-                taskScheduler = mockk<ThreadPoolTaskScheduler>(relaxed = true),
                 retryService = RetryService(retryTemplate = RetryTemplate()),
                 outboxRepository = outboxRepository,
             )

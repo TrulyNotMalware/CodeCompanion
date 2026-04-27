@@ -160,7 +160,6 @@ class MeetingServiceImplTest :
                     slackEventBuilder.simpleEphemeralTextRequest(
                         textMessage = any(),
                         commandBasicInfo = any(),
-                        commandType = any(),
                         commandDetailType = any(),
                         targetUserId = any(),
                     )

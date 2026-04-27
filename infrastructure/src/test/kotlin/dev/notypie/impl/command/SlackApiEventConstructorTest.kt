@@ -5,7 +5,6 @@ import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
@@ -49,7 +48,6 @@ class SlackApiEventConstructorTest :
                         headLineText = "Test Title",
                         commandBasicInfo = commandBasicInfo,
                         simpleString = "Hello World",
-                        commandType = CommandType.SIMPLE,
                     )
 
                 then("calls templateBuilder.simpleTextResponseTemplate with given arguments") {
@@ -92,7 +90,6 @@ class SlackApiEventConstructorTest :
                     constructor.simpleEphemeralTextRequest(
                         textMessage = "Ephemeral Message",
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                     )
 
@@ -120,7 +117,6 @@ class SlackApiEventConstructorTest :
                     constructor.simpleEphemeralTextRequest(
                         textMessage = "DM Message",
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                         targetUserId = targetUserId,
                     )
@@ -149,7 +145,6 @@ class SlackApiEventConstructorTest :
                         errorClassName = "IllegalArgumentException",
                         errorMessage = "Invalid input",
                         details = "detail info",
-                        commandType = CommandType.SIMPLE,
                         commandBasicInfo = commandBasicInfo,
                     )
 
@@ -186,7 +181,6 @@ class SlackApiEventConstructorTest :
                         markdownText = "Updated text",
                         responseUrl = responseUrl,
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.RESPONSE,
                         commandDetailType = CommandDetailType.REPLACE_TEXT,
                     )
 
@@ -214,7 +208,6 @@ class SlackApiEventConstructorTest :
                 val result =
                     constructor.requestMeetingFormRequest(
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
                         commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
                         approvalContents = null,
                     )
@@ -247,7 +240,6 @@ class SlackApiEventConstructorTest :
                 val result =
                     constructor.requestMeetingFormRequest(
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
                         commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
                         approvalContents = approvalContents,
                     )

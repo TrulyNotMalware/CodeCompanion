@@ -12,7 +12,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 @Configuration
 class SlackRequestBuilderConfiguration(
@@ -24,24 +23,14 @@ class SlackRequestBuilderConfiguration(
         ModalTemplateBuilder(restRequester = restRequester, slackApiToken = appConfig.api.token)
 
     @Bean
-    fun taskScheduler(): ThreadPoolTaskScheduler =
-        ThreadPoolTaskScheduler().apply {
-            poolSize = 5
-//            threadNamePrefix = "ThreadPoolTaskScheduler-" // val cannot be reassigned issue.
-            initialize()
-        }
-
-    @Bean
     @ConditionalOnMissingBean(MessageDispatcher::class)
     fun messageDispatcher(
         applicationEventPublisher: ApplicationEventPublisher,
-        threadPoolTaskScheduler: ThreadPoolTaskScheduler,
         outboxRepository: MessageOutboxRepository,
         retryService: RetryService,
     ) = ApplicationMessageDispatcher(
         botToken = appConfig.api.token,
         applicationEventPublisher = applicationEventPublisher,
-        taskScheduler = threadPoolTaskScheduler,
         retryService = retryService,
         outboxRepository = outboxRepository,
     )

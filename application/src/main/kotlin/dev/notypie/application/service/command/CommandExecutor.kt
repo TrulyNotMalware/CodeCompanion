@@ -44,18 +44,13 @@ class CommandExecutor(
             publishIntents(
                 intents = pendingIntents,
                 command = command,
-                output = output,
             )
         }
 
         return output
     }
 
-    private fun <T : SubCommandDefinition> publishIntents(
-        intents: List<CommandIntent>,
-        command: Command<T>,
-        output: CommandOutput,
-    ) {
+    private fun <T : SubCommandDefinition> publishIntents(intents: List<CommandIntent>, command: Command<T>) {
         val basicInfo =
             command.commandData.extractBasicInfo(
                 idempotencyKey = command.idempotencyKey,
@@ -66,7 +61,6 @@ class CommandExecutor(
                 intentResolver.resolveAll(
                     intents = intents,
                     basicInfo = basicInfo,
-                    commandType = output.commandType,
                 )
             } catch (e: Exception) {
                 log.error(e) {

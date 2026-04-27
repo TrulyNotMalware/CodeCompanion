@@ -48,17 +48,10 @@ class ModalTemplateBuilder(
         internal const val MAX_MEETINGS_PER_LIST: Int = 24
     }
 
-    private fun createLayouts(vararg blocks: LayoutBlock) =
-        listOf(
-            *blocks,
-        )
-
-    private fun collectStates(vararg stateLists: List<States>): List<States> = stateLists.flatMap { it }
-
     private fun toLayoutBlocks(vararg blocks: LayoutBlock, states: List<States> = listOf()) =
         LayoutBlocks(
             interactionStates = states,
-            template = createLayouts(blocks = blocks),
+            template = blocks.toList(),
         )
 
     override fun onlyTextTemplate(message: String, isMarkDown: Boolean): LayoutBlocks =
@@ -201,11 +194,9 @@ class ModalTemplateBuilder(
             }
 
         val states =
-            collectStates(
-                userSelectLayout.interactiveObjects,
-                selectionLayouts.flatMap { it.interactiveObjects },
-                approvalLayout.interactiveObjects,
-            )
+            userSelectLayout.interactiveObjects +
+                selectionLayouts.flatMap { it.interactiveObjects } +
+                approvalLayout.interactiveObjects
 
         return toLayoutBlocks(
             *blocks.toTypedArray(),
@@ -332,12 +323,10 @@ class ModalTemplateBuilder(
                 approvalLayout.layout,
             )
         val states =
-            collectStates(
-                callbackCheckboxes.interactiveObjects,
-                multiUserSelectionContents.interactiveObjects,
-                timeScheduleBlock.interactiveObjects,
-                approvalLayout.interactiveObjects,
-            )
+            callbackCheckboxes.interactiveObjects +
+                multiUserSelectionContents.interactiveObjects +
+                timeScheduleBlock.interactiveObjects +
+                approvalLayout.interactiveObjects
         return toLayoutBlocks(
             *blocks.toTypedArray(),
             states = states,
@@ -449,11 +438,7 @@ class ModalTemplateBuilder(
                 ),
                 approvalLayout.layout,
             )
-        val states =
-            collectStates(
-                approvalLayout.interactiveObjects,
-                radioButtonLayout.interactiveObjects,
-            )
+        val states = approvalLayout.interactiveObjects + radioButtonLayout.interactiveObjects
         return toLayoutBlocks(
             *blocks.toTypedArray(),
             states = states,

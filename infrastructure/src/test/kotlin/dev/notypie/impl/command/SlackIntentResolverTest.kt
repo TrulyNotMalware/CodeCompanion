@@ -9,7 +9,6 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
@@ -35,7 +34,6 @@ class SlackIntentResolverTest :
         val resolver = SlackIntentResolver(slackEventBuilder = slackEventBuilder)
 
         val basicInfo = createCommandBasicInfo()
-        val commandType = CommandType.SIMPLE
         val commandDetailType = CommandDetailType.SIMPLE_TEXT
         val stubEvent =
             createSendSlackMessageEvent(
@@ -53,7 +51,6 @@ class SlackIntentResolverTest :
                         headLineText = any(),
                         commandBasicInfo = any(),
                         simpleString = any(),
-                        commandType = any(),
                     )
                 } returns stubEvent
 
@@ -61,7 +58,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(intent),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("produces one event via simpleTextRequest with intent fields") {
@@ -72,7 +68,6 @@ class SlackIntentResolverTest :
                             headLineText = "hi",
                             commandBasicInfo = basicInfo,
                             simpleString = "hello world",
-                            commandType = commandType,
                         )
                     }
                 }
@@ -87,7 +82,6 @@ class SlackIntentResolverTest :
                     slackEventBuilder.simpleEphemeralTextRequest(
                         textMessage = any(),
                         commandBasicInfo = any(),
-                        commandType = any(),
                         commandDetailType = any(),
                         targetUserId = any(),
                     )
@@ -96,7 +90,6 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls simpleEphemeralTextRequest with targetUserId") {
@@ -104,7 +97,6 @@ class SlackIntentResolverTest :
                         slackEventBuilder.simpleEphemeralTextRequest(
                             textMessage = "secret",
                             commandBasicInfo = basicInfo,
-                            commandType = commandType,
                             commandDetailType = commandDetailType,
                             targetUserId = "U_TARGET",
                         )
@@ -128,7 +120,6 @@ class SlackIntentResolverTest :
                         errorClassName = any(),
                         errorMessage = any(),
                         details = any(),
-                        commandType = any(),
                         commandBasicInfo = any(),
                     )
                 } returns stubEvent
@@ -136,7 +127,6 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls detailErrorTextRequest with intent default commandDetailType (ERROR_RESPONSE)") {
@@ -146,7 +136,6 @@ class SlackIntentResolverTest :
                             errorClassName = "TestException",
                             errorMessage = "something broke",
                             details = "stack trace",
-                            commandType = commandType,
                             commandBasicInfo = basicInfo,
                         )
                     }
@@ -170,14 +159,12 @@ class SlackIntentResolverTest :
                         headLineText = any(),
                         commandBasicInfo = any(),
                         timeScheduleInfo = any(),
-                        commandType = any(),
                     )
                 } returns stubEvent
 
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls simpleTimeScheduleRequest") {
@@ -187,7 +174,6 @@ class SlackIntentResolverTest :
                             headLineText = "daily",
                             commandBasicInfo = basicInfo,
                             timeScheduleInfo = scheduleInfo,
-                            commandType = commandType,
                         )
                     }
                 }
@@ -214,7 +200,6 @@ class SlackIntentResolverTest :
                         commandDetailType = any(),
                         commandBasicInfo = any(),
                         approvalContents = any(),
-                        commandType = any(),
                         targetUserId = any(),
                     )
                 } returns stubEvent
@@ -222,7 +207,6 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls simpleApplyRejectRequest with commandDetailType derived from approvalContents") {
@@ -231,7 +215,6 @@ class SlackIntentResolverTest :
                             commandDetailType = approvalContents.commandDetailType,
                             commandBasicInfo = basicInfo,
                             approvalContents = approvalContents,
-                            commandType = commandType,
                             targetUserId = "U_TARGET",
                         )
                     }
@@ -267,7 +250,6 @@ class SlackIntentResolverTest :
                         headLineText = any(),
                         commandBasicInfo = any(),
                         selectionFields = any(),
-                        commandType = any(),
                         reasonInput = any(),
                         approvalContents = any(),
                     )
@@ -276,7 +258,6 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls simpleApprovalFormRequest with intent default commandDetailType (APPROVAL_FORM)") {
@@ -286,7 +267,6 @@ class SlackIntentResolverTest :
                             headLineText = "Approve",
                             commandBasicInfo = basicInfo,
                             selectionFields = selectionFields,
-                            commandType = commandType,
                             reasonInput = reasonInput,
                             approvalContents = null,
                         )
@@ -310,14 +290,12 @@ class SlackIntentResolverTest :
                         headLineText = any(),
                         commandBasicInfo = any(),
                         simpleString = capture(capturedText),
-                        commandType = any(),
                     )
                 } returns stubEvent
 
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("formats Slack mentions and prepends [Notice]") {
@@ -333,7 +311,6 @@ class SlackIntentResolverTest :
                 every {
                     slackEventBuilder.requestMeetingFormRequest(
                         commandBasicInfo = any(),
-                        commandType = any(),
                         commandDetailType = any(),
                         approvalContents = any(),
                     )
@@ -342,14 +319,12 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls requestMeetingFormRequest with intent default (REQUEST_MEETING_FORM)") {
                     verify(exactly = 1) {
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,
-                            commandType = commandType,
                             commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
                             approvalContents = null,
                         )
@@ -373,7 +348,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(intent),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("produces a GetMeetingListEvent with correct payload and no SlackEventBuilder interaction") {
@@ -441,7 +415,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(intent),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("produces an OpenViewEvent by delegating to SlackApiEventConstructor") {
@@ -508,7 +481,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(intent),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("routes through SlackApiEventConstructor.updateNoticeMessageRequest") {
@@ -546,7 +518,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(intent),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("produces UpdateMeetingAttendanceEvent (isAttending=false) without touching slackEventBuilder") {
@@ -576,7 +547,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(intent),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("produces UpdateMeetingAttendanceEvent (isAttending=true) without touching slackEventBuilder") {
@@ -606,7 +576,6 @@ class SlackIntentResolverTest :
                         markdownText = any(),
                         responseUrl = any(),
                         commandBasicInfo = any(),
-                        commandType = any(),
                         commandDetailType = any(),
                     )
                 } returns stubEvent
@@ -614,7 +583,6 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = listOf(intent),
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("calls replaceOriginalText with intent default commandDetailType (REPLACE_TEXT)") {
@@ -623,7 +591,6 @@ class SlackIntentResolverTest :
                             markdownText = "replacement",
                             responseUrl = "https://hooks.slack.com/foo",
                             commandBasicInfo = basicInfo,
-                            commandType = commandType,
                             commandDetailType = CommandDetailType.REPLACE_TEXT,
                         )
                     }
@@ -637,7 +604,6 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents = listOf(CommandIntent.Nothing),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("returns empty list and does not invoke any builder method") {
@@ -655,7 +621,6 @@ class SlackIntentResolverTest :
                         markdownText = any(),
                         responseUrl = any(),
                         commandBasicInfo = any(),
-                        commandType = any(),
                         commandDetailType = capture(replaceSlot),
                     )
                 } returns stubEvent
@@ -664,7 +629,6 @@ class SlackIntentResolverTest :
                         commandDetailType = capture(applyRejectSlot),
                         commandBasicInfo = any(),
                         approvalContents = any(),
-                        commandType = any(),
                         targetUserId = any(),
                     )
                 } returns stubEvent
@@ -692,7 +656,6 @@ class SlackIntentResolverTest :
                 resolver.resolveAll(
                     intents = intents,
                     basicInfo = basicInfo,
-                    commandType = commandType,
                 )
 
                 then("each intent's own commandDetailType is preserved, not collapsed to a single command-level type") {
@@ -710,7 +673,6 @@ class SlackIntentResolverTest :
                         headLineText = any(),
                         commandBasicInfo = any(),
                         simpleString = any(),
-                        commandType = any(),
                     )
                 } returns stubEvent
 
@@ -722,7 +684,6 @@ class SlackIntentResolverTest :
                                 CommandIntent.Nothing,
                             ),
                         basicInfo = basicInfo,
-                        commandType = commandType,
                     )
 
                 then("Nothing is filtered out while TextResponse is resolved") {

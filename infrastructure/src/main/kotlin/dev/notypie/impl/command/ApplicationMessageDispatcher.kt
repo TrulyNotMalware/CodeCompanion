@@ -12,7 +12,6 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
-import dev.notypie.domain.command.entity.event.DelayHandleEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
@@ -28,15 +27,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
-import java.time.Instant
 
 private val dispatcherLog = KotlinLogging.logger {}
 
 class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
-    private val taskScheduler: ThreadPoolTaskScheduler,
     private val retryService: RetryService,
     private val outboxRepository: MessageOutboxRepository,
 ) : MessageDispatcher {
@@ -60,14 +56,6 @@ class ApplicationMessageDispatcher(
         return event.toCommandOutput(commandType = commandType)
     }
 
-    @Deprecated("for removal")
-    override fun dispatch(event: DelayHandleEventPayloadContents, commandType: CommandType): CommandOutput {
-        taskScheduler.schedule({
-            applicationEventPublisher.publishEvent(event)
-        }, Instant.now().plus(event.delayTime, event.timeUnit))
-        return event.toCommandOutput(commandType = commandType)
-    }
-
     private fun SlackEventPayload.toCommandOutput(commandType: CommandType) =
         CommandOutput(
             ok = true,
@@ -86,13 +74,6 @@ class ApplicationMessageDispatcher(
                 when (event) {
                     is ActionEventPayloadContents -> {
                         dispatchActionResponseContents(event = event)
-                    }
-
-                    is DelayHandleEventPayloadContents -> {
-                        throw UnsupportedOperationException(
-                            "DelayHandleEventPayloadContents dispatch is not supported via the outbox relay path " +
-                                "(idempotencyKey=${event.idempotencyKey})",
-                        )
                     }
 
                     is PostEventPayloadContents -> {
@@ -151,7 +132,7 @@ class ApplicationMessageDispatcher(
                 botToken,
                 responseType,
             )
-        return returnSuccessOrFailed(result = result, event = event)
+        return buildCommandOutputFromResponse(result = result, event = event)
     }
 
     /**
@@ -218,10 +199,10 @@ class ApplicationMessageDispatcher(
                 .build()
         val result = okHttpClient.newCall(request).execute()
         result.close()
-        return returnSuccessOrFailed(result = result, event = event)
+        return buildCommandOutputFromResponse(result = result, event = event)
     }
 
-    private fun returnSuccessOrFailed(
+    private fun buildCommandOutputFromResponse(
         result: SlackApiTextResponse,
         event: SlackEventPayload,
         commandType: CommandType = CommandType.EXTERNAL_API,
@@ -231,7 +212,7 @@ class ApplicationMessageDispatcher(
         CommandOutput.fail(event = event, reason = result.error)
     }
 
-    private fun returnSuccessOrFailed(
+    private fun buildCommandOutputFromResponse(
         result: Response,
         event: SlackEventPayload,
         commandType: CommandType = CommandType.RESPONSE,

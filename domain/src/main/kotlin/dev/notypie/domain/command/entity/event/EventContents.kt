@@ -1,7 +1,6 @@
 package dev.notypie.domain.command.entity.event
 
 import dev.notypie.domain.command.entity.CommandDetailType
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 sealed class SlackEventPayload(
@@ -39,23 +38,6 @@ data class ActionEventPayloadContents(
     override val channel: String,
     val responseUrl: String,
     val body: String,
-) : SlackEventPayload(
-        apiAppId = apiAppId,
-        commandDetailType = commandDetailType,
-        idempotencyKey = idempotencyKey,
-        publisherId = publisherId,
-        channel = channel,
-    )
-
-data class DelayHandleEventPayloadContents(
-    override val eventId: UUID,
-    override val apiAppId: String,
-    val delayTime: Long = 5L,
-    val timeUnit: ChronoUnit = ChronoUnit.MINUTES,
-    override val commandDetailType: CommandDetailType,
-    override val idempotencyKey: UUID,
-    override val channel: String,
-    override val publisherId: String,
 ) : SlackEventPayload(
         apiAppId = apiAppId,
         commandDetailType = commandDetailType,

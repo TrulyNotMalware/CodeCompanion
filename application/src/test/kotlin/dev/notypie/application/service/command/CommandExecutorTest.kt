@@ -4,7 +4,6 @@ import dev.notypie.domain.command.TestCommand
 import dev.notypie.domain.command.createAppMentionSlackCommandData
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.impl.command.SlackIntentResolver
@@ -52,7 +51,6 @@ class CommandExecutorTest :
                     intentResolver.resolveAll(
                         intents = any(),
                         basicInfo = any(),
-                        commandType = any(),
                     )
                 } returns listOf(resolvedEvent)
                 every { eventPublisher.publishEvent(events = any()) } just Runs
@@ -66,7 +64,6 @@ class CommandExecutorTest :
                         intentResolver.resolveAll(
                             intents = listOf(intent),
                             basicInfo = any(),
-                            commandType = CommandType.SIMPLE,
                         )
                     }
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
@@ -78,7 +75,6 @@ class CommandExecutorTest :
                     intentResolver.resolveAll(
                         intents = any(),
                         basicInfo = any(),
-                        commandType = any(),
                     )
                 } throws RuntimeException("resolver failure")
 
@@ -100,7 +96,6 @@ class CommandExecutorTest :
                     intentResolver.resolveAll(
                         intents = any(),
                         basicInfo = any(),
-                        commandType = any(),
                     )
                 } returns listOf(resolvedEvent)
                 every { eventPublisher.publishEvent(events = any()) } throws RuntimeException("publish failure")
@@ -131,7 +126,6 @@ class CommandExecutorTest :
                         intentResolver.resolveAll(
                             intents = any(),
                             basicInfo = any(),
-                            commandType = any(),
                         )
                     }
                     verify(exactly = 0) { eventPublisher.publishEvent(events = any()) }
@@ -152,7 +146,6 @@ class CommandExecutorTest :
                     intentResolver.resolveAll(
                         intents = any(),
                         basicInfo = any(),
-                        commandType = any(),
                     )
                 } returns emptyList()
 

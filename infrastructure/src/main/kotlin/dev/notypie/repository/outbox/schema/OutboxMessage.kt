@@ -5,7 +5,6 @@ import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
-import dev.notypie.domain.command.entity.event.DelayHandleEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
@@ -115,13 +114,6 @@ fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
 
         is ActionEventPayloadContents -> {
             (payload as ActionEventPayloadContents).toOutboxMessage().outboxMessage
-        }
-
-        is DelayHandleEventPayloadContents -> {
-            throw UnsupportedOperationException(
-                "DelayHandleEventPayloadContents is not persisted to the outbox; " +
-                    "schedule it via TaskScheduler instead. idempotencyKey=$idempotencyKey",
-            )
         }
 
         is OpenViewPayloadContents -> {
