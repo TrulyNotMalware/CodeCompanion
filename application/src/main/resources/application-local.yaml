@@ -76,3 +76,5 @@ slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
+      signing-secret: ${SLACK_SIGNING_SECRET:}
+      request-timestamp-tolerance-seconds: 300

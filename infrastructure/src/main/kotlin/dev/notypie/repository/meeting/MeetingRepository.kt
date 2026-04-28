@@ -32,4 +32,13 @@ interface MeetingRepository {
 
     /** True if a participant row exists for `(meetingIdempotencyKey, userId)`. */
     fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean
+
+    /**
+     * Marks the meeting identified by [meetingUid] as canceled, but only when [requesterId] is
+     * the meeting's host AND the meeting is not already canceled. Returns true iff exactly one
+     * row was modified. The conditional update plus row-count check collapses three failure
+     * modes (missing meeting, non-host requester, already-canceled meeting) into a single
+     * "no-op" result so callers can react with one branch.
+     */
+    fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean
 }

@@ -259,4 +259,89 @@ class JpaMeetingRepositoryTest
                     }
                 }
             }
+
+            given("markMeetingCanceled") {
+                `when`("the host cancels their own active meeting") {
+                    val saved =
+                        repository.save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_HOST",
+                                participantUserId = "U_PARTICIPANT",
+                            ),
+                        )
+
+                    val rowsUpdated =
+                        repository.markMeetingCanceled(
+                            meetingUid = saved.meetingUid,
+                            requesterId = "U_HOST",
+                        )
+
+                    then("should report exactly one row updated") {
+                        rowsUpdated shouldBe 1
+                    }
+
+                    then("subsequent reads should reflect the canceled flag") {
+                        val refreshed = repository.findMeetingWithParticipants(meetingId = saved.id)
+                        refreshed!!.isCanceled shouldBe true
+                    }
+                }
+
+                `when`("a non-host requests cancellation") {
+                    val saved =
+                        repository.save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_HOST",
+                                participantUserId = "U_PARTICIPANT",
+                            ),
+                        )
+
+                    val rowsUpdated =
+                        repository.markMeetingCanceled(
+                            meetingUid = saved.meetingUid,
+                            requesterId = "U_PARTICIPANT",
+                        )
+
+                    then("should report 0 rows updated and leave the meeting active") {
+                        rowsUpdated shouldBe 0
+                        val refreshed = repository.findMeetingWithParticipants(meetingId = saved.id)
+                        refreshed!!.isCanceled shouldBe false
+                    }
+                }
+
+                `when`("the meeting was already canceled") {
+                    val saved =
+                        repository.save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_HOST",
+                                participantUserId = "U_PARTICIPANT",
+                            ),
+                        )
+                    repository.markMeetingCanceled(
+                        meetingUid = saved.meetingUid,
+                        requesterId = "U_HOST",
+                    )
+
+                    val rowsUpdated =
+                        repository.markMeetingCanceled(
+                            meetingUid = saved.meetingUid,
+                            requesterId = "U_HOST",
+                        )
+
+                    then("the second cancellation should be a no-op") {
+                        rowsUpdated shouldBe 0
+                    }
+                }
+
+                `when`("no meeting matches the meetingUid") {
+                    val rowsUpdated =
+                        repository.markMeetingCanceled(
+                            meetingUid = UUID.randomUUID(),
+                            requesterId = "U_HOST",
+                        )
+
+                    then("should report 0 rows updated") {
+                        rowsUpdated shouldBe 0
+                    }
+                }
+            }
         })

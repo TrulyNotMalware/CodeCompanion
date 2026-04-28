@@ -30,6 +30,8 @@ data class AppConfig(
 
     data class Api(
         val token: String = "",
+        val signingSecret: String = "",
+        val requestTimestampToleranceSeconds: Long = 300,
     )
 
     data class Cdc(

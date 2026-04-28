@@ -88,4 +88,20 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingIdempotencyKey") meetingIdempotencyKey: UUID,
         @Param("userId") userId: String,
     ): Boolean
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE meetings m
+        SET m.isCanceled = true
+        WHERE m.meetingUid = :meetingUid
+          AND m.publisherId = :requesterId
+          AND m.isCanceled = false
+    """,
+    )
+    fun markMeetingCanceled(
+        @Param("meetingUid") meetingUid: UUID,
+        @Param("requesterId") requesterId: String,
+    ): Int
 }

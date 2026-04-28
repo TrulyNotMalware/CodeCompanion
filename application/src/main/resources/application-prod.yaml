@@ -69,7 +69,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
+        include: health,info,metrics
       base-path: ${ACTUATOR_BASE_PATH}
       path-mapping:
         loggers: logs
@@ -92,6 +92,8 @@ slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
+      signing-secret: ${SLACK_SIGNING_SECRET}
+      request-timestamp-tolerance-seconds: 300
     mode:
       outbox-reading-strategy: cdc
       event-publisher: kafka

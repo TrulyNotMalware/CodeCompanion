@@ -66,4 +66,11 @@ open class MeetingRepositoryImpl(
             meetingIdempotencyKey = meetingIdempotencyKey,
             userId = userId,
         )
+
+    @Transactional
+    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean =
+        jpaMeetingRepository.markMeetingCanceled(
+            meetingUid = meetingUid,
+            requesterId = requesterId,
+        ) == 1
 }
