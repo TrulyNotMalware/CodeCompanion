@@ -1,9 +1,9 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
@@ -99,7 +99,7 @@ class ApprovalCallbackContextTest :
             val basicInfo = createCommandBasicInfo()
 
             val customApprovalContents =
-                ApprovalContents(
+                createApprovalContents(
                     reason = "Custom approval reason",
                     idempotencyKey = basicInfo.idempotencyKey,
                     commandDetailType = CommandDetailType.NOTICE_FORM,

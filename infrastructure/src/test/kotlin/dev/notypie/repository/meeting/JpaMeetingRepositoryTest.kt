@@ -1,7 +1,7 @@
 package dev.notypie.repository.meeting
 
-import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingSchema
+import dev.notypie.schema.createMeetingSchemaWithParticipant
 import dev.notypie.schema.createParticipants
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
@@ -137,27 +137,9 @@ class JpaMeetingRepositoryTest
                 val participant = "U_RANGE_PART"
                 val now = LocalDateTime.now()
 
-                fun meetingWithParticipant(
-                    publisherId: String,
-                    participantUserId: String,
-                    name: String,
-                    startAt: LocalDateTime,
-                ): MeetingSchema {
-                    val meeting =
-                        createMeetingSchema(
-                            publisherId = publisherId,
-                            name = name,
-                            startAt = startAt,
-                        )
-                    meeting.participants.add(
-                        createParticipants(meeting = meeting, userId = participantUserId),
-                    )
-                    return meeting
-                }
-
                 // Meeting 1: starts inside [now, now+7d) — owner is publisher
                 repository.save(
-                    meetingWithParticipant(
+                    createMeetingSchemaWithParticipant(
                         publisherId = owner,
                         participantUserId = participant,
                         name = "inside",
@@ -166,7 +148,7 @@ class JpaMeetingRepositoryTest
                 )
                 // Meeting 2: starts after the window — should be excluded
                 repository.save(
-                    meetingWithParticipant(
+                    createMeetingSchemaWithParticipant(
                         publisherId = owner,
                         participantUserId = participant,
                         name = "outsideLater",
@@ -175,7 +157,7 @@ class JpaMeetingRepositoryTest
                 )
                 // Meeting 3: starts inside window, owner is participant only (not publisher)
                 repository.save(
-                    meetingWithParticipant(
+                    createMeetingSchemaWithParticipant(
                         publisherId = outsider,
                         participantUserId = owner,
                         name = "participantMatch",
@@ -184,7 +166,7 @@ class JpaMeetingRepositoryTest
                 )
                 // Meeting 4: starts inside window but owner is unrelated — should be excluded
                 repository.save(
-                    meetingWithParticipant(
+                    createMeetingSchemaWithParticipant(
                         publisherId = outsider,
                         participantUserId = "U_OTHER",
                         name = "unrelated",

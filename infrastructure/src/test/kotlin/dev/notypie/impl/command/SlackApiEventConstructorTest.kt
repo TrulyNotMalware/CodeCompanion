@@ -2,8 +2,8 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.TEST_BOT_TOKEN
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.MessageType
@@ -231,7 +231,7 @@ class SlackApiEventConstructorTest :
                 } returns emptyLayout
 
                 val approvalContents =
-                    ApprovalContents(
+                    createApprovalContents(
                         idempotencyKey = idempotencyKey,
                         commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
                         reason = "Custom Reason",

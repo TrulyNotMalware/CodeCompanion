@@ -6,14 +6,13 @@ import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
 import com.slack.api.model.block.InputBlock
 import com.slack.api.model.block.SectionBlock
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
-import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.CheckBoxOptions
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
@@ -21,7 +20,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.LocalDateTime
-import java.util.UUID
 
 class ModalBlockBuilderTest :
     BehaviorSpec({
@@ -103,9 +101,7 @@ class ModalBlockBuilderTest :
         given("approvalBlock") {
             `when`("called with approval contents") {
                 val contents =
-                    ApprovalContents(
-                        idempotencyKey = UUID.randomUUID(),
-                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    createApprovalContents(
                         reason = "Test",
                         publisherId = "U012ABCDEFG",
                     )

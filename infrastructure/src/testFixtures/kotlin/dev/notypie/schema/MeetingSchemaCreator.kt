@@ -50,6 +50,22 @@ fun createParticipants(
     updatedAt = updatedAt,
 )
 
+fun createMeetingSchemaWithParticipant(
+    publisherId: String = TEST_USER_ID,
+    participantUserId: String = TEST_USER_ID,
+    name: String = "test meeting schema",
+    startAt: LocalDateTime = LocalDateTime.now(),
+): MeetingSchema {
+    val meeting =
+        createMeetingSchema(
+            publisherId = publisherId,
+            name = name,
+            startAt = startAt,
+        )
+    meeting.participants.add(createParticipants(meeting = meeting, userId = participantUserId))
+    return meeting
+}
+
 fun createMeetingSchema(member: Int, startIterator: Int = 1): MeetingSchema {
     val meeting =
         createMeetingSchema(

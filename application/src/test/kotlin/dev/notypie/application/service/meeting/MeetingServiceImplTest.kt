@@ -12,7 +12,7 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
-import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
+import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.MeetingRepository
@@ -50,16 +50,9 @@ class MeetingServiceImplTest :
             val meetingKey = UUID.randomUUID()
             val participantUserId = "U_PARTICIPANT"
             val event =
-                UpdateMeetingAttendanceEvent(
-                    idempotencyKey = UUID.randomUUID(),
-                    payload =
-                        UpdateMeetingAttendancePayload(
-                            meetingIdempotencyKey = meetingKey,
-                            participantUserId = participantUserId,
-                            isAttending = false,
-                            absentReason = RejectReason.OTHER,
-                        ),
-                    type = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                createUpdateMeetingAttendanceEvent(
+                    meetingIdempotencyKey = meetingKey,
+                    participantUserId = participantUserId,
                 )
 
             `when`("the UPDATE affects a single row") {

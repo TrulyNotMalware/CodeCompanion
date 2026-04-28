@@ -6,8 +6,8 @@ import com.slack.api.model.block.SectionBlock
 import com.slack.api.model.block.composition.MarkdownTextObject
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
@@ -41,11 +41,9 @@ class ModalTemplateBuilderTest :
 
         val testIdempotencyKey = UUID.randomUUID()
         val testApprovalContents =
-            ApprovalContents(
+            createApprovalContents(
                 idempotencyKey = testIdempotencyKey,
-                commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 reason = "Test Reason",
-                publisherId = TEST_USER_ID,
             )
 
         given("requestApprovalFormTemplate") {

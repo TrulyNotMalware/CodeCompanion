@@ -1,9 +1,10 @@
 package dev.notypie.impl.command
 
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createOpenViewEvent
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.dto.interactions.RejectReason
-import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
@@ -12,7 +13,6 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
-import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
@@ -182,7 +182,7 @@ class SlackIntentResolverTest :
 
         given("ApplyReject intent") {
             val approvalContents =
-                ApprovalContents(
+                createApprovalContents(
                     reason = "test",
                     publisherId = basicInfo.publisherId,
                     idempotencyKey = basicInfo.idempotencyKey,
@@ -379,22 +379,14 @@ class SlackIntentResolverTest :
                     noticeMessageTs = noticeMessageTs,
                 )
             val stubOpenViewEvent =
-                OpenViewEvent(
+                createOpenViewEvent(
                     idempotencyKey = basicInfo.idempotencyKey,
-                    payload =
-                        OpenViewPayloadContents(
-                            eventId = UUID.randomUUID(),
-                            apiAppId = basicInfo.appId,
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                            idempotencyKey = basicInfo.idempotencyKey,
-                            publisherId = basicInfo.publisherId,
-                            channel = basicInfo.channel,
-                            triggerId = triggerId,
-                            viewJson = "{}",
-                            meetingIdempotencyKey = meetingKey,
-                            participantUserId = "U_PARTICIPANT_X",
-                        ),
-                    type = CommandDetailType.DECLINE_REASON_MODAL,
+                    appId = basicInfo.appId,
+                    publisherId = basicInfo.publisherId,
+                    channel = basicInfo.channel,
+                    triggerId = triggerId,
+                    meetingIdempotencyKey = meetingKey,
+                    participantUserId = "U_PARTICIPANT_X",
                 )
 
             `when`("resolveAll is called") {
@@ -447,23 +439,13 @@ class SlackIntentResolverTest :
                     markdownText = markdown,
                 )
             val stubUpdateEvent =
-                SendSlackMessageEvent(
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
                     idempotencyKey = basicInfo.idempotencyKey,
-                    payload =
-                        PostEventPayloadContents(
-                            eventId = UUID.randomUUID(),
-                            apiAppId = basicInfo.appId,
-                            messageType = MessageType.UPDATE_MESSAGE,
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                            idempotencyKey = basicInfo.idempotencyKey,
-                            publisherId = basicInfo.publisherId,
-                            channel = channel,
-                            replaceOriginal = false,
-                            body = emptyMap(),
-                        ),
-                    destination = "",
-                    timestamp = System.currentTimeMillis(),
-                    type = CommandDetailType.DECLINE_REASON_MODAL,
+                    appId = basicInfo.appId,
+                    publisherId = basicInfo.publisherId,
+                    channel = channel,
+                    messageType = MessageType.UPDATE_MESSAGE,
                 )
 
             `when`("resolveAll is called") {
@@ -634,7 +616,7 @@ class SlackIntentResolverTest :
                 } returns stubEvent
 
                 val approvalContents =
-                    ApprovalContents(
+                    createApprovalContents(
                         reason = "notice",
                         publisherId = basicInfo.publisherId,
                         idempotencyKey = basicInfo.idempotencyKey,
