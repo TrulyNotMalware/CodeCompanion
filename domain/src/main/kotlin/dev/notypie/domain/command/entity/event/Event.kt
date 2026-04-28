@@ -79,6 +79,28 @@ data class UpdateMeetingAttendanceEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<UpdateMeetingAttendancePayload>
 
+class CancelMeetingPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val meetingUid: UUID,
+    val requesterId: String,
+    /**
+     * Basic info of the originating interaction. Reused by the application-layer listener
+     * to send the success/no-op ephemeral back to the requester through the same channel
+     * the click came from, without round-tripping through routing extras.
+     */
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CancelMeetingEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CancelMeetingEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CancelMeetingPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<CancelMeetingPayload>
+
 /**
  * Synchronous-dispatch command event carrying a `views.open` payload. Must be consumed on
  * the request thread because [OpenViewPayloadContents.triggerId] expires in 3 seconds.

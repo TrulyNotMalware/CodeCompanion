@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
+import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
@@ -34,6 +35,7 @@ enum class CommandDetailType {
     GET_MEETING_LIST,
     MEETING_APPROVAL_NOTICE_FORM,
     DECLINE_REASON_MODAL,
+    CANCEL_MEETING,
     NOTICE_FORM,
     ;
 
@@ -72,6 +74,14 @@ enum class CommandDetailType {
 
             DECLINE_REASON_MODAL -> {
                 DeclineReasonSubmissionContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            CANCEL_MEETING -> {
+                CancelMeetingContext(
                     commandBasicInfo = commandBasicInfo,
                     subCommand = subCommand,
                     intents = intents,

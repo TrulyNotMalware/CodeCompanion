@@ -8,6 +8,7 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -140,6 +141,53 @@ class MeetingServiceImpl(
                     ),
                 commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 targetUserId = event.participantUserId,
+            )
+        val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
+        @Suppress("UNCHECKED_CAST")
+        queue.offer(event = ephemeralEvent as CommandEvent<EventPayload>)
+        eventPublisher.publishEvent(events = queue)
+    }
+
+    /**
+     * Cancels a meeting on behalf of a host who clicked the inline Cancel button on
+     * `/meetup list`. Authorization is enforced atomically by the repository's WHERE clause —
+     * the UPDATE only matches when [CancelMeetingEvent.payload.requesterId] equals
+     * `meetings.publisherId` AND `is_canceled = false`. Returning `false` collapses three
+     * failure modes (missing meeting, non-host, already-canceled) into a single no-op
+     * branch that surfaces a friendly ephemeral instead of an error.
+     */
+    @EventListener
+    fun cancelMeeting(event: CancelMeetingEvent) {
+        val payload = event.payload
+        val basicInfo = payload.responseBasicInfo
+        val message =
+            runCatching {
+                meetingRepository.markMeetingCanceled(
+                    meetingUid = payload.meetingUid,
+                    requesterId = payload.requesterId,
+                )
+            }.fold(
+                onSuccess = { canceled ->
+                    if (canceled) {
+                        "Meeting canceled."
+                    } else {
+                        "Meeting was already canceled, or you are not the host."
+                    }
+                },
+                onFailure = { exception ->
+                    log.error(exception) {
+                        "Failed to cancel meeting meetingUid=${payload.meetingUid} " +
+                            "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
+                    }
+                    "Failed to cancel the meeting. Please try again later."
+                },
+            )
+        val ephemeralEvent =
+            slackEventBuilder.simpleEphemeralTextRequest(
+                textMessage = message,
+                commandBasicInfo = basicInfo,
+                commandDetailType = CommandDetailType.CANCEL_MEETING,
+                targetUserId = payload.requesterId,
             )
         val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
         @Suppress("UNCHECKED_CAST")

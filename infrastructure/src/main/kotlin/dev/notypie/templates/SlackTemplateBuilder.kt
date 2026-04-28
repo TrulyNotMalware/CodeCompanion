@@ -32,7 +32,18 @@ interface SlackTemplateBuilder {
     ): LayoutBlocks
 
     // Meets
-    fun meetingListFormTemplate(meetings: List<MeetingDto>): LayoutBlocks
+
+    /**
+     * Renders the `/meetup list` ephemeral. When [currentUserId] equals a meeting's creator
+     * AND the meeting is not canceled, an inline Cancel button is appended after the section
+     * so the host can cancel without typing the meeting id. [listIdempotencyKey] is embedded
+     * in every cancel button's routing value so Slack-retry dedup applies to the click.
+     */
+    fun meetingListFormTemplate(
+        meetings: List<MeetingDto>,
+        currentUserId: String,
+        listIdempotencyKey: UUID,
+    ): LayoutBlocks
 
     fun requestMeetingFormTemplate(approvalContents: ApprovalContents): LayoutBlocks
 

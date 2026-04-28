@@ -36,16 +36,15 @@ class ModalTemplateBuilder(
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
         /**
-         * Slack Block Kit caps each message at 50 blocks. Each meeting renders as:
-         *   header(1) + top-divider(1) + N sections + (N-1) inter-dividers = 2N + 1
-         * Plus, when overflow occurs, we add a single extra truncation-notice section
-         * (no preceding divider — the italic notice is already visually distinct),
-         * bringing the total to 2N + 2.
-         * For 50-block safety we must keep 2N + 2 <= 50, i.e. N <= 24.
-         * We choose 24 and, in the overflow branch, emit the notice without a leading
-         * divider so the worst-case total is exactly 50 blocks.
+         * Slack Block Kit caps each message at 50 blocks. Worst case (every meeting hosted
+         * by the current user → every row gets a Cancel actions block) is:
+         *   header(1) + top-divider(1) + N sections + N cancel-actions + (N-1) inter-dividers
+         *     = 3N + 1
+         * Plus the truncation notice (1 block, no preceding divider — it's italic and
+         * visually distinct) brings the worst case to 3N + 2.
+         * For 50-block safety we keep 3N + 2 <= 50, i.e. N <= 16.
          */
-        internal const val MAX_MEETINGS_PER_LIST: Int = 24
+        internal const val MAX_MEETINGS_PER_LIST: Int = 16
     }
 
     private fun toLayoutBlocks(vararg blocks: LayoutBlock, states: List<States> = listOf()) =
@@ -204,9 +203,13 @@ class ModalTemplateBuilder(
         )
     }
 
-    override fun meetingListFormTemplate(meetings: List<MeetingDto>): LayoutBlocks {
+    override fun meetingListFormTemplate(
+        meetings: List<MeetingDto>,
+        currentUserId: String,
+        listIdempotencyKey: UUID,
+    ): LayoutBlocks {
         val blocks =
-            mutableListOf(
+            mutableListOf<LayoutBlock>(
                 modalBlockBuilder.headerBlock(text = "My Meetings"),
                 modalBlockBuilder.dividerBlock(),
             )
@@ -219,6 +222,7 @@ class ModalTemplateBuilder(
             )
             return toLayoutBlocks(*blocks.toTypedArray())
         }
+        val cancelStates = mutableListOf<States>()
         val displayed = meetings.take(n = MAX_MEETINGS_PER_LIST)
         displayed.forEachIndexed { index, meeting ->
             blocks.add(
@@ -227,6 +231,15 @@ class ModalTemplateBuilder(
                     isMarkDown = true,
                 ),
             )
+            if (meeting.creator == currentUserId && !meeting.isCanceled) {
+                val cancelLayout =
+                    modalBlockBuilder.cancelMeetingActionsBlock(
+                        meetingUid = meeting.meetingUid,
+                        listIdempotencyKey = listIdempotencyKey,
+                    )
+                blocks.add(cancelLayout.layout)
+                cancelStates.addAll(cancelLayout.interactiveObjects)
+            }
             if (index != displayed.lastIndex) {
                 blocks.add(modalBlockBuilder.dividerBlock())
             }
@@ -237,10 +250,10 @@ class ModalTemplateBuilder(
                 "_Showing the first $MAX_MEETINGS_PER_LIST of ${meetings.size} meetings. " +
                     "$hidden more omitted — narrow the range to see them._"
             // No preceding divider: the italic notice is visually distinct, and skipping
-            // the divider keeps worst-case total at 2*MAX+2 = 50 blocks (Slack's cap).
+            // the divider keeps worst-case total at 3*MAX+2 = 50 blocks (Slack's cap).
             blocks.add(modalBlockBuilder.simpleText(text = notice, isMarkDown = true))
         }
-        return toLayoutBlocks(*blocks.toTypedArray())
+        return toLayoutBlocks(*blocks.toTypedArray(), states = cancelStates)
     }
 
     private fun renderMeetingSection(meeting: MeetingDto): String {

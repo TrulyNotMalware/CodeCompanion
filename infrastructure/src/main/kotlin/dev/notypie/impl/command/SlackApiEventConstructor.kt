@@ -195,8 +195,14 @@ class SlackApiEventConstructor(
         myMeetings: List<MeetingDto>,
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
+        currentUserId: String = commandBasicInfo.publisherId,
     ): SendSlackMessageEvent {
-        val layout = templateBuilder.meetingListFormTemplate(meetings = myMeetings)
+        val layout =
+            templateBuilder.meetingListFormTemplate(
+                meetings = myMeetings,
+                currentUserId = currentUserId,
+                listIdempotencyKey = commandBasicInfo.idempotencyKey,
+            )
         return buildEphemeralMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,

@@ -10,6 +10,7 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
@@ -541,6 +542,35 @@ class SlackIntentResolverTest :
                     event.payload.participantUserId shouldBe "U_ACCEPTOR"
                     event.payload.isAttending shouldBe true
                     event.payload.absentReason shouldBe RejectReason.ATTENDING
+                }
+            }
+        }
+
+        given("CancelMeeting intent") {
+            `when`("a host requests cancellation") {
+                val meetingUid = UUID.randomUUID()
+                val requesterId = "U_HOST_CANCEL"
+                val intent =
+                    CommandIntent.CancelMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                    )
+
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(intent),
+                        basicInfo = basicInfo,
+                    )
+
+                then("produces a CancelMeetingEvent without touching slackEventBuilder") {
+                    events shouldHaveSize 1
+                    val event = events.first()
+                    event.shouldBeInstanceOf<CancelMeetingEvent>()
+                    event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    event.type shouldBe CommandDetailType.CANCEL_MEETING
+                    event.payload.meetingUid shouldBe meetingUid
+                    event.payload.requesterId shouldBe requesterId
+                    event.payload.responseBasicInfo shouldBe basicInfo
                 }
             }
         }

@@ -266,7 +266,12 @@ class ModalTemplateBuilderTest :
 
         given("meetingListFormTemplate") {
             `when`("called with an empty meeting list") {
-                val result = templateBuilder.meetingListFormTemplate(meetings = emptyList())
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = emptyList(),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("template has header, divider, and empty-state section (3 blocks)") {
                     result.template.size shouldBe 3
@@ -282,7 +287,7 @@ class ModalTemplateBuilderTest :
                 }
             }
 
-            `when`("called with a single non-canceled meeting") {
+            `when`("called with a single non-canceled meeting (viewer is not the host)") {
                 val meetingUid = UUID.fromString("11111111-2222-3333-4444-555555555555")
                 val meeting =
                     createMeetingDto(
@@ -299,7 +304,12 @@ class ModalTemplateBuilderTest :
                         isCanceled = false,
                     )
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("template has header + divider + single meeting section (3 blocks, no trailing divider)") {
                     result.template.size shouldBe 3
@@ -338,7 +348,12 @@ class ModalTemplateBuilderTest :
                             ),
                     )
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("decliner is subtracted from accepted but stays in the denominator") {
                     val section = result.template[2] as SectionBlock
@@ -355,7 +370,12 @@ class ModalTemplateBuilderTest :
                         participants = emptyList(),
                     )
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("participant line renders host-only count") {
                     val section = result.template[2] as SectionBlock
@@ -371,7 +391,12 @@ class ModalTemplateBuilderTest :
                         isCanceled = true,
                     )
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("meeting section includes [CANCELED] marker") {
                     val section = result.template[2] as SectionBlock
@@ -380,7 +405,113 @@ class ModalTemplateBuilderTest :
                 }
             }
 
-            `when`("called with multiple meetings") {
+            `when`("viewer is the host of an active meeting") {
+                val meetingUid = UUID.fromString("99999999-aaaa-bbbb-cccc-dddddddddddd")
+                val listKey = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb")
+                val meeting =
+                    createMeetingDto(
+                        meetingUid = meetingUid,
+                        creator = TEST_USER_ID,
+                        title = "My standup",
+                        isCanceled = false,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = listKey,
+                    )
+
+                then("an inline cancel actions block is appended right after the meeting section") {
+                    // header + divider + section + cancel-actions = 4 blocks (no inter-divider for single meeting)
+                    result.template.size shouldBe 4
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    result.template[2].shouldBeInstanceOf<SectionBlock>()
+                    result.template[3].shouldBeInstanceOf<com.slack.api.model.block.ActionsBlock>()
+                }
+
+                then("the cancel button carries the comma-tokenized routing value the parser expects") {
+                    val actionsBlock =
+                        result.template[3] as com.slack.api.model.block.ActionsBlock
+                    actionsBlock.blockId shouldBe MeetingActionIds.CANCEL_BLOCK_ID
+                    val button =
+                        actionsBlock.elements.single()
+                            as com.slack.api.model.block.element.ButtonElement
+                    button.actionId shouldBe MeetingActionIds.CANCEL_ACTION_ID
+                    button.style shouldBe "danger"
+                    button.value shouldBe "$listKey,CANCEL_MEETING,$meetingUid"
+                }
+
+                then("the interactionStates expose the cancel button as a primary REJECT_BUTTON") {
+                    val stateTypes = result.interactionStates.map { it.type }
+                    stateTypes shouldBe listOf(ActionElementTypes.REJECT_BUTTON)
+                }
+            }
+
+            `when`("viewer is the host but the meeting is already canceled") {
+                val meeting =
+                    createMeetingDto(
+                        creator = TEST_USER_ID,
+                        title = "Postmortem",
+                        isCanceled = true,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("the cancel button is suppressed so the user can't double-cancel") {
+                    val actionsCount =
+                        result.template.count { it is com.slack.api.model.block.ActionsBlock }
+                    actionsCount shouldBe 0
+                    result.interactionStates shouldBe emptyList()
+                }
+            }
+
+            `when`("viewer is the host of one meeting and a participant in another") {
+                val hostMeetingUid = UUID.randomUUID()
+                val listKey = UUID.randomUUID()
+                val hostMeeting =
+                    createMeetingDto(
+                        meetingUid = hostMeetingUid,
+                        creator = TEST_USER_ID,
+                        title = "Mine",
+                        isCanceled = false,
+                    )
+                val participantMeeting =
+                    createMeetingDto(
+                        creator = "U_OTHER",
+                        title = "Theirs",
+                        isCanceled = false,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(hostMeeting, participantMeeting),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = listKey,
+                    )
+
+                then("only the host's row gets a cancel actions block") {
+                    val actionsBlocks =
+                        result.template
+                            .filterIsInstance<com.slack.api.model.block.ActionsBlock>()
+                    actionsBlocks.size shouldBe 1
+                    val button =
+                        actionsBlocks
+                            .single()
+                            .elements
+                            .single() as com.slack.api.model.block.element.ButtonElement
+                    button.value shouldBe "$listKey,CANCEL_MEETING,$hostMeetingUid"
+                }
+            }
+
+            `when`("called with multiple meetings (viewer is not the host)") {
                 val meetings =
                     listOf(
                         createMeetingDto(title = "First"),
@@ -388,7 +519,12 @@ class ModalTemplateBuilderTest :
                         createMeetingDto(title = "Third"),
                     )
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = meetings)
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("template has header + divider + (section+divider)*2 + section (7 blocks)") {
                     // 1 header + 1 top divider + 3 sections + 2 inter-meeting dividers = 7
@@ -406,15 +542,18 @@ class ModalTemplateBuilderTest :
                 }
             }
 
-            `when`("called with more meetings than MAX_MEETINGS_PER_LIST (24)") {
+            `when`("called with more meetings than MAX_MEETINGS_PER_LIST (viewer is not the host)") {
                 val overflowSize = ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 5
                 val meetings = (1..overflowSize).map { createMeetingDto(title = "M$it") }
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = meetings)
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
-                then("renders only the first 24 meetings plus a truncation notice") {
-                    // header(1) + top divider(1) + 24 meeting sections + 23 inter-dividers
-                    // + overflow-notice section(1) = 50 blocks exactly. No divider before notice.
+                then("renders only the first MAX meetings plus a truncation notice") {
                     val sectionCount = result.template.count { it is SectionBlock }
                     sectionCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 1 // meetings + notice
                     val lastBlock = result.template.last()
@@ -429,6 +568,31 @@ class ModalTemplateBuilderTest :
                 }
             }
 
+            `when`("called with more meetings than MAX_MEETINGS_PER_LIST (viewer IS the host)") {
+                // Worst case for the 50-block budget: every row gets a Cancel actions block.
+                // Total = 1 header + 1 top-divider + N*(section+cancel) + (N-1) inter-dividers
+                //         + 1 overflow notice = 3N + 2.
+                val overflowSize = ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 3
+                val meetings = (1..overflowSize).map { createMeetingDto(title = "H$it") }
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("total block count must not exceed Slack's 50-block message limit") {
+                    (result.template.size <= 50) shouldBe true
+                }
+
+                then("each rendered meeting carries an inline cancel actions block") {
+                    val actionsCount =
+                        result.template.count { it is com.slack.api.model.block.ActionsBlock }
+                    actionsCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST
+                }
+            }
+
             `when`("meeting has no endAt") {
                 val meeting =
                     createMeetingDto(
@@ -437,7 +601,12 @@ class ModalTemplateBuilderTest :
                         endAt = null,
                     )
 
-                val result = templateBuilder.meetingListFormTemplate(meetings = listOf(meeting))
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
 
                 then("section omits the end-time suffix") {
                     val section = result.template[2] as SectionBlock

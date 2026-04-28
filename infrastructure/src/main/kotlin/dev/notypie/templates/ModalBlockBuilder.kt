@@ -4,9 +4,11 @@ import com.slack.api.model.block.*
 import com.slack.api.model.block.Blocks.*
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.InteractiveObject
+import java.util.UUID
 
 class ModalBlockBuilder(
     private val modalElementBuilder: ModalElementBuilder = ModalElementBuilder(),
@@ -77,6 +79,27 @@ class ModalBlockBuilder(
                 )
             }
         return toInteractionLayout(approvalButton.state, rejectButton.state, layout = layout)
+    }
+
+    /**
+     * Builds a one-button actions block for the inline Cancel control on `/meetup list`.
+     * The button's `value` follows the standard routing format the interaction parser already
+     * reads — `<listIdempotencyKey>,CANCEL_MEETING,<meetingUid>` — so click handling reuses the
+     * existing tokenization path without introducing a new metadata format.
+     */
+    fun cancelMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
+        val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
+        val cancelButton: InteractiveObject =
+            modalElementBuilder.cancelMeetingButtonElement(
+                buttonName = "Cancel",
+                interactionPayload = routingValue,
+            )
+        val layout =
+            actions {
+                it.blockId(MeetingActionIds.CANCEL_BLOCK_ID)
+                it.elements(listOf(cancelButton.element))
+            }
+        return toInteractionLayout(cancelButton.state, layout = layout)
     }
 
     /**

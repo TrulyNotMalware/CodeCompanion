@@ -100,6 +100,18 @@ sealed class CommandIntent {
         override val commandDetailType: CommandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
     ) : CommandIntent()
 
+    /**
+     * Host's request to cancel a meeting from the inline Cancel button on `/meetup list`.
+     * Authorization (host-only) is enforced atomically by the repository's WHERE clause —
+     * the intent itself carries the requester so the bridge can pass it through, and the
+     * UI side guards against showing the button to non-hosts as defense in depth.
+     */
+    data class CancelMeeting(
+        val meetingUid: UUID,
+        val requesterId: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.CANCEL_MEETING,
+    ) : CommandIntent()
+
     data class Notice(
         val targetUserIds: Collection<String>,
         val message: String,

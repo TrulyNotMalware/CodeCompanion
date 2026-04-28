@@ -1,6 +1,8 @@
 package dev.notypie.impl.command
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.event.CancelMeetingEvent
+import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
@@ -137,6 +139,19 @@ class SlackIntentResolver(
                             participantUserId = intent.participantUserId,
                             isAttending = intent.isAttending,
                             absentReason = intent.absentReason,
+                        ),
+                    type = intent.commandDetailType,
+                )
+            }
+
+            is CommandIntent.CancelMeeting -> {
+                CancelMeetingEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CancelMeetingPayload(
+                            meetingUid = intent.meetingUid,
+                            requesterId = intent.requesterId,
+                            responseBasicInfo = basicInfo,
                         ),
                     type = intent.commandDetailType,
                 )

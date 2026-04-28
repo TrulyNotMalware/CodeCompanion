@@ -63,6 +63,27 @@ class ModalElementBuilder {
                 ),
         )
 
+    /**
+     * Danger-style button used to cancel a meeting from the inline `/meetup list` row.
+     * The [interactionPayload] is the comma-tokenized routing string the parser will
+     * read back as `idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`.
+     * `actionId` is set explicitly so the click can be tied back to a deterministic id
+     * (existing approval/reject buttons rely on payload parsing alone, but this one
+     * gets a stable id for clarity in client-side debugging).
+     */
+    fun cancelMeetingButtonElement(buttonName: String, interactionPayload: String): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.REJECT_BUTTON),
+            element =
+                ButtonElement
+                    .builder()
+                    .text(plainTextObject(text = buttonName))
+                    .actionId(MeetingActionIds.CANCEL_ACTION_ID)
+                    .value(interactionPayload)
+                    .style(ButtonType.DANGER.toString().lowercase())
+                    .build(),
+        )
+
     private fun buttonElement(
         buttonName: String,
         interactionPayload: String,

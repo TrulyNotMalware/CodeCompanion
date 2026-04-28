@@ -12,6 +12,7 @@ import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
+import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.retry.RetryService
@@ -112,6 +113,113 @@ class MeetingServiceImplTest :
                     shouldThrow<IllegalStateException> {
                         service.updateParticipantAttendance(event = event)
                     }
+                }
+            }
+        }
+
+        given("cancelMeeting receives a CancelMeetingEvent") {
+            val meetingUid = UUID.randomUUID()
+            val requesterId = "U_HOST_LISTENER"
+            val basic = createCommandBasicInfo()
+            val event =
+                createCancelMeetingEvent(
+                    meetingUid = meetingUid,
+                    requesterId = requesterId,
+                    idempotencyKey = basic.idempotencyKey,
+                    responseBasicInfo = basic,
+                )
+            val capturedTextSlot = slot<String>()
+            val ephemeralEvent =
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.CANCEL_MEETING,
+                    idempotencyKey = basic.idempotencyKey,
+                    messageType = MessageType.EPHEMERAL_MESSAGE,
+                )
+
+            `when`("the repository confirms the cancel succeeded") {
+                every {
+                    meetingRepository.markMeetingCanceled(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                    )
+                } returns true
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = capture(capturedTextSlot),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns ephemeralEvent
+
+                val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
+                every { eventPublisher.publishEvent(events = capture(captured)) } returns Unit
+
+                service.cancelMeeting(event = event)
+
+                then("publishes a success ephemeral targeted at the requester") {
+                    capturedTextSlot.captured shouldBe "Meeting canceled."
+                    val published = captured.captured.toList()
+                    published.size shouldBe 1
+                    published.single() shouldBe ephemeralEvent
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            textMessage = "Meeting canceled.",
+                            commandBasicInfo = basic,
+                            commandDetailType = CommandDetailType.CANCEL_MEETING,
+                            targetUserId = requesterId,
+                        )
+                    }
+                }
+            }
+
+            `when`("the repository reports a no-op (non-host or already canceled)") {
+                every {
+                    meetingRepository.markMeetingCanceled(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                    )
+                } returns false
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = capture(capturedTextSlot),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns ephemeralEvent
+                every { eventPublisher.publishEvent(events = any()) } returns Unit
+
+                service.cancelMeeting(event = event)
+
+                then("publishes a friendly already-canceled-or-non-host ephemeral instead of throwing") {
+                    capturedTextSlot.captured shouldBe
+                        "Meeting was already canceled, or you are not the host."
+                }
+            }
+
+            `when`("the repository throws an unexpected error") {
+                every {
+                    meetingRepository.markMeetingCanceled(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                    )
+                } throws RuntimeException("db down")
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = capture(capturedTextSlot),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns ephemeralEvent
+                every { eventPublisher.publishEvent(events = any()) } returns Unit
+
+                service.cancelMeeting(event = event)
+
+                then("the listener swallows the failure and surfaces a retry-later ephemeral") {
+                    capturedTextSlot.captured shouldBe
+                        "Failed to cancel the meeting. Please try again later."
                 }
             }
         }
