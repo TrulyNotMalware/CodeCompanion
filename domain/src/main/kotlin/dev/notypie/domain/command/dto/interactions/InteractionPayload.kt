@@ -67,4 +67,5 @@ fun InteractionPayload.toSlackCommandData(
     slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
     rawBody = rawBody,
     rawHeader = rawHeader,
+    teamId = team.id,
 )

@@ -46,6 +46,7 @@ data class SlashCommandRequestBody(
         rawBody = rawBody,
         rawHeader = rawHeader,
         subCommands = subCommandList(),
+        teamId = teamId,
     )
 
     fun subCommandList() = subCommands.split(" ")

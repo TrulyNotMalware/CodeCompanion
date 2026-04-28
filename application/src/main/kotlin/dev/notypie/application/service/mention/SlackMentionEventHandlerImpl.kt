@@ -57,6 +57,7 @@ class SlackMentionEventHandlerImpl(
             body = body,
             publisherName = payload["user_name"].toString(), // FIXME
             channelName = payload["channel_name"].toString(), // FIXME
+            teamId = body.teamId,
         )
     }
 

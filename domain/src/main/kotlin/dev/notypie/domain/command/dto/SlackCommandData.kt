@@ -16,6 +16,7 @@ data class SlackCommandData(
     val rawHeader: SlackRequestHeaders,
     val rawBody: Map<String, Any>,
     val body: Any,
+    val teamId: String? = null,
 ) : IdempotencyData {
     fun extractBasicInfo(idempotencyKey: UUID): CommandBasicInfo =
         CommandBasicInfo(
