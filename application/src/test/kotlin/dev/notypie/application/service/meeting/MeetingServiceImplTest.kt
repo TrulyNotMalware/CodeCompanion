@@ -3,14 +3,14 @@ package dev.notypie.application.service.meeting
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
@@ -129,23 +129,10 @@ class MeetingServiceImplTest :
                     reason = "trigger_id expired",
                 )
             val ephemeralEvent =
-                SendSlackMessageEvent(
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.SIMPLE_TEXT,
                     idempotencyKey = basic.idempotencyKey,
-                    payload =
-                        PostEventPayloadContents(
-                            eventId = UUID.randomUUID(),
-                            apiAppId = basic.appId,
-                            messageType = dev.notypie.domain.command.entity.event.MessageType.EPHEMERAL_MESSAGE,
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                            idempotencyKey = basic.idempotencyKey,
-                            publisherId = basic.publisherId,
-                            channel = basic.channel,
-                            replaceOriginal = false,
-                            body = emptyMap(),
-                        ),
-                    destination = "",
-                    timestamp = System.currentTimeMillis(),
-                    type = CommandDetailType.SIMPLE_TEXT,
+                    messageType = MessageType.EPHEMERAL_MESSAGE,
                 )
 
             `when`("invoked") {
