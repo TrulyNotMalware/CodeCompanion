@@ -16,6 +16,7 @@ import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
@@ -542,6 +543,27 @@ class SlackIntentResolverTest :
                     event.payload.participantUserId shouldBe "U_ACCEPTOR"
                     event.payload.isAttending shouldBe true
                     event.payload.absentReason shouldBe RejectReason.ATTENDING
+                }
+            }
+        }
+
+        given("StatusReport intent") {
+            `when`("@bot status fires the parameterless StatusReport intent") {
+                val intent = CommandIntent.StatusReport
+
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(intent),
+                        basicInfo = basicInfo,
+                    )
+
+                then("produces a StatusReportRequestEvent without touching slackEventBuilder") {
+                    events shouldHaveSize 1
+                    val event = events.first()
+                    event.shouldBeInstanceOf<StatusReportRequestEvent>()
+                    event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    event.type shouldBe CommandDetailType.STATUS_REPORT
+                    event.payload.responseBasicInfo shouldBe basicInfo
                 }
             }
         }

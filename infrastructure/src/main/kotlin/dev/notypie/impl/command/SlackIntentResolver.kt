@@ -7,6 +7,8 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.StatusReportPayload
+import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
 import dev.notypie.domain.command.intent.CommandIntent
@@ -153,6 +155,14 @@ class SlackIntentResolver(
                             requesterId = intent.requesterId,
                             responseBasicInfo = basicInfo,
                         ),
+                    type = intent.commandDetailType,
+                )
+            }
+
+            is CommandIntent.StatusReport -> {
+                StatusReportRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload = StatusReportPayload(responseBasicInfo = basicInfo),
                     type = intent.commandDetailType,
                 )
             }

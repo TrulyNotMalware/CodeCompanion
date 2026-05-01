@@ -10,6 +10,7 @@ import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
+import dev.notypie.domain.command.entity.context.SlackStatusContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.intent.IntentQueue
 import java.util.*
@@ -29,6 +30,25 @@ internal class AppMentionContextParser(
         const val ELEMENT_TYPE_TEXT = "text"
 
         const val COMMAND_DELIMITER = " "
+
+        // Markdown body for `@bot help`. Listed once here so the parser test can pin the
+        // exact wording — drift between the docs and the runtime help message is the most
+        // common bug we see when help text gets edited in passing.
+        internal val HELP_MESSAGE: String =
+            """
+            *CodeCompanion — quick reference*
+
+            *Slash commands*
+            • `/meetup` — open the new-meeting form
+            • `/meetup list` — show your upcoming meetings (host-owned rows have an inline *Cancel* button)
+            • `/meetup list today|tomorrow|week|month` — filter by window
+
+            *Mentions*
+            • `@CodeCompanion notice @user1 @user2 <message>` — send a notice
+            • `@CodeCompanion approval` — open the request-approval form
+            • `@CodeCompanion help` — show this help
+            • `@CodeCompanion status` — show outbox lag and in-flight counts
+            """.trimIndent()
     }
 
     private val slackAppMentionRequestData: SlackEventCallBackRequest by lazy {
@@ -93,6 +113,23 @@ internal class AppMentionContextParser(
 
             CommandSet.APPROVAL -> {
                 SlackApprovalFormContext(
+                    commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+                    requestHeaders = slackCommandData.rawHeader,
+                    intents = intents,
+                )
+            }
+
+            CommandSet.HELP -> {
+                SlackTextResponseContext(
+                    text = HELP_MESSAGE,
+                    commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+                    requestHeaders = slackCommandData.rawHeader,
+                    intents = intents,
+                )
+            }
+
+            CommandSet.STATUS -> {
+                SlackStatusContext(
                     commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                     requestHeaders = slackCommandData.rawHeader,
                     intents = intents,

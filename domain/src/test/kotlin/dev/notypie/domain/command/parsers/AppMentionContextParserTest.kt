@@ -11,6 +11,7 @@ import dev.notypie.domain.command.createUserElement
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
+import dev.notypie.domain.command.entity.context.SlackStatusContext
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
 import dev.notypie.domain.command.entity.parsers.AppMentionContextParser
 import io.kotest.assertions.throwables.shouldThrow
@@ -82,6 +83,66 @@ class AppMentionContextParserTest :
 
                 then("should return SlackApprovalFormContext") {
                     result.shouldBeInstanceOf<SlackApprovalFormContext>()
+                }
+            }
+
+            `when`("command is 'help'") {
+                val body =
+                    createSlackEventCallBackRequest(
+                        event =
+                            createEventCallbackData(
+                                blocks =
+                                    listOf(
+                                        createRichTextBlock(
+                                            createTextElement(text = " help"),
+                                        ),
+                                    ),
+                            ),
+                    )
+                val commandData = createAppMentionSlackCommandData(body = body)
+                val parser =
+                    AppMentionContextParser(
+                        slackCommandData = commandData,
+                        baseUrl = "",
+                        commandId = UUID.randomUUID(),
+                        idempotencyKey = idempotencyKey,
+                        intents = intents,
+                    )
+
+                val result = parser.parseContext(idempotencyKey = idempotencyKey)
+
+                then("should return SlackTextResponseContext for the help reply") {
+                    result.shouldBeInstanceOf<SlackTextResponseContext>()
+                }
+            }
+
+            `when`("command is 'status'") {
+                val body =
+                    createSlackEventCallBackRequest(
+                        event =
+                            createEventCallbackData(
+                                blocks =
+                                    listOf(
+                                        createRichTextBlock(
+                                            createTextElement(text = " status"),
+                                        ),
+                                    ),
+                            ),
+                    )
+                val commandData = createAppMentionSlackCommandData(body = body)
+                val parser =
+                    AppMentionContextParser(
+                        slackCommandData = commandData,
+                        baseUrl = "",
+                        commandId = UUID.randomUUID(),
+                        idempotencyKey = idempotencyKey,
+                        intents = intents,
+                    )
+
+                val result = parser.parseContext(idempotencyKey = idempotencyKey)
+
+                then("should return SlackStatusContext so the listener renders fresh metrics") {
+                    result.shouldBeInstanceOf<SlackStatusContext>()
                 }
             }
 

@@ -4,6 +4,8 @@ internal enum class CommandSet {
     UNKNOWN,
     NOTICE,
     APPROVAL,
+    HELP,
+    STATUS,
     ;
 
     companion object {

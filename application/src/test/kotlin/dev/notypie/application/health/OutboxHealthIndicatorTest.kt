@@ -25,18 +25,28 @@ class OutboxHealthIndicatorTest :
                     stuckThresholdSeconds = 300L,
                 )
 
-            `when`("no PENDING messages exist") {
+            // Default IN_PROGRESS counts to zero so each `when` block only stubs what it cares
+            // about. Specific cases override these.
+            every { repository.countInProgress() } returns 0L
+            every { repository.countInProgressOlderThan(threshold = any()) } returns 0L
+            every { repository.findOldestInProgressUpdatedAt() } returns null
+
+            `when`("no PENDING or IN_PROGRESS messages exist") {
                 every { repository.countPending() } returns 0L
                 every { repository.countPendingOlderThan(threshold = any()) } returns 0L
                 every { repository.findOldestPendingCreatedAt() } returns null
 
                 val result = indicator.health()
 
-                then("status should be UP with zero counts") {
+                then("status should be UP with zero counts on both states") {
                     result.status shouldBe Status.UP
                     result.details["pendingCount"] shouldBe 0L
-                    result.details["stuckCount"] shouldBe 0L
+                    result.details["stuckPendingCount"] shouldBe 0L
+                    result.details["stuckCount"] shouldBe 0L // legacy alias
                     result.details["oldestPendingAgeSeconds"] shouldBe 0L
+                    result.details["inFlightCount"] shouldBe 0L
+                    result.details["stuckInFlightCount"] shouldBe 0L
+                    result.details["oldestInFlightAgeSeconds"] shouldBe 0L
                     result.details["stuckThresholdSeconds"] shouldBe 300L
                 }
             }
@@ -52,6 +62,7 @@ class OutboxHealthIndicatorTest :
                 then("status should be UP with reported lag") {
                     result.status shouldBe Status.UP
                     result.details["pendingCount"] shouldBe 3L
+                    result.details["stuckPendingCount"] shouldBe 0L
                     result.details["stuckCount"] shouldBe 0L
                     result.details["oldestPendingAgeSeconds"] shouldBe 60L
                 }
@@ -68,6 +79,7 @@ class OutboxHealthIndicatorTest :
                 then("status should be DOWN with stuck details") {
                     result.status shouldBe Status.DOWN
                     result.details["pendingCount"] shouldBe 5L
+                    result.details["stuckPendingCount"] shouldBe 2L
                     result.details["stuckCount"] shouldBe 2L
                     result.details["oldestPendingAgeSeconds"] shouldBe 900L
                 }
@@ -82,6 +94,47 @@ class OutboxHealthIndicatorTest :
 
                 then("the reported age should be clamped to zero rather than negative") {
                     result.details["oldestPendingAgeSeconds"] shouldBe 0L
+                }
+            }
+
+            `when`("an IN_PROGRESS row exceeds the stuck threshold") {
+                val stuckClaim = now.minusSeconds(600L)
+                // Pending side is healthy — the alert must come from in-flight stalling.
+                every { repository.countPending() } returns 0L
+                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
+                every { repository.findOldestPendingCreatedAt() } returns null
+                every { repository.countInProgress() } returns 1L
+                every { repository.countInProgressOlderThan(threshold = any()) } returns 1L
+                every { repository.findOldestInProgressUpdatedAt() } returns stuckClaim
+
+                val result = indicator.health()
+
+                then("status should be DOWN driven by the stuck in-flight row") {
+                    result.status shouldBe Status.DOWN
+                    result.details["pendingCount"] shouldBe 0L
+                    result.details["stuckPendingCount"] shouldBe 0L
+                    result.details["inFlightCount"] shouldBe 1L
+                    result.details["stuckInFlightCount"] shouldBe 1L
+                    result.details["oldestInFlightAgeSeconds"] shouldBe 600L
+                }
+            }
+
+            `when`("there are IN_PROGRESS rows but none stuck (active dispatch)") {
+                val freshClaim = now.minusSeconds(15L)
+                every { repository.countPending() } returns 0L
+                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
+                every { repository.findOldestPendingCreatedAt() } returns null
+                every { repository.countInProgress() } returns 4L
+                every { repository.countInProgressOlderThan(threshold = any()) } returns 0L
+                every { repository.findOldestInProgressUpdatedAt() } returns freshClaim
+
+                val result = indicator.health()
+
+                then("status should be UP — in-flight rows below threshold are normal") {
+                    result.status shouldBe Status.UP
+                    result.details["inFlightCount"] shouldBe 4L
+                    result.details["stuckInFlightCount"] shouldBe 0L
+                    result.details["oldestInFlightAgeSeconds"] shouldBe 15L
                 }
             }
         }

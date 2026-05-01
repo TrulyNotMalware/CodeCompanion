@@ -10,16 +10,24 @@ import java.time.Duration
 
 /**
  * Reports the health of the outbox relay so that operators can see when
- * messages are accumulating without being dispatched to Slack.
+ * messages are accumulating or stalling mid-dispatch.
  *
- * Health is `DOWN` while at least one PENDING row is older than the
- * configured stuck threshold; otherwise `UP`. Detail keys are stable so
- * dashboards/alerts can pin against them:
+ * Health is `DOWN` whenever at least one PENDING *or* IN_PROGRESS row is older than the
+ * configured stuck threshold; otherwise `UP`. The two states tell different stories:
  *
- * - `pendingCount` — total PENDING rows right now
- * - `stuckCount` — PENDING rows older than [stuckThreshold]
- * - `oldestPendingAgeSeconds` — age of the oldest PENDING row, or 0 when empty
- * - `stuckThresholdSeconds` — the configured threshold for context
+ *   - PENDING stuck → the poller is failing to pick up rows (DB lag, scheduler stalled,
+ *     pod down). Look at scheduling.
+ *   - IN_PROGRESS stuck → the poller claimed a row and crashed before publishing
+ *     SUCCESS/FAILURE. Look at dispatch failures and crash logs.
+ *
+ * Detail keys are stable so dashboards/alerts can pin against them:
+ *
+ * - `pendingCount` / `stuckPendingCount` / `oldestPendingAgeSeconds`
+ * - `inFlightCount` / `stuckInFlightCount` / `oldestInFlightAgeSeconds`
+ * - `stuckThresholdSeconds` — the threshold both states share
+ *
+ * The `stuckCount` key is preserved as an alias of `stuckPendingCount` so existing
+ * dashboards / alert queries do not break in this PR.
  */
 @Component
 class OutboxHealthIndicator(
@@ -35,17 +43,17 @@ class OutboxHealthIndicator(
         val cutoff = now.minus(stuckThreshold)
 
         val pendingCount = outboxRepository.countPending()
-        val stuckCount = outboxRepository.countPendingOlderThan(threshold = cutoff)
+        val stuckPendingCount = outboxRepository.countPendingOlderThan(threshold = cutoff)
         val oldestPending = outboxRepository.findOldestPendingCreatedAt()
-        val oldestPendingAgeSeconds =
-            if (oldestPending == null) {
-                0L
-            } else {
-                Duration.between(oldestPending, now).seconds.coerceAtLeast(0L)
-            }
+        val oldestPendingAgeSeconds = ageSeconds(at = oldestPending, now = now)
+
+        val inFlightCount = outboxRepository.countInProgress()
+        val stuckInFlightCount = outboxRepository.countInProgressOlderThan(threshold = cutoff)
+        val oldestInFlight = outboxRepository.findOldestInProgressUpdatedAt()
+        val oldestInFlightAgeSeconds = ageSeconds(at = oldestInFlight, now = now)
 
         val builder =
-            if (stuckCount > 0L) {
+            if (stuckPendingCount > 0L || stuckInFlightCount > 0L) {
                 Health.down()
             } else {
                 Health.up()
@@ -53,9 +61,17 @@ class OutboxHealthIndicator(
 
         return builder
             .withDetail("pendingCount", pendingCount)
-            .withDetail("stuckCount", stuckCount)
+            .withDetail("stuckPendingCount", stuckPendingCount)
+            // alias preserved so existing dashboards keep working — drop in a follow-up PR
+            .withDetail("stuckCount", stuckPendingCount)
             .withDetail("oldestPendingAgeSeconds", oldestPendingAgeSeconds)
+            .withDetail("inFlightCount", inFlightCount)
+            .withDetail("stuckInFlightCount", stuckInFlightCount)
+            .withDetail("oldestInFlightAgeSeconds", oldestInFlightAgeSeconds)
             .withDetail("stuckThresholdSeconds", stuckThreshold.seconds)
             .build()
     }
+
+    private fun ageSeconds(at: java.time.LocalDateTime?, now: java.time.LocalDateTime): Long =
+        if (at == null) 0L else Duration.between(at, now).seconds.coerceAtLeast(0L)
 }

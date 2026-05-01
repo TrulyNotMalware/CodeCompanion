@@ -112,6 +112,16 @@ sealed class CommandIntent {
         override val commandDetailType: CommandDetailType = CommandDetailType.CANCEL_MEETING,
     ) : CommandIntent()
 
+    /**
+     * Ops-tooling request emitted when a user invokes `@bot status`. The resolver lifts this
+     * to a [dev.notypie.domain.command.entity.event.StatusReportRequestEvent] so the
+     * application listener (which has the outbox repository) can render fresh metrics. Carries
+     * no fields because all routing context lives on the resolver's [basicInfo] argument.
+     */
+    data object StatusReport : CommandIntent() {
+        override val commandDetailType: CommandDetailType = CommandDetailType.STATUS_REPORT
+    }
+
     data class Notice(
         val targetUserIds: Collection<String>,
         val message: String,

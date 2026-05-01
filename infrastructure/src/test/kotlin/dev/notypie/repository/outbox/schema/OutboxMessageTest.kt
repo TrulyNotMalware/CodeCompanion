@@ -147,6 +147,52 @@ class OutboxMessageTest :
             }
         }
 
+        given("OutboxMessage.schemaVersion") {
+            `when`("a new outbox row is created from PostEventPayloadContents") {
+                val postEvent =
+                    createPostEventPayloadContents(
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                        idempotencyKey = testIdempotencyKey,
+                    )
+                val outboxMessage = postEvent.toOutboxMessage().outboxMessage
+
+                then("schemaVersion is stamped at OutboxSchemaVersion.CURRENT") {
+                    outboxMessage.schemaVersion shouldBe OutboxSchemaVersion.CURRENT
+                }
+            }
+
+            `when`("a row carries an unknown future schema version") {
+                val outboxMessage =
+                    OutboxMessage(
+                        eventId = UUID.randomUUID().toString(),
+                        idempotencyKey = testIdempotencyKey.toString(),
+                        publisherId = TEST_USER_ID,
+                        payload = mapOf("text" to "hello"),
+                        metadata =
+                            mapOf(
+                                "api_app_id" to TEST_APP_ID,
+                                "channel" to TEST_CHANNEL_ID,
+                                "replace_original" to false,
+                            ),
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT.name,
+                        type = MessageType.CHANNEL_ALERT.name,
+                        createdAt = java.time.LocalDateTime.now(),
+                        schemaVersion = 9999,
+                    )
+
+                then("toSlackEvent refuses to dispatch with a clear error message") {
+                    val ex =
+                        io.kotest.assertions.throwables
+                            .shouldThrow<IllegalArgumentException> {
+                                outboxMessage.toSlackEvent()
+                            }
+                    ex.message shouldNotBe null
+                    require(ex.message!!.contains("Unsupported outbox schemaVersion=9999"))
+                    require(ex.message!!.contains("Refusing to dispatch"))
+                }
+            }
+        }
+
         given("OutboxMessage.updateMessageStatus") {
             val postEvent =
                 createPostEventPayloadContents(

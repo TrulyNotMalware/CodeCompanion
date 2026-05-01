@@ -63,6 +63,20 @@ class OutboxMessage(
     @field:JsonProperty("updated_at")
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
+    /**
+     * Payload schema version. New rows are written with [OutboxSchemaVersion.CURRENT];
+     * [toSlackEvent] refuses to dispatch a row whose version is not in
+     * [OutboxSchemaVersion.SUPPORTED] so a future-binary downgrade (or an attacker-injected
+     * row) cannot trigger malformed Slack requests. The DB-level default carries pre-Phase-2
+     * rows forward as v1.
+     */
+    @field:JsonProperty("schema_version")
+    @field:Column(
+        name = "schema_version",
+        nullable = false,
+        columnDefinition = "INT NOT NULL DEFAULT ${OutboxSchemaVersion.V1}",
+    )
+    val schemaVersion: Int = OutboxSchemaVersion.CURRENT,
 ) {
     @field:Version
     @field:Column(name = "version", nullable = false)
@@ -79,7 +93,23 @@ class OutboxMessage(
         this.status = status.name
     }
 
-    fun toSlackEvent(): SlackEventPayload =
+    fun toSlackEvent(): SlackEventPayload {
+        require(schemaVersion in OutboxSchemaVersion.SUPPORTED) {
+            "Unsupported outbox schemaVersion=$schemaVersion eventId=$eventId. " +
+                "Supported versions: ${OutboxSchemaVersion.SUPPORTED}. " +
+                "Refusing to dispatch a payload this binary cannot reason about."
+        }
+        return when (schemaVersion) {
+            OutboxSchemaVersion.V1 -> toSlackEventV1()
+            else ->
+                error(
+                    "Outbox schemaVersion=$schemaVersion passed the SUPPORTED check but has no " +
+                        "deserializer branch. Likely a SUPPORTED entry was added without wiring it.",
+                )
+        }
+    }
+
+    private fun toSlackEventV1(): SlackEventPayload =
         if (type == MessageType.ACTION_RESPONSE.name) {
             ActionEventPayloadContents(
                 idempotencyKey = UUID.fromString(idempotencyKey),

@@ -36,6 +36,7 @@ enum class CommandDetailType {
     MEETING_APPROVAL_NOTICE_FORM,
     DECLINE_REASON_MODAL,
     CANCEL_MEETING,
+    STATUS_REPORT,
     NOTICE_FORM,
     ;
 
