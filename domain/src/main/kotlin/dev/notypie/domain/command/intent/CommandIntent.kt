@@ -122,6 +122,32 @@ sealed class CommandIntent {
         override val commandDetailType: CommandDetailType = CommandDetailType.STATUS_REPORT
     }
 
+    /**
+     * Opens the answer-entry modal for a scheduled standup prompt. The resolver loads the
+     * routine/session read models and builds a synchronous [dev.notypie.domain.command.entity.event.OpenViewEvent]
+     * so the Slack `trigger_id` is consumed before it expires.
+     */
+    data class OpenStandupModal(
+        val triggerId: String,
+        val sessionUid: UUID,
+        val routineUid: UUID,
+        val requesterId: String,
+        val noticeChannel: String,
+        val noticeMessageTs: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_FILL,
+    ) : CommandIntent()
+
+    /**
+     * Persists the responses from the standup answer modal. Resubmission replaces the prior
+     * row for `(session_id, user_id)` in the repository.
+     */
+    data class RecordStandupAnswer(
+        val sessionUid: UUID,
+        val userId: String,
+        val responses: List<String>,
+        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+    ) : CommandIntent()
+
     data class Notice(
         val targetUserIds: Collection<String>,
         val message: String,

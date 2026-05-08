@@ -7,6 +7,8 @@ import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.standup.dto.RoutineMemberDto
+import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.RestClientRequester.Companion.SLACK_API_BASE_URL
 import dev.notypie.impl.command.RestRequester
@@ -15,6 +17,7 @@ import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -34,6 +37,8 @@ class ModalTemplateBuilder(
         const val DEFAULT_PLACEHOLDER_TEXT = "SELECT"
         private val MEETING_LIST_TIMESTAMP_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        private val STANDUP_SESSION_DATE_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
         /**
          * Slack Block Kit caps each message at 50 blocks. Worst case (every meeting hosted
@@ -358,62 +363,119 @@ class ModalTemplateBuilder(
         // participantUserId, [1] as noticeChannel, [2] as noticeMessageTs. Extras are
         // URL-decoded on the parser side; we emit Slack IDs (URL-safe ASCII) raw, which is a
         // no-op for URL-decode. Blank channel/ts still occupy a position so indices stay stable.
-        val privateMetadata =
-            listOf(
-                meetingIdempotencyKey.toString(),
-                CommandDetailType.DECLINE_REASON_MODAL.name,
-                participantUserId,
-                noticeChannel,
-                noticeMessageTs,
-            ).joinToString(",")
-        val options =
-            RejectReason.entries
-                .filter { it != RejectReason.ATTENDING }
-                .map { reason ->
-                    mapOf(
-                        "text" to mapOf("type" to "plain_text", "text" to reason.showMessage),
-                        "value" to reason.name,
-                    )
-                }
         val view =
-            mapOf(
-                "type" to "modal",
-                "callback_id" to DeclineReasonModalIds.CALLBACK_ID,
-                "private_metadata" to privateMetadata,
-                "title" to mapOf("type" to "plain_text", "text" to "Why can't you attend?"),
-                "submit" to mapOf("type" to "plain_text", "text" to "Submit"),
-                "close" to mapOf("type" to "plain_text", "text" to "Cancel"),
-                "blocks" to
-                    buildList {
-                        if (meetingTitle.isNotBlank()) {
-                            add(
-                                mapOf(
-                                    "type" to "section",
-                                    "text" to mapOf("type" to "mrkdwn", "text" to "*$meetingTitle*"),
-                                ),
+            modal {
+                callbackId(id = DeclineReasonModalIds.CALLBACK_ID)
+                privateMetadata(
+                    metadata =
+                        listOf(
+                            meetingIdempotencyKey.toString(),
+                            CommandDetailType.DECLINE_REASON_MODAL.name,
+                            participantUserId,
+                            noticeChannel,
+                            noticeMessageTs,
+                        ).joinToString(","),
+                )
+                title(text = "Why can't you attend?")
+                submit(text = "Submit")
+                close(text = "Cancel")
+                blocks {
+                    if (meetingTitle.isNotBlank()) {
+                        section { mrkdwn(text = "*$meetingTitle*") }
+                    }
+                    input(blockId = DeclineReasonModalIds.BLOCK_ID) {
+                        label(text = "Reason")
+                        // static_select (dropdown) scales better than radio_buttons for 8
+                        // options — radios stack vertically and push the Submit button
+                        // below the fold on narrower clients.
+                        staticSelect(
+                            actionId = DeclineReasonModalIds.ACTION_ID,
+                            placeholder = "Pick a reason",
+                        ) {
+                            RejectReason.entries
+                                .filter { it != RejectReason.ATTENDING }
+                                .forEach { reason ->
+                                    option(text = reason.showMessage, value = reason.name)
+                                }
+                        }
+                    }
+                }
+            }
+        return jsonMapper.writeValueAsString(view)
+    }
+
+    override fun standupModalViewJson(
+        routineName: String,
+        sessionDate: LocalDate,
+        sessionUid: UUID,
+        userId: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+        questions: List<String>,
+    ): String {
+        val view =
+            modal {
+                callbackId(id = StandupModalIds.CALLBACK_ID)
+                privateMetadata(
+                    metadata =
+                        listOf(
+                            sessionUid.toString(),
+                            CommandDetailType.STANDUP_ANSWER_SUBMIT.name,
+                            userId,
+                            noticeChannel,
+                            noticeMessageTs,
+                        ).joinToString(","),
+                )
+                title(text = "Standup")
+                submit(text = "Submit")
+                close(text = "Cancel")
+                blocks {
+                    section {
+                        mrkdwn(text = "*$routineName* — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}")
+                    }
+                    questions.forEachIndexed { index, question ->
+                        input(blockId = "${StandupModalIds.BLOCK_ID_PREFIX}$index") {
+                            label(text = question)
+                            plainTextInput(
+                                actionId = "${StandupModalIds.ACTION_ID_PREFIX}$index",
+                                multiline = true,
                             )
                         }
-                        add(
-                            mapOf(
-                                "type" to "input",
-                                "block_id" to DeclineReasonModalIds.BLOCK_ID,
-                                "label" to mapOf("type" to "plain_text", "text" to "Reason"),
-                                // static_select (dropdown) scales better than radio_buttons for 8
-                                // options — radios stack vertically and push the Submit button
-                                // below the fold on narrower clients.
-                                "element" to
-                                    mapOf(
-                                        "type" to "static_select",
-                                        "action_id" to DeclineReasonModalIds.ACTION_ID,
-                                        "placeholder" to
-                                            mapOf("type" to "plain_text", "text" to "Pick a reason"),
-                                        "options" to options,
-                                    ),
-                            ),
-                        )
-                    },
-            )
+                    }
+                }
+            }
         return jsonMapper.writeValueAsString(view)
+    }
+
+    override fun standupSummaryTemplate(
+        routineName: String,
+        sessionDate: LocalDate,
+        members: List<RoutineMemberDto>,
+        answers: List<StandupAnswerDto>,
+        questions: List<String>,
+    ): LayoutBlocks {
+        val answersByUser = answers.associateBy { it.userId }
+        val body =
+            buildString {
+                append("*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*")
+                members.forEach { member ->
+                    append("\n\n<@${member.userId}>")
+                    val answer = answersByUser[member.userId]
+                    if (answer == null) {
+                        append(" _(no response)_")
+                    } else {
+                        questions.forEachIndexed { index, question ->
+                            val response =
+                                answer.responses
+                                    .getOrNull(index)
+                                    .orEmpty()
+                                    .ifBlank { "(blank)" }
+                            append("\n• *$question* $response")
+                        }
+                    }
+                }
+            }
+        return onlyTextTemplate(message = body, isMarkDown = true)
     }
 
     override fun timeScheduleNoticeTemplate(

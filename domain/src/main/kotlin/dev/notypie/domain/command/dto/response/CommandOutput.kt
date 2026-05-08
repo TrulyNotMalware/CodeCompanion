@@ -21,6 +21,7 @@ open class CommandOutput(
     val commandType: CommandType,
     val actionStates: List<States> = listOf(),
     val errorReason: String = "",
+    val messageTs: String = "",
 ) {
     companion object {
         fun empty() =
@@ -82,7 +83,7 @@ open class CommandOutput(
             errorReason = reason,
         )
 
-        fun success(payload: SlackEventPayload, commandType: CommandType) =
+        fun success(payload: SlackEventPayload, commandType: CommandType, messageTs: String = "") =
             CommandOutput(
                 ok = true,
                 apiAppId = payload.apiAppId,
@@ -92,6 +93,7 @@ open class CommandOutput(
                 commandDetailType = payload.commandDetailType,
                 idempotencyKey = payload.idempotencyKey,
                 publisherId = payload.publisherId,
+                messageTs = messageTs,
             )
 
         fun success(basicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType) =

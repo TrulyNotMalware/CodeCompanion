@@ -25,6 +25,7 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -773,6 +774,54 @@ class ModalTemplateBuilderTest :
                     dropdown.actionId shouldBe DeclineReasonModalIds.ACTION_ID
                     // All RejectReason entries except ATTENDING (8 options).
                     dropdown.options.size shouldBe 8
+                }
+            }
+        }
+
+        given("standupModalViewJson") {
+            val sessionUid = UUID.randomUUID()
+
+            `when`("called with routine questions") {
+                val json =
+                    templateBuilder.standupModalViewJson(
+                        routineName = "Daily Standup",
+                        sessionDate = LocalDate.of(2026, 5, 4),
+                        sessionUid = sessionUid,
+                        userId = "U_STANDUP",
+                        noticeChannel = "D_NOTICE",
+                        noticeMessageTs = "1700000000.000400",
+                        questions =
+                            listOf(
+                                "What did you do yesterday?",
+                                "What are you doing today?",
+                            ),
+                    )
+
+                then("private_metadata routes the submission to STANDUP_ANSWER_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${StandupModalIds.CALLBACK_ID}\""
+                    json shouldContain
+                        "\"private_metadata\":\"$sessionUid,STANDUP_ANSWER_SUBMIT," +
+                        "U_STANDUP,D_NOTICE,1700000000.000400\""
+                }
+
+                then("each question is rendered as a multiline plain_text_input") {
+                    json shouldContain "\"block_id\":\"${StandupModalIds.BLOCK_ID_PREFIX}0\""
+                    json shouldContain "\"action_id\":\"${StandupModalIds.ACTION_ID_PREFIX}0\""
+                    json shouldContain "\"type\":\"plain_text_input\""
+                    json shouldContain "\"multiline\":true"
+                    json shouldContain "What are you doing today?"
+                }
+
+                then("the emitted JSON parses as a Slack View") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe StandupModalIds.CALLBACK_ID
+                    inputs.size shouldBe 2
                 }
             }
         }

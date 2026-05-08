@@ -9,6 +9,7 @@ import com.slack.api.methods.response.chat.ChatUpdateResponse
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
@@ -16,6 +17,7 @@ import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SlackEventPayload
+import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
 import dev.notypie.domain.history.entity.Status
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -176,17 +178,42 @@ class ApplicationMessageDispatcher(
         )
     }
 
+    /**
+     * Routes a `views.open` failure to the right domain event so the application layer can
+     * deliver a feature-specific fallback (record + ephemeral notice for decline; ephemeral
+     * "please retry" for standup). Both branches require [OpenViewPayloadContents.participantUserId]
+     * to be set so the listener has someone to DM; if it's blank, the failure is logged
+     * upstream but no event is fired.
+     */
     private fun publishOpenFailure(event: OpenViewPayloadContents, reason: String) {
-        applicationEventPublisher.publishEvent(
-            DeclineModalOpenFailedEvent(
-                meetingIdempotencyKey = event.meetingIdempotencyKey,
-                participantUserId = event.participantUserId,
-                apiAppId = event.apiAppId,
-                channel = event.channel,
-                idempotencyKey = event.idempotencyKey,
-                reason = reason,
-            ),
-        )
+        if (event.participantUserId.isBlank()) return
+        when (event.commandDetailType) {
+            CommandDetailType.DECLINE_REASON_MODAL -> {
+                val meetingIdempotencyKey = event.meetingIdempotencyKey ?: return
+                applicationEventPublisher.publishEvent(
+                    DeclineModalOpenFailedEvent(
+                        meetingIdempotencyKey = meetingIdempotencyKey,
+                        participantUserId = event.participantUserId,
+                        apiAppId = event.apiAppId,
+                        channel = event.channel,
+                        idempotencyKey = event.idempotencyKey,
+                        reason = reason,
+                    ),
+                )
+            }
+            CommandDetailType.STANDUP_FILL -> {
+                applicationEventPublisher.publishEvent(
+                    StandupModalOpenFailedEvent(
+                        userId = event.participantUserId,
+                        apiAppId = event.apiAppId,
+                        channel = event.channel,
+                        idempotencyKey = event.idempotencyKey,
+                        reason = reason,
+                    ),
+                )
+            }
+            else -> Unit
+        }
     }
 
     private fun dispatchActionResponseContents(event: ActionEventPayloadContents): CommandOutput {
@@ -207,7 +234,11 @@ class ApplicationMessageDispatcher(
         event: SlackEventPayload,
         commandType: CommandType = CommandType.EXTERNAL_API,
     ) = if (result.isOk) {
-        CommandOutput.success(payload = event, commandType = commandType)
+        CommandOutput.success(
+            payload = event,
+            commandType = commandType,
+            messageTs = (result as? ChatPostMessageResponse)?.ts.orEmpty(),
+        )
     } else {
         CommandOutput.fail(event = event, reason = result.error)
     }

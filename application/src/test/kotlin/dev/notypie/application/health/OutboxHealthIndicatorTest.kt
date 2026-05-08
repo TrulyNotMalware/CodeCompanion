@@ -1,22 +1,19 @@
 package dev.notypie.application.health
 
+import dev.notypie.application.outbox.DEFAULT_TEST_NOW
+import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.stubOutboxStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.every
 import io.mockk.mockk
 import org.springframework.boot.health.contributor.Status
-import java.time.Clock
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.ZoneOffset
 
 class OutboxHealthIndicatorTest :
     BehaviorSpec({
         given("OutboxHealthIndicator") {
-            val now = LocalDateTime.of(2026, 4, 28, 12, 0, 0)
-            val zoneId = ZoneId.of("UTC")
-            val clock = Clock.fixed(now.toInstant(ZoneOffset.UTC), zoneId)
+            val now = DEFAULT_TEST_NOW
+            val clock = createFixedUtcClock(now = now)
             val repository = mockk<MessageOutboxRepository>()
             val indicator =
                 OutboxHealthIndicator(
@@ -25,16 +22,8 @@ class OutboxHealthIndicatorTest :
                     stuckThresholdSeconds = 300L,
                 )
 
-            // Default IN_PROGRESS counts to zero so each `when` block only stubs what it cares
-            // about. Specific cases override these.
-            every { repository.countInProgress() } returns 0L
-            every { repository.countInProgressOlderThan(threshold = any()) } returns 0L
-            every { repository.findOldestInProgressUpdatedAt() } returns null
-
             `when`("no PENDING or IN_PROGRESS messages exist") {
-                every { repository.countPending() } returns 0L
-                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
-                every { repository.findOldestPendingCreatedAt() } returns null
+                repository.stubOutboxStatus()
 
                 val result = indicator.health()
 
@@ -53,9 +42,10 @@ class OutboxHealthIndicatorTest :
 
             `when`("there are PENDING messages but none stuck") {
                 val freshAge = now.minusSeconds(60L)
-                every { repository.countPending() } returns 3L
-                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
-                every { repository.findOldestPendingCreatedAt() } returns freshAge
+                repository.stubOutboxStatus(
+                    pendingCount = 3L,
+                    oldestPendingCreatedAt = freshAge,
+                )
 
                 val result = indicator.health()
 
@@ -70,9 +60,11 @@ class OutboxHealthIndicatorTest :
 
             `when`("at least one PENDING message exceeds the stuck threshold") {
                 val stuckAge = now.minusSeconds(900L)
-                every { repository.countPending() } returns 5L
-                every { repository.countPendingOlderThan(threshold = any()) } returns 2L
-                every { repository.findOldestPendingCreatedAt() } returns stuckAge
+                repository.stubOutboxStatus(
+                    pendingCount = 5L,
+                    stuckPendingCount = 2L,
+                    oldestPendingCreatedAt = stuckAge,
+                )
 
                 val result = indicator.health()
 
@@ -86,9 +78,10 @@ class OutboxHealthIndicatorTest :
             }
 
             `when`("the oldest pending row reads as a future timestamp") {
-                every { repository.countPending() } returns 1L
-                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
-                every { repository.findOldestPendingCreatedAt() } returns now.plusSeconds(30L)
+                repository.stubOutboxStatus(
+                    pendingCount = 1L,
+                    oldestPendingCreatedAt = now.plusSeconds(30L),
+                )
 
                 val result = indicator.health()
 
@@ -99,13 +92,11 @@ class OutboxHealthIndicatorTest :
 
             `when`("an IN_PROGRESS row exceeds the stuck threshold") {
                 val stuckClaim = now.minusSeconds(600L)
-                // Pending side is healthy — the alert must come from in-flight stalling.
-                every { repository.countPending() } returns 0L
-                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
-                every { repository.findOldestPendingCreatedAt() } returns null
-                every { repository.countInProgress() } returns 1L
-                every { repository.countInProgressOlderThan(threshold = any()) } returns 1L
-                every { repository.findOldestInProgressUpdatedAt() } returns stuckClaim
+                repository.stubOutboxStatus(
+                    inProgressCount = 1L,
+                    stuckInProgressCount = 1L,
+                    oldestInProgressUpdatedAt = stuckClaim,
+                )
 
                 val result = indicator.health()
 
@@ -121,12 +112,10 @@ class OutboxHealthIndicatorTest :
 
             `when`("there are IN_PROGRESS rows but none stuck (active dispatch)") {
                 val freshClaim = now.minusSeconds(15L)
-                every { repository.countPending() } returns 0L
-                every { repository.countPendingOlderThan(threshold = any()) } returns 0L
-                every { repository.findOldestPendingCreatedAt() } returns null
-                every { repository.countInProgress() } returns 4L
-                every { repository.countInProgressOlderThan(threshold = any()) } returns 0L
-                every { repository.findOldestInProgressUpdatedAt() } returns freshClaim
+                repository.stubOutboxStatus(
+                    inProgressCount = 4L,
+                    oldestInProgressUpdatedAt = freshClaim,
+                )
 
                 val result = indicator.health()
 

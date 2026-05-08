@@ -3,18 +3,16 @@ package dev.notypie.application.service.meeting
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.controllers.dto.GetMeetupListRequestDto
 import dev.notypie.application.service.command.CommandExecutor
-import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
-import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
-import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
+import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.impl.command.SlackApiEventConstructor
@@ -132,9 +130,8 @@ class MeetingServiceImpl(
                     "We couldn't open the reason picker. Your decline was noted as *Other*. " +
                         "_Tip: Click Deny again to pick a specific reason._",
                 commandBasicInfo =
-                    CommandBasicInfo(
+                    CommandBasicInfo.forOutbound(
                         appId = event.apiAppId,
-                        appToken = "",
                         publisherId = event.participantUserId,
                         channel = event.channel,
                         idempotencyKey = event.idempotencyKey,
@@ -142,10 +139,7 @@ class MeetingServiceImpl(
                 commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 targetUserId = event.participantUserId,
             )
-        val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
-        @Suppress("UNCHECKED_CAST")
-        queue.offer(event = ephemeralEvent as CommandEvent<EventPayload>)
-        eventPublisher.publishEvent(events = queue)
+        eventPublisher.publishOne(event = ephemeralEvent)
     }
 
     /**
@@ -189,10 +183,7 @@ class MeetingServiceImpl(
                 commandDetailType = CommandDetailType.CANCEL_MEETING,
                 targetUserId = payload.requesterId,
             )
-        val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
-        @Suppress("UNCHECKED_CAST")
-        queue.offer(event = ephemeralEvent as CommandEvent<EventPayload>)
-        eventPublisher.publishEvent(events = queue)
+        eventPublisher.publishOne(event = ephemeralEvent)
     }
 
     @EventListener
@@ -224,9 +215,6 @@ class MeetingServiceImpl(
                     )
                 },
             )
-        val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
-        @Suppress("UNCHECKED_CAST")
-        queue.offer(event = slackEvent as CommandEvent<EventPayload>)
-        eventPublisher.publishEvent(events = queue)
+        eventPublisher.publishOne(event = slackEvent)
     }
 }

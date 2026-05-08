@@ -13,6 +13,8 @@ import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
+import dev.notypie.domain.command.entity.context.form.StandupFillContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
 
@@ -37,6 +39,9 @@ enum class CommandDetailType {
     DECLINE_REASON_MODAL,
     CANCEL_MEETING,
     STATUS_REPORT,
+    STANDUP_FILL,
+    STANDUP_ANSWER_SUBMIT,
+    STANDUP_SUMMARY,
     NOTICE_FORM,
     ;
 
@@ -83,6 +88,22 @@ enum class CommandDetailType {
 
             CANCEL_MEETING -> {
                 CancelMeetingContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            STANDUP_FILL -> {
+                StandupFillContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            STANDUP_ANSWER_SUBMIT -> {
+                StandupAnswerSubmissionContext(
                     commandBasicInfo = commandBasicInfo,
                     subCommand = subCommand,
                     intents = intents,

@@ -9,7 +9,6 @@ import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.interactions.*
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.templates.ButtonType
-import dev.notypie.templates.DeclineReasonModalIds
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -71,30 +70,36 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()
 
-        // The decline-reason modal now uses a static_select dropdown instead of radio_buttons;
-        // both expose the selection via `selectedOption.value` on the SDK's ViewState.Value.
-        val selectedReasonValue =
+        val parsedStates =
             viewSubmission.view
                 ?.state
-                ?.values
-                ?.get(DeclineReasonModalIds.BLOCK_ID)
-                ?.get(DeclineReasonModalIds.ACTION_ID)
-                ?.selectedOption
-                ?.value
+                ?.let(::parseStates)
                 .orEmpty()
-        val selectionState =
-            States(
-                type = ActionElementTypes.STATIC_SELECT,
-                isSelected = selectedReasonValue.isNotBlank(),
-                selectedValue = selectedReasonValue,
-            )
+        val states =
+            if (type == CommandDetailType.DECLINE_REASON_MODAL &&
+                parsedStates.none { it.type == ActionElementTypes.STATIC_SELECT }
+            ) {
+                parsedStates +
+                    States(
+                        type = ActionElementTypes.STATIC_SELECT,
+                        isSelected = false,
+                        selectedValue = "",
+                    )
+            } else {
+                parsedStates
+            }
+        val selectedReasonValue =
+            states
+                .firstOrNull { it.type == ActionElementTypes.STATIC_SELECT }
+                ?.selectedValue
+                .orEmpty()
         // Synthetic primary action — view_submission has no real "current action" but
         // carries selection via view.state; downstream routing gates on isPrimary().
         val currentAction =
             States(
                 type = ActionElementTypes.APPLY_BUTTON,
                 isSelected = true,
-                selectedValue = selectedReasonValue,
+                selectedValue = selectedReasonValue.ifBlank { states.firstOrNull()?.selectedValue.orEmpty() },
             )
         val container =
             Container(
@@ -114,7 +119,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             isEnterprise = viewSubmission.isEnterpriseInstall,
             team = team,
             user = user,
-            states = listOf(selectionState),
+            states = states,
             currentAction = currentAction,
             botId = "",
             idempotencyKey = idempotencyKey,
@@ -186,18 +191,28 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
     }
 
     private fun parseStates(viewState: ViewState): List<States> =
-        viewState.values.values.flatMap { innerMap ->
+        viewState.values.entries.flatMap { (blockId, innerMap) ->
             innerMap.values.mapNotNull { value ->
                 when (value.type) {
+                    ActionElementTypes.STATIC_SELECT.elementName -> {
+                        val selectedValue = value.selectedOption?.value.orEmpty()
+                        States(
+                            type = ActionElementTypes.STATIC_SELECT,
+                            isSelected = selectedValue.isNotBlank(),
+                            selectedValue = selectedValue,
+                            blockId = blockId,
+                        )
+                    }
                     ActionElementTypes.MULTI_STATIC_SELECT.elementName -> {
                         if (value.selectedOptions.isEmpty()) {
-                            States(type = ActionElementTypes.MULTI_STATIC_SELECT)
+                            States(type = ActionElementTypes.MULTI_STATIC_SELECT, blockId = blockId)
                         } else {
                             val selectedValue = value.selectedOptions.joinToString { it.value }
                             States(
                                 type = ActionElementTypes.MULTI_STATIC_SELECT,
                                 isSelected = true,
                                 selectedValue = selectedValue,
+                                blockId = blockId,
                             )
                         }
                     }
@@ -207,16 +222,18 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                             isSelected = true,
                             selectedValue =
                                 value.value ?: "",
+                            blockId = blockId,
                         )
                     }
                     ActionElementTypes.MULTI_USERS_SELECT.elementName -> {
                         if (value.selectedUsers.isEmpty()) {
-                            States(type = ActionElementTypes.MULTI_USERS_SELECT)
+                            States(type = ActionElementTypes.MULTI_USERS_SELECT, blockId = blockId)
                         } else {
                             States(
                                 type = ActionElementTypes.MULTI_USERS_SELECT,
                                 isSelected = true,
                                 selectedValue = value.selectedUsers.joinToString(","),
+                                blockId = blockId,
                             )
                         }
                     }
@@ -225,24 +242,27 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                             type = ActionElementTypes.DATE_PICKER,
                             isSelected = true,
                             selectedValue = value.selectedDate,
+                            blockId = blockId,
                         )
                     ActionElementTypes.TIME_PICKER.elementName ->
                         States(
                             type = ActionElementTypes.TIME_PICKER,
                             isSelected = value.selectedTime != null,
                             selectedValue = value.selectedTime ?: "",
+                            blockId = blockId,
                         )
                     ActionElementTypes.CHECKBOX.elementName ->
                         if (value.selectedOptions.isEmpty()) {
-                            States(type = ActionElementTypes.CHECKBOX)
+                            States(type = ActionElementTypes.CHECKBOX, blockId = blockId)
                         } else {
                             States(
                                 type = ActionElementTypes.CHECKBOX,
                                 isSelected = value.selectedOptions.isNotEmpty(),
                                 selectedValue = value.selectedOptions.joinToString { it.text.text },
+                                blockId = blockId,
                             )
                         }
-                    else -> States(type = ActionElementTypes.UNKNOWN)
+                    else -> States(type = ActionElementTypes.UNKNOWN, blockId = blockId)
                 }
             }
         }

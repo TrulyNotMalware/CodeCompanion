@@ -117,6 +117,24 @@ fun createUserElement(userId: String) = Element(type = "user", userId = userId)
 
 fun createTextElement(text: String) = Element(type = "text", userId = null, text = PlainText(value = text))
 
+fun createAppMentionSlackCommandDataWithText(text: String, userIds: List<String> = emptyList()): SlackCommandData =
+    createAppMentionSlackCommandDataWithElements(
+        elements = (userIds.map(::createUserElement) + createTextElement(text = text)).toTypedArray(),
+    )
+
+fun createAppMentionSlackCommandDataWithElements(vararg elements: Element): SlackCommandData =
+    createAppMentionSlackCommandDataWithBlocks(
+        blocks = listOf(createRichTextBlock(elements = elements)),
+    )
+
+fun createAppMentionSlackCommandDataWithBlocks(blocks: List<Block>): SlackCommandData =
+    createAppMentionSlackCommandData(
+        body =
+            createSlackEventCallBackRequest(
+                event = createEventCallbackData(blocks = blocks),
+            ),
+    )
+
 fun createAppMentionSlackCommandData(
     appId: String = TEST_APP_ID,
     appToken: String = TEST_TOKEN,

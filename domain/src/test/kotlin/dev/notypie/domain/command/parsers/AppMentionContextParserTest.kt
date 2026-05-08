@@ -2,12 +2,13 @@ package dev.notypie.domain.command.parsers
 
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createEventCallbackData
+import dev.notypie.domain.command.createAppMentionSlackCommandDataWithBlocks
+import dev.notypie.domain.command.createAppMentionSlackCommandDataWithElements
+import dev.notypie.domain.command.createAppMentionSlackCommandDataWithText
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createRichTextBlock
 import dev.notypie.domain.command.createSlackEventCallBackRequest
-import dev.notypie.domain.command.createTextElement
 import dev.notypie.domain.command.createUserElement
+import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
@@ -24,29 +25,24 @@ class AppMentionContextParserTest :
         val idempotencyKey = UUID.randomUUID()
         val intents = createIntentQueue()
 
+        fun createParser(commandData: SlackCommandData): AppMentionContextParser =
+            AppMentionContextParser(
+                slackCommandData = commandData,
+                baseUrl = "",
+                commandId = UUID.randomUUID(),
+                idempotencyKey = idempotencyKey,
+                intents = intents,
+            )
+
         given("parseContext") {
             `when`("command is 'notice' with users") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(
-                                            createUserElement(userId = TEST_USER_ID),
-                                            createTextElement(text = " notice hello world"),
-                                        ),
-                                    ),
-                            ),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
+                    createParser(
+                        commandData =
+                            createAppMentionSlackCommandDataWithText(
+                                text = " notice hello world",
+                                userIds = listOf(TEST_USER_ID),
+                            ),
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -57,27 +53,7 @@ class AppMentionContextParserTest :
             }
 
             `when`("command is 'approval'") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(
-                                            createTextElement(text = " approval"),
-                                        ),
-                                    ),
-                            ),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
-                val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(commandData = createAppMentionSlackCommandDataWithText(text = " approval"))
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -87,27 +63,7 @@ class AppMentionContextParserTest :
             }
 
             `when`("command is 'help'") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(
-                                            createTextElement(text = " help"),
-                                        ),
-                                    ),
-                            ),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
-                val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(commandData = createAppMentionSlackCommandDataWithText(text = " help"))
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -117,27 +73,7 @@ class AppMentionContextParserTest :
             }
 
             `when`("command is 'status'") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(
-                                            createTextElement(text = " status"),
-                                        ),
-                                    ),
-                            ),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
-                val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(commandData = createAppMentionSlackCommandDataWithText(text = " status"))
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -147,26 +83,9 @@ class AppMentionContextParserTest :
             }
 
             `when`("command is unknown") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(
-                                            createTextElement(text = " unknowncommand"),
-                                        ),
-                                    ),
-                            ),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
+                    createParser(
+                        commandData = createAppMentionSlackCommandDataWithText(text = " unknowncommand"),
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -177,18 +96,9 @@ class AppMentionContextParserTest :
             }
 
             `when`("blocks have no rich_text element") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event = createEventCallbackData(blocks = emptyList()),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
+                    createParser(
+                        commandData = createAppMentionSlackCommandDataWithBlocks(blocks = emptyList()),
                     )
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
@@ -199,26 +109,12 @@ class AppMentionContextParserTest :
             }
 
             `when`("command text is empty (only user mentions)") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(
-                                            createUserElement(userId = TEST_USER_ID),
-                                        ),
-                                    ),
-                            ),
-                    )
-                val commandData = createAppMentionSlackCommandData(body = body)
                 val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
+                    createParser(
+                        commandData =
+                            createAppMentionSlackCommandDataWithElements(
+                                createUserElement(userId = TEST_USER_ID),
+                            ),
                     )
 
                 then("should throw IllegalArgumentException (empty command queue)") {
@@ -233,14 +129,7 @@ class AppMentionContextParserTest :
                     createAppMentionSlackCommandData(
                         body = createSlackEventCallBackRequest(),
                     ).copy(body = "invalid body")
-                val parser =
-                    AppMentionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(commandData = commandData)
 
                 then("should throw IllegalArgumentException") {
                     shouldThrow<IllegalArgumentException> {

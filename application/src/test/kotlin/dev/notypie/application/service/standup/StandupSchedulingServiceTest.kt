@@ -1,0 +1,536 @@
+package dev.notypie.application.service.standup
+
+import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createSendSlackMessageEvent
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.StandupCutoffEvent
+import dev.notypie.domain.standup.createRoutineDto
+import dev.notypie.domain.standup.createRoutineMemberDto
+import dev.notypie.domain.standup.createSessionDispatchDto
+import dev.notypie.domain.standup.createStandupSessionDto
+import dev.notypie.domain.standup.entity.StandupSession
+import dev.notypie.domain.standup.entity.enums.SessionStatus
+import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.standup.ReadyDispatch
+import dev.notypie.repository.standup.StandupRepository
+import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.Runs
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
+import java.time.Clock
+import java.time.DayOfWeek
+import java.time.Duration
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.UUID
+
+class StandupSchedulingServiceTest :
+    BehaviorSpec({
+        val seoul = ZoneId.of("Asia/Seoul")
+        val la = ZoneId.of("America/Los_Angeles")
+
+        // 2026-05-04 Monday in Asia/Seoul (= 2026-05-03T15:00:00Z UTC).
+        val nowInstant =
+            LocalDate
+                .of(2026, 5, 4)
+                .atTime(LocalTime.NOON)
+                .atZone(seoul)
+                .toInstant()
+        val clock = Clock.fixed(nowInstant, ZoneOffset.UTC)
+        val today = LocalDate.ofInstant(nowInstant, seoul)
+
+        fun stubBuilder(): StandupDispatchMessageBuilder {
+            val builder = mockk<StandupDispatchMessageBuilder>()
+            val basicInfo = createCommandBasicInfo()
+            val stubEvent =
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.STANDUP_FILL,
+                    idempotencyKey = basicInfo.idempotencyKey,
+                )
+            every {
+                builder.buildDmNotice(
+                    sessionUid = any(),
+                    sessionDate = any(),
+                    routineUid = any(),
+                    routineName = any(),
+                    memberId = any(),
+                    commandBasicInfo = any(),
+                )
+            } returns stubEvent
+            return builder
+        }
+
+        fun stubTransactionManager(): PlatformTransactionManager {
+            val tm = mockk<PlatformTransactionManager>()
+            val status = mockk<TransactionStatus>(relaxed = true)
+            every { tm.getTransaction(any()) } returns status
+            every { tm.commit(any()) } just Runs
+            every { tm.rollback(any()) } just Runs
+            return tm
+        }
+
+        given("openSessionsForToday") {
+            `when`("today is a configured weekday and no session exists yet") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val routine =
+                    createRoutineDto(
+                        triggerLocalTime = LocalTime.of(10, 0),
+                        cutoffOffset = Duration.ofHours(1L),
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                        members =
+                            listOf(
+                                createRoutineMemberDto(userId = "U_A", userTimezone = seoul),
+                                createRoutineMemberDto(userId = "U_B", userTimezone = la),
+                            ),
+                    )
+
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
+                val createdSession = slot<StandupSession>()
+                every { repo.createSession(session = capture(createdSession)) } answers { firstArg() }
+
+                service.openSessionsForToday()
+
+                then("creates session with cutoffAt anchored at the LATEST member trigger + offset") {
+                    val session = createdSession.captured
+                    session.routineUid shouldBe routine.routineUid
+                    session.sessionDate shouldBe today
+                    // Latest member trigger = LA 10:00 (UTC 17:00 in DST). + 1h cutoff offset = LA 11:00.
+                    // Anchoring on max(member trigger) guarantees every member has at least
+                    // cutoffOffset to respond after their DM fires.
+                    session.cutoffAt shouldBe
+                        LocalDate
+                            .of(2026, 5, 4)
+                            .atTime(11, 0)
+                            .atZone(la)
+                            .toInstant()
+
+                    val byUser = session.dispatchSnapshot().associateBy { it.userId }
+                    byUser["U_A"]!!.dmTriggerAt shouldBe
+                        LocalDate
+                            .of(2026, 5, 4)
+                            .atTime(10, 0)
+                            .atZone(seoul)
+                            .toInstant()
+                    byUser["U_B"]!!.dmTriggerAt shouldBe
+                        LocalDate
+                            .of(2026, 5, 4)
+                            .atTime(10, 0)
+                            .atZone(la)
+                            .toInstant()
+                }
+            }
+
+            `when`("today is NOT in the routine's weekday set") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                every { repo.listActiveRoutines() } returns
+                    listOf(
+                        createRoutineDto(
+                            weekdays = setOf(DayOfWeek.SATURDAY),
+                            routineTimezone = seoul,
+                            members = listOf(createRoutineMemberDto(userId = "U_A", userTimezone = seoul)),
+                        ),
+                    )
+
+                service.openSessionsForToday()
+
+                then("findSession is never consulted and createSession is never called") {
+                    verify(exactly = 0) { repo.findSession(routineUid = any(), sessionDate = any()) }
+                    verify(exactly = 0) { repo.createSession(session = any()) }
+                }
+            }
+
+            `when`("a session already exists for today") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val routine =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                    )
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns
+                    mockk(relaxed = true)
+
+                service.openSessionsForToday()
+
+                then("createSession is skipped — idempotent across ticks") {
+                    verify(exactly = 0) { repo.createSession(session = any()) }
+                }
+            }
+
+            `when`("createSession throws DataIntegrityViolationException AND a session exists (concurrent race)") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val routine =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                    )
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                // First lookup (pre-create check): null. Second lookup (post-DIE confirm): exists.
+                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returnsMany
+                    listOf(null, mockk(relaxed = true))
+                every { repo.createSession(session = any()) } throws
+                    DataIntegrityViolationException("uk_standup_session_routine_date violated")
+
+                service.openSessionsForToday()
+
+                then("the exception is swallowed because the racing row is confirmed to exist") {
+                    verify(exactly = 1) { repo.createSession(session = any()) }
+                    verify(exactly = 2) { repo.findSession(routineUid = routine.routineUid, sessionDate = today) }
+                }
+            }
+
+            `when`("createSession throws DataIntegrityViolationException but NO session exists (real bug)") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val routine =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                    )
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                // Both lookups return null — the violation was NOT the expected unique-constraint race.
+                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } throws
+                    DataIntegrityViolationException("UUID collision on session_uid")
+
+                then("the exception propagates so the underlying schema/data bug is not hidden") {
+                    try {
+                        service.openSessionsForToday()
+                        throw AssertionError("expected DataIntegrityViolationException to propagate")
+                    } catch (ex: DataIntegrityViolationException) {
+                        ex.message?.contains("UUID collision") shouldBe true
+                    }
+                }
+            }
+
+            `when`("createSession throws an unexpected runtime error (not a constraint violation)") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val routine =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                    )
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } throws RuntimeException("DB outage")
+
+                then("the exception propagates so it can be caught by the scheduler tick wrapper") {
+                    try {
+                        service.openSessionsForToday()
+                        throw AssertionError("expected RuntimeException to propagate")
+                    } catch (ex: RuntimeException) {
+                        ex.message shouldBe "DB outage"
+                    }
+                }
+            }
+        }
+
+        given("sendPendingDispatches") {
+            val routineUid = UUID.randomUUID()
+            val routine =
+                createRoutineDto(
+                    routineUid = routineUid,
+                    name = "Daily Standup",
+                    weekdays = setOf(DayOfWeek.MONDAY),
+                    routineTimezone = seoul,
+                    members = listOf(createRoutineMemberDto(userId = "U_A", userTimezone = seoul)),
+                )
+
+            fun readyDispatchOf(dispatchId: Long, userId: String, triggerOffsetSeconds: Long): ReadyDispatch =
+                ReadyDispatch(
+                    dispatch =
+                        createSessionDispatchDto(
+                            id = dispatchId,
+                            userId = userId,
+                            dmTriggerAt = nowInstant.plusSeconds(triggerOffsetSeconds),
+                        ),
+                    sessionUid = UUID.randomUUID(),
+                    sessionDate = today,
+                    cutoffAt = nowInstant.plusSeconds(3600L),
+                    sessionStatus = SessionStatus.COLLECTING,
+                    summaryMessageTs = null,
+                    routineUid = routineUid,
+                )
+
+            `when`("a dispatch is ready and claim succeeds") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val builder = stubBuilder()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = builder,
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
+
+                val claimedToken = slot<String>()
+                val sentToken = slot<String>()
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = capture(claimedToken)) } returns true
+                every {
+                    repo.markDispatchSent(dispatchId = 42L, claimToken = capture(sentToken), sentAt = any())
+                } returns true
+                val savedOutbox = slot<OutboxMessage>()
+                every { outboxRepo.save(capture(savedOutbox)) } answers { firstArg() }
+
+                service.sendPendingDispatches()
+
+                then("dispatch is claimed, outbox row persisted, markSent called") {
+                    verify(exactly = 1) { repo.claimDispatch(dispatchId = 42L, claimToken = any()) }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
+                    verify(exactly = 1) { repo.markDispatchSent(dispatchId = 42L, claimToken = any(), sentAt = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
+                }
+
+                then("the same claim token is threaded from claim through markDispatchSent") {
+                    // Without token threading, a stuck-row recovery + re-claim by another tick
+                    // would let our markDispatchSent silently flip B's claim to SENT. The token
+                    // CAS predicate is what makes that safe.
+                    sentToken.captured shouldBe claimedToken.captured
+                }
+
+                then("the outbox row carries STANDUP_FILL and the member's user_id as channel") {
+                    savedOutbox.captured.commandDetailType shouldBe CommandDetailType.STANDUP_FILL.name
+                }
+            }
+
+            `when`("the claim fails (race lost)") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val builder = stubBuilder()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = builder,
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
+
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns false
+
+                service.sendPendingDispatches()
+
+                then("no outbox save, no markSent, no markFailed") {
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                    verify(
+                        exactly = 0,
+                    ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
+                }
+            }
+
+            `when`("the message build throws") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val builder = mockk<StandupDispatchMessageBuilder>()
+                every {
+                    builder.buildDmNotice(
+                        sessionUid = any(),
+                        sessionDate = any(),
+                        routineUid = any(),
+                        routineName = any(),
+                        memberId = any(),
+                        commandBasicInfo = any(),
+                    )
+                } throws RuntimeException("Slack API error")
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = builder,
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
+
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns true
+                every { repo.markDispatchFailed(dispatchId = 42L, claimToken = any(), reason = any()) } returns true
+
+                service.sendPendingDispatches()
+
+                then("dispatch is marked FAILED with the exception message") {
+                    verify(exactly = 1) {
+                        repo.markDispatchFailed(
+                            dispatchId = 42L,
+                            claimToken = any(),
+                            reason = match { it.contains("Slack API error") },
+                        )
+                    }
+                    verify(
+                        exactly = 0,
+                    ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("nothing is pending") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns emptyList()
+
+                service.sendPendingDispatches()
+
+                then("no work is done downstream") {
+                    verify(exactly = 0) { repo.listActiveRoutines() }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("a ready dispatch points at an inactive/unknown routine") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val ready = readyDispatchOf(dispatchId = 99L, userId = "U_A", triggerOffsetSeconds = -60L)
+
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
+                // listActiveRoutines returns empty — the routine for this dispatch is missing
+                every { repo.listActiveRoutines() } returns emptyList()
+
+                service.sendPendingDispatches()
+
+                then("the dispatch is skipped, no claim attempted") {
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+        }
+
+        given("detectCutoffs") {
+            `when`("a COLLECTING session is past its cutoff") {
+                val repo = mockk<StandupRepository>()
+                val publisher = mockk<ApplicationEventPublisher>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        applicationEventPublisher = publisher,
+                        clock = clock,
+                    )
+                val sessionUid = UUID.randomUUID()
+                val routineUid = UUID.randomUUID()
+                every { repo.findCollectingSessionsPastCutoff(before = any()) } returns
+                    listOf(
+                        createStandupSessionDto(
+                            sessionId = 9L,
+                            sessionUid = sessionUid,
+                            routineUid = routineUid,
+                            sessionDate = LocalDate.of(2026, 5, 4),
+                        ),
+                    )
+
+                service.detectCutoffs()
+
+                then("a StandupCutoffEvent is published for the summary service") {
+                    verify(exactly = 1) { repo.findCollectingSessionsPastCutoff(before = any()) }
+                    verify(exactly = 1) {
+                        publisher.publishEvent(
+                            StandupCutoffEvent(
+                                sessionId = 9L,
+                                sessionUid = sessionUid,
+                                routineUid = routineUid,
+                                sessionDate = LocalDate.of(2026, 5, 4),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    })

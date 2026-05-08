@@ -3,6 +3,10 @@ package dev.notypie.configurations
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.repository.meeting.JpaMeetingRepository
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
+import dev.notypie.repository.standup.JpaRoutineRepository
+import dev.notypie.repository.standup.JpaSessionDispatchRepository
+import dev.notypie.repository.standup.JpaStandupSessionRepository
+import dev.notypie.repository.standup.StandupRepositoryImpl
 import dev.notypie.repository.user.JpaTeamEntityRepository
 import dev.notypie.repository.user.JpaTeamRepository
 import dev.notypie.repository.user.JpaUserEntityRepository
@@ -51,4 +55,16 @@ class JpaConfiguration {
     @Primary
     fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository) =
         MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+
+    @Bean
+    @Primary
+    fun standupRepository(
+        jpaRoutineRepository: JpaRoutineRepository,
+        jpaStandupSessionRepository: JpaStandupSessionRepository,
+        jpaSessionDispatchRepository: JpaSessionDispatchRepository,
+    ) = StandupRepositoryImpl(
+        jpaRoutineRepository = jpaRoutineRepository,
+        jpaStandupSessionRepository = jpaStandupSessionRepository,
+        jpaSessionDispatchRepository = jpaSessionDispatchRepository,
+    )
 }

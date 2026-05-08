@@ -513,6 +513,45 @@ class SlackInteractionRequestParserTest :
                         "$noticeChannel,$noticeMessageTs"
                 }
             }
+
+            `when`("a standup answer modal submission arrives") {
+                val sessionUid = UUID.randomUUID()
+                val payload =
+                    createStandupAnswerViewSubmissionJson(
+                        sessionUid = sessionUid,
+                        userId = "U_STANDUP",
+                        responses = listOf("Finished #12", "Working on #13"),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("routing type and notice metadata are recovered from private_metadata") {
+                    result.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                    result.idempotencyKey shouldBe sessionUid.toString()
+                    result.routingExtras shouldBe listOf("U_STANDUP", "D_NOTICE", "1700000000.000500")
+                }
+
+                then("plain_text_input responses are surfaced in modal order") {
+                    val responses =
+                        result.states
+                            .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+                            .map { it.selectedValue }
+
+                    responses shouldBe listOf("Finished #12", "Working on #13")
+                }
+
+                then("each plain_text_input state carries its originating block_id") {
+                    val blockIds =
+                        result.states
+                            .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+                            .map { it.blockId }
+
+                    // StandupAnswerSubmissionContext sorts by these to keep responses[i]
+                    // aligned with routine.questions[i] even when the parser flattens
+                    // Slack's unordered view.state.values map.
+                    blockIds shouldBe listOf("standup_q_0", "standup_q_1")
+                }
+            }
         }
 
         given("parseStringPayload for block_actions — Container.messageTs") {

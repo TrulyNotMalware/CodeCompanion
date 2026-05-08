@@ -1,5 +1,7 @@
 package dev.notypie.application.service.ops
 
+import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.stubOutboxStatus
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
@@ -17,16 +19,12 @@ import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
-import java.time.Clock
 import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.ZoneOffset
 
 class OpsStatusServiceTest :
     BehaviorSpec({
         val now = LocalDateTime.of(2026, 4, 29, 12, 0, 0)
-        val zoneId = ZoneId.of("UTC")
-        val clock = Clock.fixed(now.toInstant(ZoneOffset.UTC), zoneId)
+        val clock = createFixedUtcClock(now = now)
 
         given("OpsStatusService.handleStatusReport") {
             val outboxRepository = mockk<MessageOutboxRepository>()
@@ -55,12 +53,7 @@ class OpsStatusServiceTest :
                 )
 
             `when`("everything is healthy (no PENDING, no IN_PROGRESS)") {
-                every { outboxRepository.countPending() } returns 0L
-                every { outboxRepository.countPendingOlderThan(threshold = any()) } returns 0L
-                every { outboxRepository.findOldestPendingCreatedAt() } returns null
-                every { outboxRepository.countInProgress() } returns 0L
-                every { outboxRepository.countInProgressOlderThan(threshold = any()) } returns 0L
-                every { outboxRepository.findOldestInProgressUpdatedAt() } returns null
+                outboxRepository.stubOutboxStatus()
 
                 val captured = slot<String>()
                 every {
@@ -88,12 +81,14 @@ class OpsStatusServiceTest :
             }
 
             `when`("there are stuck PENDING and IN_PROGRESS rows") {
-                every { outboxRepository.countPending() } returns 7L
-                every { outboxRepository.countPendingOlderThan(threshold = any()) } returns 2L
-                every { outboxRepository.findOldestPendingCreatedAt() } returns now.minusSeconds(900L)
-                every { outboxRepository.countInProgress() } returns 1L
-                every { outboxRepository.countInProgressOlderThan(threshold = any()) } returns 1L
-                every { outboxRepository.findOldestInProgressUpdatedAt() } returns now.minusSeconds(600L)
+                outboxRepository.stubOutboxStatus(
+                    pendingCount = 7L,
+                    stuckPendingCount = 2L,
+                    oldestPendingCreatedAt = now.minusSeconds(900L),
+                    inProgressCount = 1L,
+                    stuckInProgressCount = 1L,
+                    oldestInProgressUpdatedAt = now.minusSeconds(600L),
+                )
 
                 val captured = slot<String>()
                 every {

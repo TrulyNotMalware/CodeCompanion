@@ -63,8 +63,8 @@ data class OpenViewPayloadContents(
     override val channel: String,
     val triggerId: String,
     val viewJson: String,
-    val meetingIdempotencyKey: UUID,
-    val participantUserId: String,
+    val meetingIdempotencyKey: UUID? = null,
+    val participantUserId: String = "",
 ) : SlackEventPayload(
         apiAppId = apiAppId,
         commandDetailType = commandDetailType,

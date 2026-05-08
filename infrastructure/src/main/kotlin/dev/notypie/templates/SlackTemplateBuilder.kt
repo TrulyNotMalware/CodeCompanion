@@ -3,8 +3,11 @@ package dev.notypie.templates
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.standup.dto.RoutineMemberDto
+import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import java.time.LocalDate
 import java.util.UUID
 
 interface SlackTemplateBuilder {
@@ -73,4 +76,22 @@ interface SlackTemplateBuilder {
         noticeChannel: String,
         noticeMessageTs: String,
     ): String
+
+    fun standupModalViewJson(
+        routineName: String,
+        sessionDate: LocalDate,
+        sessionUid: UUID,
+        userId: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+        questions: List<String>,
+    ): String
+
+    fun standupSummaryTemplate(
+        routineName: String,
+        sessionDate: LocalDate,
+        members: List<RoutineMemberDto>,
+        answers: List<StandupAnswerDto>,
+        questions: List<String>,
+    ): LayoutBlocks
 }

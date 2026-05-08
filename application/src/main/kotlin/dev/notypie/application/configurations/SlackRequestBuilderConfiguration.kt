@@ -1,11 +1,13 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.standup.StandupDispatchMessageBuilder
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.impl.command.*
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -59,8 +61,11 @@ class SlackRequestBuilderConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(SlackIntentResolver::class)
-    fun slackIntentResolver(slackApiEventConstructor: SlackApiEventConstructor): SlackIntentResolver =
-        SlackIntentResolver(slackEventBuilder = slackApiEventConstructor)
+    fun slackIntentResolver(
+        slackApiEventConstructor: SlackApiEventConstructor,
+        standupRepository: StandupRepository,
+    ): SlackIntentResolver =
+        SlackIntentResolver(slackEventBuilder = slackApiEventConstructor, standupRepository = standupRepository)
 
     @Bean
     @ConditionalOnMissingBean(CommandExecutor::class)
@@ -69,4 +74,10 @@ class SlackRequestBuilderConfiguration(
             intentResolver = slackIntentResolver,
             eventPublisher = eventPublisher,
         )
+
+    @Bean
+    @ConditionalOnMissingBean(StandupDispatchMessageBuilder::class)
+    fun standupDispatchMessageBuilder(
+        slackApiEventConstructor: SlackApiEventConstructor,
+    ): StandupDispatchMessageBuilder = StandupDispatchMessageBuilder(slackEventBuilder = slackApiEventConstructor)
 }

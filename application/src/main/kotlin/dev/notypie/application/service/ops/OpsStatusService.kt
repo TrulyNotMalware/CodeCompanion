@@ -1,11 +1,9 @@
 package dev.notypie.application.service.ops
 
-import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
+import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -58,10 +56,7 @@ class OpsStatusService(
                 commandBasicInfo = payload.responseBasicInfo,
                 simpleString = text,
             )
-        val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
-        @Suppress("UNCHECKED_CAST")
-        queue.offer(event = message as CommandEvent<EventPayload>)
-        eventPublisher.publishEvent(events = queue)
+        eventPublisher.publishOne(event = message)
     }
 
     private fun renderReport(): String {

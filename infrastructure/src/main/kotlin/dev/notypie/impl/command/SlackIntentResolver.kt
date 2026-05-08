@@ -7,17 +7,21 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
+import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
+import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val log = KotlinLogging.logger {}
 
 class SlackIntentResolver(
     private val slackEventBuilder: SlackApiEventConstructor,
+    private val standupRepository: StandupRepository,
 ) {
     /**
      * Resolves each intent individually using [CommandIntent.commandDetailType] so that a
@@ -199,8 +203,55 @@ class SlackIntentResolver(
                 ) as CommandEvent<EventPayload>
             }
 
+            is CommandIntent.OpenStandupModal -> {
+                resolveOpenStandupModal(intent = intent, basicInfo = basicInfo)
+            }
+
+            is CommandIntent.RecordStandupAnswer -> {
+                RecordStandupAnswerEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        RecordStandupAnswerPayload(
+                            sessionUid = intent.sessionUid,
+                            userId = intent.userId,
+                            responses = intent.responses,
+                        ),
+                    type = intent.commandDetailType,
+                )
+            }
+
             is CommandIntent.Nothing -> {
                 null
             }
         }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun resolveOpenStandupModal(
+        intent: CommandIntent.OpenStandupModal,
+        basicInfo: CommandBasicInfo,
+    ): CommandEvent<EventPayload>? {
+        if (intent.triggerId.isBlank()) {
+            log.warn { "Blank triggerId; cannot open standup modal for sessionUid=${intent.sessionUid}" }
+            return null
+        }
+        val routine = standupRepository.getRoutine(routineUid = intent.routineUid)
+        val session =
+            standupRepository.findSession(sessionUid = intent.sessionUid)
+                ?: run {
+                    log.warn { "Standup session not found: sessionUid=${intent.sessionUid}" }
+                    return null
+                }
+        return slackEventBuilder.openStandupModalRequest(
+            commandBasicInfo = basicInfo,
+            commandDetailType = intent.commandDetailType,
+            triggerId = intent.triggerId,
+            sessionUid = intent.sessionUid,
+            routineName = routine.name,
+            sessionDate = session.sessionDate,
+            questions = routine.questions,
+            userId = intent.requesterId,
+            noticeChannel = intent.noticeChannel,
+            noticeMessageTs = intent.noticeMessageTs,
+        ) as CommandEvent<EventPayload>
+    }
 }

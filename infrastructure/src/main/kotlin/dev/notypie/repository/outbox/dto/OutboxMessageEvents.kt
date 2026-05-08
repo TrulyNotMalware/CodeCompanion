@@ -18,6 +18,7 @@ data class MessagePublishFailedEvent(
 
 data class MessagePublishSuccessEvent(
     override val eventId: UUID,
+    val messageTs: String = "",
 ) : OutboxUpdateEvent(eventId = eventId, status = MessageStatus.SUCCESS)
 
 data class NewMessagePublishedEvent(
@@ -28,7 +29,7 @@ data class NewMessagePublishedEvent(
 
 fun CommandOutput.toOutboxUpdateEvent(eventId: UUID): OutboxUpdateEvent =
     if (ok) {
-        MessagePublishSuccessEvent(eventId = eventId)
+        MessagePublishSuccessEvent(eventId = eventId, messageTs = messageTs)
     } else {
         MessagePublishFailedEvent(eventId = eventId, reason = errorReason)
     }

@@ -3,6 +3,7 @@ package dev.notypie.domain.command.entity.event
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -120,6 +121,30 @@ data class StatusReportRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<StatusReportPayload>
 
+class RecordStandupAnswerPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val sessionUid: UUID,
+    val userId: String,
+    val responses: List<String>,
+) : EventPayload
+
+data class RecordStandupAnswerEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = RecordStandupAnswerEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: RecordStandupAnswerPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<RecordStandupAnswerPayload>
+
+data class StandupCutoffEvent(
+    val sessionId: Long,
+    val sessionUid: UUID,
+    val routineUid: UUID,
+    val sessionDate: LocalDate,
+)
+
 /**
  * Synchronous-dispatch command event carrying a `views.open` payload. Must be consumed on
  * the request thread because [OpenViewPayloadContents.triggerId] expires in 3 seconds.
@@ -145,6 +170,21 @@ data class OpenViewEvent(
 data class DeclineModalOpenFailedEvent(
     val meetingIdempotencyKey: UUID,
     val participantUserId: String,
+    val apiAppId: String,
+    val channel: String,
+    val idempotencyKey: UUID,
+    val reason: String,
+)
+
+/**
+ * Published by the dispatcher when `views.open` for the standup answer modal fails.
+ * Unlike the decline-reason flow, no provisional persistence has happened yet — the
+ * answers exist only in the unopened modal. The application listener sends an ephemeral
+ * notice so the user can retry from the original DM rather than wonder why nothing
+ * happened.
+ */
+data class StandupModalOpenFailedEvent(
+    val userId: String,
     val apiAppId: String,
     val channel: String,
     val idempotencyKey: UUID,

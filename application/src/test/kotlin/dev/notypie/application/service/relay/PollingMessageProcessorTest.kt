@@ -1,43 +1,24 @@
 package dev.notypie.application.service.relay
 
+import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.application.outbox.createPollingProcessorFixture
 import dev.notypie.application.service.relay.dto.NoParameter
-import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.mockk.confirmVerified
 import io.mockk.every
-import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import java.time.Clock
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.ZoneOffset
 
 class PollingMessageProcessorTest :
     BehaviorSpec({
-        val now = LocalDateTime.of(2026, 4, 28, 12, 0, 0)
-        val zone = ZoneId.of("UTC")
-        val clock = Clock.fixed(now.toInstant(ZoneOffset.UTC), zone)
-
-        fun newRow(eventId: String): OutboxMessage =
-            mockk(relaxed = true) {
-                every { this@mockk.eventId } returns eventId
-            }
+        val clock = createFixedUtcClock()
 
         given("PollingMessageProcessor.getPendingMessages") {
             `when`("no PENDING and no stuck IN_PROGRESS rows exist") {
-                val outboxRepository = mockk<MessageOutboxRepository>()
-                val relayService = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
-                val processor =
-                    PollingMessageProcessor(
-                        outboxRepository = outboxRepository,
-                        messageRelayService = relayService,
-                        clock = clock,
-                        batchSize = 100,
-                        stuckInProgressSeconds = 300L,
-                    )
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(clock = clock)
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = 100) } returns emptyList()
                 every { outboxRepository.findPendingMessages(limit = 100, offset = 0) } returns emptyList()
@@ -51,21 +32,12 @@ class PollingMessageProcessorTest :
             }
 
             `when`("PENDING candidates are returned and the claim succeeds for all of them") {
-                val outboxRepository = mockk<MessageOutboxRepository>()
-                val relayService = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
-                val processor =
-                    PollingMessageProcessor(
-                        outboxRepository = outboxRepository,
-                        messageRelayService = relayService,
-                        clock = clock,
-                        batchSize = 100,
-                        stuckInProgressSeconds = 300L,
-                    )
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(clock = clock)
                 val candidates =
                     listOf(
-                        newRow(eventId = "e1"),
-                        newRow(eventId = "e2"),
-                        newRow(eventId = "e3"),
+                        createOutboxRow(eventId = "e1"),
+                        createOutboxRow(eventId = "e2"),
+                        createOutboxRow(eventId = "e3"),
                     )
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
@@ -86,21 +58,12 @@ class PollingMessageProcessorTest :
             }
 
             `when`("the claim count is smaller than the candidate set (race with another poller)") {
-                val outboxRepository = mockk<MessageOutboxRepository>()
-                val relayService = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
-                val processor =
-                    PollingMessageProcessor(
-                        outboxRepository = outboxRepository,
-                        messageRelayService = relayService,
-                        clock = clock,
-                        batchSize = 100,
-                        stuckInProgressSeconds = 300L,
-                    )
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(clock = clock)
                 val candidates =
                     listOf(
-                        newRow(eventId = "a"),
-                        newRow(eventId = "b"),
-                        newRow(eventId = "c"),
+                        createOutboxRow(eventId = "a"),
+                        createOutboxRow(eventId = "b"),
+                        createOutboxRow(eventId = "c"),
                     )
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
@@ -120,20 +83,11 @@ class PollingMessageProcessorTest :
             }
 
             `when`("the claim count is zero (every candidate was already taken)") {
-                val outboxRepository = mockk<MessageOutboxRepository>()
-                val relayService = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
-                val processor =
-                    PollingMessageProcessor(
-                        outboxRepository = outboxRepository,
-                        messageRelayService = relayService,
-                        clock = clock,
-                        batchSize = 100,
-                        stuckInProgressSeconds = 300L,
-                    )
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(clock = clock)
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
                 every { outboxRepository.findPendingMessages(limit = 100, offset = 0) } returns
-                    listOf(newRow(eventId = "x"))
+                    listOf(createOutboxRow(eventId = "x"))
                 every { outboxRepository.claimPending(eventIds = listOf("x")) } returns 0
 
                 processor.getPendingMessages(messageParameter = NoParameter)
@@ -144,17 +98,12 @@ class PollingMessageProcessorTest :
             }
 
             `when`("crash-orphaned IN_PROGRESS rows are detected") {
-                val outboxRepository = mockk<MessageOutboxRepository>()
-                val relayService = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
-                val processor =
-                    PollingMessageProcessor(
-                        outboxRepository = outboxRepository,
-                        messageRelayService = relayService,
-                        clock = clock,
-                        batchSize = 100,
-                        stuckInProgressSeconds = 300L,
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(clock = clock)
+                val orphaned =
+                    listOf(
+                        createOutboxRow(eventId = "orphan-1"),
+                        createOutboxRow(eventId = "orphan-2"),
                     )
-                val orphaned = listOf(newRow(eventId = "orphan-1"), newRow(eventId = "orphan-2"))
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = 100) } returns orphaned
                 every { outboxRepository.findPendingMessages(limit = 100, offset = 0) } returns emptyList()

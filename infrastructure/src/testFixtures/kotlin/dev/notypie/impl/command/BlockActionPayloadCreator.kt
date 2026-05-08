@@ -159,6 +159,56 @@ fun createDeclineReasonViewSubmissionJson(
         """.trimIndent()
 }
 
+fun createStandupAnswerViewSubmissionJson(
+    sessionUid: UUID,
+    userId: String,
+    responses: List<String>,
+    noticeChannel: String = "D_NOTICE",
+    noticeMessageTs: String = "1700000000.000500",
+    teamId: String = TEST_TEAM_ID,
+    teamDomain: String = TEST_TEAM_DOMAIN,
+    appId: String = TEST_APP_ID,
+    token: String = TEST_TOKEN,
+): String {
+    val privateMetadata =
+        "$sessionUid,STANDUP_ANSWER_SUBMIT,$userId,$noticeChannel,$noticeMessageTs"
+    val stateValues =
+        responses
+            .mapIndexed { index, response ->
+                """
+                "${dev.notypie.templates.StandupModalIds.BLOCK_ID_PREFIX}$index": {
+                    "${dev.notypie.templates.StandupModalIds.ACTION_ID_PREFIX}$index": {
+                        "type": "${ActionElementTypes.PLAIN_TEXT_INPUT.elementName}",
+                        "value": "$response"
+                    }
+                }
+                """.trimIndent()
+            }.joinToString(",")
+    return """
+        {
+            "type": "${InteractionTypes.VIEW_SUBMISSION}",
+            "token": "$token",
+            "api_app_id": "$appId",
+            "trigger_id": "trigger_view_submission_456",
+            "is_enterprise_install": false,
+            "team": {"id": "$teamId", "domain": "$teamDomain"},
+            "user": {
+                "id": "$userId",
+                "username": "$userId",
+                "name": "$userId",
+                "team_id": "$teamId"
+            },
+            "view": {
+                "id": "V_STANDUP_123",
+                "type": "modal",
+                "callback_id": "${dev.notypie.templates.StandupModalIds.CALLBACK_ID}",
+                "private_metadata": "$privateMetadata",
+                "state": { "values": { $stateValues } }
+            }
+        }
+        """.trimIndent()
+}
+
 // ============ Full Payload Builder ============
 
 fun createBlockActionPayloadJson(

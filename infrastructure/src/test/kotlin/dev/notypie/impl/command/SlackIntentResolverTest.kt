@@ -15,10 +15,14 @@ import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.standup.createRoutineDto
+import dev.notypie.domain.standup.createStandupSessionDto
+import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -27,13 +31,20 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
 class SlackIntentResolverTest :
     BehaviorSpec({
         val slackEventBuilder = mockk<SlackApiEventConstructor>()
-        val resolver = SlackIntentResolver(slackEventBuilder = slackEventBuilder)
+        // Repository is required by the resolver but only consulted on the OpenStandupModal
+        // branch; tests that don't exercise that branch can leave it unstubbed.
+        val resolver =
+            SlackIntentResolver(
+                slackEventBuilder = slackEventBuilder,
+                standupRepository = mockk(),
+            )
 
         val basicInfo = createCommandBasicInfo()
         val commandDetailType = CommandDetailType.SIMPLE_TEXT
@@ -628,6 +639,108 @@ class SlackIntentResolverTest :
                             commandDetailType = CommandDetailType.REPLACE_TEXT,
                         )
                     }
+                }
+            }
+        }
+
+        given("OpenStandupModal intent") {
+            val standupRepository = mockk<StandupRepository>()
+            val standupResolver =
+                SlackIntentResolver(
+                    slackEventBuilder = slackEventBuilder,
+                    standupRepository = standupRepository,
+                )
+            val routineUid = UUID.randomUUID()
+            val sessionUid = UUID.randomUUID()
+            val sessionDate = LocalDate.of(2026, 5, 4)
+            val intent =
+                CommandIntent.OpenStandupModal(
+                    triggerId = "trigger-standup",
+                    sessionUid = sessionUid,
+                    routineUid = routineUid,
+                    requesterId = "U_STANDUP",
+                    noticeChannel = "D_NOTICE",
+                    noticeMessageTs = "1700000000.000600",
+                )
+            val stubOpenViewEvent =
+                createOpenViewEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    commandDetailType = CommandDetailType.STANDUP_FILL,
+                    triggerId = "trigger-standup",
+                    viewJson = "{}",
+                )
+
+            `when`("resolveAll is called") {
+                every { standupRepository.getRoutine(routineUid = routineUid) } returns
+                    createRoutineDto(
+                        routineUid = routineUid,
+                        name = "Daily Standup",
+                        questions = listOf("Yesterday?", "Today?"),
+                    )
+                every { standupRepository.findSession(sessionUid = sessionUid) } returns
+                    createStandupSessionDto(
+                        sessionUid = sessionUid,
+                        routineUid = routineUid,
+                        sessionDate = sessionDate,
+                    )
+                every {
+                    slackEventBuilder.openStandupModalRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        triggerId = any(),
+                        sessionUid = any(),
+                        routineName = any(),
+                        sessionDate = any(),
+                        questions = any(),
+                        userId = any(),
+                        noticeChannel = any(),
+                        noticeMessageTs = any(),
+                    )
+                } returns stubOpenViewEvent
+
+                val events = standupResolver.resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+
+                then("routine/session data is loaded and delegated to the modal event builder") {
+                    events.single().shouldBeInstanceOf<OpenViewEvent>()
+                    verify(exactly = 1) {
+                        slackEventBuilder.openStandupModalRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.STANDUP_FILL,
+                            triggerId = "trigger-standup",
+                            sessionUid = sessionUid,
+                            routineName = "Daily Standup",
+                            sessionDate = sessionDate,
+                            questions = listOf("Yesterday?", "Today?"),
+                            userId = "U_STANDUP",
+                            noticeChannel = "D_NOTICE",
+                            noticeMessageTs = "1700000000.000600",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("RecordStandupAnswer intent") {
+            val sessionUid = UUID.randomUUID()
+            val intent =
+                CommandIntent.RecordStandupAnswer(
+                    sessionUid = sessionUid,
+                    userId = "U_STANDUP",
+                    responses = listOf("Finished #12", "Working on #13"),
+                )
+
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces an internal RecordStandupAnswerEvent") {
+                    val record = event.shouldBeInstanceOf<RecordStandupAnswerEvent>()
+                    record.payload.sessionUid shouldBe sessionUid
+                    record.payload.userId shouldBe "U_STANDUP"
+                    record.payload.responses shouldBe listOf("Finished #12", "Working on #13")
+                    record.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
                 }
             }
         }

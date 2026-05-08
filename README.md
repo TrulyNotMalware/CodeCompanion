@@ -11,7 +11,7 @@ CodeCompanion is a Slack bot application built with Kotlin and Spring Boot for s
 - **Interactive Components**: Create and process interactive elements like buttons, dropdowns, and modals
 
 ## Tech Stack
-- **Kotlin** (v2.3.20) & **Spring Boot** (v4.0.5)
+- **Kotlin** (v2.3.21) & **Spring Boot** (v4.0.6)
 - **Java** (v25)
 - **Clean Architecture**:
     - Domain: Core business logic and entities
@@ -84,7 +84,7 @@ CodeCompanion은 사이드 프로젝트를 위한 Kotlin과 Spring Boot로 구�
 - **상호작용 컴포넌트**: 버튼, 드롭다운, 모달과 같은 상호작용 요소 생성 및 처리
 
 ## 기술 스택
-- **Kotlin** (v2.3.20) 및 **Spring Boot** (v4.0.5)
+- **Kotlin** (v2.3.21) 및 **Spring Boot** (v4.0.6)
 - **Java** (v25)
 - **클린 아키텍처**:
     - 도메인: 핵심 비즈니스 로직 및 엔티티

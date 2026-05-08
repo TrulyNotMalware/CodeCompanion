@@ -23,9 +23,12 @@ import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.domain.command.entity.event.toMessageTypeByTargetUser
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.standup.dto.RoutineMemberDto
+import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import okhttp3.FormBody
+import java.time.LocalDate
 import java.util.UUID
 
 class SlackApiEventConstructor(
@@ -246,6 +249,74 @@ class SlackApiEventConstructor(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             payload = payload,
             type = commandDetailType,
+        )
+    }
+
+    fun openStandupModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        sessionUid: UUID,
+        routineName: String,
+        sessionDate: LocalDate,
+        questions: List<String>,
+        userId: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.standupModalViewJson(
+                routineName = routineName,
+                sessionDate = sessionDate,
+                sessionUid = sessionUid,
+                userId = userId,
+                noticeChannel = noticeChannel,
+                noticeMessageTs = noticeMessageTs,
+                questions = questions,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // Surfacing the standup-filler so the dispatcher's failure branch can target the
+                // ephemeral fallback at the right user. The field is named for the decline flow
+                // but has been generalized to "DM target user" for any modal open failure.
+                participantUserId = userId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun standupSummaryRequest(
+        commandBasicInfo: CommandBasicInfo,
+        routineName: String,
+        sessionDate: LocalDate,
+        members: List<RoutineMemberDto>,
+        answers: List<StandupAnswerDto>,
+        questions: List<String>,
+    ): SendSlackMessageEvent {
+        val layout =
+            templateBuilder.standupSummaryTemplate(
+                routineName = routineName,
+                sessionDate = sessionDate,
+                members = members,
+                answers = answers,
+                questions = questions,
+            )
+        return buildMessage(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = CommandDetailType.STANDUP_SUMMARY,
+            layout = layout,
+            replaceOriginal = false,
         )
     }
 
