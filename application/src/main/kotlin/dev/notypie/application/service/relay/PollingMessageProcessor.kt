@@ -1,7 +1,5 @@
 package dev.notypie.application.service.relay
 
-import dev.notypie.application.service.relay.dto.MessageProcessorParameter
-import dev.notypie.application.service.relay.dto.NoParameter
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled

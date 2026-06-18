@@ -1,7 +1,5 @@
 package dev.notypie.application.service.relay
 
-import dev.notypie.application.service.relay.dto.Envelope
-import dev.notypie.application.service.relay.dto.MessageProcessorParameter
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent

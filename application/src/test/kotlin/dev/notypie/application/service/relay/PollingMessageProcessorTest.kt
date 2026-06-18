@@ -3,7 +3,6 @@ package dev.notypie.application.service.relay
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.outbox.createPollingProcessorFixture
-import dev.notypie.application.service.relay.dto.NoParameter
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize

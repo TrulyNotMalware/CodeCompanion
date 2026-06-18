@@ -1,4 +1,4 @@
-package dev.notypie.application.service.relay.dto
+package dev.notypie.application.service.relay
 
 import com.fasterxml.jackson.annotation.JsonProperty
 

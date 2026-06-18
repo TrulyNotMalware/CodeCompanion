@@ -1,13 +1,13 @@
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "4.0.6" apply false
+    id("org.springframework.boot") version "4.1.0" apply false
     id("java-library")
     id("java-test-fixtures")
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
-    kotlin("jvm") version "2.3.21"
-    kotlin("plugin.spring") version "2.3.21" apply false
-    kotlin("plugin.jpa") version "2.3.21" apply false
+    kotlin("jvm") version "2.4.0"
+    kotlin("plugin.spring") version "2.4.0" apply false
+    kotlin("plugin.jpa") version "2.4.0" apply false
 }
 
 java {
@@ -20,12 +20,12 @@ java {
 }
 
 ext {
-    set("kotestVersion", "6.1.11") // https://kotest.io/docs/changelog.html
-    set("slackSdkVersion", "1.48.1")
-    set("mockkVersion", "1.14.9")
-    set("springBootVersion", "4.0.6")
-    set("jacksonVersion", "3.1.2")
-    set("kotlinLoggingVersion", "8.0.01")
+    set("kotestVersion", "6.2.0") // https://kotest.io/docs/changelog.html
+    set("slackSdkVersion", "1.49.0")
+    set("mockkVersion", "1.14.11")
+    set("springBootVersion", "4.1.0")
+    set("jacksonVersion", "3.2.0")
+    set("kotlinLoggingVersion", "8.0.4")
 }
 
 kotlin {

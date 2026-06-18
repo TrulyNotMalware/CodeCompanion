@@ -1,7 +1,6 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.IdempotencyCreator
-import dev.notypie.application.controllers.dto.GetMeetupListRequestDto
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
@@ -49,11 +48,6 @@ class MeetingServiceImpl(
                 idempotencyKey = idempotencyKey,
             )
         commandExecutor.execute(command = command)
-    }
-
-    override fun getMyMeetingList(meetingRequestDto: GetMeetupListRequestDto) {
-        // Used by MCP tool only — returns DTOs directly.
-        meetingRepository.getAllMeetingByUserId(userId = meetingRequestDto.userId)
     }
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
