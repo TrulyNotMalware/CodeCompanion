@@ -97,6 +97,7 @@ sealed class CommandIntent {
         val participantUserId: String,
         val isAttending: Boolean,
         val absentReason: RejectReason,
+        val absentReasonDetail: String? = null,
         override val commandDetailType: CommandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
     ) : CommandIntent()
 

@@ -28,6 +28,7 @@ interface MeetingRepository {
         userId: String,
         isAttending: Boolean,
         absentReason: RejectReason,
+        absentReasonDetail: String? = null,
     ): Int
 
     /** True if a participant row exists for `(meetingIdempotencyKey, userId)`. */

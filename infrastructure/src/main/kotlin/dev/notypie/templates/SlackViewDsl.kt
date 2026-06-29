@@ -91,6 +91,12 @@ class InputBuilder(
         input["label"] = plainText(text = text)
     }
 
+    // Slack input blocks are required by default; mark optional so the block can be left empty
+    // (e.g. the decline-reason detail, which is only required when the reason is "Other").
+    fun optional(value: Boolean = true) {
+        input["optional"] = value
+    }
+
     fun staticSelect(actionId: String, placeholder: String? = null, options: OptionsBuilder.() -> Unit) {
         val element =
             mutableMapOf<String, Any>(

@@ -59,8 +59,10 @@ class SocketModeReceiver(
                 handleSlash(payloadJson = envelope.payload.toString())
             }
             socketClient.addInteractiveEnvelopeListener { envelope ->
-                ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
-                handleInteractive(payloadJson = envelope.payload.toString())
+                // Handle first: a view_submission may need its response_action (e.g. inline
+                // validation errors) carried in the ack itself.
+                val ackBody = handleInteractive(payloadJson = envelope.payload.toString())
+                ackInteractive(socketClient = socketClient, envelopeId = envelope.envelopeId, ackBody = ackBody)
             }
             socketClient.addEventsApiEnvelopeListener { envelope ->
                 ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
@@ -82,6 +84,17 @@ class SocketModeReceiver(
 
     private fun ack(socketClient: SocketModeClient, envelopeId: String) {
         socketClient.sendSocketModeResponse(AckResponse.builder().envelopeId(envelopeId).build())
+    }
+
+    private fun ackInteractive(socketClient: SocketModeClient, envelopeId: String, ackBody: String?) {
+        if (ackBody == null) {
+            ack(socketClient = socketClient, envelopeId = envelopeId)
+            return
+        }
+        // AckResponse can't carry a payload, so emit the raw ack envelope. ackBody is already
+        // valid JSON (a response_action object) and envelopeId is a URL-safe Slack id, so
+        // embedding it directly yields a well-formed envelope.
+        socketClient.sendSocketModeResponse("""{"envelope_id":"$envelopeId","payload":$ackBody}""")
     }
 
     private fun handleSlash(payloadJson: String) {
@@ -112,11 +125,11 @@ class SocketModeReceiver(
         }.onFailure { log.error(it) { "Socket Mode slash-command handling failed." } }
     }
 
-    private fun handleInteractive(payloadJson: String) {
+    private fun handleInteractive(payloadJson: String): String? =
         runCatching {
             interactionHandler.handleInteraction(headers = noHeaders, payload = payloadJson)
         }.onFailure { log.error(it) { "Socket Mode interaction handling failed." } }
-    }
+            .getOrNull()
 
     private fun handleEvent(payloadJson: String) {
         runCatching {

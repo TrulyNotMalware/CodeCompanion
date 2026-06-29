@@ -1,6 +1,7 @@
 package dev.notypie.domain.meet
 
 import dev.notypie.domain.TEST_USER_ID
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.dto.MeetingParticipantDto
 import java.time.LocalDateTime
@@ -30,5 +31,14 @@ fun createMeetingDto(
     isCanceled = isCanceled,
 )
 
-fun createMeetingParticipantDto(userId: String, isAttending: Boolean = true) =
-    MeetingParticipantDto(userId = userId, isAttending = isAttending)
+fun createMeetingParticipantDto(
+    userId: String,
+    isAttending: Boolean = true,
+    absentReason: RejectReason = RejectReason.ATTENDING,
+    absentReasonDetail: String? = null,
+) = MeetingParticipantDto(
+    userId = userId,
+    isAttending = isAttending,
+    absentReason = absentReason,
+    absentReasonDetail = absentReasonDetail,
+)

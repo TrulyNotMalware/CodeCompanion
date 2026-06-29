@@ -80,7 +80,8 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         """
         UPDATE meeting_participants p
         SET p.isAttending = :isAttending,
-            p.absentReason = :absentReason
+            p.absentReason = :absentReason,
+            p.absentReasonDetail = :absentReasonDetail
         WHERE p.userId = :userId
           AND p.meeting.idempotencyKey = :meetingIdempotencyKey
     """,
@@ -90,6 +91,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("userId") userId: String,
         @Param("isAttending") isAttending: Boolean,
         @Param("absentReason") absentReason: RejectReason,
+        @Param("absentReasonDetail") absentReasonDetail: String?,
     ): Int
 
     /**

@@ -53,12 +53,14 @@ open class MeetingRepositoryImpl(
         userId: String,
         isAttending: Boolean,
         absentReason: RejectReason,
+        absentReasonDetail: String?,
     ): Int =
         jpaMeetingRepository.updateParticipantAttendance(
             meetingIdempotencyKey = meetingIdempotencyKey,
             userId = userId,
             isAttending = isAttending,
             absentReason = absentReason,
+            absentReasonDetail = absentReasonDetail,
         )
 
     override fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean =

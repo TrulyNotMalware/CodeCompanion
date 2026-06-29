@@ -1,5 +1,6 @@
 package dev.notypie.domain.meet.dto
 
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -23,4 +24,6 @@ data class MeetingDto(
 data class MeetingParticipantDto(
     val userId: String,
     val isAttending: Boolean,
+    val absentReason: RejectReason = RejectReason.ATTENDING,
+    val absentReasonDetail: String? = null,
 )

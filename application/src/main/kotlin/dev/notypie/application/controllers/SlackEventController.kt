@@ -49,13 +49,19 @@ class SlackEventController(
         return ResponseEntity.ok().body(slackCommandData)
     }
 
-    @PostMapping(value = ["/interaction"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/interaction"])
     fun handleInteractions(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam payload: String,
     ): ResponseEntity<*> {
-        interactionHandler.handleInteraction(headers = headers, payload = payload)
-        return ResponseEntity.ok().body("")
+        // A non-null body is a view_submission response_action (e.g. inline validation errors),
+        // which Slack reads as JSON; the normal ack is an empty 200.
+        val ackBody = interactionHandler.handleInteraction(headers = headers, payload = payload)
+        return if (ackBody != null) {
+            ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(ackBody)
+        } else {
+            ResponseEntity.ok().body("")
+        }
     }
 
     private fun isChallengeRequest(payload: Map<String, Any>) =

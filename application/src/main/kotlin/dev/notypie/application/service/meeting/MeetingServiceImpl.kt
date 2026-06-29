@@ -82,6 +82,7 @@ class MeetingServiceImpl(
                         userId = payload.participantUserId,
                         isAttending = payload.isAttending,
                         absentReason = payload.absentReason,
+                        absentReasonDetail = payload.absentReasonDetail,
                     )
                 },
             )

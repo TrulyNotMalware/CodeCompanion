@@ -61,6 +61,11 @@ internal class DeclineReasonSubmissionContext(
         val noticeChannel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
         val noticeMessageTs = interactionPayload.routingExtras.getOrNull(2).orEmpty()
         val absentReason = extractSelectedReason(payload = interactionPayload)
+        // Detail is only meaningful for OTHER; the "required when Other" rule is enforced before
+        // this context runs (the handler returns response_action errors on a blank Other detail),
+        // so a non-blank detail is expected here whenever the reason is OTHER.
+        val absentReasonDetail =
+            extractDetail(payload = interactionPayload).takeIf { absentReason == RejectReason.OTHER }
 
         addIntent(
             CommandIntent.MeetingAttendanceUpdate(
@@ -68,6 +73,7 @@ internal class DeclineReasonSubmissionContext(
                 participantUserId = participantUserId,
                 isAttending = false,
                 absentReason = absentReason,
+                absentReasonDetail = absentReasonDetail,
             ),
         )
         // chat.update the original notice so the user can't click Accept/Deny on a stale
@@ -78,7 +84,7 @@ internal class DeclineReasonSubmissionContext(
                 CommandIntent.UpdateNoticeMessage(
                     channel = noticeChannel,
                     messageTs = noticeMessageTs,
-                    markdownText = buildDeclineSummary(reason = absentReason),
+                    markdownText = buildDeclineSummary(reason = absentReason, detail = absentReasonDetail),
                 ),
             )
         }
@@ -89,8 +95,22 @@ internal class DeclineReasonSubmissionContext(
         )
     }
 
-    private fun buildDeclineSummary(reason: RejectReason): String =
-        "You declined the meeting — *Reason:* ${reason.showMessage}"
+    private fun buildDeclineSummary(reason: RejectReason, detail: String?): String =
+        buildString {
+            append("You declined the meeting — *Reason:* ${reason.showMessage}")
+            if (!detail.isNullOrBlank()) append(" — $detail")
+        }
+
+    /**
+     * Reads the free-text detail input. Blank when the field was left empty (the modal marks it
+     * optional). The decline modal exposes a single plain-text input, so matching on type is safe.
+     */
+    private fun extractDetail(payload: InteractionPayload): String =
+        payload.states
+            .firstOrNull { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+            ?.selectedValue
+            .orEmpty()
+            .trim()
 
     /**
      * Parses the dropdown selection into a [RejectReason]. Unknown or blank values fall through

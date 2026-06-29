@@ -68,6 +68,12 @@ object DeclineReasonModalIds {
     const val CALLBACK_ID: String = "decline_reason_modal"
     const val BLOCK_ID: String = "decline_reason_block"
     const val ACTION_ID: String = "decline_reason_select"
+
+    // Optional free-text detail, required only when the selected reason is OTHER. The block id is
+    // the key returned in a view_submission `response_action: errors` payload so the inline
+    // "please explain" message attaches to this field.
+    const val DETAIL_BLOCK_ID: String = "decline_reason_detail_block"
+    const val DETAIL_ACTION_ID: String = "decline_reason_detail_input"
 }
 
 /**

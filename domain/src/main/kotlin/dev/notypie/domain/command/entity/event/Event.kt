@@ -68,6 +68,7 @@ class UpdateMeetingAttendancePayload(
     val participantUserId: String,
     val isAttending: Boolean,
     val absentReason: RejectReason,
+    val absentReasonDetail: String? = null,
 ) : EventPayload
 
 data class UpdateMeetingAttendanceEvent(

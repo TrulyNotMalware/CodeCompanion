@@ -149,6 +149,7 @@ class SlackIntentResolver(
                             participantUserId = intent.participantUserId,
                             isAttending = intent.isAttending,
                             absentReason = intent.absentReason,
+                            absentReasonDetail = intent.absentReasonDetail,
                         ),
                     type = intent.commandDetailType,
                 )

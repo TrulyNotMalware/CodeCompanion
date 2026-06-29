@@ -8,6 +8,7 @@ import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
@@ -344,7 +345,11 @@ class ModalTemplateBuilderTest :
                         participants =
                             listOf(
                                 createMeetingParticipantDto(userId = "U1", isAttending = true),
-                                createMeetingParticipantDto(userId = "U2", isAttending = false),
+                                createMeetingParticipantDto(
+                                    userId = "U2",
+                                    isAttending = false,
+                                    absentReason = RejectReason.SCHEDULE_CONFLICT,
+                                ),
                                 createMeetingParticipantDto(userId = "U3", isAttending = true),
                             ),
                     )
@@ -361,6 +366,45 @@ class ModalTemplateBuilderTest :
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
                     // host(1) + 2 attending invitees = 3; total = host(1) + 3 invitees = 4
                     mrkdwn.text shouldContain "Participants: 3/4"
+                }
+
+                then("the decliner is listed as a mention with their reason") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Declined:"
+                    mrkdwn.text shouldContain "<@U2> — ${RejectReason.SCHEDULE_CONFLICT.showMessage}"
+                    // Only the decliner appears in the declined list.
+                    mrkdwn.text.contains("<@U1>") shouldBe false
+                }
+            }
+
+            `when`("a participant declined with the Other reason and a free-text detail") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Other decline",
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(
+                                    userId = "U2",
+                                    isAttending = false,
+                                    absentReason = RejectReason.OTHER,
+                                    absentReasonDetail = "Visa appointment overseas",
+                                ),
+                            ),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("the free-text detail is shown alongside the Other reason") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "<@U2> — ${RejectReason.OTHER.showMessage}"
+                    mrkdwn.text shouldContain "Visa appointment overseas"
                 }
             }
 
@@ -813,13 +857,23 @@ class ModalTemplateBuilderTest :
                     val inputBlock =
                         view.blocks
                             .filterIsInstance<com.slack.api.model.block.InputBlock>()
-                            .single()
-                    inputBlock.blockId shouldBe DeclineReasonModalIds.BLOCK_ID
+                            .single { it.blockId == DeclineReasonModalIds.BLOCK_ID }
                     val dropdown =
                         inputBlock.element as com.slack.api.model.block.element.StaticSelectElement
                     dropdown.actionId shouldBe DeclineReasonModalIds.ACTION_ID
                     // All RejectReason entries except ATTENDING (8 options).
                     dropdown.options.size shouldBe 8
+                }
+
+                then("blocks include an optional free-text detail input for the Other reason") {
+                    val detailBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
+                    detailBlock.isOptional shouldBe true
+                    val textInput =
+                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    textInput.actionId shouldBe DeclineReasonModalIds.DETAIL_ACTION_ID
                 }
             }
         }

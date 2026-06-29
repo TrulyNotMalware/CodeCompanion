@@ -101,7 +101,12 @@ fun MeetingSchema.toMeetingDto() =
         reason = "",
         participants =
             participants.map { p ->
-                MeetingParticipantDto(userId = p.userId, isAttending = p.isAttending)
+                MeetingParticipantDto(
+                    userId = p.userId,
+                    isAttending = p.isAttending,
+                    absentReason = p.absentReason,
+                    absentReasonDetail = p.absentReasonDetail,
+                )
             },
     )
 
@@ -120,6 +125,9 @@ class ParticipantsSchema(
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "absent_reason")
     val absentReason: RejectReason = RejectReason.ATTENDING,
+    // Free-text explanation captured only when the decliner picks RejectReason.OTHER.
+    @field:Column(name = "absent_reason_detail")
+    val absentReasonDetail: String? = null,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),

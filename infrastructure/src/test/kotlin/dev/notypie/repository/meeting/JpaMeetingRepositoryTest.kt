@@ -227,13 +227,14 @@ class JpaMeetingRepositoryTest
                             userId = participantUserId,
                             isAttending = false,
                             absentReason = dev.notypie.domain.command.dto.interactions.RejectReason.OTHER,
+                            absentReasonDetail = "Out of town for a family event",
                         )
 
                     then("should report 1 row updated") {
                         rowsUpdated shouldBe 1
                     }
 
-                    then("persisted row should reflect the new attendance flags") {
+                    then("persisted row should reflect the new attendance flags and detail") {
                         val found =
                             repository
                                 .findMeetingWithParticipants(meetingId = meeting.id)!!
@@ -242,6 +243,7 @@ class JpaMeetingRepositoryTest
                         found.isAttending shouldBe false
                         found.absentReason shouldBe
                             dev.notypie.domain.command.dto.interactions.RejectReason.OTHER
+                        found.absentReasonDetail shouldBe "Out of town for a family event"
                     }
                 }
 
@@ -252,6 +254,7 @@ class JpaMeetingRepositoryTest
                             userId = "U_DOES_NOT_EXIST",
                             isAttending = false,
                             absentReason = dev.notypie.domain.command.dto.interactions.RejectReason.OTHER,
+                            absentReasonDetail = null,
                         )
 
                     then("should report 0 rows updated and not throw") {

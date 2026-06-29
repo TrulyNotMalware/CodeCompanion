@@ -104,6 +104,107 @@ class DeclineReasonSubmissionContextTest :
             }
         }
 
+        given("DeclineReasonSubmissionContext receives an Other reason with a free-text detail") {
+            val meetingKey = UUID.randomUUID()
+            val participantUserId = "U_PARTICIPANT"
+            val intentQueue = createIntentQueue()
+            val context =
+                DeclineReasonSubmissionContext(
+                    commandBasicInfo = createCommandBasicInfo(),
+                    intents = intentQueue,
+                )
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    currentAction =
+                        States(
+                            type = ActionElementTypes.APPLY_BUTTON,
+                            isSelected = true,
+                            selectedValue = RejectReason.OTHER.name,
+                        ),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.STATIC_SELECT,
+                                isSelected = true,
+                                selectedValue = RejectReason.OTHER.name,
+                            ),
+                            States(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                isSelected = true,
+                                selectedValue = "Out of town for a wedding",
+                            ),
+                        ),
+                    idempotencyKey = meetingKey,
+                ).copy(routingExtras = listOf(participantUserId, "C_NOTICE", "1700000000.000100"))
+
+            `when`("handleInteraction is invoked") {
+                context.handleInteraction(interactionPayload = payload)
+                val intents = intentQueue.drainSnapshot()
+
+                then("MeetingAttendanceUpdate carries the Other reason and its detail") {
+                    val update =
+                        intents.filterIsInstance<CommandIntent.MeetingAttendanceUpdate>().single()
+                    update.absentReason shouldBe RejectReason.OTHER
+                    update.absentReasonDetail shouldBe "Out of town for a wedding"
+                }
+
+                then("the notice summary appends the detail after the reason") {
+                    val notice =
+                        intents.filterIsInstance<CommandIntent.UpdateNoticeMessage>().single()
+                    notice.markdownText shouldBe
+                        "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
+                        "Out of town for a wedding"
+                }
+            }
+        }
+
+        given("DeclineReasonSubmissionContext receives a non-Other reason with stray detail text") {
+            val meetingKey = UUID.randomUUID()
+            val intentQueue = createIntentQueue()
+            val context =
+                DeclineReasonSubmissionContext(
+                    commandBasicInfo = createCommandBasicInfo(),
+                    intents = intentQueue,
+                )
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    currentAction =
+                        States(
+                            type = ActionElementTypes.APPLY_BUTTON,
+                            isSelected = true,
+                            selectedValue = RejectReason.VACATION.name,
+                        ),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.STATIC_SELECT,
+                                isSelected = true,
+                                selectedValue = RejectReason.VACATION.name,
+                            ),
+                            States(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                isSelected = true,
+                                selectedValue = "ignored because reason is not Other",
+                            ),
+                        ),
+                    idempotencyKey = meetingKey,
+                ).copy(routingExtras = listOf("U_PARTICIPANT"))
+
+            `when`("handleInteraction is invoked") {
+                context.handleInteraction(interactionPayload = payload)
+                val intents = intentQueue.drainSnapshot()
+
+                then("detail is dropped — it is only meaningful for Other") {
+                    val update =
+                        intents.filterIsInstance<CommandIntent.MeetingAttendanceUpdate>().single()
+                    update.absentReason shouldBe RejectReason.VACATION
+                    update.absentReasonDetail shouldBe null
+                }
+            }
+        }
+
         given("DeclineReasonSubmissionContext receives a submission with no notice routing context") {
             val meetingKey = UUID.randomUUID()
             val participantUserId = "U_PARTICIPANT"

@@ -238,8 +238,28 @@ class ModalTemplateBuilder(
         val totalCount = 1 + meeting.participants.size
         val acceptedCount = 1 + meeting.participants.count { it.isAttending }
         val participantsLine = "Participants: $acceptedCount/$totalCount"
+        val declinedLine = renderDeclinedLine(meeting = meeting)
         val uidLine = "`${meeting.meetingUid}`"
-        return "$titleLine\n$timeLine\n$participantsLine\n$uidLine"
+        return listOfNotNull(titleLine, timeLine, participantsLine, declinedLine, uidLine)
+            .joinToString(separator = "\n")
+    }
+
+    /**
+     * Lists everyone who declined as Slack mentions with their reason (and the free-text detail
+     * for OTHER), one per line. Returns null when nobody has declined so the section stays compact.
+     */
+    private fun renderDeclinedLine(meeting: MeetingDto): String? {
+        val declined = meeting.participants.filter { !it.isAttending }
+        if (declined.isEmpty()) return null
+        return buildString {
+            append("Declined:")
+            declined.forEach { participant ->
+                append("\n• <@${participant.userId}> — ${participant.absentReason.showMessage}")
+                participant.absentReasonDetail
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { detail -> append(" (_${detail}_)") }
+            }
+        }
     }
 
     override fun requestMeetingFormTemplate(approvalContents: ApprovalContents): LayoutBlocks =
@@ -346,6 +366,14 @@ class ModalTemplateBuilder(
                                     option(text = reason.showMessage, value = reason.name)
                                 }
                         }
+                    }
+                    // Optional in Slack so non-Other reasons submit without text; the
+                    // "required when Other" rule is enforced on submit via response_action errors
+                    // (DeclineReasonSubmissionContext / SlackInteractionHandlerImpl).
+                    input(blockId = DeclineReasonModalIds.DETAIL_BLOCK_ID) {
+                        optional(value = true)
+                        label(text = "Details (required if you pick Other)")
+                        plainTextInput(actionId = DeclineReasonModalIds.DETAIL_ACTION_ID, multiline = true)
                     }
                 }
             }

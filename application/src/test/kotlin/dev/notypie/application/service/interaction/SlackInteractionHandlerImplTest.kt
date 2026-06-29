@@ -2,6 +2,9 @@ package dev.notypie.application.service.interaction
 
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.createInteractionPayloadInput
+import dev.notypie.domain.command.dto.interactions.ActionElementTypes
+import dev.notypie.domain.command.dto.interactions.RejectReason
+import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
@@ -9,9 +12,12 @@ import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedRejectButtonStates
 import dev.notypie.impl.command.InteractionPayloadParser
+import dev.notypie.templates.DeclineReasonModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldNotContainAnyOf
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -120,6 +126,78 @@ class SlackInteractionHandlerImplTest :
                         commandExecutor.execute(command = match<Command<*>> { it is ReplaceTextResponseCommand })
                     }
                     verify(exactly = 0) {
+                        commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
+                    }
+                }
+            }
+        }
+
+        given("handleInteraction for a DECLINE_REASON_MODAL submission with Other and a blank detail") {
+            `when`("handler processes the payload") {
+                then("returns response_action errors targeting the detail block and skips execution") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
+                    val payload =
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            currentAction = selectedApplyButtonStates(),
+                            states =
+                                listOf(
+                                    States(
+                                        type = ActionElementTypes.STATIC_SELECT,
+                                        isSelected = true,
+                                        selectedValue = RejectReason.OTHER.name,
+                                    ),
+                                    States(
+                                        type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                        isSelected = true,
+                                        selectedValue = "   ",
+                                    ),
+                                ),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { payloadParser.parseStringPayload(payload = any()) } returns payload
+
+                    val ackBody =
+                        handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+                            ?: error("expected a response_action ack body")
+
+                    ackBody shouldContain "\"response_action\":\"errors\""
+                    ackBody shouldContain DeclineReasonModalIds.DETAIL_BLOCK_ID
+                    verify(exactly = 0) { commandExecutor.execute(command = any<Command<*>>()) }
+                }
+            }
+        }
+
+        given("handleInteraction for a DECLINE_REASON_MODAL submission with Other and a filled detail") {
+            `when`("handler processes the payload") {
+                then("returns null and executes the persistence command") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
+                    val payload =
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            currentAction = selectedApplyButtonStates(),
+                            states =
+                                listOf(
+                                    States(
+                                        type = ActionElementTypes.STATIC_SELECT,
+                                        isSelected = true,
+                                        selectedValue = RejectReason.OTHER.name,
+                                    ),
+                                    States(
+                                        type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                        isSelected = true,
+                                        selectedValue = "Visiting family abroad",
+                                    ),
+                                ),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { payloadParser.parseStringPayload(payload = any()) } returns payload
+
+                    val ackBody =
+                        handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    ackBody.shouldBeNull()
+                    verify(exactly = 1) {
                         commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
                     }
                 }
