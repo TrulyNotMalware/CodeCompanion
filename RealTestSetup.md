@@ -34,6 +34,28 @@ disable signature verification (local only).
 > Tip: spring-boot-devtools' restart classloader can break some startups — if boot fails oddly, add
 > `--spring.devtools.restart.enabled=false`.
 
+## 3b. Socket Mode (the `local` profile — no tunnel, no public URL)
+Use a **separate dev Slack app** so the production HTTP app is untouched (Socket Mode is app-wide and
+disables Request URLs for that app).
+
+1. **Dev app config** (api.slack.com/apps → new app):
+   - **Socket Mode** → ON. **Basic Information → App-Level Tokens** → generate a token with scope
+     `connections:write` (starts with `xapp-`).
+   - **Slash Commands**: create `/meetup` and `/standup` — **no Request URL needed** (delivered over
+     the socket). If you name them differently, set `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND`
+     (or `slack.app.socket.meeting-command` / `slack.app.socket.standup-command`).
+   - Bot scopes + Interactivity/Events same as section 2; Request URLs can be left blank.
+2. **Run** with the `local` profile (which the Socket Mode receiver is gated to); needs the app token:
+   ```bash
+   SLACK_API_TOKEN=xoxb-... SLACK_APP_TOKEN=xapp-... \
+     ./gradlew :application:bootRun --args='--spring.profiles.active=local'
+   ```
+   Look for `Slack Socket Mode receiver connected` in the logs. `/meetup`, `/standup`, button/modal
+   interactions, and `app_mention` events now arrive over the WebSocket — no ngrok.
+
+> The receiver bean (`SocketModeReceiver`) is gated to the `local` profile (`@Profile("local")`), so
+> it is **never registered** in any other environment. Production (`prod`) stays HTTP-only.
+
 ## 4. Feature test scenarios
 Scheduler phases run on a 60s tick (standup open/dispatch/nudge/cutoff, meeting reminders, daily agenda).
 

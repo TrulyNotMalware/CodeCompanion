@@ -23,6 +23,7 @@ data class AppConfig(
     val meeting: Meeting = Meeting(),
     val standup: Standup = Standup(),
     val outbox: Outbox = Outbox(),
+    val socket: Socket = Socket(),
 ) {
     data class Mode(
         val standAlone: Boolean = true,
@@ -33,6 +34,9 @@ data class AppConfig(
 
     data class Api(
         val token: String = "",
+        // App-level token (xapp-, scope connections:write) — only used by the local-only Socket
+        // Mode receiver. Blank in every non-local environment.
+        val appToken: String = "",
         val signingSecret: String = "",
         val requestTimestampToleranceSeconds: Long = 300,
     )
@@ -86,6 +90,13 @@ data class AppConfig(
             val stuckInProgressSeconds: Long = 300L,
         )
     }
+
+    // Local-only Socket Mode receiver settings. Socket delivers every slash command to one
+    // listener, so the command names are mapped to their handlers here.
+    data class Socket(
+        val meetingCommand: String = "/meetup",
+        val standupCommand: String = "/standup",
+    )
 }
 
 enum class EventPublisherType {

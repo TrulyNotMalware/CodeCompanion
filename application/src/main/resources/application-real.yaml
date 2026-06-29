@@ -8,7 +8,7 @@
 #
 # DB defaults to the local orbstack MariaDB (`code_companion`). ddl-auto=update stands the schema
 # up (the V* migrations are incremental patches; Flyway is disabled here, same rationale as the
-# localcdc profile). Expose :9000 with a tunnel (ngrok/cloudflared) and point the Slack app's
+# local profile). Expose :9000 with a tunnel (ngrok/cloudflared) and point the Slack app's
 # slash / interactivity / event request URLs at it — see RealTestSetup.md.
 spring:
   config:

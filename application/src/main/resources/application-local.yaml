@@ -7,34 +7,47 @@ spring:
     virtual:
       enabled: true
 
-  datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:test;MODE=MariaDB;DATABASE_TO_LOWER=TRUE
-    username: admin
-    password: admin
+  # Points at the local orbstack infra (~/infra). Flyway off + ddl-auto=update stands the schema
+  # up (the V* migrations are incremental patches assuming Hibernate created the base tables).
+  flyway:
+    enabled: false
 
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${DATABASE_URL:jdbc:mariadb://localhost:3306/code_companion}
+    username: ${DATABASE_USER_NAME:root}
+    password: ${DATABASE_USER_PWD:root_password}
     hikari:
       transaction-isolation: TRANSACTION_REPEATABLE_READ
       maximum-pool-size: 10
-#      minimum-idle: 10
       connection-timeout: 5000
-      validation-timeout: 3000
-      connection-test-query: SELECT 1
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      keepalive-time: 30000
+      max-lifetime: 600000
       pool-name: hikari_pool
-
 
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
         default_batch_fetch_size: 1000
-  sql:
-    init:
-      mode: embedded
+
+  kafka:
+    bootstrap-servers:
+      - "localhost:19092"
+      - "localhost:29092"
+      - "localhost:39092"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+    consumer:
+      group-id: codeCompanion-local
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: true
+      max-poll-records: 1000
 
 server:
   port: 9000
@@ -76,5 +89,19 @@ slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
+      # App-level token (xapp-, scope connections:write) for the local-only Socket Mode receiver
+      # (SocketModeReceiver is gated to this `local` profile). No tunnel / Request URL needed.
+      app-token: ${SLACK_APP_TOKEN:}
       signing-secret: ${SLACK_SIGNING_SECRET:}
       request-timestamp-tolerance-seconds: 300
+    # Socket Mode delivers every slash command to one listener — map command names to handlers.
+    socket:
+      meeting-command: ${SLACK_MEETING_COMMAND:/meetup}
+      standup-command: ${SLACK_STANDUP_COMMAND:/standup}
+    mode:
+      stand-alone: true
+      # Full local pipeline against orbstack: outbox -> Debezium CDC -> Kafka -> consumer -> Slack.
+      outbox-reading-strategy: cdc
+      event-publisher: kafka
+      cdc:
+        topic: cdc.code_companion.outbox_message

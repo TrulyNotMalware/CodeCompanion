@@ -30,6 +30,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 
+    // Slack Socket Mode — local-only inbound transport (gated to the `socket` Spring profile).
+    // slack-api-client provides SocketModeClient; tyrus is its default WebSocket backend.
+    implementation("com.slack.api:slack-api-client:${rootProject.extra.get("slackSdkVersion")}")
+    implementation("javax.websocket:javax.websocket-api:1.1")
+    runtimeOnly("org.glassfish.tyrus.bundles:tyrus-standalone-client:1.20")
+
     // Domain test fixtures
     testImplementation(testFixtures(project(":domain")))
     testFixturesImplementation(testFixtures(project(":domain")))
