@@ -9,13 +9,12 @@ interface EventPublisher {
 
 /**
  * Publishes a single domain event by wrapping it in a one-shot [DefaultEventQueue].
- * Centralizes the cast that callers had to repeat at every fire-and-forget publish site
- * (the publisher's queue type is invariant on `CommandEvent<EventPayload>`, but most
- * call sites construct a more-specific subtype like `SendSlackMessageEvent`).
+ * Centralizes the boilerplate that callers had to repeat at every fire-and-forget publish site.
+ * `CommandEvent` is covariant (`out T`), so a more-specific subtype like `SendSlackMessageEvent`
+ * is already accepted here without any cast.
  */
-fun EventPublisher.publishOne(event: CommandEvent<out EventPayload>) {
+fun EventPublisher.publishOne(event: CommandEvent<EventPayload>) {
     val queue = DefaultEventQueue<CommandEvent<EventPayload>>()
-    @Suppress("UNCHECKED_CAST")
-    queue.offer(event = event as CommandEvent<EventPayload>)
+    queue.offer(event = event)
     publishEvent(events = queue)
 }

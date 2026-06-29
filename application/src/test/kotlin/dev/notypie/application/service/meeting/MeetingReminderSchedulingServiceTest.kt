@@ -9,7 +9,6 @@ import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
-import dev.notypie.repository.meeting.ReminderCandidateMeeting
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.kotest.core.spec.style.BehaviorSpec
@@ -89,7 +88,7 @@ class MeetingReminderSchedulingServiceTest :
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
                 // Starts 10 minutes from now → within the 15-minute max offset window.
                 val meeting =
-                    ReminderCandidateMeeting(
+                    createReminderCandidateMeeting(
                         meetingId = 7L,
                         startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L),
                         attendingUserIds = listOf("U_A", "U_B"),
@@ -114,7 +113,7 @@ class MeetingReminderSchedulingServiceTest :
                 val repo = mockk<MeetingReminderRepository>()
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
                 val meeting =
-                    ReminderCandidateMeeting(
+                    createReminderCandidateMeeting(
                         meetingId = 7L,
                         startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L),
                         attendingUserIds = emptyList(),
@@ -134,7 +133,7 @@ class MeetingReminderSchedulingServiceTest :
                 val repo = mockk<MeetingReminderRepository>()
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
                 val meeting =
-                    ReminderCandidateMeeting(
+                    createReminderCandidateMeeting(
                         meetingId = 7L,
                         startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L),
                         attendingUserIds = listOf("U_A"),
@@ -156,7 +155,7 @@ class MeetingReminderSchedulingServiceTest :
                 val repo = mockk<MeetingReminderRepository>()
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
                 val meeting =
-                    ReminderCandidateMeeting(
+                    createReminderCandidateMeeting(
                         meetingId = 7L,
                         startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L),
                         attendingUserIds = listOf("U_A"),

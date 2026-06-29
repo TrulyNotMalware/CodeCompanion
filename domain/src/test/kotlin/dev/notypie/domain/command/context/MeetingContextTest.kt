@@ -7,6 +7,7 @@ import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.command.entity.context.form.MeetingFormInput
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
@@ -234,11 +235,11 @@ class MeetingContextTest :
                                 selectedPlainTextStates(text = VALID_TEST_REASON),
                                 selectedDatePickerStates(
                                     date = LocalDate.now().plusDays(1),
-                                    format = RequestMeetingContext.DATE_PATTERN,
+                                    format = MeetingFormInput.DATE_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = LocalTime.now(),
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
                             ),
@@ -280,15 +281,15 @@ class MeetingContextTest :
                                 selectedPlainTextStates(text = VALID_TEST_REASON),
                                 selectedDatePickerStates(
                                     date = meetingDate,
-                                    format = RequestMeetingContext.DATE_PATTERN,
+                                    format = MeetingFormInput.DATE_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = startTime,
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = endTime,
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
                             ),
@@ -325,15 +326,15 @@ class MeetingContextTest :
                                 selectedPlainTextStates(text = VALID_TEST_REASON),
                                 selectedDatePickerStates(
                                     date = meetingDate,
-                                    format = RequestMeetingContext.DATE_PATTERN,
+                                    format = MeetingFormInput.DATE_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = sameTime,
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = sameTime,
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
                             ),
@@ -370,11 +371,11 @@ class MeetingContextTest :
                                 selectedPlainTextStates(text = VALID_TEST_REASON),
                                 selectedDatePickerStates(
                                     date = meetingDate,
-                                    format = RequestMeetingContext.DATE_PATTERN,
+                                    format = MeetingFormInput.DATE_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = startTime,
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
                             ),
@@ -445,11 +446,11 @@ class MeetingContextTest :
                                 selectedPlainTextStates(text = VALID_TEST_REASON),
                                 selectedDatePickerStates(
                                     date = LocalDate.now().plusDays(1),
-                                    format = RequestMeetingContext.DATE_PATTERN,
+                                    format = MeetingFormInput.DATE_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = LocalTime.now(),
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                             ),
                     )
@@ -488,11 +489,11 @@ class MeetingContextTest :
                                 selectedPlainTextStates(text = VALID_TEST_REASON),
                                 selectedDatePickerStates(
                                     date = LocalDate.now().plusDays(1),
-                                    format = RequestMeetingContext.DATE_PATTERN,
+                                    format = MeetingFormInput.DATE_PATTERN,
                                 ),
                                 selectedTimePickerStates(
                                     time = LocalTime.now(),
-                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                                 selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
                             ),

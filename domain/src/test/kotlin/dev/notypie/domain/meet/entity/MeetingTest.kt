@@ -1,6 +1,7 @@
 package dev.notypie.domain.meet.entity
 
 import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
+import dev.notypie.domain.meet.createMeeting
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -16,7 +17,7 @@ class MeetingTest :
         given("Meeting creation with valid data") {
             `when`("all fields are valid") {
                 val meeting =
-                    Meeting(
+                    createMeeting(
                         title = "Standup",
                         publisher = "U001",
                         members = setOf("U002", "U003"),
@@ -48,24 +49,8 @@ class MeetingTest :
             }
 
             `when`("two meetings are created without explicit meetingUid") {
-                val first =
-                    Meeting(
-                        title = "First",
-                        publisher = "U001",
-                        members = setOf("U002"),
-                        reason = "reason",
-                        startAt = futureStart,
-                        endAt = futureEnd,
-                    )
-                val second =
-                    Meeting(
-                        title = "Second",
-                        publisher = "U001",
-                        members = setOf("U002"),
-                        reason = "reason",
-                        startAt = futureStart,
-                        endAt = futureEnd,
-                    )
+                val first = createMeeting(startAt = futureStart, endAt = futureEnd)
+                val second = createMeeting(startAt = futureStart, endAt = futureEnd)
 
                 then("each meeting gets a distinct meetingUid") {
                     first.meetingUid shouldNotBe second.meetingUid
@@ -75,11 +60,7 @@ class MeetingTest :
             `when`("meetingUid is supplied explicitly") {
                 val explicitUid = UUID.fromString("11111111-1111-1111-1111-111111111111")
                 val meeting =
-                    Meeting(
-                        title = "Explicit uid",
-                        publisher = "U001",
-                        members = setOf("U002"),
-                        reason = "reason",
+                    createMeeting(
                         startAt = futureStart,
                         endAt = futureEnd,
                         meetingUid = explicitUid,
@@ -91,6 +72,7 @@ class MeetingTest :
             }
 
             `when`("endAt defaults to startAt + 1 hour") {
+                // Constructed directly to exercise the entity's own `endAt` default.
                 val meeting =
                     Meeting(
                         title = "Quick sync",
@@ -110,14 +92,7 @@ class MeetingTest :
             `when`("publisher is blank") {
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "Test",
-                            publisher = "",
-                            members = setOf("U002"),
-                            reason = "reason",
-                            startAt = futureStart,
-                            endAt = futureEnd,
-                        )
+                        createMeeting(publisher = "")
                     }
                 }
             }
@@ -125,14 +100,7 @@ class MeetingTest :
             `when`("title is blank") {
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "",
-                            publisher = "U001",
-                            members = setOf("U002"),
-                            reason = "reason",
-                            startAt = futureStart,
-                            endAt = futureEnd,
-                        )
+                        createMeeting(title = "")
                     }
                 }
             }
@@ -140,14 +108,7 @@ class MeetingTest :
             `when`("title exceeds MAX_TITLE_LENGTH") {
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "A".repeat(Meeting.MAX_TITLE_LENGTH + 1),
-                            publisher = "U001",
-                            members = setOf("U002"),
-                            reason = "reason",
-                            startAt = futureStart,
-                            endAt = futureEnd,
-                        )
+                        createMeeting(title = "A".repeat(Meeting.MAX_TITLE_LENGTH + 1))
                     }
                 }
             }
@@ -155,14 +116,7 @@ class MeetingTest :
             `when`("reason exceeds MAX_REASON_LENGTH") {
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "Test",
-                            publisher = "U001",
-                            members = setOf("U002"),
-                            reason = "R".repeat(Meeting.MAX_REASON_LENGTH + 1),
-                            startAt = futureStart,
-                            endAt = futureEnd,
-                        )
+                        createMeeting(reason = "R".repeat(Meeting.MAX_REASON_LENGTH + 1))
                     }
                 }
             }
@@ -171,14 +125,7 @@ class MeetingTest :
                 then("should throw ValidationExceptionWithName") {
                     val tooManyMembers = (1..Meeting.MAX_PARTICIPANTS + 1).map { "U$it" }.toSet()
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "Test",
-                            publisher = "U001",
-                            members = tooManyMembers,
-                            reason = "reason",
-                            startAt = futureStart,
-                            endAt = futureEnd,
-                        )
+                        createMeeting(members = tooManyMembers)
                     }
                 }
             }
@@ -186,11 +133,7 @@ class MeetingTest :
             `when`("startAt is in the past") {
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "Test",
-                            publisher = "U001",
-                            members = setOf("U002"),
-                            reason = "reason",
+                        createMeeting(
                             startAt = LocalDateTime.now().minusDays(1),
                             endAt = LocalDateTime.now(),
                         )
@@ -201,11 +144,7 @@ class MeetingTest :
             `when`("endAt is before startAt") {
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {
-                        Meeting(
-                            title = "Test",
-                            publisher = "U001",
-                            members = setOf("U002"),
-                            reason = "reason",
+                        createMeeting(
                             startAt = futureStart,
                             endAt = futureStart.minusHours(1),
                         )
@@ -216,15 +155,7 @@ class MeetingTest :
 
         given("Meeting addParticipant") {
             `when`("adding a participant within limit") {
-                val meeting =
-                    Meeting(
-                        title = "Test",
-                        publisher = "U001",
-                        members = setOf("U002"),
-                        reason = "reason",
-                        startAt = futureStart,
-                        endAt = futureEnd,
-                    )
+                val meeting = createMeeting(members = setOf("U002"), startAt = futureStart, endAt = futureEnd)
 
                 meeting.addParticipant(user = Member(userId = "U003"))
 
@@ -237,14 +168,7 @@ class MeetingTest :
             `when`("adding a participant exceeding MAX_PARTICIPANTS") {
                 val members = (1..Meeting.MAX_PARTICIPANTS).map { "U$it" }.toSet()
                 val meeting =
-                    Meeting(
-                        title = "Test",
-                        publisher = "U_HOST",
-                        members = members,
-                        reason = "reason",
-                        startAt = futureStart,
-                        endAt = futureEnd,
-                    )
+                    createMeeting(publisher = "U_HOST", members = members, startAt = futureStart, endAt = futureEnd)
 
                 then("should throw ValidationExceptionWithName") {
                     shouldThrow<ValidationExceptionWithName> {

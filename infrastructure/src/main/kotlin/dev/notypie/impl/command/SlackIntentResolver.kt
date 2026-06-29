@@ -39,7 +39,6 @@ class SlackIntentResolver(
             )
         }
 
-    @Suppress("UNCHECKED_CAST")
     private fun resolve(intent: CommandIntent, basicInfo: CommandBasicInfo): CommandEvent<EventPayload>? =
         when (intent) {
             is CommandIntent.TextResponse -> {
@@ -48,7 +47,7 @@ class SlackIntentResolver(
                     headLineText = intent.headLine,
                     commandBasicInfo = basicInfo,
                     simpleString = intent.message,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.EphemeralResponse -> {
@@ -57,7 +56,7 @@ class SlackIntentResolver(
                     commandBasicInfo = basicInfo,
                     commandDetailType = intent.commandDetailType,
                     targetUserId = intent.targetUserId,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.ErrorDetail -> {
@@ -67,7 +66,7 @@ class SlackIntentResolver(
                     errorMessage = intent.errorMessage,
                     details = intent.details,
                     commandBasicInfo = basicInfo,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.TimeSchedule -> {
@@ -76,7 +75,7 @@ class SlackIntentResolver(
                     headLineText = intent.headLine,
                     commandBasicInfo = basicInfo,
                     timeScheduleInfo = intent.timeScheduleInfo,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.ApplyReject -> {
@@ -93,7 +92,7 @@ class SlackIntentResolver(
                     approvalContents = intent.approvalContents,
                     targetUserId = intent.targetUserId,
                     routingExtras = extras,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.ApprovalForm -> {
@@ -104,7 +103,7 @@ class SlackIntentResolver(
                     selectionFields = intent.selectionFields,
                     reasonInput = intent.reasonInput,
                     approvalContents = intent.approvalContents,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.Notice -> {
@@ -115,7 +114,7 @@ class SlackIntentResolver(
                     headLineText = "Notice!",
                     commandBasicInfo = basicInfo,
                     simpleString = noticeText,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.MeetingForm -> {
@@ -123,7 +122,7 @@ class SlackIntentResolver(
                     commandBasicInfo = basicInfo,
                     commandDetailType = intent.commandDetailType,
                     approvalContents = intent.approvalContents,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.MeetingListRequest -> {
@@ -182,7 +181,7 @@ class SlackIntentResolver(
                         // The open-modal intent does not carry the meeting's stored start; defaulting
                         // the pickers to "now" is sufficient since the host adjusts both before submit.
                         currentStartAt = java.time.LocalDateTime.now(),
-                    ) as CommandEvent<EventPayload>
+                    )
                 }
             }
 
@@ -218,7 +217,7 @@ class SlackIntentResolver(
                     meetingTitle = intent.meetingTitle,
                     noticeChannel = intent.noticeChannel,
                     noticeMessageTs = intent.noticeMessageTs,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.UpdateNoticeMessage -> {
@@ -228,7 +227,7 @@ class SlackIntentResolver(
                     channel = intent.channel,
                     messageTs = intent.messageTs,
                     markdownText = intent.markdownText,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.ReplaceMessage -> {
@@ -237,7 +236,7 @@ class SlackIntentResolver(
                     responseUrl = intent.responseUrl,
                     commandBasicInfo = basicInfo,
                     commandDetailType = intent.commandDetailType,
-                ) as CommandEvent<EventPayload>
+                )
             }
 
             is CommandIntent.OpenStandupModal -> {
@@ -268,7 +267,7 @@ class SlackIntentResolver(
                         triggerId = intent.triggerId,
                         creatorId = intent.creatorId,
                         commandChannel = intent.commandChannel,
-                    ) as CommandEvent<EventPayload>
+                    )
                 }
             }
 
@@ -298,7 +297,6 @@ class SlackIntentResolver(
             }
         }
 
-    @Suppress("UNCHECKED_CAST")
     private fun resolveOpenStandupModal(
         intent: CommandIntent.OpenStandupModal,
         basicInfo: CommandBasicInfo,
@@ -325,6 +323,6 @@ class SlackIntentResolver(
             userId = intent.requesterId,
             noticeChannel = intent.noticeChannel,
             noticeMessageTs = intent.noticeMessageTs,
-        ) as CommandEvent<EventPayload>
+        )
     }
 }

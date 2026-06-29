@@ -11,8 +11,29 @@ import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
+import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDateTime
 import java.util.UUID
+
+fun createMeeting(
+    title: String = "Standup",
+    publisher: String = "U001",
+    members: Set<String> = setOf("U002", "U003"),
+    reason: String = "Daily sync",
+    startAt: LocalDateTime = LocalDateTime.now().plusDays(1L),
+    endAt: LocalDateTime = startAt.plusHours(1L),
+    isCanceled: Boolean = false,
+    meetingUid: UUID = UUID.randomUUID(),
+) = Meeting(
+    title = title,
+    publisher = publisher,
+    members = members,
+    reason = reason,
+    startAt = startAt,
+    endAt = endAt,
+    isCanceled = isCanceled,
+    meetingUid = meetingUid,
+)
 
 fun createUpdateMeetingAttendanceEvent(
     meetingIdempotencyKey: UUID = UUID.randomUUID(),

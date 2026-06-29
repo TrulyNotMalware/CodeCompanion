@@ -1,6 +1,7 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.repository.meeting.AgendaCandidateMeeting
+import dev.notypie.repository.meeting.ReminderCandidateMeeting
 import java.time.LocalDateTime
 
 fun createAgendaItem(
@@ -21,6 +22,17 @@ fun createAgendaCandidateMeeting(
     AgendaCandidateMeeting(
         meetingId = meetingId,
         title = title,
+        startAt = startAt,
+        attendingUserIds = attendingUserIds,
+    )
+
+fun createReminderCandidateMeeting(
+    meetingId: Long = 1L,
+    startAt: LocalDateTime,
+    attendingUserIds: List<String> = listOf("U_A"),
+): ReminderCandidateMeeting =
+    ReminderCandidateMeeting(
+        meetingId = meetingId,
         startAt = startAt,
         attendingUserIds = attendingUserIds,
     )
