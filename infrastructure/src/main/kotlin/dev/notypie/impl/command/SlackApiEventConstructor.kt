@@ -496,8 +496,10 @@ class SlackApiEventConstructor(
                     extractBodyData(
                         chatPostEphemeralRequest =
                             chatPostEphemeralBuilder(
-                                channel =
-                                    targetUserId ?: commandBasicInfo.channel,
+                                // chat.postEphemeral needs the *channel* the message lives in, with
+                                // `user` controlling who sees it. Putting a user id in `channel` makes
+                                // Slack route the ephemeral into that user's DM instead of the channel.
+                                channel = commandBasicInfo.channel,
                                 blocks = layout.template,
                                 idempotencyKey = commandBasicInfo.idempotencyKey,
                                 commandDetailType = commandDetailType,

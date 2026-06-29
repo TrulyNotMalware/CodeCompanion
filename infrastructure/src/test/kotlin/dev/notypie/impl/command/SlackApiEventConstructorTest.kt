@@ -121,10 +121,14 @@ class SlackApiEventConstructorTest :
                         targetUserId = targetUserId,
                     )
 
-                then("payload channel and userId are set to targetUserId") {
+                then("ephemeral posts into commandBasicInfo.channel and only `user` targets targetUserId") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
                     val payload = result.payload as PostEventPayloadContents
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
+                    // chat.postEphemeral must use the real channel; putting the user id in `channel`
+                    // would route the ephemeral into a DM instead of the channel.
+                    payload.body["channel"] shouldBe commandBasicInfo.channel
+                    payload.body["user"] shouldBe targetUserId
                 }
             }
         }
