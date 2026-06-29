@@ -1,8 +1,11 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
@@ -37,8 +40,8 @@ class DailyAgendaSchedulingServiceTest :
                 .atZone(seoul)
                 .toInstant()
 
-        fun stubBuilder(): DailyAgendaMessageBuilder {
-            val builder = mockk<DailyAgendaMessageBuilder>()
+        fun stubEventBuilder(): SlackApiEventConstructor {
+            val slackEventBuilder = mockk<SlackApiEventConstructor>()
             val basicInfo = createCommandBasicInfo()
             val stubEvent =
                 createSendSlackMessageEvent(
@@ -46,14 +49,14 @@ class DailyAgendaSchedulingServiceTest :
                     idempotencyKey = basicInfo.idempotencyKey,
                 )
             every {
-                builder.buildAgendaDm(
-                    userId = any(),
-                    agendaDate = any(),
-                    meetings = any(),
+                slackEventBuilder.simpleTextRequest(
+                    commandDetailType = any(),
+                    headLineText = any(),
                     commandBasicInfo = any(),
+                    simpleString = any(),
                 )
             } returns stubEvent
-            return builder
+            return slackEventBuilder
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -70,16 +73,25 @@ class DailyAgendaSchedulingServiceTest :
             outboxRepo: MessageOutboxRepository,
             clock: Clock,
             enabled: Boolean = true,
-            builder: DailyAgendaMessageBuilder = stubBuilder(),
+            builder: SlackApiEventConstructor = stubEventBuilder(),
         ) = DailyAgendaSchedulingService(
             agendaDispatchRepository = repo,
             outboxRepository = outboxRepo,
-            messageBuilder = builder,
+            slackEventBuilder = builder,
             transactionManager = stubTransactionManager(),
             clock = clock,
-            enabled = enabled,
-            sendAt = "08:00",
-            agendaZone = "Asia/Seoul",
+            appConfig =
+                AppConfig(
+                    meeting =
+                        AppConfig.Meeting(
+                            agenda =
+                                AppConfig.Meeting.Agenda(
+                                    enabled = enabled,
+                                    sendAt = "08:00",
+                                    timezone = "Asia/Seoul",
+                                ),
+                        ),
+                ),
         )
 
         given("the local time is before the configured send time") {
@@ -125,7 +137,7 @@ class DailyAgendaSchedulingServiceTest :
             `when`("the claim succeeds") {
                 val repo = mockk<AgendaDispatchRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val builder = stubBuilder()
+                val builder = stubEventBuilder()
                 val service =
                     buildService(
                         repo = repo,
@@ -153,14 +165,14 @@ class DailyAgendaSchedulingServiceTest :
                 every { repo.claim(agendaDate = any()) } returns true
                 every { repo.findAttendingMeetingsForDay(from = any(), to = any()) } returns meetings
 
-                val capturedUsers = mutableListOf<String>()
-                val capturedItems = mutableListOf<List<AgendaItem>>()
+                val capturedInfos = mutableListOf<CommandBasicInfo>()
+                val capturedBodies = mutableListOf<String>()
                 every {
-                    builder.buildAgendaDm(
-                        userId = capture(capturedUsers),
-                        agendaDate = any(),
-                        meetings = capture(capturedItems),
-                        commandBasicInfo = any(),
+                    builder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = capture(capturedInfos),
+                        simpleString = capture(capturedBodies),
                     )
                 } returns
                     createSendSlackMessageEvent(
@@ -175,13 +187,13 @@ class DailyAgendaSchedulingServiceTest :
                 then("one agenda DM is built and saved per user with meetings") {
                     verify(exactly = 1) { repo.claim(agendaDate = any()) }
                     verify(exactly = 2) { outboxRepo.save(any()) }
-                    capturedUsers.toSet() shouldBe setOf("U_A", "U_B")
+                    capturedInfos.map { it.publisherId }.toSet() shouldBe setOf("U_A", "U_B")
                 }
 
-                then("each user's agenda lists only that user's meetings") {
-                    val agendaByUser = capturedUsers.zip(capturedItems).toMap()
-                    agendaByUser["U_A"]!!.map { it.title } shouldBe listOf("Sprint Planning", "1:1 with Lead")
-                    agendaByUser["U_B"]!!.map { it.title } shouldBe listOf("Sprint Planning")
+                then("each user's agenda lists only that user's meetings, sorted by start time") {
+                    val bodyByUser = capturedInfos.map { it.publisherId }.zip(capturedBodies).toMap()
+                    bodyByUser["U_A"] shouldBe "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
+                    bodyByUser["U_B"] shouldBe "• 10:00 — Sprint Planning"
                 }
 
                 then("the outbox rows carry DAILY_AGENDA as the command detail type") {

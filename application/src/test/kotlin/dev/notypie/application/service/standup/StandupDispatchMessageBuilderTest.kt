@@ -22,7 +22,6 @@ class StandupDispatchMessageBuilderTest :
         given("buildDmNotice") {
             `when`("called with primitive routing fields") {
                 val slackEventBuilder = mockk<SlackApiEventConstructor>()
-                val builder = StandupDispatchMessageBuilder(slackEventBuilder = slackEventBuilder)
                 val basicInfo = createCommandBasicInfo()
                 val routineUid = UUID.randomUUID()
                 val sessionUid = UUID.randomUUID()
@@ -45,7 +44,8 @@ class StandupDispatchMessageBuilderTest :
                         idempotencyKey = basicInfo.idempotencyKey,
                     )
 
-                builder.buildDmNotice(
+                buildDmNotice(
+                    slackEventBuilder = slackEventBuilder,
                     sessionUid = sessionUid,
                     sessionDate = sessionDate,
                     routineUid = routineUid,
@@ -93,7 +93,6 @@ class StandupDispatchMessageBuilderTest :
         given("buildNudgeNotice") {
             `when`("called with a routine name, cutoff, and timezone") {
                 val slackEventBuilder = mockk<SlackApiEventConstructor>()
-                val builder = StandupDispatchMessageBuilder(slackEventBuilder = slackEventBuilder)
                 val basicInfo = createCommandBasicInfo()
                 // 2026-05-04T01:00:00Z = Asia/Seoul 10:00 — verifies the cutoff renders in the
                 // routine's own zone, not UTC.
@@ -114,7 +113,8 @@ class StandupDispatchMessageBuilderTest :
                         idempotencyKey = basicInfo.idempotencyKey,
                     )
 
-                builder.buildNudgeNotice(
+                buildNudgeNotice(
+                    slackEventBuilder = slackEventBuilder,
                     routineName = "Daily Standup",
                     cutoffAt = cutoffAt,
                     routineTimezone = ZoneId.of("Asia/Seoul"),

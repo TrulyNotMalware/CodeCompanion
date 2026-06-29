@@ -60,10 +60,8 @@ class StandupSessionSchema(
     // scheduler's atomic CAS flips it under `status = COLLECTING`, so only one tick ever wins.
     @field:Column(name = "nudged_at")
     val nudgedAt: Instant? = null,
-    // `dispatches` is a Set (not a List/bag) so queries can JOIN FETCH both child collections at
-    // once: Hibernate throws MultipleBagFetchException if it fetches two bags (Lists) together, and
-    // `findBySessionUid` / `findByRoutineUidAndSessionDate` / `findCollectingForNudge` all need
-    // dispatches + answers in one shot. Membership is keyed by user, so a Set fits naturally.
+    // A Set, not a List: Hibernate throws MultipleBagFetchException when JOIN FETCH-ing two bags
+    // (Lists), and the queries need dispatches + answers in one shot. Membership is keyed by user.
     @field:OneToMany(
         mappedBy = "session",
         fetch = FetchType.LAZY,
@@ -119,27 +117,15 @@ class SessionDispatchSchema(
     val dmStatus: DispatchStatus = DispatchStatus.PENDING,
     @field:Column(name = "failure_reason", columnDefinition = "TEXT")
     val failureReason: String? = null,
-    /**
-     * Per-claim token written by [dev.notypie.repository.standup.JpaSessionDispatchRepository.claimDispatch]
-     * and required by `markSent` / `markFailed` predicates. Without this token, a stuck-row
-     * recovery sweep that resets a long-running claim to PENDING + a re-claim by another tick
-     * could be silently clobbered when the original tick eventually called `markDispatchFailed`
-     * (the row would still be SENDING but owned by tick B). The token narrows the CAS so each
-     * tick only acknowledges *its own* claim's outcome.
-     */
+    // Per-claim token required by markSent/markFailed predicates so each tick only acknowledges its
+    // own claim — a recovery reset + re-claim by another tick can't be clobbered by a stale call.
     @field:Column(name = "claim_token", length = 36)
     val claimToken: String? = null,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
-    /**
-     * Tracks the last time `dm_status` flipped — bumped explicitly inside the atomic CAS in
-     * [dev.notypie.repository.standup.JpaSessionDispatchRepository.claimDispatch] / `markSent`
-     * / `markFailed` / `resetStuckSending`. The stuck-row recovery query keys off this column,
-     * so a row claimed `SENDING` is only considered "stuck" once `updated_at` ages past the
-     * threshold. Without the explicit bump, claims on rows with future `dm_trigger_at` would
-     * be reset by the very next tick.
-     */
+    // Bumped on every dm_status transition; the stuck-row recovery query ages off this column, so a
+    // SENDING row is only "stuck" once updated_at passes the threshold.
     @field:UpdateTimestamp
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,

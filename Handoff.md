@@ -45,8 +45,8 @@ This document captures the next-phase roadmap so it survives session compaction.
 - **Meeting reminders** — 5-min / 15-min pre-meeting DMs to attending participants, via a `meeting_reminder` CAS claim/lock table + scheduler mirroring the standup pattern, idempotent on `(meeting_id, offset_minutes)` (Phase 4 #14)
 - **`/standup setup`** — slash command opens a modal (name, questions, members, summary channel, weekdays, trigger time, cutoff, timezone) → persists a `Routine` via `createRoutine` (closes the SQL-only gap; new endpoint `POST /api/slash/standup`)
 - **Meeting reschedule** — inline *Reschedule* button on `/meetup list` host rows → date/time modal → atomic host-only `rescheduleMeeting` UPDATE + participant re-notification + `meeting_reminder` delete-and-recreate
-- **Standup non-responder nudge** — scheduler phase DMs members who got the prompt but haven't answered, once per session (`standup_session.nudged_at` CAS gate), within `[cutoff - nudgeOffset, cutoff)` (config `standup.nudge.offset-minutes`, default 30; migration `V6`)
-- **Daily agenda DM** — once-per-day morning DM of each user's attending meetings for today; `agenda_dispatch` per-date `INSERT IGNORE` claim + time-of-day gate (config `meeting.agenda.send-at`/`timezone`/`enabled`; migration `V7`)
+- **Standup non-responder nudge** — scheduler phase DMs members who got the prompt but haven't answered, once per session (`standup_session.nudged_at` CAS gate), within `[cutoff - nudgeOffset, cutoff)` (config `slack.app.standup.nudge.offset-minutes`, default 30; migration `V6`)
+- **Daily agenda DM** — once-per-day morning DM of each user's attending meetings for today; `agenda_dispatch` per-date `INSERT IGNORE` claim + time-of-day gate (config `slack.app.meeting.agenda.send-at`/`timezone`/`enabled`; migration `V7`)
 
 ### Session notes (2026-06-18 — refactor + #14 + E2E)
 - **Refactor.md applied:** Rule 1 — moved single-call service `@Transactional` (StandupAnswerService.recordAnswer, SlackMessageRelayServiceImpl.saveOutboxMessages/updateOutboxMessageStatus) down to the repository layer; the 3 multi-step service boundaries (handleMeeting/handleEvent/handleInteraction) intentionally kept at service level. Rule 3 — merged `UserRepository`/`TeamRepository` markers into one file. Rule 4 — null-coalescing → scope functions in `OutboxHealthIndicator`/`OpsStatusService`. Added the missing `SlackMessageRelayServiceImplTest`.
@@ -118,7 +118,7 @@ This document captures the next-phase roadmap so it survives session compaction.
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 14 | Meeting reminders (5-min / 15-min) | ✅ done | `meeting_reminder` table (CAS claim/lock mirroring standup), `MeetingReminderSchedulingService` (materialize + send), `MeetingReminderScheduler` (@Scheduled 60s), `MeetingReminderMessageBuilder`, migration `V5__add_meeting_reminder_table.sql`. Offsets configurable via `meeting.reminder.offsets-minutes` (default `15,5`). 12 unit tests. |
+| 14 | Meeting reminders (5-min / 15-min) | ✅ done | `meeting_reminder` table (CAS claim/lock mirroring standup), `MeetingReminderSchedulingService` (materialize + send), `MeetingReminderScheduler` (@Scheduled 60s), `MeetingReminderMessageBuilder`, migration `V5__add_meeting_reminder_table.sql`. Offsets configurable via `slack.app.meeting.reminder.offsets-minutes` (default `15,5`). 12 unit tests. |
 | 15 | Prometheus metrics | M | Slack API failure rate, retry exhaustion, outbox throughput, in-flight gauge. |
 | 16 | History domain persistence | M | Wire up the dormant `HistoryRepository`. |
 

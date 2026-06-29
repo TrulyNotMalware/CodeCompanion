@@ -1,5 +1,6 @@
 package dev.notypie.application.health
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.stubOutboxStatus
@@ -19,7 +20,10 @@ class OutboxHealthIndicatorTest :
                 OutboxHealthIndicator(
                     outboxRepository = repository,
                     clock = clock,
-                    stuckThresholdSeconds = 300L,
+                    appConfig =
+                        AppConfig(
+                            outbox = AppConfig.Outbox(health = AppConfig.Outbox.Health(stuckThresholdSeconds = 300L)),
+                        ),
                 )
 
             `when`("no PENDING or IN_PROGRESS messages exist") {

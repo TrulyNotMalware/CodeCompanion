@@ -1,5 +1,6 @@
 package dev.notypie.application.service.ops
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.stubOutboxStatus
 import dev.notypie.domain.command.EventQueue
@@ -36,7 +37,10 @@ class OpsStatusServiceTest :
                     slackEventBuilder = slackEventBuilder,
                     eventPublisher = eventPublisher,
                     clock = clock,
-                    stuckThresholdSeconds = 300L,
+                    appConfig =
+                        AppConfig(
+                            outbox = AppConfig.Outbox(health = AppConfig.Outbox.Health(stuckThresholdSeconds = 300L)),
+                        ),
                 )
 
             val basic = createCommandBasicInfo()

@@ -1,18 +1,22 @@
 package dev.notypie.application.service.standup
 
 import dev.notypie.application.common.runInTx
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.standup.dto.RoutineDto
 import dev.notypie.domain.standup.entity.SessionDispatch
 import dev.notypie.domain.standup.entity.StandupSession
+import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import dev.notypie.repository.standup.NudgeCandidateSession
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -23,31 +27,34 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 private val log = KotlinLogging.logger {}
+
+private val DISPATCH_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+private val NUDGE_CUTOFF_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Service
 class StandupSchedulingService(
     private val standupRepository: StandupRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val messageBuilder: StandupDispatchMessageBuilder,
+    private val slackEventBuilder: SlackApiEventConstructor,
     transactionManager: PlatformTransactionManager,
     private val applicationEventPublisher: ApplicationEventPublisher = ApplicationEventPublisher { },
     private val clock: Clock = Clock.systemDefaultZone(),
-    @param:Value("\${standup.scheduler.stuck-sending-threshold-minutes:5}")
-    private val stuckSendingThresholdMinutes: Long = 5L,
-    @param:Value("\${standup.scheduler.dispatch-batch-size:50}")
-    private val dispatchBatchSize: Int = 50,
-    @param:Value("\${standup.nudge.offset-minutes:30}")
-    private val nudgeOffsetMinutes: Long = 30L,
+    appConfig: AppConfig = AppConfig(),
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
+    private val stuckSendingThresholdMinutes: Long = appConfig.standup.scheduler.stuckSendingThresholdMinutes
+    private val dispatchBatchSize: Int = appConfig.standup.scheduler.dispatchBatchSize
+    private val nudgeOffsetMinutes: Long = appConfig.standup.nudge.offsetMinutes
+
     /**
-     * Phase 1: Creates today's standup session + per-member dispatch rows for every active
-     * routine that fires on today's weekday. The unique constraint (routine_uid, session_date)
-     * makes this fully idempotent — a restart or duplicate tick simply finds the existing row.
+     * Phase 1: opens today's session + per-member dispatch rows for every active routine firing on
+     * today's weekday. The unique constraint `(routine_uid, session_date)` keeps it idempotent.
      */
     fun openSessionsForToday() {
         val now = clock.instant()
@@ -61,8 +68,8 @@ class StandupSchedulingService(
         if (today.dayOfWeek !in routine.weekdays) return
         if (standupRepository.findSession(routineUid = routine.routineUid, sessionDate = today) != null) return
 
-        // Per-member DM trigger time, evaluated in each member's own zone — an LA member of a
-        // Seoul routine receives the prompt at LA 10:00, not Seoul 10:00.
+        // Each member's DM trigger is evaluated in their own zone — an LA member of a Seoul routine
+        // is prompted at LA 10:00, not Seoul 10:00.
         val memberDispatches =
             routine.members.map { member ->
                 val dmTriggerAt =
@@ -73,9 +80,8 @@ class StandupSchedulingService(
                 SessionDispatch(userId = member.userId, dmTriggerAt = dmTriggerAt)
             }
 
-        // Cutoff anchors on the LATEST member trigger so every member has at least
-        // [Routine.cutoffOffset] to respond. Using a routine-zone-only cutoff would mean
-        // members in westward zones receive the DM after the cutoff has already passed.
+        // Cutoff anchors on the LATEST member trigger so every member gets at least cutoffOffset to
+        // respond; a routine-zone-only cutoff could pass before a westward member's DM even fires.
         val routineFallbackTrigger =
             LocalDateTime.of(today, routine.triggerLocalTime).atZone(routine.routineTimezone).toInstant()
         val cutoffAnchor =
@@ -96,16 +102,12 @@ class StandupSchedulingService(
                 "Standup session opened: routine=${routine.routineUid} date=$today members=${routine.members.size}"
             }
         } catch (ex: DataIntegrityViolationException) {
-            // The unique constraint (routine_uid, session_date) was the *expected* failure
-            // mode (concurrent racing tick). We confirm the row actually exists before
-            // swallowing — any other constraint violation (UUID collision, child-row schema
-            // bug, missing column) must surface so it doesn't masquerade as a benign race.
+            // Unique-constraint violation is the expected race. Confirm the row exists before
+            // swallowing — any other violation must surface.
             val existing =
                 standupRepository.findSession(routineUid = routine.routineUid, sessionDate = today)
             if (existing != null) {
-                log.debug {
-                    "Session race lost (concurrent tick): routine=${routine.routineUid} date=$today"
-                }
+                log.debug { "Session race lost (concurrent tick): routine=${routine.routineUid} date=$today" }
             } else {
                 throw ex
             }
@@ -113,15 +115,10 @@ class StandupSchedulingService(
     }
 
     /**
-     * Phase 2: Sends standup DM prompts for members whose [SessionDispatch.dmTriggerAt] has
-     * passed. Each dispatch is claimed atomically (PENDING→SENDING) before sending so a
-     * concurrent scheduler tick cannot double-send. Stuck SENDING rows from a prior crash
-     * are reset to PENDING at the start of each tick.
-     *
-     * Crucially, this method queries pending dispatches by absolute UTC time across *all*
-     * sessions — it does NOT scope to "today's session in the routine timezone." Members
-     * whose local trigger time falls on a different calendar day than the routine creator
-     * (e.g. an LA member of a Seoul routine) would otherwise be stranded in PENDING.
+     * Phase 2: sends DM prompts for dispatches whose `dmTriggerAt` has passed. Queries by absolute
+     * UTC time across ALL sessions (not "today in the routine zone") so members whose local trigger
+     * lands on a different calendar day than the routine creator aren't stranded. Stuck SENDING rows
+     * are reset first; each dispatch is claimed atomically before sending.
      */
     fun sendPendingDispatches() {
         val now = clock.instant()
@@ -149,29 +146,14 @@ class StandupSchedulingService(
     }
 
     /**
-     * Sends one dispatch with two transaction boundaries so partial failures cannot leave
-     * the system in inconsistent state:
-     *
-     *   1. **Claim** runs in its own transaction (the JPA repo's `@Modifying @Transactional`).
-     *      A successful claim leaves the row in `SENDING` durably so the failure path below
-     *      can transition it to `FAILED` even if step 2 rolls back.
-     *
-     *   2. **Send** wraps `(build → outbox.save → markDispatchSent)` in one
-     *      [TransactionTemplate]. If `markDispatchSent` returns false (recovery already moved
-     *      the row out of `SENDING`) we mark the tx for rollback — that undoes the outbox
-     *      save so we don't deliver a DM the dispatch state can't account for.
-     *
-     * If step 2 fails or rolls back, we then call `markDispatchFailed` in a *new* transaction
-     * to record the audit. Its CAS predicate (`status = 'SENDING'`) makes this safe: if
-     * recovery already reset the row to PENDING, the call is a no-op and the next tick
-     * re-claims naturally.
+     * Sends one dispatch across three transaction boundaries: claim commits in its own tx; build +
+     * outbox.save + markDispatchSent run in one tx that rolls back if markDispatchSent is a no-op
+     * (recovery raced us); on failure markDispatchFailed records the audit in a fresh tx. The
+     * per-claim token gates every CAS so only our own claim's outcome can be acknowledged.
      */
     private fun processDispatch(item: ReadyDispatch, routine: RoutineDto, sentAt: Instant) {
         val dispatchId = item.dispatch.id
         val userId = item.dispatch.userId
-        // Per-claim token tied to this exact processDispatch invocation. The CAS predicate
-        // on every transition checks the token, so a stuck-row recovery + re-claim by another
-        // tick cannot have its outcome silently overwritten by our markDispatchFailed call.
         val claimToken = UUID.randomUUID().toString()
 
         if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken)) return
@@ -179,13 +161,10 @@ class StandupSchedulingService(
         val outcome: Result<Unit> =
             transactionTemplate.runInTx<Unit> {
                 val commandBasicInfo =
-                    CommandBasicInfo.forOutbound(
-                        publisherId = userId,
-                        // Slack accepts a user_id as the DM channel target.
-                        channel = userId,
-                    )
+                    CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                 val dmEvent =
-                    messageBuilder.buildDmNotice(
+                    buildDmNotice(
+                        slackEventBuilder = slackEventBuilder,
                         sessionUid = item.sessionUid,
                         sessionDate = item.sessionDate,
                         routineUid = routine.routineUid,
@@ -200,31 +179,20 @@ class StandupSchedulingService(
                         sentAt = sentAt,
                     )
                 ) {
-                    // Crash-recovery sweep flipped this row out of SENDING (or another tick
-                    // re-claimed it). Rolling back undoes the outbox save above so we don't
-                    // deliver a DM whose dispatch row no longer represents our claim.
-                    error(
-                        "markDispatchSent had no effect — dispatch $dispatchId is no longer " +
-                            "SENDING under our claim token. Tx will be rolled back.",
-                    )
+                    error("markDispatchSent had no effect for dispatch $dispatchId — rolling back.")
                 }
             }
 
         if (outcome.isFailure) {
             val ex = outcome.exceptionOrNull()!!
             log.error(ex) { "Standup DM dispatch failed: dispatchId=$dispatchId userId=$userId" }
-            // Fresh transaction. Token-keyed CAS guarantees we only mark FAILED for OUR claim;
-            // if recovery + re-claim already happened, this is a no-op and we log it.
             if (!standupRepository.markDispatchFailed(
                     dispatchId = dispatchId,
                     claimToken = claimToken,
                     reason = ex.message ?: "unknown",
                 )
             ) {
-                log.warn {
-                    "markDispatchFailed had no effect — dispatch $dispatchId no longer holds our " +
-                        "claim token. Recovery sweep already reset or another tick re-claimed."
-                }
+                log.warn { "markDispatchFailed no-op for dispatch $dispatchId — recovery already reset or re-claimed." }
             }
         } else {
             log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
@@ -232,16 +200,10 @@ class StandupSchedulingService(
     }
 
     /**
-     * Phase 4: DMs members who received the standup prompt but haven't answered yet, once per
-     * session, shortly before the cutoff. A session qualifies when `now` is within
-     * `[cutoffAt - nudgeOffset, cutoffAt)` and it has not been nudged. The reminder is gated by
-     * [StandupRepository.claimNudge]'s atomic CAS so it fires exactly once across ticks/restarts.
-     *
-     * We claim only when a session actually has non-responders. If everyone has already answered
-     * we leave `nudged_at` NULL — there is nothing to send, and a later tick re-evaluates
-     * cheaply; once the cutoff passes the session leaves the window naturally, so the flag never
-     * needs to be burned on a no-op. Setting `standup.nudge.offset-minutes <= 0` disables the
-     * phase entirely (a kill-switch that skips all repo work).
+     * Phase 4: DMs members who got the prompt but haven't answered, once per session, within
+     * `[cutoffAt - nudgeOffset, cutoffAt)`. [StandupRepository.claimNudge]'s atomic CAS makes it
+     * fire exactly once across ticks/restarts. We claim only when non-responders actually exist, so
+     * an all-answered session leaves `nudged_at` NULL. Offset <= 0 disables the phase.
      */
     fun nudgeNonResponders() {
         if (nudgeOffsetMinutes <= 0L) return
@@ -252,8 +214,6 @@ class StandupSchedulingService(
             standupRepository.findCollectingSessionsForNudge(now = now, nudgeWindowEnd = nudgeWindowEnd)
         if (candidates.isEmpty()) return
 
-        // One-shot lookup: minimise DB chatter when many sessions share a routine (mirrors
-        // sendPendingDispatches). The routine carries the display name + timezone for the DM.
         val routinesByUid = standupRepository.listActiveRoutines().associateBy { it.routineUid }
 
         candidates.forEach { candidate ->
@@ -271,24 +231,20 @@ class StandupSchedulingService(
             return
         }
 
-        // Non-responders = members whose prompt landed (SENT) minus members who have answered.
         val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
         if (nonResponders.isEmpty()) return
 
-        // Atomic once-only gate. Lost race / already nudged → another tick owns it; do nothing.
+        // Atomic once-only gate. Lost race / already nudged → another tick owns it.
         if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return
 
         val outcome: Result<Unit> =
             transactionTemplate.runInTx<Unit> {
                 nonResponders.forEach { userId ->
                     val commandBasicInfo =
-                        CommandBasicInfo.forOutbound(
-                            publisherId = userId,
-                            // Slack accepts a user_id as the DM channel target.
-                            channel = userId,
-                        )
+                        CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                     val nudgeEvent =
-                        messageBuilder.buildNudgeNotice(
+                        buildNudgeNotice(
+                            slackEventBuilder = slackEventBuilder,
                             routineName = routine.name,
                             cutoffAt = candidate.cutoffAt,
                             routineTimezone = routine.routineTimezone,
@@ -299,9 +255,8 @@ class StandupSchedulingService(
             }
 
         if (outcome.isFailure) {
-            // The claim already committed in its own transaction, so a failure here cannot be
-            // re-nudged — surface it for the tick wrapper to log. This trades at-most-once
-            // duplication for a possible missed nudge, the safer default for a reminder.
+            // The claim already committed, so this can't be re-nudged — at-most-once, the safer
+            // default for a reminder. Surface for the tick wrapper to log.
             log.error(outcome.exceptionOrNull()) {
                 "Standup nudge enqueue failed after claim: sessionUid=${candidate.sessionUid}"
             }
@@ -313,7 +268,7 @@ class StandupSchedulingService(
         }
     }
 
-    /** Phase 3: Detects COLLECTING sessions that have passed their cutoff and queues summaries. */
+    /** Phase 3: detects COLLECTING sessions past their cutoff and queues summaries. */
     fun detectCutoffs() {
         val now = clock.instant()
         standupRepository.findCollectingSessionsPastCutoff(before = now).forEach { session ->
@@ -328,4 +283,60 @@ class StandupSchedulingService(
             )
         }
     }
+}
+
+/**
+ * Builds the standup-prompt DM with a "Fill in standup" button; clicking it yields the trigger_id
+ * the follow-up [dev.notypie.domain.command.entity.context.form.StandupFillContext] needs to open
+ * the modal (a scheduler tick has no trigger_id of its own).
+ */
+internal fun buildDmNotice(
+    slackEventBuilder: SlackApiEventConstructor,
+    sessionUid: UUID,
+    sessionDate: LocalDate,
+    routineUid: UUID,
+    routineName: String,
+    memberId: String,
+    commandBasicInfo: CommandBasicInfo,
+): SendSlackMessageEvent {
+    val approvalContents =
+        ApprovalContents(
+            headLineText = "$routineName — ${sessionDate.format(DISPATCH_DATE_FORMAT)}",
+            reason = routineName,
+            publisherId = commandBasicInfo.publisherId,
+            approvalButtonName = "Fill in standup",
+            rejectButtonName = "Skip",
+            idempotencyKey = sessionUid,
+            commandDetailType = CommandDetailType.STANDUP_FILL,
+        )
+    return slackEventBuilder.simpleApplyRejectRequest(
+        commandDetailType = CommandDetailType.STANDUP_FILL,
+        commandBasicInfo = commandBasicInfo,
+        approvalContents = approvalContents,
+        targetUserId = memberId,
+        routingExtras = listOf(sessionUid.toString(), routineUid.toString()),
+    )
+}
+
+/**
+ * Builds the once-per-session non-responder reminder: a plain `chat.postMessage` (no buttons) that
+ * points the member back to the original prompt's "Fill in standup" button.
+ */
+internal fun buildNudgeNotice(
+    slackEventBuilder: SlackApiEventConstructor,
+    routineName: String,
+    cutoffAt: Instant,
+    routineTimezone: ZoneId,
+    commandBasicInfo: CommandBasicInfo,
+): SendSlackMessageEvent {
+    val cutoffText = NUDGE_CUTOFF_TIME_FORMAT.format(cutoffAt.atZone(routineTimezone))
+    val body =
+        "⏰ Standup for *$routineName* closes at $cutoffText — you haven't responded yet. " +
+            "Tap the *Fill in standup* button in your DM."
+    return slackEventBuilder.simpleTextRequest(
+        commandDetailType = CommandDetailType.STANDUP_FILL,
+        headLineText = "Standup reminder",
+        commandBasicInfo = commandBasicInfo,
+        simpleString = body,
+    )
 }

@@ -1,5 +1,6 @@
 package dev.notypie.application.service.standup
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -10,6 +11,7 @@ import dev.notypie.domain.standup.createSessionDispatchDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.SessionStatus
+import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.standup.ReadyDispatch
@@ -50,8 +52,8 @@ class StandupSchedulingServiceTest :
         val clock = Clock.fixed(nowInstant, ZoneOffset.UTC)
         val today = LocalDate.ofInstant(nowInstant, seoul)
 
-        fun stubBuilder(): StandupDispatchMessageBuilder {
-            val builder = mockk<StandupDispatchMessageBuilder>()
+        fun stubEventBuilder(): SlackApiEventConstructor {
+            val slackEventBuilder = mockk<SlackApiEventConstructor>()
             val basicInfo = createCommandBasicInfo()
             val stubEvent =
                 createSendSlackMessageEvent(
@@ -59,24 +61,23 @@ class StandupSchedulingServiceTest :
                     idempotencyKey = basicInfo.idempotencyKey,
                 )
             every {
-                builder.buildDmNotice(
-                    sessionUid = any(),
-                    sessionDate = any(),
-                    routineUid = any(),
-                    routineName = any(),
-                    memberId = any(),
+                slackEventBuilder.simpleApplyRejectRequest(
+                    commandDetailType = any(),
                     commandBasicInfo = any(),
+                    approvalContents = any(),
+                    targetUserId = any(),
+                    routingExtras = any(),
                 )
             } returns stubEvent
             every {
-                builder.buildNudgeNotice(
-                    routineName = any(),
-                    cutoffAt = any(),
-                    routineTimezone = any(),
+                slackEventBuilder.simpleTextRequest(
+                    commandDetailType = any(),
+                    headLineText = any(),
                     commandBasicInfo = any(),
+                    simpleString = any(),
                 )
             } returns stubEvent
-            return builder
+            return slackEventBuilder
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -96,7 +97,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -156,7 +157,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -183,7 +184,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -209,7 +210,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -239,7 +240,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -270,7 +271,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -324,12 +325,12 @@ class StandupSchedulingServiceTest :
             `when`("a dispatch is ready and claim succeeds") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val builder = stubBuilder()
+                val builder = stubEventBuilder()
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = builder,
+                        slackEventBuilder = builder,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -373,12 +374,12 @@ class StandupSchedulingServiceTest :
             `when`("the claim fails (race lost)") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
-                val builder = stubBuilder()
+                val builder = stubEventBuilder()
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = builder,
+                        slackEventBuilder = builder,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -405,22 +406,21 @@ class StandupSchedulingServiceTest :
             `when`("the message build throws") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
-                val builder = mockk<StandupDispatchMessageBuilder>()
+                val builder = mockk<SlackApiEventConstructor>()
                 every {
-                    builder.buildDmNotice(
-                        sessionUid = any(),
-                        sessionDate = any(),
-                        routineUid = any(),
-                        routineName = any(),
-                        memberId = any(),
+                    builder.simpleApplyRejectRequest(
+                        commandDetailType = any(),
                         commandBasicInfo = any(),
+                        approvalContents = any(),
+                        targetUserId = any(),
+                        routingExtras = any(),
                     )
                 } throws RuntimeException("Slack API error")
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = builder,
+                        slackEventBuilder = builder,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -456,7 +456,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -479,7 +479,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -507,7 +507,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         applicationEventPublisher = publisher,
                         clock = clock,
@@ -558,7 +558,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -596,7 +596,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -629,7 +629,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -663,10 +663,11 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
-                        nudgeOffsetMinutes = 0L,
+                        appConfig =
+                            AppConfig(standup = AppConfig.Standup(nudge = AppConfig.Standup.Nudge(offsetMinutes = 0L))),
                     )
 
                 service.nudgeNonResponders()
@@ -685,10 +686,13 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        messageBuilder = stubBuilder(),
+                        slackEventBuilder = stubEventBuilder(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
-                        nudgeOffsetMinutes = 30L,
+                        appConfig =
+                            AppConfig(
+                                standup = AppConfig.Standup(nudge = AppConfig.Standup.Nudge(offsetMinutes = 30L)),
+                            ),
                     )
                 val passedNow = slot<java.time.Instant>()
                 val passedWindowEnd = slot<java.time.Instant>()

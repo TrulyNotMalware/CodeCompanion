@@ -42,20 +42,20 @@ Scheduler phases run on a 60s tick (standup open/dispatch/nudge/cutoff, meeting 
 2. **Reschedule** — on `/meetup list`, click **Reschedule** → pick new date/time → participants get a
    re-notification and the meeting's reminders are re-armed for the new time.
 3. **Meeting reminders** — create a meeting starting ~**16 min** out → attending participants get a
-   15-min and a 5-min DM (`meeting.reminder.offsets-minutes`, default `15,5`).
+   15-min and a 5-min DM (`slack.app.meeting.reminder.offsets-minutes`, default `15,5`).
 4. **/standup setup** — `/standup setup` → fill modal (questions, members, summary channel, weekdays,
    trigger time, timezone, cutoff) → routine created. At the trigger time members get the prompt DM
    with a **Fill in standup** button → submit answers; at cutoff a summary posts to the summary channel.
-5. **Standup nudge** — within `standup.nudge.offset-minutes` (default 30) of cutoff, members who got the
+5. **Standup nudge** — within `slack.app.standup.nudge.offset-minutes` (default 30) of cutoff, members who got the
    prompt but haven't answered get a one-time reminder DM.
-6. **Daily agenda** — set `meeting.agenda.send-at` to a minute or two ahead (e.g. via
-   `--meeting.agenda.send-at=HH:mm`), have at least one meeting today → each attending user gets a
+6. **Daily agenda** — set `slack.app.meeting.agenda.send-at` to a minute or two ahead (e.g. via
+   `--slack.app.meeting.agenda.send-at=HH:mm`), have at least one meeting today → each attending user gets a
    morning agenda DM (once per day).
 
 ## 5. Useful config overrides (append as `--key=value` to bootRun args)
-- `meeting.reminder.offsets-minutes=16,5` — shorten for quick testing
-- `standup.nudge.offset-minutes=30` (0 disables)
-- `meeting.agenda.send-at=09:00`, `meeting.agenda.timezone=Asia/Seoul`, `meeting.agenda.enabled=true`
+- `slack.app.meeting.reminder.offsets-minutes=16,5` — shorten for quick testing
+- `slack.app.standup.nudge.offset-minutes=30` (0 disables)
+- `slack.app.meeting.agenda.send-at=09:00`, `slack.app.meeting.agenda.timezone=Asia/Seoul`, `slack.app.meeting.agenda.enabled=true`
 
 ## 6. Quick DB peeks
 ```bash

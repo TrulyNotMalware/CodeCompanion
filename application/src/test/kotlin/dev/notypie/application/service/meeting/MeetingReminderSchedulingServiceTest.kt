@@ -1,10 +1,12 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.createMeetingReminderDto
 import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
+import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.meeting.ReminderCandidateMeeting
@@ -37,8 +39,8 @@ class MeetingReminderSchedulingServiceTest :
                 .toInstant()
         val clock = Clock.fixed(nowInstant, seoul)
 
-        fun stubBuilder(): MeetingReminderMessageBuilder {
-            val builder = mockk<MeetingReminderMessageBuilder>()
+        fun stubEventBuilder(): SlackApiEventConstructor {
+            val slackEventBuilder = mockk<SlackApiEventConstructor>()
             val basicInfo = createCommandBasicInfo()
             val stubEvent =
                 createSendSlackMessageEvent(
@@ -46,14 +48,14 @@ class MeetingReminderSchedulingServiceTest :
                     idempotencyKey = basicInfo.idempotencyKey,
                 )
             every {
-                builder.buildReminderDm(
-                    meetingTitle = any(),
-                    offsetMinutes = any(),
-                    startAt = any(),
+                slackEventBuilder.simpleTextRequest(
+                    commandDetailType = any(),
+                    headLineText = any(),
                     commandBasicInfo = any(),
+                    simpleString = any(),
                 )
             } returns stubEvent
-            return builder
+            return slackEventBuilder
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -68,14 +70,17 @@ class MeetingReminderSchedulingServiceTest :
         fun buildService(
             repo: MeetingReminderRepository,
             outboxRepo: MessageOutboxRepository,
-            builder: MeetingReminderMessageBuilder = stubBuilder(),
+            builder: SlackApiEventConstructor = stubEventBuilder(),
         ) = MeetingReminderSchedulingService(
             reminderRepository = repo,
             outboxRepository = outboxRepo,
-            messageBuilder = builder,
+            slackEventBuilder = builder,
             transactionManager = stubTransactionManager(),
             clock = clock,
-            offsetsMinutes = listOf(15, 5),
+            appConfig =
+                AppConfig(
+                    meeting = AppConfig.Meeting(reminder = AppConfig.Meeting.Reminder(offsetsMinutes = listOf(15, 5))),
+                ),
         )
 
         given("materializeReminders") {
@@ -276,13 +281,13 @@ class MeetingReminderSchedulingServiceTest :
             `when`("the message build throws") {
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
-                val builder = mockk<MeetingReminderMessageBuilder>()
+                val builder = mockk<SlackApiEventConstructor>()
                 every {
-                    builder.buildReminderDm(
-                        meetingTitle = any(),
-                        offsetMinutes = any(),
-                        startAt = any(),
+                    builder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
                         commandBasicInfo = any(),
+                        simpleString = any(),
                     )
                 } throws RuntimeException("Slack API error")
                 val service = buildService(repo = repo, outboxRepo = outboxRepo, builder = builder)

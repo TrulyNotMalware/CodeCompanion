@@ -1,7 +1,7 @@
 package dev.notypie.application.health
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.health.contributor.Health
 import org.springframework.boot.health.contributor.HealthIndicator
 import org.springframework.stereotype.Component
@@ -10,34 +10,18 @@ import java.time.Duration
 import java.time.LocalDateTime
 
 /**
- * Reports the health of the outbox relay so that operators can see when
- * messages are accumulating or stalling mid-dispatch.
- *
- * Health is `DOWN` whenever at least one PENDING *or* IN_PROGRESS row is older than the
- * configured stuck threshold; otherwise `UP`. The two states tell different stories:
- *
- *   - PENDING stuck → the poller is failing to pick up rows (DB lag, scheduler stalled,
- *     pod down). Look at scheduling.
- *   - IN_PROGRESS stuck → the poller claimed a row and crashed before publishing
- *     SUCCESS/FAILURE. Look at dispatch failures and crash logs.
- *
- * Detail keys are stable so dashboards/alerts can pin against them:
- *
- * - `pendingCount` / `stuckPendingCount` / `oldestPendingAgeSeconds`
- * - `inFlightCount` / `stuckInFlightCount` / `oldestInFlightAgeSeconds`
- * - `stuckThresholdSeconds` — the threshold both states share
- *
- * The `stuckCount` key is preserved as an alias of `stuckPendingCount` so existing
- * dashboards / alert queries do not break in this PR.
+ * Reports outbox-relay health: DOWN when any PENDING or IN_PROGRESS row is older than the configured
+ * stuck threshold, else UP. PENDING-stuck points at the poller (lag/stall), IN_PROGRESS-stuck at a
+ * dispatch that claimed a row and crashed. Detail keys are stable for dashboards; `stuckCount` is a
+ * legacy alias of `stuckPendingCount`.
  */
 @Component
 class OutboxHealthIndicator(
     private val outboxRepository: MessageOutboxRepository,
     private val clock: Clock,
-    @Value("\${outbox.health.stuck-threshold-seconds:300}")
-    stuckThresholdSeconds: Long,
+    appConfig: AppConfig = AppConfig(),
 ) : HealthIndicator {
-    private val stuckThreshold: Duration = Duration.ofSeconds(stuckThresholdSeconds)
+    private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.health.stuckThresholdSeconds)
 
     override fun health(): Health {
         val now = clock.instant().atZone(clock.zone).toLocalDateTime()

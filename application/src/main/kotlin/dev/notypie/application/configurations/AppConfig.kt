@@ -20,6 +20,9 @@ enum class OutboxReaderStrategy {
 data class AppConfig(
     val api: Api = Api(),
     val mode: Mode = Mode(),
+    val meeting: Meeting = Meeting(),
+    val standup: Standup = Standup(),
+    val outbox: Outbox = Outbox(),
 ) {
     data class Mode(
         val standAlone: Boolean = true,
@@ -37,6 +40,52 @@ data class AppConfig(
     data class Cdc(
         val topic: String = "",
     )
+
+    data class Meeting(
+        val reminder: Reminder = Reminder(),
+        val agenda: Agenda = Agenda(),
+    ) {
+        data class Reminder(
+            val offsetsMinutes: List<Int> = listOf(15, 5),
+            val stuckSendingThresholdMinutes: Long = 5L,
+            val dispatchBatchSize: Int = 50,
+            val materializeLookbackMinutes: Long = 2L,
+        )
+
+        data class Agenda(
+            val enabled: Boolean = true,
+            val sendAt: String = "08:00",
+            val timezone: String = "Asia/Seoul",
+        )
+    }
+
+    data class Standup(
+        val scheduler: Scheduler = Scheduler(),
+        val nudge: Nudge = Nudge(),
+    ) {
+        data class Scheduler(
+            val stuckSendingThresholdMinutes: Long = 5L,
+            val dispatchBatchSize: Int = 50,
+        )
+
+        data class Nudge(
+            val offsetMinutes: Long = 30L,
+        )
+    }
+
+    data class Outbox(
+        val health: Health = Health(),
+        val polling: Polling = Polling(),
+    ) {
+        data class Health(
+            val stuckThresholdSeconds: Long = 300L,
+        )
+
+        data class Polling(
+            val batchSize: Int = 100,
+            val stuckInProgressSeconds: Long = 300L,
+        )
+    }
 }
 
 enum class EventPublisherType {

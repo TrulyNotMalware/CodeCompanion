@@ -1,13 +1,16 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.runInTx
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.meeting.AgendaCandidateMeeting
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -15,41 +18,31 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private val log = KotlinLogging.logger {}
 
+private val AGENDA_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
 /**
- * Sends each user a once-per-day DM listing the meetings they are attending today.
- *
- * The scheduler ticks every minute; this service is the gate + dispatch. Two guards keep it
- * correct under repeated ticks and restarts:
- *
- *   1. **Time-of-day gate** — proceed only once the local time in [agendaZone] has passed the
- *      configured [sendAt], so the agenda fires after the configured morning time rather than at
- *      midnight when the calendar date first rolls over.
- *   2. **Per-date claim** — `agendaDispatchRepository.claim(today)` is an atomic `INSERT IGNORE`
- *      on the agenda date; only the tick that inserts the row proceeds, so the agenda for a given
- *      day is built at most once even across overlapping ticks.
+ * Sends each user a once-per-day DM listing the meetings they attend today. Two guards keep it
+ * correct under repeated ticks/restarts: a time-of-day gate (the configured send time in [zone])
+ * and an atomic per-date `INSERT IGNORE` claim so the agenda is built at most once.
  */
 @Service
 class DailyAgendaSchedulingService(
     private val agendaDispatchRepository: AgendaDispatchRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val messageBuilder: DailyAgendaMessageBuilder,
+    private val slackEventBuilder: SlackApiEventConstructor,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
-    @param:Value("\${meeting.agenda.enabled:true}")
-    private val enabled: Boolean = true,
-    @Value("\${meeting.agenda.send-at:08:00}")
-    sendAt: String = "08:00",
-    @Value("\${meeting.agenda.timezone:Asia/Seoul}")
-    agendaZone: String = "Asia/Seoul",
+    appConfig: AppConfig = AppConfig(),
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
-    private val sendTime: LocalTime = LocalTime.parse(sendAt)
-
-    private val zone: ZoneId = ZoneId.of(agendaZone)
+    private val enabled: Boolean = appConfig.meeting.agenda.enabled
+    private val sendTime: LocalTime = LocalTime.parse(appConfig.meeting.agenda.sendAt)
+    private val zone: ZoneId = ZoneId.of(appConfig.meeting.agenda.timezone)
 
     fun sendDailyAgenda() {
         if (!enabled) return
@@ -58,10 +51,10 @@ class DailyAgendaSchedulingService(
         val today = LocalDate.ofInstant(now, zone)
         val localTime = now.atZone(zone).toLocalTime()
 
-        // Time-of-day gate: don't fire before the configured morning send time.
+        // Don't fire before the configured morning send time.
         if (localTime.isBefore(sendTime)) return
 
-        // Atomic once-per-day claim — a concurrent tick that already claimed today stands down.
+        // Atomic once-per-day claim — a tick that already claimed today stands down.
         if (!agendaDispatchRepository.claim(agendaDate = today)) return
 
         val dayStart = today.atStartOfDay()
@@ -78,14 +71,10 @@ class DailyAgendaSchedulingService(
             transactionTemplate.runInTx {
                 agendaByUser.forEach { (userId, items) ->
                     val commandBasicInfo =
-                        CommandBasicInfo.forOutbound(
-                            publisherId = userId,
-                            // Slack accepts a user_id as the DM channel target.
-                            channel = userId,
-                        )
+                        CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                     val dmEvent =
-                        messageBuilder.buildAgendaDm(
-                            userId = userId,
+                        buildAgendaDm(
+                            slackEventBuilder = slackEventBuilder,
                             agendaDate = today,
                             meetings = items,
                             commandBasicInfo = commandBasicInfo,
@@ -102,10 +91,7 @@ class DailyAgendaSchedulingService(
         }
     }
 
-    /**
-     * Fans out each meeting to its attending participants, producing one [AgendaItem] list per
-     * user. Users with no attending meetings never appear, so they receive no DM.
-     */
+    /** Fans each meeting out to its attending participants, one [AgendaItem] list per user. */
     private fun groupByAttendingUser(meetings: List<AgendaCandidateMeeting>): Map<String, List<AgendaItem>> {
         val byUser = mutableMapOf<String, MutableList<AgendaItem>>()
         meetings.forEach { meeting ->
@@ -116,4 +102,29 @@ class DailyAgendaSchedulingService(
         }
         return byUser
     }
+}
+
+/**
+ * Builds the morning daily-agenda DM: a date header followed by one line per meeting, sorted by
+ * start time. A scheduler tick has no `trigger_id`, so this is a plain `chat.postMessage`.
+ */
+internal fun buildAgendaDm(
+    slackEventBuilder: SlackApiEventConstructor,
+    agendaDate: LocalDate,
+    meetings: List<AgendaItem>,
+    commandBasicInfo: CommandBasicInfo,
+): SendSlackMessageEvent {
+    val header = "🗓️ Today's meetings ($agendaDate)"
+    val lines =
+        meetings
+            .sortedBy { it.startAt }
+            .joinToString(separator = "\n") { item ->
+                "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title}"
+            }
+    return slackEventBuilder.simpleTextRequest(
+        commandDetailType = CommandDetailType.DAILY_AGENDA,
+        headLineText = header,
+        commandBasicInfo = commandBasicInfo,
+        simpleString = lines,
+    )
 }

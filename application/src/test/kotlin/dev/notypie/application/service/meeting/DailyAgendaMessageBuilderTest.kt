@@ -18,7 +18,6 @@ class DailyAgendaMessageBuilderTest :
         given("buildAgendaDm") {
             `when`("a user has multiple meetings supplied out of order") {
                 val slackEventBuilder = mockk<SlackApiEventConstructor>()
-                val builder = DailyAgendaMessageBuilder(slackEventBuilder = slackEventBuilder)
                 val basicInfo = createCommandBasicInfo()
                 val agendaDate = LocalDate.of(2026, 5, 4)
                 val meetings =
@@ -48,8 +47,8 @@ class DailyAgendaMessageBuilderTest :
                         idempotencyKey = basicInfo.idempotencyKey,
                     )
 
-                builder.buildAgendaDm(
-                    userId = "U_A",
+                buildAgendaDm(
+                    slackEventBuilder = slackEventBuilder,
                     agendaDate = agendaDate,
                     meetings = meetings,
                     commandBasicInfo = basicInfo,

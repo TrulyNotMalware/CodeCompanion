@@ -1,5 +1,6 @@
 package dev.notypie.application.outbox
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -42,8 +43,17 @@ fun createPollingProcessorFixture(
                 outboxRepository = outboxRepository,
                 messageRelayService = relayService,
                 clock = clock,
-                batchSize = batchSize,
-                stuckInProgressSeconds = stuckInProgressSeconds,
+                appConfig =
+                    AppConfig(
+                        outbox =
+                            AppConfig.Outbox(
+                                polling =
+                                    AppConfig.Outbox.Polling(
+                                        batchSize = batchSize,
+                                        stuckInProgressSeconds = stuckInProgressSeconds,
+                                    ),
+                            ),
+                    ),
             ),
     )
 

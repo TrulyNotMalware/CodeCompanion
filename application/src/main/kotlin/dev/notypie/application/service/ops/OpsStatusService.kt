@@ -1,5 +1,6 @@
 package dev.notypie.application.service.ops
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
@@ -7,7 +8,6 @@ import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -30,12 +30,9 @@ class OpsStatusService(
     private val slackEventBuilder: SlackApiEventConstructor,
     private val eventPublisher: EventPublisher,
     private val clock: Clock = Clock.systemDefaultZone(),
-    @param:Value("\${outbox.health.stuck-threshold-seconds:300}")
-    private val stuckThresholdSeconds: Long = DEFAULT_STUCK_THRESHOLD_SECONDS,
+    appConfig: AppConfig = AppConfig(),
 ) {
-    companion object {
-        const val DEFAULT_STUCK_THRESHOLD_SECONDS: Long = 300L
-    }
+    private val stuckThresholdSeconds: Long = appConfig.outbox.health.stuckThresholdSeconds
 
     @EventListener
     fun handleStatusReport(event: StatusReportRequestEvent) {

@@ -47,16 +47,9 @@ class ModalTemplateBuilder(
         private val RESCHEDULE_TIME_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("HH:mm")
 
-        /**
-         * Slack Block Kit caps each message at 50 blocks. Worst case (every meeting hosted
-         * by the current user → every row gets one host-actions block carrying both the
-         * Reschedule and Cancel buttons) is:
-         *   header(1) + top-divider(1) + N sections + N host-actions + (N-1) inter-dividers
-         *     = 3N + 1
-         * Plus the truncation notice (1 block, no preceding divider — it's italic and
-         * visually distinct) brings the worst case to 3N + 2.
-         * For 50-block safety we keep 3N + 2 <= 50, i.e. N <= 16.
-         */
+        // Slack caps a message at 50 blocks. Worst case is 3 blocks per meeting (section +
+        // host-actions + divider) plus header, top divider, and truncation notice: 3N + 2 <= 50,
+        // so N <= 16.
         internal const val MAX_MEETINGS_PER_LIST: Int = 16
 
         // Mon–Sun options for the standup-setup weekday multi-select; value is the DayOfWeek
