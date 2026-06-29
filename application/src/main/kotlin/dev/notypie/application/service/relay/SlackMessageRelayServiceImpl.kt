@@ -15,7 +15,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.util.UUID
@@ -82,14 +81,17 @@ class SlackMessageRelayServiceImpl(
         applicationEventPublisher.publishEvent(updateEvent)
     }
 
-    @Transactional
+    // Spring Data's save() already runs in its own transaction; no service-level boundary needed.
     @EventListener
     fun saveOutboxMessages(event: NewMessagePublishedEvent) {
         logger.debug { "Save Outbox Message from ${event.reason}" }
         outboxRepository.save(event.outboxMessage)
     }
 
-    @Transactional
+    // The read-modify-write below relies on OutboxMessage's @Version optimistic lock, which is
+    // enforced when save() (merge) flushes — the detached entity carries the version it was read
+    // with, so a racing claim is still detected and retried. A service-level transaction would add
+    // nothing here, so the persistence boundary stays in the repository's save().
     @EventListener
     fun updateOutboxMessageStatus(event: OutboxUpdateEvent) =
         retryService.execute(

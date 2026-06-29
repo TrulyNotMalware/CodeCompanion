@@ -7,6 +7,7 @@ import org.springframework.boot.health.contributor.HealthIndicator
 import org.springframework.stereotype.Component
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDateTime
 
 /**
  * Reports the health of the outbox relay so that operators can see when
@@ -72,6 +73,6 @@ class OutboxHealthIndicator(
             .build()
     }
 
-    private fun ageSeconds(at: java.time.LocalDateTime?, now: java.time.LocalDateTime): Long =
-        if (at == null) 0L else Duration.between(at, now).seconds.coerceAtLeast(0L)
+    private fun ageSeconds(at: LocalDateTime?, now: LocalDateTime): Long =
+        at?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
 }

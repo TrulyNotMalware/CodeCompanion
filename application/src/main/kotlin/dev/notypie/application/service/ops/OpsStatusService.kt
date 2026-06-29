@@ -67,13 +67,13 @@ class OpsStatusService(
         val stuckPendingCount = outboxRepository.countPendingOlderThan(threshold = cutoff)
         val oldestPending = outboxRepository.findOldestPendingCreatedAt()
         val oldestPendingAgeSeconds =
-            if (oldestPending == null) 0L else Duration.between(oldestPending, now).seconds.coerceAtLeast(0L)
+            oldestPending?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
 
         val inFlightCount = outboxRepository.countInProgress()
         val stuckInFlightCount = outboxRepository.countInProgressOlderThan(threshold = cutoff)
         val oldestInFlight = outboxRepository.findOldestInProgressUpdatedAt()
         val oldestInFlightAgeSeconds =
-            if (oldestInFlight == null) 0L else Duration.between(oldestInFlight, now).seconds.coerceAtLeast(0L)
+            oldestInFlight?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
 
         val healthy = stuckPendingCount == 0L && stuckInFlightCount == 0L
         val healthLine = if (healthy) "*Health:* :large_green_circle: UP" else "*Health:* :red_circle: DOWN"

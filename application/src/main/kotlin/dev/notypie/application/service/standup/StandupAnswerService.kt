@@ -11,7 +11,6 @@ import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 
 private val answerLog = KotlinLogging.logger {}
@@ -23,7 +22,9 @@ class StandupAnswerService(
     private val eventPublisher: EventPublisher,
     private val clock: Clock = Clock.systemDefaultZone(),
 ) {
-    @Transactional
+    // Transaction boundary lives on StandupRepositoryImpl.recordAnswer (the read-modify-write
+    // over the session's answer collection). This listener only forwards the payload, so it
+    // carries no transaction of its own.
     @EventListener
     fun recordAnswer(event: RecordStandupAnswerEvent) {
         val payload = event.payload
