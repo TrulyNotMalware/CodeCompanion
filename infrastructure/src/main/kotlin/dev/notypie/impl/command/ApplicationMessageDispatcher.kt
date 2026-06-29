@@ -240,6 +240,11 @@ class ApplicationMessageDispatcher(
             messageTs = (result as? ChatPostMessageResponse)?.ts.orEmpty(),
         )
     } else {
+        // A Slack-side rejection (ok=false) otherwise becomes a FAILURE outbox row with no trace,
+        // so the message silently never reaches the user. Surface the error and any block warnings.
+        dispatcherLog.warn {
+            "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
+        }
         CommandOutput.fail(event = event, reason = result.error)
     }
 

@@ -15,8 +15,10 @@ import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedDatePickerStates
 import dev.notypie.domain.command.selectedMultiUserSelectStates
 import dev.notypie.domain.command.selectedPlainTextStates
+import dev.notypie.domain.command.selectedRejectButtonStates
 import dev.notypie.domain.command.selectedTimePickerStates
 import dev.notypie.domain.history.entity.Status
+import dev.notypie.domain.meet.entity.Meeting
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
@@ -389,6 +391,39 @@ class MeetingContextTest :
             }
         }
 
+        given("Meeting Context with a canceled (deny) interaction payload") {
+            val intentQueue = createIntentQueue()
+            val context =
+                RequestMeetingContext(
+                    commandBasicInfo = testCommandBasicInfo,
+                    subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                    intents = intentQueue,
+                )
+
+            `when`("handleInteraction is called with the reject button and no fields filled in") {
+                val interactionPayload =
+                    createInteractionPayloadInput(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        currentAction = selectedRejectButtonStates(),
+                        states = emptyList(),
+                    )
+                val res = context.handleInteraction(interactionPayload = interactionPayload)
+
+                then("should cancel without validation and emit a ReplaceMessage (no EphemeralResponse)") {
+                    res.ok shouldBe true
+                    res.status shouldBe Status.SUCCESS
+                    res.commandType shouldBe CommandType.PIPELINE
+                    res.commandDetailType shouldBe CommandDetailType.REQUEST_MEETING_FORM
+
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val replace = intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                    replace.markdownText shouldBe "Meeting request canceled."
+                }
+            }
+        }
+
         given("Meeting Context with invalid interaction payload (missing participants)") {
             val intentQueue = createIntentQueue()
             val context =
@@ -427,6 +462,52 @@ class MeetingContextTest :
                     intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
                     val errorIntent = intents.first() as CommandIntent.EphemeralResponse
                     errorIntent.message shouldBe "Select participants"
+                }
+            }
+        }
+
+        given("Meeting Context with a title longer than the entity limit") {
+            val intentQueue = createIntentQueue()
+            val context =
+                RequestMeetingContext(
+                    commandBasicInfo = testCommandBasicInfo,
+                    subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                    intents = intentQueue,
+                )
+
+            `when`("handleInteraction is called with an over-long meeting name") {
+                val tooLongTitle = "a".repeat(Meeting.MAX_TITLE_LENGTH + 5)
+                val interactionPayload =
+                    createInteractionPayloadInput(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        currentAction = selectedApplyButtonStates(),
+                        states =
+                            listOf(
+                                selectedPlainTextStates(text = tooLongTitle),
+                                selectedPlainTextStates(text = VALID_TEST_REASON),
+                                selectedDatePickerStates(
+                                    date = LocalDate.now().plusDays(1),
+                                    format = RequestMeetingContext.DATE_PATTERN,
+                                ),
+                                selectedTimePickerStates(
+                                    time = LocalTime.now(),
+                                    format = RequestMeetingContext.SIMPLE_TIME_PATTERN,
+                                ),
+                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                            ),
+                    )
+                val res = context.handleInteraction(interactionPayload = interactionPayload)
+
+                then("should fail gracefully with an ephemeral error (no thrown exception, no Meeting)") {
+                    res.ok shouldBe false
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val errorIntent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
+                    // Message is rendered from the Meeting entity's own validation failure, so the
+                    // limit lives in the domain rather than being duplicated in this context.
+                    errorIntent.message.contains("meeting title length") shouldBe true
+                    errorIntent.message.contains("less than ${Meeting.MAX_TITLE_LENGTH}") shouldBe true
                 }
             }
         }

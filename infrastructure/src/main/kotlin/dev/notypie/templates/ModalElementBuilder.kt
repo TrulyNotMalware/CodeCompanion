@@ -71,14 +71,18 @@ class ModalElementBuilder {
      * (existing approval/reject buttons rely on payload parsing alone, but this one
      * gets a stable id for clarity in client-side debugging).
      */
-    fun cancelMeetingButtonElement(buttonName: String, interactionPayload: String): InteractiveObject =
+    fun cancelMeetingButtonElement(
+        buttonName: String,
+        interactionPayload: String,
+        actionId: String = MeetingActionIds.CANCEL_ACTION_ID,
+    ): InteractiveObject =
         toInteractiveObject(
             state = States(type = ActionElementTypes.REJECT_BUTTON),
             element =
                 ButtonElement
                     .builder()
                     .text(plainTextObject(text = buttonName))
-                    .actionId(MeetingActionIds.CANCEL_ACTION_ID)
+                    .actionId(actionId)
                     .value(interactionPayload)
                     .style(ButtonType.DANGER.toString().lowercase())
                     .build(),
@@ -92,14 +96,18 @@ class ModalElementBuilder {
      * distinct from the danger-styled Cancel button next to it. `actionId` is set explicitly so
      * the click maps to a deterministic id.
      */
-    fun rescheduleMeetingButtonElement(buttonName: String, interactionPayload: String): InteractiveObject =
+    fun rescheduleMeetingButtonElement(
+        buttonName: String,
+        interactionPayload: String,
+        actionId: String = MeetingActionIds.RESCHEDULE_ACTION_ID,
+    ): InteractiveObject =
         toInteractiveObject(
             state = States(type = ActionElementTypes.APPLY_BUTTON),
             element =
                 ButtonElement
                     .builder()
                     .text(plainTextObject(text = buttonName))
-                    .actionId(MeetingActionIds.RESCHEDULE_ACTION_ID)
+                    .actionId(actionId)
                     .value(interactionPayload)
                     .style(ButtonType.PRIMARY.toString().lowercase())
                     .build(),

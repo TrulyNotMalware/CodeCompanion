@@ -5,6 +5,7 @@ import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
 import org.apache.kafka.clients.consumer.Consumer
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -21,6 +22,7 @@ import org.springframework.kafka.listener.MessageListenerContainer
 import org.springframework.kafka.support.micrometer.KafkaListenerObservation
 import org.springframework.kafka.support.micrometer.KafkaListenerObservationConvention
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
 import java.lang.Exception
 
 private val logger = KotlinLogging.logger { }
@@ -45,10 +47,24 @@ class KafkaConsumerConfiguration(
     private val convention: KafkaObservationConvention,
     private val kafkaProperties: KafkaProperties,
 ) {
+    // Wrap the configured key/value deserializers in ErrorHandlingDeserializer so a record that
+    // fails to deserialize (e.g. a stale CDC payload predating the current Envelope schema) is
+    // delivered to the listener as a null value instead of throwing inside poll() and wedging the
+    // consumer on that offset forever. KafkaErrorHandler.handleOne then skips the null record.
     @Bean
     @ConditionalOnMissingBean(ConsumerFactory::class)
-    fun consumerFactory(): ConsumerFactory<String, Any> =
-        DefaultKafkaConsumerFactory(kafkaProperties.buildConsumerProperties())
+    fun consumerFactory(): ConsumerFactory<String, Any> {
+        val properties = kafkaProperties.buildConsumerProperties()
+        properties[ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG]?.let { delegate ->
+            properties[ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS] = delegate
+            properties[ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG] = ErrorHandlingDeserializer::class.java
+        }
+        properties[ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG]?.let { delegate ->
+            properties[ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS] = delegate
+            properties[ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG] = ErrorHandlingDeserializer::class.java
+        }
+        return DefaultKafkaConsumerFactory(properties)
+    }
 
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)

@@ -114,19 +114,24 @@ class ModalBlockBuilder(
     fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
         val rescheduleRoutingValue = "$listIdempotencyKey,${CommandDetailType.RESCHEDULE_MEETING.name},$meetingUid"
         val cancelRoutingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
+        // A list can render several host rows in one message, so block_id and action_id must be
+        // unique per meeting — Slack rejects the whole message (invalid_blocks) when any collide.
+        // Routing reads the button value + style, not these ids, so suffixing with the uid is safe.
         val rescheduleButton: InteractiveObject =
             modalElementBuilder.rescheduleMeetingButtonElement(
                 buttonName = "Reschedule",
                 interactionPayload = rescheduleRoutingValue,
+                actionId = "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid",
             )
         val cancelButton: InteractiveObject =
             modalElementBuilder.cancelMeetingButtonElement(
                 buttonName = "Cancel",
                 interactionPayload = cancelRoutingValue,
+                actionId = "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid",
             )
         val layout =
             actions {
-                it.blockId(MeetingActionIds.CANCEL_BLOCK_ID)
+                it.blockId("${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid")
                 it.elements(listOf(rescheduleButton.element, cancelButton.element))
             }
         return toInteractionLayout(rescheduleButton.state, cancelButton.state, layout = layout)

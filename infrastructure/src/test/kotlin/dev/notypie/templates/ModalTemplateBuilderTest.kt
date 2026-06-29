@@ -436,18 +436,20 @@ class ModalTemplateBuilderTest :
                 then("the reschedule + cancel buttons carry the comma-tokenized routing values the parser expects") {
                     val actionsBlock =
                         result.template[3] as com.slack.api.model.block.ActionsBlock
-                    actionsBlock.blockId shouldBe MeetingActionIds.CANCEL_BLOCK_ID
+                    // block_id and action_id are suffixed with the meeting uid so multiple host rows
+                    // in one message don't collide (Slack rejects duplicate ids with invalid_blocks).
+                    actionsBlock.blockId shouldBe "${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid"
                     val buttons =
                         actionsBlock.elements.map { it as com.slack.api.model.block.element.ButtonElement }
                     buttons.size shouldBe 2
 
                     val rescheduleButton = buttons[0]
-                    rescheduleButton.actionId shouldBe MeetingActionIds.RESCHEDULE_ACTION_ID
+                    rescheduleButton.actionId shouldBe "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid"
                     rescheduleButton.style shouldBe "primary"
                     rescheduleButton.value shouldBe "$listKey,RESCHEDULE_MEETING,$meetingUid"
 
                     val cancelButton = buttons[1]
-                    cancelButton.actionId shouldBe MeetingActionIds.CANCEL_ACTION_ID
+                    cancelButton.actionId shouldBe "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid"
                     cancelButton.style shouldBe "danger"
                     cancelButton.value shouldBe "$listKey,CANCEL_MEETING,$meetingUid"
                 }
@@ -456,6 +458,38 @@ class ModalTemplateBuilderTest :
                     val stateTypes = result.interactionStates.map { it.type }
                     stateTypes shouldBe
                         listOf(ActionElementTypes.APPLY_BUTTON, ActionElementTypes.REJECT_BUTTON)
+                }
+            }
+
+            `when`("the host owns multiple active meetings in one list") {
+                val listKey = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb")
+                val firstUid = UUID.fromString("11111111-aaaa-bbbb-cccc-dddddddddddd")
+                val secondUid = UUID.fromString("22222222-aaaa-bbbb-cccc-dddddddddddd")
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings =
+                            listOf(
+                                createMeetingDto(meetingUid = firstUid, creator = TEST_USER_ID, title = "First"),
+                                createMeetingDto(meetingUid = secondUid, creator = TEST_USER_ID, title = "Second"),
+                            ),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = listKey,
+                    )
+
+                then("every block_id and action_id is unique so Slack does not reject with invalid_blocks") {
+                    val actionsBlocks =
+                        result.template.filterIsInstance<com.slack.api.model.block.ActionsBlock>()
+                    actionsBlocks.size shouldBe 2
+
+                    val blockIds = actionsBlocks.map { it.blockId }
+                    blockIds shouldBe blockIds.distinct()
+
+                    val actionIds =
+                        actionsBlocks
+                            .flatMap { it.elements }
+                            .map { (it as com.slack.api.model.block.element.ButtonElement).actionId }
+                    actionIds.size shouldBe 4
+                    actionIds shouldBe actionIds.distinct()
                 }
             }
 

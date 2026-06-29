@@ -6,6 +6,7 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.dto.interactions.isCanceled
 import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -17,6 +18,7 @@ import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.history.entity.Status
 import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDate
@@ -111,9 +113,25 @@ internal class RequestMeetingContext(
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+        // Deny (reject button) cancels the form outright — no field validation, no meeting created.
+        if (interactionPayload.isCanceled()) {
+            return interactionSuccessResponse(
+                responseUrl = interactionPayload.responseUrl,
+                mkdMessage = "Meeting request canceled.",
+            )
+        }
+
         validationErrorOrNull(payload = interactionPayload)?.let { return it }
 
-        val meeting = toMeetingEntity(payload = interactionPayload)
+        // The Meeting entity owns its own invariants (title/reason length, participant count, …).
+        // Surface a violation as a user-visible ephemeral instead of letting the constructor throw,
+        // which would fail the command silently with no response back to the user.
+        val meeting =
+            try {
+                toMeetingEntity(payload = interactionPayload)
+            } catch (exception: CodeCompanionRuntimeException) {
+                return createErrorResponse(errMessage = meetingValidationMessage(exception = exception))
+            }
 
         // send notice
         if (isNoticeRequired(interactionPayload = interactionPayload) &&
@@ -170,6 +188,16 @@ internal class RequestMeetingContext(
             }
         return createErrorResponse(errMessage = errorMessage)
     }
+
+    /**
+     * Renders a domain validation failure (raised by the Meeting entity) into a single user-facing
+     * line. Falls back to a generic message when the exception carries no field details.
+     */
+    private fun meetingValidationMessage(exception: CodeCompanionRuntimeException): String =
+        exception.details
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(separator = "\n") { detail -> "${detail.fieldName}: ${detail.reason}" }
+            ?: "Invalid meeting details. Please check your input and try again."
 
     /**
      * Precondition: [validationErrorOrNull] returned null. Guaranteed to have a non-null future startAt

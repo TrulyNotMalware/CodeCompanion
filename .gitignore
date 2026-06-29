@@ -49,3 +49,4 @@ logs
 .claude
 AGENTS.md
 CveBotPlan.md
+*.hprof

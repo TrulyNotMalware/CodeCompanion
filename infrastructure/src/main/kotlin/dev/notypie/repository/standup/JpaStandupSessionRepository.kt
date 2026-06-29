@@ -56,9 +56,13 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("sessionUid") sessionUid: UUID,
     ): StandupSessionSchema?
 
+    // Dispatches and answers are eagerly fetched so the caller can map the full session graph
+    // (toStandupSessionDto) outside the persistence context without a LazyInitializationException.
     @Query(
         """
-        SELECT s FROM standup_session s
+        SELECT DISTINCT s FROM standup_session s
+        LEFT JOIN FETCH s.dispatches
+        LEFT JOIN FETCH s.answers
         WHERE s.status = dev.notypie.domain.standup.entity.enums.SessionStatus.COLLECTING
           AND s.cutoffAt <= :before
     """,
