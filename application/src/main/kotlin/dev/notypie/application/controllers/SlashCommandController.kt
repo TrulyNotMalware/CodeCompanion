@@ -2,6 +2,7 @@ package dev.notypie.application.controllers
 
 import dev.notypie.application.common.parseRequestBodyData
 import dev.notypie.application.service.meeting.MeetingService
+import dev.notypie.application.service.standup.StandupSlashService
 import org.springframework.http.MediaType
 import org.springframework.util.MultiValueMap
 import org.springframework.web.bind.annotation.*
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/slash")
 class SlashCommandController(
     private val meetingService: MeetingService,
+    private val standupSlashService: StandupSlashService,
 ) {
     @PostMapping(value = ["/meet"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestMeeting(
@@ -18,6 +20,19 @@ class SlashCommandController(
     ) {
         val (payload, slackCommandData) = parseRequestBodyData(headers = headers, data = data)
         meetingService.handleMeeting(
+            headers = headers,
+            payload = payload,
+            slackCommandData = slackCommandData,
+        )
+    }
+
+    @PostMapping(value = ["/standup"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun setupStandup(
+        @RequestHeader headers: MultiValueMap<String, String>,
+        @RequestParam data: Map<String, String>,
+    ) {
+        val (payload, slackCommandData) = parseRequestBodyData(headers = headers, data = data)
+        standupSlashService.handleStandup(
             headers = headers,
             payload = payload,
             slackCommandData = slackCommandData,

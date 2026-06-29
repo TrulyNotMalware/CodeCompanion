@@ -1,6 +1,8 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.meeting.DailyAgendaMessageBuilder
+import dev.notypie.application.service.meeting.MeetingReminderMessageBuilder
 import dev.notypie.application.service.standup.StandupDispatchMessageBuilder
 import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -80,4 +82,15 @@ class SlackRequestBuilderConfiguration(
     fun standupDispatchMessageBuilder(
         slackApiEventConstructor: SlackApiEventConstructor,
     ): StandupDispatchMessageBuilder = StandupDispatchMessageBuilder(slackEventBuilder = slackApiEventConstructor)
+
+    @Bean
+    @ConditionalOnMissingBean(MeetingReminderMessageBuilder::class)
+    fun meetingReminderMessageBuilder(
+        slackApiEventConstructor: SlackApiEventConstructor,
+    ): MeetingReminderMessageBuilder = MeetingReminderMessageBuilder(slackEventBuilder = slackApiEventConstructor)
+
+    @Bean
+    @ConditionalOnMissingBean(DailyAgendaMessageBuilder::class)
+    fun dailyAgendaMessageBuilder(slackApiEventConstructor: SlackApiEventConstructor): DailyAgendaMessageBuilder =
+        DailyAgendaMessageBuilder(slackEventBuilder = slackApiEventConstructor)
 }

@@ -13,8 +13,12 @@ import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
+import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
+import dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext
 import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
+import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
 
@@ -38,9 +42,15 @@ enum class CommandDetailType {
     MEETING_APPROVAL_NOTICE_FORM,
     DECLINE_REASON_MODAL,
     CANCEL_MEETING,
+    RESCHEDULE_MEETING,
+    RESCHEDULE_MEETING_SUBMIT,
+    MEETING_REMINDER,
+    DAILY_AGENDA,
     STATUS_REPORT,
     STANDUP_FILL,
     STANDUP_ANSWER_SUBMIT,
+    STANDUP_SETUP_FORM,
+    STANDUP_SETUP_SUBMIT,
     STANDUP_SUMMARY,
     NOTICE_FORM,
     ;
@@ -94,6 +104,22 @@ enum class CommandDetailType {
                 )
             }
 
+            RESCHEDULE_MEETING -> {
+                RescheduleMeetingContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            RESCHEDULE_MEETING_SUBMIT -> {
+                RescheduleMeetingSubmissionContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
             STANDUP_FILL -> {
                 StandupFillContext(
                     commandBasicInfo = commandBasicInfo,
@@ -104,6 +130,26 @@ enum class CommandDetailType {
 
             STANDUP_ANSWER_SUBMIT -> {
                 StandupAnswerSubmissionContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            STANDUP_SETUP_FORM -> {
+                // The slash entry point builds this context directly with the live trigger_id
+                // (see SetupStandupCommand). This branch only exists for completeness so an
+                // interaction routed here still resolves to the modal-opening context; the
+                // blank trigger_id collapses to a no-op in the resolver.
+                RequestStandupSetupContext(
+                    commandBasicInfo = commandBasicInfo,
+                    triggerId = "",
+                    intents = intents,
+                )
+            }
+
+            STANDUP_SETUP_SUBMIT -> {
+                StandupSetupSubmissionContext(
                     commandBasicInfo = commandBasicInfo,
                     subCommand = subCommand,
                     intents = intents,

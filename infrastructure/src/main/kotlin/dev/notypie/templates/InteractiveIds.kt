@@ -26,6 +26,40 @@ object StandupModalIds {
 }
 
 /**
+ * Identifiers for the standup-setup modal opened from `/standup setup`. Each `BLOCK_ID` is
+ * matched verbatim by [dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext]
+ * (which keeps its own copy of these strings, since the domain module can't depend on templating).
+ * Keep the two in sync.
+ */
+object StandupSetupModalIds {
+    const val CALLBACK_ID: String = "standup_setup_modal"
+
+    const val NAME_BLOCK_ID: String = "standup_setup_name"
+    const val NAME_ACTION_ID: String = "standup_setup_name_input"
+
+    const val QUESTIONS_BLOCK_ID: String = "standup_setup_questions"
+    const val QUESTIONS_ACTION_ID: String = "standup_setup_questions_input"
+
+    const val MEMBERS_BLOCK_ID: String = "standup_setup_members"
+    const val MEMBERS_ACTION_ID: String = "standup_setup_members_select"
+
+    const val SUMMARY_CHANNEL_BLOCK_ID: String = "standup_setup_summary_channel"
+    const val SUMMARY_CHANNEL_ACTION_ID: String = "standup_setup_summary_channel_select"
+
+    const val WEEKDAYS_BLOCK_ID: String = "standup_setup_weekdays"
+    const val WEEKDAYS_ACTION_ID: String = "standup_setup_weekdays_select"
+
+    const val TIME_BLOCK_ID: String = "standup_setup_time"
+    const val TIME_ACTION_ID: String = "standup_setup_time_picker"
+
+    const val CUTOFF_BLOCK_ID: String = "standup_setup_cutoff"
+    const val CUTOFF_ACTION_ID: String = "standup_setup_cutoff_input"
+
+    const val TIMEZONE_BLOCK_ID: String = "standup_setup_timezone"
+    const val TIMEZONE_ACTION_ID: String = "standup_setup_timezone_select"
+}
+
+/**
  * Identifiers for the decline-reason modal opened when a meeting participant clicks Deny.
  * `ACTION_ID` is kept stable across UI changes (radio_buttons → static_select) so upgraded
  * clients don't lose in-flight submissions.
@@ -37,10 +71,29 @@ object DeclineReasonModalIds {
 }
 
 /**
- * Identifiers for the inline Cancel button rendered alongside `/meetup list` rows. Mirrors
- * the modal-id naming convention so the parser side never has to import templating internals.
+ * Identifiers for the inline Cancel/Reschedule buttons rendered alongside `/meetup list` rows.
+ * Mirrors the modal-id naming convention so the parser side never has to import templating
+ * internals.
  */
 object MeetingActionIds {
     const val CANCEL_BLOCK_ID: String = "meeting_cancel_block"
     const val CANCEL_ACTION_ID: String = "meeting_cancel_button"
+
+    const val RESCHEDULE_BLOCK_ID: String = "meeting_reschedule_block"
+    const val RESCHEDULE_ACTION_ID: String = "meeting_reschedule_button"
+}
+
+/**
+ * Identifiers for the reschedule modal opened when a host clicks Reschedule on `/meetup list`.
+ * The DATE_PICKER + TIME_PICKER pair is read back by
+ * [dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext].
+ */
+object RescheduleMeetingModalIds {
+    const val CALLBACK_ID: String = "reschedule_meeting_modal"
+
+    const val DATE_BLOCK_ID: String = "reschedule_meeting_date"
+    const val DATE_ACTION_ID: String = "reschedule_meeting_date_picker"
+
+    const val TIME_BLOCK_ID: String = "reschedule_meeting_time"
+    const val TIME_ACTION_ID: String = "reschedule_meeting_time_picker"
 }

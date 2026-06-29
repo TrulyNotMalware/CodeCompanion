@@ -344,4 +344,97 @@ class JpaMeetingRepositoryTest
                     }
                 }
             }
+
+            given("rescheduleMeeting") {
+                val newStartAt = LocalDateTime.of(2026, 8, 1, 9, 0)
+
+                `when`("the host reschedules their own active meeting") {
+                    val saved =
+                        repository.save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_HOST",
+                                participantUserId = "U_PARTICIPANT",
+                            ),
+                        )
+
+                    val rowsUpdated =
+                        repository.rescheduleMeeting(
+                            meetingUid = saved.meetingUid,
+                            requesterId = "U_HOST",
+                            newStartAt = newStartAt,
+                        )
+
+                    then("should report exactly one row updated") {
+                        rowsUpdated shouldBe 1
+                    }
+
+                    then("subsequent reads should reflect the new start time") {
+                        val refreshed = repository.findMeetingByUidWithParticipants(meetingUid = saved.meetingUid)
+                        refreshed!!.startAt shouldBe newStartAt
+                    }
+                }
+
+                `when`("a non-host requests the reschedule") {
+                    val originalStart = LocalDateTime.of(2026, 1, 1, 10, 0)
+                    val saved =
+                        repository.save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_HOST",
+                                participantUserId = "U_PARTICIPANT",
+                                startAt = originalStart,
+                            ),
+                        )
+
+                    val rowsUpdated =
+                        repository.rescheduleMeeting(
+                            meetingUid = saved.meetingUid,
+                            requesterId = "U_PARTICIPANT",
+                            newStartAt = newStartAt,
+                        )
+
+                    then("should report 0 rows updated and leave the start time unchanged") {
+                        rowsUpdated shouldBe 0
+                        val refreshed = repository.findMeetingByUidWithParticipants(meetingUid = saved.meetingUid)
+                        refreshed!!.startAt shouldBe originalStart
+                    }
+                }
+
+                `when`("the meeting is already canceled") {
+                    val saved =
+                        repository.save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_HOST",
+                                participantUserId = "U_PARTICIPANT",
+                            ),
+                        )
+                    repository.markMeetingCanceled(
+                        meetingUid = saved.meetingUid,
+                        requesterId = "U_HOST",
+                    )
+
+                    val rowsUpdated =
+                        repository.rescheduleMeeting(
+                            meetingUid = saved.meetingUid,
+                            requesterId = "U_HOST",
+                            newStartAt = newStartAt,
+                        )
+
+                    then("the reschedule should be a no-op") {
+                        rowsUpdated shouldBe 0
+                    }
+                }
+
+                `when`("no meeting matches the meetingUid") {
+                    val rowsUpdated =
+                        repository.rescheduleMeeting(
+                            meetingUid = UUID.randomUUID(),
+                            requesterId = "U_HOST",
+                            newStartAt = newStartAt,
+                        )
+
+                    then("should report 0 rows updated") {
+                        rowsUpdated shouldBe 0
+                    }
+                }
+            }
         })

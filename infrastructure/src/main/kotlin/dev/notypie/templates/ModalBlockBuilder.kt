@@ -103,6 +103,36 @@ class ModalBlockBuilder(
     }
 
     /**
+     * Builds a single actions block carrying both the Reschedule and Cancel controls for a
+     * host-owned `/meetup list` row. Co-locating the two buttons in one block keeps the worst-case
+     * block budget at `3N+2` (the same as a Cancel-only row), so the 50-block Slack cap math in
+     * [ModalTemplateBuilder] is unaffected. Each button's `value` follows the standard routing
+     * format the interaction parser already reads — `<listIdempotencyKey>,<detailType>,<meetingUid>`
+     * — with Reschedule (PRIMARY) routed to `RESCHEDULE_MEETING` and Cancel (DANGER) to
+     * `CANCEL_MEETING`.
+     */
+    fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
+        val rescheduleRoutingValue = "$listIdempotencyKey,${CommandDetailType.RESCHEDULE_MEETING.name},$meetingUid"
+        val cancelRoutingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
+        val rescheduleButton: InteractiveObject =
+            modalElementBuilder.rescheduleMeetingButtonElement(
+                buttonName = "Reschedule",
+                interactionPayload = rescheduleRoutingValue,
+            )
+        val cancelButton: InteractiveObject =
+            modalElementBuilder.cancelMeetingButtonElement(
+                buttonName = "Cancel",
+                interactionPayload = cancelRoutingValue,
+            )
+        val layout =
+            actions {
+                it.blockId(MeetingActionIds.CANCEL_BLOCK_ID)
+                it.elements(listOf(rescheduleButton.element, cancelButton.element))
+            }
+        return toInteractionLayout(rescheduleButton.state, cancelButton.state, layout = layout)
+    }
+
+    /**
      * Generates a section block with a simple text.
      *
      * @param text The text content to be displayed.

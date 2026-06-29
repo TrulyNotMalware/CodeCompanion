@@ -84,6 +84,27 @@ class ModalElementBuilder {
                     .build(),
         )
 
+    /**
+     * Primary-style button used to reschedule a meeting from the inline `/meetup list` row.
+     * The [interactionPayload] is the comma-tokenized routing string the parser will read back
+     * as `idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`. PRIMARY style makes
+     * the parser classify the click as an [ActionElementTypes.APPLY_BUTTON] (a primary action),
+     * distinct from the danger-styled Cancel button next to it. `actionId` is set explicitly so
+     * the click maps to a deterministic id.
+     */
+    fun rescheduleMeetingButtonElement(buttonName: String, interactionPayload: String): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.APPLY_BUTTON),
+            element =
+                ButtonElement
+                    .builder()
+                    .text(plainTextObject(text = buttonName))
+                    .actionId(MeetingActionIds.RESCHEDULE_ACTION_ID)
+                    .value(interactionPayload)
+                    .style(ButtonType.PRIMARY.toString().lowercase())
+                    .build(),
+        )
+
     private fun buttonElement(
         buttonName: String,
         interactionPayload: String,

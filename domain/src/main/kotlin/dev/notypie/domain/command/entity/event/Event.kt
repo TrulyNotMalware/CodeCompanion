@@ -102,6 +102,29 @@ data class CancelMeetingEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<CancelMeetingPayload>
 
+class RescheduleMeetingPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val meetingUid: UUID,
+    val requesterId: String,
+    val newStartAt: LocalDateTime,
+    /**
+     * Basic info of the originating interaction. Reused by the application-layer listener
+     * to send the success/no-op ephemeral back to the requester through the same channel
+     * the submission came from, mirroring [CancelMeetingPayload.responseBasicInfo].
+     */
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class RescheduleMeetingEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = RescheduleMeetingEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: RescheduleMeetingPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<RescheduleMeetingPayload>
+
 class StatusReportPayload(
     override val eventId: UUID = UUID.randomUUID(),
     /**
@@ -144,6 +167,37 @@ data class StandupCutoffEvent(
     val routineUid: UUID,
     val sessionDate: LocalDate,
 )
+
+/**
+ * Carries the parsed standup-setup modal submission to the application-layer service that
+ * builds and persists the [dev.notypie.domain.standup.entity.Routine]. [responseBasicInfo]
+ * lets the listener post the confirmation (or a friendly validation error) back to the
+ * channel the `/standup setup` command was invoked from.
+ */
+class CreateStandupRoutinePayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val name: String,
+    val creatorId: String,
+    val commandChannel: String,
+    val summaryChannel: String,
+    val questions: List<String>,
+    val memberIds: List<String>,
+    val weekdays: Set<java.time.DayOfWeek>,
+    val triggerLocalTime: java.time.LocalTime,
+    val cutoffMinutes: Long,
+    val timezone: java.time.ZoneId,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CreateStandupRoutineEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CreateStandupRoutineEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CreateStandupRoutinePayload,
+    override val type: CommandDetailType,
+) : CommandEvent<CreateStandupRoutinePayload>
 
 /**
  * Synchronous-dispatch command event carrying a `views.open` payload. Must be consumed on

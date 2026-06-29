@@ -27,6 +27,22 @@ data class ReadyDispatch(
 )
 
 /**
+ * Read view returned by [StandupRepository.findCollectingSessionsForNudge]. Carries the
+ * dispatched-and-SENT member ids and the answered user ids so the scheduler can compute
+ * non-responders (sent − answered) without re-loading the session graph. The routine name
+ * is resolved separately from the active-routines map, mirroring [ReadyDispatch]'s split
+ * between session context (here) and routine context (looked up once per tick).
+ */
+data class NudgeCandidateSession(
+    val sessionId: Long,
+    val sessionUid: UUID,
+    val routineUid: UUID,
+    val cutoffAt: Instant,
+    val sentMemberIds: Set<String>,
+    val answeredUserIds: Set<String>,
+)
+
+/**
  * Domain-facing repository for the standup-bot feature. The interface is intentionally
  * narrow at the #10 stage — only enough to round-trip routines and sessions. Scheduling,
  * dispatch, and answer submission queries land in #12 / #13 once the contracts are clearer.
@@ -102,6 +118,21 @@ interface StandupRepository {
 
     /** Atomic COLLECTING→SUMMARIZED; returns true if the transition succeeded. */
     fun markSessionSummarized(sessionId: Long, messageTs: String): Boolean
+
+    /**
+     * Finds COLLECTING sessions inside the nudge window — `cutoffAt` in `(now, nudgeWindowEnd]`
+     * and not yet nudged (`nudged_at IS NULL`). Dispatches and answers are eagerly fetched so
+     * the scheduler can compute non-responders (SENT members − answered users) without an extra
+     * round-trip per session.
+     */
+    fun findCollectingSessionsForNudge(now: Instant, nudgeWindowEnd: Instant): List<NudgeCandidateSession>
+
+    /**
+     * Atomic once-only nudge claim: stamps `nudged_at` only when it is still NULL and the
+     * session is still COLLECTING. Returns true iff exactly one row changed — the single tick
+     * that wins the claim is the one that sends the reminder DMs. Mirrors [markSessionSummarized].
+     */
+    fun claimNudge(sessionId: Long): Boolean
 
     fun replaceSummaryMessageTs(currentMessageTs: String, messageTs: String): Boolean
 }

@@ -4,11 +4,15 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
+import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
+import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
+import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
@@ -163,6 +167,38 @@ class SlackIntentResolver(
                 )
             }
 
+            is CommandIntent.OpenRescheduleMeetingModal -> {
+                if (intent.triggerId.isBlank()) {
+                    log.warn { "Blank triggerId; cannot open reschedule modal for meetingUid=${intent.meetingUid}" }
+                    null
+                } else {
+                    slackEventBuilder.openRescheduleMeetingModalRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = intent.commandDetailType,
+                        triggerId = intent.triggerId,
+                        meetingUid = intent.meetingUid,
+                        requesterId = intent.requesterId,
+                        // The open-modal intent does not carry the meeting's stored start; defaulting
+                        // the pickers to "now" is sufficient since the host adjusts both before submit.
+                        currentStartAt = java.time.LocalDateTime.now(),
+                    ) as CommandEvent<EventPayload>
+                }
+            }
+
+            is CommandIntent.RescheduleMeeting -> {
+                RescheduleMeetingEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        RescheduleMeetingPayload(
+                            meetingUid = intent.meetingUid,
+                            requesterId = intent.requesterId,
+                            newStartAt = intent.newStartAt,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = intent.commandDetailType,
+                )
+            }
+
             is CommandIntent.StatusReport -> {
                 StatusReportRequestEvent(
                     idempotencyKey = basicInfo.idempotencyKey,
@@ -215,6 +251,42 @@ class SlackIntentResolver(
                             sessionUid = intent.sessionUid,
                             userId = intent.userId,
                             responses = intent.responses,
+                        ),
+                    type = intent.commandDetailType,
+                )
+            }
+
+            is CommandIntent.OpenStandupSetupModal -> {
+                if (intent.triggerId.isBlank()) {
+                    log.warn { "Blank triggerId; cannot open standup setup modal for creatorId=${intent.creatorId}" }
+                    null
+                } else {
+                    slackEventBuilder.openStandupSetupModalRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = intent.commandDetailType,
+                        triggerId = intent.triggerId,
+                        creatorId = intent.creatorId,
+                        commandChannel = intent.commandChannel,
+                    ) as CommandEvent<EventPayload>
+                }
+            }
+
+            is CommandIntent.CreateStandupRoutine -> {
+                CreateStandupRoutineEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CreateStandupRoutinePayload(
+                            name = intent.name,
+                            creatorId = intent.creatorId,
+                            commandChannel = intent.commandChannel,
+                            summaryChannel = intent.summaryChannel,
+                            questions = intent.questions,
+                            memberIds = intent.memberIds,
+                            weekdays = intent.weekdays,
+                            triggerLocalTime = intent.triggerLocalTime,
+                            cutoffMinutes = intent.cutoffMinutes,
+                            timezone = intent.timezone,
+                            responseBasicInfo = basicInfo,
                         ),
                     type = intent.commandDetailType,
                 )

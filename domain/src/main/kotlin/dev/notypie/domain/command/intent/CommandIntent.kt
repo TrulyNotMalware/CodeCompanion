@@ -113,6 +113,34 @@ sealed class CommandIntent {
     ) : CommandIntent()
 
     /**
+     * Host's request to open the reschedule modal from the inline Reschedule button on
+     * `/meetup list`. The resolver builds a synchronous
+     * [dev.notypie.domain.command.entity.event.OpenViewEvent] so the Slack `trigger_id` is
+     * consumed within its 3-second window — mirroring [OpenDeclineReasonModal]. The modal's
+     * `private_metadata` carries [meetingUid] + [requesterId] back to the submission handler.
+     */
+    data class OpenRescheduleMeetingModal(
+        val triggerId: String,
+        val meetingUid: UUID,
+        val requesterId: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING,
+    ) : CommandIntent()
+
+    /**
+     * Host's confirmed reschedule from the modal submission. Authorization (host-only) is
+     * enforced atomically by the repository's WHERE clause — the intent carries the requester
+     * so the bridge can pass it through. The resolver lifts this to a
+     * [dev.notypie.domain.command.entity.event.RescheduleMeetingEvent] consumed by the
+     * application-layer service that owns the meeting update + reminder re-arm + re-notification.
+     */
+    data class RescheduleMeeting(
+        val meetingUid: UUID,
+        val requesterId: String,
+        val newStartAt: LocalDateTime,
+        override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+    ) : CommandIntent()
+
+    /**
      * Ops-tooling request emitted when a user invokes `@bot status`. The resolver lifts this
      * to a [dev.notypie.domain.command.entity.event.StatusReportRequestEvent] so the
      * application listener (which has the outbox repository) can render fresh metrics. Carries
@@ -146,6 +174,43 @@ sealed class CommandIntent {
         val userId: String,
         val responses: List<String>,
         override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+    ) : CommandIntent()
+
+    /**
+     * Opens the standup-setup modal from `/standup setup`. The resolver builds a synchronous
+     * [dev.notypie.domain.command.entity.event.OpenViewEvent] so the Slack `trigger_id` is
+     * consumed within its 3-second window — mirroring [OpenStandupModal] and
+     * [OpenDeclineReasonModal]. [commandChannel] is carried into the modal's `private_metadata`
+     * so the submission handler knows where to persist + post the confirmation.
+     */
+    data class OpenStandupSetupModal(
+        val triggerId: String,
+        val creatorId: String,
+        val commandChannel: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_SETUP_FORM,
+    ) : CommandIntent()
+
+    /**
+     * Persists a brand-new standup [dev.notypie.domain.standup.entity.Routine] assembled from
+     * the setup modal's state values. The resolver lifts this to a
+     * [dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent] consumed by the
+     * application-layer service that owns the repository write + confirmation post.
+     *
+     * v1 simplification: every member's `userTimezone` equals [timezone]; per-member zones
+     * are not collected by the modal.
+     */
+    data class CreateStandupRoutine(
+        val name: String,
+        val creatorId: String,
+        val commandChannel: String,
+        val summaryChannel: String,
+        val questions: List<String>,
+        val memberIds: List<String>,
+        val weekdays: Set<java.time.DayOfWeek>,
+        val triggerLocalTime: java.time.LocalTime,
+        val cutoffMinutes: Long,
+        val timezone: java.time.ZoneId,
+        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
     ) : CommandIntent()
 
     data class Notice(

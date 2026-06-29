@@ -15,6 +15,7 @@ class StandupScheduler(
         runCatching {
             schedulingService.openSessionsForToday()
             schedulingService.sendPendingDispatches()
+            schedulingService.nudgeNonResponders()
             schedulingService.detectCutoffs()
         }.onFailure { ex ->
             log.error(ex) { "Standup scheduler tick failed" }

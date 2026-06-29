@@ -68,6 +68,14 @@ class StandupSchedulingServiceTest :
                     commandBasicInfo = any(),
                 )
             } returns stubEvent
+            every {
+                builder.buildNudgeNotice(
+                    routineName = any(),
+                    cutoffAt = any(),
+                    routineTimezone = any(),
+                    commandBasicInfo = any(),
+                )
+            } returns stubEvent
             return builder
         }
 
@@ -530,6 +538,172 @@ class StandupSchedulingServiceTest :
                             ),
                         )
                     }
+                }
+            }
+        }
+
+        given("nudgeNonResponders") {
+            val routineUid = UUID.randomUUID()
+            val routine =
+                createRoutineDto(
+                    routineUid = routineUid,
+                    name = "Daily Standup",
+                    routineTimezone = seoul,
+                )
+
+            `when`("a session in the nudge window has two non-responders") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                // U_A and U_C received the prompt (SENT); only U_C answered → U_A + a third sent
+                // member who never answered are the non-responders.
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = 7L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A", "U_B", "U_C"),
+                        answeredUserIds = setOf("U_C"),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(candidate)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimNudge(sessionId = 7L) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.nudgeNonResponders()
+
+                then("the nudge is claimed once and one outbox row is saved per non-responder") {
+                    verify(exactly = 1) { repo.claimNudge(sessionId = 7L) }
+                    // sent − answered = {U_A, U_B} → exactly two reminder DMs.
+                    verify(exactly = 2) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("every member who received the prompt has answered") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = 8L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A", "U_B"),
+                        answeredUserIds = setOf("U_A", "U_B"),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(candidate)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+
+                service.nudgeNonResponders()
+
+                then("the nudge is NOT claimed and no DM is sent — nudged_at stays NULL") {
+                    verify(exactly = 0) { repo.claimNudge(sessionId = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("the claim is lost (already nudged by another tick)") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = 9L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A"),
+                        answeredUserIds = emptySet(),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(candidate)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimNudge(sessionId = 9L) } returns false
+
+                service.nudgeNonResponders()
+
+                then("no DM is sent — the winning tick owns the reminder") {
+                    verify(exactly = 1) { repo.claimNudge(sessionId = 9L) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("the nudge offset is disabled (<= 0)") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        nudgeOffsetMinutes = 0L,
+                    )
+
+                service.nudgeNonResponders()
+
+                then("the phase short-circuits with zero repository work") {
+                    verify(exactly = 0) { repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any()) }
+                    verify(exactly = 0) { repo.claimNudge(sessionId = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("the selection window is computed from now + nudgeOffset") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        messageBuilder = stubBuilder(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        nudgeOffsetMinutes = 30L,
+                    )
+                val passedNow = slot<java.time.Instant>()
+                val passedWindowEnd = slot<java.time.Instant>()
+                every {
+                    repo.findCollectingSessionsForNudge(
+                        now = capture(passedNow),
+                        nudgeWindowEnd = capture(passedWindowEnd),
+                    )
+                } returns emptyList()
+
+                service.nudgeNonResponders()
+
+                then("the window is [now, now + 30m] so a cutoff beyond it is excluded by the query") {
+                    passedNow.captured shouldBe nowInstant
+                    passedWindowEnd.captured shouldBe nowInstant.plus(Duration.ofMinutes(30L))
                 }
             }
         }

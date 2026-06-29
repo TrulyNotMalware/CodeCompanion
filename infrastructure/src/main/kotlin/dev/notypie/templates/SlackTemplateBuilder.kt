@@ -8,6 +8,7 @@ import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 interface SlackTemplateBuilder {
@@ -77,6 +78,20 @@ interface SlackTemplateBuilder {
         noticeMessageTs: String,
     ): String
 
+    /**
+     * Builds the full Slack `view` payload JSON for the reschedule modal opened when a host
+     * clicks Reschedule on `/meetup list`. Returns a serialized JSON string for the same reason
+     * as [declineReasonModalViewJson] — the modal envelope carries top-level fields that aren't
+     * expressible as a block list.
+     *
+     * The modal exposes a DATE_PICKER + TIME_PICKER pair pre-filled from [currentStartAt].
+     * `private_metadata` uses the shared comma-tokenized routing format:
+     *   `"<meetingUid>,RESCHEDULE_MEETING_SUBMIT,<requesterId>"`.
+     * The view_submission parser surfaces requesterId as `routingExtras[0]` for
+     * [dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext].
+     */
+    fun rescheduleMeetingModalViewJson(meetingUid: UUID, currentStartAt: LocalDateTime, requesterId: String): String
+
     fun standupModalViewJson(
         routineName: String,
         sessionDate: LocalDate,
@@ -86,6 +101,18 @@ interface SlackTemplateBuilder {
         noticeMessageTs: String,
         questions: List<String>,
     ): String
+
+    /**
+     * Builds the full Slack `view` payload JSON for the `/standup setup` modal. Returns a
+     * serialized JSON string for the same reason as [declineReasonModalViewJson] — the modal
+     * envelope carries top-level fields that aren't expressible as a block list.
+     *
+     * `private_metadata` uses the shared comma-tokenized routing format:
+     *   `"<idempotencyKey>,STANDUP_SETUP_SUBMIT,<creatorId>,<commandChannel>"`.
+     * The view_submission parser surfaces creatorId/commandChannel as `routingExtras[0..1]`
+     * for [dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext].
+     */
+    fun standupSetupModalViewJson(idempotencyKey: UUID, creatorId: String, commandChannel: String): String
 
     fun standupSummaryTemplate(
         routineName: String,

@@ -9,12 +9,17 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
+import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
+import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
 import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
 import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.toMessageTypeByTargetUser
+import java.time.DayOfWeek
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 fun createCommandBasicInfo(
@@ -131,6 +136,39 @@ fun createOpenViewEvent(
             participantUserId = participantUserId,
         ),
     type = commandDetailType,
+)
+
+fun createCreateStandupRoutineEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    name: String = "Daily Standup",
+    creatorId: String = TEST_USER_ID,
+    commandChannel: String = TEST_CHANNEL_ID,
+    summaryChannel: String = TEST_CHANNEL_ID,
+    questions: List<String> = listOf("What did you do?", "What are you doing?"),
+    memberIds: List<String> = listOf("U_ALICE", "U_BOB"),
+    weekdays: Set<DayOfWeek> = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY),
+    triggerLocalTime: LocalTime = LocalTime.of(10, 0),
+    cutoffMinutes: Long = 120L,
+    timezone: ZoneId = ZoneId.of("Asia/Seoul"),
+    responseBasicInfo: dev.notypie.domain.command.dto.CommandBasicInfo =
+        createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = commandChannel),
+) = CreateStandupRoutineEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CreateStandupRoutinePayload(
+            name = name,
+            creatorId = creatorId,
+            commandChannel = commandChannel,
+            summaryChannel = summaryChannel,
+            questions = questions,
+            memberIds = memberIds,
+            weekdays = weekdays,
+            triggerLocalTime = triggerLocalTime,
+            cutoffMinutes = cutoffMinutes,
+            timezone = timezone,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.STANDUP_SETUP_SUBMIT,
 )
 
 fun createApprovalContents(

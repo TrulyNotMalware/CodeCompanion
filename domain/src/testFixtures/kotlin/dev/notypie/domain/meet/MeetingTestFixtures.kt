@@ -7,8 +7,11 @@ import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
+import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
+import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
+import java.time.LocalDateTime
 import java.util.UUID
 
 fun createUpdateMeetingAttendanceEvent(
@@ -43,4 +46,22 @@ fun createCancelMeetingEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.CANCEL_MEETING,
+)
+
+fun createRescheduleMeetingEvent(
+    meetingUid: UUID = UUID.randomUUID(),
+    requesterId: String = TEST_USER_ID,
+    newStartAt: LocalDateTime = LocalDateTime.now().plusDays(1L),
+    idempotencyKey: UUID = UUID.randomUUID(),
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = RescheduleMeetingEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        RescheduleMeetingPayload(
+            meetingUid = meetingUid,
+            requesterId = requesterId,
+            newStartAt = newStartAt,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
 )

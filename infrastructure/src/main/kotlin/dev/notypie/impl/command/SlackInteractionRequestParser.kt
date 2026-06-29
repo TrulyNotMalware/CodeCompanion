@@ -237,6 +237,15 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                             )
                         }
                     }
+                    ActionElementTypes.CONVERSATIONS_SELECT.elementName -> {
+                        val selectedConversation = value.selectedConversation.orEmpty()
+                        States(
+                            type = ActionElementTypes.CONVERSATIONS_SELECT,
+                            isSelected = selectedConversation.isNotBlank(),
+                            selectedValue = selectedConversation,
+                            blockId = blockId,
+                        )
+                    }
                     ActionElementTypes.DATE_PICKER.elementName ->
                         States(
                             type = ActionElementTypes.DATE_PICKER,

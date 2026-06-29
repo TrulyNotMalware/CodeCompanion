@@ -41,4 +41,19 @@ interface MeetingRepository {
      * "no-op" result so callers can react with one branch.
      */
     fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean
+
+    /**
+     * Moves the meeting identified by [meetingUid] to [newStartAt], but only when [requesterId]
+     * is the meeting's host AND the meeting is not canceled. Returns true iff exactly one row was
+     * modified — the same atomic host-only WHERE-clause guard as [markMeetingCanceled], collapsing
+     * missing/non-host/canceled into a single no-op so callers react with one branch.
+     */
+    fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): Boolean
+
+    /**
+     * Loads the meeting identified by [meetingUid] with its participants, or null when no row
+     * matches. Used after a successful reschedule to re-notify participants and re-arm reminders
+     * keyed on the meeting's numeric id.
+     */
+    fun findMeetingByUid(meetingUid: UUID): MeetingDto?
 }

@@ -1,7 +1,11 @@
 package dev.notypie.configurations
 
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.repository.meeting.AgendaDispatchRepositoryImpl
+import dev.notypie.repository.meeting.JpaAgendaDispatchRepository
+import dev.notypie.repository.meeting.JpaMeetingReminderRepository
 import dev.notypie.repository.meeting.JpaMeetingRepository
+import dev.notypie.repository.meeting.MeetingReminderRepositoryImpl
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
 import dev.notypie.repository.standup.JpaRoutineRepository
 import dev.notypie.repository.standup.JpaSessionDispatchRepository
@@ -55,6 +59,26 @@ class JpaConfiguration {
     @Primary
     fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository) =
         MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+
+    @Bean
+    @Primary
+    fun meetingReminderRepository(
+        jpaMeetingRepository: JpaMeetingRepository,
+        jpaMeetingReminderRepository: JpaMeetingReminderRepository,
+    ) = MeetingReminderRepositoryImpl(
+        jpaMeetingRepository = jpaMeetingRepository,
+        jpaMeetingReminderRepository = jpaMeetingReminderRepository,
+    )
+
+    @Bean
+    @Primary
+    fun agendaDispatchRepository(
+        jpaMeetingRepository: JpaMeetingRepository,
+        jpaAgendaDispatchRepository: JpaAgendaDispatchRepository,
+    ) = AgendaDispatchRepositoryImpl(
+        jpaMeetingRepository = jpaMeetingRepository,
+        jpaAgendaDispatchRepository = jpaAgendaDispatchRepository,
+    )
 
     @Bean
     @Primary

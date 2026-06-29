@@ -29,6 +29,7 @@ import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import okhttp3.FormBody
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 class SlackApiEventConstructor(
@@ -252,6 +253,40 @@ class SlackApiEventConstructor(
         )
     }
 
+    fun openRescheduleMeetingModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        meetingUid: UUID,
+        requesterId: String,
+        currentStartAt: LocalDateTime,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.rescheduleMeetingModalViewJson(
+                meetingUid = meetingUid,
+                currentStartAt = currentStartAt,
+                requesterId = requesterId,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = requesterId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
     fun openStandupModalRequest(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
@@ -288,6 +323,39 @@ class SlackApiEventConstructor(
                 // ephemeral fallback at the right user. The field is named for the decline flow
                 // but has been generalized to "DM target user" for any modal open failure.
                 participantUserId = userId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openStandupSetupModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        creatorId: String,
+        commandChannel: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.standupSetupModalViewJson(
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                creatorId = creatorId,
+                commandChannel = commandChannel,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = creatorId,
             )
         return OpenViewEvent(
             idempotencyKey = commandBasicInfo.idempotencyKey,

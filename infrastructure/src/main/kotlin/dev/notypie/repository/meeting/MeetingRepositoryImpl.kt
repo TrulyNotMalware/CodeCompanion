@@ -73,4 +73,17 @@ open class MeetingRepositoryImpl(
             meetingUid = meetingUid,
             requesterId = requesterId,
         ) == 1
+
+    @Transactional
+    override fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): Boolean =
+        jpaMeetingRepository.rescheduleMeeting(
+            meetingUid = meetingUid,
+            requesterId = requesterId,
+            newStartAt = newStartAt,
+        ) == 1
+
+    override fun findMeetingByUid(meetingUid: UUID): MeetingDto? =
+        jpaMeetingRepository
+            .findMeetingByUidWithParticipants(meetingUid = meetingUid)
+            ?.toMeetingDto()
 }

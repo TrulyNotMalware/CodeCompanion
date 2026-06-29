@@ -82,6 +82,41 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("messageTs") messageTs: String,
     ): Int
 
+    /**
+     * COLLECTING sessions inside the nudge window — cutoff still ahead of `now` but reached
+     * within `nudgeWindowEnd`, and not yet nudged. Dispatches and answers are eagerly fetched
+     * so the scheduler can compute non-responders without re-loading the session graph.
+     */
+    @Query(
+        """
+        SELECT DISTINCT s FROM standup_session s
+        LEFT JOIN FETCH s.dispatches
+        LEFT JOIN FETCH s.answers
+        WHERE s.status = dev.notypie.domain.standup.entity.enums.SessionStatus.COLLECTING
+          AND s.nudgedAt IS NULL
+          AND s.cutoffAt > :now
+          AND s.cutoffAt <= :nudgeWindowEnd
+    """,
+    )
+    fun findCollectingForNudge(
+        @Param("now") now: Instant,
+        @Param("nudgeWindowEnd") nudgeWindowEnd: Instant,
+    ): List<StandupSessionSchema>
+
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            UPDATE standup_session
+            SET nudged_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND nudged_at IS NULL AND status = 'COLLECTING'
+        """,
+        nativeQuery = true,
+    )
+    fun claimNudge(
+        @Param("id") id: Long,
+    ): Int
+
     @Modifying
     @Transactional
     @Query(

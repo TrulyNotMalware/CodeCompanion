@@ -5,6 +5,7 @@ import dev.notypie.domain.standup.dto.SessionDispatchDto
 import dev.notypie.domain.standup.dto.StandupSessionDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.StandupSession
+import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.standup.schema.SessionDispatchSchema
 import dev.notypie.repository.standup.schema.StandupAnswerSchema
@@ -135,6 +136,28 @@ open class StandupRepositoryImpl(
 
     override fun markSessionSummarized(sessionId: Long, messageTs: String): Boolean =
         jpaStandupSessionRepository.markSummarized(id = sessionId, messageTs = messageTs) == 1
+
+    override fun findCollectingSessionsForNudge(now: Instant, nudgeWindowEnd: Instant): List<NudgeCandidateSession> =
+        jpaStandupSessionRepository
+            .findCollectingForNudge(now = now, nudgeWindowEnd = nudgeWindowEnd)
+            .map { schema ->
+                NudgeCandidateSession(
+                    sessionId = schema.id,
+                    sessionUid = schema.sessionUid,
+                    routineUid = schema.routineUid,
+                    cutoffAt = schema.cutoffAt,
+                    // Only members whose prompt actually landed (SENT) can be "non-responders".
+                    // PENDING/SENDING/FAILED rows never received a prompt to ignore.
+                    sentMemberIds =
+                        schema.dispatches
+                            .filter { it.dmStatus == DispatchStatus.SENT }
+                            .map { it.userId }
+                            .toSet(),
+                    answeredUserIds = schema.answers.map { it.userId }.toSet(),
+                )
+            }
+
+    override fun claimNudge(sessionId: Long): Boolean = jpaStandupSessionRepository.claimNudge(id = sessionId) == 1
 
     override fun replaceSummaryMessageTs(currentMessageTs: String, messageTs: String): Boolean =
         jpaStandupSessionRepository.replaceSummaryMessageTs(

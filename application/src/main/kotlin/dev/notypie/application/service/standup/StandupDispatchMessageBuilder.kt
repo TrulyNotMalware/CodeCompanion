@@ -5,7 +5,9 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -23,6 +25,7 @@ class StandupDispatchMessageBuilder(
 ) {
     companion object {
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        private val CUTOFF_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 
     fun buildDmNotice(
@@ -49,6 +52,31 @@ class StandupDispatchMessageBuilder(
             approvalContents = approvalContents,
             targetUserId = memberId,
             routingExtras = listOf(sessionUid.toString(), routineUid.toString()),
+        )
+    }
+
+    /**
+     * Builds the once-per-session non-responder reminder DM. Unlike [buildDmNotice] this is a
+     * plain `chat.postMessage` with no buttons — it nudges the member back to the original
+     * prompt's "Fill in standup" button rather than re-issuing an interactive flow. The DM is
+     * routed to the member via [commandBasicInfo]'s channel (Slack treats a user_id as the DM
+     * channel), set by the caller through `CommandBasicInfo.forOutbound`.
+     */
+    fun buildNudgeNotice(
+        routineName: String,
+        cutoffAt: Instant,
+        routineTimezone: ZoneId,
+        commandBasicInfo: CommandBasicInfo,
+    ): SendSlackMessageEvent {
+        val cutoffText = CUTOFF_TIME_FORMAT.format(cutoffAt.atZone(routineTimezone))
+        val body =
+            "⏰ Standup for *$routineName* closes at $cutoffText — you haven't responded yet. " +
+                "Tap the *Fill in standup* button in your DM."
+        return slackEventBuilder.simpleTextRequest(
+            commandDetailType = CommandDetailType.STANDUP_FILL,
+            headLineText = "Standup reminder",
+            commandBasicInfo = commandBasicInfo,
+            simpleString = body,
         )
     }
 }

@@ -52,6 +52,28 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("endAt") endAt: LocalDateTime,
     ): List<MeetingSchema>
 
+    /**
+     * Candidate meetings for reminder materialization: non-canceled meetings whose `startAt`
+     * falls in the forward window, with participants eagerly fetched so the scheduler can size
+     * the per-offset reminder rows without an extra round-trip. Not user-scoped — the reminder
+     * scheduler sweeps across all meetings, unlike [findMeetingsByUserIdAndDateRange].
+     */
+    @Query(
+        """
+        SELECT DISTINCT m
+        FROM meetings m
+        JOIN FETCH m.participants
+        WHERE m.isCanceled = false
+          AND m.startAt >= :startAt
+          AND m.startAt < :endAt
+        ORDER BY m.startAt ASC
+    """,
+    )
+    fun findActiveByStartAtBetween(
+        @Param("startAt") startAt: LocalDateTime,
+        @Param("endAt") endAt: LocalDateTime,
+    ): List<MeetingSchema>
+
     @Modifying
     @Transactional
     @Query(
@@ -104,4 +126,32 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingUid") meetingUid: UUID,
         @Param("requesterId") requesterId: String,
     ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE meetings m
+        SET m.startAt = :newStartAt
+        WHERE m.meetingUid = :meetingUid
+          AND m.publisherId = :requesterId
+          AND m.isCanceled = false
+    """,
+    )
+    fun rescheduleMeeting(
+        @Param("meetingUid") meetingUid: UUID,
+        @Param("requesterId") requesterId: String,
+        @Param("newStartAt") newStartAt: LocalDateTime,
+    ): Int
+
+    @Query(
+        """
+            SELECT m FROM meetings m
+            JOIN FETCH m.participants
+            WHERE m.meetingUid = :meetingUid
+        """,
+    )
+    fun findMeetingByUidWithParticipants(
+        @Param("meetingUid") meetingUid: UUID,
+    ): MeetingSchema?
 }

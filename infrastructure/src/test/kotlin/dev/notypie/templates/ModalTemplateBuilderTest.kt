@@ -424,8 +424,8 @@ class ModalTemplateBuilderTest :
                         listIdempotencyKey = listKey,
                     )
 
-                then("an inline cancel actions block is appended right after the meeting section") {
-                    // header + divider + section + cancel-actions = 4 blocks (no inter-divider for single meeting)
+                then("an inline host-actions block is appended right after the meeting section") {
+                    // header + divider + section + host-actions = 4 blocks (no inter-divider for single meeting)
                     result.template.size shouldBe 4
                     result.template[0].shouldBeInstanceOf<HeaderBlock>()
                     result.template[1].shouldBeInstanceOf<DividerBlock>()
@@ -433,21 +433,29 @@ class ModalTemplateBuilderTest :
                     result.template[3].shouldBeInstanceOf<com.slack.api.model.block.ActionsBlock>()
                 }
 
-                then("the cancel button carries the comma-tokenized routing value the parser expects") {
+                then("the reschedule + cancel buttons carry the comma-tokenized routing values the parser expects") {
                     val actionsBlock =
                         result.template[3] as com.slack.api.model.block.ActionsBlock
                     actionsBlock.blockId shouldBe MeetingActionIds.CANCEL_BLOCK_ID
-                    val button =
-                        actionsBlock.elements.single()
-                            as com.slack.api.model.block.element.ButtonElement
-                    button.actionId shouldBe MeetingActionIds.CANCEL_ACTION_ID
-                    button.style shouldBe "danger"
-                    button.value shouldBe "$listKey,CANCEL_MEETING,$meetingUid"
+                    val buttons =
+                        actionsBlock.elements.map { it as com.slack.api.model.block.element.ButtonElement }
+                    buttons.size shouldBe 2
+
+                    val rescheduleButton = buttons[0]
+                    rescheduleButton.actionId shouldBe MeetingActionIds.RESCHEDULE_ACTION_ID
+                    rescheduleButton.style shouldBe "primary"
+                    rescheduleButton.value shouldBe "$listKey,RESCHEDULE_MEETING,$meetingUid"
+
+                    val cancelButton = buttons[1]
+                    cancelButton.actionId shouldBe MeetingActionIds.CANCEL_ACTION_ID
+                    cancelButton.style shouldBe "danger"
+                    cancelButton.value shouldBe "$listKey,CANCEL_MEETING,$meetingUid"
                 }
 
-                then("the interactionStates expose the cancel button as a primary REJECT_BUTTON") {
+                then("the interactionStates expose the reschedule (APPLY) and cancel (REJECT) buttons") {
                     val stateTypes = result.interactionStates.map { it.type }
-                    stateTypes shouldBe listOf(ActionElementTypes.REJECT_BUTTON)
+                    stateTypes shouldBe
+                        listOf(ActionElementTypes.APPLY_BUTTON, ActionElementTypes.REJECT_BUTTON)
                 }
             }
 
@@ -498,17 +506,21 @@ class ModalTemplateBuilderTest :
                         listIdempotencyKey = listKey,
                     )
 
-                then("only the host's row gets a cancel actions block") {
+                then("only the host's row gets a host-actions block carrying reschedule + cancel") {
                     val actionsBlocks =
                         result.template
                             .filterIsInstance<com.slack.api.model.block.ActionsBlock>()
                     actionsBlocks.size shouldBe 1
-                    val button =
+                    val buttons =
                         actionsBlocks
                             .single()
                             .elements
-                            .single() as com.slack.api.model.block.element.ButtonElement
-                    button.value shouldBe "$listKey,CANCEL_MEETING,$hostMeetingUid"
+                            .map { it as com.slack.api.model.block.element.ButtonElement }
+                    buttons.map { it.value } shouldBe
+                        listOf(
+                            "$listKey,RESCHEDULE_MEETING,$hostMeetingUid",
+                            "$listKey,CANCEL_MEETING,$hostMeetingUid",
+                        )
                 }
             }
 
@@ -778,6 +790,65 @@ class ModalTemplateBuilderTest :
             }
         }
 
+        given("rescheduleMeetingModalViewJson") {
+            val meetingUid = UUID.fromString("12121212-3434-5656-7878-909090909090")
+            val requesterId = "U_HOST"
+            val currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30)
+
+            `when`("called with the meeting uid, current start, and requester") {
+                val json =
+                    templateBuilder.rescheduleMeetingModalViewJson(
+                        meetingUid = meetingUid,
+                        currentStartAt = currentStartAt,
+                        requesterId = requesterId,
+                    )
+
+                then("private_metadata routes the submission to RESCHEDULE_MEETING_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${RescheduleMeetingModalIds.CALLBACK_ID}\""
+                    json shouldContain
+                        "\"private_metadata\":\"$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId\""
+                }
+
+                then("the date and time pickers are pre-filled from the current start") {
+                    json shouldContain "\"type\":\"datepicker\""
+                    json shouldContain "\"initial_date\":\"2026-07-01\""
+                    json shouldContain "\"type\":\"timepicker\""
+                    json shouldContain "\"initial_time\":\"14:30\""
+                }
+
+                then("the emitted JSON round-trips through the Slack SDK view deserializer") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                    val blockIds = inputs.map { it.blockId }
+
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe RescheduleMeetingModalIds.CALLBACK_ID
+                    view.privateMetadata shouldBe "$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId"
+                    view.title.text shouldBe "Reschedule meeting"
+                    view.submit.text shouldBe "Reschedule"
+                    view.close.text shouldBe "Cancel"
+                    blockIds shouldContainAll
+                        listOf(
+                            RescheduleMeetingModalIds.DATE_BLOCK_ID,
+                            RescheduleMeetingModalIds.TIME_BLOCK_ID,
+                        )
+                    val datePicker =
+                        inputs
+                            .single { it.blockId == RescheduleMeetingModalIds.DATE_BLOCK_ID }
+                            .element as com.slack.api.model.block.element.DatePickerElement
+                    datePicker.actionId shouldBe RescheduleMeetingModalIds.DATE_ACTION_ID
+                    val timePicker =
+                        inputs
+                            .single { it.blockId == RescheduleMeetingModalIds.TIME_BLOCK_ID }
+                            .element as com.slack.api.model.block.element.TimePickerElement
+                    timePicker.actionId shouldBe RescheduleMeetingModalIds.TIME_ACTION_ID
+                }
+            }
+        }
+
         given("standupModalViewJson") {
             val sessionUid = UUID.randomUUID()
 
@@ -822,6 +893,60 @@ class ModalTemplateBuilderTest :
                     view.type shouldBe "modal"
                     view.callbackId shouldBe StandupModalIds.CALLBACK_ID
                     inputs.size shouldBe 2
+                }
+            }
+        }
+
+        given("standupSetupModalViewJson") {
+            val setupKey = UUID.randomUUID()
+
+            `when`("called with the invoking creator and channel") {
+                val json =
+                    templateBuilder.standupSetupModalViewJson(
+                        idempotencyKey = setupKey,
+                        creatorId = "U_CREATOR",
+                        commandChannel = "C_COMMAND",
+                    )
+
+                then("private_metadata routes the submission to STANDUP_SETUP_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${StandupSetupModalIds.CALLBACK_ID}\""
+                    json shouldContain
+                        "\"private_metadata\":\"$setupKey,STANDUP_SETUP_SUBMIT,U_CREATOR,C_COMMAND\""
+                }
+
+                then("the emitted JSON round-trips through the Slack SDK view deserializer") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                    val blockIds = inputs.map { it.blockId }
+
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe StandupSetupModalIds.CALLBACK_ID
+                    view.title.text shouldBe "Standup setup"
+                    view.submit.text shouldBe "Create"
+                    view.close.text shouldBe "Cancel"
+                    blockIds shouldContainAll
+                        listOf(
+                            StandupSetupModalIds.NAME_BLOCK_ID,
+                            StandupSetupModalIds.QUESTIONS_BLOCK_ID,
+                            StandupSetupModalIds.MEMBERS_BLOCK_ID,
+                            StandupSetupModalIds.SUMMARY_CHANNEL_BLOCK_ID,
+                            StandupSetupModalIds.WEEKDAYS_BLOCK_ID,
+                            StandupSetupModalIds.TIME_BLOCK_ID,
+                            StandupSetupModalIds.CUTOFF_BLOCK_ID,
+                            StandupSetupModalIds.TIMEZONE_BLOCK_ID,
+                        )
+                }
+
+                then("each Block Kit element type is rendered") {
+                    json shouldContain "\"type\":\"multi_users_select\""
+                    json shouldContain "\"type\":\"conversations_select\""
+                    json shouldContain "\"type\":\"multi_static_select\""
+                    json shouldContain "\"type\":\"timepicker\""
+                    json shouldContain "\"type\":\"static_select\""
+                    json shouldContain "\"type\":\"plain_text_input\""
                 }
             }
         }

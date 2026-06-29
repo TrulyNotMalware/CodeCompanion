@@ -102,13 +102,68 @@ class InputBuilder(
         input["element"] = element
     }
 
-    fun plainTextInput(actionId: String, multiline: Boolean = false) {
-        input["element"] =
-            mapOf(
+    fun plainTextInput(actionId: String, multiline: Boolean = false, initialValue: String? = null) {
+        val element =
+            mutableMapOf<String, Any>(
                 "type" to "plain_text_input",
                 "action_id" to actionId,
                 "multiline" to multiline,
             )
+        if (initialValue != null) element["initial_value"] = initialValue
+        input["element"] = element
+    }
+
+    fun multiStaticSelect(actionId: String, placeholder: String? = null, options: OptionsBuilder.() -> Unit) {
+        val element =
+            mutableMapOf<String, Any>(
+                "type" to "multi_static_select",
+                "action_id" to actionId,
+            )
+        if (placeholder != null) element["placeholder"] = plainText(text = placeholder)
+        element["options"] = OptionsBuilder().apply(options).build()
+        input["element"] = element
+    }
+
+    fun multiUsersSelect(actionId: String, placeholder: String? = null) {
+        val element =
+            mutableMapOf<String, Any>(
+                "type" to "multi_users_select",
+                "action_id" to actionId,
+            )
+        if (placeholder != null) element["placeholder"] = plainText(text = placeholder)
+        input["element"] = element
+    }
+
+    fun conversationsSelect(actionId: String, placeholder: String? = null) {
+        val element =
+            mutableMapOf<String, Any>(
+                "type" to "conversations_select",
+                "action_id" to actionId,
+            )
+        if (placeholder != null) element["placeholder"] = plainText(text = placeholder)
+        input["element"] = element
+    }
+
+    fun timePicker(actionId: String, initialTime: String? = null, placeholder: String? = null) {
+        val element =
+            mutableMapOf<String, Any>(
+                "type" to "timepicker",
+                "action_id" to actionId,
+            )
+        if (initialTime != null) element["initial_time"] = initialTime
+        if (placeholder != null) element["placeholder"] = plainText(text = placeholder)
+        input["element"] = element
+    }
+
+    fun datePicker(actionId: String, initialDate: String? = null, placeholder: String? = null) {
+        val element =
+            mutableMapOf<String, Any>(
+                "type" to "datepicker",
+                "action_id" to actionId,
+            )
+        if (initialDate != null) element["initial_date"] = initialDate
+        if (placeholder != null) element["placeholder"] = plainText(text = placeholder)
+        input["element"] = element
     }
 
     internal fun build(): Map<String, Any> = input

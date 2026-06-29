@@ -56,13 +56,21 @@ class StandupSessionSchema(
     val status: SessionStatus = SessionStatus.COLLECTING,
     @field:Column(name = "summary_message_ts", length = 64)
     val summaryMessageTs: String? = null,
+    // Once-only claim stamp for the non-responder nudge. NULL until the reminder fires; the
+    // scheduler's atomic CAS flips it under `status = COLLECTING`, so only one tick ever wins.
+    @field:Column(name = "nudged_at")
+    val nudgedAt: Instant? = null,
+    // `dispatches` is a Set (not a List/bag) so queries can JOIN FETCH both child collections at
+    // once: Hibernate throws MultipleBagFetchException if it fetches two bags (Lists) together, and
+    // `findBySessionUid` / `findByRoutineUidAndSessionDate` / `findCollectingForNudge` all need
+    // dispatches + answers in one shot. Membership is keyed by user, so a Set fits naturally.
     @field:OneToMany(
         mappedBy = "session",
         fetch = FetchType.LAZY,
         orphanRemoval = true,
         cascade = [CascadeType.ALL],
     )
-    val dispatches: MutableList<SessionDispatchSchema> = mutableListOf(),
+    val dispatches: MutableSet<SessionDispatchSchema> = mutableSetOf(),
     @field:OneToMany(
         mappedBy = "session",
         fetch = FetchType.LAZY,

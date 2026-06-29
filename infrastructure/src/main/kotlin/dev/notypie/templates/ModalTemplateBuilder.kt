@@ -14,7 +14,9 @@ import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -37,16 +39,51 @@ class ModalTemplateBuilder(
         private val STANDUP_SESSION_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
+        // Initial-value formats for the reschedule modal's date/time pickers. The submission
+        // context (RescheduleMeetingSubmissionContext) reads the selected values back with the
+        // matching patterns, so these must stay aligned with its DATE_PATTERN / TIME_PATTERN.
+        private val RESCHEDULE_DATE_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        private val RESCHEDULE_TIME_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("HH:mm")
+
         /**
          * Slack Block Kit caps each message at 50 blocks. Worst case (every meeting hosted
-         * by the current user → every row gets a Cancel actions block) is:
-         *   header(1) + top-divider(1) + N sections + N cancel-actions + (N-1) inter-dividers
+         * by the current user → every row gets one host-actions block carrying both the
+         * Reschedule and Cancel buttons) is:
+         *   header(1) + top-divider(1) + N sections + N host-actions + (N-1) inter-dividers
          *     = 3N + 1
          * Plus the truncation notice (1 block, no preceding divider — it's italic and
          * visually distinct) brings the worst case to 3N + 2.
          * For 50-block safety we keep 3N + 2 <= 50, i.e. N <= 16.
          */
         internal const val MAX_MEETINGS_PER_LIST: Int = 16
+
+        // Mon–Sun options for the standup-setup weekday multi-select; value is the DayOfWeek
+        // enum name so the submission context can round-trip via DayOfWeek.valueOf(...).
+        private val WEEKDAY_OPTIONS: List<Pair<DayOfWeek, String>> =
+            listOf(
+                DayOfWeek.MONDAY to "Monday",
+                DayOfWeek.TUESDAY to "Tuesday",
+                DayOfWeek.WEDNESDAY to "Wednesday",
+                DayOfWeek.THURSDAY to "Thursday",
+                DayOfWeek.FRIDAY to "Friday",
+                DayOfWeek.SATURDAY to "Saturday",
+                DayOfWeek.SUNDAY to "Sunday",
+            )
+
+        // Small curated list of common zones for the standup-setup timezone picker; value is
+        // the IANA id parsed by ZoneId.of(...) in the submission context.
+        private val TIMEZONE_OPTIONS: List<String> =
+            listOf(
+                "Asia/Seoul",
+                "UTC",
+                "America/Los_Angeles",
+                "Europe/London",
+            )
+
+        private const val DEFAULT_TRIGGER_TIME: String = "10:00"
+        private const val DEFAULT_CUTOFF_MINUTES: String = "120"
     }
 
     override fun onlyTextTemplate(message: String, isMarkDown: Boolean): LayoutBlocks =
@@ -167,7 +204,7 @@ class ModalTemplateBuilder(
                 if (meeting.creator == currentUserId && !meeting.isCanceled) {
                     add(
                         layout =
-                            modalBlockBuilder.cancelMeetingActionsBlock(
+                            modalBlockBuilder.hostMeetingActionsBlock(
                                 meetingUid = meeting.meetingUid,
                                 listIdempotencyKey = listIdempotencyKey,
                             ),
@@ -322,6 +359,49 @@ class ModalTemplateBuilder(
         return jsonMapper.writeValueAsString(view)
     }
 
+    override fun rescheduleMeetingModalViewJson(
+        meetingUid: UUID,
+        currentStartAt: LocalDateTime,
+        requesterId: String,
+    ): String {
+        // Token order must match SlackInteractionRequestParser: idempotencyKey (the meetingUid),
+        // detailType, then routingExtras[0..n]. RescheduleMeetingSubmissionContext reads
+        // routingExtras[0] as requesterId. The pickers are pre-filled with the meeting's current
+        // start so a host only has to change the part that moved.
+        val view =
+            modal {
+                callbackId(id = RescheduleMeetingModalIds.CALLBACK_ID)
+                privateMetadata(
+                    metadata =
+                        listOf(
+                            meetingUid.toString(),
+                            CommandDetailType.RESCHEDULE_MEETING_SUBMIT.name,
+                            requesterId,
+                        ).joinToString(","),
+                )
+                title(text = "Reschedule meeting")
+                submit(text = "Reschedule")
+                close(text = "Cancel")
+                blocks {
+                    input(blockId = RescheduleMeetingModalIds.DATE_BLOCK_ID) {
+                        label(text = "New date")
+                        datePicker(
+                            actionId = RescheduleMeetingModalIds.DATE_ACTION_ID,
+                            initialDate = currentStartAt.format(RESCHEDULE_DATE_FORMAT),
+                        )
+                    }
+                    input(blockId = RescheduleMeetingModalIds.TIME_BLOCK_ID) {
+                        label(text = "New time")
+                        timePicker(
+                            actionId = RescheduleMeetingModalIds.TIME_ACTION_ID,
+                            initialTime = currentStartAt.format(RESCHEDULE_TIME_FORMAT),
+                        )
+                    }
+                }
+            }
+        return jsonMapper.writeValueAsString(view)
+    }
+
     override fun standupModalViewJson(
         routineName: String,
         sessionDate: LocalDate,
@@ -358,6 +438,84 @@ class ModalTemplateBuilder(
                                 actionId = "${StandupModalIds.ACTION_ID_PREFIX}$index",
                                 multiline = true,
                             )
+                        }
+                    }
+                }
+            }
+        return jsonMapper.writeValueAsString(view)
+    }
+
+    override fun standupSetupModalViewJson(idempotencyKey: UUID, creatorId: String, commandChannel: String): String {
+        val view =
+            modal {
+                callbackId(id = StandupSetupModalIds.CALLBACK_ID)
+                privateMetadata(
+                    metadata =
+                        listOf(
+                            idempotencyKey.toString(),
+                            CommandDetailType.STANDUP_SETUP_SUBMIT.name,
+                            creatorId,
+                            commandChannel,
+                        ).joinToString(","),
+                )
+                title(text = "Standup setup")
+                submit(text = "Create")
+                close(text = "Cancel")
+                blocks {
+                    input(blockId = StandupSetupModalIds.NAME_BLOCK_ID) {
+                        label(text = "Routine name")
+                        plainTextInput(actionId = StandupSetupModalIds.NAME_ACTION_ID)
+                    }
+                    input(blockId = StandupSetupModalIds.QUESTIONS_BLOCK_ID) {
+                        label(text = "Questions (one per line)")
+                        plainTextInput(actionId = StandupSetupModalIds.QUESTIONS_ACTION_ID, multiline = true)
+                    }
+                    input(blockId = StandupSetupModalIds.MEMBERS_BLOCK_ID) {
+                        label(text = "Members")
+                        multiUsersSelect(
+                            actionId = StandupSetupModalIds.MEMBERS_ACTION_ID,
+                            placeholder = "Select members",
+                        )
+                    }
+                    input(blockId = StandupSetupModalIds.SUMMARY_CHANNEL_BLOCK_ID) {
+                        label(text = "Summary channel")
+                        conversationsSelect(
+                            actionId = StandupSetupModalIds.SUMMARY_CHANNEL_ACTION_ID,
+                            placeholder = "Select a channel",
+                        )
+                    }
+                    input(blockId = StandupSetupModalIds.WEEKDAYS_BLOCK_ID) {
+                        label(text = "Active weekdays")
+                        multiStaticSelect(
+                            actionId = StandupSetupModalIds.WEEKDAYS_ACTION_ID,
+                            placeholder = "Select weekdays",
+                        ) {
+                            WEEKDAY_OPTIONS.forEach { (day, displayName) ->
+                                option(text = displayName, value = day.name)
+                            }
+                        }
+                    }
+                    input(blockId = StandupSetupModalIds.TIME_BLOCK_ID) {
+                        label(text = "Trigger time")
+                        timePicker(
+                            actionId = StandupSetupModalIds.TIME_ACTION_ID,
+                            initialTime = DEFAULT_TRIGGER_TIME,
+                        )
+                    }
+                    input(blockId = StandupSetupModalIds.CUTOFF_BLOCK_ID) {
+                        label(text = "Cutoff minutes")
+                        plainTextInput(
+                            actionId = StandupSetupModalIds.CUTOFF_ACTION_ID,
+                            initialValue = DEFAULT_CUTOFF_MINUTES,
+                        )
+                    }
+                    input(blockId = StandupSetupModalIds.TIMEZONE_BLOCK_ID) {
+                        label(text = "Timezone")
+                        staticSelect(
+                            actionId = StandupSetupModalIds.TIMEZONE_ACTION_ID,
+                            placeholder = "Select a timezone",
+                        ) {
+                            TIMEZONE_OPTIONS.forEach { zone -> option(text = zone, value = zone) }
                         }
                     }
                 }

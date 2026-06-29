@@ -8,6 +8,7 @@ import dev.notypie.domain.standup.entity.SessionDispatch
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
+import dev.notypie.repository.standup.NudgeCandidateSession
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -38,6 +39,8 @@ class StandupSchedulingService(
     private val stuckSendingThresholdMinutes: Long = 5L,
     @param:Value("\${standup.scheduler.dispatch-batch-size:50}")
     private val dispatchBatchSize: Int = 50,
+    @param:Value("\${standup.nudge.offset-minutes:30}")
+    private val nudgeOffsetMinutes: Long = 30L,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
@@ -225,6 +228,88 @@ class StandupSchedulingService(
             }
         } else {
             log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
+        }
+    }
+
+    /**
+     * Phase 4: DMs members who received the standup prompt but haven't answered yet, once per
+     * session, shortly before the cutoff. A session qualifies when `now` is within
+     * `[cutoffAt - nudgeOffset, cutoffAt)` and it has not been nudged. The reminder is gated by
+     * [StandupRepository.claimNudge]'s atomic CAS so it fires exactly once across ticks/restarts.
+     *
+     * We claim only when a session actually has non-responders. If everyone has already answered
+     * we leave `nudged_at` NULL — there is nothing to send, and a later tick re-evaluates
+     * cheaply; once the cutoff passes the session leaves the window naturally, so the flag never
+     * needs to be burned on a no-op. Setting `standup.nudge.offset-minutes <= 0` disables the
+     * phase entirely (a kill-switch that skips all repo work).
+     */
+    fun nudgeNonResponders() {
+        if (nudgeOffsetMinutes <= 0L) return
+
+        val now = clock.instant()
+        val nudgeWindowEnd = now.plus(Duration.ofMinutes(nudgeOffsetMinutes))
+        val candidates =
+            standupRepository.findCollectingSessionsForNudge(now = now, nudgeWindowEnd = nudgeWindowEnd)
+        if (candidates.isEmpty()) return
+
+        // One-shot lookup: minimise DB chatter when many sessions share a routine (mirrors
+        // sendPendingDispatches). The routine carries the display name + timezone for the DM.
+        val routinesByUid = standupRepository.listActiveRoutines().associateBy { it.routineUid }
+
+        candidates.forEach { candidate ->
+            nudgeCandidate(candidate = candidate, routinesByUid = routinesByUid)
+        }
+    }
+
+    private fun nudgeCandidate(candidate: NudgeCandidateSession, routinesByUid: Map<UUID, RoutineDto>) {
+        val routine = routinesByUid[candidate.routineUid]
+        if (routine == null) {
+            log.warn {
+                "Nudge candidate points at unknown/inactive routine: " +
+                    "sessionUid=${candidate.sessionUid} routineUid=${candidate.routineUid}"
+            }
+            return
+        }
+
+        // Non-responders = members whose prompt landed (SENT) minus members who have answered.
+        val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
+        if (nonResponders.isEmpty()) return
+
+        // Atomic once-only gate. Lost race / already nudged → another tick owns it; do nothing.
+        if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return
+
+        val outcome: Result<Unit> =
+            transactionTemplate.runInTx<Unit> {
+                nonResponders.forEach { userId ->
+                    val commandBasicInfo =
+                        CommandBasicInfo.forOutbound(
+                            publisherId = userId,
+                            // Slack accepts a user_id as the DM channel target.
+                            channel = userId,
+                        )
+                    val nudgeEvent =
+                        messageBuilder.buildNudgeNotice(
+                            routineName = routine.name,
+                            cutoffAt = candidate.cutoffAt,
+                            routineTimezone = routine.routineTimezone,
+                            commandBasicInfo = commandBasicInfo,
+                        )
+                    outboxRepository.save(nudgeEvent.toOutboxMessage())
+                }
+            }
+
+        if (outcome.isFailure) {
+            // The claim already committed in its own transaction, so a failure here cannot be
+            // re-nudged — surface it for the tick wrapper to log. This trades at-most-once
+            // duplication for a possible missed nudge, the safer default for a reminder.
+            log.error(outcome.exceptionOrNull()) {
+                "Standup nudge enqueue failed after claim: sessionUid=${candidate.sessionUid}"
+            }
+        } else {
+            log.info {
+                "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
+                    "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
+            }
         }
     }
 
