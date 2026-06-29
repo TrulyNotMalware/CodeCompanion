@@ -50,3 +50,8 @@ logs
 AGENTS.md
 CveBotPlan.md
 *.hprof
+
+### Local working docs (not part of the repo) ###
+Handoff.md
+Refactor.md
+RealTestSetup.md
