@@ -1,9 +1,9 @@
 package dev.notypie.domain.common
 
-import dev.notypie.domain.command.exceptions.ValidationException
-import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
 import dev.notypie.domain.common.error.CommonErrorCode
 import dev.notypie.domain.common.error.ExceptionArgument
+import dev.notypie.domain.common.error.ValidationException
+import dev.notypie.domain.common.error.ValidationExceptionWithName
 import java.time.LocalDateTime
 
 class ValidationBuilder {

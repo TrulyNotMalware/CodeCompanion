@@ -1,6 +1,6 @@
 package dev.notypie.repository.meeting
 
-import dev.notypie.domain.command.dto.interactions.RejectReason
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying

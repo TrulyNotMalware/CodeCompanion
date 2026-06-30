@@ -10,8 +10,8 @@ import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.templates.ButtonType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec

@@ -1,6 +1,6 @@
 package dev.notypie.domain.meet.dto
 
-import dev.notypie.domain.command.dto.interactions.RejectReason
+import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
 

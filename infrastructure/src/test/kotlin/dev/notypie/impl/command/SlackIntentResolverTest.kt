@@ -4,7 +4,6 @@ import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createOpenViewEvent
 import dev.notypie.domain.command.createSendSlackMessageEvent
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
@@ -20,6 +19,7 @@ import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.repository.standup.StandupRepository

@@ -1,8 +1,8 @@
 package dev.notypie.domain.command.entity.event
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
@@ -242,7 +242,7 @@ data class OpenViewEvent(
 /**
  * Published by the dispatcher when `views.open` fails (trigger_id expired, Slack API
  * error, network failure, etc.). The application-layer listener is responsible for
- * recording the decline with [dev.notypie.domain.command.dto.interactions.RejectReason.OTHER]
+ * recording the decline with [dev.notypie.domain.meet.entity.RejectReason.OTHER]
  * and sending an ephemeral notice so the user knows the decline was still accepted.
  */
 data class DeclineModalOpenFailedEvent(

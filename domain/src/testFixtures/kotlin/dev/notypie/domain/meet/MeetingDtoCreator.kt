@@ -1,9 +1,9 @@
 package dev.notypie.domain.meet
 
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.dto.MeetingParticipantDto
+import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
 

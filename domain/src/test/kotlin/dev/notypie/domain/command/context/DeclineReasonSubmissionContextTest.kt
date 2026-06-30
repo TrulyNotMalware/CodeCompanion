@@ -4,13 +4,13 @@ import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe

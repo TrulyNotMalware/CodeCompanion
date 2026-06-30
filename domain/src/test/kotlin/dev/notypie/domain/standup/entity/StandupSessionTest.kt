@@ -1,6 +1,6 @@
 package dev.notypie.domain.standup.entity
 
-import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
+import dev.notypie.domain.common.error.ValidationExceptionWithName
 import dev.notypie.domain.standup.createSessionDispatch
 import dev.notypie.domain.standup.createStandupAnswer
 import dev.notypie.domain.standup.createStandupSession

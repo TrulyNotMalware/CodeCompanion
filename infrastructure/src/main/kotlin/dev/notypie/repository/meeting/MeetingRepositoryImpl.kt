@@ -1,9 +1,9 @@
 package dev.notypie.repository.meeting
 
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.domain.meet.entity.Member
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.meeting.schema.ParticipantsSchema
 import dev.notypie.repository.meeting.schema.toDomainEntity

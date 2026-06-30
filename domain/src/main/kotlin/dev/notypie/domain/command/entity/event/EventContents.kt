@@ -51,7 +51,7 @@ data class ActionEventPayloadContents(
  * staged to the outbox and relayed asynchronously — this must be dispatched inline on the
  * request thread because Slack's `trigger_id` expires 3 seconds after issuance. The
  * dispatcher-level failure path publishes [DeclineModalOpenFailedEvent] so the application
- * layer can record the decline with [dev.notypie.domain.command.dto.interactions.RejectReason.OTHER]
+ * layer can record the decline with [dev.notypie.domain.meet.entity.RejectReason.OTHER]
  * and notify the user.
  */
 data class OpenViewPayloadContents(

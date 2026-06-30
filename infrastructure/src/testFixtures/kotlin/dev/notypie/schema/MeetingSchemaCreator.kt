@@ -2,7 +2,7 @@ package dev.notypie.schema
 
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.dto.interactions.RejectReason
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.repository.meeting.schema.ParticipantsSchema
 import java.time.LocalDateTime

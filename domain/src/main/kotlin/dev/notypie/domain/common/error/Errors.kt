@@ -56,3 +56,20 @@ abstract class CodeCompanionRuntimeException(
     errorCode: ErrorCode,
     val details: List<ExceptionArgument> = emptyList(),
 ) : RuntimeException(errorCode.message)
+
+internal class ValidationException(
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )
+
+internal class ValidationExceptionWithName(
+    val className: String,
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument> = emptyList(),
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )

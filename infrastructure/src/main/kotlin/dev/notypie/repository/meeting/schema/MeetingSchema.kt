@@ -1,10 +1,10 @@
 package dev.notypie.repository.meeting.schema
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.dto.MeetingParticipantDto
 import dev.notypie.domain.meet.entity.Meeting
+import dev.notypie.domain.meet.entity.RejectReason
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp

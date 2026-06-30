@@ -226,7 +226,7 @@ class JpaMeetingRepositoryTest
                             meetingIdempotencyKey = meetingKey,
                             userId = participantUserId,
                             isAttending = false,
-                            absentReason = dev.notypie.domain.command.dto.interactions.RejectReason.OTHER,
+                            absentReason = dev.notypie.domain.meet.entity.RejectReason.OTHER,
                             absentReasonDetail = "Out of town for a family event",
                         )
 
@@ -242,7 +242,7 @@ class JpaMeetingRepositoryTest
                                 .single { p -> p.userId == participantUserId }
                         found.isAttending shouldBe false
                         found.absentReason shouldBe
-                            dev.notypie.domain.command.dto.interactions.RejectReason.OTHER
+                            dev.notypie.domain.meet.entity.RejectReason.OTHER
                         found.absentReasonDetail shouldBe "Out of town for a family event"
                     }
                 }
@@ -253,7 +253,7 @@ class JpaMeetingRepositoryTest
                             meetingIdempotencyKey = UUID.randomUUID(),
                             userId = "U_DOES_NOT_EXIST",
                             isAttending = false,
-                            absentReason = dev.notypie.domain.command.dto.interactions.RejectReason.OTHER,
+                            absentReason = dev.notypie.domain.meet.entity.RejectReason.OTHER,
                             absentReasonDetail = null,
                         )
 

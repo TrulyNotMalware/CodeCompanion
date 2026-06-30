@@ -3,7 +3,6 @@ package dev.notypie.domain.command.context
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -11,6 +10,7 @@ import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseCon
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedRejectButtonStates
+import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf

@@ -1,10 +1,10 @@
 package dev.notypie.templates
 
 import dev.notypie.common.jsonMapper
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.dto.RoutineMemberDto
 import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.impl.command.RestClientRequester

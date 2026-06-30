@@ -3,7 +3,6 @@ package dev.notypie.application.service.interaction
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -11,6 +10,7 @@ import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedRejectButtonStates
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.templates.DeclineReasonModalIds
 import io.kotest.core.spec.style.BehaviorSpec

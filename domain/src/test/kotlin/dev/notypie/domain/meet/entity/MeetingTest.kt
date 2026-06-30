@@ -1,6 +1,6 @@
 package dev.notypie.domain.meet.entity
 
-import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
+import dev.notypie.domain.common.error.ValidationExceptionWithName
 import dev.notypie.domain.meet.createMeeting
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec

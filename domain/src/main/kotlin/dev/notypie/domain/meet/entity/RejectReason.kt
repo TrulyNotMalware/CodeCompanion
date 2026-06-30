@@ -1,4 +1,4 @@
-package dev.notypie.domain.command.dto.interactions
+package dev.notypie.domain.meet.entity
 
 enum class RejectReason(
     val showMessage: String,
