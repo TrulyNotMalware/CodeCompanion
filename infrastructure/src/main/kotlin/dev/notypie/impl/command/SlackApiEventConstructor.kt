@@ -259,6 +259,7 @@ class SlackApiEventConstructor(
         triggerId: String,
         meetingUid: UUID,
         requesterId: String,
+        channel: String,
         currentStartAt: LocalDateTime,
     ): OpenViewEvent {
         val viewJson =
@@ -266,6 +267,41 @@ class SlackApiEventConstructor(
                 meetingUid = meetingUid,
                 currentStartAt = currentStartAt,
                 requesterId = requesterId,
+                channel = channel,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = requesterId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openAddParticipantModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.addParticipantModalViewJson(
+                meetingUid = meetingUid,
+                requesterId = requesterId,
+                channel = channel,
             )
         val payload =
             OpenViewPayloadContents(

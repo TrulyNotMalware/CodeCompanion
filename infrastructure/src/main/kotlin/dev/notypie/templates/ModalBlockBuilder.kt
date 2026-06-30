@@ -113,6 +113,7 @@ class ModalBlockBuilder(
      */
     fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
         val rescheduleRoutingValue = "$listIdempotencyKey,${CommandDetailType.RESCHEDULE_MEETING.name},$meetingUid"
+        val addParticipantRoutingValue = "$listIdempotencyKey,${CommandDetailType.ADD_PARTICIPANT.name},$meetingUid"
         val cancelRoutingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
         // A list can render several host rows in one message, so block_id and action_id must be
         // unique per meeting — Slack rejects the whole message (invalid_blocks) when any collide.
@@ -123,6 +124,12 @@ class ModalBlockBuilder(
                 interactionPayload = rescheduleRoutingValue,
                 actionId = "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid",
             )
+        val addParticipantButton: InteractiveObject =
+            modalElementBuilder.addParticipantButtonElement(
+                buttonName = "Add participant",
+                interactionPayload = addParticipantRoutingValue,
+                actionId = "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid",
+            )
         val cancelButton: InteractiveObject =
             modalElementBuilder.cancelMeetingButtonElement(
                 buttonName = "Cancel",
@@ -132,9 +139,14 @@ class ModalBlockBuilder(
         val layout =
             actions {
                 it.blockId("${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid")
-                it.elements(listOf(rescheduleButton.element, cancelButton.element))
+                it.elements(listOf(rescheduleButton.element, addParticipantButton.element, cancelButton.element))
             }
-        return toInteractionLayout(rescheduleButton.state, cancelButton.state, layout = layout)
+        return toInteractionLayout(
+            rescheduleButton.state,
+            addParticipantButton.state,
+            cancelButton.state,
+            layout = layout,
+        )
     }
 
     /**

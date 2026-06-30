@@ -90,7 +90,22 @@ interface SlackTemplateBuilder {
      * The view_submission parser surfaces requesterId as `routingExtras[0]` for
      * [dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext].
      */
-    fun rescheduleMeetingModalViewJson(meetingUid: UUID, currentStartAt: LocalDateTime, requesterId: String): String
+    fun rescheduleMeetingModalViewJson(
+        meetingUid: UUID,
+        currentStartAt: LocalDateTime,
+        requesterId: String,
+        channel: String,
+    ): String
+
+    /**
+     * Builds the full Slack `view` payload JSON for the add-participant modal opened when a host
+     * clicks "Add participant" on `/meetup list`. Exposes a single multi-users select.
+     * `private_metadata` uses the shared comma-tokenized routing format:
+     *   `"<meetingUid>,ADD_PARTICIPANT_SUBMIT,<requesterId>"`.
+     * The view_submission parser surfaces requesterId as `routingExtras[0]` for
+     * [dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext].
+     */
+    fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String
 
     fun standupModalViewJson(
         routineName: String,

@@ -57,4 +57,14 @@ interface MeetingRepository {
      * keyed on the meeting's numeric id.
      */
     fun findMeetingByUid(meetingUid: UUID): MeetingDto?
+
+    /**
+     * Adds [participantUserIds] to the meeting identified by [meetingUid], but only when [requesterId]
+     * is the host and the meeting is neither canceled nor already started. Ids already on the meeting
+     * (and the host itself) are ignored; the `MAX_PARTICIPANTS` invariant is enforced through the
+     * Meeting aggregate's `addParticipant` before any row is written. The various rejection reasons
+     * are surfaced as distinct [AddParticipantResult.Outcome] values so the caller can react with a
+     * single branch per case.
+     */
+    fun addParticipants(meetingUid: UUID, requesterId: String, participantUserIds: List<String>): AddParticipantResult
 }

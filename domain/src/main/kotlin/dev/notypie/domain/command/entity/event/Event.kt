@@ -126,6 +126,29 @@ data class RescheduleMeetingEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<RescheduleMeetingPayload>
 
+class AddParticipantPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val meetingUid: UUID,
+    val requesterId: String,
+    val participantUserIds: List<String>,
+    /**
+     * Basic info of the originating interaction. Reused by the application-layer listener to send the
+     * host's confirmation ephemeral back through the same channel the submission came from, mirroring
+     * [RescheduleMeetingPayload.responseBasicInfo].
+     */
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class AddParticipantEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = AddParticipantEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: AddParticipantPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<AddParticipantPayload>
+
 class StatusReportPayload(
     override val eventId: UUID = UUID.randomUUID(),
     /**

@@ -477,7 +477,7 @@ class ModalTemplateBuilderTest :
                     result.template[3].shouldBeInstanceOf<com.slack.api.model.block.ActionsBlock>()
                 }
 
-                then("the reschedule + cancel buttons carry the comma-tokenized routing values the parser expects") {
+                then("the reschedule + add-participant + cancel buttons carry the routing values the parser expects") {
                     val actionsBlock =
                         result.template[3] as com.slack.api.model.block.ActionsBlock
                     // block_id and action_id are suffixed with the meeting uid so multiple host rows
@@ -485,23 +485,33 @@ class ModalTemplateBuilderTest :
                     actionsBlock.blockId shouldBe "${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid"
                     val buttons =
                         actionsBlock.elements.map { it as com.slack.api.model.block.element.ButtonElement }
-                    buttons.size shouldBe 2
+                    buttons.size shouldBe 3
 
                     val rescheduleButton = buttons[0]
                     rescheduleButton.actionId shouldBe "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid"
                     rescheduleButton.style shouldBe "primary"
                     rescheduleButton.value shouldBe "$listKey,RESCHEDULE_MEETING,$meetingUid"
 
-                    val cancelButton = buttons[1]
+                    val addParticipantButton = buttons[1]
+                    addParticipantButton.actionId shouldBe "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid"
+                    addParticipantButton.value shouldBe "$listKey,ADD_PARTICIPANT,$meetingUid"
+
+                    val cancelButton = buttons[2]
                     cancelButton.actionId shouldBe "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid"
                     cancelButton.style shouldBe "danger"
                     cancelButton.value shouldBe "$listKey,CANCEL_MEETING,$meetingUid"
                 }
 
-                then("the interactionStates expose the reschedule (APPLY) and cancel (REJECT) buttons") {
+                then(
+                    "the interactionStates expose the reschedule + add-participant (APPLY) and cancel (REJECT) buttons",
+                ) {
                     val stateTypes = result.interactionStates.map { it.type }
                     stateTypes shouldBe
-                        listOf(ActionElementTypes.APPLY_BUTTON, ActionElementTypes.REJECT_BUTTON)
+                        listOf(
+                            ActionElementTypes.APPLY_BUTTON,
+                            ActionElementTypes.APPLY_BUTTON,
+                            ActionElementTypes.REJECT_BUTTON,
+                        )
                 }
             }
 
@@ -532,7 +542,8 @@ class ModalTemplateBuilderTest :
                         actionsBlocks
                             .flatMap { it.elements }
                             .map { (it as com.slack.api.model.block.element.ButtonElement).actionId }
-                    actionIds.size shouldBe 4
+                    // 3 buttons (reschedule, add-participant, cancel) x 2 host rows
+                    actionIds.size shouldBe 6
                     actionIds shouldBe actionIds.distinct()
                 }
             }
@@ -584,7 +595,7 @@ class ModalTemplateBuilderTest :
                         listIdempotencyKey = listKey,
                     )
 
-                then("only the host's row gets a host-actions block carrying reschedule + cancel") {
+                then("only the host's row gets a host-actions block carrying reschedule + add-participant + cancel") {
                     val actionsBlocks =
                         result.template
                             .filterIsInstance<com.slack.api.model.block.ActionsBlock>()
@@ -597,6 +608,7 @@ class ModalTemplateBuilderTest :
                     buttons.map { it.value } shouldBe
                         listOf(
                             "$listKey,RESCHEDULE_MEETING,$hostMeetingUid",
+                            "$listKey,ADD_PARTICIPANT,$hostMeetingUid",
                             "$listKey,CANCEL_MEETING,$hostMeetingUid",
                         )
                 }
@@ -881,20 +893,22 @@ class ModalTemplateBuilderTest :
         given("rescheduleMeetingModalViewJson") {
             val meetingUid = UUID.fromString("12121212-3434-5656-7878-909090909090")
             val requesterId = "U_HOST"
+            val channel = "C_LIST"
             val currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30)
 
-            `when`("called with the meeting uid, current start, and requester") {
+            `when`("called with the meeting uid, current start, requester, and channel") {
                 val json =
                     templateBuilder.rescheduleMeetingModalViewJson(
                         meetingUid = meetingUid,
                         currentStartAt = currentStartAt,
                         requesterId = requesterId,
+                        channel = channel,
                     )
 
-                then("private_metadata routes the submission to RESCHEDULE_MEETING_SUBMIT") {
+                then("private_metadata routes the submission to RESCHEDULE_MEETING_SUBMIT with the channel") {
                     json shouldContain "\"callback_id\":\"${RescheduleMeetingModalIds.CALLBACK_ID}\""
                     json shouldContain
-                        "\"private_metadata\":\"$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId\""
+                        "\"private_metadata\":\"$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId,$channel\""
                 }
 
                 then("the date and time pickers are pre-filled from the current start") {
@@ -914,7 +928,7 @@ class ModalTemplateBuilderTest :
 
                     view.type shouldBe "modal"
                     view.callbackId shouldBe RescheduleMeetingModalIds.CALLBACK_ID
-                    view.privateMetadata shouldBe "$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId"
+                    view.privateMetadata shouldBe "$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId,$channel"
                     view.title.text shouldBe "Reschedule meeting"
                     view.submit.text shouldBe "Reschedule"
                     view.close.text shouldBe "Cancel"

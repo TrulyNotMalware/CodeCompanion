@@ -124,6 +124,9 @@ sealed class CommandIntent {
         val triggerId: String,
         val meetingUid: UUID,
         val requesterId: String,
+        // Channel the `/meetup list` message lives in, ferried through the modal's private_metadata so
+        // the host's confirmation posts back in-channel (a view_submission carries no channel).
+        val channel: String,
         override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING,
     ) : CommandIntent()
 
@@ -138,7 +141,43 @@ sealed class CommandIntent {
         val meetingUid: UUID,
         val requesterId: String,
         val newStartAt: LocalDateTime,
+        // Channel ferried through the modal's private_metadata so the host's confirmation posts back
+        // into the `/meetup list` channel rather than failing on the channel-less submission.
+        val channel: String,
         override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+    ) : CommandIntent()
+
+    /**
+     * Host's request to open the add-participant modal from the inline "Add participant" button on
+     * `/meetup list`. The resolver builds a synchronous
+     * [dev.notypie.domain.command.entity.event.OpenViewEvent] so the Slack `trigger_id` is consumed
+     * within its 3-second window — mirroring [OpenRescheduleMeetingModal]. The modal's
+     * `private_metadata` carries [meetingUid] + [requesterId] back to the submission handler.
+     */
+    data class OpenAddParticipantModal(
+        val triggerId: String,
+        val meetingUid: UUID,
+        val requesterId: String,
+        // Channel the `/meetup list` message lives in. A view_submission carries no channel, so we
+        // ferry it through the modal's private_metadata to post the host's confirmation back in-channel.
+        val channel: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.ADD_PARTICIPANT,
+    ) : CommandIntent()
+
+    /**
+     * Host's confirmed participant additions from the modal submission. Authorization (host-only),
+     * de-duplication against existing members, and the `MAX_PARTICIPANTS` invariant are all enforced
+     * by the application-layer service via the Meeting entity's `addParticipant`. The resolver lifts
+     * this to a [dev.notypie.domain.command.entity.event.AddParticipantEvent].
+     */
+    data class AddParticipant(
+        val meetingUid: UUID,
+        val requesterId: String,
+        val participantUserIds: List<String>,
+        // Channel ferried through the modal's private_metadata so the host's confirmation ephemeral
+        // posts back into the `/meetup list` channel rather than failing on the channel-less submission.
+        val channel: String,
+        override val commandDetailType: CommandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
     ) : CommandIntent()
 
     /**

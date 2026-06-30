@@ -8,6 +8,8 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
+import dev.notypie.domain.command.entity.context.form.AddParticipantContext
+import dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
@@ -44,6 +46,8 @@ enum class CommandDetailType {
     CANCEL_MEETING,
     RESCHEDULE_MEETING,
     RESCHEDULE_MEETING_SUBMIT,
+    ADD_PARTICIPANT,
+    ADD_PARTICIPANT_SUBMIT,
     MEETING_REMINDER,
     DAILY_AGENDA,
     STATUS_REPORT,
@@ -114,6 +118,22 @@ enum class CommandDetailType {
 
             RESCHEDULE_MEETING_SUBMIT -> {
                 RescheduleMeetingSubmissionContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            ADD_PARTICIPANT -> {
+                AddParticipantContext(
+                    commandBasicInfo = commandBasicInfo,
+                    subCommand = subCommand,
+                    intents = intents,
+                )
+            }
+
+            ADD_PARTICIPANT_SUBMIT -> {
+                AddParticipantSubmissionContext(
                     commandBasicInfo = commandBasicInfo,
                     subCommand = subCommand,
                     intents = intents,

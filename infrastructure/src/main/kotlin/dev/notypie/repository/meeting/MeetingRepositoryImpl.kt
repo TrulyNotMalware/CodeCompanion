@@ -3,7 +3,9 @@ package dev.notypie.repository.meeting
 import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
+import dev.notypie.domain.meet.entity.Member
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
+import dev.notypie.repository.meeting.schema.ParticipantsSchema
 import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
@@ -88,4 +90,59 @@ open class MeetingRepositoryImpl(
         jpaMeetingRepository
             .findMeetingByUidWithParticipants(meetingUid = meetingUid)
             ?.toMeetingDto()
+
+    @Transactional
+    override fun addParticipants(
+        meetingUid: UUID,
+        requesterId: String,
+        participantUserIds: List<String>,
+    ): AddParticipantResult {
+        val schema =
+            jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid)
+                ?: return AddParticipantResult(outcome = AddParticipantResult.Outcome.MEETING_NOT_FOUND)
+        if (schema.publisherId != requesterId || schema.isCanceled) {
+            return AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
+        }
+        // The Meeting aggregate models a future event (its constructor requires startAt in the future),
+        // so adding members to an already-started meeting is not a representable domain operation.
+        if (!schema.startAt.isAfter(LocalDateTime.now())) {
+            return AddParticipantResult(
+                outcome = AddParticipantResult.Outcome.MEETING_STARTED,
+                meeting = schema.toMeetingDto(),
+            )
+        }
+        val existing = schema.participants.map { it.userId }.toSet() + schema.publisherId
+        val newUserIds =
+            participantUserIds
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .filter { it !in existing }
+        if (newUserIds.isEmpty()) {
+            return AddParticipantResult(
+                outcome = AddParticipantResult.Outcome.NO_NEW_PARTICIPANTS,
+                meeting = schema.toMeetingDto(),
+            )
+        }
+        // Enforce MAX_PARTICIPANTS through the Meeting aggregate before writing any row, so the limit
+        // stays owned by the domain entity rather than duplicated here.
+        val withinCapacity =
+            runCatching {
+                val meeting = schema.toDomainEntity()
+                newUserIds.forEach { meeting.addParticipant(user = Member(userId = it)) }
+            }.isSuccess
+        if (!withinCapacity) {
+            return AddParticipantResult(
+                outcome = AddParticipantResult.Outcome.OVER_CAPACITY,
+                meeting = schema.toMeetingDto(),
+            )
+        }
+        newUserIds.forEach { schema.participants.add(ParticipantsSchema(meeting = schema, userId = it)) }
+        jpaMeetingRepository.save(schema)
+        return AddParticipantResult(
+            outcome = AddParticipantResult.Outcome.ADDED,
+            addedUserIds = newUserIds,
+            meeting = schema.toMeetingDto(),
+        )
+    }
 }

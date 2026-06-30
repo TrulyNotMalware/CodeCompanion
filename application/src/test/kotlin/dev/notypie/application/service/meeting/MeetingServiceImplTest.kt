@@ -6,6 +6,8 @@ import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AddParticipantEvent
+import dev.notypie.domain.command.entity.event.AddParticipantPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -13,13 +15,16 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
+import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -266,6 +271,141 @@ class MeetingServiceImplTest :
                     // would trigger the MariaDB no-op race documented in
                     // updateParticipantAttendance.
                     published.any { it is UpdateMeetingAttendanceEvent } shouldBe false
+                }
+            }
+        }
+
+        given("addParticipants receives an AddParticipantEvent") {
+            val meetingUid = UUID.randomUUID()
+            val requesterId = "U_HOST_ADD"
+            val basic = createCommandBasicInfo()
+            val event =
+                AddParticipantEvent(
+                    idempotencyKey = basic.idempotencyKey,
+                    payload =
+                        AddParticipantPayload(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            participantUserIds = listOf("U_A", "U_B"),
+                            responseBasicInfo = basic,
+                        ),
+                    type = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                )
+            val noticeEvent =
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    idempotencyKey = basic.idempotencyKey,
+                    messageType = MessageType.CHANNEL_ALERT,
+                )
+            val ephemeralEvent =
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    idempotencyKey = basic.idempotencyKey,
+                    messageType = MessageType.EPHEMERAL_MESSAGE,
+                )
+
+            `when`("the repository reports the users were added") {
+                val capturedHostText = slot<String>()
+                every {
+                    meetingRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A", "U_B"),
+                    )
+                } returns
+                    AddParticipantResult(
+                        outcome = AddParticipantResult.Outcome.ADDED,
+                        addedUserIds = listOf("U_A", "U_B"),
+                        meeting = createMeetingDto(creator = requesterId, title = "Team Sync"),
+                    )
+                every {
+                    slackEventBuilder.simpleApplyRejectRequest(
+                        commandDetailType = any(),
+                        commandBasicInfo = any(),
+                        approvalContents = any(),
+                        targetUserId = any(),
+                        routingExtras = any(),
+                    )
+                } returns noticeEvent
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = capture(capturedHostText),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns ephemeralEvent
+
+                service.addParticipants(event = event)
+
+                then("each added user gets the Accept/Decline approval notice") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleApplyRejectRequest(
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandBasicInfo = any(),
+                            approvalContents = any(),
+                            targetUserId = "U_A",
+                            routingExtras = any(),
+                        )
+                    }
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleApplyRejectRequest(
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandBasicInfo = any(),
+                            approvalContents = any(),
+                            targetUserId = "U_B",
+                            routingExtras = any(),
+                        )
+                    }
+                }
+
+                then("the host gets an in-channel confirmation mentioning the added users") {
+                    capturedHostText.captured shouldBe "Added <@U_A> <@U_B> to the meeting."
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            textMessage = any(),
+                            commandBasicInfo = basic,
+                            commandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                            targetUserId = requesterId,
+                        )
+                    }
+                }
+            }
+
+            `when`("the repository rejects a non-host requester") {
+                // The ADDED branch above already recorded simpleApplyRejectRequest calls on this shared
+                // mock; clear them so the exactly-0 verification below counts only this branch.
+                clearMocks(slackEventBuilder)
+                val capturedHostText = slot<String>()
+                every {
+                    meetingRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A", "U_B"),
+                    )
+                } returns AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = capture(capturedHostText),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns ephemeralEvent
+
+                service.addParticipants(event = event)
+
+                then("no approval notice is sent and the host sees a not-authorized ephemeral") {
+                    verify(exactly = 0) {
+                        slackEventBuilder.simpleApplyRejectRequest(
+                            commandDetailType = any(),
+                            commandBasicInfo = any(),
+                            approvalContents = any(),
+                            targetUserId = any(),
+                            routingExtras = any(),
+                        )
+                    }
+                    capturedHostText.captured shouldBe "Meeting was canceled, or you are not the host."
                 }
             }
         }

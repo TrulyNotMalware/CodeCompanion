@@ -1,6 +1,8 @@
 package dev.notypie.impl.command
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.event.AddParticipantEvent
+import dev.notypie.domain.command.entity.event.AddParticipantPayload
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
@@ -178,6 +180,7 @@ class SlackIntentResolver(
                         triggerId = intent.triggerId,
                         meetingUid = intent.meetingUid,
                         requesterId = intent.requesterId,
+                        channel = intent.channel,
                         // The open-modal intent does not carry the meeting's stored start; defaulting
                         // the pickers to "now" is sufficient since the host adjusts both before submit.
                         currentStartAt = java.time.LocalDateTime.now(),
@@ -193,7 +196,45 @@ class SlackIntentResolver(
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             newStartAt = intent.newStartAt,
-                            responseBasicInfo = basicInfo,
+                            // A view_submission carries no channel; use the one ferried through the
+                            // modal so the host's confirmation posts back into the list's channel.
+                            responseBasicInfo =
+                                basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
+                        ),
+                    type = intent.commandDetailType,
+                )
+            }
+
+            is CommandIntent.OpenAddParticipantModal -> {
+                if (intent.triggerId.isBlank()) {
+                    log.warn {
+                        "Blank triggerId; cannot open add-participant modal for meetingUid=${intent.meetingUid}"
+                    }
+                    null
+                } else {
+                    slackEventBuilder.openAddParticipantModalRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = intent.commandDetailType,
+                        triggerId = intent.triggerId,
+                        meetingUid = intent.meetingUid,
+                        requesterId = intent.requesterId,
+                        channel = intent.channel,
+                    )
+                }
+            }
+
+            is CommandIntent.AddParticipant -> {
+                AddParticipantEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        AddParticipantPayload(
+                            meetingUid = intent.meetingUid,
+                            requesterId = intent.requesterId,
+                            participantUserIds = intent.participantUserIds,
+                            // A view_submission carries no channel; use the one ferried through the
+                            // modal so the host's confirmation posts back into the list's channel.
+                            responseBasicInfo =
+                                basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
                         ),
                     type = intent.commandDetailType,
                 )

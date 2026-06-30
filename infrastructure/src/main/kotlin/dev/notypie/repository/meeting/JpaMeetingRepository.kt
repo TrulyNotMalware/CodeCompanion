@@ -149,7 +149,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
     @Query(
         """
             SELECT m FROM meetings m
-            JOIN FETCH m.participants
+            LEFT JOIN FETCH m.participants
             WHERE m.meetingUid = :meetingUid
         """,
     )

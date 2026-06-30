@@ -87,6 +87,21 @@ object MeetingActionIds {
 
     const val RESCHEDULE_BLOCK_ID: String = "meeting_reschedule_block"
     const val RESCHEDULE_ACTION_ID: String = "meeting_reschedule_button"
+
+    const val ADD_PARTICIPANT_ACTION_ID: String = "meeting_add_participant_button"
+}
+
+/**
+ * Identifiers for the add-participant modal opened when a host clicks "Add participant" on
+ * `/meetup list`. The multi-users select is read back by
+ * [dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext], which keeps its
+ * own copy of [USERS_BLOCK_ID] (the domain module can't depend on templating). Keep the two in sync.
+ */
+object AddParticipantModalIds {
+    const val CALLBACK_ID: String = "add_participant_modal"
+
+    const val USERS_BLOCK_ID: String = "add_participant_users"
+    const val USERS_ACTION_ID: String = "add_participant_users_select"
 }
 
 /**

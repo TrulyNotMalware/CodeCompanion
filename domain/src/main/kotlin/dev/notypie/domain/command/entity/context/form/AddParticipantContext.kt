@@ -13,7 +13,14 @@ import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.util.UUID
 
-internal class RescheduleMeetingContext(
+/**
+ * "Add participant" button on `/meetup list` carries `<listIdempotencyKey>,ADD_PARTICIPANT,<meetingUid>`.
+ * The parser surfaces the meetingUid as the first routing extra and the live `trigger_id` on the
+ * payload. We emit [CommandIntent.OpenAddParticipantModal] so the resolver opens the modal
+ * synchronously before the trigger_id expires — mirroring [RescheduleMeetingContext]. Missing/malformed
+ * extras or a blank trigger_id fall through to a no-op response; the resolver also guards the trigger_id.
+ */
+internal class AddParticipantContext(
     commandBasicInfo: CommandBasicInfo,
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
@@ -26,15 +33,8 @@ internal class RescheduleMeetingContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.RESCHEDULE_MEETING
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.ADD_PARTICIPANT
 
-    /**
-     * Reschedule button on `/meetup list` carries `<listIdempotencyKey>,RESCHEDULE_MEETING,<meetingUid>`.
-     * The parser surfaces the meetingUid as the first routing extra and the live `trigger_id` on the
-     * payload. We emit [CommandIntent.OpenRescheduleMeetingModal] so the resolver opens the modal
-     * synchronously before the trigger_id expires. Missing/malformed extras or a blank trigger_id
-     * fall through to a no-op response — the resolver also guards against a blank trigger_id.
-     */
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
         val meetingUid =
             interactionPayload.routingExtras
@@ -42,7 +42,7 @@ internal class RescheduleMeetingContext(
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return successOutput()
         addIntent(
-            CommandIntent.OpenRescheduleMeetingModal(
+            CommandIntent.OpenAddParticipantModal(
                 triggerId = interactionPayload.triggerId,
                 meetingUid = meetingUid,
                 requesterId = interactionPayload.user.id,

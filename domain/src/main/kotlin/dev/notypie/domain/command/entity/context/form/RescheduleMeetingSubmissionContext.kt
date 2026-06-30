@@ -52,6 +52,9 @@ internal class RescheduleMeetingSubmissionContext(
                 .firstOrNull()
                 ?.takeIf { it.isNotBlank() }
                 ?: interactionPayload.user.id
+        // routingExtras[1] is the originating channel (ferried via private_metadata) so the host's
+        // confirmation can be posted in-channel; a view_submission payload itself has no channel.
+        val channel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
         val newStartAt =
             parseNewStartAt(interactionPayload = interactionPayload)
                 ?: return successOutput()
@@ -61,6 +64,7 @@ internal class RescheduleMeetingSubmissionContext(
                 meetingUid = meetingUid,
                 requesterId = requesterId,
                 newStartAt = newStartAt,
+                channel = channel,
             ),
         )
         return successOutput()

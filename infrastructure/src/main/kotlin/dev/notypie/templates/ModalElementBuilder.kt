@@ -113,6 +113,28 @@ class ModalElementBuilder {
                     .build(),
         )
 
+    /**
+     * Neutral-style button used to add participants to a meeting from the inline `/meetup list` row.
+     * Routing is driven entirely by the comma-tokenized [interactionPayload] value
+     * (`idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`), so the default style here
+     * only distinguishes it visually from the PRIMARY Reschedule and DANGER Cancel buttons beside it.
+     */
+    fun addParticipantButtonElement(
+        buttonName: String,
+        interactionPayload: String,
+        actionId: String = MeetingActionIds.ADD_PARTICIPANT_ACTION_ID,
+    ): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.APPLY_BUTTON),
+            element =
+                ButtonElement
+                    .builder()
+                    .text(plainTextObject(text = buttonName))
+                    .actionId(actionId)
+                    .value(interactionPayload)
+                    .build(),
+        )
+
     private fun buttonElement(
         buttonName: String,
         interactionPayload: String,

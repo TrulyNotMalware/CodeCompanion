@@ -4,8 +4,10 @@ import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.SlackCommandData
+import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -14,8 +16,11 @@ import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
+import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.transaction.Transactional
@@ -177,6 +182,115 @@ class MeetingServiceImpl(
                 commandBasicInfo = basicInfo,
                 commandDetailType = CommandDetailType.CANCEL_MEETING,
                 targetUserId = payload.requesterId,
+            )
+        eventPublisher.publishOne(event = ephemeralEvent)
+    }
+
+    /**
+     * Adds participants to an existing meeting on behalf of a host who submitted the add-participant
+     * modal opened from `/meetup list`. Authorization (host-only), de-duplication, the already-started
+     * guard, and the `MAX_PARTICIPANTS` invariant are all enforced by [MeetingRepository.addParticipants]
+     * through the Meeting aggregate. On success each newly added user receives the same Accept/Decline
+     * approval notice the creation flow sends (keyed by the meeting's idempotency key so their decision
+     * updates the right meeting), and the host gets an in-channel confirmation ephemeral.
+     */
+    @EventListener
+    fun addParticipants(event: AddParticipantEvent) {
+        val payload = event.payload
+        val basicInfo = payload.responseBasicInfo
+        val result =
+            runCatching {
+                meetingRepository.addParticipants(
+                    meetingUid = payload.meetingUid,
+                    requesterId = payload.requesterId,
+                    participantUserIds = payload.participantUserIds,
+                )
+            }.getOrElse { exception ->
+                log.error(exception) {
+                    "Failed to add participants meetingUid=${payload.meetingUid} " +
+                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
+                }
+                publishHostEphemeral(
+                    message = "Failed to add participants. Please try again later.",
+                    basicInfo = basicInfo,
+                    targetUserId = payload.requesterId,
+                )
+                return
+            }
+
+        val meeting = result.meeting
+        if (result.outcome == AddParticipantResult.Outcome.ADDED && meeting != null) {
+            notifyAddedParticipants(meeting = meeting, addedUserIds = result.addedUserIds, basicInfo = basicInfo)
+        }
+        publishHostEphemeral(
+            message = addParticipantMessage(result = result),
+            basicInfo = basicInfo,
+            targetUserId = payload.requesterId,
+        )
+    }
+
+    private fun addParticipantMessage(result: AddParticipantResult): String =
+        when (result.outcome) {
+            AddParticipantResult.Outcome.ADDED -> {
+                val mentions = result.addedUserIds.joinToString(" ") { "<@$it>" }
+                "Added $mentions to the meeting."
+            }
+
+            AddParticipantResult.Outcome.NO_NEW_PARTICIPANTS ->
+                "Those people are already on this meeting."
+
+            AddParticipantResult.Outcome.OVER_CAPACITY ->
+                "That would exceed the ${Meeting.MAX_PARTICIPANTS}-participant limit for a meeting."
+
+            AddParticipantResult.Outcome.MEETING_STARTED ->
+                "This meeting has already started, so participants can no longer be added."
+
+            AddParticipantResult.Outcome.NOT_AUTHORIZED ->
+                "Meeting was canceled, or you are not the host."
+
+            AddParticipantResult.Outcome.MEETING_NOT_FOUND ->
+                "That meeting no longer exists."
+        }
+
+    private fun notifyAddedParticipants(meeting: MeetingDto, addedUserIds: List<String>, basicInfo: CommandBasicInfo) {
+        val approvalContents =
+            ApprovalContents(
+                headLineText = "Meeting Request!",
+                reason = "You've been added to this meeting.",
+                subTitle = meeting.title,
+                // Key the notice by the meeting's own idempotencyKey so the recipient's Accept/Decline
+                // updates this meeting's participant row (mirrors the creation-time notice).
+                idempotencyKey = meeting.idempotencyKey,
+                publisherId = meeting.creator,
+                commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+            )
+        val noticeBasicInfo =
+            CommandBasicInfo.forOutbound(
+                publisherId = meeting.creator,
+                channel = basicInfo.channel,
+                appId = basicInfo.appId,
+                idempotencyKey = meeting.idempotencyKey,
+            )
+        addedUserIds.forEach { userId ->
+            val noticeEvent =
+                slackEventBuilder.simpleApplyRejectRequest(
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    commandBasicInfo = noticeBasicInfo,
+                    approvalContents = approvalContents,
+                    targetUserId = userId,
+                    routingExtras = listOf(meeting.title).filter { it.isNotBlank() },
+                )
+            eventPublisher.publishOne(event = noticeEvent)
+        }
+    }
+
+    private fun publishHostEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
+        val ephemeralEvent =
+            slackEventBuilder.simpleEphemeralTextRequest(
+                textMessage = message,
+                commandBasicInfo = basicInfo,
+                commandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                targetUserId = targetUserId,
             )
         eventPublisher.publishOne(event = ephemeralEvent)
     }

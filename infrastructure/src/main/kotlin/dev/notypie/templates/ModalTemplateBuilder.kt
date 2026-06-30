@@ -384,11 +384,12 @@ class ModalTemplateBuilder(
         meetingUid: UUID,
         currentStartAt: LocalDateTime,
         requesterId: String,
+        channel: String,
     ): String {
         // Token order must match SlackInteractionRequestParser: idempotencyKey (the meetingUid),
         // detailType, then routingExtras[0..n]. RescheduleMeetingSubmissionContext reads
-        // routingExtras[0] as requesterId. The pickers are pre-filled with the meeting's current
-        // start so a host only has to change the part that moved.
+        // routingExtras[0] as requesterId and routingExtras[1] as the originating channel. The pickers
+        // are pre-filled with the meeting's current start so a host only changes the part that moved.
         val view =
             modal {
                 callbackId(id = RescheduleMeetingModalIds.CALLBACK_ID)
@@ -398,6 +399,7 @@ class ModalTemplateBuilder(
                             meetingUid.toString(),
                             CommandDetailType.RESCHEDULE_MEETING_SUBMIT.name,
                             requesterId,
+                            channel,
                         ).joinToString(","),
                 )
                 title(text = "Reschedule meeting")
@@ -416,6 +418,39 @@ class ModalTemplateBuilder(
                         timePicker(
                             actionId = RescheduleMeetingModalIds.TIME_ACTION_ID,
                             initialTime = currentStartAt.format(RESCHEDULE_TIME_FORMAT),
+                        )
+                    }
+                }
+            }
+        return jsonMapper.writeValueAsString(view)
+    }
+
+    override fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String {
+        // Token order must match SlackInteractionRequestParser: idempotencyKey (the meetingUid),
+        // detailType, then routingExtras[0..n]. AddParticipantSubmissionContext reads routingExtras[0]
+        // as requesterId, routingExtras[1] as the originating channel, and the multi-users select
+        // (by block id) as the user ids to add.
+        val view =
+            modal {
+                callbackId(id = AddParticipantModalIds.CALLBACK_ID)
+                privateMetadata(
+                    metadata =
+                        listOf(
+                            meetingUid.toString(),
+                            CommandDetailType.ADD_PARTICIPANT_SUBMIT.name,
+                            requesterId,
+                            channel,
+                        ).joinToString(","),
+                )
+                title(text = "Add participants")
+                submit(text = "Add")
+                close(text = "Cancel")
+                blocks {
+                    input(blockId = AddParticipantModalIds.USERS_BLOCK_ID) {
+                        label(text = "Participants to add")
+                        multiUsersSelect(
+                            actionId = AddParticipantModalIds.USERS_ACTION_ID,
+                            placeholder = "Select people",
                         )
                     }
                 }
