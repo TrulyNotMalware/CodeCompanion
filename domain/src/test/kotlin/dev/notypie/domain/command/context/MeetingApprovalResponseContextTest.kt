@@ -8,6 +8,8 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedRejectButtonStates
 import dev.notypie.domain.meet.entity.RejectReason
@@ -174,10 +176,10 @@ class MeetingApprovalResponseContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("no EphemeralResponse 'Select participants' intent should ever be emitted") {
+                then("no 'Select participants' ephemeral should ever be emitted") {
                     intents.none { intent ->
-                        intent is CommandIntent.EphemeralResponse &&
-                            intent.message.contains("Select participants")
+                        intent is OutboundMessage.Ephemeral &&
+                            (intent.content as? MessageContent.Text)?.markdown?.contains("Select participants") == true
                     } shouldBe true
                 }
 

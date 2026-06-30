@@ -17,6 +17,9 @@ import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDateTime
@@ -87,9 +90,15 @@ internal class RequestMeetingContext(
     }
 
     private fun listArgumentError(commandDetailType: CommandDetailType, message: String): CommandOutput {
-        // Leave targetUserId null so the ephemeral posts into the command's channel and is
+        // Leave recipient null so the ephemeral posts into the command's channel and is
         // visible only to publisherId — chat.postEphemeral requires a channel ID, not a user ID.
-        addIntent(CommandIntent.EphemeralResponse(message = message))
+        addOutbound(
+            OutboundMessage.Ephemeral(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                recipient = null,
+                content = MessageContent.Text(headline = null, markdown = message),
+            ),
+        )
         return CommandOutput.fail(
             basicInfo = commandBasicInfo,
             commandType = commandType,

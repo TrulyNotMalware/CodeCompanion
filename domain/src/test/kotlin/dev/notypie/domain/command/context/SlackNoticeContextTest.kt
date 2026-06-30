@@ -6,7 +6,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.SlackNoticeContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -53,13 +54,13 @@ class SlackNoticeContextTest :
                     result.commandDetailType shouldBe CommandDetailType.SIMPLE_TEXT
                 }
 
-                then("should add Notice intent to the queue") {
+                then("should add a Notice outbound to the queue") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.Notice>()
-                    val noticeIntent = intents.first() as CommandIntent.Notice
-                    noticeIntent.targetUserIds shouldBe listOf("U001", "U002")
-                    noticeIntent.message shouldBe "deploy notify check"
+                    val notice = intents.first().shouldBeInstanceOf<OutboundMessage.Notice>()
+                    notice.target.id shouldBe testCommandBasicInfo.channel
+                    notice.mentions shouldBe listOf(UserRef(id = "U001"), UserRef(id = "U002"))
+                    notice.message shouldBe "deploy notify check"
                 }
             }
         }
@@ -108,12 +109,11 @@ class SlackNoticeContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add Notice intent with empty targets") {
+                then("should add a Notice outbound with empty mentions") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.Notice>()
-                    val noticeIntent = intents.first() as CommandIntent.Notice
-                    noticeIntent.targetUserIds shouldBe emptyList()
+                    val notice = intents.first().shouldBeInstanceOf<OutboundMessage.Notice>()
+                    notice.mentions shouldBe emptyList()
                 }
             }
         }

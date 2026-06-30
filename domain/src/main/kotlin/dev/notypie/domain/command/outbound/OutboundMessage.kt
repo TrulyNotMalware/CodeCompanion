@@ -16,7 +16,7 @@ sealed interface OutboundMessage : CommandEffect {
 
     data class Ephemeral(
         val target: ConversationTarget,
-        val recipient: UserRef,
+        val recipient: UserRef? = null,
         val content: MessageContent,
     ) : OutboundMessage
 

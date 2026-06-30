@@ -6,7 +6,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -52,14 +53,14 @@ class DetailErrorAlertContextTest :
                     result.commandType shouldBe CommandType.SIMPLE
                 }
 
-                then("should add ErrorDetail intent to the queue") {
+                then("should add a ChannelMessage ErrorNotice outbound to the queue") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ErrorDetail>()
-                    val errorIntent = intents.first() as CommandIntent.ErrorDetail
-                    errorIntent.errorClassName shouldBe "TestClass"
-                    errorIntent.errorMessage shouldBe "Something went wrong"
-                    errorIntent.details shouldBe "Detailed error info"
+                    val channelMessage = intents.first().shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    val content = channelMessage.content.shouldBeInstanceOf<MessageContent.ErrorNotice>()
+                    content.className shouldBe "TestClass"
+                    content.message shouldBe "Something went wrong"
+                    content.details shouldBe "Detailed error info"
                 }
             }
         }
@@ -87,12 +88,11 @@ class DetailErrorAlertContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("should add ErrorDetail intent with null details") {
+                then("should add a ChannelMessage ErrorNotice outbound with null details") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ErrorDetail>()
-                    val errorIntent = intents.first() as CommandIntent.ErrorDetail
-                    errorIntent.details shouldBe null
+                    val channelMessage = intents.first().shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    channelMessage.content.shouldBeInstanceOf<MessageContent.ErrorNotice>().details shouldBe null
                 }
             }
         }

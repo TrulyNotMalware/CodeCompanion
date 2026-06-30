@@ -7,8 +7,10 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 
 internal class SlackTextResponseContext(
     private val text: String,
@@ -26,7 +28,12 @@ internal class SlackTextResponseContext(
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
-        addIntent(CommandIntent.TextResponse(headLine = "Simple Text Response", message = text))
+        addOutbound(
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content = MessageContent.Text(headline = "Simple Text Response", markdown = text),
+            ),
+        )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

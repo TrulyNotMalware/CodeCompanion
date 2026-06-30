@@ -10,6 +10,8 @@ import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -102,11 +104,14 @@ class RequestMeetingCommandTest :
                 val result = command.handleEvent()
                 val intents = command.drainIntents()
 
-                then("should fail and emit EphemeralResponse with Unknown range message") {
+                then("should fail and emit Ephemeral outbound with Unknown range message") {
                     result.ok shouldBe false
                     intents.size shouldBe 1
-                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    intent.message.contains("Unknown range 'bogus'") shouldBe true
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown
+                        .contains("Unknown range 'bogus'") shouldBe true
                 }
             }
         }

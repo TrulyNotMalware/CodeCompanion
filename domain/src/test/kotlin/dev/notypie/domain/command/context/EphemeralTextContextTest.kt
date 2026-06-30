@@ -7,7 +7,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.EphemeralTextResponseContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -35,9 +36,10 @@ class EphemeralTextContextTest :
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    val ephemeralIntent = intents.first() as CommandIntent.EphemeralResponse
-                    ephemeralIntent.message shouldBe "test message"
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.recipient shouldBe null
+                    ephemeral.target.id shouldBe testCommandBasicInfo.channel
+                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "test message"
                 }
             }
         }
@@ -61,9 +63,8 @@ class EphemeralTextContextTest :
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    val ephemeralIntent = intents.first() as CommandIntent.EphemeralResponse
-                    ephemeralIntent.message shouldBe "error occurred"
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "error occurred"
                 }
             }
         }

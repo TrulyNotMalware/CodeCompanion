@@ -7,7 +7,6 @@ import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
-import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
@@ -53,145 +52,6 @@ class SlackIntentResolverTest :
                 commandDetailType = commandDetailType,
                 idempotencyKey = basicInfo.idempotencyKey,
             )
-
-        given("TextResponse intent") {
-            val intent = CommandIntent.TextResponse(headLine = "hi", message = "hello world")
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = any(),
-                    )
-                } returns stubEvent
-
-                val events =
-                    resolver.resolveAll(
-                        intents = listOf(intent),
-                        basicInfo = basicInfo,
-                    )
-
-                then("produces one event via simpleTextRequest with intent fields") {
-                    events shouldHaveSize 1
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleTextRequest(
-                            commandDetailType = commandDetailType,
-                            headLineText = "hi",
-                            commandBasicInfo = basicInfo,
-                            simpleString = "hello world",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("EphemeralResponse intent") {
-            val intent = CommandIntent.EphemeralResponse(message = "secret", targetUserId = "U_TARGET")
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls simpleEphemeralTextRequest with targetUserId") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = "secret",
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = commandDetailType,
-                            targetUserId = "U_TARGET",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("ErrorDetail intent") {
-            val intent =
-                CommandIntent.ErrorDetail(
-                    errorClassName = "TestException",
-                    errorMessage = "something broke",
-                    details = "stack trace",
-                )
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.detailErrorTextRequest(
-                        commandDetailType = any(),
-                        errorClassName = any(),
-                        errorMessage = any(),
-                        details = any(),
-                        commandBasicInfo = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls detailErrorTextRequest with intent default commandDetailType (ERROR_RESPONSE)") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.detailErrorTextRequest(
-                            commandDetailType = CommandDetailType.ERROR_RESPONSE,
-                            errorClassName = "TestException",
-                            errorMessage = "something broke",
-                            details = "stack trace",
-                            commandBasicInfo = basicInfo,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("TimeSchedule intent") {
-            val scheduleInfo =
-                TimeScheduleInfo(
-                    scheduleName = "standup",
-                    startTime = LocalDateTime.now(),
-                    endTime = LocalDateTime.now().plusHours(1),
-                )
-            val intent = CommandIntent.TimeSchedule(headLine = "daily", timeScheduleInfo = scheduleInfo)
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.simpleTimeScheduleRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        timeScheduleInfo = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls simpleTimeScheduleRequest") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleTimeScheduleRequest(
-                            commandDetailType = commandDetailType,
-                            headLineText = "daily",
-                            commandBasicInfo = basicInfo,
-                            timeScheduleInfo = scheduleInfo,
-                        )
-                    }
-                }
-            }
-        }
 
         given("ApplyReject intent") {
             val approvalContents =
@@ -284,35 +144,6 @@ class SlackIntentResolverTest :
                             approvalContents = null,
                         )
                     }
-                }
-            }
-        }
-
-        given("Notice intent") {
-            val intent =
-                CommandIntent.Notice(
-                    targetUserIds = listOf("U1", "U2"),
-                    message = "meeting soon",
-                )
-
-            `when`("resolveAll is called") {
-                val capturedText = slot<String>()
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = capture(capturedText),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("formats Slack mentions and prepends [Notice]") {
-                    capturedText.captured shouldBe "[Notice] <@U1> <@U2> meeting soon"
                 }
             }
         }
@@ -813,13 +644,12 @@ class SlackIntentResolverTest :
         }
 
         given("mixed intents") {
-            `when`("resolveAll is called with TextResponse + Nothing") {
+            `when`("resolveAll is called with MeetingForm + Nothing") {
                 every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
+                    slackEventBuilder.requestMeetingFormRequest(
                         commandBasicInfo = any(),
-                        simpleString = any(),
+                        commandDetailType = any(),
+                        approvalContents = any(),
                     )
                 } returns stubEvent
 
@@ -827,13 +657,13 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents =
                             listOf(
-                                CommandIntent.TextResponse(headLine = "h", message = "m"),
+                                CommandIntent.MeetingForm(approvalContents = null),
                                 CommandIntent.Nothing,
                             ),
                         basicInfo = basicInfo,
                     )
 
-                then("Nothing is filtered out while TextResponse is resolved") {
+                then("Nothing is filtered out while MeetingForm is resolved") {
                     events shouldHaveSize 1
                 }
             }

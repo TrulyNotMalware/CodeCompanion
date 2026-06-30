@@ -43,43 +43,6 @@ class SlackIntentResolver(
 
     private fun resolve(intent: CommandIntent, basicInfo: CommandBasicInfo): CommandEvent<EventPayload>? =
         when (intent) {
-            is CommandIntent.TextResponse -> {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = intent.commandDetailType,
-                    headLineText = intent.headLine,
-                    commandBasicInfo = basicInfo,
-                    simpleString = intent.message,
-                )
-            }
-
-            is CommandIntent.EphemeralResponse -> {
-                slackEventBuilder.simpleEphemeralTextRequest(
-                    textMessage = intent.message,
-                    commandBasicInfo = basicInfo,
-                    commandDetailType = intent.commandDetailType,
-                    targetUserId = intent.targetUserId,
-                )
-            }
-
-            is CommandIntent.ErrorDetail -> {
-                slackEventBuilder.detailErrorTextRequest(
-                    commandDetailType = intent.commandDetailType,
-                    errorClassName = intent.errorClassName,
-                    errorMessage = intent.errorMessage,
-                    details = intent.details,
-                    commandBasicInfo = basicInfo,
-                )
-            }
-
-            is CommandIntent.TimeSchedule -> {
-                slackEventBuilder.simpleTimeScheduleRequest(
-                    commandDetailType = intent.commandDetailType,
-                    headLineText = intent.headLine,
-                    commandBasicInfo = basicInfo,
-                    timeScheduleInfo = intent.timeScheduleInfo,
-                )
-            }
-
             is CommandIntent.ApplyReject -> {
                 // Propagate the human-readable subtitle (meeting title for notice DMs) through
                 // the routing text so context handlers can surface it in follow-up UI without
@@ -105,17 +68,6 @@ class SlackIntentResolver(
                     selectionFields = intent.selectionFields,
                     reasonInput = intent.reasonInput,
                     approvalContents = intent.approvalContents,
-                )
-            }
-
-            is CommandIntent.Notice -> {
-                val userMentions = intent.targetUserIds.joinToString(" ") { "<@$it>" }
-                val noticeText = "[Notice] $userMentions ${intent.message}"
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = intent.commandDetailType,
-                    headLineText = "Notice!",
-                    commandBasicInfo = basicInfo,
-                    simpleString = noticeText,
                 )
             }
 

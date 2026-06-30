@@ -5,8 +5,10 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 
 internal class EphemeralTextResponseContext(
     commandBasicInfo: CommandBasicInfo,
@@ -25,7 +27,13 @@ internal class EphemeralTextResponseContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
-        addIntent(CommandIntent.EphemeralResponse(message = textMessage))
+        addOutbound(
+            OutboundMessage.Ephemeral(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                recipient = null,
+                content = MessageContent.Text(headline = null, markdown = textMessage),
+            ),
+        )
         return if (isOk) {
             CommandOutput.success(
                 basicInfo = commandBasicInfo,

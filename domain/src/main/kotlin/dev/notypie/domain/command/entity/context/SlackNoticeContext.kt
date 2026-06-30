@@ -7,8 +7,10 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 import java.util.*
 
 internal class SlackNoticeContext(
@@ -30,9 +32,10 @@ internal class SlackNoticeContext(
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
-        addIntent(
-            CommandIntent.Notice(
-                targetUserIds = users.toList(),
+        addOutbound(
+            OutboundMessage.Notice(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                mentions = users.toList().map { UserRef(id = it) },
                 message = responseText,
             ),
         )

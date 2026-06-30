@@ -6,8 +6,10 @@ import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 internal class DetailErrorAlertContext(
@@ -28,11 +30,15 @@ internal class DetailErrorAlertContext(
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
-        addIntent(
-            CommandIntent.ErrorDetail(
-                errorClassName = targetClassName,
-                errorMessage = errorMessage,
-                details = details,
+        addOutbound(
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content =
+                    MessageContent.ErrorNotice(
+                        className = targetClassName,
+                        message = errorMessage,
+                        details = details,
+                    ),
             ),
         )
         return CommandOutput.success(

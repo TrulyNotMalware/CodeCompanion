@@ -10,6 +10,7 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -32,6 +33,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  */
 class CommandExecutor(
     private val intentResolver: SlackIntentResolver,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
 ) {
     private val log = KotlinLogging.logger {}
@@ -53,11 +55,8 @@ class CommandExecutor(
     }
 
     private fun <T : SubCommandDefinition> publishIntents(effects: List<CommandEffect>, command: Command<T>) {
-        // OutboundMessage routing is wired in Phase 3c; until then only CommandIntents flow.
-        val outbound = effects.filterIsInstance<OutboundMessage>()
-        check(outbound.isEmpty()) { "OutboundMessage routing is wired in Phase 3c; none should be emitted yet" }
-
         val intents = effects.filterIsInstance<CommandIntent>()
+        val outbound = effects.filterIsInstance<OutboundMessage>()
 
         val basicInfo =
             command.commandData.extractBasicInfo(
@@ -66,14 +65,23 @@ class CommandExecutor(
 
         val resolvedEvents =
             try {
+                // CommandIntents and OutboundMessages are both rendered to staged events; the two
+                // result lists are concatenated, preserving each family's internal order.
                 intentResolver.resolveAll(
                     intents = intents,
                     basicInfo = basicInfo,
-                )
+                ) +
+                    outbound.mapNotNull { message ->
+                        outboundStager.stage(
+                            message = message,
+                            basicInfo = basicInfo,
+                        )
+                    }
             } catch (e: Exception) {
                 log.error(e) {
                     "Intent resolution failed for commandId=${command.commandId} " +
-                        "idempotencyKey=${command.idempotencyKey} intentCount=${intents.size}"
+                        "idempotencyKey=${command.idempotencyKey} intentCount=${intents.size} " +
+                        "outboundCount=${outbound.size}"
                 }
                 throw e
             }

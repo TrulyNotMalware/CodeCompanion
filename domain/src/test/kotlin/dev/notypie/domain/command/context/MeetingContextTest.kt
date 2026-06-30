@@ -13,6 +13,8 @@ import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedDatePickerStates
 import dev.notypie.domain.command.selectedMultiUserSelectStates
@@ -175,15 +177,16 @@ class MeetingContextTest :
             `when`("run command is called") {
                 val result = context.runCommand()
 
-                then("should fail and emit EphemeralResponse with usage hint") {
+                then("should fail and emit Ephemeral outbound with usage hint") {
                     result.ok shouldBe false
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    intent.message.contains("Unknown range 'yesterday'") shouldBe true
-                    intent.message.contains("today | tomorrow | week | month") shouldBe true
-                    // targetUserId must stay null: chat.postEphemeral `channel` needs a channel ID
-                    intent.targetUserId shouldBe null
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    val markdown = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
+                    markdown.contains("Unknown range 'yesterday'") shouldBe true
+                    markdown.contains("today | tomorrow | week | month") shouldBe true
+                    // recipient must stay null: chat.postEphemeral `channel` needs a channel ID
+                    ephemeral.recipient shouldBe null
                 }
             }
         }
@@ -204,12 +207,15 @@ class MeetingContextTest :
             `when`("run command is called") {
                 val result = context.runCommand()
 
-                then("should fail and emit EphemeralResponse for too many args") {
+                then("should fail and emit Ephemeral outbound for too many args") {
                     result.ok shouldBe false
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    val intent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    intent.message.contains("Too many arguments") shouldBe true
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown
+                        .contains("Too many arguments") shouldBe true
                 }
             }
         }
@@ -345,8 +351,10 @@ class MeetingContextTest :
                     res.ok shouldBe false
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    val errorIntent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    errorIntent.message shouldBe "End time must be after start time."
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe "End time must be after start time."
                 }
             }
 
@@ -456,13 +464,12 @@ class MeetingContextTest :
                     )
                 val res = context.handleInteraction(interactionPayload = interactionPayload)
 
-                then("should return fail result and emit EphemeralResponse intent (no ReplaceMessage, no Meeting)") {
+                then("should return fail result and emit Ephemeral outbound (no ReplaceMessage, no Meeting)") {
                     res.ok shouldBe false
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
-                    val errorIntent = intents.first() as CommandIntent.EphemeralResponse
-                    errorIntent.message shouldBe "Select participants"
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "Select participants"
                 }
             }
         }
@@ -504,11 +511,12 @@ class MeetingContextTest :
                     res.ok shouldBe false
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    val errorIntent = intents.first().shouldBeInstanceOf<CommandIntent.EphemeralResponse>()
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    val markdown = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
                     // Message is rendered from the Meeting entity's own validation failure, so the
                     // limit lives in the domain rather than being duplicated in this context.
-                    errorIntent.message.contains("meeting title length") shouldBe true
-                    errorIntent.message.contains("less than ${Meeting.MAX_TITLE_LENGTH}") shouldBe true
+                    markdown.contains("meeting title length") shouldBe true
+                    markdown.contains("less than ${Meeting.MAX_TITLE_LENGTH}") shouldBe true
                 }
             }
         }

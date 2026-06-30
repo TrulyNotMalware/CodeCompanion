@@ -7,7 +7,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.SlackTextResponseContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -49,13 +50,14 @@ class SlackTextResponseContextTest :
                     result.commandType shouldBe CommandType.SIMPLE
                 }
 
-                then("should add TextResponse intent to the queue") {
+                then("should add a ChannelMessage Text outbound to the queue") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.TextResponse>()
-                    val textIntent = intents.first() as CommandIntent.TextResponse
-                    textIntent.headLine shouldBe "Simple Text Response"
-                    textIntent.message shouldBe "Hello from test"
+                    val channelMessage = intents.first().shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    channelMessage.target.id shouldBe basicInfo.channel
+                    val content = channelMessage.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.headline shouldBe "Simple Text Response"
+                    content.markdown shouldBe "Hello from test"
                 }
             }
         }

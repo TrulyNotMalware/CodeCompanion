@@ -6,6 +6,7 @@ import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.IsolationMode
@@ -24,15 +25,17 @@ class CommandExecutorTest :
         isolationMode = IsolationMode.InstancePerLeaf
 
         val intentResolver = mockk<SlackIntentResolver>()
+        val outboundStager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>()
         val executor =
             CommandExecutor(
                 intentResolver = intentResolver,
+                outboundStager = outboundStager,
                 eventPublisher = eventPublisher,
             )
 
         given("a command that produces a single intent") {
-            val intent = CommandIntent.TextResponse(headLine = "hi", message = "world")
+            val intent = CommandIntent.MeetingForm()
             val idempotencyKey = UUID.randomUUID()
             val command =
                 TestCommand(

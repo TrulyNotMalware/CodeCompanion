@@ -3,7 +3,6 @@ package dev.notypie.domain.command.intent
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
-import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
@@ -24,31 +23,6 @@ import java.util.UUID
  */
 sealed class CommandIntent : CommandEffect {
     abstract val commandDetailType: CommandDetailType
-
-    data class TextResponse(
-        val headLine: String,
-        val message: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.SIMPLE_TEXT,
-    ) : CommandIntent()
-
-    data class EphemeralResponse(
-        val message: String,
-        val targetUserId: String? = null,
-        override val commandDetailType: CommandDetailType = CommandDetailType.SIMPLE_TEXT,
-    ) : CommandIntent()
-
-    data class ErrorDetail(
-        val errorClassName: String,
-        val errorMessage: String,
-        val details: String?,
-        override val commandDetailType: CommandDetailType = CommandDetailType.ERROR_RESPONSE,
-    ) : CommandIntent()
-
-    data class TimeSchedule(
-        val headLine: String,
-        val timeScheduleInfo: TimeScheduleInfo,
-        override val commandDetailType: CommandDetailType = CommandDetailType.SIMPLE_TEXT,
-    ) : CommandIntent()
 
     /**
      * The button value embedded by the Slack template uses [ApprovalContents.commandDetailType]
@@ -251,12 +225,6 @@ sealed class CommandIntent : CommandEffect {
         val cutoffMinutes: Long,
         val timezone: java.time.ZoneId,
         override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
-    ) : CommandIntent()
-
-    data class Notice(
-        val targetUserIds: Collection<String>,
-        val message: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.SIMPLE_TEXT,
     ) : CommandIntent()
 
     /**
