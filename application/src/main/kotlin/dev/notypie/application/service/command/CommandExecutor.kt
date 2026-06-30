@@ -7,7 +7,9 @@ import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.SlackIntentResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -39,10 +41,10 @@ class CommandExecutor(
 
         // Drain and resolve intents regardless of success/failure.
         // Error intents (e.g. EphemeralResponse from createErrorResponse) must also reach Slack.
-        val pendingIntents = command.drainIntents()
-        if (pendingIntents.isNotEmpty()) {
+        val pendingEffects = command.drainIntents()
+        if (pendingEffects.isNotEmpty()) {
             publishIntents(
-                intents = pendingIntents,
+                effects = pendingEffects,
                 command = command,
             )
         }
@@ -50,7 +52,13 @@ class CommandExecutor(
         return output
     }
 
-    private fun <T : SubCommandDefinition> publishIntents(intents: List<CommandIntent>, command: Command<T>) {
+    private fun <T : SubCommandDefinition> publishIntents(effects: List<CommandEffect>, command: Command<T>) {
+        // OutboundMessage routing is wired in Phase 3c; until then only CommandIntents flow.
+        val outbound = effects.filterIsInstance<OutboundMessage>()
+        check(outbound.isEmpty()) { "OutboundMessage routing is wired in Phase 3c; none should be emitted yet" }
+
+        val intents = effects.filterIsInstance<CommandIntent>()
+
         val basicInfo =
             command.commandData.extractBasicInfo(
                 idempotencyKey = command.idempotencyKey,

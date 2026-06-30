@@ -22,7 +22,7 @@ import java.util.UUID
  * but is overridden to [CommandDetailType.MEETING_APPROVAL_NOTICE_FORM] when sent as a
  * meeting participant notice).
  */
-sealed class CommandIntent {
+sealed class CommandIntent : CommandEffect {
     abstract val commandDetailType: CommandDetailType
 
     data class TextResponse(

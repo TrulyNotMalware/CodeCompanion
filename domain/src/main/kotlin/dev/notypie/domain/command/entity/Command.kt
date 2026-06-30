@@ -11,7 +11,7 @@ import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.exceptions.UnSupportedCommandException
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.DefaultIntentQueue
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.common.error.exceptionDetails
@@ -26,7 +26,7 @@ abstract class Command<T : SubCommandDefinition>(
     val commandId: UUID = UUID.randomUUID()
 
     /** Returns a defensive copy of accumulated intents and clears the queue. Idempotent for retries. */
-    fun drainIntents(): List<CommandIntent> = intents.drainSnapshot()
+    fun drainIntents(): List<CommandEffect> = intents.drainSnapshot()
 
     internal abstract fun parseContext(subCommand: SubCommand<T>): CommandContext<out T>
 

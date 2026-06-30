@@ -1,13 +1,14 @@
 package dev.notypie.domain.command.outbound
 
 import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.intent.CommandEffect
 
 /**
  * Transport-neutral description of an outbound effect that a CommandContext emits; a transport
  * adapter (Phase 3c SlackOutboundStager) renders it into a staged CommandEvent. No Slack type
  * appears here.
  */
-sealed interface OutboundMessage {
+sealed interface OutboundMessage : CommandEffect {
     data class ChannelMessage(
         val target: ConversationTarget,
         val content: MessageContent,

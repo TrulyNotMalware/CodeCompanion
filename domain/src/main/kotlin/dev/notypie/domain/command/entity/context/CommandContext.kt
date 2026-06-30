@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.OutboundMessage
 
 internal abstract class CommandContext<T : SubCommandDefinition>(
     val commandBasicInfo: CommandBasicInfo,
@@ -42,5 +43,9 @@ internal abstract class CommandContext<T : SubCommandDefinition>(
 
     protected fun addIntent(intent: CommandIntent) {
         intents.offer(intent)
+    }
+
+    protected fun addOutbound(message: OutboundMessage) {
+        intents.offer(message)
     }
 }
