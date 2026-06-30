@@ -7,7 +7,7 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.RequestApprovalContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -53,12 +53,14 @@ class RequestApprovalContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("should add ApplyReject intent to the queue") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ApplyReject>()
-                    val applyRejectIntent = intents.first() as CommandIntent.ApplyReject
-                    applyRejectIntent.approvalContents.reason shouldBe "approve this PR"
+                then("should add an Approval outbound message to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    effects.first().shouldBeInstanceOf<OutboundMessage.Approval>()
+                    val approval = effects.first() as OutboundMessage.Approval
+                    approval.approval.reason shouldBe "approve this PR"
+                    approval.recipient shouldBe null
+                    approval.target.id shouldBe basicInfo.channel
                 }
             }
         }
@@ -85,10 +87,10 @@ class RequestApprovalContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add ApplyReject intent to the queue") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ApplyReject>()
+                then("should add an Approval outbound message to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    effects.first().shouldBeInstanceOf<OutboundMessage.Approval>()
                 }
             }
         }

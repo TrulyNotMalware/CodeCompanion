@@ -9,8 +9,9 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.*
 
 internal class RequestApprovalContext(
@@ -32,7 +33,13 @@ internal class RequestApprovalContext(
     override fun parseCommandDetailType() = CommandDetailType.REQUEST_APPLY_FORM
 
     override fun runCommand(): CommandOutput {
-        addIntent(CommandIntent.ApplyReject(approvalContents = approvalContents))
+        addOutbound(
+            OutboundMessage.Approval(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                recipient = null,
+                approval = approvalContents,
+            ),
+        )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

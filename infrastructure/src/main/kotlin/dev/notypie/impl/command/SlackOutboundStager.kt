@@ -9,10 +9,10 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 
 /**
- * Slack adapter that renders the text family of [OutboundMessage]s into staged [CommandEvent]s,
- * reproducing exactly the builder calls the [SlackIntentResolver] makes for the now-removed
- * `TextResponse`/`EphemeralResponse`/`ErrorDetail`/`TimeSchedule`/`Notice` intents. Non-text
- * variants are not migrated yet and fail loudly.
+ * Slack adapter that renders the text and approval/form families of [OutboundMessage]s into staged
+ * [CommandEvent]s, reproducing exactly the builder calls the [SlackIntentResolver] made for the
+ * now-removed `TextResponse`/`EphemeralResponse`/`ErrorDetail`/`TimeSchedule`/`Notice` intents and the
+ * `ApplyReject`/`ApprovalForm`/`MeetingForm` intents. Variants not yet migrated fail loudly.
  */
 class SlackOutboundStager(
     private val slackEventBuilder: SlackApiEventConstructor,
@@ -46,6 +46,23 @@ class SlackOutboundStager(
                             timeScheduleInfo = content.info,
                         )
 
+                    is MessageContent.Form ->
+                        slackEventBuilder.simpleApprovalFormRequest(
+                            commandDetailType = CommandDetailType.APPROVAL_FORM,
+                            headLineText = content.headline,
+                            commandBasicInfo = basicInfo,
+                            selectionFields = content.fields,
+                            reasonInput = content.reason,
+                            approvalContents = content.approval,
+                        )
+
+                    is MessageContent.MeetingRequest ->
+                        slackEventBuilder.requestMeetingFormRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                            approvalContents = content.approval,
+                        )
+
                     else -> error("not yet migrated: $content")
                 }
 
@@ -59,6 +76,20 @@ class SlackOutboundStager(
                     targetUserId = message.recipient?.id,
                 )
             }
+
+            is OutboundMessage.Approval ->
+                slackEventBuilder.simpleApplyRejectRequest(
+                    commandDetailType = message.approval.commandDetailType,
+                    commandBasicInfo = basicInfo,
+                    approvalContents = message.approval,
+                    targetUserId = message.recipient?.id,
+                    // Propagate the human-readable subtitle (meeting title for notice DMs) through the
+                    // routing text so context handlers can surface it without a separate DB lookup.
+                    // Blank subtitles are filtered out to keep the routing token stable for flows
+                    // that don't use subTitle.
+                    routingExtras =
+                        listOf(message.approval.subTitle).filter { it.isNotBlank() } + message.routingExtras,
+                )
 
             is OutboundMessage.Notice -> {
                 val userMentions = message.mentions.joinToString(" ") { "<@${it.id}>" }

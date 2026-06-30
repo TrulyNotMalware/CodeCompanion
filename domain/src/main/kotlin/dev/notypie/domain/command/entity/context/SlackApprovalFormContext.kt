@@ -9,8 +9,10 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 
 internal class SlackApprovalFormContext(
     commandBasicInfo: CommandBasicInfo,
@@ -27,10 +29,16 @@ internal class SlackApprovalFormContext(
     override fun parseCommandDetailType() = CommandDetailType.APPROVAL_FORM
 
     override fun runCommand(): CommandOutput {
-        addIntent(
-            CommandIntent.ApprovalForm(
-                headLine = "Approve Form",
-                selectionFields = buildSelectionFields(),
+        addOutbound(
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content =
+                    MessageContent.Form(
+                        headline = "Approve Form",
+                        fields = buildSelectionFields(),
+                        reason = null,
+                        approval = null,
+                    ),
             ),
         )
         return CommandOutput.success(

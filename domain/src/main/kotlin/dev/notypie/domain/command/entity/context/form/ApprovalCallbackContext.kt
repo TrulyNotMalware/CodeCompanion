@@ -10,8 +10,10 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 
 internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
@@ -76,10 +78,11 @@ internal class ApprovalCallbackContext(
         commandDetailType: CommandDetailType = this.commandDetailType,
     ): List<CommandOutput> =
         participants.map { participant ->
-            addIntent(
-                CommandIntent.ApplyReject(
-                    approvalContents = approvalContents,
-                    targetUserId = participant,
+            addOutbound(
+                OutboundMessage.Approval(
+                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    recipient = UserRef(id = participant),
+                    approval = approvalContents,
                 ),
             )
             CommandOutput.success(

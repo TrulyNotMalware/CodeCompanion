@@ -8,7 +8,7 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -82,13 +82,13 @@ class ApprovalCallbackContextTest :
                     result.apiAppId shouldBe basicInfo.appId
                 }
 
-                then("intents should be added for each participant") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 3
-                    intents.forEach { intent ->
-                        intent.shouldBeInstanceOf<CommandIntent.ApplyReject>()
+                then("an Approval outbound message should be added for each participant") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 3
+                    effects.forEach { effect ->
+                        effect.shouldBeInstanceOf<OutboundMessage.Approval>()
                     }
-                    val targetUsers = intents.map { (it as CommandIntent.ApplyReject).targetUserId }.toSet()
+                    val targetUsers = effects.map { (it as OutboundMessage.Approval).recipient?.id }.toSet()
                     targetUsers shouldBe participants
                 }
             }
@@ -124,12 +124,12 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("intent should contain custom approval contents") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    val intent = intents.first() as CommandIntent.ApplyReject
-                    intent.approvalContents.reason shouldBe "Custom approval reason"
-                    intent.targetUserId shouldBe "U001"
+                then("outbound message should contain custom approval contents") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    val approval = effects.first() as OutboundMessage.Approval
+                    approval.approval.reason shouldBe "Custom approval reason"
+                    approval.recipient?.id shouldBe "U001"
                 }
             }
         }
@@ -153,10 +153,10 @@ class ApprovalCallbackContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add ApplyReject intent to the queue") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ApplyReject>()
+                then("should add an Approval outbound message to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    effects.first().shouldBeInstanceOf<OutboundMessage.Approval>()
                 }
             }
         }

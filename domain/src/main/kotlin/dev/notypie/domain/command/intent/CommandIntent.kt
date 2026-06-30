@@ -1,8 +1,5 @@
 package dev.notypie.domain.command.intent
 
-import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
@@ -12,46 +9,14 @@ import java.util.UUID
  * Abstract input to the infrastructure resolver.
  *
  * Each variant carries its own [commandDetailType] so that a single command producing
- * heterogeneous intents in one batch (e.g. `RequestMeetingContext` sending a reply to
- * the requester AND notices to participants) can still be routed back to the correct
- * context when the user later interacts with the resulting Slack message.
+ * heterogeneous intents in one batch can still be routed back to the correct context when
+ * the user later interacts with the resulting Slack message.
  *
  * Variants default to their natural detail type, but a producing context may override
- * to change routing (e.g. [ApplyReject] defaults to [CommandDetailType.REQUEST_APPLY_FORM]
- * but is overridden to [CommandDetailType.MEETING_APPROVAL_NOTICE_FORM] when sent as a
- * meeting participant notice).
+ * to change routing.
  */
 sealed class CommandIntent : CommandEffect {
     abstract val commandDetailType: CommandDetailType
-
-    /**
-     * The button value embedded by the Slack template uses [ApprovalContents.commandDetailType]
-     * for click-time routing. Deriving the envelope [commandDetailType] from the same field
-     * enforces a single source of truth: the two can never drift.
-     *
-     * Callers that want a specific routing target should set it on [approvalContents]
-     * when constructing this intent.
-     */
-    data class ApplyReject(
-        val approvalContents: ApprovalContents,
-        val targetUserId: String? = null,
-    ) : CommandIntent() {
-        override val commandDetailType: CommandDetailType
-            get() = approvalContents.commandDetailType
-    }
-
-    data class ApprovalForm(
-        val headLine: String,
-        val selectionFields: List<SelectionContents>,
-        val reasonInput: TextInputContents? = null,
-        val approvalContents: ApprovalContents? = null,
-        override val commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_FORM,
-    ) : CommandIntent()
-
-    data class MeetingForm(
-        val approvalContents: ApprovalContents? = null,
-        override val commandDetailType: CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-    ) : CommandIntent()
 
     data class MeetingListRequest(
         val publisherId: String,

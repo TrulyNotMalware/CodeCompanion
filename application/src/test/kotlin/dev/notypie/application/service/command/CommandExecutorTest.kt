@@ -35,7 +35,7 @@ class CommandExecutorTest :
             )
 
         given("a command that produces a single intent") {
-            val intent = CommandIntent.MeetingForm()
+            val intent = CommandIntent.StatusReport
             val idempotencyKey = UUID.randomUUID()
             val command =
                 TestCommand(

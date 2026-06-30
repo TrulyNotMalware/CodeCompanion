@@ -2,6 +2,10 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createSendSlackMessageEvent
+import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.dto.modals.SelectBoxDetails
+import dev.notypie.domain.command.dto.modals.SelectionContents
+import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -256,6 +260,175 @@ class SlackOutboundStagerTest :
                 then("formats Slack mentions, prepends [Notice], and uses the Notice! headline") {
                     capturedHeadline.captured shouldBe "Notice!"
                     capturedText.captured shouldBe "[Notice] <@U1> <@U2> meeting soon"
+                }
+            }
+        }
+
+        given("an Approval with a recipient and a subTitle") {
+            val approval =
+                ApprovalContents(
+                    reason = "approve this",
+                    subTitle = "Sprint Planning",
+                    publisherId = basicInfo.publisherId,
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                )
+            val message =
+                OutboundMessage.Approval(
+                    target = target,
+                    recipient = UserRef(id = "U_PARTICIPANT"),
+                    approval = approval,
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.simpleApplyRejectRequest(
+                        commandDetailType = any(),
+                        commandBasicInfo = any(),
+                        approvalContents = any(),
+                        targetUserId = any(),
+                        routingExtras = any(),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to simpleApplyRejectRequest, deriving the detail type and routing the subTitle") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleApplyRejectRequest(
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandBasicInfo = basicInfo,
+                            approvalContents = approval,
+                            targetUserId = "U_PARTICIPANT",
+                            routingExtras = listOf("Sprint Planning"),
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an Approval with a blank subTitle and no recipient") {
+            val approval =
+                ApprovalContents(
+                    reason = "approve this",
+                    publisherId = basicInfo.publisherId,
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    commandDetailType = CommandDetailType.REQUEST_APPLY_FORM,
+                )
+            val message =
+                OutboundMessage.Approval(
+                    target = target,
+                    recipient = null,
+                    approval = approval,
+                )
+
+            `when`("stage is called") {
+                val routingSlot = slot<List<String>>()
+                every {
+                    slackEventBuilder.simpleApplyRejectRequest(
+                        commandDetailType = any(),
+                        commandBasicInfo = any(),
+                        approvalContents = any(),
+                        targetUserId = any(),
+                        routingExtras = capture(routingSlot),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("a blank subTitle is filtered out and a null recipient maps to a null targetUserId") {
+                    routingSlot.captured shouldBe emptyList()
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleApplyRejectRequest(
+                            commandDetailType = CommandDetailType.REQUEST_APPLY_FORM,
+                            commandBasicInfo = basicInfo,
+                            approvalContents = approval,
+                            targetUserId = null,
+                            routingExtras = emptyList(),
+                        )
+                    }
+                }
+            }
+        }
+
+        given("a ChannelMessage with Form content") {
+            val fields =
+                listOf(
+                    SelectionContents(
+                        title = "Purpose",
+                        explanation = "Select",
+                        placeholderText = "pick one",
+                        contents = listOf(SelectBoxDetails(name = "A", value = "a")),
+                    ),
+                )
+            val reason = TextInputContents(title = "Reason", placeholderText = "why")
+            val message =
+                OutboundMessage.ChannelMessage(
+                    target = target,
+                    content =
+                        MessageContent.Form(
+                            headline = "Approve",
+                            fields = fields,
+                            reason = reason,
+                            approval = null,
+                        ),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.simpleApprovalFormRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        selectionFields = any(),
+                        reasonInput = any(),
+                        approvalContents = any(),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to simpleApprovalFormRequest with APPROVAL_FORM and the same fields") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleApprovalFormRequest(
+                            commandDetailType = CommandDetailType.APPROVAL_FORM,
+                            headLineText = "Approve",
+                            commandBasicInfo = basicInfo,
+                            selectionFields = fields,
+                            reasonInput = reason,
+                            approvalContents = null,
+                        )
+                    }
+                }
+            }
+        }
+
+        given("a ChannelMessage with MeetingRequest content") {
+            val message =
+                OutboundMessage.ChannelMessage(
+                    target = target,
+                    content = MessageContent.MeetingRequest(approval = null),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.requestMeetingFormRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        approvalContents = any(),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to requestMeetingFormRequest with REQUEST_MEETING_FORM") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.requestMeetingFormRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                            approvalContents = null,
+                        )
+                    }
                 }
             }
         }

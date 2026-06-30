@@ -7,7 +7,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -48,13 +49,13 @@ class SlackApprovalFormContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("should add ApprovalForm intent to the queue") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ApprovalForm>()
-                    val formIntent = intents.first() as CommandIntent.ApprovalForm
-                    formIntent.headLine shouldBe "Approve Form"
-                    formIntent.selectionFields.size shouldBe 1
+                then("should add a Form ChannelMessage to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    val channelMessage = effects.first() as OutboundMessage.ChannelMessage
+                    val form = channelMessage.content.shouldBeInstanceOf<MessageContent.Form>()
+                    form.headline shouldBe "Approve Form"
+                    form.fields.size shouldBe 1
                 }
             }
         }

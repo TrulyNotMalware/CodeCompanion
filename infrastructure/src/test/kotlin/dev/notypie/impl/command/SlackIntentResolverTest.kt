@@ -1,12 +1,8 @@
 package dev.notypie.impl.command
 
-import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createOpenViewEvent
 import dev.notypie.domain.command.createSendSlackMessageEvent
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
@@ -52,130 +48,6 @@ class SlackIntentResolverTest :
                 commandDetailType = commandDetailType,
                 idempotencyKey = basicInfo.idempotencyKey,
             )
-
-        given("ApplyReject intent") {
-            val approvalContents =
-                createApprovalContents(
-                    reason = "test",
-                    publisherId = basicInfo.publisherId,
-                    idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = commandDetailType,
-                )
-            val intent =
-                CommandIntent.ApplyReject(
-                    approvalContents = approvalContents,
-                    targetUserId = "U_TARGET",
-                )
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.simpleApplyRejectRequest(
-                        commandDetailType = any(),
-                        commandBasicInfo = any(),
-                        approvalContents = any(),
-                        targetUserId = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls simpleApplyRejectRequest with commandDetailType derived from approvalContents") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = approvalContents.commandDetailType,
-                            commandBasicInfo = basicInfo,
-                            approvalContents = approvalContents,
-                            targetUserId = "U_TARGET",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("ApprovalForm intent") {
-            val selectionFields =
-                listOf(
-                    SelectionContents(
-                        title = "Purpose",
-                        explanation = "Select",
-                        placeholderText = "pick one",
-                        contents =
-                            listOf(
-                                SelectBoxDetails(name = "A", value = "a"),
-                            ),
-                    ),
-                )
-            val reasonInput = TextInputContents(title = "Reason", placeholderText = "why")
-            val intent =
-                CommandIntent.ApprovalForm(
-                    headLine = "Approve",
-                    selectionFields = selectionFields,
-                    reasonInput = reasonInput,
-                )
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.simpleApprovalFormRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        selectionFields = any(),
-                        reasonInput = any(),
-                        approvalContents = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls simpleApprovalFormRequest with intent default commandDetailType (APPROVAL_FORM)") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_FORM,
-                            headLineText = "Approve",
-                            commandBasicInfo = basicInfo,
-                            selectionFields = selectionFields,
-                            reasonInput = reasonInput,
-                            approvalContents = null,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("MeetingForm intent") {
-            val intent = CommandIntent.MeetingForm(approvalContents = null)
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.requestMeetingFormRequest(
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        approvalContents = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls requestMeetingFormRequest with intent default (REQUEST_MEETING_FORM)") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.requestMeetingFormRequest(
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                            approvalContents = null,
-                        )
-                    }
-                }
-            }
-        }
 
         given("MeetingListRequest intent") {
             val startDate = LocalDateTime.now()
@@ -591,9 +463,9 @@ class SlackIntentResolverTest :
         }
 
         given("mixed intents with heterogeneous commandDetailType (regression for intent routing collapse)") {
-            `when`("resolveAll is called with ReplaceMessage + ApplyReject in one batch") {
+            `when`("resolveAll is called with ReplaceMessage + UpdateNoticeMessage in one batch") {
                 val replaceSlot = slot<CommandDetailType>()
-                val applyRejectSlot = slot<CommandDetailType>()
+                val updateNoticeSlot = slot<CommandDetailType>()
                 every {
                     slackEventBuilder.replaceOriginalText(
                         markdownText = any(),
@@ -603,31 +475,25 @@ class SlackIntentResolverTest :
                     )
                 } returns stubEvent
                 every {
-                    slackEventBuilder.simpleApplyRejectRequest(
-                        commandDetailType = capture(applyRejectSlot),
+                    slackEventBuilder.updateNoticeMessageRequest(
                         commandBasicInfo = any(),
-                        approvalContents = any(),
-                        targetUserId = any(),
+                        commandDetailType = capture(updateNoticeSlot),
+                        channel = any(),
+                        messageTs = any(),
+                        markdownText = any(),
                     )
                 } returns stubEvent
 
-                val approvalContents =
-                    createApprovalContents(
-                        reason = "notice",
-                        publisherId = basicInfo.publisherId,
-                        idempotencyKey = basicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-                    )
                 val intents =
                     listOf(
                         CommandIntent.ReplaceMessage(
                             markdownText = "done",
                             responseUrl = "https://hooks.slack.com/x",
                         ),
-                        // ApplyReject derives commandDetailType from approvalContents
-                        CommandIntent.ApplyReject(
-                            approvalContents = approvalContents,
-                            targetUserId = "U_PARTICIPANT",
+                        CommandIntent.UpdateNoticeMessage(
+                            channel = "C_NOTICE",
+                            messageTs = "1700000000.000200",
+                            markdownText = "declined",
                         ),
                     )
 
@@ -638,18 +504,19 @@ class SlackIntentResolverTest :
 
                 then("each intent's own commandDetailType is preserved, not collapsed to a single command-level type") {
                     replaceSlot.captured shouldBe CommandDetailType.REPLACE_TEXT
-                    applyRejectSlot.captured shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    updateNoticeSlot.captured shouldBe CommandDetailType.DECLINE_REASON_MODAL
                 }
             }
         }
 
         given("mixed intents") {
-            `when`("resolveAll is called with MeetingForm + Nothing") {
+            `when`("resolveAll is called with ReplaceMessage + Nothing") {
                 every {
-                    slackEventBuilder.requestMeetingFormRequest(
+                    slackEventBuilder.replaceOriginalText(
+                        markdownText = any(),
+                        responseUrl = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
-                        approvalContents = any(),
                     )
                 } returns stubEvent
 
@@ -657,13 +524,16 @@ class SlackIntentResolverTest :
                     resolver.resolveAll(
                         intents =
                             listOf(
-                                CommandIntent.MeetingForm(approvalContents = null),
+                                CommandIntent.ReplaceMessage(
+                                    markdownText = "done",
+                                    responseUrl = "https://hooks.slack.com/x",
+                                ),
                                 CommandIntent.Nothing,
                             ),
                         basicInfo = basicInfo,
                     )
 
-                then("Nothing is filtered out while MeetingForm is resolved") {
+                then("Nothing is filtered out while ReplaceMessage is resolved") {
                     events shouldHaveSize 1
                 }
             }

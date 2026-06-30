@@ -50,15 +50,16 @@ class MeetingContextTest :
             `when`("runCommand with no sub command") {
                 val result = noSubCommandContext.runCommand()
 
-                then("should return success result and create MeetingForm intent") {
+                then("should return success result and create a MeetingRequest ChannelMessage") {
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
                     result.commandDetailType shouldBe CommandDetailType.REQUEST_MEETING_FORM
 
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.MeetingForm>()
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    val channelMessage = effects.first() as OutboundMessage.ChannelMessage
+                    channelMessage.content.shouldBeInstanceOf<MessageContent.MeetingRequest>()
                 }
             }
         }

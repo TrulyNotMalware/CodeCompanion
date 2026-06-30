@@ -45,7 +45,12 @@ internal class RequestMeetingContext(
             MeetingSubCommandDefinition.LIST -> return runListSubCommand(commandDetailType = commandDetailType)
 
             else -> {
-                addIntent(CommandIntent.MeetingForm())
+                addOutbound(
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = commandBasicInfo.channel),
+                        content = MessageContent.MeetingRequest(approval = null),
+                    ),
+                )
             }
         }
         return CommandOutput.success(
