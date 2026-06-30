@@ -3,10 +3,10 @@ package dev.notypie.impl.command
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.command.createActionEventPayloadContents
 import dev.notypie.domain.command.createPostEventPayloadContents
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.MessageType
-import dev.notypie.domain.history.entity.Status
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage

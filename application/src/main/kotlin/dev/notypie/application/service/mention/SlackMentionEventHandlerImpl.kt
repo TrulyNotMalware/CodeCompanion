@@ -5,7 +5,6 @@ import dev.notypie.application.exception.AppIdNotFoundException
 import dev.notypie.application.exception.PayloadParseErrorCode
 import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
 import dev.notypie.application.service.command.CommandExecutor
-import dev.notypie.application.service.history.HistoryHandler
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.dto.SlackCommandData
@@ -14,8 +13,6 @@ import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.common.error.exceptionDetails
-import dev.notypie.domain.history.entity.History
-import dev.notypie.domain.history.mapper.mapHistory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
@@ -23,13 +20,11 @@ import java.util.UUID
 
 @Service
 class SlackMentionEventHandlerImpl(
-    private val historyHandler: HistoryHandler,
     private val commandExecutor: CommandExecutor,
 ) : AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
         const val SLACK_APP_NAME = "CodeCompanion"
-        const val REQUEST_TYPE = "APP_MENTION"
     }
 
     // FIXME Remove AppMention Events.
@@ -72,10 +67,7 @@ class SlackMentionEventHandlerImpl(
     override fun handleEvent(slackCommandData: SlackCommandData): CommandOutput {
         val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
         val command = buildCommand(idempotencyKey = idempotencyKey, commandData = slackCommandData)
-        val result: CommandOutput = commandExecutor.execute(command = command)
-        val history: History = mapHistory(requestType = REQUEST_TYPE, slackApiResponse = result)
-        historyHandler.saveNewHistory(history = history)
-        return result
+        return commandExecutor.execute(command = command)
     }
 
     private fun resolveAppId(payload: Map<String, Any>) =

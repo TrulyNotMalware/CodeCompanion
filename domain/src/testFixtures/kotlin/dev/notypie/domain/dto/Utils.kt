@@ -2,9 +2,9 @@ package dev.notypie.domain.dto
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.history.entity.Status
 
 fun CommandOutput.isEmpty(): Boolean =
     apiAppId.isEmpty() &&

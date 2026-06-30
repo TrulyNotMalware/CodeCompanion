@@ -1,4 +1,4 @@
-package dev.notypie.domain.history.entity
+package dev.notypie.domain.command.dto.response
 
 enum class Status {
     IN_PROGRESSED,

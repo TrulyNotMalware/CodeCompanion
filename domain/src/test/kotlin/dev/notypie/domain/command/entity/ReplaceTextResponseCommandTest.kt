@@ -3,7 +3,7 @@ package dev.notypie.domain.command.entity
 import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.history.entity.Status
+import dev.notypie.domain.command.dto.response.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf

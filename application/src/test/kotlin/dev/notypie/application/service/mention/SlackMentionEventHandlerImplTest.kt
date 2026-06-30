@@ -3,7 +3,6 @@ package dev.notypie.application.service.mention
 import dev.notypie.application.exception.AppIdNotFoundException
 import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
 import dev.notypie.application.service.command.CommandExecutor
-import dev.notypie.application.service.history.HistoryHandler
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_CHANNEL_ID
@@ -17,12 +16,10 @@ import org.springframework.util.LinkedMultiValueMap
 
 class SlackMentionEventHandlerImplTest :
     BehaviorSpec({
-        val historyHandler = mockk<HistoryHandler>(relaxed = true)
         val commandExecutor = mockk<CommandExecutor>(relaxed = true)
 
         val handler =
             SlackMentionEventHandlerImpl(
-                historyHandler = historyHandler,
                 commandExecutor = commandExecutor,
             )
 

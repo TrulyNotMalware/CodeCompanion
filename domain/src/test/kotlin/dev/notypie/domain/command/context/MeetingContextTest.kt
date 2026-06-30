@@ -5,6 +5,7 @@ import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.MeetingFormInput
@@ -18,7 +19,6 @@ import dev.notypie.domain.command.selectedMultiUserSelectStates
 import dev.notypie.domain.command.selectedPlainTextStates
 import dev.notypie.domain.command.selectedRejectButtonStates
 import dev.notypie.domain.command.selectedTimePickerStates
-import dev.notypie.domain.history.entity.Status
 import dev.notypie.domain.meet.entity.Meeting
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.longs.shouldBeLessThanOrEqual

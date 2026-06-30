@@ -11,8 +11,8 @@ import dev.notypie.domain.command.createSlackEventCallBackRequest
 import dev.notypie.domain.command.createTextElement
 import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
