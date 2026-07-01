@@ -24,12 +24,12 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Testing**: Kotest `6.2.0` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
 
 ## Architecture
-CodeCompanion follows a DDD-inspired, three-module layering. Dependencies flow **application → infrastructure → domain** (and **application → domain**). The `domain` module is framework-free Kotlin — no Spring, no Jakarta, no JPA.
+CodeCompanion follows a DDD-inspired, three-module layering. Dependencies flow **application → infrastructure → domain** (and **application → domain**). The `domain` module is framework-free Kotlin — no Spring, no Jakarta, no JPA. It is also **transport-agnostic**: `domain/command` carries zero Slack types. Inbound requests are normalized into a neutral model (`InboundCommand` / `InboundInteraction`) and outbound results are expressed as transport-neutral `OutboundMessage`s, so a future adapter (e.g. Discord) can be added without touching the domain.
 
 ```
 CodeCompanion/
-├── domain/                      # Pure Kotlin core — no framework dependencies
-│   ├── command/                 # Intents, events, parsers, interaction/modal DTOs
+├── domain/                      # Pure Kotlin core — no framework, no transport types
+│   ├── command/                 # Transport-neutral command core — inbound/outbound models, intents, contexts, parsers
 │   ├── meet/                    # Meeting aggregate & DTOs
 │   ├── standup/                 # Standup routines, sessions, answers
 │   ├── history/                 # History entities & mappers
@@ -43,8 +43,10 @@ CodeCompanion/
 │   ├── health/                  # Outbox health indicator
 │   └── configurations/          # Beans, conditions, async/Kafka wiring
 │
-└── infrastructure/              # Concrete adapters
-    ├── impl/command/            # Slack API event constructor & dispatchers
+└── infrastructure/              # Concrete adapters — all Slack coupling lives here
+    ├── impl/command/            # Slack adapter: request parsing, intent resolving, outbound staging
+    │   ├── slack/               #   Slack wire DTOs & inbound mappers (payload → InboundCommand)
+    │   └── event/               #   Slack event payloads, dispatch events, message dispatcher
     ├── repository/              # JPA repositories: meeting, outbox, standup, history, user
     ├── templates/               # Slack message & modal builders
     └── retry/                   # Retry support
@@ -121,12 +123,12 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **테스트**: Kotest `6.2.0` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
 
 ## 아키텍처
-CodeCompanion은 DDD 기반의 3개 모듈 계층 구조를 따릅니다. 의존성은 **application → infrastructure → domain** (및 **application → domain**) 방향으로만 흐릅니다. `domain` 모듈은 프레임워크에 의존하지 않는 순수 Kotlin입니다 — Spring·Jakarta·JPA 없음.
+CodeCompanion은 DDD 기반의 3개 모듈 계층 구조를 따릅니다. 의존성은 **application → infrastructure → domain** (및 **application → domain**) 방향으로만 흐릅니다. `domain` 모듈은 프레임워크에 의존하지 않는 순수 Kotlin입니다 — Spring·Jakarta·JPA 없음. 또한 **전송 계층에 비의존적(transport-agnostic)**입니다: `domain/command`에는 Slack 타입이 전혀 없습니다. 인바운드 요청은 중립 모델(`InboundCommand` / `InboundInteraction`)로 정규화되고, 아웃바운드 결과는 전송 중립적인 `OutboundMessage`로 표현되므로, 도메인을 건드리지 않고도 향후 어댑터(예: Discord)를 추가할 수 있습니다.
 
 ```
 CodeCompanion/
-├── domain/                      # 프레임워크 의존성 없는 순수 Kotlin 코어
-│   ├── command/                 # 인텐트, 이벤트, 파서, 상호작용/모달 DTO
+├── domain/                      # 프레임워크·전송 타입 없는 순수 Kotlin 코어
+│   ├── command/                 # 전송 중립 명령 코어 — 인바운드/아웃바운드 모델, 인텐트, 컨텍스트, 파서
 │   ├── meet/                    # 미팅 애그리거트 및 DTO
 │   ├── standup/                 # 스탠드업 루틴·세션·응답
 │   ├── history/                 # 히스토리 엔티티 및 매퍼
@@ -140,8 +142,10 @@ CodeCompanion/
 │   ├── health/                  # 아웃박스 헬스 인디케이터
 │   └── configurations/          # 빈, 조건부 설정, 비동기/Kafka 와이어링
 │
-└── infrastructure/              # 구체 어댑터
-    ├── impl/command/            # 슬랙 API 이벤트 컨스트럭터 및 디스패처
+└── infrastructure/              # 구체 어댑터 — 모든 슬랙 결합은 여기에 격리
+    ├── impl/command/            # 슬랙 어댑터: 요청 파싱, 인텐트 해석, 아웃바운드 스테이징
+    │   ├── slack/               #   슬랙 wire DTO 및 인바운드 매퍼 (payload → InboundCommand)
+    │   └── event/               #   슬랙 이벤트 페이로드, 디스패치 이벤트, 메시지 디스패처
     ├── repository/              # JPA 리포지토리: meeting, outbox, standup, history, user
     ├── templates/               # 슬랙 메시지 및 모달 빌더
     └── retry/                   # 재시도 지원
