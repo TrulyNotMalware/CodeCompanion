@@ -53,23 +53,6 @@ sealed class CommandIntent : CommandEffect {
     ) : CommandIntent()
 
     /**
-     * Host's request to open the reschedule modal from the inline Reschedule button on
-     * `/meetup list`. The resolver builds a synchronous
-     * [dev.notypie.domain.command.entity.event.OpenViewEvent] so the Slack `trigger_id` is
-     * consumed within its 3-second window — mirroring [OpenDeclineReasonModal]. The modal's
-     * `private_metadata` carries [meetingUid] + [requesterId] back to the submission handler.
-     */
-    data class OpenRescheduleMeetingModal(
-        val triggerId: String,
-        val meetingUid: UUID,
-        val requesterId: String,
-        // Channel the `/meetup list` message lives in, ferried through the modal's private_metadata so
-        // the host's confirmation posts back in-channel (a view_submission carries no channel).
-        val channel: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING,
-    ) : CommandIntent()
-
-    /**
      * Host's confirmed reschedule from the modal submission. Authorization (host-only) is
      * enforced atomically by the repository's WHERE clause — the intent carries the requester
      * so the bridge can pass it through. The resolver lifts this to a
@@ -84,23 +67,6 @@ sealed class CommandIntent : CommandEffect {
         // into the `/meetup list` channel rather than failing on the channel-less submission.
         val channel: String,
         override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
-    ) : CommandIntent()
-
-    /**
-     * Host's request to open the add-participant modal from the inline "Add participant" button on
-     * `/meetup list`. The resolver builds a synchronous
-     * [dev.notypie.domain.command.entity.event.OpenViewEvent] so the Slack `trigger_id` is consumed
-     * within its 3-second window — mirroring [OpenRescheduleMeetingModal]. The modal's
-     * `private_metadata` carries [meetingUid] + [requesterId] back to the submission handler.
-     */
-    data class OpenAddParticipantModal(
-        val triggerId: String,
-        val meetingUid: UUID,
-        val requesterId: String,
-        // Channel the `/meetup list` message lives in. A view_submission carries no channel, so we
-        // ferry it through the modal's private_metadata to post the host's confirmation back in-channel.
-        val channel: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.ADD_PARTICIPANT,
     ) : CommandIntent()
 
     /**
@@ -130,21 +96,6 @@ sealed class CommandIntent : CommandEffect {
     }
 
     /**
-     * Opens the answer-entry modal for a scheduled standup prompt. The resolver loads the
-     * routine/session read models and builds a synchronous [dev.notypie.domain.command.entity.event.OpenViewEvent]
-     * so the Slack `trigger_id` is consumed before it expires.
-     */
-    data class OpenStandupModal(
-        val triggerId: String,
-        val sessionUid: UUID,
-        val routineUid: UUID,
-        val requesterId: String,
-        val noticeChannel: String,
-        val noticeMessageTs: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_FILL,
-    ) : CommandIntent()
-
-    /**
      * Persists the responses from the standup answer modal. Resubmission replaces the prior
      * row for `(session_id, user_id)` in the repository.
      */
@@ -153,20 +104,6 @@ sealed class CommandIntent : CommandEffect {
         val userId: String,
         val responses: List<String>,
         override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-    ) : CommandIntent()
-
-    /**
-     * Opens the standup-setup modal from `/standup setup`. The resolver builds a synchronous
-     * [dev.notypie.domain.command.entity.event.OpenViewEvent] so the Slack `trigger_id` is
-     * consumed within its 3-second window — mirroring [OpenStandupModal] and
-     * [OpenDeclineReasonModal]. [commandChannel] is carried into the modal's `private_metadata`
-     * so the submission handler knows where to persist + post the confirmation.
-     */
-    data class OpenStandupSetupModal(
-        val triggerId: String,
-        val creatorId: String,
-        val commandChannel: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_SETUP_FORM,
     ) : CommandIntent()
 
     /**
@@ -190,34 +127,6 @@ sealed class CommandIntent : CommandEffect {
         val cutoffMinutes: Long,
         val timezone: java.time.ZoneId,
         override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
-    ) : CommandIntent()
-
-    /**
-     * Request to open the decline-reason modal for a participant who clicked the Deny button
-     * on a meeting-notice DM. The `triggerId` must be consumed within Slack's 3-second window
-     * via the synchronous dispatch path (outbox is bypassed). On `views.open` failure, the
-     * application layer falls back to recording the decline with `RejectReason.OTHER`.
-     */
-    data class OpenDeclineReasonModal(
-        val triggerId: String,
-        val meetingIdempotencyKey: UUID,
-        val participantUserId: String,
-        /**
-         * Optional meeting title shown as a header section in the modal. Empty means the
-         * section is omitted — the REJECT_BUTTON handler doesn't currently carry the title
-         * (it only has the tokenized idempotencyKey from the notice's message.text), so
-         * callers may pass "" rather than round-tripping a DB fetch.
-         */
-        val meetingTitle: String = "",
-        /**
-         * Channel + message_ts of the originating notice DM. Carried through the modal's
-         * `private_metadata` so [DeclineReasonSubmissionContext] can `chat.update` the
-         * original Accept/Deny notice once the user submits a reason. Empty strings mean
-         * the caller has no notice message to update (e.g. synthesized payloads in tests).
-         */
-        val noticeChannel: String = "",
-        val noticeMessageTs: String = "",
-        override val commandDetailType: CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
     ) : CommandIntent()
 
     data object Nothing : CommandIntent() {

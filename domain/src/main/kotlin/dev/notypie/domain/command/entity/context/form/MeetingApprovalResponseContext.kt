@@ -12,6 +12,11 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.ModalOpenHandle
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
 import java.util.UUID
 
@@ -89,9 +94,9 @@ internal class MeetingApprovalResponseContext(
      * emits a second [CommandIntent.MeetingAttendanceUpdate] that overwrites the provisional
      * row with the real reason.
      *
-     * Intent order matters: [CommandIntent.OpenDeclineReasonModal] is emitted first so that
-     * [dev.notypie.impl.command.SlackIntentResolver] resolves it to [OpenViewEvent] and
-     * dispatches `views.open` before any unrelated intent can queue up behind it — trigger_id
+     * Intent order matters: [OutboundMessage.OpenModal] is emitted first so that
+     * [dev.notypie.impl.command.SlackOutboundStager] stages it to [OpenViewEvent] and
+     * dispatches `views.open` before any unrelated effect can queue up behind it — trigger_id
      * expires 3 seconds after Slack issues it. The provisional update follows and is persisted
      * at BEFORE_COMMIT via [dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent],
      * which doesn't compete with the trigger window because it runs at transaction commit.
@@ -108,14 +113,20 @@ internal class MeetingApprovalResponseContext(
         noticeChannel: String,
         noticeMessageTs: String,
     ): CommandOutput {
-        addIntent(
-            CommandIntent.OpenDeclineReasonModal(
-                triggerId = triggerId,
-                meetingIdempotencyKey = meetingIdempotencyKey,
-                participantUserId = participantUserId,
-                meetingTitle = meetingTitle,
-                noticeChannel = noticeChannel,
-                noticeMessageTs = noticeMessageTs,
+        addOutbound(
+            OutboundMessage.OpenModal(
+                handle = ModalOpenHandle(raw = triggerId),
+                form =
+                    ModalForm.DeclineReason(
+                        meetingIdempotencyKey = meetingIdempotencyKey,
+                        participantUserId = participantUserId,
+                        meetingTitle = meetingTitle,
+                        originNotice =
+                            MessageRef(
+                                conversation = ConversationTarget(id = noticeChannel),
+                                messageId = noticeMessageTs,
+                            ),
+                    ),
             ),
         )
         addIntent(

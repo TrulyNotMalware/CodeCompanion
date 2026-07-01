@@ -60,16 +60,18 @@ class SlackRequestBuilderConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(SlackIntentResolver::class)
-    fun slackIntentResolver(
-        slackApiEventConstructor: SlackApiEventConstructor,
-        standupRepository: StandupRepository,
-    ): SlackIntentResolver =
-        SlackIntentResolver(slackEventBuilder = slackApiEventConstructor, standupRepository = standupRepository)
+    fun slackIntentResolver(): SlackIntentResolver = SlackIntentResolver()
 
     @Bean
     @ConditionalOnMissingBean(SlackOutboundStager::class)
-    fun slackOutboundStager(slackApiEventConstructor: SlackApiEventConstructor): SlackOutboundStager =
-        SlackOutboundStager(slackEventBuilder = slackApiEventConstructor)
+    fun slackOutboundStager(
+        slackApiEventConstructor: SlackApiEventConstructor,
+        standupRepository: StandupRepository,
+    ): SlackOutboundStager =
+        SlackOutboundStager(
+            slackEventBuilder = slackApiEventConstructor,
+            standupRepository = standupRepository,
+        )
 
     @Bean
     @ConditionalOnMissingBean(CommandExecutor::class)

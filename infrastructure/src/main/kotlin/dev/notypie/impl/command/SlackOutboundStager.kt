@@ -5,17 +5,25 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.repository.standup.StandupRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
+import java.time.LocalDateTime
+
+private val log = KotlinLogging.logger {}
 
 /**
- * Slack adapter that renders the text and approval/form families of [OutboundMessage]s into staged
- * [CommandEvent]s, reproducing exactly the builder calls the [SlackIntentResolver] made for the
- * now-removed `TextResponse`/`EphemeralResponse`/`ErrorDetail`/`TimeSchedule`/`Notice` intents and the
- * `ApplyReject`/`ApprovalForm`/`MeetingForm` intents. Variants not yet migrated fail loudly.
+ * Slack adapter that renders the text, approval/form and modal families of [OutboundMessage]s into
+ * staged [CommandEvent]s, reproducing exactly the builder calls the [SlackIntentResolver] made for the
+ * now-removed `TextResponse`/`EphemeralResponse`/`ErrorDetail`/`TimeSchedule`/`Notice` intents, the
+ * `ApplyReject`/`ApprovalForm`/`MeetingForm` intents and the five `Open*Modal` intents. Variants not yet
+ * migrated fail loudly.
  */
 class SlackOutboundStager(
     private val slackEventBuilder: SlackApiEventConstructor,
+    private val standupRepository: StandupRepository,
 ) : OutboundMessageStager {
     override fun stage(message: OutboundMessage, basicInfo: CommandBasicInfo): CommandEvent<EventPayload>? =
         when (message) {
@@ -123,6 +131,104 @@ class SlackOutboundStager(
                     commandDetailType = CommandDetailType.REPLACE_TEXT,
                 )
             }
+
+            is OutboundMessage.OpenModal ->
+                when (val form = message.form) {
+                    is ModalForm.Reschedule ->
+                        if (message.handle.raw.isBlank()) {
+                            log.warn {
+                                "Blank triggerId; cannot open reschedule modal for meetingUid=${form.meetingUid}"
+                            }
+                            null
+                        } else {
+                            slackEventBuilder.openRescheduleMeetingModalRequest(
+                                commandBasicInfo = basicInfo,
+                                commandDetailType = CommandDetailType.RESCHEDULE_MEETING,
+                                triggerId = message.handle.raw,
+                                meetingUid = form.meetingUid,
+                                requesterId = form.requesterId,
+                                channel = form.channel.id,
+                                // The open-modal message does not carry the meeting's stored start; defaulting
+                                // the pickers to "now" is sufficient since the host adjusts both before submit.
+                                currentStartAt = LocalDateTime.now(),
+                            )
+                        }
+
+                    is ModalForm.AddParticipant ->
+                        if (message.handle.raw.isBlank()) {
+                            log.warn {
+                                "Blank triggerId; cannot open add-participant modal for meetingUid=${form.meetingUid}"
+                            }
+                            null
+                        } else {
+                            slackEventBuilder.openAddParticipantModalRequest(
+                                commandBasicInfo = basicInfo,
+                                commandDetailType = CommandDetailType.ADD_PARTICIPANT,
+                                triggerId = message.handle.raw,
+                                meetingUid = form.meetingUid,
+                                requesterId = form.requesterId,
+                                channel = form.channel.id,
+                            )
+                        }
+
+                    is ModalForm.StandupSetup ->
+                        if (message.handle.raw.isBlank()) {
+                            log.warn {
+                                "Blank triggerId; cannot open standup setup modal for creatorId=${form.creatorId}"
+                            }
+                            null
+                        } else {
+                            slackEventBuilder.openStandupSetupModalRequest(
+                                commandBasicInfo = basicInfo,
+                                commandDetailType = CommandDetailType.STANDUP_SETUP_FORM,
+                                triggerId = message.handle.raw,
+                                creatorId = form.creatorId,
+                                commandChannel = form.commandChannel.id,
+                            )
+                        }
+
+                    is ModalForm.StandupFill ->
+                        if (message.handle.raw.isBlank()) {
+                            log.warn { "Blank triggerId; cannot open standup modal for sessionUid=${form.sessionUid}" }
+                            null
+                        } else {
+                            val routine = standupRepository.getRoutine(routineUid = form.routineUid)
+                            val session = standupRepository.findSession(sessionUid = form.sessionUid)
+                            if (session == null) {
+                                log.warn { "Standup session not found: sessionUid=${form.sessionUid}" }
+                                null
+                            } else {
+                                slackEventBuilder.openStandupModalRequest(
+                                    commandBasicInfo = basicInfo,
+                                    commandDetailType = CommandDetailType.STANDUP_FILL,
+                                    triggerId = message.handle.raw,
+                                    sessionUid = form.sessionUid,
+                                    routineName = routine.name,
+                                    sessionDate = session.sessionDate,
+                                    questions = routine.questions,
+                                    userId = form.requesterId,
+                                    noticeChannel = form.originNotice.conversation.id,
+                                    noticeMessageTs = form.originNotice.messageId,
+                                )
+                            }
+                        }
+
+                    is ModalForm.DeclineReason ->
+                        slackEventBuilder.openDeclineReasonModalRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            triggerId = message.handle.raw,
+                            meetingIdempotencyKey = form.meetingIdempotencyKey,
+                            participantUserId = form.participantUserId,
+                            meetingTitle = form.meetingTitle,
+                            noticeChannel =
+                                form.originNotice
+                                    ?.conversation
+                                    ?.id
+                                    .orEmpty(),
+                            noticeMessageTs = form.originNotice?.messageId.orEmpty(),
+                        )
+                }
 
             else -> error("OutboundMessage variant not yet migrated to stager: $message")
         }

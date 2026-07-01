@@ -9,16 +9,19 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.ModalOpenHandle
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 /**
  * "Add participant" button on `/meetup list` carries `<listIdempotencyKey>,ADD_PARTICIPANT,<meetingUid>`.
  * The parser surfaces the meetingUid as the first routing extra and the live `trigger_id` on the
- * payload. We emit [CommandIntent.OpenAddParticipantModal] so the resolver opens the modal
- * synchronously before the trigger_id expires — mirroring [RescheduleMeetingContext]. Missing/malformed
- * extras or a blank trigger_id fall through to a no-op response; the resolver also guards the trigger_id.
+ * payload. We emit [OutboundMessage.OpenModal] so the stager opens the modal synchronously before the
+ * trigger_id expires — mirroring [RescheduleMeetingContext]. Missing/malformed extras or a blank
+ * trigger_id fall through to a no-op response; the stager also guards the trigger_id.
  */
 internal class AddParticipantContext(
     commandBasicInfo: CommandBasicInfo,
@@ -41,12 +44,15 @@ internal class AddParticipantContext(
                 .firstOrNull()
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return successOutput()
-        addIntent(
-            CommandIntent.OpenAddParticipantModal(
-                triggerId = interactionPayload.triggerId,
-                meetingUid = meetingUid,
-                requesterId = interactionPayload.user.id,
-                channel = interactionPayload.channel.id,
+        addOutbound(
+            OutboundMessage.OpenModal(
+                handle = ModalOpenHandle(raw = interactionPayload.triggerId),
+                form =
+                    ModalForm.AddParticipant(
+                        meetingUid = meetingUid,
+                        requesterId = interactionPayload.user.id,
+                        channel = ConversationTarget(id = interactionPayload.channel.id),
+                    ),
             ),
         )
         return successOutput()

@@ -8,12 +8,15 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.entity.slash.StandupSubCommandDefinition
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.ModalOpenHandle
+import dev.notypie.domain.command.outbound.OutboundMessage
 
 /**
- * Handles the `/standup setup` slash invocation by emitting [CommandIntent.OpenStandupSetupModal]
- * — the resolver lifts this to a synchronous `views.open` so the [triggerId] is consumed within
+ * Handles the `/standup setup` slash invocation by emitting [OutboundMessage.OpenModal]
+ * — the stager lifts this to a synchronous `views.open` so the [triggerId] is consumed within
  * Slack's 3-second window. Mirrors [RequestMeetingContext]'s open-the-form path.
  */
 internal class RequestStandupSetupContext(
@@ -36,11 +39,14 @@ internal class RequestStandupSetupContext(
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
     override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
-        addIntent(
-            CommandIntent.OpenStandupSetupModal(
-                triggerId = triggerId,
-                creatorId = commandBasicInfo.publisherId,
-                commandChannel = commandBasicInfo.channel,
+        addOutbound(
+            OutboundMessage.OpenModal(
+                handle = ModalOpenHandle(raw = triggerId),
+                form =
+                    ModalForm.StandupSetup(
+                        creatorId = commandBasicInfo.publisherId,
+                        commandChannel = ConversationTarget(id = commandBasicInfo.channel),
+                    ),
             ),
         )
         return CommandOutput.success(

@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.selectedApplyButtonStates
 import dev.notypie.domain.command.selectedRejectButtonStates
@@ -108,22 +109,22 @@ class MeetingApprovalResponseContextTest :
                     result.commandDetailType shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
                 }
 
-                then("an OpenDeclineReasonModal intent is emitted with trigger/meeting/user/title context") {
+                then("an OpenModal effect is emitted with trigger/meeting/user/title context") {
                     val open =
                         intents
-                            .filterIsInstance<CommandIntent.OpenDeclineReasonModal>()
+                            .filterIsInstance<OutboundMessage.OpenModal>()
                             .single()
-                    open.meetingIdempotencyKey shouldBe meetingKey
-                    open.participantUserId shouldBe payload.user.id
-                    open.triggerId shouldBe payload.triggerId
-                    open.commandDetailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    open.handle.raw shouldBe payload.triggerId
+                    val form = open.form.shouldBeInstanceOf<ModalForm.DeclineReason>()
+                    form.meetingIdempotencyKey shouldBe meetingKey
+                    form.participantUserId shouldBe payload.user.id
                     // Title flows end-to-end from ApprovalContents.subTitle → routing text →
-                    // parser.routingExtras[0] → intent so the modal can render it.
-                    open.meetingTitle shouldBe "Weekly sync"
+                    // parser.routingExtras[0] → form so the modal can render it.
+                    form.meetingTitle shouldBe "Weekly sync"
                     // Channel + message_ts must flow through so the modal submission can later
                     // chat.update the original notice instead of leaving stale buttons.
-                    open.noticeChannel shouldBe payload.channel.id
-                    open.noticeMessageTs shouldBe "1700000000.000050"
+                    form.originNotice?.conversation?.id shouldBe payload.channel.id
+                    form.originNotice?.messageId shouldBe "1700000000.000050"
                 }
 
                 then("a provisional MeetingAttendanceUpdate(OTHER) is emitted so the Deny is always recorded") {
@@ -137,8 +138,8 @@ class MeetingApprovalResponseContextTest :
                     update.absentReason shouldBe RejectReason.OTHER
                 }
 
-                then("OpenDeclineReasonModal enqueued before provisional update (views.open wins the trigger race)") {
-                    val openIndex = intents.indexOfFirst { it is CommandIntent.OpenDeclineReasonModal }
+                then("OpenModal enqueued before provisional update (views.open wins the trigger race)") {
+                    val openIndex = intents.indexOfFirst { it is OutboundMessage.OpenModal }
                     val updateIndex = intents.indexOfFirst { it is CommandIntent.MeetingAttendanceUpdate }
                     openIndex shouldBe 0
                     (openIndex < updateIndex) shouldBe true

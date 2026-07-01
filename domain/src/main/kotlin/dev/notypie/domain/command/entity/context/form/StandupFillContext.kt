@@ -9,8 +9,12 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.ModalOpenHandle
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 internal class StandupFillContext(
@@ -52,14 +56,20 @@ internal class StandupFillContext(
                     commandType = commandType,
                     commandDetailType = commandDetailType,
                 )
-        addIntent(
-            CommandIntent.OpenStandupModal(
-                triggerId = interactionPayload.triggerId,
-                sessionUid = sessionUid,
-                routineUid = routineUid,
-                requesterId = interactionPayload.user.id,
-                noticeChannel = interactionPayload.channel.id,
-                noticeMessageTs = interactionPayload.container.messageTs.orEmpty(),
+        addOutbound(
+            OutboundMessage.OpenModal(
+                handle = ModalOpenHandle(raw = interactionPayload.triggerId),
+                form =
+                    ModalForm.StandupFill(
+                        sessionUid = sessionUid,
+                        routineUid = routineUid,
+                        requesterId = interactionPayload.user.id,
+                        originNotice =
+                            MessageRef(
+                                conversation = ConversationTarget(id = interactionPayload.channel.id),
+                                messageId = interactionPayload.container.messageTs.orEmpty(),
+                            ),
+                    ),
             ),
         )
         return CommandOutput.success(

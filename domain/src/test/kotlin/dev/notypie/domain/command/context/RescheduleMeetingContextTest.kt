@@ -7,10 +7,12 @@ import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
 class RescheduleMeetingContextTest :
@@ -42,11 +44,13 @@ class RescheduleMeetingContextTest :
                     result.commandDetailType shouldBe CommandDetailType.RESCHEDULE_MEETING
                 }
 
-                then("OpenRescheduleMeetingModal carries the trigger id, meeting uid, and requester") {
-                    val open = intents.filterIsInstance<CommandIntent.OpenRescheduleMeetingModal>().single()
-                    open.triggerId shouldBe triggerId
-                    open.meetingUid shouldBe meetingUid
-                    open.requesterId shouldBe payload.user.id
+                then("OpenModal carries the trigger id, meeting uid, requester, and channel") {
+                    val open = intents.filterIsInstance<OutboundMessage.OpenModal>().single()
+                    open.handle.raw shouldBe triggerId
+                    val form = open.form.shouldBeInstanceOf<ModalForm.Reschedule>()
+                    form.meetingUid shouldBe meetingUid
+                    form.requesterId shouldBe payload.user.id
+                    form.channel.id shouldBe payload.channel.id
                 }
             }
         }

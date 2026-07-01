@@ -5,11 +5,13 @@ import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.selectedApplyButtonStates
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
 class StandupFillContextTest :
@@ -46,14 +48,15 @@ class StandupFillContextTest :
                     result.commandDetailType shouldBe CommandDetailType.STANDUP_FILL
                 }
 
-                then("an OpenStandupModal intent carries routing and notice update context") {
-                    val open = intents.filterIsInstance<CommandIntent.OpenStandupModal>().single()
-                    open.triggerId shouldBe "trigger-standup"
-                    open.sessionUid shouldBe sessionUid
-                    open.routineUid shouldBe routineUid
-                    open.requesterId shouldBe payload.user.id
-                    open.noticeChannel shouldBe payload.channel.id
-                    open.noticeMessageTs shouldBe "1700000000.000200"
+                then("an OpenModal effect carries routing and notice update context") {
+                    val open = intents.filterIsInstance<OutboundMessage.OpenModal>().single()
+                    open.handle.raw shouldBe "trigger-standup"
+                    val form = open.form.shouldBeInstanceOf<ModalForm.StandupFill>()
+                    form.sessionUid shouldBe sessionUid
+                    form.routineUid shouldBe routineUid
+                    form.requesterId shouldBe payload.user.id
+                    form.originNotice.conversation.id shouldBe payload.channel.id
+                    form.originNotice.messageId shouldBe "1700000000.000200"
                 }
             }
         }

@@ -9,8 +9,11 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.ModalForm
+import dev.notypie.domain.command.outbound.ModalOpenHandle
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 internal class RescheduleMeetingContext(
@@ -31,7 +34,7 @@ internal class RescheduleMeetingContext(
     /**
      * Reschedule button on `/meetup list` carries `<listIdempotencyKey>,RESCHEDULE_MEETING,<meetingUid>`.
      * The parser surfaces the meetingUid as the first routing extra and the live `trigger_id` on the
-     * payload. We emit [CommandIntent.OpenRescheduleMeetingModal] so the resolver opens the modal
+     * payload. We emit [OutboundMessage.OpenModal] so the stager opens the modal
      * synchronously before the trigger_id expires. Missing/malformed extras or a blank trigger_id
      * fall through to a no-op response — the resolver also guards against a blank trigger_id.
      */
@@ -41,12 +44,15 @@ internal class RescheduleMeetingContext(
                 .firstOrNull()
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return successOutput()
-        addIntent(
-            CommandIntent.OpenRescheduleMeetingModal(
-                triggerId = interactionPayload.triggerId,
-                meetingUid = meetingUid,
-                requesterId = interactionPayload.user.id,
-                channel = interactionPayload.channel.id,
+        addOutbound(
+            OutboundMessage.OpenModal(
+                handle = ModalOpenHandle(raw = interactionPayload.triggerId),
+                form =
+                    ModalForm.Reschedule(
+                        meetingUid = meetingUid,
+                        requesterId = interactionPayload.user.id,
+                        channel = ConversationTarget(id = interactionPayload.channel.id),
+                    ),
             ),
         )
         return successOutput()
