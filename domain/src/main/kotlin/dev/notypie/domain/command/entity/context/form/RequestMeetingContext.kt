@@ -95,8 +95,7 @@ internal class RequestMeetingContext(
     }
 
     private fun listArgumentError(commandDetailType: CommandDetailType, message: String): CommandOutput {
-        // Leave recipient null so the ephemeral posts into the command's channel and is
-        // visible only to publisherId — chat.postEphemeral requires a channel ID, not a user ID.
+        // Null recipient: chat.postEphemeral requires a channel ID, not a user ID.
         addOutbound(
             OutboundMessage.Ephemeral(
                 target = ConversationTarget(id = commandBasicInfo.channel),
@@ -115,7 +114,7 @@ internal class RequestMeetingContext(
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
-        // Deny (reject button) cancels the form outright — no field validation, no meeting created.
+        // Deny cancels outright — no validation, no meeting created.
         if (interactionPayload.isCanceled()) {
             return interactionSuccessResponse(
                 responseUrl = interactionPayload.responseUrl,
@@ -126,9 +125,7 @@ internal class RequestMeetingContext(
         val formInput = MeetingFormInput.from(payload = interactionPayload)
         validationErrorOrNull(formInput = formInput, payload = interactionPayload)?.let { return it }
 
-        // The Meeting entity owns its own invariants (title/reason length, participant count, …).
-        // Surface a violation as a user-visible ephemeral instead of letting the constructor throw,
-        // which would fail the command silently with no response back to the user.
+        // Surface Meeting's own invariant violations as an ephemeral instead of throwing silently.
         val meeting =
             try {
                 formInput.toMeeting()
@@ -136,7 +133,6 @@ internal class RequestMeetingContext(
                 return createErrorResponse(errMessage = meetingValidationMessage(exception = exception))
             }
 
-        // send notice
         if (formInput.noticeRequired && !sendNotice(meeting = meeting)) {
             return createErrorResponse(
                 errMessage = "Failed to send notice. Please try again later",
@@ -159,8 +155,7 @@ internal class RequestMeetingContext(
     }
 
     /**
-     * Returns an error CommandOutput when the meeting form input is invalid, or null when it passes
-     * validation and can be converted into a Meeting entity safely. The `isCompleted` check stays on
+     * Error CommandOutput when the form input is invalid, else null. The `isCompleted` check stays on
      * the raw payload because it inspects whether every interactive element was answered.
      */
     private fun validationErrorOrNull(formInput: MeetingFormInput, payload: InteractionPayload): CommandOutput? {
@@ -181,10 +176,7 @@ internal class RequestMeetingContext(
         return createErrorResponse(errMessage = errorMessage)
     }
 
-    /**
-     * Renders a domain validation failure (raised by the Meeting entity) into a single user-facing
-     * line. Falls back to a generic message when the exception carries no field details.
-     */
+    /** Renders a domain validation failure into user-facing lines, or a generic message when empty. */
     private fun meetingValidationMessage(exception: CodeCompanionRuntimeException): String =
         exception.details
             .takeIf { it.isNotEmpty() }
@@ -210,8 +202,7 @@ internal class RequestMeetingContext(
                     subTitle = meeting.title,
                     idempotencyKey = commandBasicInfo.idempotencyKey,
                     publisherId = commandBasicInfo.publisherId,
-                    // Must match the runCommand commandDetailType below so that the button
-                    // value embedded by the Slack template routes clicks to the same context.
+                    // Must match runCommand's commandDetailType below so button clicks route back here.
                     commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
                 ),
             subCommand = SubCommand.empty(),

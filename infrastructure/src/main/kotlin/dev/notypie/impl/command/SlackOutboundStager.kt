@@ -88,10 +88,8 @@ class SlackOutboundStager(
                     commandBasicInfo = basicInfo,
                     approvalContents = message.approval,
                     targetUserId = message.recipient?.id,
-                    // Propagate the human-readable subtitle (meeting title for notice DMs) through the
-                    // routing text so context handlers can surface it without a separate DB lookup.
-                    // Blank subtitles are filtered out to keep the routing token stable for flows
-                    // that don't use subTitle.
+                    // Carry the subtitle (meeting title) through the routing text so handlers avoid a
+                    // DB lookup; blanks are dropped to keep the token stable for flows without a subtitle.
                     routingExtras =
                         listOf(message.approval.subTitle).filter { it.isNotBlank() } + message.routingExtras,
                 )
@@ -145,8 +143,7 @@ class SlackOutboundStager(
                                 meetingUid = form.meetingUid,
                                 requesterId = form.requesterId,
                                 channel = form.channel.id,
-                                // The open-modal message does not carry the meeting's stored start; defaulting
-                                // the pickers to "now" is sufficient since the host adjusts both before submit.
+                                // Message carries no stored start; the host adjusts both pickers anyway.
                                 currentStartAt = LocalDateTime.now(),
                             )
                         }

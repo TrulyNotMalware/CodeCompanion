@@ -15,16 +15,12 @@ import dev.notypie.impl.command.SlackIntentResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Orchestrates Command execution: drains the effects a Command accumulated, resolves them to
- * transport-layer events, and dispatches them.
+ * Orchestrates Command execution: drains accumulated effects, resolves them to transport-layer
+ * events, and dispatches them.
  *
- * Failure semantics:
- *  - Resolver / publisher failures are logged with idempotency context and re-thrown so that
- *    transactional rollback can happen at the caller.
- *  - Intents are NOT re-queued on failure. The current publishers ([AppEventPublisher],
- *    [KafkaEventPublisher]) dispatch events sequentially, so a partial failure could otherwise
- *    cause duplicate publishes on retry. Retries must happen upstream (outbox relay, Kafka
- *    producer retries, or a replay of the original Slack event) with the shared idempotencyKey.
+ * Failures are logged and re-thrown for transactional rollback at the caller. Intents are NOT
+ * re-queued: publishers dispatch sequentially, so a retry could duplicate publishes — retries
+ * must happen upstream (outbox relay, Kafka retries, Slack replay) under the shared idempotencyKey.
  */
 class CommandExecutor(
     private val intentResolver: SlackIntentResolver,
@@ -36,8 +32,7 @@ class CommandExecutor(
     fun <T : SubCommandDefinition> execute(command: Command<T>): CommandOutput {
         val output = command.handleEvent()
 
-        // Drain regardless of success/failure: error effects (e.g. from createErrorResponse) must
-        // also reach Slack.
+        // Drain regardless of success/failure: error effects must also reach Slack.
         val pendingEffects = command.drainIntents()
         if (pendingEffects.isNotEmpty()) {
             publishIntents(

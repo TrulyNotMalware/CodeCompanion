@@ -47,12 +47,8 @@ data class ActionEventPayloadContents(
     )
 
 /**
- * Payload for a synchronous `views.open` call. Unlike [PostEventPayloadContents] — which is
- * staged to the outbox and relayed asynchronously — this must be dispatched inline on the
- * request thread because Slack's `trigger_id` expires 3 seconds after issuance. The
- * dispatcher-level failure path publishes [DeclineModalOpenFailedEvent] so the application
- * layer can record the decline with [dev.notypie.domain.meet.entity.RejectReason.OTHER]
- * and notify the user.
+ * Payload for a synchronous `views.open` call. Unlike [PostEventPayloadContents] (outbox-relayed),
+ * this must be dispatched inline on the request thread because `trigger_id` expires 3s after issuance.
  */
 data class OpenViewPayloadContents(
     override val eventId: UUID,
@@ -79,11 +75,7 @@ enum class MessageType {
     DIRECT_MESSAGE,
     ACTION_RESPONSE,
 
-    /**
-     * `chat.update` — rewrites an existing message in place using `channel` + `ts` keys in
-     * the form body. Never synthesized from user DMs directly; emitted by flows like the
-     * decline-reason submission that need to collapse a prior interactive notice.
-     */
+    /** `chat.update` — rewrites an existing message in place using `channel` + `ts`. */
     UPDATE_MESSAGE,
 }
 

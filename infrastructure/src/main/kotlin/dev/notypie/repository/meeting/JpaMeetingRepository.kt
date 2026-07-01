@@ -53,10 +53,8 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
     ): List<MeetingSchema>
 
     /**
-     * Candidate meetings for reminder materialization: non-canceled meetings whose `startAt`
-     * falls in the forward window, with participants eagerly fetched so the scheduler can size
-     * the per-offset reminder rows without an extra round-trip. Not user-scoped — the reminder
-     * scheduler sweeps across all meetings, unlike [findMeetingsByUserIdAndDateRange].
+     * Non-canceled meetings in the forward window with participants eagerly fetched. Not user-scoped:
+     * the reminder scheduler sweeps all meetings, unlike [findMeetingsByUserIdAndDateRange].
      */
     @Query(
         """
@@ -95,10 +93,8 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
     ): Int
 
     /**
-     * Existence probe used to disambiguate `updateParticipantAttendance` returning 0:
-     *  - row exists AND new values equal current ones → UPDATE is a no-op and still returns 0
-     *    on MariaDB's default `CLIENT_FOUND_ROWS=false`; we must not treat this as missing data.
-     *  - row doesn't exist → genuine routing failure; caller should throw to trigger rollback.
+     * Disambiguates `updateParticipantAttendance` returning 0: a no-op UPDATE also returns 0 on
+     * MariaDB's default `CLIENT_FOUND_ROWS=false`, so only a missing row is a genuine routing failure.
      */
     @Query(
         """

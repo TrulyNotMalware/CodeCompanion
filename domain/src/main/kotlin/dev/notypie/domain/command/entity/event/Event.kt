@@ -31,10 +31,7 @@ class GetMeetingEventPayload(
     val startDate: LocalDateTime = LocalDateTime.now(),
     val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
     publisherId: String,
-    /**
-     * Basic info of the original command. Required by the async handler to
-     * render the meeting list back to Slack using the same channel/app context.
-     */
+    /** Original command context; lets the async handler reply on the same channel/app. */
     val responseBasicInfo: CommandBasicInfo,
 ) : MeetingPayload(
         eventId = UUID.randomUUID(),
@@ -85,11 +82,7 @@ class CancelMeetingPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val meetingUid: UUID,
     val requesterId: String,
-    /**
-     * Basic info of the originating interaction. Reused by the application-layer listener
-     * to send the success/no-op ephemeral back to the requester through the same channel
-     * the click came from, without round-tripping through routing extras.
-     */
+    /** Originating interaction context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -108,11 +101,7 @@ class RescheduleMeetingPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val newStartAt: LocalDateTime,
-    /**
-     * Basic info of the originating interaction. Reused by the application-layer listener
-     * to send the success/no-op ephemeral back to the requester through the same channel
-     * the submission came from, mirroring [CancelMeetingPayload.responseBasicInfo].
-     */
+    /** Originating interaction context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -131,11 +120,7 @@ class AddParticipantPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val participantUserIds: List<String>,
-    /**
-     * Basic info of the originating interaction. Reused by the application-layer listener to send the
-     * host's confirmation ephemeral back through the same channel the submission came from, mirroring
-     * [RescheduleMeetingPayload.responseBasicInfo].
-     */
+    /** Originating interaction context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -151,10 +136,7 @@ data class AddParticipantEvent(
 
 class StatusReportPayload(
     override val eventId: UUID = UUID.randomUUID(),
-    /**
-     * Basic info of the `@bot status` mention. The application listener uses it to post the
-     * formatted status back to the same channel the request came from.
-     */
+    /** `@bot status` mention context; lets the listener post the report on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -193,10 +175,8 @@ data class StandupCutoffEvent(
 )
 
 /**
- * Carries the parsed standup-setup modal submission to the application-layer service that
- * builds and persists the [dev.notypie.domain.standup.entity.Routine]. [responseBasicInfo]
- * lets the listener post the confirmation (or a friendly validation error) back to the
- * channel the `/standup setup` command was invoked from.
+ * Parsed standup-setup modal submission; [responseBasicInfo] lets the listener post the
+ * confirmation (or validation error) back to the invoking channel.
  */
 class CreateStandupRoutinePayload(
     override val eventId: UUID = UUID.randomUUID(),
@@ -224,10 +204,9 @@ data class CreateStandupRoutineEvent(
 ) : CommandEvent<CreateStandupRoutinePayload>
 
 /**
- * Synchronous-dispatch command event carrying a `views.open` payload. Must be consumed on
- * the request thread because [OpenViewPayloadContents.triggerId] expires in 3 seconds.
- * `isInternal = true` so the event is routed through the in-process Spring event bus
- * (never staged in the outbox) and picked up by a dedicated non-`@Async` listener.
+ * Synchronous `views.open` command event. Must be consumed on the request thread because
+ * [OpenViewPayloadContents.triggerId] expires in 3 seconds; `isInternal = true` keeps it on
+ * the in-process event bus (never the outbox), handled by a dedicated non-`@Async` listener.
  */
 data class OpenViewEvent(
     override val idempotencyKey: UUID,
@@ -240,10 +219,9 @@ data class OpenViewEvent(
 ) : CommandEvent<OpenViewPayloadContents>
 
 /**
- * Published by the dispatcher when `views.open` fails (trigger_id expired, Slack API
- * error, network failure, etc.). The application-layer listener is responsible for
- * recording the decline with [dev.notypie.domain.meet.entity.RejectReason.OTHER]
- * and sending an ephemeral notice so the user knows the decline was still accepted.
+ * Published when `views.open` fails (expired trigger_id, Slack/network error). The listener
+ * records the decline with [dev.notypie.domain.meet.entity.RejectReason.OTHER] and sends an
+ * ephemeral notice so the user knows the decline was still accepted.
  */
 data class DeclineModalOpenFailedEvent(
     val meetingIdempotencyKey: UUID,
@@ -255,11 +233,9 @@ data class DeclineModalOpenFailedEvent(
 )
 
 /**
- * Published by the dispatcher when `views.open` for the standup answer modal fails.
- * Unlike the decline-reason flow, no provisional persistence has happened yet — the
- * answers exist only in the unopened modal. The application listener sends an ephemeral
- * notice so the user can retry from the original DM rather than wonder why nothing
- * happened.
+ * Published when `views.open` for the standup answer modal fails. Unlike the decline-reason
+ * flow nothing has been persisted yet — the answers exist only in the unopened modal — so the
+ * listener sends an ephemeral notice prompting the user to retry from the original DM.
  */
 data class StandupModalOpenFailedEvent(
     val userId: String,

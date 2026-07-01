@@ -225,9 +225,6 @@ class ValidationBuilder {
         return this
     }
 
-    /**
-     * Validates that the integer field is positive (greater than zero).
-     */
     fun Field<Int>.shouldBePositive(): Field<Int> {
         if (value <= 0) {
             errors.add(
@@ -445,11 +442,9 @@ class ValidationBuilder {
     }
 }
 
-// Entrypoint
 fun validate(className: String = "", block: ValidationBuilder.() -> Unit) {
     ValidationBuilder().apply(block).validate(className = className)
 }
 
-// Entrypoint
 internal fun validateAndReturn(className: String = "", block: ValidationBuilder.() -> Unit): List<ExceptionArgument> =
     ValidationBuilder().apply(block).getErrors()

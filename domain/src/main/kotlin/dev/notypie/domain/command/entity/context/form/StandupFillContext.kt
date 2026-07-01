@@ -33,9 +33,8 @@ internal class StandupFillContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_FILL
 
     /**
-     * "Fill in standup" button carries `<idempotencyKey>,STANDUP_FILL,<sessionUid>,<routineUid>`.
-     * routingExtras[0] = sessionUid, routingExtras[1] = routineUid. Missing or malformed
-     * extras fall through to a no-op success response.
+     * "Fill in standup" button carries `<idempotencyKey>,STANDUP_FILL,<sessionUid>,<routineUid>`;
+     * routingExtras[0] = sessionUid, [1] = routineUid. Missing/malformed extras are a no-op.
      */
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
         val sessionUid =

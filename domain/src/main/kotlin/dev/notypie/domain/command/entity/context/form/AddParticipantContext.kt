@@ -17,11 +17,9 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 /**
- * "Add participant" button on `/meetup list` carries `<listIdempotencyKey>,ADD_PARTICIPANT,<meetingUid>`.
- * The parser surfaces the meetingUid as the first routing extra and the live `trigger_id` on the
- * payload. We emit [OutboundMessage.OpenModal] so the stager opens the modal synchronously before the
- * trigger_id expires — mirroring [RescheduleMeetingContext]. Missing/malformed extras or a blank
- * trigger_id fall through to a no-op response; the stager also guards the trigger_id.
+ * "Add participant" button carries `<listIdempotencyKey>,ADD_PARTICIPANT,<meetingUid>`; the meetingUid
+ * surfaces as the first routing extra. Emits [OutboundMessage.OpenModal] so the stager opens the modal
+ * before the trigger_id expires, mirroring [RescheduleMeetingContext].
  */
 internal class AddParticipantContext(
     commandBasicInfo: CommandBasicInfo,

@@ -20,14 +20,10 @@ import dev.notypie.domain.meet.entity.RejectReason
 import java.util.UUID
 
 /**
- * Handles the `view_submission` payload generated when a participant picks a decline reason
- * from the modal opened by [MeetingApprovalResponseContext.handleDecline]. The routing tokens
- * for this context live in the modal's `private_metadata` — the interaction parser already
- * copies them into [InteractionPayload.idempotencyKey] / [InteractionPayload.routingExtras]
- * using the same comma-tokenized format as embedded-message-text routing.
- *
- * Note: view_submission carries no channel/response_url; the persistence path is the sole
- * side effect. The user's acknowledgement is the modal's auto-close on 200 OK.
+ * Handles the `view_submission` for the decline-reason modal opened by
+ * [MeetingApprovalResponseContext.handleDecline]; routing tokens ride in `private_metadata`.
+ * view_submission carries no channel/response_url, so persistence is the sole side effect and
+ * the modal's auto-close on 200 OK is the acknowledgement.
  */
 internal class DeclineReasonSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
@@ -48,9 +44,7 @@ internal class DeclineReasonSubmissionContext(
         val meetingIdempotencyKey =
             runCatching { UUID.fromString(interactionPayload.idempotencyKey) }
                 .getOrElse {
-                    // Malformed private_metadata — can't correlate to a meeting, so we skip
-                    // persistence. The modal already auto-closes on 200 OK so the user sees
-                    // no error; logs will carry the parse failure via upstream handlers.
+                    // Malformed private_metadata — no meeting to correlate to, so skip persistence.
                     return CommandOutput.success(
                         basicInfo = commandBasicInfo,
                         commandType = commandType,
@@ -65,9 +59,7 @@ internal class DeclineReasonSubmissionContext(
         val noticeChannel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
         val noticeMessageTs = interactionPayload.routingExtras.getOrNull(2).orEmpty()
         val absentReason = extractSelectedReason(payload = interactionPayload)
-        // Detail is only meaningful for OTHER; the "required when Other" rule is enforced before
-        // this context runs (the handler returns response_action errors on a blank Other detail),
-        // so a non-blank detail is expected here whenever the reason is OTHER.
+        // Detail is only meaningful for OTHER; the "required when Other" rule is enforced upstream.
         val absentReasonDetail =
             extractDetail(payload = interactionPayload).takeIf { absentReason == RejectReason.OTHER }
 
@@ -80,9 +72,7 @@ internal class DeclineReasonSubmissionContext(
                 absentReasonDetail = absentReasonDetail,
             ),
         )
-        // chat.update the original notice so the user can't click Accept/Deny on a stale
-        // message after submitting a reason. Skipped when the private_metadata carries no
-        // channel/ts (synthesized test payloads).
+        // chat.update the original notice so Accept/Deny can't be clicked on a stale message.
         if (noticeChannel.isNotBlank() && noticeMessageTs.isNotBlank()) {
             addOutbound(
                 OutboundMessage.UpdateMessage(
@@ -113,10 +103,7 @@ internal class DeclineReasonSubmissionContext(
             if (!detail.isNullOrBlank()) append(" — $detail")
         }
 
-    /**
-     * Reads the free-text detail input. Blank when the field was left empty (the modal marks it
-     * optional). The decline modal exposes a single plain-text input, so matching on type is safe.
-     */
+    /** Reads the single plain-text detail input; blank when left empty. */
     private fun extractDetail(payload: InteractionPayload): String =
         payload.states
             .firstOrNull { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
@@ -124,11 +111,7 @@ internal class DeclineReasonSubmissionContext(
             .orEmpty()
             .trim()
 
-    /**
-     * Parses the dropdown selection into a [RejectReason]. Unknown or blank values fall through
-     * to [RejectReason.OTHER] rather than throwing — a malformed submission should still
-     * register the user's Deny intent.
-     */
+    /** Parses the dropdown into a [RejectReason]; unknown/blank fall through to OTHER, never throwing. */
     private fun extractSelectedReason(payload: InteractionPayload): RejectReason {
         val selected =
             payload.states

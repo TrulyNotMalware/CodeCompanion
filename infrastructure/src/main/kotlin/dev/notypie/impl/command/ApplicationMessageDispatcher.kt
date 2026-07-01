@@ -138,13 +138,9 @@ class ApplicationMessageDispatcher(
     }
 
     /**
-     * Synchronous `views.open` call. Bypasses the outbox because [OpenViewPayloadContents.triggerId]
-     * expires 3 seconds after issuance — staging the call for later relay would always race the
-     * expiry. On any failure (API error, network, malformed view JSON, expired trigger) we log
-     * and publish [DeclineModalOpenFailedEvent] so the application layer can persist the decline
-     * with RejectReason.OTHER. We intentionally do NOT rethrow: the caller listener runs inside
-     * the request thread and throwing would abort any subsequent intent dispatch from the same
-     * batch, which is not what the user's Deny click should trigger.
+     * Synchronous `views.open`, bypassing the outbox because [OpenViewPayloadContents.triggerId]
+     * expires 3s after issuance. On any failure it logs and publishes the fallback open-failed event
+     * rather than rethrowing, so subsequent intent dispatch from the same batch is not aborted.
      */
     override fun dispatchImmediate(event: OpenViewPayloadContents): CommandOutput {
         val response =
@@ -179,11 +175,8 @@ class ApplicationMessageDispatcher(
     }
 
     /**
-     * Routes a `views.open` failure to the right domain event so the application layer can
-     * deliver a feature-specific fallback (record + ephemeral notice for decline; ephemeral
-     * "please retry" for standup). Both branches require [OpenViewPayloadContents.participantUserId]
-     * to be set so the listener has someone to DM; if it's blank, the failure is logged
-     * upstream but no event is fired.
+     * Routes a `views.open` failure to the feature-specific fallback event. Requires
+     * [OpenViewPayloadContents.participantUserId] so the listener has someone to DM; blank fires nothing.
      */
     private fun publishOpenFailure(event: OpenViewPayloadContents, reason: String) {
         if (event.participantUserId.isBlank()) return
@@ -240,8 +233,7 @@ class ApplicationMessageDispatcher(
             messageTs = (result as? ChatPostMessageResponse)?.ts.orEmpty(),
         )
     } else {
-        // A Slack-side rejection (ok=false) otherwise becomes a FAILURE outbox row with no trace,
-        // so the message silently never reaches the user. Surface the error and any block warnings.
+        // Surface Slack-side rejections (ok=false); otherwise the message silently never arrives.
         dispatcherLog.warn {
             "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
         }

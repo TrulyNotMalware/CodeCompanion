@@ -23,10 +23,7 @@ import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
 import dev.notypie.domain.command.intent.CommandIntent
 
 class SlackIntentResolver {
-    /**
-     * Resolves each intent individually, assigning the routing detail type per variant so that a
-     * heterogeneous batch produces events with correctly-typed routing metadata.
-     */
+    /** Resolves each intent individually, assigning its per-variant routing detail type. */
     fun resolveAll(intents: List<CommandIntent>, basicInfo: CommandBasicInfo): List<CommandEvent<EventPayload>> =
         intents.mapNotNull { intent ->
             resolve(
@@ -87,8 +84,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             newStartAt = intent.newStartAt,
-                            // A view_submission carries no channel; use the one ferried through the
-                            // modal so the host's confirmation posts back into the list's channel.
+                            // view_submission carries no channel; use the one ferried through the modal.
                             responseBasicInfo =
                                 basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
                         ),
@@ -104,8 +100,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             participantUserIds = intent.participantUserIds,
-                            // A view_submission carries no channel; use the one ferried through the
-                            // modal so the host's confirmation posts back into the list's channel.
+                            // view_submission carries no channel; use the one ferried through the modal.
                             responseBasicInfo =
                                 basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
                         ),

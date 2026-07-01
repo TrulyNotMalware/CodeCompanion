@@ -28,10 +28,7 @@ sealed interface OutboundMessage : CommandEffect {
     data class UpdateMessage(
         val ref: MessageRef,
         val content: MessageContent,
-        /**
-         * Per-emitter routing type so a chat.update can be routed back to the correct context on
-         * later interaction. Per-emitter rather than constant.
-         */
+        /** Per-emitter routing type so a chat.update routes back to the correct context. */
         val detailType: CommandDetailType,
     ) : OutboundMessage
 

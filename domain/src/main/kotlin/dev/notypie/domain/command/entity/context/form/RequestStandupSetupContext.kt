@@ -15,9 +15,8 @@ import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
 
 /**
- * Handles the `/standup setup` slash invocation by emitting [OutboundMessage.OpenModal]
- * — the stager lifts this to a synchronous `views.open` so the [triggerId] is consumed within
- * Slack's 3-second window. Mirrors [RequestMeetingContext]'s open-the-form path.
+ * Handles `/standup setup` by emitting [OutboundMessage.OpenModal]; the stager lifts it to a
+ * synchronous `views.open` so [triggerId] is consumed within Slack's 3-second window.
  */
 internal class RequestStandupSetupContext(
     commandBasicInfo: CommandBasicInfo,

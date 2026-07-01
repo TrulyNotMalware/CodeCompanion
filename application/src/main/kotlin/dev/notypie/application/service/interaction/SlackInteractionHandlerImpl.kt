@@ -30,13 +30,9 @@ class SlackInteractionHandlerImpl(
 ) : InteractionHandler {
     companion object {
         /**
-         * Legacy interaction types whose REJECT button is handled by a global "Canceled."
-         * replace message at the handler level, bypassing context routing. These existed
-         * before feature-specific contexts were introduced.
-         *
-         * New [CommandDetailType] values should NOT be added here; they should handle their
-         * own REJECT button inside their dedicated [dev.notypie.domain.command.entity.context.ReactionContext]
-         * (e.g. cancel-confirm modal's Cancel button, meeting participant Decline button).
+         * Legacy types whose REJECT button is handled by a global "Canceled." replace at the handler
+         * level, bypassing context routing. Do NOT add new types here — new contexts handle their own
+         * REJECT button inside their dedicated [dev.notypie.domain.command.entity.context.ReactionContext].
          */
         internal val LEGACY_AUTO_REJECT_TYPES: Set<CommandDetailType> =
             setOf(
@@ -49,8 +45,7 @@ class SlackInteractionHandlerImpl(
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String): String? {
         val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
 
-        // A blank "Other" detail must be answered synchronously with an inline error and must NOT
-        // persist the decline, so this gate runs before any command execution.
+        // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
         declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
 
         val slackCommandData = interactionPayload.toSlackCommandData()
@@ -75,10 +70,8 @@ class SlackInteractionHandlerImpl(
     }
 
     /**
-     * view_submission validation for the decline-reason modal: when the user picked OTHER but left
-     * the detail blank, returns a `response_action: errors` body (keyed by the detail block) so
-     * Slack shows an inline error and keeps the modal open. Returns null for every other case,
-     * letting the submission proceed to persistence.
+     * When the decline-reason modal picks OTHER with a blank detail, returns a `response_action: errors`
+     * body so Slack shows an inline error and keeps the modal open; null otherwise.
      */
     private fun declineDetailErrorOrNull(payload: InteractionPayload): String? {
         if (payload.type != CommandDetailType.DECLINE_REASON_MODAL) return null

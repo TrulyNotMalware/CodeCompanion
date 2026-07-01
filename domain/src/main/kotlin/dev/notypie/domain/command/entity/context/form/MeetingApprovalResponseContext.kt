@@ -51,14 +51,9 @@ internal class MeetingApprovalResponseContext(
                     meetingIdempotencyKey = meetingIdempotencyKey,
                     participantUserId = participantUserId,
                     triggerId = interactionPayload.triggerId,
-                    // The notice was sent with `ApprovalContents.subTitle` (meeting title)
-                    // propagated through the routing text by SlackIntentResolver, so the
-                    // parser surfaces it as the first extra. Blank/missing falls through to ""
-                    // and the modal template simply omits the title section.
+                    // Meeting title, surfaced as the first routing extra; blank omits the title section.
                     meetingTitle = interactionPayload.routingExtras.firstOrNull().orEmpty(),
-                    // Channel + message_ts of the notice DM. Carried through the modal's
-                    // private_metadata so the submission handler can chat.update the notice.
-                    // Blank means we can't update (synthesized test payloads, rare races).
+                    // Notice DM channel + message_ts; let the submission handler chat.update the notice.
                     noticeChannel = interactionPayload.channel.id,
                     noticeMessageTs = interactionPayload.container.messageTs.orEmpty(),
                 )
@@ -87,23 +82,15 @@ internal class MeetingApprovalResponseContext(
     }
 
     /**
-     * Records a provisional decline with [RejectReason.OTHER] and opens the reason-picker
-     * modal. The provisional write guarantees the user's Deny intent is always honored — even
-     * if `views.open` fails, if the user cancels the modal (X / Esc), or if `view_submission`
-     * never reaches us. When the user does submit the modal, [DeclineReasonSubmissionContext]
-     * emits a second [CommandIntent.MeetingAttendanceUpdate] that overwrites the provisional
-     * row with the real reason.
+     * Records a provisional decline with [RejectReason.OTHER], then opens the reason-picker modal.
+     * The provisional write honors the Deny intent even if `views.open` fails, the user cancels the
+     * modal, or `view_submission` never arrives; a later submission overwrites it with the real reason.
      *
-     * Intent order matters: [OutboundMessage.OpenModal] is emitted first so that
-     * [dev.notypie.impl.command.SlackOutboundStager] stages it to [OpenViewEvent] and
-     * dispatches `views.open` before any unrelated effect can queue up behind it — trigger_id
-     * expires 3 seconds after Slack issues it. The provisional update follows and is persisted
-     * at BEFORE_COMMIT via [dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent],
-     * which doesn't compete with the trigger window because it runs at transaction commit.
+     * Order matters: [OutboundMessage.OpenModal] is emitted first so `views.open` fires before
+     * trigger_id expires (3s). The provisional update runs at BEFORE_COMMIT, off the trigger window.
      *
-     * We intentionally do NOT call `interactionSuccessResponse` — replacing the original notice
-     * with a "You declined" banner before the user has actually confirmed a reason would
-     * destroy the context they need if the modal fails to open.
+     * Intentionally does NOT call `interactionSuccessResponse`: replacing the notice with a
+     * "You declined" banner before a reason is confirmed would destroy context if the modal fails.
      */
     private fun handleDecline(
         meetingIdempotencyKey: UUID,

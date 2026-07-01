@@ -46,10 +46,8 @@ internal class StandupAnswerSubmissionContext(
                 ?: interactionPayload.user.id
         val noticeChannel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
         val noticeMessageTs = interactionPayload.routingExtras.getOrNull(2).orEmpty()
-        // Slack returns `view.state.values` as an unordered Map; iteration order is not
-        // guaranteed by the Slack SDK or the JVM. The standup modal stamps each input block
-        // with `standup_q_<index>`, so we sort by that index to keep `responses[i]` aligned
-        // with `routine.questions[i]` regardless of how the parser flattened the map.
+        // Slack returns `view.state.values` unordered; sort by the `standup_q_<index>` block id so
+        // `responses[i]` stays aligned with `routine.questions[i]`.
         val responses =
             interactionPayload.states
                 .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
@@ -88,11 +86,7 @@ internal class StandupAnswerSubmissionContext(
             commandDetailType = commandDetailType,
         )
 
-    /**
-     * Extracts the trailing numeric question index from a `standup_q_<index>` block id. Inputs
-     * that don't follow the pattern (or have non-numeric tails) sort to the end via
-     * [Int.MAX_VALUE], preserving original relative order between unparseable entries.
-     */
+    /** Trailing index of a `standup_q_<index>` block id; unparseable ids sort last via [Int.MAX_VALUE]. */
     private fun standupQuestionIndex(blockId: String?): Int {
         val tail = blockId?.removePrefix(STANDUP_QUESTION_BLOCK_ID_PREFIX)
         return tail?.toIntOrNull() ?: Int.MAX_VALUE
