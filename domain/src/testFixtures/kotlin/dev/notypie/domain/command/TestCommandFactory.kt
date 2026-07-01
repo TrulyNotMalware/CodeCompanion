@@ -1,13 +1,12 @@
 package dev.notypie.domain.command
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.util.UUID
@@ -18,7 +17,7 @@ import java.util.UUID
  */
 class TestCommand(
     idempotencyKey: UUID,
-    commandData: SlackCommandData,
+    commandData: InboundCommand,
     private val intentToProduce: CommandIntent? = null,
 ) : Command<NoSubCommands>(
         idempotencyKey = idempotencyKey,
@@ -40,7 +39,6 @@ internal class TestContext(
     private val intentToProduce: CommandIntent?,
 ) : CommandContext<NoSubCommands>(
         commandBasicInfo = commandBasicInfo,
-        requestHeaders = SlackRequestHeaders(),
         intents = intents,
         subCommand = SubCommand.empty(),
     ) {

@@ -7,18 +7,20 @@ import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.methods.response.chat.ChatUpdateResponse
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
-import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
-import dev.notypie.domain.command.entity.event.MessageType
-import dev.notypie.domain.command.entity.event.OpenViewPayloadContents
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
-import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
+import dev.notypie.impl.command.event.ActionEventPayloadContents
+import dev.notypie.impl.command.event.MessageDispatcher
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.OpenViewPayloadContents
+import dev.notypie.impl.command.event.PostEventPayloadContents
+import dev.notypie.impl.command.event.SlackEventPayload
+import dev.notypie.impl.command.event.failOutput
+import dev.notypie.impl.command.event.successOutput
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
@@ -152,7 +154,7 @@ class ApplicationMessageDispatcher(
         return response.fold(
             onSuccess = { apiResponse ->
                 if (apiResponse.isOk) {
-                    CommandOutput.success(payload = event, commandType = CommandType.EXTERNAL_API)
+                    successOutput(payload = event, commandType = CommandType.EXTERNAL_API)
                 } else {
                     dispatcherLog.warn {
                         "views.open rejected by Slack: error=${apiResponse.error} " +
@@ -160,7 +162,7 @@ class ApplicationMessageDispatcher(
                             "participantUserId=${event.participantUserId}"
                     }
                     publishOpenFailure(event = event, reason = apiResponse.error ?: "unknown Slack error")
-                    CommandOutput.fail(event = event, reason = apiResponse.error ?: "views.open failed")
+                    failOutput(event = event, reason = apiResponse.error ?: "views.open failed")
                 }
             },
             onFailure = { error ->
@@ -169,7 +171,7 @@ class ApplicationMessageDispatcher(
                         "participantUserId=${event.participantUserId}"
                 }
                 publishOpenFailure(event = event, reason = error.message ?: error::class.java.simpleName)
-                CommandOutput.fail(event = event, reason = error.message ?: "views.open threw")
+                failOutput(event = event, reason = error.message ?: "views.open threw")
             },
         )
     }
@@ -227,7 +229,7 @@ class ApplicationMessageDispatcher(
         event: SlackEventPayload,
         commandType: CommandType = CommandType.EXTERNAL_API,
     ) = if (result.isOk) {
-        CommandOutput.success(
+        successOutput(
             payload = event,
             commandType = commandType,
             messageTs = (result as? ChatPostMessageResponse)?.ts.orEmpty(),
@@ -237,7 +239,7 @@ class ApplicationMessageDispatcher(
         dispatcherLog.warn {
             "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
         }
-        CommandOutput.fail(event = event, reason = result.error)
+        failOutput(event = event, reason = result.error)
     }
 
     private fun buildCommandOutputFromResponse(
@@ -245,8 +247,8 @@ class ApplicationMessageDispatcher(
         event: SlackEventPayload,
         commandType: CommandType = CommandType.RESPONSE,
     ) = if (result.isSuccessful) {
-        CommandOutput.success(payload = event, commandType = commandType)
+        successOutput(payload = event, commandType = commandType)
     } else {
-        CommandOutput.fail(event = event, reason = result.message)
+        failOutput(event = event, reason = result.message)
     }
 }

@@ -9,9 +9,9 @@ import dev.notypie.domain.TEST_TEAM_ID
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.ButtonType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
@@ -550,6 +550,60 @@ class SlackInteractionRequestParserTest :
                     // aligned with routine.questions[i] even when the parser flattens
                     // Slack's unordered view.state.values map.
                     blockIds shouldBe listOf("standup_q_0", "standup_q_1")
+                }
+            }
+        }
+
+        given("parseStringPayload for view_submission — delivery channel recovery") {
+            `when`("a reschedule submission ferries the originating channel in private_metadata") {
+                val meetingUid = UUID.randomUUID()
+                val payload =
+                    createRoutingOnlyViewSubmissionJson(
+                        callbackId = "reschedule_meeting_modal",
+                        privateMetadata =
+                            "$meetingUid,RESCHEDULE_MEETING_SUBMIT,U_REQUESTER,C_ORIGIN_CHANNEL",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("channel.id is recovered so basicInfo routes the confirmation in-channel") {
+                    result.type shouldBe CommandDetailType.RESCHEDULE_MEETING_SUBMIT
+                    result.channel.id shouldBe "C_ORIGIN_CHANNEL"
+                }
+            }
+
+            `when`("an add-participant submission ferries the originating channel") {
+                val meetingUid = UUID.randomUUID()
+                val payload =
+                    createRoutingOnlyViewSubmissionJson(
+                        callbackId = "add_participant_modal",
+                        privateMetadata =
+                            "$meetingUid,ADD_PARTICIPANT_SUBMIT,U_REQUESTER,C_ADD_CHANNEL",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("channel.id is recovered from routingExtras[1]") {
+                    result.type shouldBe CommandDetailType.ADD_PARTICIPANT_SUBMIT
+                    result.channel.id shouldBe "C_ADD_CHANNEL"
+                }
+            }
+
+            `when`("a decline-reason submission carries a notice channel (not a delivery channel)") {
+                val meetingKey = UUID.randomUUID()
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_P",
+                        selectedReason = RejectReason.HEALTH_ISSUE.name,
+                        noticeChannel = "C_NOTICE",
+                        noticeMessageTs = "1700000000.000900",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("channel stays blank — notice routing is read from routingExtras, not basicInfo") {
+                    result.channel.id shouldBe ""
                 }
             }
         }

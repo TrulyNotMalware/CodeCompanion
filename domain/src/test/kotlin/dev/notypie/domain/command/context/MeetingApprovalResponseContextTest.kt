@@ -1,18 +1,21 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.applyButtonField
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
+import dev.notypie.domain.command.inbound.MessageHandle
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.selectedApplyButtonStates
-import dev.notypie.domain.command.selectedRejectButtonStates
+import dev.notypie.domain.command.rejectAction
+import dev.notypie.domain.command.rejectButtonField
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -32,15 +35,15 @@ class MeetingApprovalResponseContextTest :
                 )
             val meetingKey = UUID.randomUUID()
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-                    currentAction = selectedApplyButtonStates(),
-                    states = listOf(selectedApplyButtonStates()),
+                createInboundInteraction(
+                    detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    action = approveAction(isSelected = true),
+                    form = listOf(applyButtonField()),
                     idempotencyKey = meetingKey,
                 )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("result should be successful with MEETING_APPROVAL_NOTICE_FORM detail type") {
@@ -56,7 +59,7 @@ class MeetingApprovalResponseContextTest :
                             .filterIsInstance<CommandIntent.MeetingAttendanceUpdate>()
                             .single()
                     update.meetingIdempotencyKey shouldBe meetingKey
-                    update.participantUserId shouldBe payload.user.id
+                    update.participantUserId shouldBe payload.actor.id
                     update.isAttending shouldBe true
                     update.absentReason shouldBe RejectReason.ATTENDING
                 }
@@ -68,7 +71,7 @@ class MeetingApprovalResponseContextTest :
                             .single()
                     replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
                         "You accepted the meeting invitation."
-                    replace.handle.raw shouldBe payload.responseUrl
+                    replace.handle.raw shouldBe payload.reply.raw
                 }
             }
         }
@@ -84,24 +87,20 @@ class MeetingApprovalResponseContextTest :
             val meetingKey = UUID.randomUUID()
             // The notice DM is sent with ApprovalContents.subTitle propagated through the
             // routing text by SlackIntentResolver; the parser surfaces it as routingExtras[0].
+            // Container.messageTs is what lets DeclineReasonSubmissionContext later chat.update
+            // the original notice — carry it through so the modal's private_metadata can round-trip it.
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-                    currentAction = selectedRejectButtonStates(),
-                    states = listOf(selectedRejectButtonStates()),
+                createInboundInteraction(
+                    detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    action = rejectAction(isSelected = true),
+                    form = listOf(rejectButtonField()),
                     idempotencyKey = meetingKey,
-                ).let { base ->
-                    base.copy(
-                        routingExtras = listOf("Weekly sync"),
-                        // Container.messageTs is what lets DeclineReasonSubmissionContext later
-                        // chat.update the original notice — carry it through the intent so the
-                        // modal's private_metadata can round-trip it.
-                        container = base.container.copy(messageTs = "1700000000.000050"),
-                    )
-                }
+                    routingExtras = listOf("Weekly sync"),
+                    message = MessageHandle(raw = "1700000000.000050"),
+                )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("result should still be successful (decision recorded regardless)") {
@@ -114,16 +113,16 @@ class MeetingApprovalResponseContextTest :
                         intents
                             .filterIsInstance<OutboundMessage.OpenModal>()
                             .single()
-                    open.handle.raw shouldBe payload.triggerId
+                    open.handle.raw shouldBe payload.trigger.raw
                     val form = open.form.shouldBeInstanceOf<ModalForm.DeclineReason>()
                     form.meetingIdempotencyKey shouldBe meetingKey
-                    form.participantUserId shouldBe payload.user.id
+                    form.participantUserId shouldBe payload.actor.id
                     // Title flows end-to-end from ApprovalContents.subTitle → routing text →
                     // parser.routingExtras[0] → form so the modal can render it.
                     form.meetingTitle shouldBe "Weekly sync"
                     // Channel + message_ts must flow through so the modal submission can later
                     // chat.update the original notice instead of leaving stale buttons.
-                    form.originNotice?.conversation?.id shouldBe payload.channel.id
+                    form.originNotice?.conversation?.id shouldBe payload.channelId
                     form.originNotice?.messageId shouldBe "1700000000.000050"
                 }
 
@@ -133,7 +132,7 @@ class MeetingApprovalResponseContextTest :
                             .filterIsInstance<CommandIntent.MeetingAttendanceUpdate>()
                             .single()
                     update.meetingIdempotencyKey shouldBe meetingKey
-                    update.participantUserId shouldBe payload.user.id
+                    update.participantUserId shouldBe payload.actor.id
                     update.isAttending shouldBe false
                     update.absentReason shouldBe RejectReason.OTHER
                 }
@@ -162,15 +161,15 @@ class MeetingApprovalResponseContextTest :
             // Payload carries only a button click (no MULTI_USERS_SELECT state).
             // Under the old routing this would trip "Select participants".
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-                    currentAction = selectedApplyButtonStates(),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
                 )
 
             `when`("handleInteraction is invoked on a button-only payload") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("result should succeed without any validation error") {

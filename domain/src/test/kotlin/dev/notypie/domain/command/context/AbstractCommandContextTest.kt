@@ -4,16 +4,15 @@ import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.dto.isEmpty
@@ -29,7 +28,6 @@ class AbstractCommandContextTest :
             val abstractCommandContext =
                 object : CommandContext<NoSubCommands>(
                     commandBasicInfo = createCommandBasicInfo(),
-                    requestHeaders = SlackRequestHeaders(),
                     intents = intentQueue,
                     subCommand = SubCommand.empty(),
                 ) {
@@ -53,7 +51,6 @@ class AbstractCommandContextTest :
             val overrideContext =
                 object : CommandContext<NoSubCommands>(
                     commandBasicInfo = createCommandBasicInfo(),
-                    requestHeaders = SlackRequestHeaders(),
                     intents = intentQueue,
                     subCommand = SubCommand.empty(),
                 ) {
@@ -81,7 +78,6 @@ class AbstractReactionCommandContextTest :
             val handleInteractionReturnValue = CommandOutput.empty()
             val reactionContext =
                 object : ReactionContext<NoSubCommands>(
-                    requestHeaders = SlackRequestHeaders(),
                     commandBasicInfo = createCommandBasicInfo(),
                     intents = intentQueue,
                     subCommand = SubCommand.empty(),
@@ -90,7 +86,7 @@ class AbstractReactionCommandContextTest :
 
                     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTHING
 
-                    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
+                    override fun handleInteraction(interaction: InboundInteraction): CommandOutput =
                         handleInteractionReturnValue
 
                     override fun runCommand(): CommandOutput = runCommandReturnValue
@@ -104,7 +100,7 @@ class AbstractReactionCommandContextTest :
             `when`("handleInteraction") {
                 val res =
                     reactionContext.handleInteraction(
-                        interactionPayload = createInteractionPayloadInput(),
+                        interaction = createInboundInteraction(),
                     )
                 then("should return override value") {
                     res shouldBe handleInteractionReturnValue
@@ -118,7 +114,6 @@ class AbstractReactionCommandContextTest :
 
             val reactionContext =
                 object : ReactionContext<NoSubCommands>(
-                    requestHeaders = SlackRequestHeaders(),
                     commandBasicInfo = testCommandBasicInfo,
                     intents = testIntentQueue,
                     subCommand = SubCommand.empty(),

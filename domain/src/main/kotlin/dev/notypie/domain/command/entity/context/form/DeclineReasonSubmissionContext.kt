@@ -3,13 +3,12 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundFieldKind
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -27,11 +26,9 @@ import java.util.UUID
  */
 internal class DeclineReasonSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -40,9 +37,9 @@ internal class DeclineReasonSubmissionContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingIdempotencyKey =
-            runCatching { UUID.fromString(interactionPayload.idempotencyKey) }
+            runCatching { UUID.fromString(interaction.idempotencyKey) }
                 .getOrElse {
                     // Malformed private_metadata — no meeting to correlate to, so skip persistence.
                     return CommandOutput.success(
@@ -52,16 +49,16 @@ internal class DeclineReasonSubmissionContext(
                     )
                 }
         val participantUserId =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .firstOrNull()
                 ?.takeIf { it.isNotBlank() }
-                ?: interactionPayload.user.id
-        val noticeChannel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
-        val noticeMessageTs = interactionPayload.routingExtras.getOrNull(2).orEmpty()
-        val absentReason = extractSelectedReason(payload = interactionPayload)
+                ?: interaction.actor.id
+        val noticeChannel = interaction.routingExtras.getOrNull(1).orEmpty()
+        val noticeMessageTs = interaction.routingExtras.getOrNull(2).orEmpty()
+        val absentReason = extractSelectedReason(interaction = interaction)
         // Detail is only meaningful for OTHER; the "required when Other" rule is enforced upstream.
         val absentReasonDetail =
-            extractDetail(payload = interactionPayload).takeIf { absentReason == RejectReason.OTHER }
+            extractDetail(interaction = interaction).takeIf { absentReason == RejectReason.OTHER }
 
         addIntent(
             CommandIntent.MeetingAttendanceUpdate(
@@ -104,19 +101,17 @@ internal class DeclineReasonSubmissionContext(
         }
 
     /** Reads the single plain-text detail input; blank when left empty. */
-    private fun extractDetail(payload: InteractionPayload): String =
-        payload.states
-            .firstOrNull { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
-            ?.selectedValue
+    private fun extractDetail(interaction: InboundInteraction): String =
+        interaction.form
+            .firstValue(kind = InboundFieldKind.TEXT)
             .orEmpty()
             .trim()
 
     /** Parses the dropdown into a [RejectReason]; unknown/blank fall through to OTHER, never throwing. */
-    private fun extractSelectedReason(payload: InteractionPayload): RejectReason {
+    private fun extractSelectedReason(interaction: InboundInteraction): RejectReason {
         val selected =
-            payload.states
-                .firstOrNull { it.type == ActionElementTypes.STATIC_SELECT }
-                ?.selectedValue
+            interaction.form
+                .firstValue(kind = InboundFieldKind.CHOICE)
                 .orEmpty()
         return runCatching { RejectReason.valueOf(selected) }
             .getOrDefault(RejectReason.OTHER)

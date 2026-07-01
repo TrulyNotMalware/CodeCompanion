@@ -3,7 +3,6 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
@@ -17,13 +16,11 @@ import dev.notypie.domain.command.outbound.UserRef
 
 internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     approvalContents: ApprovalContents? = null,
     private val participants: Set<String> = emptySet(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -64,7 +61,6 @@ internal class ApprovalCallbackContext(
             channel = commandBasicInfo.channel,
             token = commandBasicInfo.appToken,
             commandType = commandType,
-            actionStates = results.flatMap { it.actionStates },
             commandDetailType = commandDetailType,
         )
     }

@@ -2,15 +2,14 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReplaceMessageContext
+import dev.notypie.domain.command.inbound.InboundCommand
 import java.util.UUID
 
 class ReplaceTextResponseCommand(
     idempotencyKey: UUID,
-    commandData: SlackCommandData,
+    commandData: InboundCommand,
     private val markdownMessage: String,
     private val responseUrl: String,
 ) : Command<NoSubCommands>(
@@ -20,7 +19,6 @@ class ReplaceTextResponseCommand(
     override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<NoSubCommands> =
         ReplaceMessageContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            requestHeaders = SlackRequestHeaders(),
             markdownMessage = markdownMessage,
             responseUrl = responseUrl,
             subCommand = subCommand,

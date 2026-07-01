@@ -4,10 +4,9 @@ import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
-import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
@@ -61,13 +60,12 @@ enum class CommandDetailType {
 
     internal fun createContext(
         commandBasicInfo: CommandBasicInfo,
-        requestHeaders: SlackRequestHeaders,
         subCommand: SubCommand<NoSubCommands>,
         intents: IntentQueue,
     ): CommandContext<out SubCommandDefinition> =
         when (this) {
             APPROVAL_FORM -> {
-                SlackApprovalFormContext(
+                ApprovalFormContext(
                     commandBasicInfo = commandBasicInfo,
                     intents = intents,
                 )
@@ -187,7 +185,6 @@ enum class CommandDetailType {
             else -> {
                 EmptyContext(
                     commandBasicInfo = commandBasicInfo,
-                    requestHeaders = requestHeaders,
                     intents = intents,
                 )
             }

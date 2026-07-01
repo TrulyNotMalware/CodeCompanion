@@ -2,9 +2,9 @@ package dev.notypie.templates
 
 import com.slack.api.model.block.*
 import com.slack.api.model.block.Blocks.*
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.slack.States
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.InteractiveObject
@@ -58,15 +58,18 @@ class ModalBlockBuilder(
      * @return An `ActionsBlock` object representing the approval block.
      */
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
+        // Slack button value routing string: idempotencyKey + detailType, tokenized the same way
+        // the interaction parser reads it back. This transport concern lives here, not in the domain.
+        val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType}"
         val approvalButton: InteractiveObject =
             modalElementBuilder.approvalButtonElement(
                 approvalButtonName = approvalContents.approvalButtonName,
-                interactionPayload = approvalContents.interactionValue,
+                interactionPayload = interactionPayload,
             )
         val rejectButton: InteractiveObject =
             modalElementBuilder.rejectButtonElement(
                 rejectButtonName = approvalContents.rejectButtonName,
-                interactionPayload = approvalContents.interactionValue,
+                interactionPayload = interactionPayload,
             )
 
         val layout =

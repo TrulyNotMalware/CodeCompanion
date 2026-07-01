@@ -3,12 +3,11 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
@@ -19,11 +18,9 @@ import java.util.UUID
 
 internal class StandupFillContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -36,9 +33,9 @@ internal class StandupFillContext(
      * "Fill in standup" button carries `<idempotencyKey>,STANDUP_FILL,<sessionUid>,<routineUid>`;
      * routingExtras[0] = sessionUid, [1] = routineUid. Missing/malformed extras are a no-op.
      */
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val sessionUid =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .getOrNull(0)
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return CommandOutput.success(
@@ -47,7 +44,7 @@ internal class StandupFillContext(
                     commandDetailType = commandDetailType,
                 )
         val routineUid =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .getOrNull(1)
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return CommandOutput.success(
@@ -57,16 +54,16 @@ internal class StandupFillContext(
                 )
         addOutbound(
             OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = interactionPayload.triggerId),
+                handle = ModalOpenHandle(raw = interaction.trigger.raw),
                 form =
                     ModalForm.StandupFill(
                         sessionUid = sessionUid,
                         routineUid = routineUid,
-                        requesterId = interactionPayload.user.id,
+                        requesterId = interaction.actor.id,
                         originNotice =
                             MessageRef(
-                                conversation = ConversationTarget(id = interactionPayload.channel.id),
-                                messageId = interactionPayload.container.messageTs.orEmpty(),
+                                conversation = ConversationTarget(id = interaction.channelId),
+                                messageId = interaction.message?.raw.orEmpty(),
                             ),
                     ),
             ),

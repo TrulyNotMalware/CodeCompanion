@@ -4,8 +4,8 @@ import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.meeting.ReminderCandidateMeeting

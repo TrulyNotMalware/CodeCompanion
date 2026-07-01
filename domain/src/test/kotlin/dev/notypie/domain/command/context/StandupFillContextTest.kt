@@ -1,13 +1,16 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.applyButtonField
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
+import dev.notypie.domain.command.inbound.MessageHandle
+import dev.notypie.domain.command.inbound.TriggerHandle
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.selectedApplyButtonStates
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -26,21 +29,18 @@ class StandupFillContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.STANDUP_FILL,
-                    currentAction = selectedApplyButtonStates(),
-                    states = listOf(selectedApplyButtonStates()),
+                createInboundInteraction(
+                    detailType = CommandDetailType.STANDUP_FILL,
+                    action = approveAction(isSelected = true),
+                    form = listOf(applyButtonField()),
                     idempotencyKey = UUID.randomUUID(),
-                    triggerId = "trigger-standup",
-                ).let { base ->
-                    base.copy(
-                        routingExtras = listOf(sessionUid.toString(), routineUid.toString()),
-                        container = base.container.copy(messageTs = "1700000000.000200"),
-                    )
-                }
+                    trigger = TriggerHandle(raw = "trigger-standup"),
+                    message = MessageHandle(raw = "1700000000.000200"),
+                    routingExtras = listOf(sessionUid.toString(), routineUid.toString()),
+                )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("the interaction succeeds") {
@@ -54,8 +54,8 @@ class StandupFillContextTest :
                     val form = open.form.shouldBeInstanceOf<ModalForm.StandupFill>()
                     form.sessionUid shouldBe sessionUid
                     form.routineUid shouldBe routineUid
-                    form.requesterId shouldBe payload.user.id
-                    form.originNotice.conversation.id shouldBe payload.channel.id
+                    form.requesterId shouldBe payload.actor.id
+                    form.originNotice.conversation.id shouldBe payload.channelId
                     form.originNotice.messageId shouldBe "1700000000.000200"
                 }
             }
@@ -69,15 +69,16 @@ class StandupFillContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.STANDUP_FILL,
-                    currentAction = selectedApplyButtonStates(),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.STANDUP_FILL,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
-                ).copy(routingExtras = listOf("not-a-uuid"))
+                    routingExtras = listOf("not-a-uuid"),
+                )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
 
                 then("Slack still receives a success response and no intent is emitted") {
                     result.ok shouldBe true

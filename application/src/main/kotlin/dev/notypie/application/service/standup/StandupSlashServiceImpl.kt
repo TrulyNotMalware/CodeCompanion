@@ -2,9 +2,9 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.slash.SetupStandupCommand
+import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import org.springframework.util.MultiValueMap
@@ -23,13 +23,13 @@ class StandupSlashServiceImpl(
     override fun handleStandup(
         headers: MultiValueMap<String, String>,
         payload: SlashCommandRequestBody,
-        slackCommandData: SlackCommandData,
+        commandData: InboundCommand,
     ) {
-        val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
+        val idempotencyKey = IdempotencyCreator.create(data = commandData)
         val command =
             SetupStandupCommand(
                 idempotencyKey = idempotencyKey,
-                commandData = slackCommandData,
+                commandData = commandData,
             )
         commandExecutor.execute(command = command)
     }

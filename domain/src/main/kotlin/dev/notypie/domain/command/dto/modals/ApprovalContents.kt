@@ -15,9 +15,7 @@ data class ApprovalContents(
     val idempotencyKey: UUID,
     val commandDetailType: CommandDetailType,
     val time: LocalDateTime = LocalDateTime.now(),
-) {
-    val interactionValue: String = "$idempotencyKey, $commandDetailType"
-}
+)
 
 enum class ApprovalContentType {
     SIMPLE_REQUEST_FORM,

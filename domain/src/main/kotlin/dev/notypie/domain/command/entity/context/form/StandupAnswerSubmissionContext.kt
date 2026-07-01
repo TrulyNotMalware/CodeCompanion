@@ -3,13 +3,12 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundFieldKind
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -20,11 +19,9 @@ import java.util.UUID
 
 internal class StandupAnswerSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -33,26 +30,26 @@ internal class StandupAnswerSubmissionContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val sessionUid =
-            runCatching { UUID.fromString(interactionPayload.idempotencyKey) }
+            runCatching { UUID.fromString(interaction.idempotencyKey) }
                 .getOrElse {
                     return successOutput()
                 }
         val userId =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .getOrNull(0)
                 ?.takeIf { it.isNotBlank() }
-                ?: interactionPayload.user.id
-        val noticeChannel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
-        val noticeMessageTs = interactionPayload.routingExtras.getOrNull(2).orEmpty()
+                ?: interaction.actor.id
+        val noticeChannel = interaction.routingExtras.getOrNull(1).orEmpty()
+        val noticeMessageTs = interaction.routingExtras.getOrNull(2).orEmpty()
         // Slack returns `view.state.values` unordered; sort by the `standup_q_<index>` block id so
         // `responses[i]` stays aligned with `routine.questions[i]`.
         val responses =
-            interactionPayload.states
-                .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
-                .sortedBy { state -> standupQuestionIndex(blockId = state.blockId) }
-                .map { it.selectedValue.trim() }
+            interaction.form
+                .all(kind = InboundFieldKind.TEXT)
+                .sortedBy { field -> standupQuestionIndex(blockId = field.key) }
+                .map { it.rawValue.trim() }
 
         if (responses.isNotEmpty()) {
             addIntent(

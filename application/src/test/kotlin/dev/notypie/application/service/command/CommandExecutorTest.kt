@@ -1,13 +1,13 @@
 package dev.notypie.application.service.command
 
 import dev.notypie.domain.command.TestCommand
-import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createSendSlackMessageEvent
+import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
+import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
@@ -40,7 +40,7 @@ class CommandExecutorTest :
             val command =
                 TestCommand(
                     idempotencyKey = idempotencyKey,
-                    commandData = createAppMentionSlackCommandData(),
+                    commandData = createMentionInboundCommand(),
                     intentToProduce = intent,
                 )
 
@@ -116,7 +116,7 @@ class CommandExecutorTest :
             val command =
                 TestCommand(
                     idempotencyKey = UUID.randomUUID(),
-                    commandData = createAppMentionSlackCommandData(),
+                    commandData = createMentionInboundCommand(),
                     intentToProduce = null,
                 )
 
@@ -140,7 +140,7 @@ class CommandExecutorTest :
             val command =
                 TestCommand(
                     idempotencyKey = UUID.randomUUID(),
-                    commandData = createAppMentionSlackCommandData(),
+                    commandData = createMentionInboundCommand(),
                     intentToProduce = CommandIntent.Nothing,
                 )
 

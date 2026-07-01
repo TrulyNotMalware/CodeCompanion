@@ -1,10 +1,11 @@
 package dev.notypie.domain.command.context
 
-import dev.notypie.domain.TEST_USER
 import dev.notypie.domain.command.SubCommand
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
+import dev.notypie.domain.command.datePickerField
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -13,14 +14,12 @@ import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.multiUsersField
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.selectedApplyButtonStates
-import dev.notypie.domain.command.selectedDatePickerStates
-import dev.notypie.domain.command.selectedMultiUserSelectStates
-import dev.notypie.domain.command.selectedPlainTextStates
-import dev.notypie.domain.command.selectedRejectButtonStates
-import dev.notypie.domain.command.selectedTimePickerStates
+import dev.notypie.domain.command.plainTextField
+import dev.notypie.domain.command.rejectAction
+import dev.notypie.domain.command.timePickerField
 import dev.notypie.domain.meet.entity.Meeting
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.longs.shouldBeLessThanOrEqual
@@ -232,26 +231,26 @@ class MeetingContextTest :
 
             `when`("handleInteraction with successful data") {
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedApplyButtonStates(),
-                        states =
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form =
                             listOf(
-                                selectedPlainTextStates(text = VALID_TEST_TITLE),
-                                selectedPlainTextStates(text = VALID_TEST_REASON),
-                                selectedDatePickerStates(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                datePickerField(
                                     date = LocalDate.now().plusDays(1),
                                     format = MeetingFormInput.DATE_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = LocalTime.now(),
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                                multiUsersField(maximumSequence = 10),
                             ),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
                 then("should return success result and create ReplaceMessage intent") {
                     res.ok shouldBe true
                     res.status shouldBe Status.SUCCESS
@@ -278,30 +277,30 @@ class MeetingContextTest :
                 val startTime = LocalTime.of(10, 0)
                 val endTime = LocalTime.of(11, 30)
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedApplyButtonStates(),
-                        states =
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form =
                             listOf(
-                                selectedPlainTextStates(text = VALID_TEST_TITLE),
-                                selectedPlainTextStates(text = VALID_TEST_REASON),
-                                selectedDatePickerStates(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                datePickerField(
                                     date = meetingDate,
                                     format = MeetingFormInput.DATE_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = startTime,
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = endTime,
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                                multiUsersField(maximumSequence = 10),
                             ),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
 
                 then("succeeds and emits ReplaceMessage") {
                     res.ok shouldBe true
@@ -323,30 +322,30 @@ class MeetingContextTest :
                 val meetingDate = LocalDate.now().plusDays(1)
                 val sameTime = LocalTime.of(10, 0)
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedApplyButtonStates(),
-                        states =
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form =
                             listOf(
-                                selectedPlainTextStates(text = VALID_TEST_TITLE),
-                                selectedPlainTextStates(text = VALID_TEST_REASON),
-                                selectedDatePickerStates(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                datePickerField(
                                     date = meetingDate,
                                     format = MeetingFormInput.DATE_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = sameTime,
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = sameTime,
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                                multiUsersField(maximumSequence = 10),
                             ),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
 
                 then("fails with End time must be after start time ephemeral") {
                     res.ok shouldBe false
@@ -370,26 +369,26 @@ class MeetingContextTest :
                 val meetingDate = LocalDate.now().plusDays(1)
                 val startTime = LocalTime.of(10, 0)
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedApplyButtonStates(),
-                        states =
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form =
                             listOf(
-                                selectedPlainTextStates(text = VALID_TEST_TITLE),
-                                selectedPlainTextStates(text = VALID_TEST_REASON),
-                                selectedDatePickerStates(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                datePickerField(
                                     date = meetingDate,
                                     format = MeetingFormInput.DATE_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = startTime,
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                                multiUsersField(maximumSequence = 10),
                             ),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
 
                 then("succeeds — end time defaults to startAt + 1h in the domain entity") {
                     res.ok shouldBe true
@@ -412,13 +411,13 @@ class MeetingContextTest :
 
             `when`("handleInteraction is called with the reject button and no fields filled in") {
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedRejectButtonStates(),
-                        states = emptyList(),
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = rejectAction(isSelected = true),
+                        form = emptyList(),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
 
                 then("should cancel without validation and emit a ReplaceMessage (no EphemeralResponse)") {
                     res.ok shouldBe true
@@ -446,25 +445,25 @@ class MeetingContextTest :
 
             `when`("handleInteraction is called with no participants") {
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedApplyButtonStates(),
-                        states =
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form =
                             listOf(
-                                selectedPlainTextStates(text = VALID_TEST_TITLE),
-                                selectedPlainTextStates(text = VALID_TEST_REASON),
-                                selectedDatePickerStates(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                datePickerField(
                                     date = LocalDate.now().plusDays(1),
                                     format = MeetingFormInput.DATE_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = LocalTime.now(),
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
                             ),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
 
                 then("should return fail result and emit Ephemeral outbound (no ReplaceMessage, no Meeting)") {
                     res.ok shouldBe false
@@ -488,26 +487,26 @@ class MeetingContextTest :
             `when`("handleInteraction is called with an over-long meeting name") {
                 val tooLongTitle = "a".repeat(Meeting.MAX_TITLE_LENGTH + 5)
                 val interactionPayload =
-                    createInteractionPayloadInput(
+                    createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = selectedApplyButtonStates(),
-                        states =
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form =
                             listOf(
-                                selectedPlainTextStates(text = tooLongTitle),
-                                selectedPlainTextStates(text = VALID_TEST_REASON),
-                                selectedDatePickerStates(
+                                plainTextField(text = tooLongTitle),
+                                plainTextField(text = VALID_TEST_REASON),
+                                datePickerField(
                                     date = LocalDate.now().plusDays(1),
                                     format = MeetingFormInput.DATE_PATTERN,
                                 ),
-                                selectedTimePickerStates(
+                                timePickerField(
                                     time = LocalTime.now(),
                                     format = MeetingFormInput.SIMPLE_TIME_PATTERN,
                                 ),
-                                selectedMultiUserSelectStates(user = TEST_USER, maximumSequence = 10),
+                                multiUsersField(maximumSequence = 10),
                             ),
                     )
-                val res = context.handleInteraction(interactionPayload = interactionPayload)
+                val res = context.handleInteraction(interaction = interactionPayload)
 
                 then("should fail gracefully with an ephemeral error (no thrown exception, no Meeting)") {
                     res.ok shouldBe false

@@ -1,12 +1,12 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
+import dev.notypie.domain.command.inbound.TriggerHandle
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
@@ -27,16 +27,17 @@ class RescheduleMeetingContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.RESCHEDULE_MEETING,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
-                    triggerId = triggerId,
-                ).copy(routingExtras = listOf(meetingUid.toString()))
+                    trigger = TriggerHandle(raw = triggerId),
+                    routingExtras = listOf(meetingUid.toString()),
+                )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("the interaction succeeds") {
@@ -49,8 +50,8 @@ class RescheduleMeetingContextTest :
                     open.handle.raw shouldBe triggerId
                     val form = open.form.shouldBeInstanceOf<ModalForm.Reschedule>()
                     form.meetingUid shouldBe meetingUid
-                    form.requesterId shouldBe payload.user.id
-                    form.channel.id shouldBe payload.channel.id
+                    form.requesterId shouldBe payload.actor.id
+                    form.channel.id shouldBe payload.channelId
                 }
             }
         }
@@ -63,16 +64,17 @@ class RescheduleMeetingContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.RESCHEDULE_MEETING,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
-                    triggerId = "trigger.123",
-                ).copy(routingExtras = listOf("not-a-uuid"))
+                    trigger = TriggerHandle(raw = "trigger.123"),
+                    routingExtras = listOf("not-a-uuid"),
+                )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
 
                 then("no intents are emitted and Slack still gets success") {
                     result.ok shouldBe true

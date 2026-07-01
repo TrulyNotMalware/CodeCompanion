@@ -1,10 +1,11 @@
 package dev.notypie.domain.command.parsers
 
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionSlackCommandData
+import dev.notypie.domain.command.createInteractionResponseInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.EmptyContext
-import dev.notypie.domain.command.entity.context.SlackApprovalFormContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
@@ -18,43 +19,35 @@ class InteractionContextParserTest :
         val idempotencyKey = UUID.randomUUID()
         val intents = createIntentQueue()
 
+        fun createParser(detailType: CommandDetailType): InteractionContextParser {
+            val interaction =
+                createInboundInteraction(
+                    detailType = detailType,
+                    idempotencyKey = idempotencyKey,
+                )
+            return InteractionContextParser(
+                commandData = createInteractionResponseInboundCommand(interaction = interaction),
+                interaction = interaction,
+                baseUrl = "",
+                commandId = UUID.randomUUID(),
+                idempotencyKey = idempotencyKey,
+                intents = intents,
+            )
+        }
+
         given("parseContext") {
             `when`("interaction type is APPROVAL_FORM") {
-                val commandData =
-                    createInteractionSlackCommandData(
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
-                        idempotencyKey = idempotencyKey,
-                    )
-                val parser =
-                    InteractionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(detailType = CommandDetailType.APPROVAL_FORM)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
-                then("should return SlackApprovalFormContext") {
-                    result.shouldBeInstanceOf<SlackApprovalFormContext>()
+                then("should return ApprovalFormContext") {
+                    result.shouldBeInstanceOf<ApprovalFormContext>()
                 }
             }
 
             `when`("interaction type is NOTICE_FORM") {
-                val commandData =
-                    createInteractionSlackCommandData(
-                        commandDetailType = CommandDetailType.NOTICE_FORM,
-                        idempotencyKey = idempotencyKey,
-                    )
-                val parser =
-                    InteractionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(detailType = CommandDetailType.NOTICE_FORM)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -64,19 +57,7 @@ class InteractionContextParserTest :
             }
 
             `when`("interaction type is REQUEST_MEETING_FORM") {
-                val commandData =
-                    createInteractionSlackCommandData(
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        idempotencyKey = idempotencyKey,
-                    )
-                val parser =
-                    InteractionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(detailType = CommandDetailType.REQUEST_MEETING_FORM)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -86,19 +67,7 @@ class InteractionContextParserTest :
             }
 
             `when`("interaction type is MEETING_APPROVAL_NOTICE_FORM") {
-                val commandData =
-                    createInteractionSlackCommandData(
-                        commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-                        idempotencyKey = idempotencyKey,
-                    )
-                val parser =
-                    InteractionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -108,19 +77,7 @@ class InteractionContextParserTest :
             }
 
             `when`("interaction type is SIMPLE_TEXT (falls to else branch)") {
-                val commandData =
-                    createInteractionSlackCommandData(
-                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                        idempotencyKey = idempotencyKey,
-                    )
-                val parser =
-                    InteractionContextParser(
-                        slackCommandData = commandData,
-                        baseUrl = "",
-                        commandId = UUID.randomUUID(),
-                        idempotencyKey = idempotencyKey,
-                        intents = intents,
-                    )
+                val parser = createParser(detailType = CommandDetailType.SIMPLE_TEXT)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 

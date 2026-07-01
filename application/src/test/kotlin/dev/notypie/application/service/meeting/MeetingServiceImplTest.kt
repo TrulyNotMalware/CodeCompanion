@@ -3,7 +3,6 @@ package dev.notypie.application.service.meeting
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.AddParticipantPayload
@@ -11,13 +10,14 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository

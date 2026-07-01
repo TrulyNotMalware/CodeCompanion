@@ -2,7 +2,6 @@ package dev.notypie.domain.command.context
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -23,7 +22,6 @@ class EphemeralTextContextTest :
                 EphemeralTextResponseContext(
                     commandBasicInfo = testCommandBasicInfo,
                     textMessage = "test message",
-                    requestHeaders = SlackRequestHeaders(),
                     intents = intentQueue,
                 )
             `when`("runCommand with no sub command") {
@@ -50,7 +48,6 @@ class EphemeralTextContextTest :
                 EphemeralTextResponseContext(
                     commandBasicInfo = testCommandBasicInfo,
                     textMessage = "error occurred",
-                    requestHeaders = SlackRequestHeaders(),
                     isOk = false,
                     intents = intentQueue,
                 )

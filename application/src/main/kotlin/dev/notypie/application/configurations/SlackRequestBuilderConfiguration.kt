@@ -1,9 +1,9 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.service.command.CommandExecutor
-import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.impl.command.*
+import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.standup.StandupRepository

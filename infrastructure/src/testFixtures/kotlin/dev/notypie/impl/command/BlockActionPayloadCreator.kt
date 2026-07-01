@@ -10,9 +10,9 @@ import dev.notypie.domain.TEST_TEAM_ID
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.InteractionTypes
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.slack.ActionElementTypes
+import dev.notypie.impl.command.slack.InteractionTypes
 import dev.notypie.templates.ButtonType
 import dev.notypie.templates.DeclineReasonModalIds
 import java.util.UUID
@@ -208,6 +208,39 @@ fun createStandupAnswerViewSubmissionJson(
         }
         """.trimIndent()
 }
+
+/**
+ * Builds a minimal `view_submission` payload carrying only `private_metadata` routing (no state
+ * values needed), for asserting how the parser recovers the originating channel per flow.
+ */
+fun createRoutingOnlyViewSubmissionJson(
+    callbackId: String,
+    privateMetadata: String,
+    teamId: String = TEST_TEAM_ID,
+    teamDomain: String = TEST_TEAM_DOMAIN,
+    userId: String = TEST_USER_ID,
+    userName: String = TEST_USER_NAME,
+    appId: String = TEST_APP_ID,
+    token: String = TEST_TOKEN,
+): String =
+    """
+    {
+        "type": "${InteractionTypes.VIEW_SUBMISSION}",
+        "token": "$token",
+        "api_app_id": "$appId",
+        "trigger_id": "trigger_view_submission_789",
+        "is_enterprise_install": false,
+        "team": {"id": "$teamId", "domain": "$teamDomain"},
+        "user": {"id": "$userId", "username": "$userName", "name": "$userName", "team_id": "$teamId"},
+        "view": {
+            "id": "V_ROUTING_123",
+            "type": "modal",
+            "callback_id": "$callbackId",
+            "private_metadata": "$privateMetadata",
+            "state": { "values": {} }
+        }
+    }
+    """.trimIndent()
 
 // ============ Full Payload Builder ============
 

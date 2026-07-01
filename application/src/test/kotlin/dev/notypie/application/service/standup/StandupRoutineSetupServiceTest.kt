@@ -3,9 +3,9 @@ package dev.notypie.application.service.standup
 import dev.notypie.domain.command.createCreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder

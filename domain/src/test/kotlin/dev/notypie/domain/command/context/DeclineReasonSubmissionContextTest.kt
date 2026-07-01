@@ -1,14 +1,17 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
+import dev.notypie.domain.command.inbound.InboundField
+import dev.notypie.domain.command.inbound.InboundFieldKind
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inboundField
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -28,29 +31,21 @@ class DeclineReasonSubmissionContextTest :
             selectedReason: String,
             noticeChannel: String = "C_NOTICE",
             noticeMessageTs: String = "1700000000.000100",
-        ) = createInteractionPayloadInput(
-            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-            currentAction =
-                States(
-                    type = ActionElementTypes.APPLY_BUTTON,
-                    isSelected = true,
-                    selectedValue = selectedReason,
-                ),
-            states =
-                listOf(
-                    States(
-                        type = ActionElementTypes.STATIC_SELECT,
-                        isSelected = selectedReason.isNotBlank(),
-                        selectedValue = selectedReason,
+        ): InboundInteraction =
+            createInboundInteraction(
+                detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                action = approveAction(isSelected = true),
+                form =
+                    listOf(
+                        inboundField(
+                            kind = InboundFieldKind.CHOICE,
+                            isSelected = selectedReason.isNotBlank(),
+                            rawValue = selectedReason,
+                        ),
                     ),
-                ),
-            idempotencyKey = meetingKey,
-        ).copy(
-            routingExtras = listOf(participantUserId, noticeChannel, noticeMessageTs),
-            privateMetadata =
-                "$meetingKey,${CommandDetailType.DECLINE_REASON_MODAL.name}," +
-                    "$participantUserId,$noticeChannel,$noticeMessageTs",
-        )
+                idempotencyKey = meetingKey,
+                routingExtras = listOf(participantUserId, noticeChannel, noticeMessageTs),
+            )
 
         given("DeclineReasonSubmissionContext receives a valid view_submission") {
             val meetingKey = UUID.randomUUID()
@@ -69,7 +64,7 @@ class DeclineReasonSubmissionContextTest :
                 )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("result is a success with DECLINE_REASON_MODAL detail type") {
@@ -118,32 +113,28 @@ class DeclineReasonSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    currentAction =
-                        States(
-                            type = ActionElementTypes.APPLY_BUTTON,
-                            isSelected = true,
-                            selectedValue = RejectReason.OTHER.name,
-                        ),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.STATIC_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.CHOICE,
                                 isSelected = true,
-                                selectedValue = RejectReason.OTHER.name,
+                                rawValue = RejectReason.OTHER.name,
                             ),
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
-                                selectedValue = "Out of town for a wedding",
+                                rawValue = "Out of town for a wedding",
                             ),
                         ),
                     idempotencyKey = meetingKey,
-                ).copy(routingExtras = listOf(participantUserId, "C_NOTICE", "1700000000.000100"))
+                    routingExtras = listOf(participantUserId, "C_NOTICE", "1700000000.000100"),
+                )
 
             `when`("handleInteraction is invoked") {
-                context.handleInteraction(interactionPayload = payload)
+                context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("MeetingAttendanceUpdate carries the Other reason and its detail") {
@@ -172,32 +163,28 @@ class DeclineReasonSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    currentAction =
-                        States(
-                            type = ActionElementTypes.APPLY_BUTTON,
-                            isSelected = true,
-                            selectedValue = RejectReason.VACATION.name,
-                        ),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.STATIC_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.CHOICE,
                                 isSelected = true,
-                                selectedValue = RejectReason.VACATION.name,
+                                rawValue = RejectReason.VACATION.name,
                             ),
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
-                                selectedValue = "ignored because reason is not Other",
+                                rawValue = "ignored because reason is not Other",
                             ),
                         ),
                     idempotencyKey = meetingKey,
-                ).copy(routingExtras = listOf("U_PARTICIPANT"))
+                    routingExtras = listOf("U_PARTICIPANT"),
+                )
 
             `when`("handleInteraction is invoked") {
-                context.handleInteraction(interactionPayload = payload)
+                context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("detail is dropped — it is only meaningful for Other") {
@@ -220,27 +207,23 @@ class DeclineReasonSubmissionContextTest :
                 )
             // Legacy notice that predates Wave 2 — routing carries only participantUserId.
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    currentAction =
-                        States(
-                            type = ActionElementTypes.APPLY_BUTTON,
-                            isSelected = true,
-                            selectedValue = RejectReason.HEALTH_ISSUE.name,
-                        ),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.STATIC_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.CHOICE,
                                 isSelected = true,
-                                selectedValue = RejectReason.HEALTH_ISSUE.name,
+                                rawValue = RejectReason.HEALTH_ISSUE.name,
                             ),
                         ),
                     idempotencyKey = meetingKey,
-                ).copy(routingExtras = listOf(participantUserId))
+                    routingExtras = listOf(participantUserId),
+                )
 
             `when`("handleInteraction is invoked") {
-                context.handleInteraction(interactionPayload = payload)
+                context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("MeetingAttendanceUpdate still records the decline") {
@@ -273,7 +256,7 @@ class DeclineReasonSubmissionContextTest :
                 )
 
             `when`("handleInteraction is invoked") {
-                context.handleInteraction(interactionPayload = payload)
+                context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("the attendance update falls back to RejectReason.OTHER") {
@@ -302,7 +285,7 @@ class DeclineReasonSubmissionContextTest :
                 )
 
             `when`("handleInteraction is invoked") {
-                context.handleInteraction(interactionPayload = payload)
+                context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("ATTENDING is coerced to OTHER so the decline still records as absent") {
@@ -322,17 +305,15 @@ class DeclineReasonSubmissionContextTest :
                     intents = intentQueue,
                 )
             val badPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = listOf(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    action = approveAction(isSelected = true),
+                    form = emptyList<InboundField>(),
                     idempotencyKey = UUID.randomUUID(),
-                ).copy(
-                    idempotencyKey = "not-a-uuid",
-                )
+                ).copy(idempotencyKey = "not-a-uuid")
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = badPayload)
+                val result = context.handleInteraction(interaction = badPayload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("no intents are emitted and the context returns success so Slack closes the modal") {

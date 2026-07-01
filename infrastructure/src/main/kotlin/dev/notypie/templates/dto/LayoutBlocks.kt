@@ -2,7 +2,7 @@ package dev.notypie.templates.dto
 
 import com.slack.api.model.block.LayoutBlock
 import com.slack.api.model.block.element.BlockElement
-import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.impl.command.slack.States
 
 /*
  * Wrapper types that pair Slack SDK rendering objects with the [States] entries the

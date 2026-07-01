@@ -2,10 +2,6 @@ package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
-import dev.notypie.domain.command.dto.interactions.isCanceled
-import dev.notypie.domain.command.dto.interactions.isCompleted
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
@@ -15,6 +11,9 @@ import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.isCanceled
+import dev.notypie.domain.command.inbound.isComplete
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -26,12 +25,10 @@ import java.time.LocalDateTime
 
 internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<MeetingSubCommandDefinition> =
         SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
     intents: IntentQueue,
 ) : ReactionContext<MeetingSubCommandDefinition>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -113,17 +110,17 @@ internal class RequestMeetingContext(
 
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         // Deny cancels outright — no validation, no meeting created.
-        if (interactionPayload.isCanceled()) {
+        if (interaction.isCanceled()) {
             return interactionSuccessResponse(
-                responseUrl = interactionPayload.responseUrl,
+                responseUrl = interaction.reply.raw,
                 mkdMessage = "Meeting request canceled.",
             )
         }
 
-        val formInput = MeetingFormInput.from(payload = interactionPayload)
-        validationErrorOrNull(formInput = formInput, payload = interactionPayload)?.let { return it }
+        val formInput = MeetingFormInput.from(interaction = interaction)
+        validationErrorOrNull(formInput = formInput, interaction = interaction)?.let { return it }
 
         // Surface Meeting's own invariant violations as an ephemeral instead of throwing silently.
         val meeting =
@@ -145,7 +142,7 @@ internal class RequestMeetingContext(
         }
 
         return interactionSuccessResponse(
-            responseUrl = interactionPayload.responseUrl,
+            responseUrl = interaction.reply.raw,
             results =
                 interactionResults(
                     status = Status.SUCCESS,
@@ -155,10 +152,10 @@ internal class RequestMeetingContext(
     }
 
     /**
-     * Error CommandOutput when the form input is invalid, else null. The `isCompleted` check stays on
-     * the raw payload because it inspects whether every interactive element was answered.
+     * Error CommandOutput when the form input is invalid, else null. The `isComplete` check stays on
+     * the raw interaction because it inspects whether every interactive element was answered.
      */
-    private fun validationErrorOrNull(formInput: MeetingFormInput, payload: InteractionPayload): CommandOutput? {
+    private fun validationErrorOrNull(formInput: MeetingFormInput, interaction: InboundInteraction): CommandOutput? {
         val errorMessage =
             when {
                 formInput.participants.isEmpty() -> "Select participants"
@@ -169,7 +166,7 @@ internal class RequestMeetingContext(
                     "End time must be after start time."
                 }
 
-                !payload.isCompleted() -> "Please select *all options.*"
+                !interaction.isComplete() -> "Please select *all options.*"
 
                 else -> return null
             }

@@ -3,9 +3,7 @@ package dev.notypie.application.service.meeting
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
@@ -16,9 +14,11 @@ import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
+import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
@@ -44,12 +44,12 @@ class MeetingServiceImpl(
     override fun handleMeeting(
         headers: MultiValueMap<String, String>,
         payload: SlashCommandRequestBody,
-        slackCommandData: SlackCommandData,
+        commandData: InboundCommand,
     ) {
-        val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
+        val idempotencyKey = IdempotencyCreator.create(data = commandData)
         val command =
             RequestMeetingCommand(
-                commandData = slackCommandData,
+                commandData = commandData,
                 idempotencyKey = idempotencyKey,
             )
         commandExecutor.execute(command = command)

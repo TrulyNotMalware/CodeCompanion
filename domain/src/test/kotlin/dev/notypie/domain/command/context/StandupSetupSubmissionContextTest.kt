@@ -1,12 +1,13 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
+import dev.notypie.domain.command.inbound.InboundFieldKind
+import dev.notypie.domain.command.inboundField
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -27,70 +28,67 @@ class StandupSetupSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
-                                selectedValue = "Daily Standup",
-                                blockId = StandupSetupSubmissionContext.NAME_BLOCK_ID,
+                                rawValue = "Daily Standup",
+                                key = StandupSetupSubmissionContext.NAME_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
                                 // Blank middle line must be trimmed away.
-                                selectedValue = "What did you do?\n\n  What are you doing?  \nBlockers?",
-                                blockId = StandupSetupSubmissionContext.QUESTIONS_BLOCK_ID,
+                                rawValue = "What did you do?\n\n  What are you doing?  \nBlockers?",
+                                key = StandupSetupSubmissionContext.QUESTIONS_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.MULTI_USERS_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.USERS,
                                 isSelected = true,
-                                selectedValue = "U_ALICE,U_BOB",
-                                blockId = StandupSetupSubmissionContext.MEMBERS_BLOCK_ID,
+                                rawValue = "U_ALICE,U_BOB",
+                                key = StandupSetupSubmissionContext.MEMBERS_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.CONVERSATIONS_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.CONVERSATION,
                                 isSelected = true,
-                                selectedValue = "C_SUMMARY",
-                                blockId = StandupSetupSubmissionContext.SUMMARY_CHANNEL_BLOCK_ID,
+                                rawValue = "C_SUMMARY",
+                                key = StandupSetupSubmissionContext.SUMMARY_CHANNEL_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.MULTI_STATIC_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.MULTI_CHOICE,
                                 isSelected = true,
-                                selectedValue = "MONDAY,WEDNESDAY,FRIDAY",
-                                blockId = StandupSetupSubmissionContext.WEEKDAYS_BLOCK_ID,
+                                rawValue = "MONDAY,WEDNESDAY,FRIDAY",
+                                key = StandupSetupSubmissionContext.WEEKDAYS_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.TIME_PICKER,
+                            inboundField(
+                                kind = InboundFieldKind.TIME,
                                 isSelected = true,
-                                selectedValue = "09:30",
-                                blockId = StandupSetupSubmissionContext.TIME_BLOCK_ID,
+                                rawValue = "09:30",
+                                key = StandupSetupSubmissionContext.TIME_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
-                                selectedValue = "90",
-                                blockId = StandupSetupSubmissionContext.CUTOFF_BLOCK_ID,
+                                rawValue = "90",
+                                key = StandupSetupSubmissionContext.CUTOFF_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.STATIC_SELECT,
+                            inboundField(
+                                kind = InboundFieldKind.CHOICE,
                                 isSelected = true,
-                                selectedValue = "UTC",
-                                blockId = StandupSetupSubmissionContext.TIMEZONE_BLOCK_ID,
+                                rawValue = "UTC",
+                                key = StandupSetupSubmissionContext.TIMEZONE_BLOCK_ID,
                             ),
                         ),
                     idempotencyKey = UUID.randomUUID(),
-                ).copy(
                     routingExtras = listOf("U_CREATOR", "C_COMMAND"),
-                    privateMetadata =
-                        "${UUID.randomUUID()},${CommandDetailType.STANDUP_SETUP_SUBMIT.name},U_CREATOR,C_COMMAND",
                 )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("the interaction succeeds") {
@@ -124,29 +122,29 @@ class StandupSetupSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
-                                selectedValue = "Routine",
-                                blockId = StandupSetupSubmissionContext.NAME_BLOCK_ID,
+                                rawValue = "Routine",
+                                key = StandupSetupSubmissionContext.NAME_BLOCK_ID,
                             ),
-                            States(
-                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                            inboundField(
+                                kind = InboundFieldKind.TEXT,
                                 isSelected = true,
-                                selectedValue = "Only question",
-                                blockId = StandupSetupSubmissionContext.QUESTIONS_BLOCK_ID,
+                                rawValue = "Only question",
+                                key = StandupSetupSubmissionContext.QUESTIONS_BLOCK_ID,
                             ),
                         ),
                     idempotencyKey = UUID.randomUUID(),
                 )
 
             `when`("handleInteraction is invoked without cutoff or timezone selections") {
-                context.handleInteraction(interactionPayload = payload)
+                context.handleInteraction(interaction = payload)
                 val create =
                     intentQueue
                         .drainSnapshot()

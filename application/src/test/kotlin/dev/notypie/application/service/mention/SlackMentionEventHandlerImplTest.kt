@@ -40,7 +40,7 @@ class SlackMentionEventHandlerImplTest :
 
                 then("parsed command data fields should be correct") {
                     result.channel shouldBe TEST_CHANNEL_ID
-                    result.publisherId shouldBe TEST_USER_ID
+                    result.actorId shouldBe TEST_USER_ID
                     result.appToken shouldBe TEST_BOT_TOKEN
                 }
             }
@@ -55,7 +55,7 @@ class SlackMentionEventHandlerImplTest :
                 }
             }
 
-            `when`("payload type is not a known SlackCommandType") {
+            `when`("payload type is not a known Slack event type") {
                 val payload = createAppMentionPayload(type = "not_a_real_type")
 
                 then("should throw UnsupportedSlackCommandTypeException") {
@@ -79,7 +79,7 @@ class SlackMentionEventHandlerImplTest :
 
                 then("parsed values should reflect the custom parameters") {
                     result.channel shouldBe "C_CUSTOM"
-                    result.publisherId shouldBe "U_CUSTOM"
+                    result.actorId shouldBe "U_CUSTOM"
                 }
             }
         }

@@ -3,13 +3,11 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.time.DayOfWeek
@@ -30,11 +28,9 @@ import java.time.ZoneId
  */
 internal class StandupSetupSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -43,34 +39,34 @@ internal class StandupSetupSubmissionContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val creatorId =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .getOrNull(0)
                 ?.takeIf { it.isNotBlank() }
-                ?: interactionPayload.user.id
-        val commandChannel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
+                ?: interaction.actor.id
+        val commandChannel = interaction.routingExtras.getOrNull(1).orEmpty()
 
-        val name = selectedValueOf(payload = interactionPayload, blockId = NAME_BLOCK_ID).trim()
+        val name = selectedValueOf(interaction = interaction, blockId = NAME_BLOCK_ID).trim()
         val questions =
-            selectedValueOf(payload = interactionPayload, blockId = QUESTIONS_BLOCK_ID)
+            selectedValueOf(interaction = interaction, blockId = QUESTIONS_BLOCK_ID)
                 .split("\n")
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
         val memberIds =
-            selectedValueOf(payload = interactionPayload, blockId = MEMBERS_BLOCK_ID)
+            selectedValueOf(interaction = interaction, blockId = MEMBERS_BLOCK_ID)
                 .split(",")
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
-        val summaryChannel = selectedValueOf(payload = interactionPayload, blockId = SUMMARY_CHANNEL_BLOCK_ID).trim()
+        val summaryChannel = selectedValueOf(interaction = interaction, blockId = SUMMARY_CHANNEL_BLOCK_ID).trim()
         val weekdays =
-            selectedValueOf(payload = interactionPayload, blockId = WEEKDAYS_BLOCK_ID)
+            selectedValueOf(interaction = interaction, blockId = WEEKDAYS_BLOCK_ID)
                 .split(",")
                 .mapNotNull { token -> runCatching { DayOfWeek.valueOf(token.trim()) }.getOrNull() }
                 .toSet()
-        val triggerLocalTime = parseTriggerTime(payload = interactionPayload)
-        val cutoffMinutes = parseCutoffMinutes(payload = interactionPayload)
-        val timezone = parseTimezone(payload = interactionPayload)
+        val triggerLocalTime = parseTriggerTime(interaction = interaction)
+        val cutoffMinutes = parseCutoffMinutes(interaction = interaction)
+        val timezone = parseTimezone(interaction = interaction)
 
         addIntent(
             CommandIntent.CreateStandupRoutine(
@@ -93,24 +89,21 @@ internal class StandupSetupSubmissionContext(
         )
     }
 
-    private fun selectedValueOf(payload: InteractionPayload, blockId: String): String =
-        stateOf(payload = payload, blockId = blockId)?.selectedValue.orEmpty()
+    private fun selectedValueOf(interaction: InboundInteraction, blockId: String): String =
+        interaction.form.value(key = blockId)
 
-    private fun stateOf(payload: InteractionPayload, blockId: String): States? =
-        payload.states.firstOrNull { it.blockId == blockId }
-
-    private fun parseTriggerTime(payload: InteractionPayload): LocalTime {
-        val raw = selectedValueOf(payload = payload, blockId = TIME_BLOCK_ID)
+    private fun parseTriggerTime(interaction: InboundInteraction): LocalTime {
+        val raw = selectedValueOf(interaction = interaction, blockId = TIME_BLOCK_ID)
         return runCatching { LocalTime.parse(raw) }.getOrDefault(DEFAULT_TRIGGER_TIME)
     }
 
-    private fun parseCutoffMinutes(payload: InteractionPayload): Long {
-        val raw = selectedValueOf(payload = payload, blockId = CUTOFF_BLOCK_ID).trim()
+    private fun parseCutoffMinutes(interaction: InboundInteraction): Long {
+        val raw = selectedValueOf(interaction = interaction, blockId = CUTOFF_BLOCK_ID).trim()
         return raw.toLongOrNull() ?: DEFAULT_CUTOFF_MINUTES
     }
 
-    private fun parseTimezone(payload: InteractionPayload): ZoneId {
-        val raw = selectedValueOf(payload = payload, blockId = TIMEZONE_BLOCK_ID).trim()
+    private fun parseTimezone(interaction: InboundInteraction): ZoneId {
+        val raw = selectedValueOf(interaction = interaction, blockId = TIMEZONE_BLOCK_ID).trim()
         return runCatching { ZoneId.of(raw) }.getOrDefault(DEFAULT_TIMEZONE)
     }
 

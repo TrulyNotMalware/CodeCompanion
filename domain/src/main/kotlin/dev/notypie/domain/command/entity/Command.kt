@@ -1,16 +1,15 @@
 package dev.notypie.domain.command.entity
 
-import dev.notypie.domain.command.SlackCommandType
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.exceptions.UnSupportedCommandException
+import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.DefaultIntentQueue
 import dev.notypie.domain.command.intent.IntentQueue
@@ -19,7 +18,7 @@ import java.util.UUID
 
 abstract class Command<T : SubCommandDefinition>(
     val idempotencyKey: UUID,
-    val commandData: SlackCommandData,
+    val commandData: InboundCommand,
 ) {
     internal val intents: IntentQueue = DefaultIntentQueue()
 
@@ -36,8 +35,7 @@ abstract class Command<T : SubCommandDefinition>(
         runCatching { executeCommand() }
             .getOrElse { exception ->
                 CommandOutput.fail(
-                    slackCommandData = commandData,
-                    idempotencyKey = idempotencyKey,
+                    basicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                     commandDetailType = CommandDetailType.ERROR_RESPONSE,
                     reason = exception.toString(),
                 )
@@ -46,22 +44,22 @@ abstract class Command<T : SubCommandDefinition>(
     private fun executeCommand(): CommandOutput {
         val subCommand = createSubCommand()
         val context = parseContext(subCommand = subCommand)
-        return when (commandData.slackCommandType) {
-            SlackCommandType.INTERACTION_RESPONSE -> context.executeInteraction()
+        return when (val payload = commandData.payload) {
+            is InboundInteraction -> context.executeInteraction(interaction = payload)
             else -> context.runCommand()
         }
     }
 
-    private fun CommandContext<out T>.executeInteraction(): CommandOutput =
+    private fun CommandContext<out T>.executeInteraction(interaction: InboundInteraction): CommandOutput =
         if (this is ReactionContext<out T>) {
-            handleInteraction(commandData.body as InteractionPayload)
+            handleInteraction(interaction)
         } else {
             throw UnSupportedCommandException(
-                commandType = commandData.slackCommandType.toString(),
+                commandType = commandData.kind.toString(),
                 errorCode = CommandErrorCode.UNSUPPORTED_COMMAND_TYPE,
                 details =
                     exceptionDetails {
-                        "commandType" value commandData.slackCommandType.toString() because
+                        "commandType" value commandData.kind.toString() because
                             "handleInteraction() is required only for reaction command type"
                     },
             )

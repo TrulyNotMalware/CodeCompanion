@@ -2,9 +2,8 @@ package dev.notypie.domain.command.context
 
 import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -25,7 +24,6 @@ class ReplaceMessageContextTest :
             val context =
                 ReplaceMessageContext(
                     commandBasicInfo = basicInfo,
-                    requestHeaders = SlackRequestHeaders(),
                     responseUrl = TEST_BASE_URL,
                     markdownMessage = "Replaced successfully.",
                     intents = intentQueue,
@@ -67,7 +65,6 @@ class ReplaceMessageContextTest :
                 val interactionContext =
                     ReplaceMessageContext(
                         commandBasicInfo = basicInfo,
-                        requestHeaders = SlackRequestHeaders(),
                         responseUrl = TEST_BASE_URL,
                         markdownMessage = "Interaction replaced.",
                         intents = interactionIntentQueue,
@@ -75,7 +72,7 @@ class ReplaceMessageContextTest :
 
                 val result =
                     interactionContext.handleInteraction(
-                        interactionPayload = createInteractionPayloadInput(),
+                        interaction = createInboundInteraction(),
                     )
 
                 then("should return success CommandOutput") {

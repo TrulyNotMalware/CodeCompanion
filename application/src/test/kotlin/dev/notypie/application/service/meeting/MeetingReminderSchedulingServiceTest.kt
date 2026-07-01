@@ -2,11 +2,11 @@ package dev.notypie.application.service.meeting
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.createMeetingReminderDto
 import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.outbox.MessageOutboxRepository

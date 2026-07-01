@@ -40,6 +40,9 @@ dependencies {
     testImplementation(testFixtures(project(":domain")))
     testFixturesImplementation(testFixtures(project(":domain")))
 
+    // Infrastructure test fixtures (Slack event payload/event builders)
+    testImplementation(testFixtures(project(":infrastructure")))
+
     // AOP
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 

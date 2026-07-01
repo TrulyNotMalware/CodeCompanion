@@ -10,7 +10,7 @@ interface EventPublisher {
 /**
  * Publishes a single domain event by wrapping it in a one-shot [DefaultEventQueue].
  * Centralizes the boilerplate that callers had to repeat at every fire-and-forget publish site.
- * `CommandEvent` is covariant (`out T`), so a more-specific subtype like `SendSlackMessageEvent`
+ * `CommandEvent` is covariant (`out T`), so a more-specific subtype like `GetMeetingListEvent`
  * is already accepted here without any cast.
  */
 fun EventPublisher.publishOne(event: CommandEvent<EventPayload>) {

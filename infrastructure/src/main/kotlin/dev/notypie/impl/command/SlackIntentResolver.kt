@@ -84,9 +84,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             newStartAt = intent.newStartAt,
-                            // view_submission carries no channel; use the one ferried through the modal.
-                            responseBasicInfo =
-                                basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
+                            responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
                 )
@@ -100,9 +98,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             participantUserIds = intent.participantUserIds,
-                            // view_submission carries no channel; use the one ferried through the modal.
-                            responseBasicInfo =
-                                basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
+                            responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
                 )

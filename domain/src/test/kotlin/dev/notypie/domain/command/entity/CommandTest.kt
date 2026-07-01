@@ -2,12 +2,10 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
-import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.createInteractionResponseSlackCommandData
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.approveAction
+import dev.notypie.domain.command.createInboundInteraction
+import dev.notypie.domain.command.createInteractionResponseInboundCommand
+import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.context.CommandContext
@@ -21,7 +19,7 @@ class CommandTest :
     BehaviorSpec({
 
         given("Command.handleEvent with non-interaction command") {
-            val commandData = createAppMentionSlackCommandData()
+            val commandData = createMentionInboundCommand()
             val idempotencyKey = UUID.randomUUID()
 
             val command =
@@ -34,7 +32,6 @@ class CommandTest :
                     ): CommandContext<out NoSubCommands> =
                         EmptyContext(
                             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-                            requestHeaders = SlackRequestHeaders(),
                             intents = intents,
                         )
 
@@ -53,13 +50,13 @@ class CommandTest :
         given("Command.handleEvent with interaction command") {
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.APPROVAL_FORM,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.APPROVAL_FORM,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
+            val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
             `when`("context is ReactionContext") {
                 val command =
@@ -103,7 +100,6 @@ class CommandTest :
                         ): CommandContext<out NoSubCommands> =
                             EmptyContext(
                                 commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-                                requestHeaders = SlackRequestHeaders(),
                                 intents = intents,
                             )
 
@@ -121,7 +117,7 @@ class CommandTest :
         }
 
         given("Command.handleEvent when executeCommand throws") {
-            val commandData = createAppMentionSlackCommandData()
+            val commandData = createMentionInboundCommand()
             val idempotencyKey = UUID.randomUUID()
 
             val command =

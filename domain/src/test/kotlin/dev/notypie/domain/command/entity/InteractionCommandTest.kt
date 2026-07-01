@@ -1,16 +1,10 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createEventCallbackData
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.createInteractionResponseSlackCommandData
-import dev.notypie.domain.command.createRichTextBlock
-import dev.notypie.domain.command.createSlackEventCallBackRequest
-import dev.notypie.domain.command.createTextElement
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.approveAction
+import dev.notypie.domain.command.createInboundInteraction
+import dev.notypie.domain.command.createInteractionResponseInboundCommand
+import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import io.kotest.core.spec.style.BehaviorSpec
@@ -21,23 +15,8 @@ import java.util.UUID
 class InteractionCommandTest :
     BehaviorSpec({
 
-        given("InteractionCommand with EVENT_CALLBACK (app_mention)") {
-            val body =
-                createSlackEventCallBackRequest(
-                    event =
-                        createEventCallbackData(
-                            blocks =
-                                listOf(
-                                    createRichTextBlock(
-                                        createTextElement(text = " notice hello"),
-                                    ),
-                                ),
-                        ),
-                )
-            val commandData =
-                createAppMentionSlackCommandData(body = body).copy(
-                    slackCommandType = SlackCommandType.EVENT_CALLBACK,
-                )
+        given("InteractionCommand with a MENTION payload (app_mention)") {
+            val commandData = createMentionInboundCommand(commandTokens = listOf("notice", "hello"))
             val idempotencyKey = UUID.randomUUID()
 
             val command =
@@ -60,13 +39,13 @@ class InteractionCommandTest :
         given("InteractionCommand with INTERACTION_RESPONSE (ReactionContext)") {
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.NOTICE_FORM,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.NOTICE_FORM,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
+            val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
             val command =
                 InteractionCommand(
@@ -87,13 +66,13 @@ class InteractionCommandTest :
         given("InteractionCommand with INTERACTION_RESPONSE (non-ReactionContext)") {
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.APPROVAL_FORM,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.APPROVAL_FORM,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
+            val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
             val command =
                 InteractionCommand(
@@ -114,16 +93,16 @@ class InteractionCommandTest :
         }
 
         given("InteractionCommand findSubCommandDefinition") {
-            `when`("body is InteractionPayload with REQUEST_MEETING_FORM") {
+            `when`("payload is InboundInteraction with REQUEST_MEETING_FORM") {
                 val idempotencyKey = UUID.randomUUID()
                 val interactionPayload =
-                    createInteractionPayloadInput(
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                        states = emptyList(),
+                    createInboundInteraction(
+                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        action = approveAction(isSelected = true),
+                        form = emptyList(),
                         idempotencyKey = idempotencyKey,
                     )
-                val commandData = createInteractionResponseSlackCommandData(interactionPayload = interactionPayload)
+                val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
                 val command =
                     InteractionCommand(
@@ -140,21 +119,8 @@ class InteractionCommandTest :
                 }
             }
 
-            `when`("body is not InteractionPayload") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(createTextElement(text = " notice")),
-                                    ),
-                            ),
-                    )
-                val commandData =
-                    createAppMentionSlackCommandData(body = body).copy(
-                        slackCommandType = SlackCommandType.EVENT_CALLBACK,
-                    )
+            `when`("payload is not InboundInteraction") {
+                val commandData = createMentionInboundCommand(commandTokens = listOf("notice"))
                 val idempotencyKey = UUID.randomUUID()
 
                 val command =

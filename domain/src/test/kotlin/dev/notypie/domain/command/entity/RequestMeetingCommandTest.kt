@@ -1,10 +1,7 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.createSlashCommandData
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
@@ -25,7 +22,7 @@ class RequestMeetingCommandTest :
 
         given("RequestMeetingCommand findSubCommandDefinition") {
             `when`("no subcommands provided") {
-                val commandData = createSlashCommandData()
+                val commandData = createSlashInboundCommand()
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -40,7 +37,7 @@ class RequestMeetingCommandTest :
             }
 
             `when`("subcommand is 'list'") {
-                val commandData = createSlashCommandData(subCommands = listOf("list"))
+                val commandData = createSlashInboundCommand(subCommands = listOf("list"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -55,7 +52,7 @@ class RequestMeetingCommandTest :
             }
 
             `when`("subcommand is unknown") {
-                val commandData = createSlashCommandData(subCommands = listOf("unknown_sub"))
+                val commandData = createSlashInboundCommand(subCommands = listOf("unknown_sub"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -72,7 +69,7 @@ class RequestMeetingCommandTest :
 
         given("RequestMeetingCommand handleEvent with LIST sub command and range option") {
             `when`("subcommand text is 'list today'") {
-                val commandData = createSlashCommandData(subCommands = listOf("list", "today"))
+                val commandData = createSlashInboundCommand(subCommands = listOf("list", "today"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -95,7 +92,7 @@ class RequestMeetingCommandTest :
             }
 
             `when`("subcommand text is 'list bogus'") {
-                val commandData = createSlashCommandData(subCommands = listOf("list", "bogus"))
+                val commandData = createSlashInboundCommand(subCommands = listOf("list", "bogus"))
                 val command =
                     RequestMeetingCommand(
                         idempotencyKey = UUID.randomUUID(),
@@ -116,16 +113,9 @@ class RequestMeetingCommandTest :
             }
         }
 
-        given("RequestMeetingCommand handleEvent with INTERACTION_RESPONSE") {
+        given("RequestMeetingCommand handleEvent with no subcommands") {
             val idempotencyKey = UUID.randomUUID()
-            val interactionPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
-                    idempotencyKey = idempotencyKey,
-                )
-            val commandData = createSlashCommandData(body = interactionPayload)
+            val commandData = createSlashInboundCommand()
 
             val command =
                 RequestMeetingCommand(

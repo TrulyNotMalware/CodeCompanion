@@ -2,7 +2,6 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.standup.createRoutineDto
@@ -12,6 +11,7 @@ import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.standup.ReadyDispatch

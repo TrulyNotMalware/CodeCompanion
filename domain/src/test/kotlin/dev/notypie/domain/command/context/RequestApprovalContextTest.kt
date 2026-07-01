@@ -2,7 +2,6 @@ package dev.notypie.domain.command.context
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -26,7 +25,6 @@ class RequestApprovalContextTest :
                 RequestApprovalContext(
                     users = users,
                     commands = commands,
-                    requestHeaders = SlackRequestHeaders(),
                     basicInfo = basicInfo,
                     intents = intentQueue,
                 )
@@ -75,7 +73,6 @@ class RequestApprovalContextTest :
                 RequestApprovalContext(
                     users = users,
                     commands = commands,
-                    requestHeaders = SlackRequestHeaders(),
                     basicInfo = basicInfo,
                     intents = intentQueue,
                 )

@@ -3,7 +3,6 @@ package dev.notypie.domain.command.entity.slash
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.Command
@@ -14,13 +13,14 @@ import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
+import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.meet.entity.Meeting
 import java.util.UUID
 
 class RequestMeetingCommand(
     idempotencyKey: UUID,
-    commandData: SlackCommandData,
+    commandData: InboundCommand,
 ) : Command<MeetingSubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,

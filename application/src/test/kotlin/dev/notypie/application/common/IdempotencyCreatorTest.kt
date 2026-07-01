@@ -1,7 +1,8 @@
 package dev.notypie.application.common
 
-import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createInteractionSlackCommandData
+import dev.notypie.domain.command.createInteractionInboundCommand
+import dev.notypie.domain.command.createMentionInboundCommand
+import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.common.IdempotencyData
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -116,8 +117,8 @@ class IdempotencyCreatorTest :
                 }
             }
 
-            `when`("called twice with the same real SlackCommandData (app_mention) in the same time window") {
-                val data = createAppMentionSlackCommandData()
+            `when`("called twice with the same real InboundCommand (app_mention) in the same time window") {
+                val data = createMentionInboundCommand()
                 val timeMillis = 5000L
 
                 then("should return the same UUID — idempotency preserved (regression for seeds jitter)") {
@@ -127,13 +128,25 @@ class IdempotencyCreatorTest :
                 }
             }
 
-            `when`("called with real SlackCommandData wrapping an InteractionPayload body") {
-                val data = createInteractionSlackCommandData()
+            `when`("called with a real InboundCommand wrapping an InboundInteraction payload") {
+                val data = createInteractionInboundCommand()
                 val timeMillis = 5000L
 
-                then("Jackson should serialize the nested Slack DTOs without NotSerializableException") {
+                then("Jackson should serialize the neutral nested payload without NotSerializableException") {
                     val key = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
                     key.shouldNotBeNull()
+                }
+            }
+
+            `when`("called with a slash InboundCommand whose payload nests a @JvmInline TriggerHandle") {
+                val data = createSlashInboundCommand(triggerId = "T-12345")
+                val timeMillis = 5000L
+
+                then("Jackson should serialize the value-class handle cleanly and stay idempotent") {
+                    val key1 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    val key2 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    key1.shouldNotBeNull()
+                    key1 shouldBe key2
                 }
             }
         }

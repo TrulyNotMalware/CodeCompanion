@@ -6,8 +6,8 @@ import com.slack.api.app_backend.interactive_components.payload.BlockActionPaylo
 import com.slack.api.app_backend.views.payload.ViewSubmissionPayload
 import com.slack.api.model.view.ViewState
 import com.slack.api.util.json.GsonFactory
-import dev.notypie.domain.command.dto.interactions.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.slack.*
 import dev.notypie.templates.ButtonType
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -69,6 +69,11 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 ?: CommandDetailType.NOTHING
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()
+        // view_submission has no channel of its own; flows that post a host confirmation ferry the
+        // originating channel via private_metadata. Recover it here (type-aware, since routingExtras[1]
+        // means different things per flow) so basicInfo.channel is correct without the domain intent
+        // having to carry a delivery channel.
+        val recoveredChannel = recoverDeliveryChannel(type = type, routingExtras = routingExtras)
 
         val parsedStates =
             viewSubmission.view
@@ -111,7 +116,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         return InteractionPayload(
             type = type,
             apiAppId = viewSubmission.apiAppId.orEmpty(),
-            channel = Channel(id = "", name = ""),
+            channel = Channel(id = recoveredChannel, name = ""),
             container = container,
             responseUrl = "",
             token = viewSubmission.token.orEmpty(),
@@ -189,6 +194,19 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             routingExtras = routingExtras,
         )
     }
+
+    /**
+     * Extracts the originating channel a view_submission should route its host confirmation back to.
+     * Only the reschedule/add-participant flows ferry a pure delivery channel at routingExtras[1];
+     * other flows either need no channel or carry business channels the domain reads itself.
+     */
+    private fun recoverDeliveryChannel(type: CommandDetailType, routingExtras: List<String>): String =
+        when (type) {
+            CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+            CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+            -> routingExtras.getOrNull(1).orEmpty()
+            else -> ""
+        }
 
     private fun parseStates(viewState: ViewState): List<States> =
         viewState.values.entries.flatMap { (blockId, innerMap) ->

@@ -1,12 +1,13 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext
+import dev.notypie.domain.command.inbound.InboundFieldKind
+import dev.notypie.domain.command.inboundField
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -30,39 +31,36 @@ class RescheduleMeetingSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.DATE_PICKER,
+                            inboundField(
+                                kind = InboundFieldKind.DATE,
                                 isSelected = true,
-                                selectedValue =
+                                rawValue =
                                     newDate.format(
                                         DateTimeFormatter.ofPattern(RescheduleMeetingSubmissionContext.DATE_PATTERN),
                                     ),
-                                blockId = "reschedule_meeting_date",
+                                key = "reschedule_meeting_date",
                             ),
-                            States(
-                                type = ActionElementTypes.TIME_PICKER,
+                            inboundField(
+                                kind = InboundFieldKind.TIME,
                                 isSelected = true,
-                                selectedValue =
+                                rawValue =
                                     newTime.format(
                                         DateTimeFormatter.ofPattern(RescheduleMeetingSubmissionContext.TIME_PATTERN),
                                     ),
-                                blockId = "reschedule_meeting_time",
+                                key = "reschedule_meeting_time",
                             ),
                         ),
                     idempotencyKey = meetingUid,
-                ).copy(
                     routingExtras = listOf("U_HOST"),
-                    privateMetadata =
-                        "$meetingUid,${CommandDetailType.RESCHEDULE_MEETING_SUBMIT.name},U_HOST",
                 )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
                 then("the interaction succeeds") {
@@ -88,27 +86,24 @@ class RescheduleMeetingSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states =
+                createInboundInteraction(
+                    detailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    action = approveAction(isSelected = true),
+                    form =
                         listOf(
-                            States(
-                                type = ActionElementTypes.DATE_PICKER,
+                            inboundField(
+                                kind = InboundFieldKind.DATE,
                                 isSelected = true,
-                                selectedValue = "2026-07-01",
-                                blockId = "reschedule_meeting_date",
+                                rawValue = "2026-07-01",
+                                key = "reschedule_meeting_date",
                             ),
                         ),
                     idempotencyKey = meetingUid,
-                ).copy(
                     routingExtras = listOf("U_HOST"),
-                    privateMetadata =
-                        "$meetingUid,${CommandDetailType.RESCHEDULE_MEETING_SUBMIT.name},U_HOST",
                 )
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
 
                 then("no intents are emitted and Slack still gets success") {
                     result.ok shouldBe true
@@ -125,15 +120,15 @@ class RescheduleMeetingSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
                 ).copy(idempotencyKey = "not-a-uuid")
 
             `when`("handleInteraction is invoked") {
-                val result = context.handleInteraction(interactionPayload = payload)
+                val result = context.handleInteraction(interaction = payload)
 
                 then("no intents are emitted and Slack still gets success") {
                     result.ok shouldBe true

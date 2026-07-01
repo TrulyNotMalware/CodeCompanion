@@ -1,14 +1,14 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.createRescheduleMeetingEvent
 import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.core.spec.style.BehaviorSpec

@@ -3,7 +3,6 @@ package dev.notypie.domain.command.context
 import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -23,7 +22,6 @@ class ApprovalCallbackContextTest :
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    requestHeaders = SlackRequestHeaders(),
                     participants = emptySet(),
                     intents = intentQueue,
                 )
@@ -61,7 +59,6 @@ class ApprovalCallbackContextTest :
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    requestHeaders = SlackRequestHeaders(),
                     participants = participants,
                     intents = intentQueue,
                 )
@@ -77,7 +74,7 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("actionStates should contain results from all participants") {
+                then("result should carry basic info from all participants") {
                     result.publisherId shouldBe basicInfo.publisherId
                     result.apiAppId shouldBe basicInfo.appId
                 }
@@ -110,7 +107,6 @@ class ApprovalCallbackContextTest :
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    requestHeaders = SlackRequestHeaders(),
                     participants = setOf("U001"),
                     approvalContents = customApprovalContents,
                     intents = intentQueue,
@@ -141,7 +137,6 @@ class ApprovalCallbackContextTest :
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    requestHeaders = SlackRequestHeaders(),
                     participants = setOf("U001"),
                     intents = intentQueue,
                 )

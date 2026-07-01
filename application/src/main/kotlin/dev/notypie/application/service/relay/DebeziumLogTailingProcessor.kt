@@ -1,6 +1,6 @@
 package dev.notypie.application.service.relay
 
-import dev.notypie.domain.command.MessageDispatcher
+import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent

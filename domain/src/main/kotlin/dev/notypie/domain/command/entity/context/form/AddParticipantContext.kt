@@ -3,12 +3,11 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.ModalForm
@@ -23,11 +22,9 @@ import java.util.UUID
  */
 internal class AddParticipantContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -36,20 +33,20 @@ internal class AddParticipantContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.ADD_PARTICIPANT
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingUid =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .firstOrNull()
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return successOutput()
         addOutbound(
             OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = interactionPayload.triggerId),
+                handle = ModalOpenHandle(raw = interaction.trigger.raw),
                 form =
                     ModalForm.AddParticipant(
                         meetingUid = meetingUid,
-                        requesterId = interactionPayload.user.id,
-                        channel = ConversationTarget(id = interactionPayload.channel.id),
+                        requesterId = interaction.actor.id,
+                        channel = ConversationTarget(id = interaction.channelId),
                     ),
             ),
         )

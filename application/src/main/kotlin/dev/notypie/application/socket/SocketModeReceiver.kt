@@ -104,20 +104,20 @@ class SocketModeReceiver(
                     .readValue(payloadJson, Map::class.java)
                     .entries
                     .associate { (key, value) -> key.toString() to value.toString() }
-            val (payload, slackCommandData) = parseRequestBodyData(headers = noHeaders, data = data)
+            val (payload, commandData) = parseRequestBodyData(headers = noHeaders, data = data)
             when (payload.command) {
                 appConfig.socket.meetingCommand ->
                     meetingService.handleMeeting(
                         headers = noHeaders,
                         payload = payload,
-                        slackCommandData = slackCommandData,
+                        commandData = commandData,
                     )
 
                 appConfig.socket.standupCommand ->
                     standupSlashService.handleStandup(
                         headers = noHeaders,
                         payload = payload,
-                        slackCommandData = slackCommandData,
+                        commandData = commandData,
                     )
 
                 else -> log.warn { "Unmapped slash command over Socket Mode: ${payload.command}" }

@@ -3,11 +3,11 @@ package dev.notypie.templates
 import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*
 import com.slack.api.model.block.element.*
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
+import dev.notypie.impl.command.slack.ActionElementTypes
+import dev.notypie.impl.command.slack.States
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractiveObject
 import java.time.LocalDate

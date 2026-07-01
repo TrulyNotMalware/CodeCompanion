@@ -2,7 +2,7 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.createAppMentionSlackCommandData
+import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.dto.response.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -13,7 +13,7 @@ class ReplaceTextResponseCommandTest :
     BehaviorSpec({
 
         given("ReplaceTextResponseCommand") {
-            val commandData = createAppMentionSlackCommandData()
+            val commandData = createMentionInboundCommand()
             val idempotencyKey = UUID.randomUUID()
 
             val command =

@@ -2,7 +2,7 @@ package dev.notypie.application.controllers
 
 import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.mention.AppMentionEventHandler
-import dev.notypie.domain.command.SlackCommandType
+import dev.notypie.impl.command.slack.SlackEventType
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -45,8 +45,8 @@ class SlackEventController(
             return ResponseEntity.ok().build<Unit>()
         }
 
-        val slackCommandData = eventHandler.handleEvent(headers = headers, payload = payload)
-        return ResponseEntity.ok().body(slackCommandData)
+        val commandData = eventHandler.handleEvent(headers = headers, payload = payload)
+        return ResponseEntity.ok().body(commandData)
     }
 
     @PostMapping(value = ["/interaction"])
@@ -65,7 +65,7 @@ class SlackEventController(
     }
 
     private fun isChallengeRequest(payload: Map<String, Any>) =
-        payload["type"] == SlackCommandType.URL_VERIFICATION.toString().lowercase()
+        payload["type"] == SlackEventType.URL_VERIFICATION.toString().lowercase()
 
     private fun extractEventType(payload: Map<String, Any>): String? {
         val event = payload["event"] as? Map<*, *> ?: return null

@@ -2,7 +2,6 @@ package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -21,12 +20,10 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 internal class RequestStandupSetupContext(
     commandBasicInfo: CommandBasicInfo,
     private val triggerId: String,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<StandupSubCommandDefinition> =
         SubCommand.of(definition = StandupSubCommandDefinition.SETUP),
     intents: IntentQueue,
 ) : ReactionContext<StandupSubCommandDefinition>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,

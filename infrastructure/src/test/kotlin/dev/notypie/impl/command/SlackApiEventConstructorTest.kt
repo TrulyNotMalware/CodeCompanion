@@ -5,9 +5,9 @@ import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
-import dev.notypie.domain.command.entity.event.MessageType
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.impl.command.event.ActionEventPayloadContents
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.PostEventPayloadContents
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import io.kotest.core.spec.style.BehaviorSpec

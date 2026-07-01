@@ -1,7 +1,7 @@
 package dev.notypie.impl.command
 
-import dev.notypie.domain.command.MessageDispatcher
-import dev.notypie.domain.command.entity.event.SlackEventPayload
+import dev.notypie.impl.command.event.MessageDispatcher
+import dev.notypie.impl.command.event.SlackEventPayload
 import io.kotest.core.spec.style.BehaviorSpec
 import io.mockk.mockk
 import io.mockk.verify

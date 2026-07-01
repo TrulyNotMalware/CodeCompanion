@@ -3,12 +3,11 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.util.UUID
@@ -16,7 +15,7 @@ import java.util.UUID
 /**
  * Handles the `view_submission` payload from the add-participant modal opened by
  * [AddParticipantContext]. Routing tokens live in the modal's `private_metadata`: the parser copies
- * them into [InteractionPayload.idempotencyKey] (the meetingUid) and [InteractionPayload.routingExtras]
+ * them into [InboundInteraction.idempotencyKey] (the meetingUid) and [InboundInteraction.routingExtras]
  * (the requesterId), the same comma-tokenized convention used by the other modal flows.
  *
  * The modal exposes a single multi-users select; its selected user ids arrive as a comma-joined
@@ -26,11 +25,9 @@ import java.util.UUID
  */
 internal class AddParticipantSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -39,19 +36,16 @@ internal class AddParticipantSubmissionContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingUid =
-            runCatching { UUID.fromString(interactionPayload.idempotencyKey) }
+            runCatching { UUID.fromString(interaction.idempotencyKey) }
                 .getOrElse { return successOutput() }
         val requesterId =
-            interactionPayload.routingExtras
+            interaction.routingExtras
                 .firstOrNull()
                 ?.takeIf { it.isNotBlank() }
-                ?: interactionPayload.user.id
-        // routingExtras[1] is the originating channel (ferried via private_metadata) so the host's
-        // confirmation can be posted in-channel; a view_submission payload itself has no channel.
-        val channel = interactionPayload.routingExtras.getOrNull(1).orEmpty()
-        val participantUserIds = parseSelectedUserIds(interactionPayload = interactionPayload)
+                ?: interaction.actor.id
+        val participantUserIds = parseSelectedUserIds(interaction = interaction)
         if (participantUserIds.isEmpty()) return successOutput()
 
         addIntent(
@@ -59,17 +53,14 @@ internal class AddParticipantSubmissionContext(
                 meetingUid = meetingUid,
                 requesterId = requesterId,
                 participantUserIds = participantUserIds,
-                channel = channel,
             ),
         )
         return successOutput()
     }
 
-    private fun parseSelectedUserIds(interactionPayload: InteractionPayload): List<String> =
-        interactionPayload.states
-            .firstOrNull { it.blockId == USERS_BLOCK_ID }
-            ?.selectedValue
-            .orEmpty()
+    private fun parseSelectedUserIds(interaction: InboundInteraction): List<String> =
+        interaction.form
+            .value(key = USERS_BLOCK_ID)
             .split(",")
             .map { it.trim() }
             .filter { it.isNotBlank() }

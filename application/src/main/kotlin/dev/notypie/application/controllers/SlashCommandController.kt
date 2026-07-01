@@ -18,11 +18,11 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, slackCommandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
         meetingService.handleMeeting(
             headers = headers,
             payload = payload,
-            slackCommandData = slackCommandData,
+            commandData = commandData,
         )
     }
 
@@ -31,11 +31,11 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, slackCommandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
         standupSlashService.handleStandup(
             headers = headers,
             payload = payload,
-            slackCommandData = slackCommandData,
+            commandData = commandData,
         )
     }
 
@@ -44,6 +44,6 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, slackCommandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
     }
 }

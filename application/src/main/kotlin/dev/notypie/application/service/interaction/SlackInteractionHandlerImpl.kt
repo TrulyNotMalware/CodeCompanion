@@ -4,17 +4,17 @@ import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.common.jsonMapper
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
-import dev.notypie.domain.command.dto.interactions.isCanceled
-import dev.notypie.domain.command.dto.interactions.isPrimary
-import dev.notypie.domain.command.dto.interactions.toSlackCommandData
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
+import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
+import dev.notypie.impl.command.slack.ActionElementTypes
+import dev.notypie.impl.command.slack.InteractionPayload
+import dev.notypie.impl.command.slack.isCanceled
+import dev.notypie.impl.command.slack.isPrimary
+import dev.notypie.impl.command.toInboundCommand
 import dev.notypie.templates.DeclineReasonModalIds
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -48,20 +48,20 @@ class SlackInteractionHandlerImpl(
         // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
         declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
 
-        val slackCommandData = interactionPayload.toSlackCommandData()
-        val idempotencyKey = IdempotencyCreator.create(data = slackCommandData)
+        val commandData = interactionPayload.toInboundCommand()
+        val idempotencyKey = IdempotencyCreator.create(data = commandData)
 
         if (shouldUseLegacyReject(payload = interactionPayload)) {
             commandExecutor.execute(
                 command =
                     rejectCommand(
                         idempotencyKey = idempotencyKey,
-                        commandData = slackCommandData,
+                        commandData = commandData,
                         responseUrl = interactionPayload.responseUrl,
                     ),
             )
         } else if (interactionPayload.isPrimary() || interactionPayload.isCanceled()) {
-            val command = buildCommand(idempotencyKey = idempotencyKey, commandData = slackCommandData)
+            val command = buildCommand(idempotencyKey = idempotencyKey, commandData = commandData)
             val result = commandExecutor.execute(command = command)
             // FIXME Event publisher
             result.takeIf { it.ok }?.let { applicationEventPublisher.publishEvent(it) }
@@ -104,7 +104,7 @@ class SlackInteractionHandlerImpl(
     private fun shouldUseLegacyReject(payload: InteractionPayload): Boolean =
         payload.isCanceled() && payload.type in LEGACY_AUTO_REJECT_TYPES
 
-    private fun buildCommand(idempotencyKey: UUID, commandData: SlackCommandData): InteractionCommand =
+    private fun buildCommand(idempotencyKey: UUID, commandData: InboundCommand): InteractionCommand =
         InteractionCommand(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
@@ -113,7 +113,7 @@ class SlackInteractionHandlerImpl(
 
     private fun rejectCommand(
         idempotencyKey: UUID,
-        commandData: SlackCommandData,
+        commandData: InboundCommand,
         responseUrl: String,
     ): ReplaceTextResponseCommand =
         ReplaceTextResponseCommand(

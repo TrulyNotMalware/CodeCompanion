@@ -1,7 +1,7 @@
 package dev.notypie.templates
 
 import com.slack.api.model.block.LayoutBlock
-import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.impl.command.slack.States
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.LayoutBlocks
 

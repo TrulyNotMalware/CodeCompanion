@@ -7,12 +7,12 @@ import com.slack.api.model.block.HeaderBlock
 import com.slack.api.model.block.InputBlock
 import com.slack.api.model.block.SectionBlock
 import dev.notypie.domain.command.createApprovalContents
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
+import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.CheckBoxOptions
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll

@@ -1,7 +1,6 @@
 package dev.notypie.domain.command.entity.context
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -12,12 +11,10 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 
 internal class EphemeralTextResponseContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders,
     isOk: Boolean = true,
     private val textMessage: String,
     intents: IntentQueue,
 ) : ResponseContext(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         isOk = isOk,
         intents = intents,

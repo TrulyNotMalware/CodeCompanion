@@ -44,8 +44,6 @@ sealed class CommandIntent : CommandEffect {
         val meetingUid: UUID,
         val requesterId: String,
         val newStartAt: LocalDateTime,
-        // Ferried through the modal's private_metadata; a view_submission carries no channel.
-        val channel: String,
     ) : CommandIntent()
 
     /**
@@ -56,8 +54,6 @@ sealed class CommandIntent : CommandEffect {
         val meetingUid: UUID,
         val requesterId: String,
         val participantUserIds: List<String>,
-        // Ferried through the modal's private_metadata; a view_submission carries no channel.
-        val channel: String,
     ) : CommandIntent()
 
     /** Ops-tooling request from `@bot status`; routing context lives on the resolver's basicInfo. */

@@ -36,7 +36,7 @@ class StandupSession(
             // SUMMARIZED state must carry the message_ts so we never re-post. Enforced here so
             // JPA loads cannot resurrect a logically-broken row from disk.
             ("summaryMessageTs" of summaryMessageTs).shouldSatisfy(
-                "SUMMARIZED session must record summaryMessageTs (Slack message_ts of the summary post)",
+                "SUMMARIZED session must record summaryMessageTs (message_ts of the summary post)",
             ) {
                 status != SessionStatus.SUMMARIZED || !it.isNullOrBlank()
             }

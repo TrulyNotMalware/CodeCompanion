@@ -1,7 +1,7 @@
 package dev.notypie.domain.command.context
 
-import dev.notypie.domain.command.createAppMentionSlackCommandData
 import dev.notypie.domain.command.createIntentQueue
+import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -19,11 +19,11 @@ class DetailErrorAlertContextTest :
         given("DetailErrorAlertContext with details") {
             val intentQueue = createIntentQueue()
             val idempotencyKey = UUID.randomUUID()
-            val commandData = createAppMentionSlackCommandData()
+            val commandData = createMentionInboundCommand()
 
             val context =
                 DetailErrorAlertContext(
-                    slackCommandData = commandData,
+                    commandData = commandData,
                     targetClassName = "TestClass",
                     errorMessage = "Something went wrong",
                     details = "Detailed error info",
@@ -68,11 +68,11 @@ class DetailErrorAlertContextTest :
         given("DetailErrorAlertContext without details") {
             val intentQueue = createIntentQueue()
             val idempotencyKey = UUID.randomUUID()
-            val commandData = createAppMentionSlackCommandData()
+            val commandData = createMentionInboundCommand()
 
             val context =
                 DetailErrorAlertContext(
-                    slackCommandData = commandData,
+                    commandData = commandData,
                     targetClassName = "TestClass",
                     errorMessage = "Error occurred",
                     details = null,

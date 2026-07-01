@@ -3,13 +3,12 @@ package dev.notypie.domain.command.entity.context.form
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
+import dev.notypie.domain.command.inbound.InboundActionRole
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -22,11 +21,9 @@ import java.util.UUID
 
 internal class MeetingApprovalResponseContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
         subCommand = subCommand,
         intents = intents,
@@ -35,30 +32,30 @@ internal class MeetingApprovalResponseContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput {
-        val meetingIdempotencyKey = UUID.fromString(interactionPayload.idempotencyKey)
-        val participantUserId = interactionPayload.user.id
-        return when (interactionPayload.currentAction.type) {
-            ActionElementTypes.APPLY_BUTTON ->
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
+        val meetingIdempotencyKey = UUID.fromString(interaction.idempotencyKey)
+        val participantUserId = interaction.actor.id
+        return when (interaction.action.role) {
+            InboundActionRole.APPROVE ->
                 handleAccept(
                     meetingIdempotencyKey = meetingIdempotencyKey,
                     participantUserId = participantUserId,
-                    responseUrl = interactionPayload.responseUrl,
+                    responseUrl = interaction.reply.raw,
                 )
 
-            ActionElementTypes.REJECT_BUTTON ->
+            InboundActionRole.REJECT ->
                 handleDecline(
                     meetingIdempotencyKey = meetingIdempotencyKey,
                     participantUserId = participantUserId,
-                    triggerId = interactionPayload.triggerId,
+                    triggerId = interaction.trigger.raw,
                     // Meeting title, surfaced as the first routing extra; blank omits the title section.
-                    meetingTitle = interactionPayload.routingExtras.firstOrNull().orEmpty(),
+                    meetingTitle = interaction.routingExtras.firstOrNull().orEmpty(),
                     // Notice DM channel + message_ts; let the submission handler chat.update the notice.
-                    noticeChannel = interactionPayload.channel.id,
-                    noticeMessageTs = interactionPayload.container.messageTs.orEmpty(),
+                    noticeChannel = interaction.channelId,
+                    noticeMessageTs = interaction.message?.raw.orEmpty(),
                 )
 
-            else -> interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
+            else -> interactionSuccessResponse(responseUrl = interaction.reply.raw)
         }
     }
 

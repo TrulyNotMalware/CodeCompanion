@@ -2,27 +2,27 @@ package dev.notypie.domain.command.entity.slash
 
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.slash.SlashCommandRequestBody
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
+import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.common.error.exceptionDetails
 import java.util.UUID
 
 /**
  * `/standup setup` slash command. Mirrors [RequestMeetingCommand]: a slash invocation whose
  * sole job is to open a modal synchronously so the Slack `trigger_id` is consumed before it
- * expires. The live trigger_id and the invoking channel are read off the
- * [SlashCommandRequestBody] (carried on [SlackCommandData.body]) and threaded into
+ * expires. The live trigger handle and the invoking channel are read off the
+ * [SlashInvocation] (carried on [InboundCommand.payload]) and threaded into
  * [RequestStandupSetupContext], which emits the modal-opening intent.
  */
 class SetupStandupCommand(
     idempotencyKey: UUID,
-    commandData: SlackCommandData,
+    commandData: InboundCommand,
 ) : Command<StandupSubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
@@ -30,10 +30,10 @@ class SetupStandupCommand(
     override fun parseContext(
         subCommand: SubCommand<StandupSubCommandDefinition>,
     ): CommandContext<StandupSubCommandDefinition> {
-        val slashBody = commandData.body as SlashCommandRequestBody
+        val slashPayload = commandData.payload as SlashInvocation
         return RequestStandupSetupContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            triggerId = slashBody.triggerId,
+            triggerId = slashPayload.trigger.raw,
             subCommand = subCommand,
             intents = intents,
         )

@@ -4,12 +4,12 @@ import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.createActionEventPayloadContents
-import dev.notypie.domain.command.createPostEventPayloadContents
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
-import dev.notypie.domain.command.entity.event.MessageType
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.impl.command.event.ActionEventPayloadContents
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.PostEventPayloadContents
+import dev.notypie.impl.command.event.createActionEventPayloadContents
+import dev.notypie.impl.command.event.createPostEventPayloadContents
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
