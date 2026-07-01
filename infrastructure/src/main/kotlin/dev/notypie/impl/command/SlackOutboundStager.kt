@@ -101,6 +101,29 @@ class SlackOutboundStager(
                 )
             }
 
+            is OutboundMessage.UpdateMessage -> {
+                val content = message.content
+                check(content is MessageContent.Text) { "UpdateMessage content must be Text: $content" }
+                slackEventBuilder.updateNoticeMessageRequest(
+                    commandBasicInfo = basicInfo,
+                    commandDetailType = message.detailType,
+                    channel = message.ref.conversation.id,
+                    messageTs = message.ref.messageId,
+                    markdownText = content.markdown,
+                )
+            }
+
+            is OutboundMessage.ReplaceMessage -> {
+                val content = message.content
+                check(content is MessageContent.Text) { "ReplaceMessage content must be Text: $content" }
+                slackEventBuilder.replaceOriginalText(
+                    markdownText = content.markdown,
+                    responseUrl = message.handle.raw,
+                    commandBasicInfo = basicInfo,
+                    commandDetailType = CommandDetailType.REPLACE_TEXT,
+                )
+            }
+
             else -> error("OutboundMessage variant not yet migrated to stager: $message")
         }
 }

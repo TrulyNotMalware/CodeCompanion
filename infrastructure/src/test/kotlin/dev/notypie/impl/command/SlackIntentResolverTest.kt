@@ -6,11 +6,8 @@ import dev.notypie.domain.command.createSendSlackMessageEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
-import dev.notypie.domain.command.entity.event.MessageType
 import dev.notypie.domain.command.entity.event.OpenViewEvent
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
@@ -24,7 +21,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -144,63 +140,6 @@ class SlackIntentResolverTest :
             }
         }
 
-        given("UpdateNoticeMessage intent") {
-            val channel = "C_UPDATE"
-            val messageTs = "1700000000.000300"
-            val markdown = "You declined the meeting — *Reason:* Other"
-            val intent =
-                CommandIntent.UpdateNoticeMessage(
-                    channel = channel,
-                    messageTs = messageTs,
-                    markdownText = markdown,
-                )
-            val stubUpdateEvent =
-                createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    idempotencyKey = basicInfo.idempotencyKey,
-                    appId = basicInfo.appId,
-                    publisherId = basicInfo.publisherId,
-                    channel = channel,
-                    messageType = MessageType.UPDATE_MESSAGE,
-                )
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.updateNoticeMessageRequest(
-                        commandBasicInfo = basicInfo,
-                        commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                        channel = channel,
-                        messageTs = messageTs,
-                        markdownText = markdown,
-                    )
-                } returns stubUpdateEvent
-
-                val events =
-                    resolver.resolveAll(
-                        intents = listOf(intent),
-                        basicInfo = basicInfo,
-                    )
-
-                then("routes through SlackApiEventConstructor.updateNoticeMessageRequest") {
-                    events shouldHaveSize 1
-                    val sendEvent = events.first()
-                    sendEvent.shouldBeInstanceOf<SendSlackMessageEvent>()
-                    val payload = sendEvent.payload
-                    payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    payload.messageType shouldBe MessageType.UPDATE_MESSAGE
-                    verify(exactly = 1) {
-                        slackEventBuilder.updateNoticeMessageRequest(
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-                            channel = channel,
-                            messageTs = messageTs,
-                            markdownText = markdown,
-                        )
-                    }
-                }
-            }
-        }
-
         given("MeetingAttendanceUpdate intent") {
             `when`("participant declines (isAttending = false)") {
                 val meetingKey = UUID.randomUUID()
@@ -307,41 +246,6 @@ class SlackIntentResolverTest :
                     event.payload.meetingUid shouldBe meetingUid
                     event.payload.requesterId shouldBe requesterId
                     event.payload.responseBasicInfo shouldBe basicInfo
-                }
-            }
-        }
-
-        given("ReplaceMessage intent") {
-            val intent =
-                CommandIntent.ReplaceMessage(
-                    markdownText = "replacement",
-                    responseUrl = "https://hooks.slack.com/foo",
-                )
-
-            `when`("resolveAll is called") {
-                every {
-                    slackEventBuilder.replaceOriginalText(
-                        markdownText = any(),
-                        responseUrl = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                    )
-                } returns stubEvent
-
-                resolver.resolveAll(
-                    intents = listOf(intent),
-                    basicInfo = basicInfo,
-                )
-
-                then("calls replaceOriginalText with intent default commandDetailType (REPLACE_TEXT)") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.replaceOriginalText(
-                            markdownText = "replacement",
-                            responseUrl = "https://hooks.slack.com/foo",
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.REPLACE_TEXT,
-                        )
-                    }
                 }
             }
         }
@@ -463,77 +367,43 @@ class SlackIntentResolverTest :
         }
 
         given("mixed intents with heterogeneous commandDetailType (regression for intent routing collapse)") {
-            `when`("resolveAll is called with ReplaceMessage + UpdateNoticeMessage in one batch") {
-                val replaceSlot = slot<CommandDetailType>()
-                val updateNoticeSlot = slot<CommandDetailType>()
-                every {
-                    slackEventBuilder.replaceOriginalText(
-                        markdownText = any(),
-                        responseUrl = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = capture(replaceSlot),
-                    )
-                } returns stubEvent
-                every {
-                    slackEventBuilder.updateNoticeMessageRequest(
-                        commandBasicInfo = any(),
-                        commandDetailType = capture(updateNoticeSlot),
-                        channel = any(),
-                        messageTs = any(),
-                        markdownText = any(),
-                    )
-                } returns stubEvent
-
+            `when`("resolveAll is called with CancelMeeting + StatusReport in one batch") {
                 val intents =
                     listOf(
-                        CommandIntent.ReplaceMessage(
-                            markdownText = "done",
-                            responseUrl = "https://hooks.slack.com/x",
+                        CommandIntent.CancelMeeting(
+                            meetingUid = UUID.randomUUID(),
+                            requesterId = "U_HOST",
                         ),
-                        CommandIntent.UpdateNoticeMessage(
-                            channel = "C_NOTICE",
-                            messageTs = "1700000000.000200",
-                            markdownText = "declined",
-                        ),
+                        CommandIntent.StatusReport,
                     )
 
-                resolver.resolveAll(
-                    intents = intents,
-                    basicInfo = basicInfo,
-                )
+                val events =
+                    resolver.resolveAll(
+                        intents = intents,
+                        basicInfo = basicInfo,
+                    )
 
                 then("each intent's own commandDetailType is preserved, not collapsed to a single command-level type") {
-                    replaceSlot.captured shouldBe CommandDetailType.REPLACE_TEXT
-                    updateNoticeSlot.captured shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    events shouldHaveSize 2
+                    events[0].type shouldBe CommandDetailType.CANCEL_MEETING
+                    events[1].type shouldBe CommandDetailType.STATUS_REPORT
                 }
             }
         }
 
         given("mixed intents") {
-            `when`("resolveAll is called with ReplaceMessage + Nothing") {
-                every {
-                    slackEventBuilder.replaceOriginalText(
-                        markdownText = any(),
-                        responseUrl = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                    )
-                } returns stubEvent
-
+            `when`("resolveAll is called with StatusReport + Nothing") {
                 val events =
                     resolver.resolveAll(
                         intents =
                             listOf(
-                                CommandIntent.ReplaceMessage(
-                                    markdownText = "done",
-                                    responseUrl = "https://hooks.slack.com/x",
-                                ),
+                                CommandIntent.StatusReport,
                                 CommandIntent.Nothing,
                             ),
                         basicInfo = basicInfo,
                     )
 
-                then("Nothing is filtered out while ReplaceMessage is resolved") {
+                then("Nothing is filtered out while StatusReport is resolved") {
                     events shouldHaveSize 1
                 }
             }

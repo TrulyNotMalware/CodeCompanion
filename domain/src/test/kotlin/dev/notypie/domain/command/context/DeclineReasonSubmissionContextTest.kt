@@ -10,10 +10,13 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
 class DeclineReasonSubmissionContextTest :
@@ -85,20 +88,21 @@ class DeclineReasonSubmissionContextTest :
                     update.absentReason shouldBe RejectReason.HEALTH_ISSUE
                 }
 
-                then("an UpdateNoticeMessage intent collapses the notice DM to a decline summary") {
+                then("an UpdateMessage collapses the notice DM to a decline summary") {
                     val update =
-                        intents.filterIsInstance<CommandIntent.UpdateNoticeMessage>().single()
-                    update.channel shouldBe "C_NOTICE"
-                    update.messageTs shouldBe "1700000000.000100"
-                    update.markdownText shouldBe
+                        intents.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    update.ref.conversation.id shouldBe "C_NOTICE"
+                    update.ref.messageId shouldBe "1700000000.000100"
+                    update.detailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    update.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
                         "You declined the meeting — *Reason:* ${RejectReason.HEALTH_ISSUE.showMessage}"
                 }
 
-                then("MeetingAttendanceUpdate is emitted before UpdateNoticeMessage so persistence commits first") {
+                then("MeetingAttendanceUpdate is emitted before UpdateMessage so persistence commits first") {
                     val attendanceIdx =
                         intents.indexOfFirst { it is CommandIntent.MeetingAttendanceUpdate }
                     val updateNoticeIdx =
-                        intents.indexOfFirst { it is CommandIntent.UpdateNoticeMessage }
+                        intents.indexOfFirst { it is OutboundMessage.UpdateMessage }
                     (attendanceIdx < updateNoticeIdx) shouldBe true
                 }
             }
@@ -151,8 +155,8 @@ class DeclineReasonSubmissionContextTest :
 
                 then("the notice summary appends the detail after the reason") {
                     val notice =
-                        intents.filterIsInstance<CommandIntent.UpdateNoticeMessage>().single()
-                    notice.markdownText shouldBe
+                        intents.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    notice.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
                         "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
                         "Out of town for a wedding"
                 }
@@ -246,8 +250,8 @@ class DeclineReasonSubmissionContextTest :
                         .absentReason shouldBe RejectReason.HEALTH_ISSUE
                 }
 
-                then("no UpdateNoticeMessage is emitted — we can't chat.update without channel + ts") {
-                    intents.filterIsInstance<CommandIntent.UpdateNoticeMessage>() shouldBe emptyList()
+                then("no UpdateMessage is emitted — we can't chat.update without channel + ts") {
+                    intents.filterIsInstance<OutboundMessage.UpdateMessage>() shouldBe emptyList()
                 }
             }
         }

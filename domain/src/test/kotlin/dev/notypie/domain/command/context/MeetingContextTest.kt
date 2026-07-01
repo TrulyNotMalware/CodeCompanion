@@ -260,7 +260,7 @@ class MeetingContextTest :
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                    intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
                 }
             }
         }
@@ -308,7 +308,7 @@ class MeetingContextTest :
                     res.status shouldBe Status.SUCCESS
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                    intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
                 }
             }
 
@@ -396,7 +396,7 @@ class MeetingContextTest :
                     res.status shouldBe Status.SUCCESS
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                    intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
                 }
             }
         }
@@ -428,8 +428,9 @@ class MeetingContextTest :
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    val replace = intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
-                    replace.markdownText shouldBe "Meeting request canceled."
+                    val replace = intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                    replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "Meeting request canceled."
                 }
             }
         }

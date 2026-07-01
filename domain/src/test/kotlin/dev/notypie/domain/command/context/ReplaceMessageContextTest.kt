@@ -9,7 +9,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReplaceMessageContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -52,13 +53,12 @@ class ReplaceMessageContextTest :
                     result.commandType shouldBe CommandType.SIMPLE
                 }
 
-                then("should add ReplaceMessage intent to the queue") {
+                then("should add ReplaceMessage to the queue") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
-                    val replaceIntent = intents.first() as CommandIntent.ReplaceMessage
-                    replaceIntent.markdownText shouldBe "Replaced successfully."
-                    replaceIntent.responseUrl shouldBe TEST_BASE_URL
+                    val replace = intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                    replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "Replaced successfully."
+                    replace.handle.raw shouldBe TEST_BASE_URL
                 }
             }
 
@@ -83,12 +83,11 @@ class ReplaceMessageContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("should add ReplaceMessage intent to the queue") {
+                then("should add ReplaceMessage to the queue") {
                     val intents = interactionIntentQueue.snapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
-                    val replaceIntent = intents.first() as CommandIntent.ReplaceMessage
-                    replaceIntent.markdownText shouldBe "Interaction replaced."
+                    val replace = intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                    replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "Interaction replaced."
                 }
             }
         }

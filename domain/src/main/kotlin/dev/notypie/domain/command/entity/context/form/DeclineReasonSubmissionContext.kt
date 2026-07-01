@@ -12,6 +12,10 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
 import java.util.UUID
 
@@ -80,11 +84,19 @@ internal class DeclineReasonSubmissionContext(
         // message after submitting a reason. Skipped when the private_metadata carries no
         // channel/ts (synthesized test payloads, or legacy notices sent before Wave 2).
         if (noticeChannel.isNotBlank() && noticeMessageTs.isNotBlank()) {
-            addIntent(
-                CommandIntent.UpdateNoticeMessage(
-                    channel = noticeChannel,
-                    messageTs = noticeMessageTs,
-                    markdownText = buildDeclineSummary(reason = absentReason, detail = absentReasonDetail),
+            addOutbound(
+                OutboundMessage.UpdateMessage(
+                    ref =
+                        MessageRef(
+                            conversation = ConversationTarget(id = noticeChannel),
+                            messageId = noticeMessageTs,
+                        ),
+                    content =
+                        MessageContent.Text(
+                            headline = null,
+                            markdown = buildDeclineSummary(reason = absentReason, detail = absentReasonDetail),
+                        ),
+                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
                 ),
             )
         }

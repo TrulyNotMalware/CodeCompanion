@@ -60,13 +60,14 @@ class MeetingApprovalResponseContextTest :
                     update.absentReason shouldBe RejectReason.ATTENDING
                 }
 
-                then("a ReplaceMessage intent with accepted copy is emitted") {
+                then("a ReplaceMessage with accepted copy is emitted") {
                     val replace =
                         intents
-                            .filterIsInstance<CommandIntent.ReplaceMessage>()
+                            .filterIsInstance<OutboundMessage.ReplaceMessage>()
                             .single()
-                    replace.markdownText shouldBe "You accepted the meeting invitation."
-                    replace.responseUrl shouldBe payload.responseUrl
+                    replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "You accepted the meeting invitation."
+                    replace.handle.raw shouldBe payload.responseUrl
                 }
             }
         }
@@ -144,7 +145,7 @@ class MeetingApprovalResponseContextTest :
                 }
 
                 then("no ReplaceMessage is emitted — the original notice must stay readable if the modal fails") {
-                    intents.filterIsInstance<CommandIntent.ReplaceMessage>() shouldBe emptyList()
+                    intents.filterIsInstance<OutboundMessage.ReplaceMessage>() shouldBe emptyList()
                 }
             }
         }
@@ -186,7 +187,7 @@ class MeetingApprovalResponseContextTest :
                 then("emitted intents are exactly MeetingAttendanceUpdate + ReplaceMessage") {
                     intents.any { it is CommandIntent.MeetingAttendanceUpdate }.shouldBeInstanceOf<Boolean>()
                     intents.count { it is CommandIntent.MeetingAttendanceUpdate } shouldBe 1
-                    intents.count { it is CommandIntent.ReplaceMessage } shouldBe 1
+                    intents.count { it is OutboundMessage.ReplaceMessage } shouldBe 1
                 }
             }
         }

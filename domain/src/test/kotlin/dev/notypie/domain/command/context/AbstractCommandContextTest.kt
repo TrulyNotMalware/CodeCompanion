@@ -14,7 +14,8 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.dto.isEmpty
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -155,13 +156,13 @@ class AbstractReactionCommandContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add ReplaceMessage intent to the queue") {
+                then("should add ReplaceMessage to the queue") {
                     val intents = testIntentQueue.drainSnapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
-                    val replaceIntent = intents.first() as CommandIntent.ReplaceMessage
-                    replaceIntent.responseUrl shouldBe TEST_BASE_URL
-                    replaceIntent.markdownText shouldBe "Successfully processed."
+                    val replace = intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                    replace.handle.raw shouldBe TEST_BASE_URL
+                    replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "Successfully processed."
                 }
             }
 
@@ -187,10 +188,10 @@ class AbstractReactionCommandContextTest :
                     result shouldBe expectedResults
                 }
 
-                then("should still add ReplaceMessage intent to the queue") {
+                then("should still add ReplaceMessage to the queue") {
                     val intents = testIntentQueue.drainSnapshot()
                     intents.size shouldBe 1
-                    intents.first().shouldBeInstanceOf<CommandIntent.ReplaceMessage>()
+                    intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
                 }
             }
         }

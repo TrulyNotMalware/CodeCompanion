@@ -10,7 +10,9 @@ import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -397,6 +399,109 @@ class SlackOutboundStagerTest :
                             selectionFields = fields,
                             reasonInput = reason,
                             approvalContents = null,
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an UpdateMessage with STANDUP_ANSWER_SUBMIT detailType") {
+            val message =
+                OutboundMessage.UpdateMessage(
+                    ref =
+                        MessageRef(
+                            conversation = ConversationTarget(id = "D_NOTICE"),
+                            messageId = "1700000000.000300",
+                        ),
+                    content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
+                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.updateNoticeMessageRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        channel = any(),
+                        messageTs = any(),
+                        markdownText = any(),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to updateNoticeMessageRequest, passing the emitter detailType through") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.updateNoticeMessageRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                            channel = "D_NOTICE",
+                            messageTs = "1700000000.000300",
+                            markdownText = "Standup submitted.",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an UpdateMessage with DECLINE_REASON_MODAL detailType") {
+            val message =
+                OutboundMessage.UpdateMessage(
+                    ref =
+                        MessageRef(
+                            conversation = ConversationTarget(id = "C_NOTICE"),
+                            messageId = "1700000000.000100",
+                        ),
+                    content = MessageContent.Text(headline = null, markdown = "You declined the meeting."),
+                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                )
+
+            `when`("stage is called") {
+                val detailTypeSlot = slot<CommandDetailType>()
+                every {
+                    slackEventBuilder.updateNoticeMessageRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = capture(detailTypeSlot),
+                        channel = any(),
+                        messageTs = any(),
+                        markdownText = any(),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("the per-emitter detailType passes through unchanged") {
+                    detailTypeSlot.captured shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                }
+            }
+        }
+
+        given("a ReplaceMessage") {
+            val message =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/foo"),
+                    content = MessageContent.Text(headline = null, markdown = "replacement"),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.replaceOriginalText(
+                        markdownText = any(),
+                        responseUrl = any(),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                    )
+                } returns stubEvent
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to replaceOriginalText with REPLACE_TEXT and the responseUrl from the handle") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.replaceOriginalText(
+                            markdownText = "replacement",
+                            responseUrl = "https://hooks.slack.com/foo",
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.REPLACE_TEXT,
                         )
                     }
                 }

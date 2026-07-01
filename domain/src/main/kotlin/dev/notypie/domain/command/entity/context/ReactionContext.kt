@@ -8,8 +8,10 @@ import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 
 internal abstract class ReactionContext<T : SubCommandDefinition>(
     requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
@@ -26,7 +28,12 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
         responseUrl: String,
         mkdMessage: String = "Successfully processed.",
     ): CommandOutput {
-        addIntent(CommandIntent.ReplaceMessage(markdownText = mkdMessage, responseUrl = responseUrl))
+        addOutbound(
+            OutboundMessage.ReplaceMessage(
+                handle = ResponseReplaceHandle(raw = responseUrl),
+                content = MessageContent.Text(headline = null, markdown = mkdMessage),
+            ),
+        )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,
@@ -39,7 +46,12 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
         mkdMessage: String = "Successfully processed.",
         results: CommandOutput,
     ): CommandOutput {
-        addIntent(CommandIntent.ReplaceMessage(markdownText = mkdMessage, responseUrl = responseUrl))
+        addOutbound(
+            OutboundMessage.ReplaceMessage(
+                handle = ResponseReplaceHandle(raw = responseUrl),
+                content = MessageContent.Text(headline = null, markdown = mkdMessage),
+            ),
+        )
         return results
     }
 

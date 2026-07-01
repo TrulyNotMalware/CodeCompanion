@@ -8,8 +8,10 @@ import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 
 internal class ReplaceMessageContext(
     commandBasicInfo: CommandBasicInfo,
@@ -33,7 +35,12 @@ internal class ReplaceMessageContext(
     override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = replaceText()
 
     private fun replaceText(): CommandOutput {
-        addIntent(CommandIntent.ReplaceMessage(markdownText = markdownMessage, responseUrl = responseUrl))
+        addOutbound(
+            OutboundMessage.ReplaceMessage(
+                handle = ResponseReplaceHandle(raw = responseUrl),
+                content = MessageContent.Text(headline = null, markdown = markdownMessage),
+            ),
+        )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

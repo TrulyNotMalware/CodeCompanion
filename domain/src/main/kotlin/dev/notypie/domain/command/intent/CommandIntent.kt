@@ -220,25 +220,6 @@ sealed class CommandIntent : CommandEffect {
         override val commandDetailType: CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
     ) : CommandIntent()
 
-    /**
-     * Replaces an existing Slack message in place via `chat.update`. Used after the decline
-     * modal submits so the original Accept/Deny notice DM collapses into a decline summary —
-     * prevents the user from clicking Accept on a stale notice after they've already declined.
-     * Routed through the outbox (not latency-sensitive like `views.open`).
-     */
-    data class UpdateNoticeMessage(
-        val channel: String,
-        val messageTs: String,
-        val markdownText: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
-    ) : CommandIntent()
-
-    data class ReplaceMessage(
-        val markdownText: String,
-        val responseUrl: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.REPLACE_TEXT,
-    ) : CommandIntent()
-
     data object Nothing : CommandIntent() {
         override val commandDetailType: CommandDetailType = CommandDetailType.NOTHING
     }

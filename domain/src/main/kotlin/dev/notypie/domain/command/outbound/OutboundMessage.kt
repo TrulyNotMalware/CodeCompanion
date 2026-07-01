@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.outbound
 
 import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.intent.CommandEffect
 
 /**
@@ -28,6 +29,12 @@ sealed interface OutboundMessage : CommandEffect {
     data class UpdateMessage(
         val ref: MessageRef,
         val content: MessageContent,
+        /**
+         * Carries the emitting context's routing type so a chat.update can be routed back to the
+         * correct context on later interaction. This is per-emitter rather than constant; it stays
+         * on the model until commandDetailType is removed in Phase 3e.
+         */
+        val detailType: CommandDetailType,
     ) : OutboundMessage
 
     data class ReplaceMessage(

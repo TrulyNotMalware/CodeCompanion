@@ -157,9 +157,15 @@ class OutboundMessageTest :
                     direct.content shouldBe content
 
                     val ref = MessageRef(conversation = target, messageId = "1700.0001")
-                    val update = OutboundMessage.UpdateMessage(ref = ref, content = content)
+                    val update =
+                        OutboundMessage.UpdateMessage(
+                            ref = ref,
+                            content = content,
+                            detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                        )
                     update.ref shouldBe ref
                     update.content shouldBe content
+                    update.detailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
 
                     val handle = ResponseReplaceHandle(raw = "https://response.url")
                     val replace = OutboundMessage.ReplaceMessage(handle = handle, content = content)

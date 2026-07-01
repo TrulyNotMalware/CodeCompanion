@@ -177,25 +177,6 @@ class SlackIntentResolver(
                 )
             }
 
-            is CommandIntent.UpdateNoticeMessage -> {
-                slackEventBuilder.updateNoticeMessageRequest(
-                    commandBasicInfo = basicInfo,
-                    commandDetailType = intent.commandDetailType,
-                    channel = intent.channel,
-                    messageTs = intent.messageTs,
-                    markdownText = intent.markdownText,
-                )
-            }
-
-            is CommandIntent.ReplaceMessage -> {
-                slackEventBuilder.replaceOriginalText(
-                    markdownText = intent.markdownText,
-                    responseUrl = intent.responseUrl,
-                    commandBasicInfo = basicInfo,
-                    commandDetailType = intent.commandDetailType,
-                )
-            }
-
             is CommandIntent.OpenStandupModal -> {
                 resolveOpenStandupModal(intent = intent, basicInfo = basicInfo)
             }

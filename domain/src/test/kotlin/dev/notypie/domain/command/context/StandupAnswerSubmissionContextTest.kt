@@ -8,9 +8,12 @@ import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
 class StandupAnswerSubmissionContextTest :
@@ -69,11 +72,12 @@ class StandupAnswerSubmissionContextTest :
                     record.responses shouldBe listOf("Finished #12", "Work on #13")
                 }
 
-                then("UpdateNoticeMessage collapses the originating DM") {
-                    val update = intents.filterIsInstance<CommandIntent.UpdateNoticeMessage>().single()
-                    update.channel shouldBe "D_NOTICE"
-                    update.messageTs shouldBe "1700000000.000300"
-                    update.commandDetailType shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                then("UpdateMessage collapses the originating DM") {
+                    val update = intents.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    update.ref.conversation.id shouldBe "D_NOTICE"
+                    update.ref.messageId shouldBe "1700000000.000300"
+                    update.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "Standup submitted."
+                    update.detailType shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
                 }
             }
         }
