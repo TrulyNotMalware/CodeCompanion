@@ -1,6 +1,5 @@
 package dev.notypie.domain.command.intent
 
-import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
@@ -8,21 +7,15 @@ import java.util.UUID
 /**
  * Abstract input to the infrastructure resolver.
  *
- * Each variant carries its own [commandDetailType] so that a single command producing
- * heterogeneous intents in one batch can still be routed back to the correct context when
- * the user later interacts with the resulting Slack message.
- *
- * Variants default to their natural detail type, but a producing context may override
- * to change routing.
+ * Each variant is mapped to a domain event by the infrastructure resolver, which assigns the
+ * routing detail type so the resulting message can be routed back to the correct context when
+ * the user later interacts with it.
  */
 sealed class CommandIntent : CommandEffect {
-    abstract val commandDetailType: CommandDetailType
-
     data class MeetingListRequest(
         val publisherId: String,
         val startDate: LocalDateTime = LocalDateTime.now(),
         val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
-        override val commandDetailType: CommandDetailType = CommandDetailType.GET_MEETING_LIST,
     ) : CommandIntent()
 
     /**
@@ -37,7 +30,6 @@ sealed class CommandIntent : CommandEffect {
         val isAttending: Boolean,
         val absentReason: RejectReason,
         val absentReasonDetail: String? = null,
-        override val commandDetailType: CommandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
     ) : CommandIntent()
 
     /**
@@ -49,7 +41,6 @@ sealed class CommandIntent : CommandEffect {
     data class CancelMeeting(
         val meetingUid: UUID,
         val requesterId: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.CANCEL_MEETING,
     ) : CommandIntent()
 
     /**
@@ -66,7 +57,6 @@ sealed class CommandIntent : CommandEffect {
         // Channel ferried through the modal's private_metadata so the host's confirmation posts back
         // into the `/meetup list` channel rather than failing on the channel-less submission.
         val channel: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
     ) : CommandIntent()
 
     /**
@@ -82,7 +72,6 @@ sealed class CommandIntent : CommandEffect {
         // Channel ferried through the modal's private_metadata so the host's confirmation ephemeral
         // posts back into the `/meetup list` channel rather than failing on the channel-less submission.
         val channel: String,
-        override val commandDetailType: CommandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
     ) : CommandIntent()
 
     /**
@@ -91,9 +80,7 @@ sealed class CommandIntent : CommandEffect {
      * application listener (which has the outbox repository) can render fresh metrics. Carries
      * no fields because all routing context lives on the resolver's [basicInfo] argument.
      */
-    data object StatusReport : CommandIntent() {
-        override val commandDetailType: CommandDetailType = CommandDetailType.STATUS_REPORT
-    }
+    data object StatusReport : CommandIntent()
 
     /**
      * Persists the responses from the standup answer modal. Resubmission replaces the prior
@@ -103,7 +90,6 @@ sealed class CommandIntent : CommandEffect {
         val sessionUid: UUID,
         val userId: String,
         val responses: List<String>,
-        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
     ) : CommandIntent()
 
     /**
@@ -126,10 +112,7 @@ sealed class CommandIntent : CommandEffect {
         val triggerLocalTime: java.time.LocalTime,
         val cutoffMinutes: Long,
         val timezone: java.time.ZoneId,
-        override val commandDetailType: CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
     ) : CommandIntent()
 
-    data object Nothing : CommandIntent() {
-        override val commandDetailType: CommandDetailType = CommandDetailType.NOTHING
-    }
+    data object Nothing : CommandIntent()
 }

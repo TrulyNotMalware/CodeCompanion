@@ -1,6 +1,7 @@
 package dev.notypie.impl.command
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.AddParticipantPayload
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
@@ -23,7 +24,7 @@ import dev.notypie.domain.command.intent.CommandIntent
 
 class SlackIntentResolver {
     /**
-     * Resolves each intent individually using [CommandIntent.commandDetailType] so that a
+     * Resolves each intent individually, assigning the routing detail type per variant so that a
      * heterogeneous batch produces events with correctly-typed routing metadata.
      */
     fun resolveAll(intents: List<CommandIntent>, basicInfo: CommandBasicInfo): List<CommandEvent<EventPayload>> =
@@ -46,7 +47,7 @@ class SlackIntentResolver {
                             endDate = intent.endDate,
                             responseBasicInfo = basicInfo,
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.GET_MEETING_LIST,
                 )
             }
 
@@ -61,7 +62,7 @@ class SlackIntentResolver {
                             absentReason = intent.absentReason,
                             absentReasonDetail = intent.absentReasonDetail,
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
                 )
             }
 
@@ -74,7 +75,7 @@ class SlackIntentResolver {
                             requesterId = intent.requesterId,
                             responseBasicInfo = basicInfo,
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.CANCEL_MEETING,
                 )
             }
 
@@ -91,7 +92,7 @@ class SlackIntentResolver {
                             responseBasicInfo =
                                 basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
                 )
             }
 
@@ -108,7 +109,7 @@ class SlackIntentResolver {
                             responseBasicInfo =
                                 basicInfo.copy(channel = intent.channel.ifBlank { basicInfo.channel }),
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
                 )
             }
 
@@ -116,7 +117,7 @@ class SlackIntentResolver {
                 StatusReportRequestEvent(
                     idempotencyKey = basicInfo.idempotencyKey,
                     payload = StatusReportPayload(responseBasicInfo = basicInfo),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.STATUS_REPORT,
                 )
             }
 
@@ -129,7 +130,7 @@ class SlackIntentResolver {
                             userId = intent.userId,
                             responses = intent.responses,
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
                 )
             }
 
@@ -150,7 +151,7 @@ class SlackIntentResolver {
                             timezone = intent.timezone,
                             responseBasicInfo = basicInfo,
                         ),
-                    type = intent.commandDetailType,
+                    type = CommandDetailType.STANDUP_SETUP_SUBMIT,
                 )
             }
 
