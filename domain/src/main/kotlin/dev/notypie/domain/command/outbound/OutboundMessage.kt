@@ -5,9 +5,8 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.intent.CommandEffect
 
 /**
- * Transport-neutral description of an outbound effect that a CommandContext emits; a transport
- * adapter (Phase 3c SlackOutboundStager) renders it into a staged CommandEvent. No Slack type
- * appears here.
+ * Transport-neutral description of an outbound effect a CommandContext emits; a transport adapter
+ * renders it into a staged CommandEvent. No Slack type appears here.
  */
 sealed interface OutboundMessage : CommandEffect {
     data class ChannelMessage(
@@ -30,9 +29,8 @@ sealed interface OutboundMessage : CommandEffect {
         val ref: MessageRef,
         val content: MessageContent,
         /**
-         * Carries the emitting context's routing type so a chat.update can be routed back to the
-         * correct context on later interaction. This is per-emitter rather than constant; it stays
-         * on the model until commandDetailType is removed in Phase 3e.
+         * Per-emitter routing type so a chat.update can be routed back to the correct context on
+         * later interaction. Per-emitter rather than constant.
          */
         val detailType: CommandDetailType,
     ) : OutboundMessage

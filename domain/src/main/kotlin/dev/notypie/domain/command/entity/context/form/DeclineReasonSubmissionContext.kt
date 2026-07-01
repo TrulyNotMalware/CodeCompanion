@@ -82,7 +82,7 @@ internal class DeclineReasonSubmissionContext(
         )
         // chat.update the original notice so the user can't click Accept/Deny on a stale
         // message after submitting a reason. Skipped when the private_metadata carries no
-        // channel/ts (synthesized test payloads, or legacy notices sent before Wave 2).
+        // channel/ts (synthesized test payloads).
         if (noticeChannel.isNotBlank() && noticeMessageTs.isNotBlank()) {
             addOutbound(
                 OutboundMessage.UpdateMessage(

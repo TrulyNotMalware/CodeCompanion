@@ -16,10 +16,7 @@ private val log = KotlinLogging.logger {}
 
 /**
  * Slack adapter that renders the text, approval/form and modal families of [OutboundMessage]s into
- * staged [CommandEvent]s, reproducing exactly the builder calls the [SlackIntentResolver] made for the
- * now-removed `TextResponse`/`EphemeralResponse`/`ErrorDetail`/`TimeSchedule`/`Notice` intents, the
- * `ApplyReject`/`ApprovalForm`/`MeetingForm` intents and the five `Open*Modal` intents. Variants not yet
- * migrated fail loudly.
+ * staged [CommandEvent]s. Variants not yet migrated fail loudly.
  */
 class SlackOutboundStager(
     private val slackEventBuilder: SlackApiEventConstructor,

@@ -15,13 +15,8 @@ import dev.notypie.impl.command.SlackIntentResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Orchestrates Command execution with Intent resolution.
- *
- * Flow:
- *  1. command.handleEvent() runs the context pipeline and accumulates CommandIntents.
- *  2. drainIntents() atomically snapshots and clears the queue.
- *  3. SlackIntentResolver maps intents to transport-layer events.
- *  4. EventPublisher dispatches the events (Spring ApplicationEvent / Kafka / Outbox).
+ * Orchestrates Command execution: drains the effects a Command accumulated, resolves them to
+ * transport-layer events, and dispatches them.
  *
  * Failure semantics:
  *  - Resolver / publisher failures are logged with idempotency context and re-thrown so that
@@ -41,8 +36,8 @@ class CommandExecutor(
     fun <T : SubCommandDefinition> execute(command: Command<T>): CommandOutput {
         val output = command.handleEvent()
 
-        // Drain and resolve intents regardless of success/failure.
-        // Error intents (e.g. EphemeralResponse from createErrorResponse) must also reach Slack.
+        // Drain regardless of success/failure: error effects (e.g. from createErrorResponse) must
+        // also reach Slack.
         val pendingEffects = command.drainIntents()
         if (pendingEffects.isNotEmpty()) {
             publishIntents(
@@ -65,8 +60,6 @@ class CommandExecutor(
 
         val resolvedEvents =
             try {
-                // CommandIntents and OutboundMessages are both rendered to staged events; the two
-                // result lists are concatenated, preserving each family's internal order.
                 intentResolver.resolveAll(
                     intents = intents,
                     basicInfo = basicInfo,
