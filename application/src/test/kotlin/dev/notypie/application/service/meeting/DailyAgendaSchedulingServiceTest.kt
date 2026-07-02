@@ -197,7 +197,7 @@ class DailyAgendaSchedulingServiceTest :
                 }
 
                 then("the outbox rows carry DAILY_AGENDA as the command detail type") {
-                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.DAILY_AGENDA.name }
+                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.DAILY_AGENDA.wireValue }
                 }
             }
         }

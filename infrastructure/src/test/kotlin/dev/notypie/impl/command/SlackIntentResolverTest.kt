@@ -75,7 +75,7 @@ class SlackIntentResolverTest :
                     val event = events.first()
                     event.shouldBeInstanceOf<UpdateMeetingAttendanceEvent>()
                     event.idempotencyKey shouldBe basicInfo.idempotencyKey
-                    event.type shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    event.type shouldBe CommandDetailType.MEETING_APPROVAL_REQUEST
                     event.payload.meetingIdempotencyKey shouldBe meetingKey
                     event.payload.participantUserId shouldBe "U_PARTICIPANT"
                     event.payload.isAttending shouldBe false
@@ -104,7 +104,7 @@ class SlackIntentResolverTest :
                     val event = events.first()
                     event.shouldBeInstanceOf<UpdateMeetingAttendanceEvent>()
                     event.idempotencyKey shouldBe basicInfo.idempotencyKey
-                    event.type shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    event.type shouldBe CommandDetailType.MEETING_APPROVAL_REQUEST
                     event.payload.meetingIdempotencyKey shouldBe meetingKey
                     event.payload.participantUserId shouldBe "U_ACCEPTOR"
                     event.payload.isAttending shouldBe true

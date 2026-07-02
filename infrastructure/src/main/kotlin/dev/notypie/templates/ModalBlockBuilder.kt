@@ -60,7 +60,7 @@ class ModalBlockBuilder(
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
         // Slack button value routing string: idempotencyKey + detailType, tokenized the same way
         // the interaction parser reads it back. This transport concern lives here, not in the domain.
-        val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType}"
+        val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType.wireValue}"
         val approvalButton: InteractiveObject =
             modalElementBuilder.approvalButtonElement(
                 approvalButtonName = approvalContents.approvalButtonName,
@@ -91,7 +91,7 @@ class ModalBlockBuilder(
      * existing tokenization path without introducing a new metadata format.
      */
     fun cancelMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
-        val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
+        val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.wireValue},$meetingUid"
         val cancelButton: InteractiveObject =
             modalElementBuilder.cancelMeetingButtonElement(
                 buttonName = "Cancel",
@@ -115,9 +115,10 @@ class ModalBlockBuilder(
      * `CANCEL_MEETING`.
      */
     fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
-        val rescheduleRoutingValue = "$listIdempotencyKey,${CommandDetailType.RESCHEDULE_MEETING.name},$meetingUid"
-        val addParticipantRoutingValue = "$listIdempotencyKey,${CommandDetailType.ADD_PARTICIPANT.name},$meetingUid"
-        val cancelRoutingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
+        fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.wireValue},$meetingUid"
+        val rescheduleRoutingValue = routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)
+        val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
+        val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)
         // A list can render several host rows in one message, so block_id and action_id must be
         // unique per meeting — Slack rejects the whole message (invalid_blocks) when any collide.
         // Routing reads the button value + style, not these ids, so suffixing with the uid is safe.

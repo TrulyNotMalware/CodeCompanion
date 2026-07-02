@@ -6,8 +6,7 @@ import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
-import dev.notypie.domain.command.inbound.InboundFieldKind
-import dev.notypie.domain.command.inboundField
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -31,26 +30,16 @@ class StandupAnswerSubmissionContextTest :
                 createInboundInteraction(
                     detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
                     action = approveAction(isSelected = true),
-                    // Inputs intentionally arrive in reverse block-id order to prove the
-                    // context sorts by `standup_q_<index>` rather than relying on iteration
-                    // order from Slack's `view.state.values` map.
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "Work on #13",
-                                key = "standup_q_1",
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "Finished #12",
-                                key = "standup_q_0",
-                            ),
+                    // The mapper has already trimmed and ordered the answers by question index, so
+                    // the context consumes them as-is.
+                    submission =
+                        InboundSubmission.StandupAnswer(
+                            sessionUidRaw = sessionUid.toString(),
+                            userId = "U_STANDUP",
+                            noticeChannel = "D_NOTICE",
+                            noticeMessageTs = "1700000000.000300",
+                            answers = listOf("Finished #12", "Work on #13"),
                         ),
-                    idempotencyKey = sessionUid,
-                    routingExtras = listOf("U_STANDUP", "D_NOTICE", "1700000000.000300"),
                 )
 
             `when`("handleInteraction is invoked") {
@@ -90,9 +79,15 @@ class StandupAnswerSubmissionContextTest :
                 createInboundInteraction(
                     detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form = emptyList(),
-                    idempotencyKey = UUID.randomUUID(),
-                ).copy(idempotencyKey = "not-a-uuid")
+                    submission =
+                        InboundSubmission.StandupAnswer(
+                            sessionUidRaw = "not-a-uuid",
+                            userId = "U_STANDUP",
+                            noticeChannel = "D_NOTICE",
+                            noticeMessageTs = "1700000000.000300",
+                            answers = emptyList(),
+                        ),
+                )
 
             `when`("handleInteraction is invoked") {
                 val result = context.handleInteraction(interaction = payload)

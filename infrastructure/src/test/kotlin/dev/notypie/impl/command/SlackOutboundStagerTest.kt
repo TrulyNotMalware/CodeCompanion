@@ -286,7 +286,7 @@ class SlackOutboundStagerTest :
                     subTitle = "Sprint Planning",
                     publisherId = basicInfo.publisherId,
                     idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                 )
             val message =
                 OutboundMessage.Approval(
@@ -311,7 +311,7 @@ class SlackOutboundStagerTest :
                 then("delegates to simpleApplyRejectRequest, deriving the detail type and routing the subTitle") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             commandBasicInfo = basicInfo,
                             approvalContents = approval,
                             targetUserId = "U_PARTICIPANT",
@@ -328,7 +328,7 @@ class SlackOutboundStagerTest :
                     reason = "approve this",
                     publisherId = basicInfo.publisherId,
                     idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.REQUEST_APPLY_FORM,
+                    commandDetailType = CommandDetailType.APPLY_REQUEST,
                 )
             val message =
                 OutboundMessage.Approval(
@@ -355,7 +355,7 @@ class SlackOutboundStagerTest :
                     routingSlot.captured shouldBe emptyList()
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.REQUEST_APPLY_FORM,
+                            commandDetailType = CommandDetailType.APPLY_REQUEST,
                             commandBasicInfo = basicInfo,
                             approvalContents = approval,
                             targetUserId = null,
@@ -406,7 +406,7 @@ class SlackOutboundStagerTest :
                 then("delegates to simpleApprovalFormRequest with APPROVAL_FORM and the same fields") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_FORM,
+                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                             headLineText = "Approve",
                             commandBasicInfo = basicInfo,
                             selectionFields = fields,
@@ -466,7 +466,7 @@ class SlackOutboundStagerTest :
                             messageId = "1700000000.000100",
                         ),
                     content = MessageContent.Text(headline = null, markdown = "You declined the meeting."),
-                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    detailType = CommandDetailType.MEETING_DECLINE_REASON,
                 )
 
             `when`("stage is called") {
@@ -484,7 +484,7 @@ class SlackOutboundStagerTest :
                 stager.stage(message = message, basicInfo = basicInfo)
 
                 then("the per-emitter detailType passes through unchanged") {
-                    detailTypeSlot.captured shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    detailTypeSlot.captured shouldBe CommandDetailType.MEETING_DECLINE_REASON
                 }
             }
         }
@@ -543,7 +543,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                             approvalContents = null,
                         )
                     }
@@ -575,7 +575,7 @@ class SlackOutboundStagerTest :
                         channel = any(),
                         currentStartAt = any(),
                     )
-                } returns createOpenViewEvent(commandDetailType = CommandDetailType.RESCHEDULE_MEETING)
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
@@ -583,7 +583,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.openRescheduleMeetingModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.RESCHEDULE_MEETING,
+                            commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST,
                             triggerId = "trigger-reschedule",
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
@@ -639,7 +639,7 @@ class SlackOutboundStagerTest :
                         requesterId = any(),
                         channel = any(),
                     )
-                } returns createOpenViewEvent(commandDetailType = CommandDetailType.ADD_PARTICIPANT)
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
@@ -647,7 +647,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.openAddParticipantModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.ADD_PARTICIPANT,
+                            commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST,
                             triggerId = "trigger-add",
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
@@ -699,7 +699,7 @@ class SlackOutboundStagerTest :
                         creatorId = any(),
                         commandChannel = any(),
                     )
-                } returns createOpenViewEvent(commandDetailType = CommandDetailType.STANDUP_SETUP_FORM)
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.STANDUP_SETUP_REQUEST)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
@@ -707,7 +707,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.openStandupSetupModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.STANDUP_SETUP_FORM,
+                            commandDetailType = CommandDetailType.STANDUP_SETUP_REQUEST,
                             triggerId = "trigger-setup",
                             creatorId = "U_CREATOR",
                             commandChannel = "C_SETUP",
@@ -783,7 +783,7 @@ class SlackOutboundStagerTest :
                         noticeChannel = any(),
                         noticeMessageTs = any(),
                     )
-                } returns createOpenViewEvent(commandDetailType = CommandDetailType.STANDUP_FILL)
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.STANDUP_PROMPT)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
@@ -791,7 +791,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.openStandupModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.STANDUP_FILL,
+                            commandDetailType = CommandDetailType.STANDUP_PROMPT,
                             triggerId = "trigger-fill",
                             sessionUid = sessionUid,
                             routineName = "Daily Standup",
@@ -894,7 +894,7 @@ class SlackOutboundStagerTest :
                         noticeChannel = any(),
                         noticeMessageTs = any(),
                     )
-                } returns createOpenViewEvent(commandDetailType = CommandDetailType.DECLINE_REASON_MODAL)
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_DECLINE_REASON)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
@@ -902,7 +902,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.openDeclineReasonModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
                             triggerId = "trigger-decline",
                             meetingIdempotencyKey = meetingKey,
                             participantUserId = "U_PARTICIPANT",
@@ -941,7 +941,7 @@ class SlackOutboundStagerTest :
                         noticeChannel = any(),
                         noticeMessageTs = any(),
                     )
-                } returns createOpenViewEvent(commandDetailType = CommandDetailType.DECLINE_REASON_MODAL)
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_DECLINE_REASON)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
@@ -949,7 +949,7 @@ class SlackOutboundStagerTest :
                     verify(exactly = 1) {
                         slackEventBuilder.openDeclineReasonModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
                             triggerId = "",
                             meetingIdempotencyKey = meetingKey,
                             participantUserId = "U_PARTICIPANT",

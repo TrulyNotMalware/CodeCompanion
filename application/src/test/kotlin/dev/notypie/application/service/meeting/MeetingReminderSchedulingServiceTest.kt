@@ -227,7 +227,7 @@ class MeetingReminderSchedulingServiceTest :
                 }
 
                 then("the outbox rows carry MEETING_REMINDER as the command detail type") {
-                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.MEETING_REMINDER.name }
+                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.MEETING_REMINDER.wireValue }
                 }
             }
 

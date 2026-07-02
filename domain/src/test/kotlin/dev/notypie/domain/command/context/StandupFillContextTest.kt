@@ -30,7 +30,7 @@ class StandupFillContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.STANDUP_FILL,
+                    detailType = CommandDetailType.STANDUP_PROMPT,
                     action = approveAction(isSelected = true),
                     form = listOf(applyButtonField()),
                     idempotencyKey = UUID.randomUUID(),
@@ -45,7 +45,7 @@ class StandupFillContextTest :
 
                 then("the interaction succeeds") {
                     result.ok shouldBe true
-                    result.commandDetailType shouldBe CommandDetailType.STANDUP_FILL
+                    result.commandDetailType shouldBe CommandDetailType.STANDUP_PROMPT
                 }
 
                 then("an OpenModal effect carries routing and notice update context") {
@@ -70,7 +70,7 @@ class StandupFillContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.STANDUP_FILL,
+                    detailType = CommandDetailType.STANDUP_PROMPT,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),

@@ -27,7 +27,7 @@ internal class StandupFillContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_FILL
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_PROMPT
 
     /**
      * "Fill in standup" button carries `<idempotencyKey>,STANDUP_FILL,<sessionUid>,<routineUid>`;

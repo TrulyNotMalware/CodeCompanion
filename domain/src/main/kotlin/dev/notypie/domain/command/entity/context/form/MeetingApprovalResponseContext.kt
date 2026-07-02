@@ -30,7 +30,7 @@ internal class MeetingApprovalResponseContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST
 
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingIdempotencyKey = UUID.fromString(interaction.idempotencyKey)

@@ -35,7 +35,7 @@ class OutboxMessageTest :
                     val outbox = result.outboxMessage
                     outbox.idempotencyKey shouldBe testIdempotencyKey.toString()
                     outbox.publisherId shouldBe TEST_USER_ID
-                    outbox.commandDetailType shouldBe CommandDetailType.SIMPLE_TEXT.name
+                    outbox.commandDetailType shouldBe CommandDetailType.SIMPLE_TEXT.wireValue
                     outbox.type shouldBe MessageType.CHANNEL_ALERT.name
                     outbox.payload shouldBe mapOf("text" to "hello")
                 }
@@ -72,7 +72,7 @@ class OutboxMessageTest :
                     val outbox = result.outboxMessage
                     outbox.idempotencyKey shouldBe testIdempotencyKey.toString()
                     outbox.publisherId shouldBe TEST_USER_ID
-                    outbox.commandDetailType shouldBe CommandDetailType.REPLACE_TEXT.name
+                    outbox.commandDetailType shouldBe CommandDetailType.REPLACE_TEXT.wireValue
                     outbox.type shouldBe MessageType.ACTION_RESPONSE.name
                 }
 
@@ -174,7 +174,7 @@ class OutboxMessageTest :
                                 "channel" to TEST_CHANNEL_ID,
                                 "replace_original" to false,
                             ),
-                        commandDetailType = CommandDetailType.SIMPLE_TEXT.name,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT.wireValue,
                         type = MessageType.CHANNEL_ALERT.name,
                         createdAt = java.time.LocalDateTime.now(),
                         schemaVersion = 9999,

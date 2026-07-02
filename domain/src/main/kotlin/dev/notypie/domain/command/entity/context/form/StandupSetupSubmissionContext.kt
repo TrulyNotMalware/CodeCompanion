@@ -8,6 +8,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.time.DayOfWeek
@@ -16,10 +17,9 @@ import java.time.ZoneId
 
 /**
  * Parses the `/standup setup` modal `view_submission` into a [CommandIntent.CreateStandupRoutine].
- * Fields are located by their declared `block_id` (see `StandupSetupModalIds`) rather than by
- * iteration order, because Slack's `view.state.values` map is unordered. The creatorId and the
- * originating command channel ride along in the modal's `private_metadata` and surface as
- * `routingExtras[0]`/`[1]`.
+ * The inbound mapper resolves the semantic fields (name, questions, members, schedule) and the
+ * creator/command-channel routing into a typed [InboundSubmission.StandupSetup]; this context keeps
+ * only the interpretation policy (trimming, splits, weekday/time/cutoff/timezone parsing, defaults).
  *
  * Validation of the assembled [dev.notypie.domain.standup.entity.Routine] (question count,
  * weekday presence, positive cutoff, etc.) is deferred to the application-layer service that
@@ -40,33 +40,32 @@ internal class StandupSetupSubmissionContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT
 
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
-        val creatorId =
-            interaction.routingExtras
-                .getOrNull(0)
-                ?.takeIf { it.isNotBlank() }
-                ?: interaction.actor.id
-        val commandChannel = interaction.routingExtras.getOrNull(1).orEmpty()
+        val s =
+            interaction.submission as? InboundSubmission.StandupSetup
+                ?: return successOutput()
+        val creatorId = s.creatorId.ifBlank { interaction.actor.id }
+        val commandChannel = s.commandChannel
 
-        val name = selectedValueOf(interaction = interaction, blockId = NAME_BLOCK_ID).trim()
+        val name = s.name.trim()
         val questions =
-            selectedValueOf(interaction = interaction, blockId = QUESTIONS_BLOCK_ID)
+            s.questionsRaw
                 .split("\n")
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
         val memberIds =
-            selectedValueOf(interaction = interaction, blockId = MEMBERS_BLOCK_ID)
+            s.membersRaw
                 .split(",")
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
-        val summaryChannel = selectedValueOf(interaction = interaction, blockId = SUMMARY_CHANNEL_BLOCK_ID).trim()
+        val summaryChannel = s.summaryChannel.trim()
         val weekdays =
-            selectedValueOf(interaction = interaction, blockId = WEEKDAYS_BLOCK_ID)
+            s.weekdaysRaw
                 .split(",")
                 .mapNotNull { token -> runCatching { DayOfWeek.valueOf(token.trim()) }.getOrNull() }
                 .toSet()
-        val triggerLocalTime = parseTriggerTime(interaction = interaction)
-        val cutoffMinutes = parseCutoffMinutes(interaction = interaction)
-        val timezone = parseTimezone(interaction = interaction)
+        val triggerLocalTime = runCatching { LocalTime.parse(s.timeRaw) }.getOrDefault(DEFAULT_TRIGGER_TIME)
+        val cutoffMinutes = s.cutoffRaw.trim().toLongOrNull() ?: DEFAULT_CUTOFF_MINUTES
+        val timezone = runCatching { ZoneId.of(s.timezoneRaw.trim()) }.getOrDefault(DEFAULT_TIMEZONE)
 
         addIntent(
             CommandIntent.CreateStandupRoutine(
@@ -82,43 +81,17 @@ internal class StandupSetupSubmissionContext(
                 timezone = timezone,
             ),
         )
-        return CommandOutput.success(
+        return successOutput()
+    }
+
+    private fun successOutput() =
+        CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,
             commandDetailType = commandDetailType,
         )
-    }
-
-    private fun selectedValueOf(interaction: InboundInteraction, blockId: String): String =
-        interaction.form.value(key = blockId)
-
-    private fun parseTriggerTime(interaction: InboundInteraction): LocalTime {
-        val raw = selectedValueOf(interaction = interaction, blockId = TIME_BLOCK_ID)
-        return runCatching { LocalTime.parse(raw) }.getOrDefault(DEFAULT_TRIGGER_TIME)
-    }
-
-    private fun parseCutoffMinutes(interaction: InboundInteraction): Long {
-        val raw = selectedValueOf(interaction = interaction, blockId = CUTOFF_BLOCK_ID).trim()
-        return raw.toLongOrNull() ?: DEFAULT_CUTOFF_MINUTES
-    }
-
-    private fun parseTimezone(interaction: InboundInteraction): ZoneId {
-        val raw = selectedValueOf(interaction = interaction, blockId = TIMEZONE_BLOCK_ID).trim()
-        return runCatching { ZoneId.of(raw) }.getOrDefault(DEFAULT_TIMEZONE)
-    }
 
     companion object {
-        // Mirrors StandupSetupModalIds in the infrastructure layer. Kept as plain constants here
-        // so the domain module stays free of templating dependencies.
-        const val NAME_BLOCK_ID: String = "standup_setup_name"
-        const val QUESTIONS_BLOCK_ID: String = "standup_setup_questions"
-        const val MEMBERS_BLOCK_ID: String = "standup_setup_members"
-        const val SUMMARY_CHANNEL_BLOCK_ID: String = "standup_setup_summary_channel"
-        const val WEEKDAYS_BLOCK_ID: String = "standup_setup_weekdays"
-        const val TIME_BLOCK_ID: String = "standup_setup_time"
-        const val CUTOFF_BLOCK_ID: String = "standup_setup_cutoff"
-        const val TIMEZONE_BLOCK_ID: String = "standup_setup_timezone"
-
         const val DEFAULT_CUTOFF_MINUTES: Long = 120L
         private val DEFAULT_TRIGGER_TIME: LocalTime = LocalTime.of(10, 0)
         private val DEFAULT_TIMEZONE: ZoneId = ZoneId.of("Asia/Seoul")

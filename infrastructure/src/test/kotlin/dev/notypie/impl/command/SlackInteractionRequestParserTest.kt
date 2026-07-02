@@ -28,7 +28,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         buttonType = ButtonType.PRIMARY,
                     )
 
@@ -47,7 +47,7 @@ class SlackInteractionRequestParserTest :
                 }
 
                 then("should parse command detail type from message text") {
-                    result.type shouldBe CommandDetailType.APPROVAL_FORM
+                    result.type shouldBe CommandDetailType.APPROVAL_REQUEST
                     result.idempotencyKey shouldBe idempotencyKey.toString()
                 }
 
@@ -62,7 +62,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         buttonType = ButtonType.DANGER,
                     )
 
@@ -82,7 +82,7 @@ class SlackInteractionRequestParserTest :
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                         actions =
                             buttonActionJsonWithoutStyle(
-                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT}",
+                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT.wireValue}",
                             ),
                     )
 
@@ -99,17 +99,17 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         isEphemeral = true,
                         buttonType = ButtonType.PRIMARY,
-                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_FORM}",
+                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_REQUEST.wireValue}",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("should use button value for idempotency key and type") {
                     result.idempotencyKey shouldBe idempotencyKey.toString()
-                    result.type shouldBe CommandDetailType.APPROVAL_FORM
+                    result.type shouldBe CommandDetailType.APPROVAL_REQUEST
                 }
 
                 then("container should be ephemeral") {
@@ -405,7 +405,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        messageText = "$idempotencyKey,${CommandDetailType.SIMPLE_TEXT},42",
+                        messageText = "$idempotencyKey,${CommandDetailType.SIMPLE_TEXT.wireValue},42",
                     )
 
                 then("routingExtras should expose the meetingId token") {
@@ -446,7 +446,7 @@ class SlackInteractionRequestParserTest :
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("routing type is recovered from private_metadata, not message text") {
-                    result.type shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    result.type shouldBe CommandDetailType.MEETING_DECLINE_REASON
                     result.idempotencyKey shouldBe meetingKey.toString()
                     result.routingExtras shouldBe listOf(participantUserId)
                     result.privateMetadata shouldBe
@@ -485,7 +485,7 @@ class SlackInteractionRequestParserTest :
                 }
 
                 then("routing still resolves from private_metadata") {
-                    result.type shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    result.type shouldBe CommandDetailType.MEETING_DECLINE_REASON
                 }
             }
 
@@ -567,7 +567,7 @@ class SlackInteractionRequestParserTest :
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("channel.id is recovered so basicInfo routes the confirmation in-channel") {
-                    result.type shouldBe CommandDetailType.RESCHEDULE_MEETING_SUBMIT
+                    result.type shouldBe CommandDetailType.MEETING_RESCHEDULE_SUBMIT
                     result.channel.id shouldBe "C_ORIGIN_CHANNEL"
                 }
             }
@@ -584,7 +584,7 @@ class SlackInteractionRequestParserTest :
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("channel.id is recovered from routingExtras[1]") {
-                    result.type shouldBe CommandDetailType.ADD_PARTICIPANT_SUBMIT
+                    result.type shouldBe CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT
                     result.channel.id shouldBe "C_ADD_CHANNEL"
                 }
             }
@@ -614,7 +614,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        messageText = "$idempotencyKey,${CommandDetailType.MEETING_APPROVAL_NOTICE_FORM}",
+                        messageText = "$idempotencyKey,${CommandDetailType.MEETING_APPROVAL_REQUEST.wireValue}",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)

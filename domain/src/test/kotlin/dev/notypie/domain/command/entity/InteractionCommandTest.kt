@@ -40,7 +40,7 @@ class InteractionCommandTest :
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.NOTICE_FORM,
+                    detailType = CommandDetailType.APPROVAL_CALLBACK,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = idempotencyKey,
@@ -67,7 +67,7 @@ class InteractionCommandTest :
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.APPROVAL_FORM,
+                    detailType = CommandDetailType.APPROVAL_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = idempotencyKey,
@@ -97,7 +97,7 @@ class InteractionCommandTest :
                 val idempotencyKey = UUID.randomUUID()
                 val interactionPayload =
                     createInboundInteraction(
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form = emptyList(),
                         idempotencyKey = idempotencyKey,

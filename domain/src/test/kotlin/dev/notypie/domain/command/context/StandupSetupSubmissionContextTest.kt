@@ -6,8 +6,7 @@ import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
-import dev.notypie.domain.command.inbound.InboundFieldKind
-import dev.notypie.domain.command.inboundField
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -31,60 +30,21 @@ class StandupSetupSubmissionContextTest :
                 createInboundInteraction(
                     detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "Daily Standup",
-                                key = StandupSetupSubmissionContext.NAME_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                // Blank middle line must be trimmed away.
-                                rawValue = "What did you do?\n\n  What are you doing?  \nBlockers?",
-                                key = StandupSetupSubmissionContext.QUESTIONS_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.USERS,
-                                isSelected = true,
-                                rawValue = "U_ALICE,U_BOB",
-                                key = StandupSetupSubmissionContext.MEMBERS_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.CONVERSATION,
-                                isSelected = true,
-                                rawValue = "C_SUMMARY",
-                                key = StandupSetupSubmissionContext.SUMMARY_CHANNEL_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.MULTI_CHOICE,
-                                isSelected = true,
-                                rawValue = "MONDAY,WEDNESDAY,FRIDAY",
-                                key = StandupSetupSubmissionContext.WEEKDAYS_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TIME,
-                                isSelected = true,
-                                rawValue = "09:30",
-                                key = StandupSetupSubmissionContext.TIME_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "90",
-                                key = StandupSetupSubmissionContext.CUTOFF_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.CHOICE,
-                                isSelected = true,
-                                rawValue = "UTC",
-                                key = StandupSetupSubmissionContext.TIMEZONE_BLOCK_ID,
-                            ),
+                    submission =
+                        InboundSubmission.StandupSetup(
+                            idempotencyKeyRaw = UUID.randomUUID().toString(),
+                            creatorId = "U_CREATOR",
+                            commandChannel = "C_COMMAND",
+                            name = "Daily Standup",
+                            // Blank middle line must be trimmed away.
+                            questionsRaw = "What did you do?\n\n  What are you doing?  \nBlockers?",
+                            membersRaw = "U_ALICE,U_BOB",
+                            summaryChannel = "C_SUMMARY",
+                            weekdaysRaw = "MONDAY,WEDNESDAY,FRIDAY",
+                            timeRaw = "09:30",
+                            cutoffRaw = "90",
+                            timezoneRaw = "UTC",
                         ),
-                    idempotencyKey = UUID.randomUUID(),
-                    routingExtras = listOf("U_CREATOR", "C_COMMAND"),
                 )
 
             `when`("handleInteraction is invoked") {
@@ -125,22 +85,20 @@ class StandupSetupSubmissionContextTest :
                 createInboundInteraction(
                     detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "Routine",
-                                key = StandupSetupSubmissionContext.NAME_BLOCK_ID,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "Only question",
-                                key = StandupSetupSubmissionContext.QUESTIONS_BLOCK_ID,
-                            ),
+                    submission =
+                        InboundSubmission.StandupSetup(
+                            idempotencyKeyRaw = UUID.randomUUID().toString(),
+                            creatorId = "U_CREATOR",
+                            commandChannel = "C_COMMAND",
+                            name = "Routine",
+                            questionsRaw = "Only question",
+                            membersRaw = "",
+                            summaryChannel = "",
+                            weekdaysRaw = "",
+                            timeRaw = "",
+                            cutoffRaw = "",
+                            timezoneRaw = "",
                         ),
-                    idempotencyKey = UUID.randomUUID(),
                 )
 
             `when`("handleInteraction is invoked without cutoff or timezone selections") {

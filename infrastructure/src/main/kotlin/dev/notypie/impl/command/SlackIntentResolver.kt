@@ -59,7 +59,7 @@ class SlackIntentResolver {
                             absentReason = intent.absentReason,
                             absentReasonDetail = intent.absentReasonDetail,
                         ),
-                    type = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    type = CommandDetailType.MEETING_APPROVAL_REQUEST,
                 )
             }
 
@@ -86,7 +86,7 @@ class SlackIntentResolver {
                             newStartAt = intent.newStartAt,
                             responseBasicInfo = basicInfo,
                         ),
-                    type = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    type = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                 )
             }
 
@@ -100,7 +100,7 @@ class SlackIntentResolver {
                             participantUserIds = intent.participantUserIds,
                             responseBasicInfo = basicInfo,
                         ),
-                    type = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
             }
 

@@ -6,8 +6,7 @@ import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext
-import dev.notypie.domain.command.inbound.InboundFieldKind
-import dev.notypie.domain.command.inboundField
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -27,19 +26,14 @@ class AddParticipantSubmissionContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.USERS,
-                                rawValue = "U_A,U_B",
-                                isSelected = true,
-                                key = AddParticipantSubmissionContext.USERS_BLOCK_ID,
-                            ),
+                    submission =
+                        InboundSubmission.AddParticipant(
+                            meetingUidRaw = meetingUid.toString(),
+                            requesterId = "U_HOST",
+                            participantUserIdsRaw = "U_A,U_B",
                         ),
-                    idempotencyKey = meetingUid,
-                    routingExtras = listOf("U_HOST"),
                 )
 
             `when`("handleInteraction is invoked") {
@@ -48,7 +42,7 @@ class AddParticipantSubmissionContextTest :
 
                 then("the interaction succeeds") {
                     result.ok shouldBe true
-                    result.commandDetailType shouldBe CommandDetailType.ADD_PARTICIPANT_SUBMIT
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT
                 }
 
                 then("AddParticipant carries the meeting uid, requester, and the selected user ids") {
@@ -70,19 +64,14 @@ class AddParticipantSubmissionContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.USERS,
-                                rawValue = "",
-                                isSelected = true,
-                                key = AddParticipantSubmissionContext.USERS_BLOCK_ID,
-                            ),
+                    submission =
+                        InboundSubmission.AddParticipant(
+                            meetingUidRaw = meetingUid.toString(),
+                            requesterId = "U_HOST",
+                            participantUserIdsRaw = "",
                         ),
-                    idempotencyKey = meetingUid,
-                    routingExtras = listOf("U_HOST"),
                 )
 
             `when`("handleInteraction is invoked") {
@@ -104,11 +93,15 @@ class AddParticipantSubmissionContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form = emptyList(),
-                    idempotencyKey = UUID.randomUUID(),
-                ).copy(idempotencyKey = "not-a-uuid")
+                    submission =
+                        InboundSubmission.AddParticipant(
+                            meetingUidRaw = "not-a-uuid",
+                            requesterId = "U_HOST",
+                            participantUserIdsRaw = "",
+                        ),
+                )
 
             `when`("handleInteraction is invoked") {
                 val result = context.handleInteraction(interaction = payload)

@@ -31,7 +31,7 @@ internal class AddParticipantContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.ADD_PARTICIPANT
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST
 
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingUid =

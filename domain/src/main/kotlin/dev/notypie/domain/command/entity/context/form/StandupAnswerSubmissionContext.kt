@@ -7,8 +7,8 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.inbound.InboundFieldKind
 import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -31,25 +31,19 @@ internal class StandupAnswerSubmissionContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT
 
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
+        val s =
+            interaction.submission as? InboundSubmission.StandupAnswer
+                ?: return successOutput()
         val sessionUid =
-            runCatching { UUID.fromString(interaction.idempotencyKey) }
+            runCatching { UUID.fromString(s.sessionUidRaw) }
                 .getOrElse {
                     return successOutput()
                 }
-        val userId =
-            interaction.routingExtras
-                .getOrNull(0)
-                ?.takeIf { it.isNotBlank() }
-                ?: interaction.actor.id
-        val noticeChannel = interaction.routingExtras.getOrNull(1).orEmpty()
-        val noticeMessageTs = interaction.routingExtras.getOrNull(2).orEmpty()
-        // Slack returns `view.state.values` unordered; sort by the `standup_q_<index>` block id so
-        // `responses[i]` stays aligned with `routine.questions[i]`.
-        val responses =
-            interaction.form
-                .all(kind = InboundFieldKind.TEXT)
-                .sortedBy { field -> standupQuestionIndex(blockId = field.key) }
-                .map { it.rawValue.trim() }
+        val userId = s.userId.ifBlank { interaction.actor.id }
+        val noticeChannel = s.noticeChannel
+        val noticeMessageTs = s.noticeMessageTs
+        // Answers arrive already trimmed and ordered by question index from the inbound mapper.
+        val responses = s.answers
 
         if (responses.isNotEmpty()) {
             addIntent(
@@ -82,14 +76,4 @@ internal class StandupAnswerSubmissionContext(
             commandType = commandType,
             commandDetailType = commandDetailType,
         )
-
-    /** Trailing index of a `standup_q_<index>` block id; unparseable ids sort last via [Int.MAX_VALUE]. */
-    private fun standupQuestionIndex(blockId: String?): Int {
-        val tail = blockId?.removePrefix(STANDUP_QUESTION_BLOCK_ID_PREFIX)
-        return tail?.toIntOrNull() ?: Int.MAX_VALUE
-    }
-
-    companion object {
-        private const val STANDUP_QUESTION_BLOCK_ID_PREFIX = "standup_q_"
-    }
 }

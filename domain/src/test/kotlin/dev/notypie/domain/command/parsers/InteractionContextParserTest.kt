@@ -28,8 +28,6 @@ class InteractionContextParserTest :
             return InteractionContextParser(
                 commandData = createInteractionResponseInboundCommand(interaction = interaction),
                 interaction = interaction,
-                baseUrl = "",
-                commandId = UUID.randomUUID(),
                 idempotencyKey = idempotencyKey,
                 intents = intents,
             )
@@ -37,7 +35,7 @@ class InteractionContextParserTest :
 
         given("parseContext") {
             `when`("interaction type is APPROVAL_FORM") {
-                val parser = createParser(detailType = CommandDetailType.APPROVAL_FORM)
+                val parser = createParser(detailType = CommandDetailType.APPROVAL_REQUEST)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -47,7 +45,7 @@ class InteractionContextParserTest :
             }
 
             `when`("interaction type is NOTICE_FORM") {
-                val parser = createParser(detailType = CommandDetailType.NOTICE_FORM)
+                val parser = createParser(detailType = CommandDetailType.APPROVAL_CALLBACK)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -57,7 +55,7 @@ class InteractionContextParserTest :
             }
 
             `when`("interaction type is REQUEST_MEETING_FORM") {
-                val parser = createParser(detailType = CommandDetailType.REQUEST_MEETING_FORM)
+                val parser = createParser(detailType = CommandDetailType.MEETING_CREATE_REQUEST)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
@@ -67,7 +65,7 @@ class InteractionContextParserTest :
             }
 
             `when`("interaction type is MEETING_APPROVAL_NOTICE_FORM") {
-                val parser = createParser(detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
+                val parser = createParser(detailType = CommandDetailType.MEETING_APPROVAL_REQUEST)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 

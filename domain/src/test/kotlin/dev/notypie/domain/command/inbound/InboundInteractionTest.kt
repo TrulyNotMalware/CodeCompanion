@@ -16,7 +16,7 @@ class InboundInteractionTest :
             `when`("primary action is selected and all fields are selected") {
                 val interaction =
                     createInboundInteraction(
-                        detailType = CommandDetailType.APPROVAL_FORM,
+                        detailType = CommandDetailType.APPROVAL_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(
@@ -32,7 +32,7 @@ class InboundInteractionTest :
             `when`("primary action is selected but a field is not selected") {
                 val interaction =
                     createInboundInteraction(
-                        detailType = CommandDetailType.APPROVAL_FORM,
+                        detailType = CommandDetailType.APPROVAL_REQUEST,
                         action = approveAction(isSelected = true),
                         form = listOf(inboundField(kind = InboundFieldKind.USERS, isSelected = false)),
                     )
@@ -45,7 +45,7 @@ class InboundInteractionTest :
             `when`("current action is not primary") {
                 val interaction =
                     createInboundInteraction(
-                        detailType = CommandDetailType.APPROVAL_FORM,
+                        detailType = CommandDetailType.APPROVAL_REQUEST,
                         action = passiveAction(isSelected = true),
                         form = emptyList(),
                     )
@@ -58,7 +58,7 @@ class InboundInteractionTest :
             `when`("current action is not selected") {
                 val interaction =
                     createInboundInteraction(
-                        detailType = CommandDetailType.APPROVAL_FORM,
+                        detailType = CommandDetailType.APPROVAL_REQUEST,
                         action = approveAction(isSelected = false),
                         form = emptyList(),
                     )
@@ -71,7 +71,7 @@ class InboundInteractionTest :
             `when`("an unselected TOGGLE field exists") {
                 val interaction =
                     createInboundInteraction(
-                        detailType = CommandDetailType.APPROVAL_FORM,
+                        detailType = CommandDetailType.APPROVAL_REQUEST,
                         action = approveAction(isSelected = true),
                         form = listOf(inboundField(kind = InboundFieldKind.TOGGLE, isSelected = false)),
                     )
@@ -84,7 +84,7 @@ class InboundInteractionTest :
             `when`("an unselected TEXT field exists") {
                 val interaction =
                     createInboundInteraction(
-                        detailType = CommandDetailType.APPROVAL_FORM,
+                        detailType = CommandDetailType.APPROVAL_REQUEST,
                         action = approveAction(isSelected = true),
                         form = listOf(inboundField(kind = InboundFieldKind.TEXT, isSelected = false)),
                     )

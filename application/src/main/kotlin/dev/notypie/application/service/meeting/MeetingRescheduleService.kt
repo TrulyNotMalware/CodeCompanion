@@ -105,7 +105,7 @@ class MeetingRescheduleService(
                 newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT) + "."
         val noticeEvent =
             slackEventBuilder.simpleTextRequest(
-                commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                 headLineText = "Meeting rescheduled",
                 commandBasicInfo = basicInfo,
                 simpleString = notice,
@@ -118,7 +118,7 @@ class MeetingRescheduleService(
             slackEventBuilder.simpleEphemeralTextRequest(
                 textMessage = message,
                 commandBasicInfo = basicInfo,
-                commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                 targetUserId = targetUserId,
             )
         eventPublisher.publishOne(event = ephemeralEvent)

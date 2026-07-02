@@ -16,8 +16,6 @@ import java.util.*
 internal class AppMentionContextParser(
     private val commandData: InboundCommand,
     private val mention: MentionInvocation,
-    val baseUrl: String,
-    val commandId: UUID,
     val idempotencyKey: UUID,
     private val intents: IntentQueue,
 ) : ContextParser {

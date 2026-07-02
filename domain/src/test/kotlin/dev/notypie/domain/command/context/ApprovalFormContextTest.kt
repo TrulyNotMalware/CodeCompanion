@@ -31,7 +31,7 @@ class ApprovalFormContextTest :
                 }
 
                 then("commandDetailType should be APPROVAL_FORM") {
-                    context.commandDetailType shouldBe CommandDetailType.APPROVAL_FORM
+                    context.commandDetailType shouldBe CommandDetailType.APPROVAL_REQUEST
                 }
             }
 

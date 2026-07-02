@@ -3,6 +3,7 @@ package dev.notypie.domain.command.entity.parsers
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.createContext
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.IntentQueue
@@ -11,8 +12,6 @@ import java.util.*
 internal class InteractionContextParser(
     private val commandData: InboundCommand,
     private val interaction: InboundInteraction,
-    val baseUrl: String,
-    val commandId: UUID,
     val idempotencyKey: UUID,
     private val intents: IntentQueue,
 ) : ContextParser {

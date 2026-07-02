@@ -665,7 +665,7 @@ class SlackApiEventConstructor(
         commandDetailType: CommandDetailType,
         routingExtras: List<String>,
     ): String {
-        val prefix = "$idempotencyKey,$commandDetailType"
+        val prefix = "$idempotencyKey,${commandDetailType.wireValue}"
         if (routingExtras.isEmpty()) return prefix
         val encoded =
             routingExtras.joinToString(",") {
@@ -684,7 +684,7 @@ class SlackApiEventConstructor(
     ) = ChatPostEphemeralRequest
         .builder()
         .channel(channel)
-        .text("$idempotencyKey, $commandDetailType")
+        .text("$idempotencyKey, ${commandDetailType.wireValue}")
         .token(botToken)
         .blocks(blocks)
         .user(userId)

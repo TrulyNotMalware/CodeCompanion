@@ -12,6 +12,7 @@ import dev.notypie.domain.command.inbound.InboundField
 import dev.notypie.domain.command.inbound.InboundFieldKind
 import dev.notypie.domain.command.inbound.InboundForm
 import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.inbound.MessageHandle
 import dev.notypie.domain.command.inbound.ReplyHandle
 import dev.notypie.domain.command.inbound.TriggerHandle
@@ -38,6 +39,7 @@ fun createInboundInteraction(
     message: MessageHandle? = null,
     idempotencyKey: UUID = UUID.randomUUID(),
     routingExtras: List<String> = emptyList(),
+    submission: InboundSubmission? = null,
 ): InboundInteraction =
     InboundInteraction(
         detailType = detailType,
@@ -50,6 +52,7 @@ fun createInboundInteraction(
         routingExtras = routingExtras,
         form = InboundForm(fields = form),
         action = action,
+        submission = submission,
     )
 
 fun approveAction(isSelected: Boolean = true) = InboundAction(role = InboundActionRole.APPROVE, isSelected = isSelected)

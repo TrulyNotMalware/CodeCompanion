@@ -36,7 +36,7 @@ class MeetingApprovalResponseContextTest :
             val meetingKey = UUID.randomUUID()
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    detailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                     action = approveAction(isSelected = true),
                     form = listOf(applyButtonField()),
                     idempotencyKey = meetingKey,
@@ -50,7 +50,7 @@ class MeetingApprovalResponseContextTest :
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
-                    result.commandDetailType shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_APPROVAL_REQUEST
                 }
 
                 then("a MeetingAttendanceUpdate intent with isAttending=true is emitted") {
@@ -91,7 +91,7 @@ class MeetingApprovalResponseContextTest :
             // the original notice — carry it through so the modal's private_metadata can round-trip it.
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    detailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                     action = rejectAction(isSelected = true),
                     form = listOf(rejectButtonField()),
                     idempotencyKey = meetingKey,
@@ -105,7 +105,7 @@ class MeetingApprovalResponseContextTest :
 
                 then("result should still be successful (decision recorded regardless)") {
                     result.ok shouldBe true
-                    result.commandDetailType shouldBe CommandDetailType.MEETING_APPROVAL_NOTICE_FORM
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_APPROVAL_REQUEST
                 }
 
                 then("an OpenModal effect is emitted with trigger/meeting/user/title context") {
@@ -162,7 +162,7 @@ class MeetingApprovalResponseContextTest :
             // Under the old routing this would trip "Select participants".
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    detailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),

@@ -7,8 +7,8 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.inbound.InboundFieldKind
 import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.time.LocalDateTime
@@ -38,19 +38,18 @@ internal class RescheduleMeetingSubmissionContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT
 
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
+        val s =
+            interaction.submission as? InboundSubmission.RescheduleMeeting
+                ?: return successOutput()
         val meetingUid =
-            runCatching { UUID.fromString(interaction.idempotencyKey) }
+            runCatching { UUID.fromString(s.meetingUidRaw) }
                 .getOrElse { return successOutput() }
-        val requesterId =
-            interaction.routingExtras
-                .firstOrNull()
-                ?.takeIf { it.isNotBlank() }
-                ?: interaction.actor.id
+        val requesterId = s.requesterId.ifBlank { interaction.actor.id }
         val newStartAt =
-            parseNewStartAt(interaction = interaction)
+            parseNewStartAt(date = s.date, time = s.time)
                 ?: return successOutput()
 
         addIntent(
@@ -64,26 +63,14 @@ internal class RescheduleMeetingSubmissionContext(
     }
 
     /**
-     * Combines the modal's DATE_PICKER + TIME_PICKER selections into a [LocalDateTime]. Returns
-     * null when either selection is blank or fails to parse, so a half-filled submission is a
-     * no-op rather than a 500.
+     * Combines the modal's date + time selections into a [LocalDateTime]. Returns null when either
+     * selection is blank or fails to parse, so a half-filled submission is a no-op rather than a 500.
      */
-    private fun parseNewStartAt(interaction: InboundInteraction): LocalDateTime? {
-        val dateString =
-            interaction.form
-                .all(kind = InboundFieldKind.DATE)
-                .firstOrNull { it.rawValue.isNotBlank() }
-                ?.rawValue
-                ?: return null
-        val timeString =
-            interaction.form
-                .all(kind = InboundFieldKind.TIME)
-                .firstOrNull { it.rawValue.isNotBlank() }
-                ?.rawValue
-                ?: return null
+    private fun parseNewStartAt(date: String, time: String): LocalDateTime? {
+        if (date.isBlank() || time.isBlank()) return null
         return runCatching {
             LocalDateTime.parse(
-                "$dateString $timeString",
+                "$date $time",
                 DateTimeFormatter.ofPattern("$DATE_PATTERN $TIME_PATTERN"),
             )
         }.getOrNull()

@@ -87,6 +87,83 @@ class InboundForm(
     fun firstValue(kind: InboundFieldKind): String? = first(kind)?.rawValue
 }
 
+/**
+ * Field-identity contract shared between the modal template (writer, infra `InteractiveIds`) and the
+ * submission contexts (reader). The literal values are the field block ids carried on the wire;
+ * co-locating them here makes this the single source of truth so the writer and the domain readers
+ * can no longer drift apart (a drift silently degrades a field read to empty).
+ */
+object InboundFieldKeys {
+    // add-participant modal
+    const val ADD_PARTICIPANT_USERS: String = "add_participant_users"
+
+    // standup answer modal — per-question fields are this prefix joined with the question index
+    const val STANDUP_ANSWER_QUESTION_PREFIX: String = "standup_q_"
+
+    // standup setup modal
+    const val STANDUP_SETUP_NAME: String = "standup_setup_name"
+    const val STANDUP_SETUP_QUESTIONS: String = "standup_setup_questions"
+    const val STANDUP_SETUP_MEMBERS: String = "standup_setup_members"
+    const val STANDUP_SETUP_SUMMARY_CHANNEL: String = "standup_setup_summary_channel"
+    const val STANDUP_SETUP_WEEKDAYS: String = "standup_setup_weekdays"
+    const val STANDUP_SETUP_TIME: String = "standup_setup_time"
+    const val STANDUP_SETUP_CUTOFF: String = "standup_setup_cutoff"
+    const val STANDUP_SETUP_TIMEZONE: String = "standup_setup_timezone"
+}
+
+/**
+ * Typed, semantic per-flow projection of a `view_submission`. The infra mapper resolves the
+ * positional `routingExtras`/block-id reads into named fields once, so each domain context consumes
+ * its own variant by field name and keeps only its interpretation policy (uid parsing, date/time
+ * combine, RejectReason parsing, defaults, string splits). Null for block_actions interactions,
+ * which carry no submission.
+ */
+sealed interface InboundSubmission {
+    data class RescheduleMeeting(
+        val meetingUidRaw: String,
+        val requesterId: String,
+        val date: String,
+        val time: String,
+    ) : InboundSubmission
+
+    data class AddParticipant(
+        val meetingUidRaw: String,
+        val requesterId: String,
+        val participantUserIdsRaw: String,
+    ) : InboundSubmission
+
+    data class DeclineReason(
+        val meetingIdempotencyKeyRaw: String,
+        val participantUserId: String,
+        val noticeChannel: String,
+        val noticeMessageTs: String,
+        val reasonRaw: String,
+        val detailRaw: String,
+    ) : InboundSubmission
+
+    data class StandupAnswer(
+        val sessionUidRaw: String,
+        val userId: String,
+        val noticeChannel: String,
+        val noticeMessageTs: String,
+        val answers: List<String>,
+    ) : InboundSubmission
+
+    data class StandupSetup(
+        val idempotencyKeyRaw: String,
+        val creatorId: String,
+        val commandChannel: String,
+        val name: String,
+        val questionsRaw: String,
+        val membersRaw: String,
+        val summaryChannel: String,
+        val weekdaysRaw: String,
+        val timeRaw: String,
+        val cutoffRaw: String,
+        val timezoneRaw: String,
+    ) : InboundSubmission
+}
+
 /** Transport-neutral interaction consumed by domain contexts. */
 data class InboundInteraction(
     val detailType: CommandDetailType, // was type
@@ -100,6 +177,8 @@ data class InboundInteraction(
     val routingExtras: List<String> = emptyList(),
     val form: InboundForm,
     val action: InboundAction,
+    // Typed per-flow view_submission projection; null for block_actions interactions.
+    val submission: InboundSubmission? = null,
 ) : InboundPayload
 
 fun InboundInteraction.isPrimary(): Boolean = action.role.triggersEvent

@@ -37,7 +37,7 @@ internal class ApprovalCallbackContext(
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTICE_FORM
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.APPROVAL_CALLBACK
 
     override fun runCommand() = handleCommand()
 

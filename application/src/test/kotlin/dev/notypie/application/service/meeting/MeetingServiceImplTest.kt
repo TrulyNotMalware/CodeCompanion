@@ -289,17 +289,17 @@ class MeetingServiceImplTest :
                             participantUserIds = listOf("U_A", "U_B"),
                             responseBasicInfo = basic,
                         ),
-                    type = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
             val noticeEvent =
                 createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                     idempotencyKey = basic.idempotencyKey,
                     messageType = MessageType.CHANNEL_ALERT,
                 )
             val ephemeralEvent =
                 createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                    commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                     idempotencyKey = basic.idempotencyKey,
                     messageType = MessageType.EPHEMERAL_MESSAGE,
                 )
@@ -341,7 +341,7 @@ class MeetingServiceImplTest :
                 then("each added user gets the Accept/Decline approval notice") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             commandBasicInfo = any(),
                             approvalContents = any(),
                             targetUserId = "U_A",
@@ -350,7 +350,7 @@ class MeetingServiceImplTest :
                     }
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             commandBasicInfo = any(),
                             approvalContents = any(),
                             targetUserId = "U_B",
@@ -365,7 +365,7 @@ class MeetingServiceImplTest :
                         slackEventBuilder.simpleEphemeralTextRequest(
                             textMessage = any(),
                             commandBasicInfo = basic,
-                            commandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                            commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                             targetUserId = requesterId,
                         )
                     }

@@ -23,7 +23,7 @@ internal class ApprovalFormContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType() = CommandDetailType.APPROVAL_FORM
+    override fun parseCommandDetailType() = CommandDetailType.APPROVAL_REQUEST
 
     override fun runCommand(): CommandOutput {
         addOutbound(

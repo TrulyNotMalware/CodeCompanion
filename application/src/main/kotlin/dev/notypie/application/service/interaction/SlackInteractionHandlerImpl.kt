@@ -36,8 +36,8 @@ class SlackInteractionHandlerImpl(
          */
         internal val LEGACY_AUTO_REJECT_TYPES: Set<CommandDetailType> =
             setOf(
-                CommandDetailType.REQUEST_APPLY_FORM,
-                CommandDetailType.APPROVAL_FORM,
+                CommandDetailType.APPLY_REQUEST,
+                CommandDetailType.APPROVAL_REQUEST,
             )
     }
 
@@ -74,7 +74,7 @@ class SlackInteractionHandlerImpl(
      * body so Slack shows an inline error and keeps the modal open; null otherwise.
      */
     private fun declineDetailErrorOrNull(payload: InteractionPayload): String? {
-        if (payload.type != CommandDetailType.DECLINE_REASON_MODAL) return null
+        if (payload.type != CommandDetailType.MEETING_DECLINE_REASON) return null
         val selectedReason =
             payload.states
                 .firstOrNull { it.type == ActionElementTypes.STATIC_SELECT }

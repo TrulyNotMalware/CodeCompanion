@@ -8,10 +8,8 @@ import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
-import dev.notypie.domain.command.inbound.InboundField
-import dev.notypie.domain.command.inbound.InboundFieldKind
 import dev.notypie.domain.command.inbound.InboundInteraction
-import dev.notypie.domain.command.inboundField
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -29,22 +27,22 @@ class DeclineReasonSubmissionContextTest :
             meetingKey: UUID,
             participantUserId: String,
             selectedReason: String,
+            detail: String = "",
             noticeChannel: String = "C_NOTICE",
             noticeMessageTs: String = "1700000000.000100",
         ): InboundInteraction =
             createInboundInteraction(
-                detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                detailType = CommandDetailType.MEETING_DECLINE_REASON,
                 action = approveAction(isSelected = true),
-                form =
-                    listOf(
-                        inboundField(
-                            kind = InboundFieldKind.CHOICE,
-                            isSelected = selectedReason.isNotBlank(),
-                            rawValue = selectedReason,
-                        ),
+                submission =
+                    InboundSubmission.DeclineReason(
+                        meetingIdempotencyKeyRaw = meetingKey.toString(),
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                        reasonRaw = selectedReason,
+                        detailRaw = detail,
                     ),
-                idempotencyKey = meetingKey,
-                routingExtras = listOf(participantUserId, noticeChannel, noticeMessageTs),
             )
 
         given("DeclineReasonSubmissionContext receives a valid view_submission") {
@@ -71,7 +69,7 @@ class DeclineReasonSubmissionContextTest :
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
-                    result.commandDetailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_DECLINE_REASON
                 }
 
                 then("a single MeetingAttendanceUpdate intent carries the selected reason") {
@@ -88,7 +86,7 @@ class DeclineReasonSubmissionContextTest :
                         intents.filterIsInstance<OutboundMessage.UpdateMessage>().single()
                     update.ref.conversation.id shouldBe "C_NOTICE"
                     update.ref.messageId shouldBe "1700000000.000100"
-                    update.detailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    update.detailType shouldBe CommandDetailType.MEETING_DECLINE_REASON
                     update.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
                         "You declined the meeting — *Reason:* ${RejectReason.HEALTH_ISSUE.showMessage}"
                 }
@@ -113,24 +111,11 @@ class DeclineReasonSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInboundInteraction(
-                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.CHOICE,
-                                isSelected = true,
-                                rawValue = RejectReason.OTHER.name,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "Out of town for a wedding",
-                            ),
-                        ),
-                    idempotencyKey = meetingKey,
-                    routingExtras = listOf(participantUserId, "C_NOTICE", "1700000000.000100"),
+                submissionPayload(
+                    meetingKey = meetingKey,
+                    participantUserId = participantUserId,
+                    selectedReason = RejectReason.OTHER.name,
+                    detail = "Out of town for a wedding",
                 )
 
             `when`("handleInteraction is invoked") {
@@ -163,24 +148,13 @@ class DeclineReasonSubmissionContextTest :
                     intents = intentQueue,
                 )
             val payload =
-                createInboundInteraction(
-                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.CHOICE,
-                                isSelected = true,
-                                rawValue = RejectReason.VACATION.name,
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TEXT,
-                                isSelected = true,
-                                rawValue = "ignored because reason is not Other",
-                            ),
-                        ),
-                    idempotencyKey = meetingKey,
-                    routingExtras = listOf("U_PARTICIPANT"),
+                submissionPayload(
+                    meetingKey = meetingKey,
+                    participantUserId = "U_PARTICIPANT",
+                    selectedReason = RejectReason.VACATION.name,
+                    detail = "ignored because reason is not Other",
+                    noticeChannel = "",
+                    noticeMessageTs = "",
                 )
 
             `when`("handleInteraction is invoked") {
@@ -207,19 +181,12 @@ class DeclineReasonSubmissionContextTest :
                 )
             // Legacy notice that predates Wave 2 — routing carries only participantUserId.
             val payload =
-                createInboundInteraction(
-                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
-                    action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.CHOICE,
-                                isSelected = true,
-                                rawValue = RejectReason.HEALTH_ISSUE.name,
-                            ),
-                        ),
-                    idempotencyKey = meetingKey,
-                    routingExtras = listOf(participantUserId),
+                submissionPayload(
+                    meetingKey = meetingKey,
+                    participantUserId = participantUserId,
+                    selectedReason = RejectReason.HEALTH_ISSUE.name,
+                    noticeChannel = "",
+                    noticeMessageTs = "",
                 )
 
             `when`("handleInteraction is invoked") {
@@ -306,11 +273,18 @@ class DeclineReasonSubmissionContextTest :
                 )
             val badPayload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    detailType = CommandDetailType.MEETING_DECLINE_REASON,
                     action = approveAction(isSelected = true),
-                    form = emptyList<InboundField>(),
-                    idempotencyKey = UUID.randomUUID(),
-                ).copy(idempotencyKey = "not-a-uuid")
+                    submission =
+                        InboundSubmission.DeclineReason(
+                            meetingIdempotencyKeyRaw = "not-a-uuid",
+                            participantUserId = "U_PARTICIPANT",
+                            noticeChannel = "C_NOTICE",
+                            noticeMessageTs = "1700000000.000100",
+                            reasonRaw = RejectReason.HEALTH_ISSUE.name,
+                            detailRaw = "",
+                        ),
+                )
 
             `when`("handleInteraction is invoked") {
                 val result = context.handleInteraction(interaction = badPayload)

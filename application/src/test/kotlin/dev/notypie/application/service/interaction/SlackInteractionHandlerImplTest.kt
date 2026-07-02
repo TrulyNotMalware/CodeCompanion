@@ -51,17 +51,17 @@ class SlackInteractionHandlerImplTest :
                 then("contains exactly REQUEST_APPLY_FORM and APPROVAL_FORM") {
                     SlackInteractionHandlerImpl.LEGACY_AUTO_REJECT_TYPES shouldBe
                         setOf(
-                            CommandDetailType.REQUEST_APPLY_FORM,
-                            CommandDetailType.APPROVAL_FORM,
+                            CommandDetailType.APPLY_REQUEST,
+                            CommandDetailType.APPROVAL_REQUEST,
                         )
                 }
 
                 then("does NOT contain new CommandDetailType values that need context routing") {
                     SlackInteractionHandlerImpl.LEGACY_AUTO_REJECT_TYPES shouldNotContainAnyOf
                         setOf(
-                            CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-                            CommandDetailType.REQUEST_MEETING_FORM,
-                            CommandDetailType.NOTICE_FORM,
+                            CommandDetailType.MEETING_APPROVAL_REQUEST,
+                            CommandDetailType.MEETING_CREATE_REQUEST,
+                            CommandDetailType.APPROVAL_CALLBACK,
                             CommandDetailType.NOTHING,
                         )
                 }
@@ -82,7 +82,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                             currentAction = selectedApplyButtonStates(),
                             states = listOf(selectedApplyButtonStates()),
                             idempotencyKey = UUID.randomUUID(),
@@ -110,7 +110,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.APPROVAL_FORM,
+                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                             currentAction = selectedRejectButtonStates(),
                             states = listOf(selectedRejectButtonStates()),
                             idempotencyKey = UUID.randomUUID(),
@@ -138,7 +138,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
                             currentAction = selectedApplyButtonStates(),
                             states =
                                 listOf(
@@ -174,7 +174,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
                             currentAction = selectedApplyButtonStates(),
                             states =
                                 listOf(
@@ -210,7 +210,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             currentAction = selectedApplyButtonStates(),
                             states = listOf(selectedApplyButtonStates()),
                             idempotencyKey = UUID.randomUUID(),
@@ -238,7 +238,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             currentAction = selectedRejectButtonStates(),
                             states = listOf(selectedRejectButtonStates()),
                             idempotencyKey = UUID.randomUUID(),
@@ -266,7 +266,7 @@ class SlackInteractionHandlerImplTest :
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
                     val payload =
                         createInteractionPayloadInput(
-                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                             currentAction = selectedRejectButtonStates(),
                             states = listOf(selectedRejectButtonStates()),
                             idempotencyKey = UUID.randomUUID(),

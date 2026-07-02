@@ -183,7 +183,7 @@ class ApplicationMessageDispatcher(
     private fun publishOpenFailure(event: OpenViewPayloadContents, reason: String) {
         if (event.participantUserId.isBlank()) return
         when (event.commandDetailType) {
-            CommandDetailType.DECLINE_REASON_MODAL -> {
+            CommandDetailType.MEETING_DECLINE_REASON -> {
                 val meetingIdempotencyKey = event.meetingIdempotencyKey ?: return
                 applicationEventPublisher.publishEvent(
                     DeclineModalOpenFailedEvent(
@@ -196,7 +196,7 @@ class ApplicationMessageDispatcher(
                     ),
                 )
             }
-            CommandDetailType.STANDUP_FILL -> {
+            CommandDetailType.STANDUP_PROMPT -> {
                 applicationEventPublisher.publishEvent(
                     StandupModalOpenFailedEvent(
                         userId = event.participantUserId,

@@ -246,7 +246,7 @@ fun createRoutingOnlyViewSubmissionJson(
 
 fun createBlockActionPayloadJson(
     idempotencyKey: UUID = UUID.randomUUID(),
-    commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_FORM,
+    commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_REQUEST,
     isEphemeral: Boolean = false,
     buttonType: ButtonType = ButtonType.PRIMARY,
     buttonValue: String? = null,
@@ -264,8 +264,8 @@ fun createBlockActionPayloadJson(
     channelName: String = TEST_CHANNEL_NAME,
     botId: String = TEST_BOT_ID,
 ): String {
-    val resolvedButtonValue = buttonValue ?: "$idempotencyKey, $commandDetailType"
-    val resolvedMessageText = messageText ?: "$idempotencyKey, $commandDetailType"
+    val resolvedButtonValue = buttonValue ?: "$idempotencyKey, ${commandDetailType.wireValue}"
+    val resolvedMessageText = messageText ?: "$idempotencyKey, ${commandDetailType.wireValue}"
     val resolvedActions =
         actions ?: buttonActionJson(buttonType = buttonType, value = resolvedButtonValue)
 

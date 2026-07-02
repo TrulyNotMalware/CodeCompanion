@@ -53,7 +53,7 @@ class SlackOutboundStager(
 
                     is MessageContent.Form ->
                         slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_FORM,
+                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                             headLineText = content.headline,
                             commandBasicInfo = basicInfo,
                             selectionFields = content.fields,
@@ -64,7 +64,7 @@ class SlackOutboundStager(
                     is MessageContent.MeetingRequest ->
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                             approvalContents = content.approval,
                         )
 
@@ -138,7 +138,7 @@ class SlackOutboundStager(
                         } else {
                             slackEventBuilder.openRescheduleMeetingModalRequest(
                                 commandBasicInfo = basicInfo,
-                                commandDetailType = CommandDetailType.RESCHEDULE_MEETING,
+                                commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST,
                                 triggerId = message.handle.raw,
                                 meetingUid = form.meetingUid,
                                 requesterId = form.requesterId,
@@ -157,7 +157,7 @@ class SlackOutboundStager(
                         } else {
                             slackEventBuilder.openAddParticipantModalRequest(
                                 commandBasicInfo = basicInfo,
-                                commandDetailType = CommandDetailType.ADD_PARTICIPANT,
+                                commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST,
                                 triggerId = message.handle.raw,
                                 meetingUid = form.meetingUid,
                                 requesterId = form.requesterId,
@@ -174,7 +174,7 @@ class SlackOutboundStager(
                         } else {
                             slackEventBuilder.openStandupSetupModalRequest(
                                 commandBasicInfo = basicInfo,
-                                commandDetailType = CommandDetailType.STANDUP_SETUP_FORM,
+                                commandDetailType = CommandDetailType.STANDUP_SETUP_REQUEST,
                                 triggerId = message.handle.raw,
                                 creatorId = form.creatorId,
                                 commandChannel = form.commandChannel.id,
@@ -194,7 +194,7 @@ class SlackOutboundStager(
                             } else {
                                 slackEventBuilder.openStandupModalRequest(
                                     commandBasicInfo = basicInfo,
-                                    commandDetailType = CommandDetailType.STANDUP_FILL,
+                                    commandDetailType = CommandDetailType.STANDUP_PROMPT,
                                     triggerId = message.handle.raw,
                                     sessionUid = form.sessionUid,
                                     routineName = routine.name,
@@ -210,7 +210,7 @@ class SlackOutboundStager(
                     is ModalForm.DeclineReason ->
                         slackEventBuilder.openDeclineReasonModalRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
                             triggerId = message.handle.raw,
                             meetingIdempotencyKey = form.meetingIdempotencyKey,
                             participantUserId = form.participantUserId,

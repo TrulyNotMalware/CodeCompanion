@@ -262,7 +262,7 @@ class MeetingServiceImpl(
                 // updates this meeting's participant row (mirrors the creation-time notice).
                 idempotencyKey = meeting.idempotencyKey,
                 publisherId = meeting.creator,
-                commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
             )
         val noticeBasicInfo =
             CommandBasicInfo.forOutbound(
@@ -274,7 +274,7 @@ class MeetingServiceImpl(
         addedUserIds.forEach { userId ->
             val noticeEvent =
                 slackEventBuilder.simpleApplyRejectRequest(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                     commandBasicInfo = noticeBasicInfo,
                     approvalContents = approvalContents,
                     targetUserId = userId,
@@ -289,7 +289,7 @@ class MeetingServiceImpl(
             slackEventBuilder.simpleEphemeralTextRequest(
                 textMessage = message,
                 commandBasicInfo = basicInfo,
-                commandDetailType = CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+                commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 targetUserId = targetUserId,
             )
         eventPublisher.publishOne(event = ephemeralEvent)

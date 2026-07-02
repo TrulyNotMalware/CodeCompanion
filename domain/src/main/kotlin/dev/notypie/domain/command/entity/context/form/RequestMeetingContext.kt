@@ -35,7 +35,7 @@ internal class RequestMeetingContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REQUEST_MEETING_FORM
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_CREATE_REQUEST
 
     override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
         when (subCommand.subCommandDefinition) {
@@ -200,10 +200,10 @@ internal class RequestMeetingContext(
                     idempotencyKey = commandBasicInfo.idempotencyKey,
                     publisherId = commandBasicInfo.publisherId,
                     // Must match runCommand's commandDetailType below so button clicks route back here.
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                 ),
             subCommand = SubCommand.empty(),
             intents = intents,
-        ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM)
+        ).runCommand(commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST)
             .status == Status.SUCCESS
 }

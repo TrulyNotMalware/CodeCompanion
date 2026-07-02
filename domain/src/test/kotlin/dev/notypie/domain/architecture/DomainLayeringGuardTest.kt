@@ -5,29 +5,61 @@ import io.kotest.matchers.shouldBe
 import java.io.File
 
 /**
- * Architectural guard: the pure-domain packages (meet/standup/user/common) must never
- * depend on the command package. command may depend on them, not the reverse — this keeps
- * the domain model free of the Slack command/workflow machinery and prevents the
- * package cycle removed in the transport-agnostic refactor from silently returning.
+ * Architectural guards that keep the domain layer honest after the transport-agnostic refactor.
+ *
+ * 1. The pure-domain packages (meet/standup/user/common) must never depend on the command package —
+ *    command may depend on them, not the reverse, which prevents the removed package cycle from
+ *    silently returning.
+ * 2. The whole domain source set must stay free of transport/serialization coupling (Slack SDK,
+ *    Slack API URLs, Jackson, Gson). Neutral abstractions may *describe* their Slack origin in a
+ *    comment (e.g. "was Slack trigger_id"); they may not import or hardcode the transport itself.
+ *
+ * Known, intentionally-deferred leaks tracked elsewhere (not guarded here yet): the `CommandDetailType`
+ * routing enum and the `slackUserId`/`slackTeamId` business identifiers.
  */
 class DomainLayeringGuardTest :
     StringSpec({
+        val domainMain = File("src/main/kotlin/dev/notypie/domain")
+
+        fun domainKtFiles(vararg roots: File): List<File> =
+            roots
+                .filter { it.exists() }
+                .flatMap { it.walkTopDown().toList() }
+                .filter { it.isFile && it.extension == "kt" }
+
         "pure domain packages must not import the command package" {
-            val sourceRoot = File("src/main/kotlin/dev/notypie/domain")
-            sourceRoot.exists() shouldBe true
-            val pureRoots = listOf("meet", "standup", "user", "common")
+            domainMain.exists() shouldBe true
+            val pureRoots = listOf("meet", "standup", "user", "common").map { File(domainMain, it) }
             val violations =
-                pureRoots
-                    .map { File(sourceRoot, it) }
-                    .filter { it.exists() }
-                    .flatMap { it.walkTopDown().toList() }
-                    .filter { it.isFile && it.extension == "kt" }
-                    .flatMap { file ->
-                        file
-                            .readLines()
-                            .filter { it.trimStart().startsWith("import dev.notypie.domain.command") }
-                            .map { "${file.path} -> ${it.trim()}" }
+                domainKtFiles(*pureRoots.toTypedArray()).flatMap { file ->
+                    file
+                        .readLines()
+                        .filter { it.trimStart().startsWith("import dev.notypie.domain.command") }
+                        .map { "${file.path} -> ${it.trim()}" }
+                }
+            violations shouldBe emptyList()
+        }
+
+        "domain source must not leak transport or serialization coupling" {
+            domainMain.exists() shouldBe true
+            val forbidden =
+                listOf(
+                    "Slack SDK import" to Regex("""import\s+com\.slack"""),
+                    "Slack API URL literal" to Regex("""slack\.com"""),
+                    "Jackson import" to Regex("""import\s+(com\.fasterxml\.jackson|tools\.jackson)"""),
+                    "Jackson annotation" to Regex("""@Json[A-Za-z]+"""),
+                    "Gson import" to Regex("""import\s+com\.google\.gson"""),
+                    "Slack SDK payload type" to
+                        Regex("""\b(BlockActionPayload|ViewSubmissionPayload|SlackApiException)\b"""),
+                )
+            val violations =
+                domainKtFiles(domainMain).flatMap { file ->
+                    file.readLines().withIndex().flatMap { (index, line) ->
+                        forbidden
+                            .filter { (_, pattern) -> pattern.containsMatchIn(line) }
+                            .map { (label, _) -> "${file.path}:${index + 1} [$label] -> ${line.trim()}" }
                     }
+                }
             violations shouldBe emptyList()
         }
     })

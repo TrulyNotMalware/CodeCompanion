@@ -307,10 +307,10 @@ internal fun buildDmNotice(
             approvalButtonName = "Fill in standup",
             rejectButtonName = "Skip",
             idempotencyKey = sessionUid,
-            commandDetailType = CommandDetailType.STANDUP_FILL,
+            commandDetailType = CommandDetailType.STANDUP_PROMPT,
         )
     return slackEventBuilder.simpleApplyRejectRequest(
-        commandDetailType = CommandDetailType.STANDUP_FILL,
+        commandDetailType = CommandDetailType.STANDUP_PROMPT,
         commandBasicInfo = commandBasicInfo,
         approvalContents = approvalContents,
         targetUserId = memberId,
@@ -334,7 +334,7 @@ internal fun buildNudgeNotice(
         "⏰ Standup for *$routineName* closes at $cutoffText — you haven't responded yet. " +
             "Tap the *Fill in standup* button in your DM."
     return slackEventBuilder.simpleTextRequest(
-        commandDetailType = CommandDetailType.STANDUP_FILL,
+        commandDetailType = CommandDetailType.STANDUP_PROMPT,
         headLineText = "Standup reminder",
         commandBasicInfo = commandBasicInfo,
         simpleString = body,

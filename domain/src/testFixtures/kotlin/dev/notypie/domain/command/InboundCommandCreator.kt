@@ -48,7 +48,7 @@ fun createMentionInboundCommand(
     )
 
 fun createInteractionInboundCommand(
-    commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_FORM,
+    commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_REQUEST,
     action: InboundAction = approveAction(isSelected = true),
     form: List<InboundField> = emptyList(),
     idempotencyKey: UUID = UUID.randomUUID(),

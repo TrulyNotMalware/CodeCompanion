@@ -29,8 +29,6 @@ class AppMentionContextParserTest :
             AppMentionContextParser(
                 commandData = createMentionInboundCommand(),
                 mention = mention,
-                baseUrl = "",
-                commandId = UUID.randomUUID(),
                 idempotencyKey = idempotencyKey,
                 intents = intents,
             )

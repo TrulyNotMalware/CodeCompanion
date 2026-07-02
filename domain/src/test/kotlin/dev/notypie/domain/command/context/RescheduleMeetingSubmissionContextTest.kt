@@ -6,8 +6,7 @@ import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext
-import dev.notypie.domain.command.inbound.InboundFieldKind
-import dev.notypie.domain.command.inboundField
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -32,31 +31,21 @@ class RescheduleMeetingSubmissionContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.DATE,
-                                isSelected = true,
-                                rawValue =
-                                    newDate.format(
-                                        DateTimeFormatter.ofPattern(RescheduleMeetingSubmissionContext.DATE_PATTERN),
-                                    ),
-                                key = "reschedule_meeting_date",
-                            ),
-                            inboundField(
-                                kind = InboundFieldKind.TIME,
-                                isSelected = true,
-                                rawValue =
-                                    newTime.format(
-                                        DateTimeFormatter.ofPattern(RescheduleMeetingSubmissionContext.TIME_PATTERN),
-                                    ),
-                                key = "reschedule_meeting_time",
-                            ),
+                    submission =
+                        InboundSubmission.RescheduleMeeting(
+                            meetingUidRaw = meetingUid.toString(),
+                            requesterId = "U_HOST",
+                            date =
+                                newDate.format(
+                                    DateTimeFormatter.ofPattern(RescheduleMeetingSubmissionContext.DATE_PATTERN),
+                                ),
+                            time =
+                                newTime.format(
+                                    DateTimeFormatter.ofPattern(RescheduleMeetingSubmissionContext.TIME_PATTERN),
+                                ),
                         ),
-                    idempotencyKey = meetingUid,
-                    routingExtras = listOf("U_HOST"),
                 )
 
             `when`("handleInteraction is invoked") {
@@ -65,7 +54,7 @@ class RescheduleMeetingSubmissionContextTest :
 
                 then("the interaction succeeds") {
                     result.ok shouldBe true
-                    result.commandDetailType shouldBe CommandDetailType.RESCHEDULE_MEETING_SUBMIT
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_RESCHEDULE_SUBMIT
                 }
 
                 then("RescheduleMeeting carries the parsed meeting uid, requester, and new start") {
@@ -87,19 +76,15 @@ class RescheduleMeetingSubmissionContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form =
-                        listOf(
-                            inboundField(
-                                kind = InboundFieldKind.DATE,
-                                isSelected = true,
-                                rawValue = "2026-07-01",
-                                key = "reschedule_meeting_date",
-                            ),
+                    submission =
+                        InboundSubmission.RescheduleMeeting(
+                            meetingUidRaw = meetingUid.toString(),
+                            requesterId = "U_HOST",
+                            date = "2026-07-01",
+                            time = "",
                         ),
-                    idempotencyKey = meetingUid,
-                    routingExtras = listOf("U_HOST"),
                 )
 
             `when`("handleInteraction is invoked") {
@@ -121,11 +106,16 @@ class RescheduleMeetingSubmissionContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                     action = approveAction(isSelected = true),
-                    form = emptyList(),
-                    idempotencyKey = UUID.randomUUID(),
-                ).copy(idempotencyKey = "not-a-uuid")
+                    submission =
+                        InboundSubmission.RescheduleMeeting(
+                            meetingUidRaw = "not-a-uuid",
+                            requesterId = "U_HOST",
+                            date = "",
+                            time = "",
+                        ),
+                )
 
             `when`("handleInteraction is invoked") {
                 val result = context.handleInteraction(interaction = payload)

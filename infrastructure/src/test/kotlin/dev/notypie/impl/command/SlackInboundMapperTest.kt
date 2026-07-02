@@ -2,13 +2,16 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.inbound.InboundActionRole
+import dev.notypie.domain.command.inbound.InboundFieldKeys
 import dev.notypie.domain.command.inbound.InboundFieldKind
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.inbound.InboundKind
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.States
 import dev.notypie.impl.command.slack.createInteractionPayloadInput
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -20,7 +23,7 @@ class SlackInboundMapperTest :
         given("a synthesized view_submission payload (APPLY_BUTTON currentAction, no message_ts)") {
             val payload =
                 createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+                    commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
                     currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
                     states = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
@@ -43,7 +46,7 @@ class SlackInboundMapperTest :
         given("a block_actions payload carrying a container message_ts") {
             val base =
                 createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                     currentAction = States(type = ActionElementTypes.REJECT_BUTTON, isSelected = true),
                     states = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
@@ -59,6 +62,48 @@ class SlackInboundMapperTest :
 
                 then("the REJECT action maps to the REJECT role") {
                     inbound.action.role shouldBe InboundActionRole.REJECT
+                }
+
+                then("a block_actions interaction carries no typed submission") {
+                    inbound.submission.shouldBeNull()
+                }
+            }
+        }
+
+        given("a standup-answer view_submission with unordered per-question fields") {
+            val sessionUid = UUID.randomUUID()
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                isSelected = true,
+                                selectedValue = "  Work on #13  ",
+                                blockId = "${InboundFieldKeys.STANDUP_ANSWER_QUESTION_PREFIX}1",
+                            ),
+                            States(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                isSelected = true,
+                                selectedValue = "Finished #12",
+                                blockId = "${InboundFieldKeys.STANDUP_ANSWER_QUESTION_PREFIX}0",
+                            ),
+                        ),
+                    idempotencyKey = sessionUid,
+                ).copy(routingExtras = listOf("U_STANDUP", "D_NOTICE", "1700000000.000300"))
+
+            `when`("mapped to the neutral inbound model") {
+                val submission = payload.toInbound().submission
+
+                then("it builds a StandupAnswer with routing plus trimmed, index-sorted answers") {
+                    val standup = submission.shouldBeInstanceOf<InboundSubmission.StandupAnswer>()
+                    standup.sessionUidRaw shouldBe sessionUid.toString()
+                    standup.userId shouldBe "U_STANDUP"
+                    standup.noticeChannel shouldBe "D_NOTICE"
+                    standup.noticeMessageTs shouldBe "1700000000.000300"
+                    standup.answers shouldContainExactly listOf("Finished #12", "Work on #13")
                 }
             }
         }
@@ -105,7 +150,7 @@ class SlackInboundMapperTest :
         given("toInboundCommand") {
             val payload =
                 createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.APPROVAL_FORM,
+                    commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                     currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
                     states = emptyList(),
                     idempotencyKey = UUID.randomUUID(),

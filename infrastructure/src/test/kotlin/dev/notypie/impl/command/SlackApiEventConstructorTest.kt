@@ -212,7 +212,7 @@ class SlackApiEventConstructorTest :
                 val result =
                     constructor.requestMeetingFormRequest(
                         commandBasicInfo = commandBasicInfo,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         approvalContents = null,
                     )
 
@@ -237,14 +237,14 @@ class SlackApiEventConstructorTest :
                 val approvalContents =
                     createApprovalContents(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         reason = "Custom Reason",
                         publisherId = commandBasicInfo.publisherId,
                     )
                 val result =
                     constructor.requestMeetingFormRequest(
                         commandBasicInfo = commandBasicInfo,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         approvalContents = approvalContents,
                     )
 

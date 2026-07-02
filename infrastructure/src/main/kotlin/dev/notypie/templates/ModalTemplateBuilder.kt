@@ -323,7 +323,7 @@ class ModalTemplateBuilder(
                     metadata =
                         listOf(
                             meetingIdempotencyKey.toString(),
-                            CommandDetailType.DECLINE_REASON_MODAL.name,
+                            CommandDetailType.MEETING_DECLINE_REASON.wireValue,
                             participantUserId,
                             noticeChannel,
                             noticeMessageTs,
@@ -377,7 +377,7 @@ class ModalTemplateBuilder(
                     metadata =
                         listOf(
                             meetingUid.toString(),
-                            CommandDetailType.RESCHEDULE_MEETING_SUBMIT.name,
+                            CommandDetailType.MEETING_RESCHEDULE_SUBMIT.wireValue,
                             requesterId,
                             channel,
                         ).joinToString(","),
@@ -415,7 +415,7 @@ class ModalTemplateBuilder(
                     metadata =
                         listOf(
                             meetingUid.toString(),
-                            CommandDetailType.ADD_PARTICIPANT_SUBMIT.name,
+                            CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT.wireValue,
                             requesterId,
                             channel,
                         ).joinToString(","),
@@ -452,7 +452,7 @@ class ModalTemplateBuilder(
                     metadata =
                         listOf(
                             sessionUid.toString(),
-                            CommandDetailType.STANDUP_ANSWER_SUBMIT.name,
+                            CommandDetailType.STANDUP_ANSWER_SUBMIT.wireValue,
                             userId,
                             noticeChannel,
                             noticeMessageTs,
@@ -487,7 +487,7 @@ class ModalTemplateBuilder(
                     metadata =
                         listOf(
                             idempotencyKey.toString(),
-                            CommandDetailType.STANDUP_SETUP_SUBMIT.name,
+                            CommandDetailType.STANDUP_SETUP_SUBMIT.wireValue,
                             creatorId,
                             commandChannel,
                         ).joinToString(","),

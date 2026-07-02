@@ -175,11 +175,11 @@ class OutboundMessageTest :
                         OutboundMessage.UpdateMessage(
                             ref = ref,
                             content = content,
-                            detailType = CommandDetailType.DECLINE_REASON_MODAL,
+                            detailType = CommandDetailType.MEETING_DECLINE_REASON,
                         )
                     update.ref shouldBe ref
                     update.content shouldBe content
-                    update.detailType shouldBe CommandDetailType.DECLINE_REASON_MODAL
+                    update.detailType shouldBe CommandDetailType.MEETING_DECLINE_REASON
 
                     val handle = ResponseReplaceHandle(raw = "https://response.url")
                     val replace = OutboundMessage.ReplaceMessage(handle = handle, content = content)

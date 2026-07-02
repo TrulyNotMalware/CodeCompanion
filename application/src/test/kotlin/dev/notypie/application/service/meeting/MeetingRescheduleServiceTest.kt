@@ -50,13 +50,13 @@ class MeetingRescheduleServiceTest :
                 )
             val ephemeralEvent =
                 createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                     idempotencyKey = basic.idempotencyKey,
                     messageType = MessageType.EPHEMERAL_MESSAGE,
                 )
             val noticeEvent =
                 createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                    commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                     idempotencyKey = basic.idempotencyKey,
                 )
 
@@ -109,7 +109,7 @@ class MeetingRescheduleServiceTest :
                 then("a participant re-notification is published") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                            commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                             headLineText = any(),
                             commandBasicInfo = basic,
                             simpleString = any(),
@@ -123,7 +123,7 @@ class MeetingRescheduleServiceTest :
                         slackEventBuilder.simpleEphemeralTextRequest(
                             textMessage = "Meeting rescheduled to 2026-07-01 14:30.",
                             commandBasicInfo = basic,
-                            commandDetailType = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+                            commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                             targetUserId = requesterId,
                         )
                     }

@@ -86,7 +86,7 @@ fun createOpenViewEvent(
     appId: String = TEST_APP_ID,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
-    commandDetailType: CommandDetailType = CommandDetailType.DECLINE_REASON_MODAL,
+    commandDetailType: CommandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
     triggerId: String = "",
     meetingIdempotencyKey: UUID = UUID.randomUUID(),
     participantUserId: String = TEST_USER_ID,

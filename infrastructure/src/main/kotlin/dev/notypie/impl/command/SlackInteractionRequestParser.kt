@@ -65,7 +65,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             tokens
                 .getOrNull(1)
                 ?.takeIf { it.isNotBlank() }
-                ?.let { runCatching { CommandDetailType.valueOf(it) }.getOrDefault(CommandDetailType.NOTHING) }
+                ?.let { CommandDetailType.fromWireValue(it) }
                 ?: CommandDetailType.NOTHING
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()
@@ -81,7 +81,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 ?.let(::parseStates)
                 .orEmpty()
         val states =
-            if (type == CommandDetailType.DECLINE_REASON_MODAL &&
+            if (type == CommandDetailType.MEETING_DECLINE_REASON &&
                 parsedStates.none { it.type == ActionElementTypes.STATIC_SELECT }
             ) {
                 parsedStates +
@@ -172,7 +172,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             tokens
                 .getOrNull(1)
                 ?.takeIf { it.isNotBlank() }
-                ?.let { runCatching { CommandDetailType.valueOf(it) }.getOrDefault(CommandDetailType.NOTHING) }
+                ?.let { CommandDetailType.fromWireValue(it) }
                 ?: CommandDetailType.NOTHING
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()
@@ -202,8 +202,8 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
      */
     private fun recoverDeliveryChannel(type: CommandDetailType, routingExtras: List<String>): String =
         when (type) {
-            CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
-            CommandDetailType.ADD_PARTICIPANT_SUBMIT,
+            CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+            CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
             -> routingExtras.getOrNull(1).orEmpty()
             else -> ""
         }

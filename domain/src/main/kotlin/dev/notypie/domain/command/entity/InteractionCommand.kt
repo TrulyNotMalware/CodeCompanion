@@ -24,10 +24,6 @@ class InteractionCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
-    companion object {
-        const val BASE_URL: String = "https://slack.com/api/"
-    }
-
     // Lazy so that UnSupportedCommandException thrown here is captured by Command.handleEvent()
     // rather than breaking Command construction.
     private val commandParser: ContextParser by lazy { buildParser(commandData) }
@@ -41,8 +37,8 @@ class InteractionCommand(
                 ?: return NoSubCommands()
 
         return when (interaction.detailType) {
-            CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-            CommandDetailType.REQUEST_MEETING_FORM,
+            CommandDetailType.MEETING_APPROVAL_REQUEST,
+            CommandDetailType.MEETING_CREATE_REQUEST,
             -> MeetingSubCommandDefinition.NONE
 
             else -> NoSubCommands()
@@ -55,8 +51,6 @@ class InteractionCommand(
                 AppMentionContextParser(
                     commandData = commandData,
                     mention = payload,
-                    baseUrl = BASE_URL,
-                    commandId = commandId,
                     idempotencyKey = idempotencyKey,
                     intents = intents,
                 )
@@ -65,8 +59,6 @@ class InteractionCommand(
                 InteractionContextParser(
                     commandData = commandData,
                     interaction = payload,
-                    baseUrl = BASE_URL,
-                    commandId = commandId,
                     idempotencyKey = idempotencyKey,
                     intents = intents,
                 )

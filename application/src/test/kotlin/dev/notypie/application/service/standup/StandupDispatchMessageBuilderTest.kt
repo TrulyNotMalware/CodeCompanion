@@ -40,7 +40,7 @@ class StandupDispatchMessageBuilderTest :
                     )
                 } returns
                     createSendSlackMessageEvent(
-                        commandDetailType = CommandDetailType.STANDUP_FILL,
+                        commandDetailType = CommandDetailType.STANDUP_PROMPT,
                         idempotencyKey = basicInfo.idempotencyKey,
                     )
 
@@ -64,7 +64,7 @@ class StandupDispatchMessageBuilderTest :
 
                 then("ApprovalContents uses sessionUid as the idempotency key and STANDUP_FILL type") {
                     capturedContents.captured.idempotencyKey shouldBe sessionUid
-                    capturedContents.captured.commandDetailType shouldBe CommandDetailType.STANDUP_FILL
+                    capturedContents.captured.commandDetailType shouldBe CommandDetailType.STANDUP_PROMPT
                 }
 
                 then("the headline includes the routine name and the session date") {
@@ -79,7 +79,7 @@ class StandupDispatchMessageBuilderTest :
                 then("the call is delegated through SlackApiEventConstructor.simpleApplyRejectRequest") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.STANDUP_FILL,
+                            commandDetailType = CommandDetailType.STANDUP_PROMPT,
                             commandBasicInfo = basicInfo,
                             approvalContents = any(),
                             targetUserId = "U_TARGET",
@@ -109,7 +109,7 @@ class StandupDispatchMessageBuilderTest :
                     )
                 } returns
                     createSendSlackMessageEvent(
-                        commandDetailType = CommandDetailType.STANDUP_FILL,
+                        commandDetailType = CommandDetailType.STANDUP_PROMPT,
                         idempotencyKey = basicInfo.idempotencyKey,
                     )
 
@@ -131,7 +131,7 @@ class StandupDispatchMessageBuilderTest :
                 then("it delegates to a plain-text request typed STANDUP_FILL — no interactive buttons") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.STANDUP_FILL,
+                            commandDetailType = CommandDetailType.STANDUP_PROMPT,
                             headLineText = any(),
                             commandBasicInfo = basicInfo,
                             simpleString = any(),

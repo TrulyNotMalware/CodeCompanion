@@ -27,7 +27,7 @@ internal class RequestApprovalContext(
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType() = CommandDetailType.REQUEST_APPLY_FORM
+    override fun parseCommandDetailType() = CommandDetailType.APPLY_REQUEST
 
     override fun runCommand(): CommandOutput {
         addOutbound(

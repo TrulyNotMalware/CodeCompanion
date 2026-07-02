@@ -83,5 +83,5 @@ data class RequestMeetingContextResult(
         channel = commandBasicInfo.channel,
         token = commandBasicInfo.appToken,
         commandType = CommandType.PIPELINE,
-        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
     )

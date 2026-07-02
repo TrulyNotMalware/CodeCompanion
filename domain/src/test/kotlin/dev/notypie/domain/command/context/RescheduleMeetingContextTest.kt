@@ -28,7 +28,7 @@ class RescheduleMeetingContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.RESCHEDULE_MEETING,
+                    detailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
@@ -42,7 +42,7 @@ class RescheduleMeetingContextTest :
 
                 then("the interaction succeeds") {
                     result.ok shouldBe true
-                    result.commandDetailType shouldBe CommandDetailType.RESCHEDULE_MEETING
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_RESCHEDULE_REQUEST
                 }
 
                 then("OpenModal carries the trigger id, meeting uid, requester, and channel") {
@@ -65,7 +65,7 @@ class RescheduleMeetingContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.RESCHEDULE_MEETING,
+                    detailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),

@@ -34,7 +34,7 @@ class ApprovalCallbackContextTest :
                 }
 
                 then("commandDetailType should be NOTICE_FORM") {
-                    result.commandDetailType shouldBe CommandDetailType.NOTICE_FORM
+                    result.commandDetailType shouldBe CommandDetailType.APPROVAL_CALLBACK
                 }
 
                 then("ok should be true (vacuously true for empty list)") {
@@ -99,7 +99,7 @@ class ApprovalCallbackContextTest :
                 createApprovalContents(
                     reason = "Custom approval reason",
                     idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.NOTICE_FORM,
+                    commandDetailType = CommandDetailType.APPROVAL_CALLBACK,
                     publisherId = basicInfo.publisherId,
                     headLineText = "Custom Headline",
                 )

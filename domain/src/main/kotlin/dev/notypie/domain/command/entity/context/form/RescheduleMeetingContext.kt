@@ -26,7 +26,7 @@ internal class RescheduleMeetingContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.RESCHEDULE_MEETING
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST
 
     /**
      * Reschedule button carries `<listIdempotencyKey>,RESCHEDULE_MEETING,<meetingUid>`; the meetingUid

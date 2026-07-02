@@ -50,7 +50,7 @@ fun createUpdateMeetingAttendanceEvent(
             isAttending = isAttending,
             absentReason = absentReason,
         ),
-    type = CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
+    type = CommandDetailType.MEETING_APPROVAL_REQUEST,
 )
 
 fun createCancelMeetingEvent(
@@ -84,5 +84,5 @@ fun createRescheduleMeetingEvent(
             newStartAt = newStartAt,
             responseBasicInfo = responseBasicInfo,
         ),
-    type = CommandDetailType.RESCHEDULE_MEETING_SUBMIT,
+    type = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
 )

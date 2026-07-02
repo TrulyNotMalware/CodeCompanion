@@ -57,7 +57,7 @@ class StandupSchedulingServiceTest :
             val basicInfo = createCommandBasicInfo()
             val stubEvent =
                 createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.STANDUP_FILL,
+                    commandDetailType = CommandDetailType.STANDUP_PROMPT,
                     idempotencyKey = basicInfo.idempotencyKey,
                 )
             every {
@@ -367,7 +367,7 @@ class StandupSchedulingServiceTest :
                 }
 
                 then("the outbox row carries STANDUP_FILL and the member's user_id as channel") {
-                    savedOutbox.captured.commandDetailType shouldBe CommandDetailType.STANDUP_FILL.name
+                    savedOutbox.captured.commandDetailType shouldBe CommandDetailType.STANDUP_PROMPT.wireValue
                 }
             }
 

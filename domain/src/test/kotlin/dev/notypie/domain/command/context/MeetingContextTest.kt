@@ -53,7 +53,7 @@ class MeetingContextTest :
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
-                    result.commandDetailType shouldBe CommandDetailType.REQUEST_MEETING_FORM
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_CREATE_REQUEST
 
                     val effects = intentQueue.snapshot()
                     effects.size shouldBe 1
@@ -81,7 +81,7 @@ class MeetingContextTest :
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
-                    result.commandDetailType shouldBe CommandDetailType.REQUEST_MEETING_FORM
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_CREATE_REQUEST
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
@@ -233,7 +233,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(
@@ -255,7 +255,7 @@ class MeetingContextTest :
                     res.ok shouldBe true
                     res.status shouldBe Status.SUCCESS
                     res.commandType shouldBe CommandType.PIPELINE
-                    res.commandDetailType shouldBe CommandDetailType.REQUEST_MEETING_FORM
+                    res.commandDetailType shouldBe CommandDetailType.MEETING_CREATE_REQUEST
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
@@ -279,7 +279,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(
@@ -324,7 +324,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(
@@ -371,7 +371,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(
@@ -413,7 +413,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = rejectAction(isSelected = true),
                         form = emptyList(),
                     )
@@ -423,7 +423,7 @@ class MeetingContextTest :
                     res.ok shouldBe true
                     res.status shouldBe Status.SUCCESS
                     res.commandType shouldBe CommandType.PIPELINE
-                    res.commandDetailType shouldBe CommandDetailType.REQUEST_MEETING_FORM
+                    res.commandDetailType shouldBe CommandDetailType.MEETING_CREATE_REQUEST
 
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
@@ -447,7 +447,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(
@@ -489,7 +489,7 @@ class MeetingContextTest :
                 val interactionPayload =
                     createInboundInteraction(
                         idempotencyKey = testCommandBasicInfo.idempotencyKey,
-                        detailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         action = approveAction(isSelected = true),
                         form =
                             listOf(

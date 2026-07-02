@@ -28,7 +28,7 @@ class AddParticipantContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.ADD_PARTICIPANT,
+                    detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),
@@ -42,7 +42,7 @@ class AddParticipantContextTest :
 
                 then("the interaction succeeds") {
                     result.ok shouldBe true
-                    result.commandDetailType shouldBe CommandDetailType.ADD_PARTICIPANT
+                    result.commandDetailType shouldBe CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST
                 }
 
                 then("OpenModal carries the trigger id, meeting uid, requester, and channel") {
@@ -65,7 +65,7 @@ class AddParticipantContextTest :
                 )
             val payload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.ADD_PARTICIPANT,
+                    detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = UUID.randomUUID(),

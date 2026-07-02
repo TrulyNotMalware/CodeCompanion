@@ -30,7 +30,7 @@ internal class RequestStandupSetupContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_SETUP_FORM
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_SETUP_REQUEST
 
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 

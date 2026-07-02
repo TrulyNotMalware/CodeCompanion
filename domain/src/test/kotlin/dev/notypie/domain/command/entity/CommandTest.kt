@@ -51,7 +51,7 @@ class CommandTest :
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
                 createInboundInteraction(
-                    detailType = CommandDetailType.APPROVAL_FORM,
+                    detailType = CommandDetailType.APPROVAL_REQUEST,
                     action = approveAction(isSelected = true),
                     form = emptyList(),
                     idempotencyKey = idempotencyKey,
@@ -74,7 +74,7 @@ class CommandTest :
                             ) {
                                 override fun parseCommandType() = CommandType.SIMPLE
 
-                                override fun parseCommandDetailType() = CommandDetailType.APPROVAL_FORM
+                                override fun parseCommandDetailType() = CommandDetailType.APPROVAL_REQUEST
 
                                 override fun runCommand() = CommandOutput.empty()
                             }
