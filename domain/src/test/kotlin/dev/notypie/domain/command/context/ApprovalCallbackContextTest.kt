@@ -33,7 +33,7 @@ class ApprovalCallbackContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("commandDetailType should be NOTICE_FORM") {
+                then("commandDetailType should be APPROVAL_CALLBACK") {
                     result.commandDetailType shouldBe CommandDetailType.APPROVAL_CALLBACK
                 }
 

@@ -4,6 +4,10 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
+import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.standup.dto.RoutineMemberDto
+import dev.notypie.domain.standup.dto.StandupAnswerDto
+import java.time.LocalDate
 
 sealed interface MessageContent {
     data class Text(
@@ -31,5 +35,18 @@ sealed interface MessageContent {
 
     data class MeetingRequest(
         val approval: ApprovalContents?,
+    ) : MessageContent
+
+    data class MeetingList(
+        val meetings: List<MeetingDto>,
+        val currentUserId: String,
+    ) : MessageContent
+
+    data class StandupSummary(
+        val routineName: String,
+        val sessionDate: LocalDate,
+        val members: List<RoutineMemberDto>,
+        val answers: List<StandupAnswerDto>,
+        val questions: List<String>,
     ) : MessageContent
 }

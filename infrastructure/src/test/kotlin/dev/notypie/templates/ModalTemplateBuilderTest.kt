@@ -490,11 +490,11 @@ class ModalTemplateBuilderTest :
                     val rescheduleButton = buttons[0]
                     rescheduleButton.actionId shouldBe "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid"
                     rescheduleButton.style shouldBe "primary"
-                    rescheduleButton.value shouldBe "$listKey,RESCHEDULE_MEETING,$meetingUid"
+                    rescheduleButton.value shouldBe "$listKey,MEETING_RESCHEDULE_REQUEST,$meetingUid"
 
                     val addParticipantButton = buttons[1]
                     addParticipantButton.actionId shouldBe "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid"
-                    addParticipantButton.value shouldBe "$listKey,ADD_PARTICIPANT,$meetingUid"
+                    addParticipantButton.value shouldBe "$listKey,MEETING_ADD_PARTICIPANT_REQUEST,$meetingUid"
 
                     val cancelButton = buttons[2]
                     cancelButton.actionId shouldBe "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid"
@@ -607,8 +607,8 @@ class ModalTemplateBuilderTest :
                             .map { it as com.slack.api.model.block.element.ButtonElement }
                     buttons.map { it.value } shouldBe
                         listOf(
-                            "$listKey,RESCHEDULE_MEETING,$hostMeetingUid",
-                            "$listKey,ADD_PARTICIPANT,$hostMeetingUid",
+                            "$listKey,MEETING_RESCHEDULE_REQUEST,$hostMeetingUid",
+                            "$listKey,MEETING_ADD_PARTICIPANT_REQUEST,$hostMeetingUid",
                             "$listKey,CANCEL_MEETING,$hostMeetingUid",
                         )
                 }
@@ -767,10 +767,10 @@ class ModalTemplateBuilderTest :
                 then("the view envelope carries modal metadata plus the tokenized private_metadata") {
                     json shouldContain "\"type\":\"modal\""
                     json shouldContain "\"callback_id\":\"decline_reason_modal\""
-                    // tokenized as meetingKey,DECLINE_REASON_MODAL,participantUserId,noticeChannel,noticeMessageTs
+                    // tokenized as meetingKey,MEETING_DECLINE_REASON,participantUserId,noticeChannel,noticeMessageTs
                     // so DeclineReasonSubmissionContext can chat.update the notice DM.
                     json shouldContain
-                        "\"private_metadata\":\"$meetingKey,DECLINE_REASON_MODAL," +
+                        "\"private_metadata\":\"$meetingKey,MEETING_DECLINE_REASON," +
                         "$participantUserId,$noticeChannel,$noticeMessageTs\""
                     json shouldContain "\"title\""
                     json shouldContain "Why can't you attend?"
@@ -832,7 +832,7 @@ class ModalTemplateBuilderTest :
                 then("private_metadata keeps all 5 positions so parser indices stay stable") {
                     // trailing empty tokens are intentional — routingExtras[1..2] read as ""
                     json shouldContain
-                        "\"private_metadata\":\"$meetingKey,DECLINE_REASON_MODAL," +
+                        "\"private_metadata\":\"$meetingKey,MEETING_DECLINE_REASON," +
                         "$participantUserId,,\""
                 }
             }
@@ -858,7 +858,7 @@ class ModalTemplateBuilderTest :
                     view.type shouldBe "modal"
                     view.callbackId shouldBe DeclineReasonModalIds.CALLBACK_ID
                     view.privateMetadata shouldBe
-                        "$meetingKey,DECLINE_REASON_MODAL,$participantUserId," +
+                        "$meetingKey,MEETING_DECLINE_REASON,$participantUserId," +
                         "$noticeChannel,$noticeMessageTs"
                     view.title.text shouldBe "Why can't you attend?"
                     view.submit.text shouldBe "Submit"
@@ -905,10 +905,10 @@ class ModalTemplateBuilderTest :
                         channel = channel,
                     )
 
-                then("private_metadata routes the submission to RESCHEDULE_MEETING_SUBMIT with the channel") {
+                then("private_metadata routes the submission to MEETING_RESCHEDULE_SUBMIT with the channel") {
                     json shouldContain "\"callback_id\":\"${RescheduleMeetingModalIds.CALLBACK_ID}\""
                     json shouldContain
-                        "\"private_metadata\":\"$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId,$channel\""
+                        "\"private_metadata\":\"$meetingUid,MEETING_RESCHEDULE_SUBMIT,$requesterId,$channel\""
                 }
 
                 then("the date and time pickers are pre-filled from the current start") {
@@ -928,7 +928,7 @@ class ModalTemplateBuilderTest :
 
                     view.type shouldBe "modal"
                     view.callbackId shouldBe RescheduleMeetingModalIds.CALLBACK_ID
-                    view.privateMetadata shouldBe "$meetingUid,RESCHEDULE_MEETING_SUBMIT,$requesterId,$channel"
+                    view.privateMetadata shouldBe "$meetingUid,MEETING_RESCHEDULE_SUBMIT,$requesterId,$channel"
                     view.title.text shouldBe "Reschedule meeting"
                     view.submit.text shouldBe "Reschedule"
                     view.close.text shouldBe "Cancel"

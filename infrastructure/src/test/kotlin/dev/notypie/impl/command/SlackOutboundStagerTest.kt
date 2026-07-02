@@ -15,7 +15,9 @@ import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.standup.createRoutineDto
+import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
@@ -250,6 +252,154 @@ class SlackOutboundStagerTest :
             }
         }
 
+        given("a ChannelMessage with Text content and a per-emitter detailType") {
+            val message =
+                OutboundMessage.ChannelMessage(
+                    target = target,
+                    content = MessageContent.Text(headline = "Daily agenda", markdown = "agenda body"),
+                    detailType = CommandDetailType.DAILY_AGENDA,
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = any(),
+                    )
+                } returns stubEvent
+
+                val event = stager.stage(message = message, basicInfo = basicInfo)
+
+                then("the emitter's detailType overrides the SIMPLE_TEXT default") {
+                    event shouldBe stubEvent
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleTextRequest(
+                            commandDetailType = CommandDetailType.DAILY_AGENDA,
+                            headLineText = "Daily agenda",
+                            commandBasicInfo = basicInfo,
+                            simpleString = "agenda body",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an Ephemeral with a per-emitter detailType") {
+            val message =
+                OutboundMessage.Ephemeral(
+                    target = target,
+                    recipient = UserRef(id = "U_REQUESTER"),
+                    content = MessageContent.Text(headline = null, markdown = "canceled"),
+                    detailType = CommandDetailType.CANCEL_MEETING,
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        textMessage = any(),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns stubEvent
+
+                val event = stager.stage(message = message, basicInfo = basicInfo)
+
+                then("the emitter's detailType overrides the SIMPLE_TEXT default") {
+                    event shouldBe stubEvent
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            textMessage = "canceled",
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.CANCEL_MEETING,
+                            targetUserId = "U_REQUESTER",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an Ephemeral with MeetingList content") {
+            val meetings = listOf(createMeetingDto())
+            val message =
+                OutboundMessage.Ephemeral(
+                    target = target,
+                    content = MessageContent.MeetingList(meetings = meetings, currentUserId = "U_VIEWER"),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.getMeetingListFormRequest(
+                        myMeetings = any(),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        currentUserId = any(),
+                    )
+                } returns stubEvent
+
+                val event = stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to getMeetingListFormRequest with GET_MEETING_LIST by default") {
+                    event shouldBe stubEvent
+                    verify(exactly = 1) {
+                        slackEventBuilder.getMeetingListFormRequest(
+                            myMeetings = meetings,
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.GET_MEETING_LIST,
+                            currentUserId = "U_VIEWER",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("a ChannelMessage with StandupSummary content") {
+            val members = listOf(createRoutineMemberDto())
+            val message =
+                OutboundMessage.ChannelMessage(
+                    target = target,
+                    content =
+                        MessageContent.StandupSummary(
+                            routineName = "Daily Standup",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members = members,
+                            answers = emptyList(),
+                            questions = listOf("What did you do yesterday?"),
+                        ),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.standupSummaryRequest(
+                        commandBasicInfo = any(),
+                        routineName = any(),
+                        sessionDate = any(),
+                        members = any(),
+                        answers = any(),
+                        questions = any(),
+                    )
+                } returns stubEvent
+
+                val event = stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to standupSummaryRequest with the summary fields") {
+                    event shouldBe stubEvent
+                    verify(exactly = 1) {
+                        slackEventBuilder.standupSummaryRequest(
+                            commandBasicInfo = basicInfo,
+                            routineName = "Daily Standup",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members = members,
+                            answers = emptyList(),
+                            questions = listOf("What did you do yesterday?"),
+                        )
+                    }
+                }
+            }
+        }
+
         given("a Notice") {
             val message =
                 OutboundMessage.Notice(
@@ -403,7 +553,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to simpleApprovalFormRequest with APPROVAL_FORM and the same fields") {
+                then("delegates to simpleApprovalFormRequest with APPROVAL_REQUEST and the same fields") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApprovalFormRequest(
                             commandDetailType = CommandDetailType.APPROVAL_REQUEST,
@@ -457,7 +607,7 @@ class SlackOutboundStagerTest :
             }
         }
 
-        given("an UpdateMessage with DECLINE_REASON_MODAL detailType") {
+        given("an UpdateMessage with MEETING_DECLINE_REASON detailType") {
             val message =
                 OutboundMessage.UpdateMessage(
                     ref =
@@ -539,7 +689,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to requestMeetingFormRequest with REQUEST_MEETING_FORM") {
+                then("delegates to requestMeetingFormRequest with MEETING_CREATE_REQUEST") {
                     verify(exactly = 1) {
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,
@@ -579,7 +729,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to openRescheduleMeetingModalRequest with RESCHEDULE_MEETING and the ferried channel") {
+                then("delegates to openRescheduleMeetingModalRequest with the ferried channel") {
                     verify(exactly = 1) {
                         slackEventBuilder.openRescheduleMeetingModalRequest(
                             commandBasicInfo = basicInfo,
@@ -643,7 +793,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to openAddParticipantModalRequest with ADD_PARTICIPANT and the ferried channel") {
+                then("delegates to openAddParticipantModalRequest with the ferried channel") {
                     verify(exactly = 1) {
                         slackEventBuilder.openAddParticipantModalRequest(
                             commandBasicInfo = basicInfo,
@@ -703,7 +853,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to openStandupSetupModalRequest with STANDUP_SETUP_FORM and the ferried channel") {
+                then("delegates to openStandupSetupModalRequest with STANDUP_SETUP_REQUEST and the ferried channel") {
                     verify(exactly = 1) {
                         slackEventBuilder.openStandupSetupModalRequest(
                             commandBasicInfo = basicInfo,
@@ -787,7 +937,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("loads routine/session and delegates to openStandupModalRequest with STANDUP_FILL") {
+                then("loads routine/session and delegates to openStandupModalRequest with STANDUP_PROMPT") {
                     verify(exactly = 1) {
                         slackEventBuilder.openStandupModalRequest(
                             commandBasicInfo = basicInfo,
@@ -898,7 +1048,7 @@ class SlackOutboundStagerTest :
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to openDeclineReasonModalRequest with DECLINE_REASON_MODAL and the notice ref") {
+                then("delegates to openDeclineReasonModalRequest with MEETING_DECLINE_REASON and the notice ref") {
                     verify(exactly = 1) {
                         slackEventBuilder.openDeclineReasonModalRequest(
                             commandBasicInfo = basicInfo,

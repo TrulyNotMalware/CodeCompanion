@@ -2,10 +2,13 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupSessionDto
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
@@ -37,12 +40,12 @@ class StandupSummaryServiceTest :
             `when`("a cutoff event is received for a collecting session") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val slackEventBuilder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 val service =
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        slackEventBuilder = slackEventBuilder,
+                        stager = stager,
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
@@ -71,13 +74,20 @@ class StandupSummaryServiceTest :
                 every { repo.findSession(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every {
-                    slackEventBuilder.standupSummaryRequest(
-                        commandBasicInfo = any(),
-                        routineName = "Daily Standup",
-                        sessionDate = sessionDate,
-                        members = routine.members,
-                        answers = session.answers,
-                        questions = routine.questions,
+                    stager.stage(
+                        message =
+                            OutboundMessage.ChannelMessage(
+                                target = ConversationTarget(id = "C_SUMMARY"),
+                                content =
+                                    MessageContent.StandupSummary(
+                                        routineName = "Daily Standup",
+                                        sessionDate = sessionDate,
+                                        members = routine.members,
+                                        answers = session.answers,
+                                        questions = routine.questions,
+                                    ),
+                            ),
+                        basicInfo = any(),
                     )
                 } returns slackEvent
                 every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
@@ -98,7 +108,24 @@ class StandupSummaryServiceTest :
                         ),
                 )
 
-                then("a summary message is saved to the outbox and the session is atomically marked summarized") {
+                then("a summary is staged to the channel, saved to the outbox and marked summarized") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message =
+                                OutboundMessage.ChannelMessage(
+                                    target = ConversationTarget(id = "C_SUMMARY"),
+                                    content =
+                                        MessageContent.StandupSummary(
+                                            routineName = "Daily Standup",
+                                            sessionDate = sessionDate,
+                                            members = routine.members,
+                                            answers = session.answers,
+                                            questions = routine.questions,
+                                        ),
+                                ),
+                            basicInfo = match { it.channel == "C_SUMMARY" },
+                        )
+                    }
                     verify(exactly = 1) { outboxRepo.save(any<OutboxMessage>()) }
                     verify(exactly = 1) {
                         repo.markSessionSummarized(
@@ -116,7 +143,7 @@ class StandupSummaryServiceTest :
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        slackEventBuilder = mockk(),
+                        stager = mockk(),
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
@@ -141,12 +168,12 @@ class StandupSummaryServiceTest :
             `when`("markSessionSummarized rejects the transition (already SUMMARIZED)") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val slackEventBuilder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 val service =
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        slackEventBuilder = slackEventBuilder,
+                        stager = stager,
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
@@ -175,14 +202,7 @@ class StandupSummaryServiceTest :
                 every { repo.findSession(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every {
-                    slackEventBuilder.standupSummaryRequest(
-                        commandBasicInfo = any(),
-                        routineName = any(),
-                        sessionDate = any(),
-                        members = any(),
-                        answers = any(),
-                        questions = any(),
-                    )
+                    stager.stage(message = any(), basicInfo = any())
                 } returns slackEvent
                 every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
                 // The transition lost — another tick already summarized this session.
@@ -222,7 +242,7 @@ class StandupSummaryServiceTest :
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        slackEventBuilder = mockk(relaxed = true),
+                        stager = mockk(relaxed = true),
                         transactionManager = stubTransactionManager(),
                     )
                 val eventId = UUID.randomUUID()

@@ -46,7 +46,7 @@ class MeetingApprovalResponseContextTest :
                 val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
-                then("result should be successful with MEETING_APPROVAL_NOTICE_FORM detail type") {
+                then("result should be successful with MEETING_APPROVAL_REQUEST detail type") {
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE
@@ -150,7 +150,7 @@ class MeetingApprovalResponseContextTest :
             }
         }
 
-        given("routing regression: MEETING_APPROVAL_NOTICE_FORM must NOT run the creation form validation") {
+        given("routing regression: MEETING_APPROVAL_REQUEST must NOT run the creation form validation") {
             val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val context =

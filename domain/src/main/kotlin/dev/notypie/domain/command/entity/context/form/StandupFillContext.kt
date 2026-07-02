@@ -30,7 +30,7 @@ internal class StandupFillContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_PROMPT
 
     /**
-     * "Fill in standup" button carries `<idempotencyKey>,STANDUP_FILL,<sessionUid>,<routineUid>`;
+     * "Fill in standup" button carries `<idempotencyKey>,STANDUP_PROMPT,<sessionUid>,<routineUid>`;
      * routingExtras[0] = sessionUid, [1] = routineUid. Missing/malformed extras are a no-op.
      */
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {

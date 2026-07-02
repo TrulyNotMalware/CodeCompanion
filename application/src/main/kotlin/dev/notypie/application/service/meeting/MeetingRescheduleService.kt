@@ -5,7 +5,11 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.publishOne
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -31,7 +35,7 @@ import java.time.format.DateTimeFormatter
 class MeetingRescheduleService(
     private val meetingRepository: MeetingRepository,
     private val reminderRepository: MeetingReminderRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
 ) {
     private val log = KotlinLogging.logger {}
@@ -103,25 +107,30 @@ class MeetingRescheduleService(
         val notice =
             "[Notice] $mentions *$meetingTitle* has been rescheduled to " +
                 newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT) + "."
-        val noticeEvent =
-            slackEventBuilder.simpleTextRequest(
-                commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                headLineText = "Meeting rescheduled",
-                commandBasicInfo = basicInfo,
-                simpleString = notice,
-            )
-        eventPublisher.publishOne(event = noticeEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = "Meeting rescheduled", markdown = notice),
+                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                    ),
+                basicInfo = basicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     private fun publishEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
-        val ephemeralEvent =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage = message,
-                commandBasicInfo = basicInfo,
-                commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                targetUserId = targetUserId,
-            )
-        eventPublisher.publishOne(event = ephemeralEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        recipient = UserRef(id = targetUserId),
+                        content = MessageContent.Text(headline = null, markdown = message),
+                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                    ),
+                basicInfo = basicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     companion object {

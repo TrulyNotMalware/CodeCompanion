@@ -4,7 +4,10 @@ import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.meeting.AgendaCandidateMeeting
 import dev.notypie.repository.meeting.AgendaDispatchRepository
@@ -33,7 +36,7 @@ private val AGENDA_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern(
 class DailyAgendaSchedulingService(
     private val agendaDispatchRepository: AgendaDispatchRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val stager: OutboundMessageStager,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
     appConfig: AppConfig = AppConfig(),
@@ -74,7 +77,7 @@ class DailyAgendaSchedulingService(
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                     val dmEvent =
                         buildAgendaDm(
-                            slackEventBuilder = slackEventBuilder,
+                            stager = stager,
                             agendaDate = today,
                             meetings = items,
                             commandBasicInfo = commandBasicInfo,
@@ -109,7 +112,7 @@ class DailyAgendaSchedulingService(
  * start time. A scheduler tick has no `trigger_id`, so this is a plain `chat.postMessage`.
  */
 internal fun buildAgendaDm(
-    slackEventBuilder: SlackApiEventConstructor,
+    stager: OutboundMessageStager,
     agendaDate: LocalDate,
     meetings: List<AgendaItem>,
     commandBasicInfo: CommandBasicInfo,
@@ -121,10 +124,13 @@ internal fun buildAgendaDm(
             .joinToString(separator = "\n") { item ->
                 "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title}"
             }
-    return slackEventBuilder.simpleTextRequest(
-        commandDetailType = CommandDetailType.DAILY_AGENDA,
-        headLineText = header,
-        commandBasicInfo = commandBasicInfo,
-        simpleString = lines,
-    )
+    return stager.stage(
+        message =
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content = MessageContent.Text(headline = header, markdown = lines),
+                detailType = CommandDetailType.DAILY_AGENDA,
+            ),
+        basicInfo = commandBasicInfo,
+    ) as SendSlackMessageEvent
 }

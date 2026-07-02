@@ -118,9 +118,9 @@ fun createDeclineReasonViewSubmissionJson(
     // supplies channel/ts, emit the 5-token Wave 2 format.
     val privateMetadata =
         if (noticeChannel.isBlank() && noticeMessageTs.isBlank()) {
-            "$meetingIdempotencyKey,DECLINE_REASON_MODAL,$participantUserId"
+            "$meetingIdempotencyKey,MEETING_DECLINE_REASON,$participantUserId"
         } else {
-            "$meetingIdempotencyKey,DECLINE_REASON_MODAL,$participantUserId,$noticeChannel,$noticeMessageTs"
+            "$meetingIdempotencyKey,MEETING_DECLINE_REASON,$participantUserId,$noticeChannel,$noticeMessageTs"
         }
     val stateValues =
         if (selectedReason.isNotBlank()) {
@@ -271,8 +271,8 @@ fun createBlockActionPayloadJson(
     channelName: String = TEST_CHANNEL_NAME,
     botId: String = TEST_BOT_ID,
 ): String {
-    val resolvedButtonValue = buttonValue ?: "$idempotencyKey, ${commandDetailType.wireValue}"
-    val resolvedMessageText = messageText ?: "$idempotencyKey, ${commandDetailType.wireValue}"
+    val resolvedButtonValue = buttonValue ?: "$idempotencyKey, ${commandDetailType.name}"
+    val resolvedMessageText = messageText ?: "$idempotencyKey, ${commandDetailType.name}"
     val resolvedActions =
         actions ?: buttonActionJson(buttonType = buttonType, value = resolvedButtonValue)
 

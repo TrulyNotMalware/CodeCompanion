@@ -1,6 +1,7 @@
 package dev.notypie.application.service.standup
 
 import dev.notypie.domain.command.DefaultEventQueue
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -8,7 +9,10 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
@@ -32,7 +36,7 @@ class StandupAnswerServiceTest :
                 val service =
                     StandupAnswerService(
                         standupRepository = repo,
-                        slackEventBuilder = mockk(),
+                        outboundStager = mockk(),
                         eventPublisher = mockk(),
                         clock = Clock.fixed(now, ZoneOffset.UTC),
                     )
@@ -74,12 +78,12 @@ class StandupAnswerServiceTest :
 
         given("onStandupModalOpenFailed") {
             `when`("views.open failed for the standup modal") {
-                val slackEventBuilder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val service =
                     StandupAnswerService(
                         standupRepository = mockk(),
-                        slackEventBuilder = slackEventBuilder,
+                        outboundStager = stager,
                         eventPublisher = eventPublisher,
                         clock = Clock.fixed(Instant.now(), ZoneOffset.UTC),
                     )
@@ -93,14 +97,7 @@ class StandupAnswerServiceTest :
                         reason = "trigger_expired",
                     )
                 val ephemeralStub = mockk<SendSlackMessageEvent>(relaxed = true)
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralStub
+                every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralStub
                 val queueSlot = slot<DefaultEventQueue<CommandEvent<EventPayload>>>()
                 every { eventPublisher.publishEvent(events = capture(queueSlot)) } returns Unit
 
@@ -109,20 +106,29 @@ class StandupAnswerServiceTest :
                 then("an ephemeral retry notice is published to the publisher") {
                     // chat.postEphemeral expects channel = D-channel ID and user = recipient
                     // user ID. Carrying both on CommandBasicInfo (channel + publisherId) and
-                    // leaving targetUserId null keeps the two distinct on the wire instead of
+                    // leaving the recipient null keeps the two distinct on the wire instead of
                     // collapsing the user ID into the channel slot.
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = match { it.contains("Fill in standup") },
-                            commandBasicInfo =
-                                match {
-                                    it.appId == "A_STANDUP" &&
-                                        it.publisherId == "U_STANDUP" &&
-                                        it.channel == "D_STANDUP" &&
-                                        it.idempotencyKey == idempotencyKey
-                                },
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                            targetUserId = null,
+                        stager.stage(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = ConversationTarget(id = "D_STANDUP"),
+                                    recipient = null,
+                                    content =
+                                        MessageContent.Text(
+                                            headline = null,
+                                            markdown =
+                                                "Couldn't open the standup form. _Tip: re-click the " +
+                                                    "*Fill in standup* button from the original DM to try again._",
+                                        ),
+                                ),
+                            basicInfo =
+                                CommandBasicInfo.forOutbound(
+                                    appId = "A_STANDUP",
+                                    publisherId = "U_STANDUP",
+                                    channel = "D_STANDUP",
+                                    idempotencyKey = idempotencyKey,
+                                ),
                         )
                     }
                     queueSlot.isCaptured shouldBe true

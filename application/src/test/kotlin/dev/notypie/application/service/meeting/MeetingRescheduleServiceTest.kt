@@ -3,10 +3,14 @@ package dev.notypie.application.service.meeting
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.createRescheduleMeetingEvent
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
@@ -24,13 +28,13 @@ class MeetingRescheduleServiceTest :
     BehaviorSpec({
         val meetingRepository = mockk<MeetingRepository>()
         val reminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
-        val slackEventBuilder = mockk<SlackApiEventConstructor>()
+        val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
         val service =
             MeetingRescheduleService(
                 meetingRepository = meetingRepository,
                 reminderRepository = reminderRepository,
-                slackEventBuilder = slackEventBuilder,
+                outboundStager = stager,
                 eventPublisher = eventPublisher,
             )
 
@@ -54,14 +58,8 @@ class MeetingRescheduleServiceTest :
                     idempotencyKey = basic.idempotencyKey,
                     messageType = MessageType.EPHEMERAL_MESSAGE,
                 )
-            val noticeEvent =
-                createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                    idempotencyKey = basic.idempotencyKey,
-                )
 
             `when`("the repository confirms the reschedule succeeded") {
-                val capturedEphemeralText = slot<String>()
                 every {
                     meetingRepository.rescheduleMeeting(
                         meetingUid = meetingUid,
@@ -83,22 +81,7 @@ class MeetingRescheduleServiceTest :
                                 createMeetingParticipantDto(userId = "U_P2"),
                             ),
                     )
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = any(),
-                    )
-                } returns noticeEvent
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedEphemeralText),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralEvent
 
                 service.rescheduleMeeting(event = event)
 
@@ -108,23 +91,39 @@ class MeetingRescheduleServiceTest :
 
                 then("a participant re-notification is published") {
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                            headLineText = any(),
-                            commandBasicInfo = basic,
-                            simpleString = any(),
+                        stager.stage(
+                            message =
+                                OutboundMessage.ChannelMessage(
+                                    target = ConversationTarget(id = basic.channel),
+                                    content =
+                                        MessageContent.Text(
+                                            headline = "Meeting rescheduled",
+                                            markdown =
+                                                "[Notice] <@U_P1> <@U_P2> *Test Meeting* has been rescheduled to " +
+                                                    "2026-07-01 14:30.",
+                                        ),
+                                    detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                                ),
+                            basicInfo = basic,
                         )
                     }
                 }
 
                 then("a success ephemeral is published to the requester") {
-                    capturedEphemeralText.captured shouldBe "Meeting rescheduled to 2026-07-01 14:30."
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = "Meeting rescheduled to 2026-07-01 14:30.",
-                            commandBasicInfo = basic,
-                            commandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                            targetUserId = requesterId,
+                        stager.stage(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = ConversationTarget(id = basic.channel),
+                                    recipient = UserRef(id = requesterId),
+                                    content =
+                                        MessageContent.Text(
+                                            headline = null,
+                                            markdown = "Meeting rescheduled to 2026-07-01 14:30.",
+                                        ),
+                                    detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                                ),
+                            basicInfo = basic,
                         )
                     }
                 }
@@ -135,16 +134,16 @@ class MeetingRescheduleServiceTest :
                 // the spec-scope relaxed mocks (kotest accumulates verify counts across when-blocks).
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
-                val localSlackEventBuilder = mockk<SlackApiEventConstructor>()
+                val localStager = mockk<OutboundMessageStager>()
                 val localEventPublisher = mockk<EventPublisher>(relaxed = true)
                 val localService =
                     MeetingRescheduleService(
                         meetingRepository = localMeetingRepository,
                         reminderRepository = localReminderRepository,
-                        slackEventBuilder = localSlackEventBuilder,
+                        outboundStager = localStager,
                         eventPublisher = localEventPublisher,
                     )
-                val capturedEphemeralText = slot<String>()
+                val capturedMessage = slot<OutboundMessage>()
                 every {
                     localMeetingRepository.rescheduleMeeting(
                         meetingUid = meetingUid,
@@ -153,29 +152,24 @@ class MeetingRescheduleServiceTest :
                     )
                 } returns false
                 every {
-                    localSlackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedEphemeralText),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
+                    localStager.stage(message = capture(capturedMessage), basicInfo = any())
                 } returns ephemeralEvent
 
                 localService.rescheduleMeeting(event = event)
 
                 then("a friendly non-host-or-canceled ephemeral is published instead of throwing") {
-                    capturedEphemeralText.captured shouldBe "Meeting was canceled, or you are not the host."
+                    val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
+                    val body = (ephemeral.content as MessageContent.Text).markdown
+                    body shouldBe "Meeting was canceled, or you are not the host."
                 }
 
                 then("reminders are NOT cleared and no re-notification is published") {
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
                     verify(exactly = 0) { localMeetingRepository.findMeetingByUid(any()) }
                     verify(exactly = 0) {
-                        localSlackEventBuilder.simpleTextRequest(
-                            commandDetailType = any(),
-                            headLineText = any(),
-                            commandBasicInfo = any(),
-                            simpleString = any(),
+                        localStager.stage(
+                            message = match { it is OutboundMessage.ChannelMessage },
+                            basicInfo = any(),
                         )
                     }
                 }
@@ -184,16 +178,16 @@ class MeetingRescheduleServiceTest :
             `when`("the repository throws an unexpected error") {
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
-                val localSlackEventBuilder = mockk<SlackApiEventConstructor>()
+                val localStager = mockk<OutboundMessageStager>()
                 val localEventPublisher = mockk<EventPublisher>(relaxed = true)
                 val localService =
                     MeetingRescheduleService(
                         meetingRepository = localMeetingRepository,
                         reminderRepository = localReminderRepository,
-                        slackEventBuilder = localSlackEventBuilder,
+                        outboundStager = localStager,
                         eventPublisher = localEventPublisher,
                     )
-                val capturedEphemeralText = slot<String>()
+                val capturedMessage = slot<OutboundMessage>()
                 every {
                     localMeetingRepository.rescheduleMeeting(
                         meetingUid = meetingUid,
@@ -202,19 +196,15 @@ class MeetingRescheduleServiceTest :
                     )
                 } throws RuntimeException("db down")
                 every {
-                    localSlackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedEphemeralText),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
+                    localStager.stage(message = capture(capturedMessage), basicInfo = any())
                 } returns ephemeralEvent
 
                 localService.rescheduleMeeting(event = event)
 
                 then("the listener swallows the failure and surfaces a retry-later ephemeral") {
-                    capturedEphemeralText.captured shouldBe
-                        "Failed to reschedule the meeting. Please try again later."
+                    val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
+                    val body = (ephemeral.content as MessageContent.Text).markdown
+                    body shouldBe "Failed to reschedule the meeting. Please try again later."
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
                 }
             }

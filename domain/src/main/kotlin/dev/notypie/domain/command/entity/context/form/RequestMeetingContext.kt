@@ -114,7 +114,7 @@ internal class RequestMeetingContext(
         // Deny cancels outright — no validation, no meeting created.
         if (interaction.isCanceled()) {
             return interactionSuccessResponse(
-                responseUrl = interaction.reply.raw,
+                replyHandle = interaction.reply.raw,
                 mkdMessage = "Meeting request canceled.",
             )
         }
@@ -142,7 +142,7 @@ internal class RequestMeetingContext(
         }
 
         return interactionSuccessResponse(
-            responseUrl = interaction.reply.raw,
+            replyHandle = interaction.reply.raw,
             results =
                 interactionResults(
                     status = Status.SUCCESS,

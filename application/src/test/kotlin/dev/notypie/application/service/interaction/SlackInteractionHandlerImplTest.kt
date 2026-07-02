@@ -48,7 +48,7 @@ class SlackInteractionHandlerImplTest :
 
         given("legacy whitelist constant") {
             `when`("LEGACY_AUTO_REJECT_TYPES is inspected") {
-                then("contains exactly REQUEST_APPLY_FORM and APPROVAL_FORM") {
+                then("contains exactly APPLY_REQUEST and APPROVAL_REQUEST") {
                     SlackInteractionHandlerImpl.LEGACY_AUTO_REJECT_TYPES shouldBe
                         setOf(
                             CommandDetailType.APPLY_REQUEST,
@@ -104,7 +104,7 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
-        given("handleInteraction for REJECT on a legacy type (APPROVAL_FORM)") {
+        given("handleInteraction for REJECT on a legacy type (APPROVAL_REQUEST)") {
             `when`("handler processes the payload") {
                 then("commandExecutor executes the legacy ReplaceTextResponseCommand") {
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
@@ -132,7 +132,7 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
-        given("handleInteraction for a DECLINE_REASON_MODAL submission with Other and a blank detail") {
+        given("handleInteraction for a MEETING_DECLINE_REASON submission with Other and a blank detail") {
             `when`("handler processes the payload") {
                 then("returns response_action errors targeting the detail block and skips execution") {
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
@@ -168,7 +168,7 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
-        given("handleInteraction for a DECLINE_REASON_MODAL submission with Other and a filled detail") {
+        given("handleInteraction for a MEETING_DECLINE_REASON submission with Other and a filled detail") {
             `when`("handler processes the payload") {
                 then("returns null and executes the persistence command") {
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
@@ -204,7 +204,7 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
-        given("handleInteraction for APPLY on MEETING_APPROVAL_NOTICE_FORM") {
+        given("handleInteraction for APPLY on MEETING_APPROVAL_REQUEST") {
             `when`("handler processes the payload") {
                 then("routes APPLY through InteractionCommand, not the legacy path") {
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
@@ -232,7 +232,7 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
-        given("handleInteraction for REJECT on MEETING_APPROVAL_NOTICE_FORM") {
+        given("handleInteraction for REJECT on MEETING_APPROVAL_REQUEST") {
             `when`("handler processes the payload") {
                 then("routes REJECT through InteractionCommand, not the legacy path") {
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
@@ -260,7 +260,7 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
-        given("handleInteraction for REJECT on a context-routed type (REQUEST_MEETING_FORM)") {
+        given("handleInteraction for REJECT on a context-routed type (MEETING_CREATE_REQUEST)") {
             `when`("handler processes the payload") {
                 then("commandExecutor routes the reject through an InteractionCommand, not the legacy path") {
                     clearMocks(payloadParser, commandExecutor, applicationEventPublisher)

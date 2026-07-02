@@ -5,9 +5,12 @@ import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.publishOne
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.RoutineMember
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
@@ -30,7 +33,7 @@ private val setupLog = KotlinLogging.logger {}
 @Service
 class StandupRoutineSetupService(
     private val standupRepository: StandupRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
 ) {
     @EventListener
@@ -49,13 +52,17 @@ class StandupRoutineSetupService(
                             "_Please run /standup setup again and review your inputs._"
                     },
                 )
-        val ephemeralEvent =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage = message,
-                commandBasicInfo = payload.responseBasicInfo,
-                commandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
-            )
-        eventPublisher.publishOne(event = ephemeralEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                        recipient = null,
+                        content = MessageContent.Text(headline = null, markdown = message),
+                        detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                    ),
+                basicInfo = payload.responseBasicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     private fun persistRoutine(payload: CreateStandupRoutinePayload): Routine {

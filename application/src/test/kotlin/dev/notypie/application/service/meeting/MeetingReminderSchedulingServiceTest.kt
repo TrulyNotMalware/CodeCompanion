@@ -3,9 +3,12 @@ package dev.notypie.application.service.meeting
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.meet.createMeetingReminderDto
 import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
@@ -38,23 +41,16 @@ class MeetingReminderSchedulingServiceTest :
                 .toInstant()
         val clock = Clock.fixed(nowInstant, seoul)
 
-        fun stubEventBuilder(): SlackApiEventConstructor {
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
+        fun stubStager(): OutboundMessageStager {
+            val stager = mockk<OutboundMessageStager>()
             val basicInfo = createCommandBasicInfo()
             val stubEvent =
                 createSendSlackMessageEvent(
                     commandDetailType = CommandDetailType.MEETING_REMINDER,
                     idempotencyKey = basicInfo.idempotencyKey,
                 )
-            every {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = any(),
-                    headLineText = any(),
-                    commandBasicInfo = any(),
-                    simpleString = any(),
-                )
-            } returns stubEvent
-            return slackEventBuilder
+            every { stager.stage(message = any(), basicInfo = any()) } returns stubEvent
+            return stager
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -69,11 +65,11 @@ class MeetingReminderSchedulingServiceTest :
         fun buildService(
             repo: MeetingReminderRepository,
             outboxRepo: MessageOutboxRepository,
-            builder: SlackApiEventConstructor = stubEventBuilder(),
+            stager: OutboundMessageStager = stubStager(),
         ) = MeetingReminderSchedulingService(
             reminderRepository = repo,
             outboxRepository = outboxRepo,
-            slackEventBuilder = builder,
+            stager = stager,
             transactionManager = stubTransactionManager(),
             clock = clock,
             appConfig =
@@ -196,7 +192,8 @@ class MeetingReminderSchedulingServiceTest :
             `when`("a reminder is due and claim succeeds") {
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val stager = stubStager()
+                val service = buildService(repo = repo, outboxRepo = outboxRepo, stager = stager)
                 val ready =
                     readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A", "U_B"))
 
@@ -227,7 +224,29 @@ class MeetingReminderSchedulingServiceTest :
                 }
 
                 then("the outbox rows carry MEETING_REMINDER as the command detail type") {
-                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.MEETING_REMINDER.wireValue }
+                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.MEETING_REMINDER.name }
+                }
+
+                then("each attendee is staged a MEETING_REMINDER ChannelMessage to their own channel") {
+                    listOf("U_A", "U_B").forEach { userId ->
+                        verify(exactly = 1) {
+                            stager.stage(
+                                message =
+                                    OutboundMessage.ChannelMessage(
+                                        target = ConversationTarget(id = userId),
+                                        content =
+                                            MessageContent.Text(
+                                                headline = "Meeting reminder — Sprint Planning",
+                                                markdown =
+                                                    "Your meeting *Sprint Planning* starts in 15 minutes " +
+                                                        "(at 2026-05-04 12:15).",
+                                            ),
+                                        detailType = CommandDetailType.MEETING_REMINDER,
+                                    ),
+                                basicInfo = match { it.publisherId == userId && it.channel == userId },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -280,16 +299,11 @@ class MeetingReminderSchedulingServiceTest :
             `when`("the message build throws") {
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
-                val builder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 every {
-                    builder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = any(),
-                    )
+                    stager.stage(message = any(), basicInfo = any())
                 } throws RuntimeException("Slack API error")
-                val service = buildService(repo = repo, outboxRepo = outboxRepo, builder = builder)
+                val service = buildService(repo = repo, outboxRepo = outboxRepo, stager = stager)
                 val ready = readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
 
                 every { repo.resetStuckReminders(olderThan = any()) } returns 0

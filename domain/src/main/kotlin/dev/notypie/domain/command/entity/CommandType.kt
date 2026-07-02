@@ -31,59 +31,37 @@ enum class CommandType {
 }
 
 /**
- * Routing discriminator for a command interaction. [wireValue] is the stable, serialized token
- * embedded in the outbox column and in Slack modal `private_metadata` / button values; it is
- * decoupled from the Kotlin identifier so the identifier can stay transport-neutral while the
- * persisted/in-flight wire string never changes. Adapters serialize via [wireValue] and read back
- * via [fromWireValue]; they must never rely on [name].
+ * Routing discriminator for a command interaction, serialized by [name] into the outbox column and
+ * Slack modal `private_metadata` / button values, read back with [valueOf] (unknown tokens fail
+ * fast). Renaming a value requires a local DB reset and invalidates buttons already posted to Slack.
  */
-enum class CommandDetailType(
-    val wireValue: String,
-) {
-    NOTHING("NOTHING"),
-    SIMPLE_TEXT("SIMPLE_TEXT"),
-    REPLACE_TEXT("REPLACE_TEXT"),
-    ERROR_RESPONSE("ERROR_RESPONSE"),
-    APPROVAL_REQUEST("APPROVAL_FORM"),
-    APPLY_REQUEST("REQUEST_APPLY_FORM"),
+enum class CommandDetailType {
+    NOTHING,
+    SIMPLE_TEXT,
+    REPLACE_TEXT,
+    ERROR_RESPONSE,
+    APPROVAL_REQUEST,
+    APPLY_REQUEST,
 
-    MEETING_CREATE_REQUEST("REQUEST_MEETING_FORM"),
-    GET_MEETING_LIST("GET_MEETING_LIST"),
-    MEETING_APPROVAL_REQUEST("MEETING_APPROVAL_NOTICE_FORM"),
-    MEETING_DECLINE_REASON("DECLINE_REASON_MODAL"),
-    CANCEL_MEETING("CANCEL_MEETING"),
-    MEETING_RESCHEDULE_REQUEST("RESCHEDULE_MEETING"),
-    MEETING_RESCHEDULE_SUBMIT("RESCHEDULE_MEETING_SUBMIT"),
-    MEETING_ADD_PARTICIPANT_REQUEST("ADD_PARTICIPANT"),
-    MEETING_ADD_PARTICIPANT_SUBMIT("ADD_PARTICIPANT_SUBMIT"),
-    MEETING_REMINDER("MEETING_REMINDER"),
-    DAILY_AGENDA("DAILY_AGENDA"),
-    STATUS_REPORT("STATUS_REPORT"),
-    AGENT_CONVERSE("AGENT_CONVERSE"),
-    STANDUP_PROMPT("STANDUP_FILL"),
-    STANDUP_ANSWER_SUBMIT("STANDUP_ANSWER_SUBMIT"),
-    STANDUP_SETUP_REQUEST("STANDUP_SETUP_FORM"),
-    STANDUP_SETUP_SUBMIT("STANDUP_SETUP_SUBMIT"),
-    STANDUP_SUMMARY("STANDUP_SUMMARY"),
-    APPROVAL_CALLBACK("NOTICE_FORM"),
-    ;
-
-    companion object {
-        /**
-         * Tolerant reverse of [wireValue] for inbound Slack surfaces: an interaction can carry a stale
-         * or unknown token (old message in channel history), so unknown degrades to [NOTHING].
-         */
-        fun fromWireValue(raw: String): CommandDetailType = entries.firstOrNull { it.wireValue == raw } ?: NOTHING
-
-        /**
-         * Strict reverse of [wireValue] for trusted, already-persisted data (the outbox column). An
-         * unknown token there means corruption, so fail fast rather than silently dispatching [NOTHING]
-         * (preserves the pre-decoupling `valueOf` semantics).
-         */
-        fun requireWireValue(raw: String): CommandDetailType =
-            entries.firstOrNull { it.wireValue == raw }
-                ?: throw IllegalArgumentException("Unknown CommandDetailType wireValue: $raw")
-    }
+    MEETING_CREATE_REQUEST,
+    GET_MEETING_LIST,
+    MEETING_APPROVAL_REQUEST,
+    MEETING_DECLINE_REASON,
+    CANCEL_MEETING,
+    MEETING_RESCHEDULE_REQUEST,
+    MEETING_RESCHEDULE_SUBMIT,
+    MEETING_ADD_PARTICIPANT_REQUEST,
+    MEETING_ADD_PARTICIPANT_SUBMIT,
+    MEETING_REMINDER,
+    DAILY_AGENDA,
+    STATUS_REPORT,
+    AGENT_CONVERSE,
+    STANDUP_PROMPT,
+    STANDUP_ANSWER_SUBMIT,
+    STANDUP_SETUP_REQUEST,
+    STANDUP_SETUP_SUBMIT,
+    STANDUP_SUMMARY,
+    APPROVAL_CALLBACK,
 }
 
 /**
@@ -193,7 +171,7 @@ internal fun CommandDetailType.createContext(
             // blank trigger_id collapses to a no-op in the resolver.
             RequestStandupSetupContext(
                 commandBasicInfo = commandBasicInfo,
-                triggerId = "",
+                triggerHandle = "",
                 intents = intents,
             )
         }

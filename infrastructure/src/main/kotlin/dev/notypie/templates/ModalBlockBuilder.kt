@@ -60,7 +60,7 @@ class ModalBlockBuilder(
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
         // Slack button value routing string: idempotencyKey + detailType, tokenized the same way
         // the interaction parser reads it back. This transport concern lives here, not in the domain.
-        val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType.wireValue}"
+        val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType.name}"
         val approvalButton: InteractiveObject =
             modalElementBuilder.approvalButtonElement(
                 approvalButtonName = approvalContents.approvalButtonName,
@@ -91,7 +91,7 @@ class ModalBlockBuilder(
      * existing tokenization path without introducing a new metadata format.
      */
     fun cancelMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
-        val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.wireValue},$meetingUid"
+        val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
         val cancelButton: InteractiveObject =
             modalElementBuilder.cancelMeetingButtonElement(
                 buttonName = "Cancel",
@@ -111,11 +111,11 @@ class ModalBlockBuilder(
      * block budget at `3N+2` (the same as a Cancel-only row), so the 50-block Slack cap math in
      * [ModalTemplateBuilder] is unaffected. Each button's `value` follows the standard routing
      * format the interaction parser already reads — `<listIdempotencyKey>,<detailType>,<meetingUid>`
-     * — with Reschedule (PRIMARY) routed to `RESCHEDULE_MEETING` and Cancel (DANGER) to
+     * — with Reschedule (PRIMARY) routed to `MEETING_RESCHEDULE_REQUEST` and Cancel (DANGER) to
      * `CANCEL_MEETING`.
      */
     fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
-        fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.wireValue},$meetingUid"
+        fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.name},$meetingUid"
         val rescheduleRoutingValue = routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)
         val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
         val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)

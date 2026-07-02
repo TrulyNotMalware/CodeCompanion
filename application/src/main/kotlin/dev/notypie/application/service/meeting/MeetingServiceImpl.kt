@@ -15,17 +15,21 @@ import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jakarta.transaction.Transactional
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.util.MultiValueMap
@@ -35,7 +39,7 @@ class MeetingServiceImpl(
     private val meetingRepository: MeetingRepository,
     private val retryService: RetryService,
     private val commandExecutor: CommandExecutor,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
 ) : MeetingService {
     private val log = KotlinLogging.logger {}
@@ -124,22 +128,29 @@ class MeetingServiceImpl(
             "views.open fallback triggered: meetingIdempotencyKey=${event.meetingIdempotencyKey} " +
                 "participantUserId=${event.participantUserId} reason=${event.reason}"
         }
-        val ephemeralEvent =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage =
-                    "We couldn't open the reason picker. Your decline was noted as *Other*. " +
-                        "_Tip: Click Deny again to pick a specific reason._",
-                commandBasicInfo =
-                    CommandBasicInfo.forOutbound(
-                        appId = event.apiAppId,
-                        publisherId = event.participantUserId,
-                        channel = event.channel,
-                        idempotencyKey = event.idempotencyKey,
-                    ),
-                commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                targetUserId = event.participantUserId,
+        val basicInfo =
+            CommandBasicInfo.forOutbound(
+                appId = event.apiAppId,
+                publisherId = event.participantUserId,
+                channel = event.channel,
+                idempotencyKey = event.idempotencyKey,
             )
-        eventPublisher.publishOne(event = ephemeralEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        recipient = UserRef(id = event.participantUserId),
+                        content =
+                            MessageContent.Text(
+                                headline = null,
+                                markdown =
+                                    "We couldn't open the reason picker. Your decline was noted as *Other*. " +
+                                        "_Tip: Click Deny again to pick a specific reason._",
+                            ),
+                    ),
+                basicInfo = basicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     /**
@@ -176,14 +187,17 @@ class MeetingServiceImpl(
                     "Failed to cancel the meeting. Please try again later."
                 },
             )
-        val ephemeralEvent =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage = message,
-                commandBasicInfo = basicInfo,
-                commandDetailType = CommandDetailType.CANCEL_MEETING,
-                targetUserId = payload.requesterId,
-            )
-        eventPublisher.publishOne(event = ephemeralEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        recipient = UserRef(id = payload.requesterId),
+                        content = MessageContent.Text(headline = null, markdown = message),
+                        detailType = CommandDetailType.CANCEL_MEETING,
+                    ),
+                basicInfo = basicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     /**
@@ -272,33 +286,40 @@ class MeetingServiceImpl(
                 idempotencyKey = meeting.idempotencyKey,
             )
         addedUserIds.forEach { userId ->
-            val noticeEvent =
-                slackEventBuilder.simpleApplyRejectRequest(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
-                    commandBasicInfo = noticeBasicInfo,
-                    approvalContents = approvalContents,
-                    targetUserId = userId,
-                    routingExtras = listOf(meeting.title).filter { it.isNotBlank() },
-                )
-            eventPublisher.publishOne(event = noticeEvent)
+            outboundStager
+                .stage(
+                    message =
+                        OutboundMessage.Approval(
+                            target = ConversationTarget(id = noticeBasicInfo.channel),
+                            recipient = UserRef(id = userId),
+                            approval = approvalContents,
+                            routingExtras = emptyList(),
+                        ),
+                    basicInfo = noticeBasicInfo,
+                )?.let { eventPublisher.publishOne(event = it) }
         }
     }
 
     private fun publishHostEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
-        val ephemeralEvent =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage = message,
-                commandBasicInfo = basicInfo,
-                commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                targetUserId = targetUserId,
-            )
-        eventPublisher.publishOne(event = ephemeralEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        recipient = UserRef(id = targetUserId),
+                        content = MessageContent.Text(headline = null, markdown = message),
+                        detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+                    ),
+                basicInfo = basicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     @EventListener
     fun getMeetingListEvent(event: GetMeetingListEvent) {
         val payload = event.payload
-        val slackEvent =
+        val basicInfo = payload.responseBasicInfo
+        val target = ConversationTarget(id = basicInfo.channel)
+        val message =
             runCatching {
                 meetingRepository.getMeetingsByUserIdInRange(
                     userId = payload.publisherId,
@@ -307,23 +328,30 @@ class MeetingServiceImpl(
                 )
             }.fold(
                 onSuccess = { meetings ->
-                    slackEventBuilder.getMeetingListFormRequest(
-                        myMeetings = meetings,
-                        commandBasicInfo = payload.responseBasicInfo,
-                        commandDetailType = CommandDetailType.GET_MEETING_LIST,
+                    OutboundMessage.Ephemeral(
+                        target = target,
+                        content =
+                            MessageContent.MeetingList(
+                                meetings = meetings,
+                                currentUserId = basicInfo.publisherId,
+                            ),
                     )
                 },
                 onFailure = { exception ->
                     log.error(exception) {
                         "Failed to fetch meeting list for publisherId=${payload.publisherId} idempotencyKey=${event.idempotencyKey}"
                     }
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = "Failed to fetch your meetings. Please try again later.",
-                        commandBasicInfo = payload.responseBasicInfo,
-                        commandDetailType = CommandDetailType.ERROR_RESPONSE,
+                    OutboundMessage.Ephemeral(
+                        target = target,
+                        content =
+                            MessageContent.Text(
+                                headline = null,
+                                markdown = "Failed to fetch your meetings. Please try again later.",
+                            ),
+                        detailType = CommandDetailType.ERROR_RESPONSE,
                     )
                 },
             )
-        eventPublisher.publishOne(event = slackEvent)
+        outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }
 }

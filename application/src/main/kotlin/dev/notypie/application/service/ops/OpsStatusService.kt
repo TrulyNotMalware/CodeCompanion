@@ -5,7 +5,10 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.publishOne
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
@@ -27,7 +30,7 @@ private val log = KotlinLogging.logger {}
 @Service
 class OpsStatusService(
     private val outboxRepository: MessageOutboxRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
     private val clock: Clock = Clock.systemDefaultZone(),
     appConfig: AppConfig = AppConfig(),
@@ -46,14 +49,20 @@ class OpsStatusService(
                     "Failed to read outbox status. Check application logs."
                 }
 
-        val message =
-            slackEventBuilder.simpleTextRequest(
-                commandDetailType = CommandDetailType.STATUS_REPORT,
-                headLineText = "CodeCompanion — outbox status",
-                commandBasicInfo = payload.responseBasicInfo,
-                simpleString = text,
-            )
-        eventPublisher.publishOne(event = message)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                        content =
+                            MessageContent.Text(
+                                headline = "CodeCompanion — outbox status",
+                                markdown = text,
+                            ),
+                        detailType = CommandDetailType.STATUS_REPORT,
+                    ),
+                basicInfo = payload.responseBasicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 
     private fun renderReport(): String {

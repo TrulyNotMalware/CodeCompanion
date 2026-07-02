@@ -1,12 +1,14 @@
 package dev.notypie.application.service.standup
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.publishOne
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
@@ -18,7 +20,7 @@ private val answerLog = KotlinLogging.logger {}
 @Service
 class StandupAnswerService(
     private val standupRepository: StandupRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
     private val clock: Clock = Clock.systemDefaultZone(),
 ) {
@@ -56,21 +58,29 @@ class StandupAnswerService(
         // `chat.postEphemeral` requires `channel` to be an IM/channel ID and `user` to be the
         // recipient's user ID. The originating DM's channel was already captured on
         // [event.channel] (a D-channel for the bot↔user IM); routing it through CommandBasicInfo
-        // — and leaving `targetUserId` null — keeps `channel` and `user` distinct on the wire.
-        val ephemeralEvent =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage =
-                    "Couldn't open the standup form. _Tip: re-click the *Fill in standup* button " +
-                        "from the original DM to try again._",
-                commandBasicInfo =
-                    CommandBasicInfo.forOutbound(
-                        appId = event.apiAppId,
-                        publisherId = event.userId,
-                        channel = event.channel,
-                        idempotencyKey = event.idempotencyKey,
-                    ),
-                commandDetailType = CommandDetailType.SIMPLE_TEXT,
+        // — and leaving the recipient null — keeps `channel` and `user` distinct on the wire.
+        val basicInfo =
+            CommandBasicInfo.forOutbound(
+                appId = event.apiAppId,
+                publisherId = event.userId,
+                channel = event.channel,
+                idempotencyKey = event.idempotencyKey,
             )
-        eventPublisher.publishOne(event = ephemeralEvent)
+        outboundStager
+            .stage(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        recipient = null,
+                        content =
+                            MessageContent.Text(
+                                headline = null,
+                                markdown =
+                                    "Couldn't open the standup form. _Tip: re-click the *Fill in standup* button " +
+                                        "from the original DM to try again._",
+                            ),
+                    ),
+                basicInfo = basicInfo,
+            )?.let { eventPublisher.publishOne(event = it) }
     }
 }

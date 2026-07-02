@@ -6,10 +6,14 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.dto.RoutineDto
 import dev.notypie.domain.standup.entity.SessionDispatch
 import dev.notypie.domain.standup.entity.StandupSession
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.toOutboxMessage
@@ -40,7 +44,7 @@ private val NUDGE_CUTOFF_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPa
 class StandupSchedulingService(
     private val standupRepository: StandupRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val stager: OutboundMessageStager,
     transactionManager: PlatformTransactionManager,
     private val applicationEventPublisher: ApplicationEventPublisher = ApplicationEventPublisher { },
     private val clock: Clock = Clock.systemDefaultZone(),
@@ -164,7 +168,7 @@ class StandupSchedulingService(
                     CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                 val dmEvent =
                     buildDmNotice(
-                        slackEventBuilder = slackEventBuilder,
+                        stager = stager,
                         sessionUid = item.sessionUid,
                         sessionDate = item.sessionDate,
                         routineUid = routine.routineUid,
@@ -244,7 +248,7 @@ class StandupSchedulingService(
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                     val nudgeEvent =
                         buildNudgeNotice(
-                            slackEventBuilder = slackEventBuilder,
+                            stager = stager,
                             routineName = routine.name,
                             cutoffAt = candidate.cutoffAt,
                             routineTimezone = routine.routineTimezone,
@@ -291,7 +295,7 @@ class StandupSchedulingService(
  * the modal (a scheduler tick has no trigger_id of its own).
  */
 internal fun buildDmNotice(
-    slackEventBuilder: SlackApiEventConstructor,
+    stager: OutboundMessageStager,
     sessionUid: UUID,
     sessionDate: LocalDate,
     routineUid: UUID,
@@ -309,13 +313,16 @@ internal fun buildDmNotice(
             idempotencyKey = sessionUid,
             commandDetailType = CommandDetailType.STANDUP_PROMPT,
         )
-    return slackEventBuilder.simpleApplyRejectRequest(
-        commandDetailType = CommandDetailType.STANDUP_PROMPT,
-        commandBasicInfo = commandBasicInfo,
-        approvalContents = approvalContents,
-        targetUserId = memberId,
-        routingExtras = listOf(sessionUid.toString(), routineUid.toString()),
-    )
+    return stager.stage(
+        message =
+            OutboundMessage.Approval(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                recipient = UserRef(id = memberId),
+                approval = approvalContents,
+                routingExtras = listOf(sessionUid.toString(), routineUid.toString()),
+            ),
+        basicInfo = commandBasicInfo,
+    ) as SendSlackMessageEvent
 }
 
 /**
@@ -323,7 +330,7 @@ internal fun buildDmNotice(
  * points the member back to the original prompt's "Fill in standup" button.
  */
 internal fun buildNudgeNotice(
-    slackEventBuilder: SlackApiEventConstructor,
+    stager: OutboundMessageStager,
     routineName: String,
     cutoffAt: Instant,
     routineTimezone: ZoneId,
@@ -333,10 +340,13 @@ internal fun buildNudgeNotice(
     val body =
         "⏰ Standup for *$routineName* closes at $cutoffText — you haven't responded yet. " +
             "Tap the *Fill in standup* button in your DM."
-    return slackEventBuilder.simpleTextRequest(
-        commandDetailType = CommandDetailType.STANDUP_PROMPT,
-        headLineText = "Standup reminder",
-        commandBasicInfo = commandBasicInfo,
-        simpleString = body,
-    )
+    return stager.stage(
+        message =
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content = MessageContent.Text(headline = "Standup reminder", markdown = body),
+                detailType = CommandDetailType.STANDUP_PROMPT,
+            ),
+        basicInfo = commandBasicInfo,
+    ) as SendSlackMessageEvent
 }

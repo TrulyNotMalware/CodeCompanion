@@ -22,12 +22,12 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
         subCommand = subCommand,
     ) {
     protected fun interactionSuccessResponse(
-        responseUrl: String,
+        replyHandle: String,
         mkdMessage: String = "Successfully processed.",
     ): CommandOutput {
         addOutbound(
             OutboundMessage.ReplaceMessage(
-                handle = ResponseReplaceHandle(raw = responseUrl),
+                handle = ResponseReplaceHandle(raw = replyHandle),
                 content = MessageContent.Text(headline = null, markdown = mkdMessage),
             ),
         )
@@ -39,13 +39,13 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
     }
 
     protected fun interactionSuccessResponse(
-        responseUrl: String,
+        replyHandle: String,
         mkdMessage: String = "Successfully processed.",
         results: CommandOutput,
     ): CommandOutput {
         addOutbound(
             OutboundMessage.ReplaceMessage(
-                handle = ResponseReplaceHandle(raw = responseUrl),
+                handle = ResponseReplaceHandle(raw = replyHandle),
                 content = MessageContent.Text(headline = null, markdown = mkdMessage),
             ),
         )
@@ -55,7 +55,7 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
 
     internal open fun handleInteraction(interaction: InboundInteraction): CommandOutput =
-        interactionSuccessResponse(responseUrl = interaction.reply.raw)
+        interactionSuccessResponse(replyHandle = interaction.reply.raw)
 }
 
 internal abstract class ResponseContext(

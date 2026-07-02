@@ -84,7 +84,7 @@ class InteractionCommandTest :
             `when`("handleEvent") {
                 val result = command.handleEvent()
 
-                then("should fail because APPROVAL_FORM creates non-ReactionContext") {
+                then("should fail because APPROVAL_REQUEST creates non-ReactionContext") {
                     result.ok shouldBe false
                     result.status shouldBe Status.FAILED
                     result.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
@@ -93,7 +93,7 @@ class InteractionCommandTest :
         }
 
         given("InteractionCommand findSubCommandDefinition") {
-            `when`("payload is InboundInteraction with REQUEST_MEETING_FORM") {
+            `when`("payload is InboundInteraction with MEETING_CREATE_REQUEST") {
                 val idempotencyKey = UUID.randomUUID()
                 val interactionPayload =
                     createInboundInteraction(

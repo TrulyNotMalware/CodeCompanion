@@ -123,19 +123,19 @@ class AbstractReactionCommandContextTest :
                     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REPLACE_TEXT
 
                     fun callInteractionSuccessResponse(
-                        responseUrl: String,
+                        replyHandle: String,
                         mkdMessage: String = "Successfully processed.",
                     ) = interactionSuccessResponse(
-                        responseUrl = responseUrl,
+                        replyHandle = replyHandle,
                         mkdMessage = mkdMessage,
                     )
 
                     fun callInteractionSuccessResponseWithResults(
-                        responseUrl: String,
+                        replyHandle: String,
                         mkdMessage: String = "Successfully processed.",
                         results: CommandOutput,
                     ) = interactionSuccessResponse(
-                        responseUrl = responseUrl,
+                        replyHandle = replyHandle,
                         mkdMessage = mkdMessage,
                         results = results,
                     )
@@ -144,7 +144,7 @@ class AbstractReactionCommandContextTest :
             `when`("interactionSuccessResponse without results") {
                 val result =
                     reactionContext.callInteractionSuccessResponse(
-                        responseUrl = TEST_BASE_URL,
+                        replyHandle = TEST_BASE_URL,
                     )
 
                 then("should return success CommandOutput") {
@@ -175,7 +175,7 @@ class AbstractReactionCommandContextTest :
                     )
                 val result =
                     reactionContext.callInteractionSuccessResponseWithResults(
-                        responseUrl = TEST_BASE_URL,
+                        replyHandle = TEST_BASE_URL,
                         results = expectedResults,
                     )
 

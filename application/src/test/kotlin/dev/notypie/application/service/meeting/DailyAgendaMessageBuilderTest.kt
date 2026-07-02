@@ -2,7 +2,10 @@ package dev.notypie.application.service.meeting
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -17,7 +20,7 @@ class DailyAgendaMessageBuilderTest :
     BehaviorSpec({
         given("buildAgendaDm") {
             `when`("a user has multiple meetings supplied out of order") {
-                val slackEventBuilder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 val basicInfo = createCommandBasicInfo()
                 val agendaDate = LocalDate.of(2026, 5, 4)
                 val meetings =
@@ -32,15 +35,9 @@ class DailyAgendaMessageBuilderTest :
                         ),
                     )
 
-                val capturedHeadline = slot<String>()
-                val capturedBody = slot<String>()
+                val capturedMessage = slot<OutboundMessage>()
                 every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = capture(capturedHeadline),
-                        commandBasicInfo = any(),
-                        simpleString = capture(capturedBody),
-                    )
+                    stager.stage(message = capture(capturedMessage), basicInfo = any())
                 } returns
                     createSendSlackMessageEvent(
                         commandDetailType = CommandDetailType.DAILY_AGENDA,
@@ -48,29 +45,27 @@ class DailyAgendaMessageBuilderTest :
                     )
 
                 buildAgendaDm(
-                    slackEventBuilder = slackEventBuilder,
+                    stager = stager,
                     agendaDate = agendaDate,
                     meetings = meetings,
                     commandBasicInfo = basicInfo,
                 )
 
+                val channelMessage = capturedMessage.captured as OutboundMessage.ChannelMessage
+                val text = channelMessage.content as MessageContent.Text
+
                 then("the headline is the date header") {
-                    capturedHeadline.captured shouldBe "🗓️ Today's meetings (2026-05-04)"
+                    text.headline shouldBe "🗓️ Today's meetings (2026-05-04)"
                 }
 
                 then("the body lists meetings sorted by start time, one line each") {
-                    capturedBody.captured shouldBe "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
+                    text.markdown shouldBe "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
                 }
 
-                then("it delegates to a plain-text request typed DAILY_AGENDA") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.DAILY_AGENDA,
-                            headLineText = any(),
-                            commandBasicInfo = basicInfo,
-                            simpleString = any(),
-                        )
-                    }
+                then("it stages a plain-text ChannelMessage typed DAILY_AGENDA to the command channel") {
+                    channelMessage.detailType shouldBe CommandDetailType.DAILY_AGENDA
+                    channelMessage.target shouldBe ConversationTarget(id = basicInfo.channel)
+                    verify(exactly = 1) { stager.stage(message = any(), basicInfo = basicInfo) }
                 }
             }
         }

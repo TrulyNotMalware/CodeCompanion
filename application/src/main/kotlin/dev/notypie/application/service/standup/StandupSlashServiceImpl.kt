@@ -5,8 +5,8 @@ import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.entity.slash.SetupStandupCommand
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
-import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 
 /**

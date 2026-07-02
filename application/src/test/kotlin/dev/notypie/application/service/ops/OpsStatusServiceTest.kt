@@ -11,7 +11,9 @@ import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.core.spec.style.BehaviorSpec
@@ -29,12 +31,12 @@ class OpsStatusServiceTest :
 
         given("OpsStatusService.handleStatusReport") {
             val outboxRepository = mockk<MessageOutboxRepository>()
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
+            val stager = mockk<OutboundMessageStager>()
             val eventPublisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 OpsStatusService(
                     outboxRepository = outboxRepository,
-                    slackEventBuilder = slackEventBuilder,
+                    outboundStager = stager,
                     eventPublisher = eventPublisher,
                     clock = clock,
                     appConfig =
@@ -59,24 +61,19 @@ class OpsStatusServiceTest :
             `when`("everything is healthy (no PENDING, no IN_PROGRESS)") {
                 outboxRepository.stubOutboxStatus()
 
-                val captured = slot<String>()
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = capture(captured),
-                    )
-                } returns outboundStub
+                val captured = slot<OutboundMessage>()
+                every { stager.stage(message = capture(captured), basicInfo = any()) } returns outboundStub
                 val publishedQueue = slot<EventQueue<CommandEvent<EventPayload>>>()
                 every { eventPublisher.publishEvent(events = capture(publishedQueue)) } returns Unit
 
                 service.handleStatusReport(event = event)
 
                 then("the rendered text reports zero counts and UP health") {
-                    captured.captured shouldContain "*Pending:* 0"
-                    captured.captured shouldContain "*In-flight:* 0"
-                    captured.captured shouldContain "UP"
+                    val channelMessage = captured.captured as OutboundMessage.ChannelMessage
+                    val body = (channelMessage.content as MessageContent.Text).markdown
+                    body shouldContain "*Pending:* 0"
+                    body shouldContain "*In-flight:* 0"
+                    body shouldContain "UP"
                 }
 
                 then("the rendered text is published as a single channel message") {
@@ -94,44 +91,34 @@ class OpsStatusServiceTest :
                     oldestInProgressUpdatedAt = now.minusSeconds(600L),
                 )
 
-                val captured = slot<String>()
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = capture(captured),
-                    )
-                } returns outboundStub
+                val captured = slot<OutboundMessage>()
+                every { stager.stage(message = capture(captured), basicInfo = any()) } returns outboundStub
                 every { eventPublisher.publishEvent(events = any()) } returns Unit
 
                 service.handleStatusReport(event = event)
 
                 then("the report surfaces stuck counts and DOWN health") {
-                    captured.captured shouldContain "*Pending:* 7 (oldest 900s ago, stuck 2)"
-                    captured.captured shouldContain "*In-flight:* 1 (oldest 600s ago, stuck 1)"
-                    captured.captured shouldContain "DOWN"
+                    val channelMessage = captured.captured as OutboundMessage.ChannelMessage
+                    val body = (channelMessage.content as MessageContent.Text).markdown
+                    body shouldContain "*Pending:* 7 (oldest 900s ago, stuck 2)"
+                    body shouldContain "*In-flight:* 1 (oldest 600s ago, stuck 1)"
+                    body shouldContain "DOWN"
                 }
             }
 
             `when`("the repository throws while reading metrics") {
                 every { outboxRepository.countPending() } throws RuntimeException("db down")
 
-                val captured = slot<String>()
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = capture(captured),
-                    )
-                } returns outboundStub
+                val captured = slot<OutboundMessage>()
+                every { stager.stage(message = capture(captured), basicInfo = any()) } returns outboundStub
                 every { eventPublisher.publishEvent(events = any()) } returns Unit
 
                 service.handleStatusReport(event = event)
 
                 then("the listener still publishes a friendly fallback instead of crashing") {
-                    captured.captured shouldContain "Failed to read outbox status"
+                    val channelMessage = captured.captured as OutboundMessage.ChannelMessage
+                    val body = (channelMessage.content as MessageContent.Text).markdown
+                    body shouldContain "Failed to read outbox status"
                 }
             }
         }

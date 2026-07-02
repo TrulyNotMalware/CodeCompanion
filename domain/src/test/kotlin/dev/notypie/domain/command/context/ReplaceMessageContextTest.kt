@@ -24,7 +24,7 @@ class ReplaceMessageContextTest :
             val context =
                 ReplaceMessageContext(
                     commandBasicInfo = basicInfo,
-                    responseUrl = TEST_BASE_URL,
+                    replyHandle = TEST_BASE_URL,
                     markdownMessage = "Replaced successfully.",
                     intents = intentQueue,
                 )
@@ -65,7 +65,7 @@ class ReplaceMessageContextTest :
                 val interactionContext =
                     ReplaceMessageContext(
                         commandBasicInfo = basicInfo,
-                        responseUrl = TEST_BASE_URL,
+                        replyHandle = TEST_BASE_URL,
                         markdownMessage = "Interaction replaced.",
                         intents = interactionIntentQueue,
                     )

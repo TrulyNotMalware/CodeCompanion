@@ -82,7 +82,7 @@ class SlackInteractionRequestParserTest :
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                         actions =
                             buttonActionJsonWithoutStyle(
-                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT.wireValue}",
+                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT.name}",
                             ),
                     )
 
@@ -102,7 +102,7 @@ class SlackInteractionRequestParserTest :
                         commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         isEphemeral = true,
                         buttonType = ButtonType.PRIMARY,
-                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_REQUEST.wireValue}",
+                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_REQUEST.name}",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)
@@ -392,11 +392,10 @@ class SlackInteractionRequestParserTest :
                         messageText = "$idempotencyKey, INVALID_TYPE",
                     )
 
-                then("should fall back to NOTHING instead of throwing (graceful degrade)") {
-                    val result = parser.parseStringPayload(payload = payload)
-                    result.type shouldBe CommandDetailType.NOTHING
-                    result.idempotencyKey shouldBe idempotencyKey.toString()
-                    result.routingExtras shouldBe emptyList()
+                then("fails fast on the unknown routing token") {
+                    shouldThrow<IllegalArgumentException> {
+                        parser.parseStringPayload(payload = payload)
+                    }
                 }
             }
 
@@ -405,7 +404,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        messageText = "$idempotencyKey,${CommandDetailType.SIMPLE_TEXT.wireValue},42",
+                        messageText = "$idempotencyKey,${CommandDetailType.SIMPLE_TEXT.name},42",
                     )
 
                 then("routingExtras should expose the meetingId token") {
@@ -450,7 +449,7 @@ class SlackInteractionRequestParserTest :
                     result.idempotencyKey shouldBe meetingKey.toString()
                     result.routingExtras shouldBe listOf(participantUserId)
                     result.privateMetadata shouldBe
-                        "$meetingKey,DECLINE_REASON_MODAL,$participantUserId"
+                        "$meetingKey,MEETING_DECLINE_REASON,$participantUserId"
                 }
 
                 then("currentAction is synthesized as APPLY_BUTTON so routing treats submission as primary") {
@@ -509,7 +508,7 @@ class SlackInteractionRequestParserTest :
                     // DeclineReasonSubmissionContext reads by index: [0]=user, [1]=channel, [2]=ts.
                     result.routingExtras shouldBe listOf(participantUserId, noticeChannel, noticeMessageTs)
                     result.privateMetadata shouldBe
-                        "$meetingKey,DECLINE_REASON_MODAL,$participantUserId," +
+                        "$meetingKey,MEETING_DECLINE_REASON,$participantUserId," +
                         "$noticeChannel,$noticeMessageTs"
                 }
             }
@@ -561,7 +560,7 @@ class SlackInteractionRequestParserTest :
                     createRoutingOnlyViewSubmissionJson(
                         callbackId = "reschedule_meeting_modal",
                         privateMetadata =
-                            "$meetingUid,RESCHEDULE_MEETING_SUBMIT,U_REQUESTER,C_ORIGIN_CHANNEL",
+                            "$meetingUid,MEETING_RESCHEDULE_SUBMIT,U_REQUESTER,C_ORIGIN_CHANNEL",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)
@@ -578,7 +577,7 @@ class SlackInteractionRequestParserTest :
                     createRoutingOnlyViewSubmissionJson(
                         callbackId = "add_participant_modal",
                         privateMetadata =
-                            "$meetingUid,ADD_PARTICIPANT_SUBMIT,U_REQUESTER,C_ADD_CHANNEL",
+                            "$meetingUid,MEETING_ADD_PARTICIPANT_SUBMIT,U_REQUESTER,C_ADD_CHANNEL",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)
@@ -614,7 +613,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        messageText = "$idempotencyKey,${CommandDetailType.MEETING_APPROVAL_REQUEST.wireValue}",
+                        messageText = "$idempotencyKey,${CommandDetailType.MEETING_APPROVAL_REQUEST.name}",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)

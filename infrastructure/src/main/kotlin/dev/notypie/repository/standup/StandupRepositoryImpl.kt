@@ -14,8 +14,8 @@ import dev.notypie.repository.standup.schema.toDomainEntity
 import dev.notypie.repository.standup.schema.toRoutineDto
 import dev.notypie.repository.standup.schema.toSchema
 import dev.notypie.repository.standup.schema.toStandupSessionDto
-import jakarta.transaction.Transactional
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID

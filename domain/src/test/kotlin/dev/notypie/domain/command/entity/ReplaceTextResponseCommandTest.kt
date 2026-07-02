@@ -21,7 +21,7 @@ class ReplaceTextResponseCommandTest :
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
                     markdownMessage = "Replaced message content",
-                    responseUrl = TEST_BASE_URL,
+                    replyHandle = TEST_BASE_URL,
                 )
 
             `when`("handleEvent") {

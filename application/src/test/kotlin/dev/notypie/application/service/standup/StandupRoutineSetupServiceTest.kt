@@ -3,8 +3,10 @@ package dev.notypie.application.service.standup
 import dev.notypie.domain.command.createCreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.entity.Routine
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
@@ -23,12 +25,12 @@ class StandupRoutineSetupServiceTest :
         given("createRoutine") {
             `when`("a valid CreateStandupRoutineEvent is received") {
                 val repo = mockk<StandupRepository>()
-                val slackEventBuilder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val service =
                     StandupRoutineSetupService(
                         standupRepository = repo,
-                        slackEventBuilder = slackEventBuilder,
+                        outboundStager = stager,
                         eventPublisher = eventPublisher,
                     )
                 val event =
@@ -46,14 +48,8 @@ class StandupRoutineSetupServiceTest :
                     )
                 val routineSlot = slot<Routine>()
                 every { repo.createRoutine(routine = capture(routineSlot)) } answers { routineSlot.captured }
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns mockk<SendSlackMessageEvent>(relaxed = true)
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
 
                 service.createRoutine(event = event)
 
@@ -77,11 +73,20 @@ class StandupRoutineSetupServiceTest :
 
                 then("a confirmation message is published to the command channel") {
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = match { it.contains("Daily Standup") && it.contains("created") },
-                            commandBasicInfo = match { it.channel == "C_COMMAND" },
-                            commandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
-                            targetUserId = null,
+                        stager.stage(
+                            message =
+                                match { message ->
+                                    message is OutboundMessage.Ephemeral &&
+                                        message.recipient == null &&
+                                        message.detailType == CommandDetailType.STANDUP_SETUP_SUBMIT &&
+                                        message.content.let {
+                                            it is MessageContent.Text &&
+                                                it.headline == null &&
+                                                it.markdown.contains("Daily Standup") &&
+                                                it.markdown.contains("created")
+                                        }
+                                },
+                            basicInfo = match { it.channel == "C_COMMAND" },
                         )
                     }
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
@@ -90,24 +95,18 @@ class StandupRoutineSetupServiceTest :
 
             `when`("the event carries no questions (invalid input)") {
                 val repo = mockk<StandupRepository>()
-                val slackEventBuilder = mockk<SlackApiEventConstructor>()
+                val stager = mockk<OutboundMessageStager>()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val service =
                     StandupRoutineSetupService(
                         standupRepository = repo,
-                        slackEventBuilder = slackEventBuilder,
+                        outboundStager = stager,
                         eventPublisher = eventPublisher,
                     )
                 val event = createCreateStandupRoutineEvent(questions = emptyList())
-                val errorSlot = slot<String>()
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(errorSlot),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns mockk<SendSlackMessageEvent>(relaxed = true)
+                val errorSlot = slot<OutboundMessage>()
+                every { stager.stage(message = capture(errorSlot), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
 
                 service.createRoutine(event = event)
 
@@ -116,7 +115,9 @@ class StandupRoutineSetupServiceTest :
                 }
 
                 then("a friendly error ephemeral is published instead") {
-                    errorSlot.captured.contains("Couldn't create the standup routine") shouldBe true
+                    val ephemeral = errorSlot.captured as OutboundMessage.Ephemeral
+                    val body = (ephemeral.content as MessageContent.Text).markdown
+                    body.contains("Couldn't create the standup routine") shouldBe true
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
                 }
             }

@@ -2,8 +2,8 @@ package dev.notypie.repository.meeting
 
 import dev.notypie.repository.meeting.schema.MeetingReminderSchema
 import dev.notypie.repository.meeting.schema.toMeetingReminderDto
-import jakarta.transaction.Transactional
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDateTime
 

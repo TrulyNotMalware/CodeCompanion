@@ -28,7 +28,7 @@ class SlackOutboundStager(
                 when (val content = message.content) {
                     is MessageContent.Text ->
                         slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                            commandDetailType = message.detailType ?: CommandDetailType.SIMPLE_TEXT,
                             headLineText = content.headline.orEmpty(),
                             commandBasicInfo = basicInfo,
                             simpleString = content.markdown,
@@ -36,7 +36,7 @@ class SlackOutboundStager(
 
                     is MessageContent.ErrorNotice ->
                         slackEventBuilder.detailErrorTextRequest(
-                            commandDetailType = CommandDetailType.ERROR_RESPONSE,
+                            commandDetailType = message.detailType ?: CommandDetailType.ERROR_RESPONSE,
                             errorClassName = content.className,
                             errorMessage = content.message,
                             details = content.details,
@@ -45,7 +45,7 @@ class SlackOutboundStager(
 
                     is MessageContent.Schedule ->
                         slackEventBuilder.simpleTimeScheduleRequest(
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                            commandDetailType = message.detailType ?: CommandDetailType.SIMPLE_TEXT,
                             headLineText = content.headline,
                             commandBasicInfo = basicInfo,
                             timeScheduleInfo = content.info,
@@ -53,7 +53,7 @@ class SlackOutboundStager(
 
                     is MessageContent.Form ->
                         slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
+                            commandDetailType = message.detailType ?: CommandDetailType.APPROVAL_REQUEST,
                             headLineText = content.headline,
                             commandBasicInfo = basicInfo,
                             selectionFields = content.fields,
@@ -64,23 +64,43 @@ class SlackOutboundStager(
                     is MessageContent.MeetingRequest ->
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                            commandDetailType = message.detailType ?: CommandDetailType.MEETING_CREATE_REQUEST,
                             approvalContents = content.approval,
+                        )
+
+                    is MessageContent.StandupSummary ->
+                        slackEventBuilder.standupSummaryRequest(
+                            commandBasicInfo = basicInfo,
+                            routineName = content.routineName,
+                            sessionDate = content.sessionDate,
+                            members = content.members,
+                            answers = content.answers,
+                            questions = content.questions,
                         )
 
                     else -> error("not yet migrated: $content")
                 }
 
-            is OutboundMessage.Ephemeral -> {
-                val content = message.content
-                check(content is MessageContent.Text) { "Ephemeral content must be Text: $content" }
-                slackEventBuilder.simpleEphemeralTextRequest(
-                    textMessage = content.markdown,
-                    commandBasicInfo = basicInfo,
-                    commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                    targetUserId = message.recipient?.id,
-                )
-            }
+            is OutboundMessage.Ephemeral ->
+                when (val content = message.content) {
+                    is MessageContent.Text ->
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            textMessage = content.markdown,
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = message.detailType ?: CommandDetailType.SIMPLE_TEXT,
+                            targetUserId = message.recipient?.id,
+                        )
+
+                    is MessageContent.MeetingList ->
+                        slackEventBuilder.getMeetingListFormRequest(
+                            myMeetings = content.meetings,
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = message.detailType ?: CommandDetailType.GET_MEETING_LIST,
+                            currentUserId = content.currentUserId,
+                        )
+
+                    else -> error("Ephemeral content not yet migrated: $content")
+                }
 
             is OutboundMessage.Approval ->
                 slackEventBuilder.simpleApplyRejectRequest(

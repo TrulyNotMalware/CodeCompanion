@@ -34,7 +34,7 @@ class RequestApprovalContextTest :
                     context.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("commandDetailType should be REQUEST_APPLY_FORM") {
+                then("commandDetailType should be APPLY_REQUEST") {
                     context.commandDetailType shouldBe CommandDetailType.APPLY_REQUEST
                 }
             }

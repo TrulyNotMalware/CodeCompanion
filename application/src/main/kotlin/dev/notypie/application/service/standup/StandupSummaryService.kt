@@ -3,7 +3,11 @@ package dev.notypie.application.service.standup
 import dev.notypie.application.common.runInTx
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.toOutboxMessage
@@ -20,7 +24,7 @@ private val summaryLog = KotlinLogging.logger {}
 class StandupSummaryService(
     private val standupRepository: StandupRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val stager: OutboundMessageStager,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
@@ -40,14 +44,21 @@ class StandupSummaryService(
                 channel = routine.summaryChannel,
             )
         val summaryEvent =
-            slackEventBuilder.standupSummaryRequest(
-                commandBasicInfo = commandBasicInfo,
-                routineName = routine.name,
-                sessionDate = session.sessionDate,
-                members = routine.members,
-                answers = session.answers,
-                questions = routine.questions,
-            )
+            stager.stage(
+                message =
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = commandBasicInfo.channel),
+                        content =
+                            MessageContent.StandupSummary(
+                                routineName = routine.name,
+                                sessionDate = session.sessionDate,
+                                members = routine.members,
+                                answers = session.answers,
+                                questions = routine.questions,
+                            ),
+                    ),
+                basicInfo = commandBasicInfo,
+            ) as SendSlackMessageEvent
         val summaryMarker = "outbox:${summaryEvent.payload.eventId}"
         transactionTemplate
             .runInTx<Unit> {

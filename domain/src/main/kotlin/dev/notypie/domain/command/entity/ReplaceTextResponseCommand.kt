@@ -11,7 +11,7 @@ class ReplaceTextResponseCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
     private val markdownMessage: String,
-    private val responseUrl: String,
+    private val replyHandle: String,
 ) : Command<NoSubCommands>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
@@ -20,7 +20,7 @@ class ReplaceTextResponseCommand(
         ReplaceMessageContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             markdownMessage = markdownMessage,
-            responseUrl = responseUrl,
+            replyHandle = replyHandle,
             subCommand = subCommand,
             intents = intents,
         )

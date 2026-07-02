@@ -64,7 +64,7 @@ interface SlackTemplateBuilder {
      *
      * `private_metadata` uses the same comma-tokenized format as the embedded-text routing
      * string used in DM notices:
-     *   `"<meetingIdempotencyKey>,DECLINE_REASON_MODAL,<participantUserId>,<noticeChannel>,<noticeMessageTs>"`.
+     *   `"<meetingIdempotencyKey>,MEETING_DECLINE_REASON,<participantUserId>,<noticeChannel>,<noticeMessageTs>"`.
      * The view_submission parser then treats it with the same tokenization rules, surfacing
      * the extras as `routingExtras[0..2]` for [DeclineReasonSubmissionContext] to pick up.
      * `noticeChannel` + `noticeMessageTs` let the submission handler `chat.update` the
@@ -86,7 +86,7 @@ interface SlackTemplateBuilder {
      *
      * The modal exposes a DATE_PICKER + TIME_PICKER pair pre-filled from [currentStartAt].
      * `private_metadata` uses the shared comma-tokenized routing format:
-     *   `"<meetingUid>,RESCHEDULE_MEETING_SUBMIT,<requesterId>"`.
+     *   `"<meetingUid>,MEETING_RESCHEDULE_SUBMIT,<requesterId>"`.
      * The view_submission parser surfaces requesterId as `routingExtras[0]` for
      * [dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext].
      */
@@ -101,7 +101,7 @@ interface SlackTemplateBuilder {
      * Builds the full Slack `view` payload JSON for the add-participant modal opened when a host
      * clicks "Add participant" on `/meetup list`. Exposes a single multi-users select.
      * `private_metadata` uses the shared comma-tokenized routing format:
-     *   `"<meetingUid>,ADD_PARTICIPANT_SUBMIT,<requesterId>"`.
+     *   `"<meetingUid>,MEETING_ADD_PARTICIPANT_SUBMIT,<requesterId>"`.
      * The view_submission parser surfaces requesterId as `routingExtras[0]` for
      * [dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext].
      */

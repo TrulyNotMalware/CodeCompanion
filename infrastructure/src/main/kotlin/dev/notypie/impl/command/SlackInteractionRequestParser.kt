@@ -65,7 +65,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             tokens
                 .getOrNull(1)
                 ?.takeIf { it.isNotBlank() }
-                ?.let { CommandDetailType.fromWireValue(it) }
+                ?.let { CommandDetailType.valueOf(it) }
                 ?: CommandDetailType.NOTHING
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()
@@ -172,7 +172,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             tokens
                 .getOrNull(1)
                 ?.takeIf { it.isNotBlank() }
-                ?.let { CommandDetailType.fromWireValue(it) }
+                ?.let { CommandDetailType.valueOf(it) }
                 ?: CommandDetailType.NOTHING
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()

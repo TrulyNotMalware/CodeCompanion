@@ -40,14 +40,14 @@ internal class MeetingApprovalResponseContext(
                 handleAccept(
                     meetingIdempotencyKey = meetingIdempotencyKey,
                     participantUserId = participantUserId,
-                    responseUrl = interaction.reply.raw,
+                    replyHandle = interaction.reply.raw,
                 )
 
             InboundActionRole.REJECT ->
                 handleDecline(
                     meetingIdempotencyKey = meetingIdempotencyKey,
                     participantUserId = participantUserId,
-                    triggerId = interaction.trigger.raw,
+                    triggerHandle = interaction.trigger.raw,
                     // Meeting title, surfaced as the first routing extra; blank omits the title section.
                     meetingTitle = interaction.routingExtras.firstOrNull().orEmpty(),
                     // Notice DM channel + message_ts; let the submission handler chat.update the notice.
@@ -55,14 +55,14 @@ internal class MeetingApprovalResponseContext(
                     noticeMessageTs = interaction.message?.raw.orEmpty(),
                 )
 
-            else -> interactionSuccessResponse(responseUrl = interaction.reply.raw)
+            else -> interactionSuccessResponse(replyHandle = interaction.reply.raw)
         }
     }
 
     private fun handleAccept(
         meetingIdempotencyKey: UUID,
         participantUserId: String,
-        responseUrl: String,
+        replyHandle: String,
     ): CommandOutput {
         addIntent(
             CommandIntent.MeetingAttendanceUpdate(
@@ -73,7 +73,7 @@ internal class MeetingApprovalResponseContext(
             ),
         )
         return interactionSuccessResponse(
-            responseUrl = responseUrl,
+            replyHandle = replyHandle,
             mkdMessage = "You accepted the meeting invitation.",
         )
     }
@@ -92,14 +92,14 @@ internal class MeetingApprovalResponseContext(
     private fun handleDecline(
         meetingIdempotencyKey: UUID,
         participantUserId: String,
-        triggerId: String,
+        triggerHandle: String,
         meetingTitle: String,
         noticeChannel: String,
         noticeMessageTs: String,
     ): CommandOutput {
         addOutbound(
             OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = triggerId),
+                handle = ModalOpenHandle(raw = triggerHandle),
                 form =
                     ModalForm.DeclineReason(
                         meetingIdempotencyKey = meetingIdempotencyKey,

@@ -15,7 +15,7 @@ import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 internal class ReplaceMessageContext(
     commandBasicInfo: CommandBasicInfo,
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
-    private val responseUrl: String,
+    private val replyHandle: String,
     private val markdownMessage: String,
     intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
@@ -34,7 +34,7 @@ internal class ReplaceMessageContext(
     private fun replaceText(): CommandOutput {
         addOutbound(
             OutboundMessage.ReplaceMessage(
-                handle = ResponseReplaceHandle(raw = responseUrl),
+                handle = ResponseReplaceHandle(raw = replyHandle),
                 content = MessageContent.Text(headline = null, markdown = markdownMessage),
             ),
         )

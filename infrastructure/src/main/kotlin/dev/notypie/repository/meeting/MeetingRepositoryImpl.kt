@@ -9,7 +9,7 @@ import dev.notypie.repository.meeting.schema.ParticipantsSchema
 import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
-import jakarta.transaction.Transactional
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 import java.util.UUID
 

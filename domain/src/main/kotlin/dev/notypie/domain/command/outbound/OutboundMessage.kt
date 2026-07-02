@@ -12,12 +12,16 @@ sealed interface OutboundMessage : CommandEffect {
     data class ChannelMessage(
         val target: ConversationTarget,
         val content: MessageContent,
+        /** Per-emitter routing type; null falls back to the content family's default. */
+        val detailType: CommandDetailType? = null,
     ) : OutboundMessage
 
     data class Ephemeral(
         val target: ConversationTarget,
         val recipient: UserRef? = null,
         val content: MessageContent,
+        /** Per-emitter routing type; null falls back to the content family's default. */
+        val detailType: CommandDetailType? = null,
     ) : OutboundMessage
 
     data class DirectMessage(

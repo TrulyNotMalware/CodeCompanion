@@ -4,7 +4,9 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -40,23 +42,16 @@ class DailyAgendaSchedulingServiceTest :
                 .atZone(seoul)
                 .toInstant()
 
-        fun stubEventBuilder(): SlackApiEventConstructor {
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
+        fun stubStager(): OutboundMessageStager {
+            val stager = mockk<OutboundMessageStager>()
             val basicInfo = createCommandBasicInfo()
             val stubEvent =
                 createSendSlackMessageEvent(
                     commandDetailType = CommandDetailType.DAILY_AGENDA,
                     idempotencyKey = basicInfo.idempotencyKey,
                 )
-            every {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = any(),
-                    headLineText = any(),
-                    commandBasicInfo = any(),
-                    simpleString = any(),
-                )
-            } returns stubEvent
-            return slackEventBuilder
+            every { stager.stage(message = any(), basicInfo = any()) } returns stubEvent
+            return stager
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -73,11 +68,11 @@ class DailyAgendaSchedulingServiceTest :
             outboxRepo: MessageOutboxRepository,
             clock: Clock,
             enabled: Boolean = true,
-            builder: SlackApiEventConstructor = stubEventBuilder(),
+            stager: OutboundMessageStager = stubStager(),
         ) = DailyAgendaSchedulingService(
             agendaDispatchRepository = repo,
             outboxRepository = outboxRepo,
-            slackEventBuilder = builder,
+            stager = stager,
             transactionManager = stubTransactionManager(),
             clock = clock,
             appConfig =
@@ -137,13 +132,13 @@ class DailyAgendaSchedulingServiceTest :
             `when`("the claim succeeds") {
                 val repo = mockk<AgendaDispatchRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val builder = stubEventBuilder()
+                val stager = stubStager()
                 val service =
                     buildService(
                         repo = repo,
                         outboxRepo = outboxRepo,
                         clock = Clock.fixed(afterSendInstant, seoul),
-                        builder = builder,
+                        stager = stager,
                     )
 
                 // Two meetings; U_A attends both, U_B attends one.
@@ -166,14 +161,9 @@ class DailyAgendaSchedulingServiceTest :
                 every { repo.findAttendingMeetingsForDay(from = any(), to = any()) } returns meetings
 
                 val capturedInfos = mutableListOf<CommandBasicInfo>()
-                val capturedBodies = mutableListOf<String>()
+                val capturedMessages = mutableListOf<OutboundMessage>()
                 every {
-                    builder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = capture(capturedInfos),
-                        simpleString = capture(capturedBodies),
-                    )
+                    stager.stage(message = capture(capturedMessages), basicInfo = capture(capturedInfos))
                 } returns
                     createSendSlackMessageEvent(
                         commandDetailType = CommandDetailType.DAILY_AGENDA,
@@ -184,20 +174,31 @@ class DailyAgendaSchedulingServiceTest :
 
                 service.sendDailyAgenda()
 
-                then("one agenda DM is built and saved per user with meetings") {
+                then("one agenda DM is staged and saved per user with meetings") {
                     verify(exactly = 1) { repo.claim(agendaDate = any()) }
                     verify(exactly = 2) { outboxRepo.save(any()) }
                     capturedInfos.map { it.publisherId }.toSet() shouldBe setOf("U_A", "U_B")
                 }
 
-                then("each user's agenda lists only that user's meetings, sorted by start time") {
-                    val bodyByUser = capturedInfos.map { it.publisherId }.zip(capturedBodies).toMap()
-                    bodyByUser["U_A"] shouldBe "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
-                    bodyByUser["U_B"] shouldBe "• 10:00 — Sprint Planning"
+                then("each agenda ChannelMessage carries DAILY_AGENDA and only that user's meetings") {
+                    val agendaByUser =
+                        capturedInfos
+                            .map { it.publisherId }
+                            .zip(capturedMessages.map { it as OutboundMessage.ChannelMessage })
+                            .toMap()
+                    agendaByUser.forEach { (userId, message) ->
+                        message.detailType shouldBe CommandDetailType.DAILY_AGENDA
+                        message.target.id shouldBe userId
+                        (message.content as MessageContent.Text).headline shouldBe "🗓️ Today's meetings (2026-05-04)"
+                    }
+                    (agendaByUser["U_A"]!!.content as MessageContent.Text).markdown shouldBe
+                        "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
+                    (agendaByUser["U_B"]!!.content as MessageContent.Text).markdown shouldBe
+                        "• 10:00 — Sprint Planning"
                 }
 
                 then("the outbox rows carry DAILY_AGENDA as the command detail type") {
-                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.DAILY_AGENDA.wireValue }
+                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.DAILY_AGENDA.name }
                 }
             }
         }

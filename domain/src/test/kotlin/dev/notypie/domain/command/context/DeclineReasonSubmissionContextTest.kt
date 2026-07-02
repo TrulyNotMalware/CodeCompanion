@@ -65,7 +65,7 @@ class DeclineReasonSubmissionContextTest :
                 val result = context.handleInteraction(interaction = payload)
                 val intents = intentQueue.drainSnapshot()
 
-                then("result is a success with DECLINE_REASON_MODAL detail type") {
+                then("result is a success with MEETING_DECLINE_REASON detail type") {
                     result.ok shouldBe true
                     result.status shouldBe Status.SUCCESS
                     result.commandType shouldBe CommandType.PIPELINE

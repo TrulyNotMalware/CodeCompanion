@@ -16,7 +16,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 /**
- * "Add participant" button carries `<listIdempotencyKey>,ADD_PARTICIPANT,<meetingUid>`; the meetingUid
+ * "Add participant" button carries `<listIdempotencyKey>,MEETING_ADD_PARTICIPANT_REQUEST,<meetingUid>`; the meetingUid
  * surfaces as the first routing extra. Emits [OutboundMessage.OpenModal] so the stager opens the modal
  * before the trigger_id expires, mirroring [RescheduleMeetingContext].
  */

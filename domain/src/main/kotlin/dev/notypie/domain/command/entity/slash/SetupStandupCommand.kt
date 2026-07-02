@@ -33,7 +33,7 @@ class SetupStandupCommand(
         val slashPayload = commandData.payload as SlashInvocation
         return RequestStandupSetupContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            triggerId = slashPayload.trigger.raw,
+            triggerHandle = slashPayload.trigger.raw,
             subCommand = subCommand,
             intents = intents,
         )

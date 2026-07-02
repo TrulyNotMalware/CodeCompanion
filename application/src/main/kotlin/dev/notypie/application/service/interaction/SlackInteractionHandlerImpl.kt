@@ -120,6 +120,6 @@ class SlackInteractionHandlerImpl(
             idempotencyKey = idempotencyKey,
             commandData = commandData,
             markdownMessage = "Canceled.",
-            responseUrl = responseUrl,
+            replyHandle = responseUrl,
         )
 }

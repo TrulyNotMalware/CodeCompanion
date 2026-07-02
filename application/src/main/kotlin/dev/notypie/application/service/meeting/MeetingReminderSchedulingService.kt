@@ -4,7 +4,10 @@ import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.impl.command.SlackApiEventConstructor
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
@@ -32,7 +35,7 @@ private val REMINDER_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPatter
 class MeetingReminderSchedulingService(
     private val reminderRepository: MeetingReminderRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val stager: OutboundMessageStager,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
     appConfig: AppConfig = AppConfig(),
@@ -138,7 +141,7 @@ class MeetingReminderSchedulingService(
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                     val dmEvent =
                         buildReminderDm(
-                            slackEventBuilder = slackEventBuilder,
+                            stager = stager,
                             meetingTitle = item.meetingTitle,
                             offsetMinutes = item.reminder.offsetMinutes,
                             startAt = item.startAt,
@@ -180,17 +183,24 @@ class MeetingReminderSchedulingService(
  * `chat.postMessage` (the recipient's user_id rides as [CommandBasicInfo.channel]).
  */
 internal fun buildReminderDm(
-    slackEventBuilder: SlackApiEventConstructor,
+    stager: OutboundMessageStager,
     meetingTitle: String,
     offsetMinutes: Int,
     startAt: LocalDateTime,
     commandBasicInfo: CommandBasicInfo,
 ): SendSlackMessageEvent =
-    slackEventBuilder.simpleTextRequest(
-        commandDetailType = CommandDetailType.MEETING_REMINDER,
-        headLineText = "Meeting reminder — $meetingTitle",
-        commandBasicInfo = commandBasicInfo,
-        simpleString =
-            "Your meeting *$meetingTitle* starts in $offsetMinutes minutes " +
-                "(at ${startAt.format(REMINDER_TIME_FORMAT)}).",
-    )
+    stager.stage(
+        message =
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content =
+                    MessageContent.Text(
+                        headline = "Meeting reminder — $meetingTitle",
+                        markdown =
+                            "Your meeting *$meetingTitle* starts in $offsetMinutes minutes " +
+                                "(at ${startAt.format(REMINDER_TIME_FORMAT)}).",
+                    ),
+                detailType = CommandDetailType.MEETING_REMINDER,
+            ),
+        basicInfo = commandBasicInfo,
+    ) as SendSlackMessageEvent

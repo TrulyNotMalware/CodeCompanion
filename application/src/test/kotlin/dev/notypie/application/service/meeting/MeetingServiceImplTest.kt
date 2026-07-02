@@ -11,11 +11,15 @@ import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.impl.retry.RetryService
@@ -36,14 +40,14 @@ class MeetingServiceImplTest :
         val meetingRepository = mockk<MeetingRepository>()
         val retryService = mockk<RetryService>()
         val commandExecutor = mockk<CommandExecutor>()
-        val slackEventBuilder = mockk<SlackApiEventConstructor>()
+        val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
         val service =
             MeetingServiceImpl(
                 meetingRepository = meetingRepository,
                 retryService = retryService,
                 commandExecutor = commandExecutor,
-                slackEventBuilder = slackEventBuilder,
+                outboundStager = stager,
                 eventPublisher = eventPublisher,
             )
 
@@ -133,7 +137,7 @@ class MeetingServiceImplTest :
                     idempotencyKey = basic.idempotencyKey,
                     responseBasicInfo = basic,
                 )
-            val capturedTextSlot = slot<String>()
+            val capturedMessage = slot<OutboundMessage>()
             val ephemeralEvent =
                 createSendSlackMessageEvent(
                     commandDetailType = CommandDetailType.CANCEL_MEETING,
@@ -148,14 +152,7 @@ class MeetingServiceImplTest :
                         requesterId = requesterId,
                     )
                 } returns true
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedTextSlot),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = capture(capturedMessage), basicInfo = any()) } returns ephemeralEvent
 
                 val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
                 every { eventPublisher.publishEvent(events = capture(captured)) } returns Unit
@@ -163,16 +160,19 @@ class MeetingServiceImplTest :
                 service.cancelMeeting(event = event)
 
                 then("publishes a success ephemeral targeted at the requester") {
-                    capturedTextSlot.captured shouldBe "Meeting canceled."
                     val published = captured.captured.toList()
                     published.size shouldBe 1
                     published.single() shouldBe ephemeralEvent
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = "Meeting canceled.",
-                            commandBasicInfo = basic,
-                            commandDetailType = CommandDetailType.CANCEL_MEETING,
-                            targetUserId = requesterId,
+                        stager.stage(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = ConversationTarget(id = basic.channel),
+                                    recipient = UserRef(id = requesterId),
+                                    content = MessageContent.Text(headline = null, markdown = "Meeting canceled."),
+                                    detailType = CommandDetailType.CANCEL_MEETING,
+                                ),
+                            basicInfo = basic,
                         )
                     }
                 }
@@ -185,21 +185,15 @@ class MeetingServiceImplTest :
                         requesterId = requesterId,
                     )
                 } returns false
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedTextSlot),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = capture(capturedMessage), basicInfo = any()) } returns ephemeralEvent
                 every { eventPublisher.publishEvent(events = any()) } returns Unit
 
                 service.cancelMeeting(event = event)
 
                 then("publishes a friendly already-canceled-or-non-host ephemeral instead of throwing") {
-                    capturedTextSlot.captured shouldBe
-                        "Meeting was already canceled, or you are not the host."
+                    val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
+                    val body = (ephemeral.content as MessageContent.Text).markdown
+                    body shouldBe "Meeting was already canceled, or you are not the host."
                 }
             }
 
@@ -210,21 +204,15 @@ class MeetingServiceImplTest :
                         requesterId = requesterId,
                     )
                 } throws RuntimeException("db down")
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedTextSlot),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = capture(capturedMessage), basicInfo = any()) } returns ephemeralEvent
                 every { eventPublisher.publishEvent(events = any()) } returns Unit
 
                 service.cancelMeeting(event = event)
 
                 then("the listener swallows the failure and surfaces a retry-later ephemeral") {
-                    capturedTextSlot.captured shouldBe
-                        "Failed to cancel the meeting. Please try again later."
+                    val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
+                    val body = (ephemeral.content as MessageContent.Text).markdown
+                    body shouldBe "Failed to cancel the meeting. Please try again later."
                 }
             }
         }
@@ -249,14 +237,7 @@ class MeetingServiceImplTest :
                 )
 
             `when`("invoked") {
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralEvent
 
                 val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
                 every { eventPublisher.publishEvent(events = capture(captured)) } returns Unit
@@ -291,12 +272,6 @@ class MeetingServiceImplTest :
                         ),
                     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
-            val noticeEvent =
-                createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
-                    idempotencyKey = basic.idempotencyKey,
-                    messageType = MessageType.CHANNEL_ALERT,
-                )
             val ephemeralEvent =
                 createSendSlackMessageEvent(
                     commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
@@ -305,7 +280,6 @@ class MeetingServiceImplTest :
                 )
 
             `when`("the repository reports the users were added") {
-                val capturedHostText = slot<String>()
                 every {
                     meetingRepository.addParticipants(
                         meetingUid = meetingUid,
@@ -318,65 +292,59 @@ class MeetingServiceImplTest :
                         addedUserIds = listOf("U_A", "U_B"),
                         meeting = createMeetingDto(creator = requesterId, title = "Team Sync"),
                     )
-                every {
-                    slackEventBuilder.simpleApplyRejectRequest(
-                        commandDetailType = any(),
-                        commandBasicInfo = any(),
-                        approvalContents = any(),
-                        targetUserId = any(),
-                        routingExtras = any(),
-                    )
-                } returns noticeEvent
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedHostText),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralEvent
 
                 service.addParticipants(event = event)
 
                 then("each added user gets the Accept/Decline approval notice") {
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
-                            commandBasicInfo = any(),
-                            approvalContents = any(),
-                            targetUserId = "U_A",
-                            routingExtras = any(),
+                        stager.stage(
+                            message =
+                                match {
+                                    it is OutboundMessage.Approval &&
+                                        it.recipient == UserRef(id = "U_A") &&
+                                        it.approval.commandDetailType == CommandDetailType.MEETING_APPROVAL_REQUEST
+                                },
+                            basicInfo = any(),
                         )
                     }
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
-                            commandBasicInfo = any(),
-                            approvalContents = any(),
-                            targetUserId = "U_B",
-                            routingExtras = any(),
+                        stager.stage(
+                            message =
+                                match {
+                                    it is OutboundMessage.Approval &&
+                                        it.recipient == UserRef(id = "U_B") &&
+                                        it.approval.commandDetailType == CommandDetailType.MEETING_APPROVAL_REQUEST
+                                },
+                            basicInfo = any(),
                         )
                     }
                 }
 
                 then("the host gets an in-channel confirmation mentioning the added users") {
-                    capturedHostText.captured shouldBe "Added <@U_A> <@U_B> to the meeting."
                     verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = any(),
-                            commandBasicInfo = basic,
-                            commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                            targetUserId = requesterId,
+                        stager.stage(
+                            message =
+                                match { message ->
+                                    message is OutboundMessage.Ephemeral &&
+                                        message.recipient == UserRef(id = requesterId) &&
+                                        message.detailType == CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT &&
+                                        message.content.let {
+                                            it is MessageContent.Text &&
+                                                it.markdown == "Added <@U_A> <@U_B> to the meeting."
+                                        }
+                                },
+                            basicInfo = basic,
                         )
                     }
                 }
             }
 
             `when`("the repository rejects a non-host requester") {
-                // The ADDED branch above already recorded simpleApplyRejectRequest calls on this shared
-                // mock; clear them so the exactly-0 verification below counts only this branch.
-                clearMocks(slackEventBuilder)
-                val capturedHostText = slot<String>()
+                // The ADDED branch above already recorded stage calls on this shared mock; clear them
+                // so the exactly-0 verification below counts only this branch.
+                clearMocks(stager)
+                val capturedMessage = slot<OutboundMessage>()
                 every {
                     meetingRepository.addParticipants(
                         meetingUid = meetingUid,
@@ -384,28 +352,17 @@ class MeetingServiceImplTest :
                         participantUserIds = listOf("U_A", "U_B"),
                     )
                 } returns AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = capture(capturedHostText),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns ephemeralEvent
+                every { stager.stage(message = capture(capturedMessage), basicInfo = any()) } returns ephemeralEvent
 
                 service.addParticipants(event = event)
 
                 then("no approval notice is sent and the host sees a not-authorized ephemeral") {
                     verify(exactly = 0) {
-                        slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = any(),
-                            commandBasicInfo = any(),
-                            approvalContents = any(),
-                            targetUserId = any(),
-                            routingExtras = any(),
-                        )
+                        stager.stage(message = match { it is OutboundMessage.Approval }, basicInfo = any())
                     }
-                    capturedHostText.captured shouldBe "Meeting was canceled, or you are not the host."
+                    val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
+                    val body = (ephemeral.content as MessageContent.Text).markdown
+                    body shouldBe "Meeting was canceled, or you are not the host."
                 }
             }
         }
