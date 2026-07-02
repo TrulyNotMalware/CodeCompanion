@@ -49,6 +49,12 @@ fun unknownActionJson(type: String = "overflow", actionId: String = "overflow_1"
 fun stateValuesJson(blockId: String = "block_1", actionId: String = "action_1", stateEntry: String) =
     """{"$blockId":{"$actionId":$stateEntry}}"""
 
+/** Multi-block variant of [stateValuesJson]; action ids are derived from the block ids. */
+fun stateValuesJson(vararg blocks: Pair<String, String>): String =
+    blocks.joinToString(separator = ",", prefix = "{", postfix = "}") { (blockId, stateEntry) ->
+        """"$blockId":{"${blockId}_action":$stateEntry}"""
+    }
+
 fun multiStaticSelectStateJson(selectedOptions: List<Pair<String, String>>) =
     if (selectedOptions.isEmpty()) {
         """{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","selected_options":[]}"""
@@ -210,12 +216,13 @@ fun createStandupAnswerViewSubmissionJson(
 }
 
 /**
- * Builds a minimal `view_submission` payload carrying only `private_metadata` routing (no state
- * values needed), for asserting how the parser recovers the originating channel per flow.
+ * Builds a minimal `view_submission` payload carrying `private_metadata` routing (plus optional
+ * form state), for asserting how the parser recovers the originating channel per flow.
  */
 fun createRoutingOnlyViewSubmissionJson(
     callbackId: String,
     privateMetadata: String,
+    stateValues: String = "{}",
     teamId: String = TEST_TEAM_ID,
     teamDomain: String = TEST_TEAM_DOMAIN,
     userId: String = TEST_USER_ID,
@@ -237,7 +244,7 @@ fun createRoutingOnlyViewSubmissionJson(
             "type": "modal",
             "callback_id": "$callbackId",
             "private_metadata": "$privateMetadata",
-            "state": { "values": {} }
+            "state": { "values": $stateValues }
         }
     }
     """.trimIndent()

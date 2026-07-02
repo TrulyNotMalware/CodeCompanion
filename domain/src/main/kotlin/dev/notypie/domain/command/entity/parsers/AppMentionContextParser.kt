@@ -44,7 +44,7 @@ internal class AppMentionContextParser(
         if (!mention.hasCommandStructure) return handleNotSupportedCommand()
         if (mention.commandTokens.isEmpty()) throw IllegalArgumentException("Command Queue is empty")
         val command: String = mention.commandTokens.first().replace(" ", "")
-        return when (CommandSet.parseCommand(command)) { // FIXME Later when block
+        return when (CommandSet.parseCommand(command)) {
             CommandSet.NOTICE -> {
                 NoticeContext(
                     users = LinkedList(mention.mentionedUserIds),

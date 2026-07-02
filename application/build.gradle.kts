@@ -21,6 +21,10 @@ dependencies {
     implementation(project(":infrastructure"))
     testFixturesImplementation(project(":infrastructure"))
 
+    // Jackson — declared per-module so :domain's classpath stays Jackson-free
+    api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+    implementation("tools.jackson.module:jackson-module-kotlin")
+
     implementation("org.springframework.boot:spring-boot-starter-web") {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
     }

@@ -18,6 +18,7 @@ import dev.notypie.templates.StandupModalIds
 import dev.notypie.templates.StandupSetupModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.mockk
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -32,6 +33,8 @@ import java.util.UUID
  * writer's token order directly to [SlackInteractionRequestParser.recoverDeliveryChannel] and to the
  * domain contexts that read `routingExtras` positionally: a future token reorder on either side
  * breaks this test instead of silently misrouting a host-confirmation message in production.
+ * The final `given` is the executable negative control: it reorders the writer's real tokens and
+ * asserts the resulting misroute, proving the positive assertions are order-sensitive.
  */
 class ViewSubmissionChannelRoutingRegressionTest :
     BehaviorSpec({
@@ -261,6 +264,65 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     update.ref.conversation.id shouldBe noticeChannel
                     update.ref.messageId shouldBe noticeMessageTs
                     update.detailType shouldBe CommandDetailType.MEETING_DECLINE_REASON
+                }
+            }
+        }
+
+        // Negative control: proves the positive assertions above genuinely depend on the writer's
+        // token order. If channel recovery were order-insensitive, this block would fail and the
+        // whole suite would be vacuous.
+        given("a reschedule private_metadata whose routing tokens were reordered") {
+            val meetingUid = UUID.randomUUID()
+            val requesterId = "U_HOST_SWAPPED"
+            val originChannel = "C_ORIGIN_SWAPPED"
+            val modalJson =
+                templateBuilder.rescheduleMeetingModalViewJson(
+                    meetingUid = meetingUid,
+                    currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30),
+                    requesterId = requesterId,
+                    channel = originChannel,
+                )
+            val swappedMetadata =
+                extractPrivateMetadata(modalViewJson = modalJson)
+                    .split(",")
+                    .map { it.trim() }
+                    .let { tokens -> tokens.take(2) + tokens.drop(2).reversed() }
+                    .joinToString(separator = ",")
+            // Real date/time state so the submission takes the actual reschedule path (a stateless
+            // payload would fall through to the context's no-op success and prove nothing beyond
+            // the basicInfo copy).
+            val submissionPayload =
+                createRoutingOnlyViewSubmissionJson(
+                    callbackId = RescheduleMeetingModalIds.CALLBACK_ID,
+                    privateMetadata = swappedMetadata,
+                    stateValues =
+                        stateValuesJson(
+                            "reschedule_date_block" to datepickerStateJson(selectedDate = "2026-07-10"),
+                            "reschedule_time_block" to timepickerStateJson(selectedTime = "15:45"),
+                        ),
+                )
+
+            `when`("the parser reads the reordered token string") {
+                val interactionPayload = parser.parseStringPayload(payload = submissionPayload)
+
+                then("the recovered channel is the misrouted requester id, not the origin channel") {
+                    interactionPayload.channel.id shouldNotBe originChannel
+                    interactionPayload.channel.id shouldBe requesterId
+                }
+            }
+
+            `when`("the reordered interaction is routed through the real domain command pipeline") {
+                val (output, effects) = runThroughDomain(viewSubmissionPayload = submissionPayload)
+
+                then("the real reschedule path executes and every routed slot is swapped") {
+                    output.ok shouldBe true
+                    val reschedule = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
+                    reschedule.meetingUid shouldBe meetingUid
+                    reschedule.newStartAt shouldBe LocalDateTime.of(2026, 7, 10, 15, 45)
+                    // The channel token landed in the requester slot and vice versa.
+                    reschedule.requesterId shouldBe originChannel
+                    output.channel shouldNotBe originChannel
+                    output.channel shouldBe requesterId
                 }
             }
         }

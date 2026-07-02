@@ -97,12 +97,12 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        // BOM platforms — use api so they propagate to testFixtures and other configurations
+        // BOM platforms — use api so they propagate to testFixtures and other configurations.
+        // Jackson is intentionally NOT injected here: domain must stay Jackson-free, so the
+        // modules that actually serialize (application/infrastructure) declare it themselves.
         api(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
-        api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
 
         implementation(kotlin("reflect"))
-        implementation("tools.jackson.module:jackson-module-kotlin")
 
         // Kotlin logging
         implementation("io.github.oshai:kotlin-logging-jvm:${rootProject.extra.get("kotlinLoggingVersion")}")

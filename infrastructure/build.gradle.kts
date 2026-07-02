@@ -26,6 +26,10 @@ dependencies {
 
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
+
+    // Jackson — declared per-module so :domain's classpath stays Jackson-free
+    api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+    implementation("tools.jackson.module:jackson-module-kotlin")
 //    api("org.springframework.retry:spring-retry") now spring core
 
     // CDC

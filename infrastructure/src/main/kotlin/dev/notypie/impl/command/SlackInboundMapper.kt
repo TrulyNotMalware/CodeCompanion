@@ -162,7 +162,7 @@ fun InteractionPayload.toInboundCommand() =
         actorName = user.name,
         channel = channel.id,
         channelName = channel.name,
-        payload = this.toInbound(),
+        payload = toInbound(),
         kind = InboundKind.INTERACTION,
         teamId = team.id,
     )
