@@ -22,6 +22,8 @@ import dev.notypie.domain.command.intent.IntentQueue
 internal class AgentChatContext(
     private val prompt: String,
     private val threadId: String?,
+    private val requesterName: String,
+    private val channelName: String,
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,
 ) : CommandContext<NoSubCommands>(
@@ -44,6 +46,8 @@ internal class AgentChatContext(
             CommandIntent.AgentConverse(
                 prompt = prompt,
                 threadId = threadId,
+                requesterName = requesterName,
+                channelName = channelName,
             ),
         )
         return CommandOutput.success(

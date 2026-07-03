@@ -3,6 +3,7 @@ package dev.notypie.domain.command.parsers
 import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_THREAD_TS
 import dev.notypie.domain.TEST_USER_ID
+import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.entity.context.AgentChatContext
@@ -124,6 +125,8 @@ class AppMentionContextParserTest :
                     val intent = askIntents.snapshot().first().shouldBeInstanceOf<CommandIntent.AgentConverse>()
                     intent.prompt shouldBe "what is up"
                     intent.threadId shouldBe TEST_MESSAGE_TS
+                    intent.requesterName shouldBe TEST_USER_NAME
+                    intent.channelName shouldBe "general"
                 }
             }
 

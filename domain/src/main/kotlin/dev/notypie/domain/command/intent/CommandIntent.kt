@@ -66,10 +66,14 @@ sealed class CommandIntent : CommandEffect {
      * transport-level conversation anchor (`thread ?: message` of the mention): the listener keys
      * session continuity on it and posts the reply into the same thread. Null when the transport
      * gave no message identity; the listener then replies un-threaded without session continuity.
+     * [requesterName]/[channelName] are display names the listener folds into the per-request
+     * agent context (the ids already ride on the resolver's basicInfo).
      */
     data class AgentConverse(
         val prompt: String,
         val threadId: String?,
+        val requesterName: String,
+        val channelName: String,
     ) : CommandIntent()
 
     /** Persists standup answers; resubmission replaces the prior `(session_id, user_id)` row. */

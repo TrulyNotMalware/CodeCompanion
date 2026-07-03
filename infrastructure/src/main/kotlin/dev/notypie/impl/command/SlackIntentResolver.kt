@@ -121,6 +121,8 @@ class SlackIntentResolver {
                         AgentConversePayload(
                             prompt = intent.prompt,
                             threadId = intent.threadId,
+                            requesterName = intent.requesterName,
+                            channelName = intent.channelName,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.AGENT_CONVERSE,

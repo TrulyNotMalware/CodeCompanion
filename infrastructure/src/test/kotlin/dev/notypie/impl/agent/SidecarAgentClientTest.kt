@@ -93,6 +93,7 @@ class SidecarAgentClientTest :
                                 prompt = "hi",
                                 sessionId = "sess-0",
                                 userId = "U1",
+                                appendSystemPrompt = "## Conversation context",
                             ),
                     )
 
@@ -109,17 +110,18 @@ class SidecarAgentClientTest :
                     capturedUserId shouldBe "U1"
                 }
 
-                then("echoes sessionKey, prompt, and the resume sessionId in the request body") {
+                then("echoes sessionKey, prompt, resume sessionId, and the appended prompt in the body") {
                     @Suppress("UNCHECKED_CAST")
                     val body = jsonMapper.readValue(capturedBody, Map::class.java) as Map<String, Any?>
                     body["sessionKey"] shouldBe "C1:1712345678.000100"
                     body["prompt"] shouldBe "hi"
                     body["sessionId"] shouldBe "sess-0"
+                    body["appendSystemPrompt"] shouldBe "## Conversation context"
                 }
             }
         }
 
-        given("a first turn without a resume sessionId") {
+        given("a first turn without a resume sessionId or appended prompt") {
             respond =
                 sseResponse(
                     """
@@ -135,9 +137,10 @@ class SidecarAgentClientTest :
             `when`("converse") {
                 client.converse(request = AgentTurnRequest(sessionKey = "C1:x", prompt = "hi"))
 
-                then("the sessionId field is omitted entirely (the sidecar forbids extra/unknown nulls)") {
+                then("the optional fields are omitted entirely (the sidecar forbids extra/unknown nulls)") {
                     capturedBody shouldContain "\"sessionKey\""
                     capturedBody shouldNotContain "sessionId"
+                    capturedBody shouldNotContain "appendSystemPrompt"
                 }
             }
         }

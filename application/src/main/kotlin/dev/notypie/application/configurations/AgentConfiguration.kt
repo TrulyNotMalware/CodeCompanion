@@ -6,6 +6,8 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.SidecarAgentClient
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.agent.AgentSessionRepository
+import dev.notypie.repository.agent.AgentTurnHistoryRepository
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -36,15 +38,19 @@ class AgentConfiguration(
     fun agentConverseService(
         agentGateway: AgentGateway,
         agentSessionRepository: AgentSessionRepository,
+        agentTurnHistoryRepository: AgentTurnHistoryRepository,
         slackApiEventConstructor: SlackApiEventConstructor,
         eventPublisher: EventPublisher,
+        meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
     ): AgentConverseService =
         AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
+            agentTurnHistoryRepository = agentTurnHistoryRepository,
             slackEventBuilder = slackApiEventConstructor,
             eventPublisher = eventPublisher,
+            meterRegistry = meterRegistry,
             transactionManager = transactionManager,
         )
 }

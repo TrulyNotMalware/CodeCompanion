@@ -14,12 +14,15 @@ interface AgentGateway {
  * Slack thread); [sessionId] is the backend's own session id from a prior [AgentTurnResult.Completed]
  * and must be echoed back to actually resume the conversation context. [userId] is forwarded as
  * `X-User-Id` for per-user concurrency gating and MCP tool attribution — the model never sees it.
+ * [appendSystemPrompt] is appended to the sidecar's static base prompt (CLAUDE.md) for this turn —
+ * the seam for per-request context like requester, channel, and current time.
  */
 data class AgentTurnRequest(
     val sessionKey: String,
     val prompt: String,
     val sessionId: String? = null,
     val userId: String? = null,
+    val appendSystemPrompt: String? = null,
 )
 
 sealed interface AgentTurnResult {

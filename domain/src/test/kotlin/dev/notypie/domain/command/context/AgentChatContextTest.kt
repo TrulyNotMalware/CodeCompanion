@@ -1,6 +1,8 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_THREAD_TS
+import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.dto.response.Status
@@ -25,6 +27,8 @@ class AgentChatContextTest :
                 AgentChatContext(
                     prompt = "What meetings do I have today?",
                     threadId = TEST_THREAD_TS,
+                    requesterName = TEST_USER_NAME,
+                    channelName = TEST_CHANNEL_NAME,
                     commandBasicInfo = basicInfo,
                     intents = intentQueue,
                 )
@@ -47,12 +51,14 @@ class AgentChatContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("should add an AgentConverse intent carrying prompt and thread anchor") {
+                then("should add an AgentConverse intent carrying prompt, thread anchor, and names") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
                     val intent = intents.first().shouldBeInstanceOf<CommandIntent.AgentConverse>()
                     intent.prompt shouldBe "What meetings do I have today?"
                     intent.threadId shouldBe TEST_THREAD_TS
+                    intent.requesterName shouldBe TEST_USER_NAME
+                    intent.channelName shouldBe TEST_CHANNEL_NAME
                 }
             }
         }
@@ -64,6 +70,8 @@ class AgentChatContextTest :
                 AgentChatContext(
                     prompt = "hello",
                     threadId = null,
+                    requesterName = TEST_USER_NAME,
+                    channelName = TEST_CHANNEL_NAME,
                     commandBasicInfo = createCommandBasicInfo(),
                     intents = intentQueue,
                 )
@@ -89,6 +97,8 @@ class AgentChatContextTest :
                 AgentChatContext(
                     prompt = "   ",
                     threadId = TEST_THREAD_TS,
+                    requesterName = TEST_USER_NAME,
+                    channelName = TEST_CHANNEL_NAME,
                     commandBasicInfo = basicInfo,
                     intents = intentQueue,
                 )

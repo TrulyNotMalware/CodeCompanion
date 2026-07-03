@@ -143,12 +143,15 @@ data class StatusReportRequestEvent(
 /**
  * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. [threadId] is the
  * conversation anchor the async listener keys session continuity on and replies into;
- * [responseBasicInfo] lets it post that reply on the same channel/app.
+ * [responseBasicInfo] lets it post that reply on the same channel/app. [requesterName] and
+ * [channelName] are display names for the per-request agent context block.
  */
 class AgentConversePayload(
     override val eventId: UUID = UUID.randomUUID(),
     val prompt: String,
     val threadId: String?,
+    val requesterName: String,
+    val channelName: String,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 

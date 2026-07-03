@@ -77,10 +77,11 @@ class SidecarAgentClient(
         }
     }
 
-    /** Serialized by hand-built map so a null sessionId is omitted — the sidecar forbids unknown/extra fields. */
+    /** Serialized by hand-built map so null optionals are omitted — the sidecar forbids unknown/extra fields. */
     private fun toRequestBody(request: AgentTurnRequest): String {
         val body = mutableMapOf<String, String>("sessionKey" to request.sessionKey, "prompt" to request.prompt)
         request.sessionId?.let { body["sessionId"] = it }
+        request.appendSystemPrompt?.let { body["appendSystemPrompt"] = it }
         return jsonMapper.writeValueAsString(body)
     }
 

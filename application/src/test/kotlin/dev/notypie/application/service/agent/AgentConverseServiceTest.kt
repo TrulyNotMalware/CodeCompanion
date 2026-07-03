@@ -1,6 +1,9 @@
 package dev.notypie.application.service.agent
 
+import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_THREAD_TS
+import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -11,8 +14,13 @@ import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.agent.AgentSessionRepository
+import dev.notypie.repository.agent.AgentTurnHistoryRepository
+import dev.notypie.repository.agent.AgentTurnRecord
+import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -21,10 +29,13 @@ import io.mockk.slot
 import io.mockk.verify
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import java.time.LocalDateTime
 import java.util.UUID
 
 class AgentConverseServiceTest :
     BehaviorSpec({
+
+        val fixedNow = LocalDateTime.of(2026, 7, 3, 12, 0, 0)
 
         fun stubTransactionManager(): PlatformTransactionManager {
             val tm = mockk<PlatformTransactionManager>()
@@ -38,14 +49,19 @@ class AgentConverseServiceTest :
         fun buildService(
             agentGateway: AgentGateway,
             agentSessionRepository: AgentSessionRepository = mockk(relaxed = true),
+            agentTurnHistoryRepository: AgentTurnHistoryRepository = mockk(relaxed = true),
             slackEventBuilder: SlackApiEventConstructor = mockk(),
             eventPublisher: EventPublisher = mockk(relaxed = true),
+            meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry(),
         ) = AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
+            agentTurnHistoryRepository = agentTurnHistoryRepository,
             slackEventBuilder = slackEventBuilder,
             eventPublisher = eventPublisher,
+            meterRegistry = meterRegistry,
             transactionManager = stubTransactionManager(),
+            clock = createFixedUtcClock(now = fixedNow),
         )
 
         val stubOutbound =
@@ -67,10 +83,19 @@ class AgentConverseServiceTest :
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = expectedSessionKey) } returns "sess-prev"
 
+            val historyRepository = mockk<AgentTurnHistoryRepository>(relaxed = true)
+            val recordedTurn = slot<AgentTurnRecord>()
+            every { historyRepository.record(turn = capture(recordedTurn)) } just Runs
+
             val gateway = mockk<AgentGateway>()
             val turnRequest = slot<AgentTurnRequest>()
             every { gateway.converse(request = capture(turnRequest)) } returns
-                AgentTurnResult.Completed(sessionId = "sess-next", finalText = "You have two meetings.")
+                AgentTurnResult.Completed(
+                    sessionId = "sess-next",
+                    finalText = "You have two meetings.",
+                    inputTokens = 120L,
+                    outputTokens = 45L,
+                )
 
             val slackEventBuilder = mockk<SlackApiEventConstructor>()
             val renderedText = slot<String>()
@@ -86,12 +111,15 @@ class AgentConverseServiceTest :
             } returns stubOutbound
 
             val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val meterRegistry = SimpleMeterRegistry()
             val service =
                 buildService(
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
                     slackEventBuilder = slackEventBuilder,
                     eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
                 )
 
             `when`("handleAgentConverse") {
@@ -102,6 +130,14 @@ class AgentConverseServiceTest :
                     turnRequest.captured.prompt shouldBe "what is on my calendar"
                     turnRequest.captured.sessionId shouldBe "sess-prev"
                     turnRequest.captured.userId shouldBe basicInfo.publisherId
+                }
+
+                then("the per-request context block carries requester, channel, date, and mrkdwn rules") {
+                    val contextPrompt = turnRequest.captured.appendSystemPrompt.orEmpty()
+                    contextPrompt shouldContain "<@${basicInfo.publisherId}> ($TEST_USER_NAME)"
+                    contextPrompt shouldContain "#$TEST_CHANNEL_NAME"
+                    contextPrompt shouldContain "2026-07-03"
+                    contextPrompt shouldContain "mrkdwn"
                 }
 
                 then("the new provider session id is stored for the next turn") {
@@ -117,6 +153,26 @@ class AgentConverseServiceTest :
                     renderedText.captured shouldBe "You have two meetings."
                     renderedThreadTs.single() shouldBe TEST_THREAD_TS
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("the turn is audited with outcome and token usage") {
+                    recordedTurn.captured.sessionKey shouldBe expectedSessionKey
+                    recordedTurn.captured.requesterId shouldBe basicInfo.publisherId
+                    recordedTurn.captured.outcome shouldBe AgentTurnOutcome.COMPLETED
+                    recordedTurn.captured.inputTokens shouldBe 120L
+                    recordedTurn.captured.outputTokens shouldBe 45L
+                }
+
+                then("turn and token metrics are recorded") {
+                    meterRegistry
+                        .counter(AgentConverseService.METRIC_TURNS, "outcome", "completed")
+                        .count() shouldBe 1.0
+                    meterRegistry
+                        .counter(AgentConverseService.METRIC_TOKENS, "direction", "input")
+                        .count() shouldBe 120.0
+                    meterRegistry
+                        .counter(AgentConverseService.METRIC_TOKENS, "direction", "output")
+                        .count() shouldBe 45.0
                 }
             }
         }
@@ -180,11 +236,15 @@ class AgentConverseServiceTest :
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
+            val historyRepository = mockk<AgentTurnHistoryRepository>(relaxed = true)
+            val recordedTurn = slot<AgentTurnRecord>()
+            every { historyRepository.record(turn = capture(recordedTurn)) } just Runs
             val eventPublisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 buildService(
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
                     slackEventBuilder = slackEventBuilder,
                     eventPublisher = eventPublisher,
                 )
@@ -197,6 +257,10 @@ class AgentConverseServiceTest :
                 then("the requester gets the busy ephemeral") {
                     ephemeralText.captured shouldBe AgentConverseService.BUSY_MESSAGE
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("the turn is audited as BUSY") {
+                    recordedTurn.captured.outcome shouldBe AgentTurnOutcome.BUSY
                 }
             }
         }
@@ -220,10 +284,14 @@ class AgentConverseServiceTest :
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
+            val historyRepository = mockk<AgentTurnHistoryRepository>(relaxed = true)
+            val recordedTurn = slot<AgentTurnRecord>()
+            every { historyRepository.record(turn = capture(recordedTurn)) } just Runs
             val service =
                 buildService(
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
                     slackEventBuilder = slackEventBuilder,
                 )
 
@@ -232,6 +300,11 @@ class AgentConverseServiceTest :
 
                 then("a friendly failure message is posted into the thread") {
                     renderedText.captured shouldBe AgentConverseService.FAILURE_MESSAGE
+                }
+
+                then("the turn is audited as FAILED with the sidecar error code") {
+                    recordedTurn.captured.outcome shouldBe AgentTurnOutcome.FAILED
+                    recordedTurn.captured.errorCode shouldBe "timeout"
                 }
             }
         }

@@ -2,9 +2,11 @@ package dev.notypie.domain.command
 
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
+import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -68,6 +70,8 @@ fun createAgentConverseRequestEvent(
     idempotencyKey: UUID = UUID.randomUUID(),
     prompt: String = "What meetings do I have today?",
     threadId: String? = TEST_MESSAGE_TS,
+    requesterName: String = TEST_USER_NAME,
+    channelName: String = TEST_CHANNEL_NAME,
     responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
 ) = AgentConverseRequestEvent(
     idempotencyKey = idempotencyKey,
@@ -75,6 +79,8 @@ fun createAgentConverseRequestEvent(
         AgentConversePayload(
             prompt = prompt,
             threadId = threadId,
+            requesterName = requesterName,
+            channelName = channelName,
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.AGENT_CONVERSE,

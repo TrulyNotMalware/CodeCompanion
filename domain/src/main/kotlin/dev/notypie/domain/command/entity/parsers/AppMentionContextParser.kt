@@ -92,6 +92,8 @@ internal class AppMentionContextParser(
             prompt = promptTokens.joinToString(separator = " "),
             // A top-level mention anchors its own thread; a threaded mention continues that thread.
             threadId = (mention.thread ?: mention.message)?.raw,
+            requesterName = commandData.actorName,
+            channelName = commandData.channelName,
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             intents = intents,
         )

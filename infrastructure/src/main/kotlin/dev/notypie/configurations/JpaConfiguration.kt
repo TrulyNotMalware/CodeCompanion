@@ -2,7 +2,9 @@ package dev.notypie.configurations
 
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.repository.agent.AgentSessionRepositoryImpl
+import dev.notypie.repository.agent.AgentTurnHistoryRepositoryImpl
 import dev.notypie.repository.agent.JpaAgentSessionRepository
+import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
 import dev.notypie.repository.meeting.AgendaDispatchRepositoryImpl
 import dev.notypie.repository.meeting.JpaAgendaDispatchRepository
 import dev.notypie.repository.meeting.JpaMeetingReminderRepository
@@ -86,6 +88,11 @@ class JpaConfiguration {
     @Primary
     fun agentSessionRepository(jpaAgentSessionRepository: JpaAgentSessionRepository) =
         AgentSessionRepositoryImpl(jpaAgentSessionRepository = jpaAgentSessionRepository)
+
+    @Bean
+    @Primary
+    fun agentTurnHistoryRepository(jpaAgentTurnHistoryRepository: JpaAgentTurnHistoryRepository) =
+        AgentTurnHistoryRepositoryImpl(jpaAgentTurnHistoryRepository = jpaAgentTurnHistoryRepository)
 
     @Bean
     @Primary
