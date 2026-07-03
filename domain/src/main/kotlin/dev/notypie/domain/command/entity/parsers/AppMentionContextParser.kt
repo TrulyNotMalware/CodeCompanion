@@ -2,9 +2,9 @@ package dev.notypie.domain.command.entity.parsers
 
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.entity.CommandSet
+import dev.notypie.domain.command.entity.context.AgentChatContext
 import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.context.DetailErrorAlertContext
 import dev.notypie.domain.command.entity.context.NoticeContext
 import dev.notypie.domain.command.entity.context.StatusContext
 import dev.notypie.domain.command.entity.context.TextResponseContext
@@ -37,6 +37,9 @@ internal class AppMentionContextParser(
             • `@CodeCompanion approval` — open the request-approval form
             • `@CodeCompanion help` — show this help
             • `@CodeCompanion status` — show outbox lag and in-flight counts
+            • `@CodeCompanion ask <question>` — ask the AI assistant (replies in a thread; mention again in the thread to continue)
+
+            Anything that isn't a command above is treated as `ask`.
             """.trimIndent()
     }
 
@@ -76,18 +79,22 @@ internal class AppMentionContextParser(
                 )
             }
 
-            CommandSet.UNKNOWN -> {
-                DetailErrorAlertContext(
-                    commandData = commandData,
-                    errorMessage = "Command \"$command\" not found",
-                    targetClassName = this::class.simpleName ?: "AppMentionContextParser",
-                    details = null,
-                    idempotencyKey = idempotencyKey,
-                    intents = intents,
-                )
-            }
+            CommandSet.ASK -> agentChatContext(promptTokens = mention.commandTokens.drop(1))
+
+            // Free-text fallback: any mention that doesn't match a command is a question for the
+            // AI assistant, keyword included ("what does status mean" must not lose "what").
+            CommandSet.UNKNOWN -> agentChatContext(promptTokens = mention.commandTokens)
         }
     }
+
+    private fun agentChatContext(promptTokens: List<String>): AgentChatContext =
+        AgentChatContext(
+            prompt = promptTokens.joinToString(separator = " "),
+            // A top-level mention anchors its own thread; a threaded mention continues that thread.
+            threadId = (mention.thread ?: mention.message)?.raw,
+            commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+            intents = intents,
+        )
 
     private fun handleNotSupportedCommand(): TextResponseContext =
         TextResponseContext(

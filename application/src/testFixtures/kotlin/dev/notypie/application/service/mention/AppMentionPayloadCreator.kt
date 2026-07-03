@@ -52,7 +52,8 @@ fun createAppMentionPayload(
                 "user" to publisherId,
                 "app_id" to (appId ?: TEST_APP_ID),
                 "bot_id" to botId,
-                "ts" to 1234567890.123,
+                // Slack sends ts as a string on the wire; keep the fixture faithful to it.
+                "ts" to "1234567890.000123",
                 "team" to teamId,
                 "channel" to channel,
                 "event_ts" to 1234567890.123,

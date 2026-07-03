@@ -92,4 +92,48 @@ class SlackMentionMapperTest :
                 }
             }
         }
+
+        given("a top-level mention (no thread_ts)") {
+            `when`("flattened") {
+                val request =
+                    createSlackEventCallBackRequest(
+                        event = createEventCallbackData(ts = "1712345678.000100"),
+                        authorizations = listOf(createAuthorization(userId = botId, isBot = true)),
+                    )
+                val mention =
+                    request
+                        .toMentionInboundCommand(appId = TEST_APP_ID, channelName = "general", actorName = "tester")
+                        .payload
+                        .shouldBeInstanceOf<MentionInvocation>()
+
+                then("the mention message ts is carried and there is no thread handle") {
+                    mention.message?.raw shouldBe "1712345678.000100"
+                    mention.thread shouldBe null
+                }
+            }
+        }
+
+        given("a mention inside an existing thread") {
+            `when`("flattened") {
+                val request =
+                    createSlackEventCallBackRequest(
+                        event =
+                            createEventCallbackData(
+                                ts = "1712345678.000100",
+                                threadTs = "1712345600.000200",
+                            ),
+                        authorizations = listOf(createAuthorization(userId = botId, isBot = true)),
+                    )
+                val mention =
+                    request
+                        .toMentionInboundCommand(appId = TEST_APP_ID, channelName = "general", actorName = "tester")
+                        .payload
+                        .shouldBeInstanceOf<MentionInvocation>()
+
+                then("both the message ts and the enclosing thread root are carried") {
+                    mention.message?.raw shouldBe "1712345678.000100"
+                    mention.thread?.raw shouldBe "1712345600.000200"
+                }
+            }
+        }
     })

@@ -24,11 +24,17 @@ data class SlashInvocation(
  * bot-filtered and command text is split/blank-filtered in the infra mapper. [hasCommandStructure]
  * is true iff a command-bearing structure (a rich_text_section) was found — it distinguishes the
  * "not supported" outcome (no structure) from the "empty command" outcome (structure, zero tokens).
+ *
+ * [message] identifies the mention message itself and [thread] its enclosing thread root (null for
+ * a top-level mention). Together they anchor conversational features — a threaded reply targets
+ * `thread ?: message`, which also serves as the stable conversation id across follow-up mentions.
  */
 data class MentionInvocation(
     val mentionedUserIds: List<String>,
     val commandTokens: List<String>,
     val hasCommandStructure: Boolean,
+    val message: MessageHandle? = null,
+    val thread: MessageHandle? = null,
 ) : InboundPayload
 
 /** Transport-neutral inbound command envelope consumed by the domain command pipeline. */

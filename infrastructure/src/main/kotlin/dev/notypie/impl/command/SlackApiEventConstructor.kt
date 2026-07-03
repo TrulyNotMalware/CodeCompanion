@@ -43,6 +43,7 @@ class SlackApiEventConstructor(
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         simpleString: String,
+        threadTs: String? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.simpleTextResponseTemplate(
@@ -55,6 +56,7 @@ class SlackApiEventConstructor(
             commandDetailType = commandDetailType,
             layout = layout,
             replaceOriginal = false,
+            threadTs = threadTs,
         )
     }
 
@@ -489,6 +491,7 @@ class SlackApiEventConstructor(
         replaceOriginal: Boolean,
         targetUserId: String? = null,
         routingExtras: List<String> = emptyList(),
+        threadTs: String? = null,
     ): SendSlackMessageEvent {
         val messageType = toMessageTypeByTargetUser(targetUserId = targetUserId)
         val payload =
@@ -506,6 +509,7 @@ class SlackApiEventConstructor(
                                 commandDetailType = commandDetailType,
                                 targetUserId = targetUserId,
                                 routingExtras = routingExtras,
+                                threadTs = threadTs,
                             ),
                     ),
                 messageType = messageType,
@@ -647,12 +651,14 @@ class SlackApiEventConstructor(
         blocks: List<LayoutBlock>,
         targetUserId: String? = null,
         routingExtras: List<String> = emptyList(),
+        threadTs: String? = null,
     ) = ChatPostMessageRequest
         .builder()
         .channel(targetUserId ?: channel)
         .text(buildRoutingText(idempotencyKey, commandDetailType, routingExtras))
         .token(botToken)
         .blocks(blocks)
+        .threadTs(threadTs)
         .build()
 
     /**

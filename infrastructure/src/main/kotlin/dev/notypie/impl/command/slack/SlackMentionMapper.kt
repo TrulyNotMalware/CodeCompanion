@@ -3,6 +3,7 @@ package dev.notypie.impl.command.slack
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.MentionInvocation
+import dev.notypie.domain.command.inbound.MessageHandle
 
 private const val BLOCK_TYPE_RICH_TEXT = "rich_text"
 private const val ELEMENT_TYPE_TEXT_SECTION = "rich_text_section"
@@ -63,6 +64,8 @@ fun SlackEventCallBackRequest.toMentionInboundCommand(
                 mentionedUserIds = mentionedUserIds,
                 commandTokens = commandTokens,
                 hasCommandStructure = section != null,
+                message = event.ts.takeIf { it.isNotBlank() }?.let { MessageHandle(raw = it) },
+                thread = event.threadTs?.takeIf { it.isNotBlank() }?.let { MessageHandle(raw = it) },
             ),
     )
 }

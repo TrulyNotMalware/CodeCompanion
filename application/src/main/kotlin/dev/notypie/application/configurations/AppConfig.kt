@@ -24,6 +24,7 @@ data class AppConfig(
     val standup: Standup = Standup(),
     val outbox: Outbox = Outbox(),
     val socket: Socket = Socket(),
+    val agent: Agent = Agent(),
 ) {
     data class Mode(
         val standAlone: Boolean = true,
@@ -97,6 +98,20 @@ data class AppConfig(
         val meetingCommand: String = "/meetup",
         val standupCommand: String = "/standup",
     )
+
+    // AI-agent backend (claude-sidecar co-process). The sidecar shares the Pod, so the default
+    // base URL is Pod-loopback; `bearerSecret` is the shared secret both processes are booted with.
+    data class Agent(
+        val sidecar: Sidecar = Sidecar(),
+    ) {
+        data class Sidecar(
+            val baseUrl: String = "http://127.0.0.1:7300",
+            val bearerSecret: String = "",
+            // Client-side ceiling on one converse exchange; keep above the sidecar's own
+            // TURN_TIMEOUT_SEC (default 90s) so the server-side timeout is the one that fires.
+            val requestTimeoutSeconds: Long = 120L,
+        )
+    }
 }
 
 enum class EventPublisherType {

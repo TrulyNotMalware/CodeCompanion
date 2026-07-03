@@ -6,6 +6,7 @@ internal enum class CommandSet {
     APPROVAL,
     HELP,
     STATUS,
+    ASK,
     ;
 
     companion object {

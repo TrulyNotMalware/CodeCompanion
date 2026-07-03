@@ -105,3 +105,11 @@ slack:
       event-publisher: kafka
       cdc:
         topic: cdc.code_companion.outbox_message
+    # AI agent backend — run the claude-sidecar locally: `BEARER_SECRET=... python -m sidecar`
+    # (binds 127.0.0.1:7300 by default). Local runs may authenticate the sidecar with a
+    # subscription OAuth token; clusters must use ANTHROPIC_API_KEY (sidecar-side setting).
+    agent:
+      sidecar:
+        base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
+        bearer-secret: ${SIDECAR_BEARER_SECRET:}
+        request-timeout-seconds: 120

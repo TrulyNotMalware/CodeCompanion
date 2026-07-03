@@ -2,11 +2,14 @@ package dev.notypie.domain.command
 
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AgentConversePayload
+import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import java.time.DayOfWeek
@@ -59,6 +62,22 @@ fun createCreateStandupRoutineEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.STANDUP_SETUP_SUBMIT,
+)
+
+fun createAgentConverseRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    prompt: String = "What meetings do I have today?",
+    threadId: String? = TEST_MESSAGE_TS,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = AgentConverseRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        AgentConversePayload(
+            prompt = prompt,
+            threadId = threadId,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.AGENT_CONVERSE,
 )
 
 fun createApprovalContents(

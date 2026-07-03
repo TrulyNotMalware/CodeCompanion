@@ -59,6 +59,19 @@ sealed class CommandIntent : CommandEffect {
     /** Ops-tooling request from `@bot status`; routing context lives on the resolver's basicInfo. */
     data object StatusReport : CommandIntent()
 
+    /**
+     * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. The turn itself
+     * runs in an async application listener — the LLM call is a slow external network call that
+     * must never hold the inbound request thread or its transaction. [threadId] is the
+     * transport-level conversation anchor (`thread ?: message` of the mention): the listener keys
+     * session continuity on it and posts the reply into the same thread. Null when the transport
+     * gave no message identity; the listener then replies un-threaded without session continuity.
+     */
+    data class AgentConverse(
+        val prompt: String,
+        val threadId: String?,
+    ) : CommandIntent()
+
     /** Persists standup answers; resubmission replaces the prior `(session_id, user_id)` row. */
     data class RecordStandupAnswer(
         val sessionUid: UUID,

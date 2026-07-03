@@ -20,7 +20,11 @@ data class EventCallbackData(
     val botId: String,
     @field:JsonProperty("bot_profile")
     val botProfile: BotProfile,
-    val ts: Double,
+    // Slack sends ts as a string ("1712345678.123456") and it must stay one: it is a message id
+    // (thread anchor / chat.update target), and a Double round-trip mangles the fixed-point format.
+    val ts: String,
+    @field:JsonProperty("thread_ts")
+    val threadTs: String? = null,
     @field:JsonProperty("blocks")
     val blocks: List<Block>,
     @field:JsonProperty("team")

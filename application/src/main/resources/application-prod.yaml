@@ -99,3 +99,10 @@ slack:
       event-publisher: kafka
       cdc:
         topic: ${SLACK_CDC_TOPIC}
+    # AI agent backend — the claude-sidecar runs in the same Pod (k8s native sidecar), so the
+    # base URL stays Pod-loopback. The bearer secret is shared with the sidecar via one Secret.
+    agent:
+      sidecar:
+        base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
+        bearer-secret: ${SIDECAR_BEARER_SECRET:}
+        request-timeout-seconds: ${SIDECAR_REQUEST_TIMEOUT_SECONDS:120}

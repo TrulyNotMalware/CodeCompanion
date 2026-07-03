@@ -14,6 +14,7 @@ import dev.notypie.domain.command.inbound.InboundField
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.MentionInvocation
+import dev.notypie.domain.command.inbound.MessageHandle
 import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.command.inbound.TriggerHandle
 import java.util.UUID
@@ -29,6 +30,8 @@ fun createMentionInboundCommand(
     channel: String = TEST_CHANNEL_ID,
     channelName: String = "general",
     teamId: String? = TEST_TEAM_ID,
+    message: MessageHandle? = null,
+    thread: MessageHandle? = null,
 ): InboundCommand =
     InboundCommand(
         appId = appId,
@@ -44,6 +47,8 @@ fun createMentionInboundCommand(
                 mentionedUserIds = mentionedUserIds,
                 commandTokens = commandTokens,
                 hasCommandStructure = hasCommandStructure,
+                message = message,
+                thread = thread,
             ),
     )
 

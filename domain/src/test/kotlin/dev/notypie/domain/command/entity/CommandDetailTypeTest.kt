@@ -34,6 +34,7 @@ class CommandDetailTypeTest :
                 CommandDetailType.MEETING_REMINDER to "MEETING_REMINDER",
                 CommandDetailType.DAILY_AGENDA to "DAILY_AGENDA",
                 CommandDetailType.STATUS_REPORT to "STATUS_REPORT",
+                CommandDetailType.AGENT_CONVERSE to "AGENT_CONVERSE",
                 CommandDetailType.STANDUP_PROMPT to "STANDUP_FILL",
                 CommandDetailType.STANDUP_ANSWER_SUBMIT to "STANDUP_ANSWER_SUBMIT",
                 CommandDetailType.STANDUP_SETUP_REQUEST to "STANDUP_SETUP_FORM",

@@ -140,6 +140,28 @@ data class StatusReportRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<StatusReportPayload>
 
+/**
+ * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. [threadId] is the
+ * conversation anchor the async listener keys session continuity on and replies into;
+ * [responseBasicInfo] lets it post that reply on the same channel/app.
+ */
+class AgentConversePayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val prompt: String,
+    val threadId: String?,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class AgentConverseRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = AgentConverseRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: AgentConversePayload,
+    override val type: CommandDetailType,
+) : CommandEvent<AgentConversePayload>
+
 class RecordStandupAnswerPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val sessionUid: UUID,

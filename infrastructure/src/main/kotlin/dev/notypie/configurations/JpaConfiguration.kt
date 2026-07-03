@@ -1,6 +1,8 @@
 package dev.notypie.configurations
 
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.repository.agent.AgentSessionRepositoryImpl
+import dev.notypie.repository.agent.JpaAgentSessionRepository
 import dev.notypie.repository.meeting.AgendaDispatchRepositoryImpl
 import dev.notypie.repository.meeting.JpaAgendaDispatchRepository
 import dev.notypie.repository.meeting.JpaMeetingReminderRepository
@@ -79,6 +81,11 @@ class JpaConfiguration {
         jpaMeetingRepository = jpaMeetingRepository,
         jpaAgendaDispatchRepository = jpaAgendaDispatchRepository,
     )
+
+    @Bean
+    @Primary
+    fun agentSessionRepository(jpaAgentSessionRepository: JpaAgentSessionRepository) =
+        AgentSessionRepositoryImpl(jpaAgentSessionRepository = jpaAgentSessionRepository)
 
     @Bean
     @Primary

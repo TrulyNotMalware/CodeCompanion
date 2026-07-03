@@ -4,6 +4,8 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.AddParticipantPayload
+import dev.notypie.domain.command.entity.event.AgentConversePayload
+import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
@@ -109,6 +111,19 @@ class SlackIntentResolver {
                     idempotencyKey = basicInfo.idempotencyKey,
                     payload = StatusReportPayload(responseBasicInfo = basicInfo),
                     type = CommandDetailType.STATUS_REPORT,
+                )
+            }
+
+            is CommandIntent.AgentConverse -> {
+                AgentConverseRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        AgentConversePayload(
+                            prompt = intent.prompt,
+                            threadId = intent.threadId,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.AGENT_CONVERSE,
                 )
             }
 
