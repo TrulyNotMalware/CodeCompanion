@@ -1,15 +1,22 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.common.runInTx
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.publishOne
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
@@ -31,13 +38,13 @@ private val log = KotlinLogging.logger {}
  * Runs one AI-agent conversation turn for an [AgentConverseRequestEvent] and posts the outcome
  * back into the originating Slack thread.
  *
- * Class-level `@Async` for the same reasons as
- * [dev.notypie.impl.command.SlackEventAsyncDispatcher]: a turn is a slow external network call
- * (up to the sidecar's turn ceiling), so it must leave the mention's HTTP request thread — and its
- * `@Transactional` scope — immediately. Because the listener therefore runs with no active
- * transaction, each outcome's writes are wrapped in a [TransactionTemplate] so the outbox's
- * BEFORE_COMMIT listener has a transaction to bind to (the scheduling services' pattern); the
- * session upsert, the audit row, and the staged reply commit atomically.
+ * Class-level `@Async`: a turn is a slow external network call (up to the sidecar's turn ceiling),
+ * so it must leave the mention's HTTP request thread — and its `@Transactional` scope —
+ * immediately. Because the listener therefore runs with no active transaction, each outcome's
+ * writes are wrapped in a [TransactionTemplate] so the outbox's BEFORE_COMMIT listener has a
+ * transaction to bind to (the scheduling services' pattern); the session upsert, the audit row,
+ * and the staged reply commit atomically. Replies go through [OutboundMessageStager] as
+ * transport-neutral [OutboundMessage]s and are rendered only at deliver time.
  *
  * Session continuity: the conversation anchor (`threadId`, falling back to the requester for
  * transports without message identity) keys both the sidecar workspace (`sessionKey`) and the
@@ -51,7 +58,7 @@ class AgentConverseService(
     private val agentGateway: AgentGateway,
     private val agentSessionRepository: AgentSessionRepository,
     private val agentTurnHistoryRepository: AgentTurnHistoryRepository,
-    private val slackEventBuilder: SlackApiEventConstructor,
+    private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
     private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
@@ -175,13 +182,6 @@ class AgentConverseService(
 
     private fun publishBusy(event: AgentConverseRequestEvent, sessionKey: String, durationMs: Long) {
         val basicInfo = event.payload.responseBasicInfo
-        val ephemeral =
-            slackEventBuilder.simpleEphemeralTextRequest(
-                textMessage = BUSY_MESSAGE,
-                commandBasicInfo = basicInfo,
-                commandDetailType = CommandDetailType.AGENT_CONVERSE,
-                targetUserId = basicInfo.publisherId,
-            )
         transactionTemplate
             .runInTx {
                 agentTurnHistoryRepository.record(
@@ -193,7 +193,19 @@ class AgentConverseService(
                             durationMs = durationMs,
                         ),
                 )
-                eventPublisher.publishOne(event = ephemeral)
+                eventPublisher.publishOne(
+                    event =
+                        stageReply(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = ConversationTarget(id = basicInfo.channel),
+                                    recipient = UserRef(id = basicInfo.publisherId),
+                                    content = MessageContent.Text(headline = null, markdown = BUSY_MESSAGE),
+                                    detailType = CommandDetailType.AGENT_CONVERSE,
+                                ),
+                            basicInfo = basicInfo,
+                        ),
+                )
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent busy notice idempotencyKey=${event.idempotencyKey}"
@@ -269,12 +281,22 @@ class AgentConverseService(
         }
     }
 
-    private fun answerEvent(event: AgentConverseRequestEvent, text: String) =
-        slackEventBuilder.simpleTextRequest(
-            commandDetailType = CommandDetailType.AGENT_CONVERSE,
-            headLineText = RESPONSE_HEADLINE,
-            commandBasicInfo = event.payload.responseBasicInfo,
-            simpleString = text,
-            threadTs = event.payload.threadId,
+    private fun answerEvent(event: AgentConverseRequestEvent, text: String): CommandEvent<EventPayload> =
+        stageReply(
+            message =
+                OutboundMessage.ChannelMessage(
+                    target = ConversationTarget(id = event.payload.responseBasicInfo.channel),
+                    content = MessageContent.Text(headline = RESPONSE_HEADLINE, markdown = text),
+                    detailType = CommandDetailType.AGENT_CONVERSE,
+                    threadId = event.payload.threadId,
+                ),
+            basicInfo = event.payload.responseBasicInfo,
         )
+
+    // Non-modal messages always stage to an event; a null here means the reply would be silently
+    // lost, so the turn's transaction must fail instead.
+    private fun stageReply(message: OutboundMessage, basicInfo: CommandBasicInfo): CommandEvent<EventPayload> =
+        checkNotNull(outboundStager.stage(message = message, basicInfo = basicInfo)) {
+            "Agent reply failed to stage an outbox event: $message"
+        }
 }

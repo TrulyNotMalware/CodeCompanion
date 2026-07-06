@@ -7,12 +7,15 @@ import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
-import dev.notypie.impl.command.SlackApiEventConstructor
-import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
@@ -20,7 +23,9 @@ import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.mockk.CapturingSlot
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -30,7 +35,6 @@ import io.mockk.verify
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.LocalDateTime
-import java.util.UUID
 
 class AgentConverseServiceTest :
     BehaviorSpec({
@@ -50,25 +54,27 @@ class AgentConverseServiceTest :
             agentGateway: AgentGateway,
             agentSessionRepository: AgentSessionRepository = mockk(relaxed = true),
             agentTurnHistoryRepository: AgentTurnHistoryRepository = mockk(relaxed = true),
-            slackEventBuilder: SlackApiEventConstructor = mockk(),
+            outboundStager: OutboundMessageStager = mockk(),
             eventPublisher: EventPublisher = mockk(relaxed = true),
             meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry(),
         ) = AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
             agentTurnHistoryRepository = agentTurnHistoryRepository,
-            slackEventBuilder = slackEventBuilder,
+            outboundStager = outboundStager,
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
             transactionManager = stubTransactionManager(),
             clock = createFixedUtcClock(now = fixedNow),
         )
 
-        val stubOutbound =
-            createSendSlackMessageEvent(
-                commandDetailType = CommandDetailType.AGENT_CONVERSE,
-                idempotencyKey = UUID.randomUUID(),
-            )
+        val stubStagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
+
+        fun stagerCapturing(stagedMessage: CapturingSlot<OutboundMessage>): OutboundMessageStager {
+            val stager = mockk<OutboundMessageStager>()
+            every { stager.stage(message = capture(stagedMessage), basicInfo = any()) } returns stubStagedEvent
+            return stager
+        }
 
         given("a turn that completes") {
             val basicInfo = createCommandBasicInfo()
@@ -97,18 +103,8 @@ class AgentConverseServiceTest :
                     outputTokens = 45L,
                 )
 
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
-            val renderedText = slot<String>()
-            val renderedThreadTs = mutableListOf<String?>()
-            every {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = any(),
-                    headLineText = any(),
-                    commandBasicInfo = any(),
-                    simpleString = capture(renderedText),
-                    threadTs = captureNullable(renderedThreadTs),
-                )
-            } returns stubOutbound
+            val stagedMessage = slot<OutboundMessage>()
+            val outboundStager = stagerCapturing(stagedMessage = stagedMessage)
 
             val eventPublisher = mockk<EventPublisher>(relaxed = true)
             val meterRegistry = SimpleMeterRegistry()
@@ -117,7 +113,7 @@ class AgentConverseServiceTest :
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
                     agentTurnHistoryRepository = historyRepository,
-                    slackEventBuilder = slackEventBuilder,
+                    outboundStager = outboundStager,
                     eventPublisher = eventPublisher,
                     meterRegistry = meterRegistry,
                 )
@@ -149,9 +145,14 @@ class AgentConverseServiceTest :
                     }
                 }
 
-                then("the answer is rendered into the originating thread and published") {
-                    renderedText.captured shouldBe "You have two meetings."
-                    renderedThreadTs.single() shouldBe TEST_THREAD_TS
+                then("the answer is staged transport-neutral into the originating thread and published") {
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    staged.target.id shouldBe basicInfo.channel
+                    staged.detailType shouldBe CommandDetailType.AGENT_CONVERSE
+                    staged.threadId shouldBe TEST_THREAD_TS
+                    val content = staged.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.headline shouldBe AgentConverseService.RESPONSE_HEADLINE
+                    content.markdown shouldBe "You have two meetings."
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
                 }
 
@@ -182,17 +183,8 @@ class AgentConverseServiceTest :
             every { gateway.converse(request = any()) } returns
                 AgentTurnResult.Completed(sessionId = null, finalText = "")
 
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
-            val renderedText = slot<String>()
-            every {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = any(),
-                    headLineText = any(),
-                    commandBasicInfo = any(),
-                    simpleString = capture(renderedText),
-                    threadTs = any(),
-                )
-            } returns stubOutbound
+            val stagedMessage = slot<OutboundMessage>()
+            val outboundStager = stagerCapturing(stagedMessage = stagedMessage)
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
@@ -200,14 +192,16 @@ class AgentConverseServiceTest :
                 buildService(
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
-                    slackEventBuilder = slackEventBuilder,
+                    outboundStager = outboundStager,
                 )
 
             `when`("handleAgentConverse") {
                 service.handleAgentConverse(event = createAgentConverseRequestEvent())
 
                 then("a placeholder is posted instead of an empty Slack message") {
-                    renderedText.captured shouldBe AgentConverseService.EMPTY_RESPONSE_MESSAGE
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    val content = staged.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe AgentConverseService.EMPTY_RESPONSE_MESSAGE
                 }
 
                 then("no session id is stored when the backend returned none") {
@@ -223,16 +217,8 @@ class AgentConverseServiceTest :
             val gateway = mockk<AgentGateway>()
             every { gateway.converse(request = any()) } returns AgentTurnResult.Busy
 
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
-            val ephemeralText = slot<String>()
-            every {
-                slackEventBuilder.simpleEphemeralTextRequest(
-                    textMessage = capture(ephemeralText),
-                    commandBasicInfo = any(),
-                    commandDetailType = any(),
-                    targetUserId = any(),
-                )
-            } returns stubOutbound
+            val stagedMessage = slot<OutboundMessage>()
+            val outboundStager = stagerCapturing(stagedMessage = stagedMessage)
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
@@ -245,7 +231,7 @@ class AgentConverseServiceTest :
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
                     agentTurnHistoryRepository = historyRepository,
-                    slackEventBuilder = slackEventBuilder,
+                    outboundStager = outboundStager,
                     eventPublisher = eventPublisher,
                 )
 
@@ -255,7 +241,12 @@ class AgentConverseServiceTest :
                 )
 
                 then("the requester gets the busy ephemeral") {
-                    ephemeralText.captured shouldBe AgentConverseService.BUSY_MESSAGE
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    staged.target.id shouldBe basicInfo.channel
+                    staged.recipient?.id shouldBe basicInfo.publisherId
+                    staged.detailType shouldBe CommandDetailType.AGENT_CONVERSE
+                    val content = staged.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe AgentConverseService.BUSY_MESSAGE
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
                 }
 
@@ -270,17 +261,8 @@ class AgentConverseServiceTest :
             every { gateway.converse(request = any()) } returns
                 AgentTurnResult.Failed(code = "timeout", message = "turn exceeded the ceiling")
 
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
-            val renderedText = slot<String>()
-            every {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = any(),
-                    headLineText = any(),
-                    commandBasicInfo = any(),
-                    simpleString = capture(renderedText),
-                    threadTs = any(),
-                )
-            } returns stubOutbound
+            val stagedMessage = slot<OutboundMessage>()
+            val outboundStager = stagerCapturing(stagedMessage = stagedMessage)
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
@@ -292,14 +274,16 @@ class AgentConverseServiceTest :
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
                     agentTurnHistoryRepository = historyRepository,
-                    slackEventBuilder = slackEventBuilder,
+                    outboundStager = outboundStager,
                 )
 
             `when`("handleAgentConverse") {
                 service.handleAgentConverse(event = createAgentConverseRequestEvent())
 
                 then("a friendly failure message is posted into the thread") {
-                    renderedText.captured shouldBe AgentConverseService.FAILURE_MESSAGE
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    val content = staged.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe AgentConverseService.FAILURE_MESSAGE
                 }
 
                 then("the turn is audited as FAILED with the sidecar error code") {
@@ -316,17 +300,8 @@ class AgentConverseServiceTest :
             every { gateway.converse(request = capture(turnRequest)) } returns
                 AgentTurnResult.Completed(sessionId = null, finalText = "hi")
 
-            val slackEventBuilder = mockk<SlackApiEventConstructor>()
-            val renderedThreadTs = mutableListOf<String?>()
-            every {
-                slackEventBuilder.simpleTextRequest(
-                    commandDetailType = any(),
-                    headLineText = any(),
-                    commandBasicInfo = any(),
-                    simpleString = any(),
-                    threadTs = captureNullable(renderedThreadTs),
-                )
-            } returns stubOutbound
+            val stagedMessage = slot<OutboundMessage>()
+            val outboundStager = stagerCapturing(stagedMessage = stagedMessage)
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
@@ -334,7 +309,7 @@ class AgentConverseServiceTest :
                 buildService(
                     agentGateway = gateway,
                     agentSessionRepository = sessionRepository,
-                    slackEventBuilder = slackEventBuilder,
+                    outboundStager = outboundStager,
                 )
 
             `when`("handleAgentConverse") {
@@ -344,7 +319,8 @@ class AgentConverseServiceTest :
 
                 then("the session falls back to a per-user channel key and the reply is un-threaded") {
                     turnRequest.captured.sessionKey shouldBe "${basicInfo.channel}:${basicInfo.publisherId}"
-                    renderedThreadTs.single() shouldBe null
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    staged.threadId shouldBe null
                 }
             }
         }

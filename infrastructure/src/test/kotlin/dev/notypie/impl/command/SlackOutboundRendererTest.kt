@@ -135,6 +135,43 @@ class SlackOutboundRendererTest :
             }
         }
 
+        given("a ChannelMessage with Text content anchored to a thread") {
+            val message =
+                OutboundMessage.ChannelMessage(
+                    target = target,
+                    content = MessageContent.Text(headline = "AI assistant", markdown = "threaded reply"),
+                    detailType = CommandDetailType.AGENT_CONVERSE,
+                    threadId = "1700000000.000100",
+                )
+
+            `when`("render is called") {
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = any(),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+
+                val payload = renderer.render(message = message, basicInfo = basicInfo)
+
+                then("the neutral threadId is delivered as the Slack thread_ts") {
+                    payload shouldBe stubEvent.payload
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleTextRequest(
+                            commandDetailType = CommandDetailType.AGENT_CONVERSE,
+                            headLineText = "AI assistant",
+                            commandBasicInfo = basicInfo,
+                            simpleString = "threaded reply",
+                            threadTs = "1700000000.000100",
+                        )
+                    }
+                }
+            }
+        }
+
         given("a ChannelMessage with ErrorNotice content") {
             val message =
                 OutboundMessage.ChannelMessage(

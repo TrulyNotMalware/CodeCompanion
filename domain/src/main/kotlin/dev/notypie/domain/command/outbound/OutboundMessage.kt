@@ -14,6 +14,8 @@ sealed interface OutboundMessage : CommandEffect {
         val content: MessageContent,
         /** Per-emitter routing type; null falls back to the content family's default. */
         val detailType: CommandDetailType? = null,
+        /** Conversation anchor within [target]; non-null posts the message as a threaded reply. */
+        val threadId: String? = null,
     ) : OutboundMessage
 
     data class Ephemeral(

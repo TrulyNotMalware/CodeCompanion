@@ -41,7 +41,7 @@ class OutboundMessageCodecTest :
             roundTrip(message = message) shouldBe OutboundEnvelope(message = message, basicInfo = basicInfo)
         }
 
-        "ChannelMessage with Text round-trips, with and without detailType" {
+        "ChannelMessage with Text round-trips, with and without detailType and threadId" {
             assertRoundTrips(
                 message =
                     OutboundMessage.ChannelMessage(
@@ -55,6 +55,15 @@ class OutboundMessageCodecTest :
                     OutboundMessage.ChannelMessage(
                         target = target,
                         content = MessageContent.Text(headline = null, markdown = "plain"),
+                    ),
+            )
+            assertRoundTrips(
+                message =
+                    OutboundMessage.ChannelMessage(
+                        target = target,
+                        content = MessageContent.Text(headline = "AI assistant", markdown = "threaded reply"),
+                        detailType = CommandDetailType.AGENT_CONVERSE,
+                        threadId = "1700000000.000100",
                     ),
             )
         }

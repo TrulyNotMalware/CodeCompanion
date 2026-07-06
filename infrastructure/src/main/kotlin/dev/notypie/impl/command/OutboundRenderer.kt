@@ -33,6 +33,7 @@ class SlackOutboundRenderer(
                             headLineText = content.headline.orEmpty(),
                             commandBasicInfo = basicInfo,
                             simpleString = content.markdown,
+                            threadTs = message.threadId,
                         )
 
                     is MessageContent.ErrorNotice ->

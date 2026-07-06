@@ -2,9 +2,9 @@ package dev.notypie.application.configurations
 
 import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.SidecarAgentClient
-import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import io.micrometer.core.instrument.MeterRegistry
@@ -16,9 +16,9 @@ import java.time.Duration
 
 /**
  * Wires the AI-agent lane: the sidecar HTTP+SSE adapter and the async converse listener.
- * [AgentConverseService] is an explicit `@Bean` (not component-scanned) for the same reason as
- * [dev.notypie.impl.command.SlackEventAsyncDispatcher] — the class-level `@Async` relies on a
- * CGLIB subclass proxy, and co-locating the wiring here keeps the bean-ordering explicit.
+ * [AgentConverseService] is an explicit `@Bean` (not component-scanned) because the class-level
+ * `@Async` relies on a CGLIB subclass proxy, and co-locating the wiring here keeps the
+ * bean-ordering explicit.
  */
 @Configuration
 class AgentConfiguration(
@@ -39,7 +39,7 @@ class AgentConfiguration(
         agentGateway: AgentGateway,
         agentSessionRepository: AgentSessionRepository,
         agentTurnHistoryRepository: AgentTurnHistoryRepository,
-        slackApiEventConstructor: SlackApiEventConstructor,
+        outboundStager: OutboundMessageStager,
         eventPublisher: EventPublisher,
         meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
@@ -48,7 +48,7 @@ class AgentConfiguration(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
             agentTurnHistoryRepository = agentTurnHistoryRepository,
-            slackEventBuilder = slackApiEventConstructor,
+            outboundStager = outboundStager,
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
             transactionManager = transactionManager,
