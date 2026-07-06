@@ -15,10 +15,6 @@ import dev.notypie.repository.standup.JpaRoutineRepository
 import dev.notypie.repository.standup.JpaSessionDispatchRepository
 import dev.notypie.repository.standup.JpaStandupSessionRepository
 import dev.notypie.repository.standup.StandupRepositoryImpl
-import dev.notypie.repository.user.JpaTeamEntityRepository
-import dev.notypie.repository.user.JpaTeamRepository
-import dev.notypie.repository.user.JpaUserEntityRepository
-import dev.notypie.repository.user.JpaUserRepository
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -43,21 +39,6 @@ class JpaConfiguration {
     @Primary
     fun lazyConnectionDataSourceProxy(hikariDataSource: HikariDataSource) =
         LazyConnectionDataSourceProxy(hikariDataSource)
-
-    @Bean
-    @Primary
-    fun userRepository(
-        jpaUserEntityRepository: JpaUserEntityRepository,
-        jpaTeamEntityRepository: JpaTeamEntityRepository,
-    ) = JpaUserRepository(
-        jpaUserEntityRepository = jpaUserEntityRepository,
-        jpaTeamEntityRepository = jpaTeamEntityRepository,
-    )
-
-    @Bean
-    @Primary
-    fun teamRepository(jpaTeamEntityRepository: JpaTeamEntityRepository) =
-        JpaTeamRepository(teamRepository = jpaTeamEntityRepository)
 
     @Bean
     @Primary

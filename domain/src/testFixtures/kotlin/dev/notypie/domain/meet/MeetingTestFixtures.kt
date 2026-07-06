@@ -6,6 +6,8 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
+import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
+import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
@@ -67,6 +69,25 @@ fun createCancelMeetingEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.CANCEL_MEETING,
+)
+
+fun createGetMeetingListEvent(
+    publisherId: String = TEST_USER_ID,
+    startDate: LocalDateTime = LocalDateTime.now(),
+    endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
+    idempotencyKey: UUID = UUID.randomUUID(),
+    responseBasicInfo: CommandBasicInfo =
+        createCommandBasicInfo(publisherId = publisherId, idempotencyKey = idempotencyKey),
+) = GetMeetingListEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        GetMeetingEventPayload(
+            publisherId = publisherId,
+            startDate = startDate,
+            endDate = endDate,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.GET_MEETING_LIST,
 )
 
 fun createRescheduleMeetingEvent(

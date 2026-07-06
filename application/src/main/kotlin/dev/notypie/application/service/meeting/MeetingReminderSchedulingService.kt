@@ -7,13 +7,11 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.OutboundMessageStager
-import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.meeting.ReminderCandidateMeeting
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.schema.toOutboxMessage
+import dev.notypie.repository.outbox.OutboundMessagePort
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -35,7 +33,7 @@ private val REMINDER_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPatter
 class MeetingReminderSchedulingService(
     private val reminderRepository: MeetingReminderRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val stager: OutboundMessageStager,
+    private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
     appConfig: AppConfig = AppConfig(),
@@ -139,15 +137,16 @@ class MeetingReminderSchedulingService(
                 item.attendingUserIds.forEach { userId ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
-                    val dmEvent =
+                    val message =
                         buildReminderDm(
-                            stager = stager,
                             meetingTitle = item.meetingTitle,
                             offsetMinutes = item.reminder.offsetMinutes,
                             startAt = item.startAt,
                             commandBasicInfo = commandBasicInfo,
                         )
-                    outboxRepository.save(dmEvent.toOutboxMessage())
+                    outboxRepository.save(
+                        outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
+                    )
                 }
                 if (!reminderRepository.markReminderSent(
                         reminderId = reminderId,
@@ -183,24 +182,19 @@ class MeetingReminderSchedulingService(
  * `chat.postMessage` (the recipient's user_id rides as [CommandBasicInfo.channel]).
  */
 internal fun buildReminderDm(
-    stager: OutboundMessageStager,
     meetingTitle: String,
     offsetMinutes: Int,
     startAt: LocalDateTime,
     commandBasicInfo: CommandBasicInfo,
-): SendSlackMessageEvent =
-    stager.stage(
-        message =
-            OutboundMessage.ChannelMessage(
-                target = ConversationTarget(id = commandBasicInfo.channel),
-                content =
-                    MessageContent.Text(
-                        headline = "Meeting reminder — $meetingTitle",
-                        markdown =
-                            "Your meeting *$meetingTitle* starts in $offsetMinutes minutes " +
-                                "(at ${startAt.format(REMINDER_TIME_FORMAT)}).",
-                    ),
-                detailType = CommandDetailType.MEETING_REMINDER,
+): OutboundMessage.ChannelMessage =
+    OutboundMessage.ChannelMessage(
+        target = ConversationTarget(id = commandBasicInfo.channel),
+        content =
+            MessageContent.Text(
+                headline = "Meeting reminder — $meetingTitle",
+                markdown =
+                    "Your meeting *$meetingTitle* starts in $offsetMinutes minutes " +
+                        "(at ${startAt.format(REMINDER_TIME_FORMAT)}).",
             ),
-        basicInfo = commandBasicInfo,
-    ) as SendSlackMessageEvent
+        detailType = CommandDetailType.MEETING_REMINDER,
+    )

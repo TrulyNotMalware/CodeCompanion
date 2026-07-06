@@ -1,16 +1,15 @@
 package dev.notypie.application.service.standup
 
-import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupSessionDto
-import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.standup.StandupRepository
@@ -40,12 +39,12 @@ class StandupSummaryServiceTest :
             `when`("a cutoff event is received for a collecting session") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val stager = mockk<OutboundMessageStager>()
+                val port = mockk<OutboundMessagePort>()
                 val service =
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stager,
+                        outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
@@ -66,15 +65,11 @@ class StandupSummaryServiceTest :
                         questions = listOf("Yesterday?", "Today?"),
                         members = listOf(createRoutineMemberDto(userId = "U_STANDUP")),
                     )
-                val slackEvent =
-                    createSendSlackMessageEvent(
-                        commandDetailType = CommandDetailType.STANDUP_SUMMARY,
-                        idempotencyKey = UUID.randomUUID(),
-                    )
+                val summaryRow = createOutboxRow(eventId = "EVT-SUMMARY")
                 every { repo.findSession(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every {
-                    stager.stage(
+                    port.toRow(
                         message =
                             OutboundMessage.ChannelMessage(
                                 target = ConversationTarget(id = "C_SUMMARY"),
@@ -89,13 +84,10 @@ class StandupSummaryServiceTest :
                             ),
                         basicInfo = any(),
                     )
-                } returns slackEvent
+                } returns summaryRow
                 every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
                 every {
-                    repo.markSessionSummarized(
-                        sessionId = 7L,
-                        messageTs = "outbox:${slackEvent.payload.eventId}",
-                    )
+                    repo.markSessionSummarized(sessionId = 7L, messageTs = "outbox:EVT-SUMMARY")
                 } returns true
 
                 service.postSummary(
@@ -108,9 +100,9 @@ class StandupSummaryServiceTest :
                         ),
                 )
 
-                then("a summary is staged to the channel, saved to the outbox and marked summarized") {
+                then("a summary row is built to the channel, saved to the outbox and marked summarized") {
                     verify(exactly = 1) {
-                        stager.stage(
+                        port.toRow(
                             message =
                                 OutboundMessage.ChannelMessage(
                                     target = ConversationTarget(id = "C_SUMMARY"),
@@ -126,12 +118,9 @@ class StandupSummaryServiceTest :
                             basicInfo = match { it.channel == "C_SUMMARY" },
                         )
                     }
-                    verify(exactly = 1) { outboxRepo.save(any<OutboxMessage>()) }
+                    verify(exactly = 1) { outboxRepo.save(summaryRow) }
                     verify(exactly = 1) {
-                        repo.markSessionSummarized(
-                            sessionId = 7L,
-                            messageTs = "outbox:${slackEvent.payload.eventId}",
-                        )
+                        repo.markSessionSummarized(sessionId = 7L, messageTs = "outbox:EVT-SUMMARY")
                     }
                 }
             }
@@ -143,7 +132,7 @@ class StandupSummaryServiceTest :
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = mockk(),
+                        outboundMessagePort = mockk(),
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
@@ -168,12 +157,12 @@ class StandupSummaryServiceTest :
             `when`("markSessionSummarized rejects the transition (already SUMMARIZED)") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val stager = mockk<OutboundMessageStager>()
+                val port = mockk<OutboundMessagePort>()
                 val service =
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stager,
+                        outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
@@ -194,23 +183,13 @@ class StandupSummaryServiceTest :
                         questions = listOf("Yesterday?"),
                         members = listOf(createRoutineMemberDto(userId = "U_STANDUP")),
                     )
-                val slackEvent =
-                    createSendSlackMessageEvent(
-                        commandDetailType = CommandDetailType.STANDUP_SUMMARY,
-                        idempotencyKey = UUID.randomUUID(),
-                    )
                 every { repo.findSession(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
-                every {
-                    stager.stage(message = any(), basicInfo = any())
-                } returns slackEvent
+                every { port.toRow(message = any(), basicInfo = any()) } returns createOutboxRow(eventId = "EVT-9")
                 every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
                 // The transition lost — another tick already summarized this session.
                 every {
-                    repo.markSessionSummarized(
-                        sessionId = 9L,
-                        messageTs = "outbox:${slackEvent.payload.eventId}",
-                    )
+                    repo.markSessionSummarized(sessionId = 9L, messageTs = "outbox:EVT-9")
                 } returns false
 
                 service.postSummary(
@@ -228,10 +207,7 @@ class StandupSummaryServiceTest :
                     // is enforced via TransactionStatus.setRollbackOnly() (stubbed in
                     // stubTransactionManager) so we only assert the CAS attempt itself.
                     verify(exactly = 1) {
-                        repo.markSessionSummarized(
-                            sessionId = 9L,
-                            messageTs = "outbox:${slackEvent.payload.eventId}",
-                        )
+                        repo.markSessionSummarized(sessionId = 9L, messageTs = "outbox:EVT-9")
                     }
                 }
             }
@@ -242,7 +218,7 @@ class StandupSummaryServiceTest :
                     StandupSummaryService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = mockk(relaxed = true),
+                        outboundMessagePort = mockk(relaxed = true),
                         transactionManager = stubTransactionManager(),
                     )
                 val eventId = UUID.randomUUID()

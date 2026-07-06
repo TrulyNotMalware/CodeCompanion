@@ -16,6 +16,7 @@ private val logger = KotlinLogging.logger {}
 
 class DebeziumLogTailingProcessor(
     private val messageDispatcher: MessageDispatcher,
+    private val payloadRenderer: OutboxPayloadRenderer,
     private val eventPublisher: ApplicationEventPublisher,
 ) : MessageProcessor {
     @KafkaListener(
@@ -52,7 +53,8 @@ class DebeziumLogTailingProcessor(
 
         val updateEvent: OutboxUpdateEvent =
             try {
-                val dispatchResult = messageDispatcher.dispatch(event = outboxMessage.toSlackEvent())
+                val rendered = payloadRenderer.render(row = outboxMessage)
+                val dispatchResult = messageDispatcher.dispatch(event = rendered)
                 dispatchResult.toOutboxUpdateEvent(eventId = eventId)
             } catch (exception: Exception) {
                 logger.error(exception) {

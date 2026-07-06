@@ -6,11 +6,9 @@ import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.OutboundMessageStager
-import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
-import dev.notypie.repository.outbox.schema.toOutboxMessage
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
@@ -24,7 +22,7 @@ private val summaryLog = KotlinLogging.logger {}
 class StandupSummaryService(
     private val standupRepository: StandupRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val stager: OutboundMessageStager,
+    private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
@@ -43,8 +41,8 @@ class StandupSummaryService(
                 publisherId = routine.creatorId,
                 channel = routine.summaryChannel,
             )
-        val summaryEvent =
-            stager.stage(
+        val summaryRow =
+            outboundMessagePort.toRow(
                 message =
                     OutboundMessage.ChannelMessage(
                         target = ConversationTarget(id = commandBasicInfo.channel),
@@ -58,11 +56,11 @@ class StandupSummaryService(
                             ),
                     ),
                 basicInfo = commandBasicInfo,
-            ) as SendSlackMessageEvent
-        val summaryMarker = "outbox:${summaryEvent.payload.eventId}"
+            )
+        val summaryMarker = "outbox:${summaryRow.eventId}"
         transactionTemplate
             .runInTx<Unit> {
-                outboxRepository.save(summaryEvent.toOutboxMessage())
+                outboxRepository.save(summaryRow)
                 if (!standupRepository.markSessionSummarized(
                         sessionId = session.sessionId,
                         messageTs = summaryMarker,

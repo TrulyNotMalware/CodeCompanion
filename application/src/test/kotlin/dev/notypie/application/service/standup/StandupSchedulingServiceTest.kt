@@ -1,13 +1,12 @@
 package dev.notypie.application.service.standup
 
 import dev.notypie.application.configurations.AppConfig
-import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
@@ -15,9 +14,8 @@ import dev.notypie.domain.standup.createSessionDispatchDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.SessionStatus
-import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
@@ -56,16 +54,12 @@ class StandupSchedulingServiceTest :
         val clock = Clock.fixed(nowInstant, ZoneOffset.UTC)
         val today = LocalDate.ofInstant(nowInstant, seoul)
 
-        fun stubStager(): OutboundMessageStager {
-            val stager = mockk<OutboundMessageStager>()
-            val basicInfo = createCommandBasicInfo()
-            val stubEvent =
-                createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.STANDUP_PROMPT,
-                    idempotencyKey = basicInfo.idempotencyKey,
-                )
-            every { stager.stage(message = any(), basicInfo = any()) } returns stubEvent
-            return stager
+        fun stubPort(): OutboundMessagePort {
+            val port = mockk<OutboundMessagePort>()
+            every { port.toRow(message = any(), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            return port
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -85,7 +79,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -145,7 +139,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -172,7 +166,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -198,7 +192,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -228,7 +222,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -259,7 +253,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -313,12 +307,12 @@ class StandupSchedulingServiceTest :
             `when`("a dispatch is ready and claim succeeds") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val stager = stubStager()
+                val port = stubPort()
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stager,
+                        outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -333,8 +327,7 @@ class StandupSchedulingServiceTest :
                 every {
                     repo.markDispatchSent(dispatchId = 42L, claimToken = capture(sentToken), sentAt = any())
                 } returns true
-                val savedOutbox = slot<OutboxMessage>()
-                every { outboxRepo.save(capture(savedOutbox)) } answers { firstArg() }
+                every { outboxRepo.save(any()) } answers { firstArg() }
 
                 service.sendPendingDispatches()
 
@@ -354,14 +347,10 @@ class StandupSchedulingServiceTest :
                     sentToken.captured shouldBe claimedToken.captured
                 }
 
-                then("the outbox row carries STANDUP_PROMPT and the member's user_id as channel") {
-                    savedOutbox.captured.commandDetailType shouldBe CommandDetailType.STANDUP_PROMPT.name
-                }
-
-                then("the member is staged a STANDUP_PROMPT approval DM carrying the session/routine routing") {
-                    val staged = slot<OutboundMessage>()
-                    verify(exactly = 1) { stager.stage(message = capture(staged), basicInfo = any()) }
-                    val approval = staged.captured as OutboundMessage.Approval
+                then("the member is enqueued a STANDUP_PROMPT approval DM carrying the session/routine routing") {
+                    val enqueued = slot<OutboundMessage>()
+                    verify(exactly = 1) { port.toRow(message = capture(enqueued), basicInfo = any()) }
+                    val approval = enqueued.captured as OutboundMessage.Approval
                     approval.target.id shouldBe "U_A"
                     approval.recipient shouldBe UserRef(id = "U_A")
                     approval.approval.commandDetailType shouldBe CommandDetailType.STANDUP_PROMPT
@@ -381,7 +370,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -405,18 +394,18 @@ class StandupSchedulingServiceTest :
                 }
             }
 
-            `when`("the message build throws") {
+            `when`("the row build throws") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
-                val stager = mockk<OutboundMessageStager>()
+                val port = mockk<OutboundMessagePort>()
                 every {
-                    stager.stage(message = any(), basicInfo = any())
+                    port.toRow(message = any(), basicInfo = any())
                 } throws RuntimeException("Slack API error")
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stager,
+                        outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -452,7 +441,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -475,7 +464,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -503,7 +492,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = mockk(relaxed = true),
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         applicationEventPublisher = publisher,
                         clock = clock,
@@ -550,12 +539,12 @@ class StandupSchedulingServiceTest :
             `when`("a session in the nudge window has two non-responders") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val stager = stubStager()
+                val port = stubPort()
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stager,
+                        outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -585,10 +574,10 @@ class StandupSchedulingServiceTest :
                     verify(exactly = 2) { outboxRepo.save(any()) }
                 }
 
-                then("each non-responder is staged a STANDUP_PROMPT nudge ChannelMessage to their own channel") {
+                then("each non-responder is enqueued a STANDUP_PROMPT nudge ChannelMessage to their own channel") {
                     listOf("U_A", "U_B").forEach { userId ->
                         verify(exactly = 1) {
-                            stager.stage(
+                            port.toRow(
                                 message =
                                     OutboundMessage.ChannelMessage(
                                         target = ConversationTarget(id = userId),
@@ -616,7 +605,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -649,7 +638,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
@@ -683,7 +672,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                         appConfig =
@@ -706,7 +695,7 @@ class StandupSchedulingServiceTest :
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
-                        stager = stubStager(),
+                        outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                         appConfig =

@@ -1,13 +1,6 @@
 package dev.notypie.application.configurations
 
-import dev.notypie.application.configurations.conditions.OnMicroServiceCondition
-import dev.notypie.application.configurations.conditions.OnStandAloneCondition
-import dev.notypie.application.service.user.DefaultUserServiceImpl
-import dev.notypie.application.service.user.MicroUserServiceImpl
-import dev.notypie.application.service.user.UserService
-import dev.notypie.domain.user.repository.TeamRepository
 import org.springframework.boot.context.properties.ConfigurationProperties
-import org.springframework.context.annotation.*
 
 const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
 
@@ -27,7 +20,6 @@ data class AppConfig(
     val agent: Agent = Agent(),
 ) {
     data class Mode(
-        val standAlone: Boolean = true,
         val outboxReadingStrategy: OutboxReaderStrategy = OutboxReaderStrategy.POLLING,
         val cdc: Cdc = Cdc(),
         val eventPublisher: EventPublisherType = EventPublisherType.APPLICATION_EVENT,
@@ -117,19 +109,4 @@ data class AppConfig(
 enum class EventPublisherType {
     KAFKA,
     APPLICATION_EVENT,
-}
-
-@Configuration
-@Conditional(OnStandAloneCondition::class)
-class ApplicationOptionConfiguration {
-    @Bean
-    fun userService(teamRepository: TeamRepository): UserService =
-        DefaultUserServiceImpl(teamRepository = teamRepository)
-}
-
-@Configuration
-@Conditional(OnMicroServiceCondition::class)
-class ApplicationMicroServiceOptionConfiguration {
-    @Bean
-    fun userService(): UserService = MicroUserServiceImpl()
 }

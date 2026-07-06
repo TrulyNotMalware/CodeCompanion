@@ -2,10 +2,6 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
-import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -13,23 +9,19 @@ import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
-import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.standup.createRoutineDto
-import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupSessionDto
+import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.createOpenViewEvent
-import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.util.UUID
 
 class SlackOutboundStagerTest :
@@ -43,145 +35,27 @@ class SlackOutboundStagerTest :
             )
 
         val basicInfo = createCommandBasicInfo()
-        val stubEvent =
-            createSendSlackMessageEvent(
-                commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                idempotencyKey = basicInfo.idempotencyKey,
-            )
         val target = ConversationTarget(id = basicInfo.channel)
 
+        // Non-modal families are never rendered by the stager; they are wrapped transport-neutral
+        // and rendered at deliver time (that path is covered by SlackOutboundRendererTest). A strict
+        // slackEventBuilder mock means an accidental render call here would throw, unstubbed.
         given("a ChannelMessage with Text content") {
             val message =
                 OutboundMessage.ChannelMessage(
                     target = target,
                     content = MessageContent.Text(headline = "hi", markdown = "hello world"),
+                    detailType = CommandDetailType.DAILY_AGENDA,
                 )
 
             `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = any(),
-                    )
-                } returns stubEvent
-
                 val event = stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to simpleTextRequest with SIMPLE_TEXT and the same fields") {
-                    event shouldBe stubEvent
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                            headLineText = "hi",
-                            commandBasicInfo = basicInfo,
-                            simpleString = "hello world",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with Text content and no headline") {
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content = MessageContent.Text(headline = null, markdown = "body"),
-                )
-
-            `when`("stage is called") {
-                val headlineSlot = slot<String>()
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = capture(headlineSlot),
-                        commandBasicInfo = any(),
-                        simpleString = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("a null headline renders as an empty string") {
-                    headlineSlot.captured shouldBe ""
-                }
-            }
-        }
-
-        given("a ChannelMessage with ErrorNotice content") {
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content =
-                        MessageContent.ErrorNotice(
-                            className = "TestException",
-                            message = "something broke",
-                            details = "stack trace",
-                        ),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.detailErrorTextRequest(
-                        commandDetailType = any(),
-                        errorClassName = any(),
-                        errorMessage = any(),
-                        details = any(),
-                        commandBasicInfo = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to detailErrorTextRequest with ERROR_RESPONSE") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.detailErrorTextRequest(
-                            commandDetailType = CommandDetailType.ERROR_RESPONSE,
-                            errorClassName = "TestException",
-                            errorMessage = "something broke",
-                            details = "stack trace",
-                            commandBasicInfo = basicInfo,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with Schedule content") {
-            val scheduleInfo =
-                TimeScheduleInfo(
-                    scheduleName = "standup",
-                    startTime = LocalDateTime.now(),
-                    endTime = LocalDateTime.now().plusHours(1),
-                )
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content = MessageContent.Schedule(headline = "daily", info = scheduleInfo),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleTimeScheduleRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        timeScheduleInfo = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to simpleTimeScheduleRequest with SIMPLE_TEXT") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleTimeScheduleRequest(
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                            headLineText = "daily",
-                            commandBasicInfo = basicInfo,
-                            timeScheduleInfo = scheduleInfo,
-                        )
-                    }
+                then("it is enqueued transport-neutral, carrying the message and command context") {
+                    val enqueued = event.shouldBeInstanceOf<OutboundMessageEnqueued>()
+                    enqueued.payload.message shouldBe message
+                    enqueued.payload.basicInfo shouldBe basicInfo
+                    enqueued.idempotencyKey shouldBe basicInfo.idempotencyKey
                 }
             }
         }
@@ -195,241 +69,15 @@ class SlackOutboundStagerTest :
                 )
 
             `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to simpleEphemeralTextRequest with the recipient id") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = "secret",
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                            targetUserId = "U_TARGET",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("an Ephemeral with a null recipient (the command publisher)") {
-            val message =
-                OutboundMessage.Ephemeral(
-                    target = target,
-                    recipient = null,
-                    content = MessageContent.Text(headline = null, markdown = "to publisher"),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("a null recipient maps to a null targetUserId (posts to the publisher)") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = "to publisher",
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                            targetUserId = null,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with Text content and a per-emitter detailType") {
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content = MessageContent.Text(headline = "Daily agenda", markdown = "agenda body"),
-                    detailType = CommandDetailType.DAILY_AGENDA,
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        simpleString = any(),
-                    )
-                } returns stubEvent
-
                 val event = stager.stage(message = message, basicInfo = basicInfo)
 
-                then("the emitter's detailType overrides the SIMPLE_TEXT default") {
-                    event shouldBe stubEvent
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleTextRequest(
-                            commandDetailType = CommandDetailType.DAILY_AGENDA,
-                            headLineText = "Daily agenda",
-                            commandBasicInfo = basicInfo,
-                            simpleString = "agenda body",
-                        )
-                    }
+                then("it is enqueued transport-neutral without touching the renderer") {
+                    event.shouldBeInstanceOf<OutboundMessageEnqueued>().payload.message shouldBe message
                 }
             }
         }
 
-        given("an Ephemeral with a per-emitter detailType") {
-            val message =
-                OutboundMessage.Ephemeral(
-                    target = target,
-                    recipient = UserRef(id = "U_REQUESTER"),
-                    content = MessageContent.Text(headline = null, markdown = "canceled"),
-                    detailType = CommandDetailType.CANCEL_MEETING,
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleEphemeralTextRequest(
-                        textMessage = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        targetUserId = any(),
-                    )
-                } returns stubEvent
-
-                val event = stager.stage(message = message, basicInfo = basicInfo)
-
-                then("the emitter's detailType overrides the SIMPLE_TEXT default") {
-                    event shouldBe stubEvent
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleEphemeralTextRequest(
-                            textMessage = "canceled",
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.CANCEL_MEETING,
-                            targetUserId = "U_REQUESTER",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("an Ephemeral with MeetingList content") {
-            val meetings = listOf(createMeetingDto())
-            val message =
-                OutboundMessage.Ephemeral(
-                    target = target,
-                    content = MessageContent.MeetingList(meetings = meetings, currentUserId = "U_VIEWER"),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.getMeetingListFormRequest(
-                        myMeetings = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        currentUserId = any(),
-                    )
-                } returns stubEvent
-
-                val event = stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to getMeetingListFormRequest with GET_MEETING_LIST by default") {
-                    event shouldBe stubEvent
-                    verify(exactly = 1) {
-                        slackEventBuilder.getMeetingListFormRequest(
-                            myMeetings = meetings,
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.GET_MEETING_LIST,
-                            currentUserId = "U_VIEWER",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with StandupSummary content") {
-            val members = listOf(createRoutineMemberDto())
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content =
-                        MessageContent.StandupSummary(
-                            routineName = "Daily Standup",
-                            sessionDate = LocalDate.of(2026, 5, 1),
-                            members = members,
-                            answers = emptyList(),
-                            questions = listOf("What did you do yesterday?"),
-                        ),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.standupSummaryRequest(
-                        commandBasicInfo = any(),
-                        routineName = any(),
-                        sessionDate = any(),
-                        members = any(),
-                        answers = any(),
-                        questions = any(),
-                    )
-                } returns stubEvent
-
-                val event = stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to standupSummaryRequest with the summary fields") {
-                    event shouldBe stubEvent
-                    verify(exactly = 1) {
-                        slackEventBuilder.standupSummaryRequest(
-                            commandBasicInfo = basicInfo,
-                            routineName = "Daily Standup",
-                            sessionDate = LocalDate.of(2026, 5, 1),
-                            members = members,
-                            answers = emptyList(),
-                            questions = listOf("What did you do yesterday?"),
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a Notice") {
-            val message =
-                OutboundMessage.Notice(
-                    target = target,
-                    mentions = listOf(UserRef(id = "U1"), UserRef(id = "U2")),
-                    message = "meeting soon",
-                )
-
-            `when`("stage is called") {
-                val capturedText = slot<String>()
-                val capturedHeadline = slot<String>()
-                every {
-                    slackEventBuilder.simpleTextRequest(
-                        commandDetailType = any(),
-                        headLineText = capture(capturedHeadline),
-                        commandBasicInfo = any(),
-                        simpleString = capture(capturedText),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("formats Slack mentions, prepends [Notice], and uses the Notice! headline") {
-                    capturedHeadline.captured shouldBe "Notice!"
-                    capturedText.captured shouldBe "[Notice] <@U1> <@U2> meeting soon"
-                }
-            }
-        }
-
-        given("an Approval with a recipient and a subTitle") {
+        given("an Approval") {
             val approval =
                 ApprovalContents(
                     reason = "approve this",
@@ -446,257 +94,10 @@ class SlackOutboundStagerTest :
                 )
 
             `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleApplyRejectRequest(
-                        commandDetailType = any(),
-                        commandBasicInfo = any(),
-                        approvalContents = any(),
-                        targetUserId = any(),
-                        routingExtras = any(),
-                    )
-                } returns stubEvent
+                val event = stager.stage(message = message, basicInfo = basicInfo)
 
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to simpleApplyRejectRequest, deriving the detail type and routing the subTitle") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
-                            commandBasicInfo = basicInfo,
-                            approvalContents = approval,
-                            targetUserId = "U_PARTICIPANT",
-                            routingExtras = listOf("Sprint Planning"),
-                        )
-                    }
-                }
-            }
-        }
-
-        given("an Approval with a blank subTitle and no recipient") {
-            val approval =
-                ApprovalContents(
-                    reason = "approve this",
-                    publisherId = basicInfo.publisherId,
-                    idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.APPLY_REQUEST,
-                )
-            val message =
-                OutboundMessage.Approval(
-                    target = target,
-                    recipient = null,
-                    approval = approval,
-                )
-
-            `when`("stage is called") {
-                val routingSlot = slot<List<String>>()
-                every {
-                    slackEventBuilder.simpleApplyRejectRequest(
-                        commandDetailType = any(),
-                        commandBasicInfo = any(),
-                        approvalContents = any(),
-                        targetUserId = any(),
-                        routingExtras = capture(routingSlot),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("a blank subTitle is filtered out and a null recipient maps to a null targetUserId") {
-                    routingSlot.captured shouldBe emptyList()
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.APPLY_REQUEST,
-                            commandBasicInfo = basicInfo,
-                            approvalContents = approval,
-                            targetUserId = null,
-                            routingExtras = emptyList(),
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with Form content") {
-            val fields =
-                listOf(
-                    SelectionContents(
-                        title = "Purpose",
-                        explanation = "Select",
-                        placeholderText = "pick one",
-                        contents = listOf(SelectBoxDetails(name = "A", value = "a")),
-                    ),
-                )
-            val reason = TextInputContents(title = "Reason", placeholderText = "why")
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content =
-                        MessageContent.Form(
-                            headline = "Approve",
-                            fields = fields,
-                            reason = reason,
-                            approval = null,
-                        ),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.simpleApprovalFormRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        selectionFields = any(),
-                        reasonInput = any(),
-                        approvalContents = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to simpleApprovalFormRequest with APPROVAL_REQUEST and the same fields") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
-                            headLineText = "Approve",
-                            commandBasicInfo = basicInfo,
-                            selectionFields = fields,
-                            reasonInput = reason,
-                            approvalContents = null,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("an UpdateMessage with STANDUP_ANSWER_SUBMIT detailType") {
-            val message =
-                OutboundMessage.UpdateMessage(
-                    ref =
-                        MessageRef(
-                            conversation = ConversationTarget(id = "D_NOTICE"),
-                            messageId = "1700000000.000300",
-                        ),
-                    content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
-                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.updateNoticeMessageRequest(
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        channel = any(),
-                        messageTs = any(),
-                        markdownText = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to updateNoticeMessageRequest, passing the emitter detailType through") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.updateNoticeMessageRequest(
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                            channel = "D_NOTICE",
-                            messageTs = "1700000000.000300",
-                            markdownText = "Standup submitted.",
-                        )
-                    }
-                }
-            }
-        }
-
-        given("an UpdateMessage with MEETING_DECLINE_REASON detailType") {
-            val message =
-                OutboundMessage.UpdateMessage(
-                    ref =
-                        MessageRef(
-                            conversation = ConversationTarget(id = "C_NOTICE"),
-                            messageId = "1700000000.000100",
-                        ),
-                    content = MessageContent.Text(headline = null, markdown = "You declined the meeting."),
-                    detailType = CommandDetailType.MEETING_DECLINE_REASON,
-                )
-
-            `when`("stage is called") {
-                val detailTypeSlot = slot<CommandDetailType>()
-                every {
-                    slackEventBuilder.updateNoticeMessageRequest(
-                        commandBasicInfo = any(),
-                        commandDetailType = capture(detailTypeSlot),
-                        channel = any(),
-                        messageTs = any(),
-                        markdownText = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("the per-emitter detailType passes through unchanged") {
-                    detailTypeSlot.captured shouldBe CommandDetailType.MEETING_DECLINE_REASON
-                }
-            }
-        }
-
-        given("a ReplaceMessage") {
-            val message =
-                OutboundMessage.ReplaceMessage(
-                    handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/foo"),
-                    content = MessageContent.Text(headline = null, markdown = "replacement"),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.replaceOriginalText(
-                        markdownText = any(),
-                        responseUrl = any(),
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to replaceOriginalText with REPLACE_TEXT and the responseUrl from the handle") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.replaceOriginalText(
-                            markdownText = "replacement",
-                            responseUrl = "https://hooks.slack.com/foo",
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.REPLACE_TEXT,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with MeetingRequest content") {
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content = MessageContent.MeetingRequest(approval = null),
-                )
-
-            `when`("stage is called") {
-                every {
-                    slackEventBuilder.requestMeetingFormRequest(
-                        commandBasicInfo = any(),
-                        commandDetailType = any(),
-                        approvalContents = any(),
-                    )
-                } returns stubEvent
-
-                stager.stage(message = message, basicInfo = basicInfo)
-
-                then("delegates to requestMeetingFormRequest with MEETING_CREATE_REQUEST") {
-                    verify(exactly = 1) {
-                        slackEventBuilder.requestMeetingFormRequest(
-                            commandBasicInfo = basicInfo,
-                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
-                            approvalContents = null,
-                        )
-                    }
+                then("it is enqueued transport-neutral") {
+                    event.shouldBeInstanceOf<OutboundMessageEnqueued>().payload.message shouldBe message
                 }
             }
         }

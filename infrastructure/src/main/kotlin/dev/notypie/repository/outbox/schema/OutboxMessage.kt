@@ -1,25 +1,15 @@
 package dev.notypie.repository.outbox.schema
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import dev.notypie.common.JPAJsonConverter
 import dev.notypie.common.jsonMapper
-import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.impl.command.event.ActionEventPayloadContents
-import dev.notypie.impl.command.event.MessageType
-import dev.notypie.impl.command.event.OpenViewPayloadContents
-import dev.notypie.impl.command.event.PostEventPayloadContents
-import dev.notypie.impl.command.event.SendSlackMessageEvent
-import dev.notypie.impl.command.event.SlackEventPayload
-import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
+import dev.notypie.repository.outbox.Transport
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
-import tools.jackson.module.kotlin.readValue
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.util.*
 
 private val logger = KotlinLogging.logger { }
 
@@ -41,20 +31,13 @@ class OutboxMessage(
     @field:Column(name = "publisher_id", nullable = false)
     @field:JsonProperty("publisher_id")
     val publisherId: String,
-    @field:Convert(converter = JPAJsonConverter::class)
-    @field:Column(name = "payload", columnDefinition = "JSON")
-    val payload: Map<String, Any>,
-    @field:Convert(converter = JPAJsonConverter::class)
-    @field:Column(name = "metadata", columnDefinition = "JSON")
-    val metadata: Map<String, Any>,
-    @field:Column(name = "command_detail_type")
-//    @field:Enumerated(value = EnumType.STRING)
-    // Debezium cdc enum type cause Null pointer exception.
-    @field:JsonProperty("command_detail_type")
-    val commandDetailType: String,
-//    @field:Enumerated(value = EnumType.STRING)
-    @field:Column(name = "type")
-    val type: String,
+    // Debezium CDC delivers enum types as null, so transport rides as a plain string column.
+    @field:Column(name = "transport", nullable = false)
+    val transport: String = Transport.SLACK.name,
+    // Codec-encoded OutboundEnvelope. Stored as opaque TEXT (not JSON): the relay decodes it via
+    // OutboundMessageCodec at deliver time, so the DB never needs to reason about its structure.
+    @field:Column(name = "payload", columnDefinition = "TEXT", nullable = false)
+    val payload: String,
     @field:CreationTimestamp
     @field:JsonProperty("created_at")
     @field:Column(name = "created_at", nullable = false, updatable = false)
@@ -64,17 +47,15 @@ class OutboxMessage(
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
     /**
-     * Payload schema version. New rows are written with [OutboxSchemaVersion.CURRENT];
-     * [toSlackEvent] refuses to dispatch a row whose version is not in
-     * [OutboxSchemaVersion.SUPPORTED] so a future-binary downgrade (or an attacker-injected
-     * row) cannot trigger malformed Slack requests. The DB-level default carries pre-Phase-2
-     * rows forward as v1.
+     * Payload schema version. New rows are written with [OutboxSchemaVersion.CURRENT]; the relay
+     * refuses to decode a row whose version is not in [OutboxSchemaVersion.SUPPORTED] so a
+     * future-binary downgrade (or an attacker-injected row) cannot trigger a malformed request.
      */
     @field:JsonProperty("schema_version")
     @field:Column(
         name = "schema_version",
         nullable = false,
-        columnDefinition = "INT NOT NULL DEFAULT ${OutboxSchemaVersion.V1}",
+        columnDefinition = "INT NOT NULL DEFAULT ${OutboxSchemaVersion.V2}",
     )
     val schemaVersion: Int = OutboxSchemaVersion.CURRENT,
 ) {
@@ -83,133 +64,17 @@ class OutboxMessage(
     var version: Long = 0L
         protected set
 
-    //    @field:Enumerated(value = EnumType.STRING)
     @field:Column(name = "status")
     var status: String = MessageStatus.PENDING.name
         protected set
 
-    // FIXME change final variables
     fun updateMessageStatus(status: MessageStatus) {
         this.status = status.name
     }
-
-    fun toSlackEvent(): SlackEventPayload {
-        require(schemaVersion in OutboxSchemaVersion.SUPPORTED) {
-            "Unsupported outbox schemaVersion=$schemaVersion eventId=$eventId. " +
-                "Supported versions: ${OutboxSchemaVersion.SUPPORTED}. " +
-                "Refusing to dispatch a payload this binary cannot reason about."
-        }
-        return when (schemaVersion) {
-            OutboxSchemaVersion.V1 -> toSlackEventV1()
-            else ->
-                error(
-                    "Outbox schemaVersion=$schemaVersion passed the SUPPORTED check but has no " +
-                        "deserializer branch. Likely a SUPPORTED entry was added without wiring it.",
-                )
-        }
-    }
-
-    private fun toSlackEventV1(): SlackEventPayload =
-        if (type == MessageType.ACTION_RESPONSE.name) {
-            ActionEventPayloadContents(
-                idempotencyKey = UUID.fromString(idempotencyKey),
-                publisherId = publisherId,
-                commandDetailType = CommandDetailType.valueOf(commandDetailType),
-                body = jsonMapper.writeValueAsString(payload),
-                apiAppId = metadata["api_app_id"].toString(),
-                responseUrl = metadata["response_url"].toString(),
-                channel = metadata["channel"].toString(),
-                eventId = UUID.fromString(eventId),
-            )
-        } else {
-            PostEventPayloadContents(
-                idempotencyKey = UUID.fromString(idempotencyKey),
-                publisherId = publisherId,
-                messageType = MessageType.valueOf(type),
-                apiAppId = metadata["api_app_id"].toString(),
-                commandDetailType = CommandDetailType.valueOf(commandDetailType),
-                body = payload,
-                channel = metadata["channel"].toString(),
-                replaceOriginal = metadata["replace_original"].toString().toBoolean(),
-                eventId = UUID.fromString(eventId),
-            )
-        }
 }
-
-fun SendSlackMessageEvent.toOutboxMessage(): OutboxMessage =
-    when (payload) {
-        is PostEventPayloadContents -> {
-            (payload as PostEventPayloadContents).toOutboxMessage().outboxMessage
-        }
-
-        is ActionEventPayloadContents -> {
-            (payload as ActionEventPayloadContents).toOutboxMessage().outboxMessage
-        }
-
-        is OpenViewPayloadContents -> {
-            throw UnsupportedOperationException(
-                "OpenViewPayloadContents is not persisted to the outbox — trigger_id expires in 3s. " +
-                    "Use MessageDispatcher.dispatchImmediate on the request thread. " +
-                    "idempotencyKey=$idempotencyKey",
-            )
-        }
-    }
-
-fun PostEventPayloadContents.toOutboxMessage() =
-    createNewMessagePublishedEvent(
-        slackEventPayload = this,
-        payload = body,
-        metadata =
-            mapOf(
-                "api_app_id" to apiAppId,
-                "channel" to channel,
-                "replace_original" to replaceOriginal,
-            ),
-        type = messageType.name,
-        reason = "PostEventContents",
-    )
-
-fun ActionEventPayloadContents.toOutboxMessage() =
-    createNewMessagePublishedEvent(
-        slackEventPayload = this,
-        payload = jsonMapper.readValue<Map<String, Any>>(content = body),
-        metadata =
-            mapOf(
-                "api_app_id" to apiAppId,
-                "channel" to channel,
-                "response_url" to responseUrl,
-            ),
-        type = MessageType.ACTION_RESPONSE.name,
-        reason = "ActionEventContents",
-    )
-
-private fun createNewMessagePublishedEvent(
-    slackEventPayload: SlackEventPayload,
-    payload: Map<String, Any>,
-    metadata: Map<String, Any>,
-    type: String,
-    reason: String,
-) = NewMessagePublishedEvent(
-    outboxMessage =
-        OutboxMessage(
-            eventId = slackEventPayload.eventId.toString(),
-            idempotencyKey = slackEventPayload.idempotencyKey.toString(),
-            publisherId = slackEventPayload.publisherId,
-            commandDetailType = slackEventPayload.commandDetailType.name,
-            payload = payload,
-            metadata = metadata,
-            type = type,
-            createdAt = LocalDateTime.now(),
-        ),
-    reason = reason,
-    slackEventPayload = slackEventPayload,
-)
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
     runCatching {
-        parseJsonField(key = "metadata")
-        parseJsonField(key = "payload")
-
         val createdAt = this["created_at"]
         val updatedAt = this["updated_at"]
         if (createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
@@ -220,12 +85,6 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
         logger.error { "Failed to convert to OutboxMessage. ${e.message}" }
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }
-
-private fun MutableMap<String, Any>.parseJsonField(key: String) {
-    this[key]?.takeIf { it is String }?.let {
-        this[key] = jsonMapper.readValue<Map<String, Any>>(content = it as String)
-    }
-}
 
 private fun Long.toLocalDateTime(): LocalDateTime {
     val seconds = this / 1_000_000

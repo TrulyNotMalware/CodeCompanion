@@ -1,16 +1,15 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.impl.command.event.MessageDispatcher
-import dev.notypie.impl.command.event.SendSlackMessageEvent
+import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
-import dev.notypie.repository.outbox.dto.NewMessagePublishedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
-import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -25,6 +24,8 @@ private val logger = KotlinLogging.logger {}
 @Service
 class SlackMessageRelayServiceImpl(
     private val outboxRepository: MessageOutboxRepository,
+    private val outboundMessagePort: OutboundMessagePort,
+    private val payloadRenderer: OutboxPayloadRenderer,
     private val messageDispatcher: MessageDispatcher,
     private val retryService: RetryService,
     private val applicationEventPublisher: ApplicationEventPublisher,
@@ -43,18 +44,24 @@ class SlackMessageRelayServiceImpl(
     }
 
     /**
-     * Dispatches a PENDING outbox message and publishes an [OutboxUpdateEvent] with the
-     * dispatch result so that [updateOutboxMessageStatus] transitions the row out of
-     * PENDING. Without this publish step, the polling loop would re-read the same rows
-     * forever.
+     * Renders a PENDING outbox row to a transport payload, dispatches it, and publishes an
+     * [OutboxUpdateEvent] carrying the dispatch result so that [updateOutboxMessageStatus]
+     * transitions the row out of PENDING. Without this publish step, the polling loop would
+     * re-read the same rows forever.
+     *
+     * The status event always keys on the ROW eventId (parsed up front), never on the payload
+     * eventId the renderer mints — that one is throwaway; the row PK is the identity.
+     *
+     * Render and dispatch both sit inside the try: a malformed/unsupported payload surfaces as a
+     * failure event, exactly as the old row-side decode did. Render is deliberately NOT retried
+     * (retrying a codec/schema failure cannot help); only dispatch is retried, inside the
+     * dispatcher.
      *
      * Note: we catch [Exception] (not [Throwable]) intentionally. [Error] subclasses
      * (OutOfMemoryError, StackOverflowError, etc.) indicate fatal JVM conditions and
      * should propagate to the executor's uncaught handler.
      */
     internal fun batchPendingMessagesAsync(pendingMessage: OutboxMessage) {
-        // Parse eventId up front. If this fails the row cannot be identified by UUID
-        // so we log and skip rather than publishing a status event under a bogus key.
         val eventId =
             runCatching { UUID.fromString(pendingMessage.eventId) }
                 .getOrElse { parseFailure ->
@@ -67,7 +74,8 @@ class SlackMessageRelayServiceImpl(
 
         val updateEvent: OutboxUpdateEvent =
             try {
-                val result = messageDispatcher.dispatch(event = pendingMessage.toSlackEvent())
+                val rendered = payloadRenderer.render(row = pendingMessage)
+                val result = messageDispatcher.dispatch(event = rendered)
                 result.toOutboxUpdateEvent(eventId = eventId)
             } catch (exception: Exception) {
                 logger.error(exception) {
@@ -79,13 +87,6 @@ class SlackMessageRelayServiceImpl(
                 )
             }
         applicationEventPublisher.publishEvent(updateEvent)
-    }
-
-    // Spring Data's save() already runs in its own transaction; no service-level boundary needed.
-    @EventListener
-    fun saveOutboxMessages(event: NewMessagePublishedEvent) {
-        logger.debug { "Save Outbox Message from ${event.reason}" }
-        outboxRepository.save(event.outboxMessage)
     }
 
     // The read-modify-write below relies on OutboxMessage's @Version optimistic lock, which is
@@ -108,11 +109,20 @@ class SlackMessageRelayServiceImpl(
         return outboxRepository.save(message)
     }
 
-    // Domain Event Listener
+    // Interactive outbound path: builds the transport-neutral row from the enqueued message inside
+    // the command's transaction so it commits atomically with the command's own writes. Spring
+    // Data's save() runs in its own transaction; no service-level boundary needed.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
-    fun saveOutboxMessage(event: SendSlackMessageEvent) {
+    fun saveOutboxMessage(event: OutboundMessageEnqueued) {
         retryService.execute(
-            action = { outboxRepository.save(event.toOutboxMessage()) },
+            action = {
+                val row =
+                    outboundMessagePort.toRow(
+                        message = event.payload.message,
+                        basicInfo = event.payload.basicInfo,
+                    )
+                outboxRepository.save(row)
+            },
             maxAttempts = 3,
         )
     }

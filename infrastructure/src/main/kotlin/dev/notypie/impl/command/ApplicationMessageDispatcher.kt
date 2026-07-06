@@ -8,7 +8,6 @@ import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.methods.response.chat.ChatUpdateResponse
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.domain.command.dto.response.CommandOutput
-import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
@@ -22,8 +21,6 @@ import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.impl.retry.RetryService
-import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
@@ -38,39 +35,10 @@ class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val retryService: RetryService,
-    private val outboxRepository: MessageOutboxRepository,
 ) : MessageDispatcher {
     private val slack: Slack = Slack.getInstance()
     private val okHttpClient = buildOkHttpClient(slack.config)
     private val mediaTypeJson = "application/json; charset=utf-8".toMediaType()
-
-    override fun dispatch(event: PostEventPayloadContents, commandType: CommandType): CommandOutput {
-        retryService.execute(
-            action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
-            maxAttempts = 3,
-        )
-        return event.toCommandOutput(commandType = commandType)
-    }
-
-    override fun dispatch(event: ActionEventPayloadContents, commandType: CommandType): CommandOutput {
-        retryService.execute(
-            action = { outboxRepository.save(event.toOutboxMessage().outboxMessage) },
-            maxAttempts = 3,
-        )
-        return event.toCommandOutput(commandType = commandType)
-    }
-
-    private fun SlackEventPayload.toCommandOutput(commandType: CommandType) =
-        CommandOutput(
-            ok = true,
-            apiAppId = apiAppId,
-            status = Status.IN_PROGRESSED,
-            idempotencyKey = idempotencyKey,
-            publisherId = publisherId,
-            channel = channel,
-            commandType = commandType,
-            commandDetailType = commandDetailType,
-        )
 
     override fun dispatch(event: SlackEventPayload): CommandOutput =
         retryService.execute(

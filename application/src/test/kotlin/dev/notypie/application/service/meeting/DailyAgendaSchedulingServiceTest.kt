@@ -1,16 +1,14 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.application.configurations.AppConfig
-import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.OutboundMessageStager
-import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.outbox.OutboundMessagePort
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.Runs
@@ -23,6 +21,7 @@ import org.springframework.transaction.TransactionStatus
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.UUID
 
 class DailyAgendaSchedulingServiceTest :
     BehaviorSpec({
@@ -42,16 +41,12 @@ class DailyAgendaSchedulingServiceTest :
                 .atZone(seoul)
                 .toInstant()
 
-        fun stubStager(): OutboundMessageStager {
-            val stager = mockk<OutboundMessageStager>()
-            val basicInfo = createCommandBasicInfo()
-            val stubEvent =
-                createSendSlackMessageEvent(
-                    commandDetailType = CommandDetailType.DAILY_AGENDA,
-                    idempotencyKey = basicInfo.idempotencyKey,
-                )
-            every { stager.stage(message = any(), basicInfo = any()) } returns stubEvent
-            return stager
+        fun stubPort(): OutboundMessagePort {
+            val port = mockk<OutboundMessagePort>()
+            every { port.toRow(message = any(), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            return port
         }
 
         fun stubTransactionManager(): PlatformTransactionManager {
@@ -68,11 +63,11 @@ class DailyAgendaSchedulingServiceTest :
             outboxRepo: MessageOutboxRepository,
             clock: Clock,
             enabled: Boolean = true,
-            stager: OutboundMessageStager = stubStager(),
+            port: OutboundMessagePort = stubPort(),
         ) = DailyAgendaSchedulingService(
             agendaDispatchRepository = repo,
             outboxRepository = outboxRepo,
-            stager = stager,
+            outboundMessagePort = port,
             transactionManager = stubTransactionManager(),
             clock = clock,
             appConfig =
@@ -132,13 +127,13 @@ class DailyAgendaSchedulingServiceTest :
             `when`("the claim succeeds") {
                 val repo = mockk<AgendaDispatchRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val stager = stubStager()
+                val port = stubPort()
                 val service =
                     buildService(
                         repo = repo,
                         outboxRepo = outboxRepo,
                         clock = Clock.fixed(afterSendInstant, seoul),
-                        stager = stager,
+                        port = port,
                     )
 
                 // Two meetings; U_A attends both, U_B attends one.
@@ -163,18 +158,13 @@ class DailyAgendaSchedulingServiceTest :
                 val capturedInfos = mutableListOf<CommandBasicInfo>()
                 val capturedMessages = mutableListOf<OutboundMessage>()
                 every {
-                    stager.stage(message = capture(capturedMessages), basicInfo = capture(capturedInfos))
-                } returns
-                    createSendSlackMessageEvent(
-                        commandDetailType = CommandDetailType.DAILY_AGENDA,
-                        idempotencyKey = createCommandBasicInfo().idempotencyKey,
-                    )
-                val savedOutbox = mutableListOf<OutboxMessage>()
-                every { outboxRepo.save(capture(savedOutbox)) } answers { firstArg() }
+                    port.toRow(message = capture(capturedMessages), basicInfo = capture(capturedInfos))
+                } answers { createOutboxRow(eventId = UUID.randomUUID().toString()) }
+                every { outboxRepo.save(any()) } answers { firstArg() }
 
                 service.sendDailyAgenda()
 
-                then("one agenda DM is staged and saved per user with meetings") {
+                then("one agenda DM is built and saved per user with meetings") {
                     verify(exactly = 1) { repo.claim(agendaDate = any()) }
                     verify(exactly = 2) { outboxRepo.save(any()) }
                     capturedInfos.map { it.publisherId }.toSet() shouldBe setOf("U_A", "U_B")
@@ -195,10 +185,6 @@ class DailyAgendaSchedulingServiceTest :
                         "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
                     (agendaByUser["U_B"]!!.content as MessageContent.Text).markdown shouldBe
                         "• 10:00 — Sprint Planning"
-                }
-
-                then("the outbox rows carry DAILY_AGENDA as the command detail type") {
-                    savedOutbox.forEach { it.commandDetailType shouldBe CommandDetailType.DAILY_AGENDA.name }
                 }
             }
         }

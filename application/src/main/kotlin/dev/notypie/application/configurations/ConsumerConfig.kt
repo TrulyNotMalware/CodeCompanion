@@ -6,6 +6,7 @@ import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import dev.notypie.application.configurations.conditions.OnPollingConsumer
 import dev.notypie.application.service.relay.DebeziumLogTailingProcessor
 import dev.notypie.application.service.relay.MessageProcessor
+import dev.notypie.application.service.relay.OutboxPayloadRenderer
 import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -46,8 +47,10 @@ class CdcPublisherConfig {
     fun debeziumLogTailingProcessor(
         applicationEventPublisher: ApplicationEventPublisher,
         messageDispatcher: MessageDispatcher,
+        payloadRenderer: OutboxPayloadRenderer,
     ) = DebeziumLogTailingProcessor(
         messageDispatcher = messageDispatcher,
+        payloadRenderer = payloadRenderer,
         eventPublisher = applicationEventPublisher,
     )
 }

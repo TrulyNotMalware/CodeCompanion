@@ -1,13 +1,8 @@
 package dev.notypie.impl.command.event
 
 import dev.notypie.domain.command.dto.response.CommandOutput
-import dev.notypie.domain.command.entity.CommandType
 
 interface MessageDispatcher {
-    fun dispatch(event: PostEventPayloadContents, commandType: CommandType): CommandOutput
-
-    fun dispatch(event: ActionEventPayloadContents, commandType: CommandType): CommandOutput
-
     fun dispatch(event: SlackEventPayload): CommandOutput
 
     /**

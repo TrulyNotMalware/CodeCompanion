@@ -17,6 +17,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createCancelMeetingEvent
+import dev.notypie.domain.meet.createGetMeetingListEvent
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
@@ -363,6 +364,102 @@ class MeetingServiceImplTest :
                     val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
                     val body = (ephemeral.content as MessageContent.Text).markdown
                     body shouldBe "Meeting was canceled, or you are not the host."
+                }
+            }
+        }
+
+        given("getMeetingListEvent receives a GetMeetingListEvent") {
+            val basic = createCommandBasicInfo()
+            val event =
+                createGetMeetingListEvent(
+                    publisherId = basic.publisherId,
+                    idempotencyKey = basic.idempotencyKey,
+                    responseBasicInfo = basic,
+                )
+            val payload = event.payload
+            val target = ConversationTarget(id = basic.channel)
+            val ephemeralEvent =
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.GET_MEETING_LIST,
+                    idempotencyKey = basic.idempotencyKey,
+                    messageType = MessageType.EPHEMERAL_MESSAGE,
+                )
+
+            `when`("the repository returns the user's meetings") {
+                val meetings =
+                    listOf(
+                        createMeetingDto(creator = basic.publisherId, title = "Team Sync"),
+                        createMeetingDto(creator = "U_OTHER", title = "Design Review"),
+                    )
+                every {
+                    meetingRepository.getMeetingsByUserIdInRange(
+                        userId = payload.publisherId,
+                        startAt = payload.startDate,
+                        endAt = payload.endDate,
+                    )
+                } returns meetings
+                every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralEvent
+
+                val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
+                every { eventPublisher.publishEvent(events = capture(captured)) } returns Unit
+
+                service.getMeetingListEvent(event = event)
+
+                then("stages a MeetingList ephemeral scoped to the caller and publishes it") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = target,
+                                    content =
+                                        MessageContent.MeetingList(
+                                            meetings = meetings,
+                                            currentUserId = payload.responseBasicInfo.publisherId,
+                                        ),
+                                ),
+                            basicInfo = payload.responseBasicInfo,
+                        )
+                    }
+                    val published = captured.captured.toList()
+                    published.size shouldBe 1
+                    published.single() shouldBe ephemeralEvent
+                }
+            }
+
+            `when`("the repository throws") {
+                every {
+                    meetingRepository.getMeetingsByUserIdInRange(
+                        userId = payload.publisherId,
+                        startAt = payload.startDate,
+                        endAt = payload.endDate,
+                    )
+                } throws RuntimeException("db down")
+                every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralEvent
+
+                val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
+                every { eventPublisher.publishEvent(events = capture(captured)) } returns Unit
+
+                service.getMeetingListEvent(event = event)
+
+                then("stages an ERROR_RESPONSE retry-later ephemeral and publishes it") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = target,
+                                    content =
+                                        MessageContent.Text(
+                                            headline = null,
+                                            markdown = "Failed to fetch your meetings. Please try again later.",
+                                        ),
+                                    detailType = CommandDetailType.ERROR_RESPONSE,
+                                ),
+                            basicInfo = payload.responseBasicInfo,
+                        )
+                    }
+                    val published = captured.captured.toList()
+                    published.size shouldBe 1
+                    published.single() shouldBe ephemeralEvent
                 }
             }
         }

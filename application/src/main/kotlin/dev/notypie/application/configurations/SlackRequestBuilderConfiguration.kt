@@ -1,11 +1,14 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.relay.OutboxPayloadRenderer
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.impl.command.*
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.retry.RetryService
-import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.CodecOutboundMessagePort
+import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
@@ -25,21 +28,12 @@ class SlackRequestBuilderConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(MessageDispatcher::class)
-    fun messageDispatcher(
-        applicationEventPublisher: ApplicationEventPublisher,
-        outboxRepository: MessageOutboxRepository,
-        retryService: RetryService,
-    ) = ApplicationMessageDispatcher(
-        botToken = appConfig.api.token,
-        applicationEventPublisher = applicationEventPublisher,
-        retryService = retryService,
-        outboxRepository = outboxRepository,
-    )
-
-    @Bean
-    @ConditionalOnMissingBean(SlackEventAsyncDispatcher::class)
-    fun slackEventAsyncDispatcher(messageDispatcher: MessageDispatcher): SlackEventAsyncDispatcher =
-        SlackEventAsyncDispatcher(messageDispatcher = messageDispatcher)
+    fun messageDispatcher(applicationEventPublisher: ApplicationEventPublisher, retryService: RetryService) =
+        ApplicationMessageDispatcher(
+            botToken = appConfig.api.token,
+            applicationEventPublisher = applicationEventPublisher,
+            retryService = retryService,
+        )
 
     @Bean
     @ConditionalOnMissingBean(SlackViewOpenDispatcher::class)
@@ -72,6 +66,20 @@ class SlackRequestBuilderConfiguration(
             slackEventBuilder = slackApiEventConstructor,
             standupRepository = standupRepository,
         )
+
+    @Bean
+    @ConditionalOnMissingBean(OutboundRenderer::class)
+    fun slackOutboundRenderer(slackApiEventConstructor: SlackApiEventConstructor): OutboundRenderer =
+        SlackOutboundRenderer(slackEventBuilder = slackApiEventConstructor)
+
+    @Bean
+    @ConditionalOnMissingBean(OutboundMessagePort::class)
+    fun outboundMessagePort(): OutboundMessagePort = CodecOutboundMessagePort()
+
+    @Bean
+    @ConditionalOnMissingBean(OutboxPayloadRenderer::class)
+    fun outboxPayloadRenderer(outboundRenderer: OutboundRenderer): OutboxPayloadRenderer =
+        OutboxPayloadRenderer(renderers = mapOf(Transport.SLACK to outboundRenderer))
 
     @Bean
     @ConditionalOnMissingBean(CommandExecutor::class)

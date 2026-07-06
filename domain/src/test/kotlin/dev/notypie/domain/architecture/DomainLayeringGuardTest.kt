@@ -7,7 +7,7 @@ import java.io.File
 /**
  * Architectural guards that keep the domain layer honest after the transport-agnostic refactor.
  *
- * 1. The pure-domain packages (meet/standup/user/common) must never depend on the command package —
+ * 1. The pure-domain packages (meet/standup/common) must never depend on the command package —
  *    command may depend on them, not the reverse, which prevents the removed package cycle from
  *    silently returning.
  * 2. The whole domain source set must stay free of transport/serialization coupling (Slack SDK,
@@ -29,7 +29,7 @@ class DomainLayeringGuardTest :
 
         "pure domain packages must not import the command package" {
             domainMain.exists() shouldBe true
-            val pureRoots = listOf("meet", "standup", "user", "common").map { File(domainMain, it) }
+            val pureRoots = listOf("meet", "standup", "common").map { File(domainMain, it) }
             val violations =
                 domainKtFiles(*pureRoots.toTypedArray()).flatMap { file ->
                     file

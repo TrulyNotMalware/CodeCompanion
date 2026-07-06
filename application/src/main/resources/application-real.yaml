@@ -68,7 +68,6 @@ slack:
       # signing secret to enforce Slack's X-Slack-Signature check (SlackRequestVerificationFilter).
       signing-secret: ${SLACK_SIGNING_SECRET:}
     mode:
-      stand-alone: true
       # POLLING + APPLICATION_EVENT keeps the whole relay in-process — no Kafka, no Debezium.
       outbox-reading-strategy: polling
       event-publisher: application_event

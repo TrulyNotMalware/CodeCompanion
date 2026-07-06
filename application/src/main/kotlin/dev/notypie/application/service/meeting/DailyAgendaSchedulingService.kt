@@ -7,12 +7,10 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.command.outbound.OutboundMessageStager
-import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.meeting.AgendaCandidateMeeting
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.schema.toOutboxMessage
+import dev.notypie.repository.outbox.OutboundMessagePort
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
@@ -36,7 +34,7 @@ private val AGENDA_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern(
 class DailyAgendaSchedulingService(
     private val agendaDispatchRepository: AgendaDispatchRepository,
     private val outboxRepository: MessageOutboxRepository,
-    private val stager: OutboundMessageStager,
+    private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
     appConfig: AppConfig = AppConfig(),
@@ -75,14 +73,15 @@ class DailyAgendaSchedulingService(
                 agendaByUser.forEach { (userId, items) ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
-                    val dmEvent =
+                    val message =
                         buildAgendaDm(
-                            stager = stager,
                             agendaDate = today,
                             meetings = items,
                             commandBasicInfo = commandBasicInfo,
                         )
-                    outboxRepository.save(dmEvent.toOutboxMessage())
+                    outboxRepository.save(
+                        outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
+                    )
                 }
             }
 
@@ -112,11 +111,10 @@ class DailyAgendaSchedulingService(
  * start time. A scheduler tick has no `trigger_id`, so this is a plain `chat.postMessage`.
  */
 internal fun buildAgendaDm(
-    stager: OutboundMessageStager,
     agendaDate: LocalDate,
     meetings: List<AgendaItem>,
     commandBasicInfo: CommandBasicInfo,
-): SendSlackMessageEvent {
+): OutboundMessage.ChannelMessage {
     val header = "🗓️ Today's meetings ($agendaDate)"
     val lines =
         meetings
@@ -124,13 +122,9 @@ internal fun buildAgendaDm(
             .joinToString(separator = "\n") { item ->
                 "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title}"
             }
-    return stager.stage(
-        message =
-            OutboundMessage.ChannelMessage(
-                target = ConversationTarget(id = commandBasicInfo.channel),
-                content = MessageContent.Text(headline = header, markdown = lines),
-                detailType = CommandDetailType.DAILY_AGENDA,
-            ),
-        basicInfo = commandBasicInfo,
-    ) as SendSlackMessageEvent
+    return OutboundMessage.ChannelMessage(
+        target = ConversationTarget(id = commandBasicInfo.channel),
+        content = MessageContent.Text(headline = header, markdown = lines),
+        detailType = CommandDetailType.DAILY_AGENDA,
+    )
 }

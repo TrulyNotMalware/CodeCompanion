@@ -141,6 +141,14 @@ fun createRoutineDto(
         members = members,
     )
 
+fun createStandupAnswerDto(
+    userId: String = TEST_USER_ID,
+    responses: List<String> = listOf("Did the thing", "Will do the next thing"),
+    submittedAt: Instant = Instant.parse("2026-05-01T01:30:00Z"),
+): dev.notypie.domain.standup.dto.StandupAnswerDto =
+    dev.notypie.domain.standup.dto
+        .StandupAnswerDto(userId = userId, responses = responses, submittedAt = submittedAt)
+
 fun createRoutineMemberDto(
     userId: String = TEST_USER_ID,
     userTimezone: ZoneId = ZoneId.of("Asia/Seoul"),
