@@ -1,7 +1,6 @@
 package dev.notypie.impl.command.slack
 
 import dev.notypie.domain.TEST_APP_ID
-import dev.notypie.domain.TEST_BOT_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_TEAM_ID
@@ -49,8 +48,9 @@ fun createAuthorization(
 fun createEventCallbackData(
     type: String = "app_mention",
     userId: String = TEST_USER_ID,
-    appId: String = TEST_APP_ID,
-    botId: String = TEST_BOT_ID,
+    // Bot metadata only exists on app-posted mentions; the human-typed default carries none.
+    appId: String? = null,
+    botId: String? = null,
     channel: String = TEST_CHANNEL_ID,
     teamId: String = TEST_TEAM_ID,
     blocks: List<Block> = emptyList(),
@@ -66,23 +66,24 @@ fun createEventCallbackData(
     team = teamId,
     channel = channel,
     eventTs = 1234567890.123,
-    channelType = "channel",
     botProfile =
-        BotProfile(
-            id = botId,
-            name = "TestBot",
-            deleted = false,
-            updated = 1234567890L,
-            appId = appId,
-            userId = userId,
-            teamId = teamId,
-            icons =
-                Icons(
-                    imageSize36 = "https://example.com/36.png",
-                    imageSize48 = "https://example.com/48.png",
-                    imageSize72 = "https://example.com/72.png",
-                ),
-        ),
+        botId?.let {
+            BotProfile(
+                id = it,
+                name = "TestBot",
+                deleted = false,
+                updated = 1234567890L,
+                appId = appId ?: TEST_APP_ID,
+                userId = userId,
+                teamId = teamId,
+                icons =
+                    Icons(
+                        imageSize36 = "https://example.com/36.png",
+                        imageSize48 = "https://example.com/48.png",
+                        imageSize72 = "https://example.com/72.png",
+                    ),
+            )
+        },
     blocks = blocks,
 )
 

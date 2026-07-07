@@ -14,12 +14,14 @@ data class EventCallbackData(
     val rawText: String? = null,
     @field:JsonProperty("user")
     val userId: String,
+    // app_id / bot_id / bot_profile only appear when the mentioning message was posted by an
+    // app; a human-typed mention carries none of them.
     @field:JsonProperty("app_id")
-    val appId: String,
+    val appId: String? = null,
     @field:JsonProperty("bot_id")
-    val botId: String,
+    val botId: String? = null,
     @field:JsonProperty("bot_profile")
-    val botProfile: BotProfile,
+    val botProfile: BotProfile? = null,
     // Slack sends ts as a string ("1712345678.123456") and it must stay one: it is a message id
     // (thread anchor / chat.update target), and a Double round-trip mangles the fixed-point format.
     val ts: String,
@@ -33,8 +35,9 @@ data class EventCallbackData(
     val channel: String,
     @field:JsonProperty("event_ts")
     val eventTs: Double,
+    // Not part of the documented app_mention payload; present only on message-family events.
     @field:JsonProperty("channel_type")
-    val channelType: String,
+    val channelType: String? = null,
 )
 
 data class BotProfile(

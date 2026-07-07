@@ -67,6 +67,30 @@ class SlackMentionEventHandlerImplTest :
                 }
             }
 
+            // Regression: a human-typed mention has no bot_id / bot_profile / app_id / channel_type
+            // in the event body; parsing must not require them.
+            `when`("payload is a human-typed mention without bot metadata") {
+                val payload = createAppMentionPayload(botId = null)
+
+                val result = handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+
+                then("parsing succeeds and carries the actor and channel") {
+                    result.channel shouldBe TEST_CHANNEL_ID
+                    result.actorId shouldBe TEST_USER_ID
+                }
+            }
+
+            `when`("payload is an app-posted mention carrying bot metadata") {
+                val payload = createAppMentionPayload(botId = "B001")
+
+                val result = handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+
+                then("parsing succeeds as before") {
+                    result.channel shouldBe TEST_CHANNEL_ID
+                    result.actorId shouldBe TEST_USER_ID
+                }
+            }
+
             `when`("payload has custom channel and publisher") {
                 val payload =
                     createAppMentionPayload(
