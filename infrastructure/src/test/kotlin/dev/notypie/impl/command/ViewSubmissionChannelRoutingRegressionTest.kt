@@ -3,6 +3,7 @@ package dev.notypie.impl.command
 import com.slack.api.model.view.View
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.TEST_BOT_TOKEN
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
@@ -62,6 +63,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     appName = "routing-regression-test",
                     idempotencyKey = UUID.randomUUID(),
                     commandData = interactionPayload.toInboundCommand(),
+                    actorRole = UserRole.USER,
                 )
             val output = command.handleEvent()
             return output to command.drainIntents()

@@ -3,6 +3,7 @@ package dev.notypie.domain.command.entity
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.parsers.AppMentionContextParser
 import dev.notypie.domain.command.entity.parsers.ContextParser
@@ -20,6 +21,8 @@ class InteractionCommand(
     val appName: String,
     idempotencyKey: UUID,
     commandData: InboundCommand,
+    /** Role of the actor issuing the command; mention routing denies commands it does not grant. */
+    private val actorRole: UserRole,
 ) : Command<SubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
@@ -53,6 +56,7 @@ class InteractionCommand(
                     mention = payload,
                     idempotencyKey = idempotencyKey,
                     intents = intents,
+                    actorRole = actorRole,
                 )
 
             is InboundInteraction ->

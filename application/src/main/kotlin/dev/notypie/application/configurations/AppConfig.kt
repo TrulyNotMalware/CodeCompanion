@@ -18,7 +18,14 @@ data class AppConfig(
     val outbox: Outbox = Outbox(),
     val socket: Socket = Socket(),
     val agent: Agent = Agent(),
+    val authorization: Authorization = Authorization(),
 ) {
+    data class Authorization(
+        // Slack user ids treated as ADMIN without a DB row — breaks the bootstrap chicken-and-egg
+        // for the user_command_role table.
+        val bootstrapAdmins: List<String> = emptyList(),
+    )
+
     data class Mode(
         val outboxReadingStrategy: OutboxReaderStrategy = OutboxReaderStrategy.POLLING,
         val cdc: Cdc = Cdc(),

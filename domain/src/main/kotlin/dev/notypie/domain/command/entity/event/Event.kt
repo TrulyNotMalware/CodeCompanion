@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.entity.event
 
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.meet.entity.RejectReason
@@ -139,6 +140,33 @@ data class StatusReportRequestEvent(
     override val payload: StatusReportPayload,
     override val type: CommandDetailType,
 ) : CommandEvent<StatusReportPayload>
+
+enum class RoleManageAction {
+    GRANT,
+    REVOKE,
+    LIST,
+}
+
+class RoleManagePayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: RoleManageAction,
+    /** Grant/revoke target; LIST has none. */
+    val targetUserId: String? = null,
+    /** Role to assign; only GRANT carries one. */
+    val role: UserRole? = null,
+    /** Originating mention context; lets the listener reply on the same channel. */
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class RoleManageRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = RoleManageRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: RoleManagePayload,
+    override val type: CommandDetailType,
+) : CommandEvent<RoleManagePayload>
 
 /**
  * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. [threadId] is the

@@ -4,6 +4,7 @@ import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.common.jsonMapper
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
@@ -104,11 +105,14 @@ class SlackInteractionHandlerImpl(
     private fun shouldUseLegacyReject(payload: InteractionPayload): Boolean =
         payload.isCanceled() && payload.type in LEGACY_AUTO_REJECT_TYPES
 
+    // Interactions (modals, buttons, view submissions) are BASIC-permission flows open to every
+    // role, so the default USER role is sufficient here.
     private fun buildCommand(idempotencyKey: UUID, commandData: InboundCommand): InteractionCommand =
         InteractionCommand(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
             commandData = commandData,
+            actorRole = UserRole.USER,
         )
 
     private fun rejectCommand(

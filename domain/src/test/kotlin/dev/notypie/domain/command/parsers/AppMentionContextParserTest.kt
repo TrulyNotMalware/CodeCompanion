@@ -4,6 +4,7 @@ import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_THREAD_TS
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.entity.context.AgentChatContext
@@ -16,6 +17,8 @@ import dev.notypie.domain.command.inbound.MentionInvocation
 import dev.notypie.domain.command.inbound.MessageHandle
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -32,12 +35,19 @@ class AppMentionContextParserTest :
         val idempotencyKey = UUID.randomUUID()
         val intents = createIntentQueue()
 
-        fun createParser(mention: MentionInvocation, intentQueue: IntentQueue = intents): AppMentionContextParser =
+        // Routing cases below run as ADMIN so every command stays reachable; the dedicated
+        // authorization block exercises the restrictive roles.
+        fun createParser(
+            mention: MentionInvocation,
+            intentQueue: IntentQueue = intents,
+            actorRole: UserRole = UserRole.ADMIN,
+        ): AppMentionContextParser =
             AppMentionContextParser(
                 commandData = createMentionInboundCommand(),
                 mention = mention,
                 idempotencyKey = idempotencyKey,
                 intents = intentQueue,
+                actorRole = actorRole,
             )
 
         fun mentionOf(
@@ -201,6 +211,198 @@ class AppMentionContextParserTest :
                     shouldThrow<IllegalArgumentException> {
                         parser.parseContext(idempotencyKey = idempotencyKey)
                     }
+                }
+            }
+        }
+
+        given("command authorization") {
+            fun deniedMarkdown(tokens: List<String>, actorRole: UserRole): String {
+                val denialIntents = createIntentQueue()
+                val result =
+                    createParser(
+                        mention = mentionOf(tokens = tokens),
+                        intentQueue = denialIntents,
+                        actorRole = actorRole,
+                    ).parseContext(idempotencyKey = idempotencyKey)
+                result.shouldBeInstanceOf<TextResponseContext>()
+                result.runCommand()
+                return denialIntents
+                    .snapshot()
+                    .first()
+                    .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    .content
+                    .shouldBeInstanceOf<MessageContent.Text>()
+                    .markdown
+            }
+
+            `when`("a USER runs `status`") {
+                then("the command is denied with the command name") {
+                    deniedMarkdown(tokens = listOf("status"), actorRole = UserRole.USER) shouldBe
+                        "You don't have permission to use `status`. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("a USER runs `notice`") {
+                then("the command is denied") {
+                    deniedMarkdown(tokens = listOf("notice", "hi"), actorRole = UserRole.USER) shouldBe
+                        "You don't have permission to use `notice`. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("a USER sends free text (the ask fallback)") {
+                then("the AI lane is denied") {
+                    deniedMarkdown(tokens = listOf("what", "is", "up"), actorRole = UserRole.USER) shouldBe
+                        "You don't have permission to use the AI assistant. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("a USER runs `help`") {
+                val result =
+                    createParser(
+                        mention = mentionOf(tokens = listOf("help")),
+                        actorRole = UserRole.USER,
+                    ).parseContext(idempotencyKey = idempotencyKey)
+
+                then("the BASIC command still routes") {
+                    result.shouldBeInstanceOf<TextResponseContext>()
+                }
+            }
+
+            `when`("an AI_USER runs `ask`") {
+                val result =
+                    createParser(
+                        mention = mentionOf(tokens = listOf("ask", "hello")),
+                        intentQueue = createIntentQueue(),
+                        actorRole = UserRole.AI_USER,
+                    ).parseContext(idempotencyKey = idempotencyKey)
+
+                then("the AI lane routes") {
+                    result.shouldBeInstanceOf<AgentChatContext>()
+                }
+            }
+
+            `when`("an AI_USER runs `status`") {
+                then("the operational command is denied") {
+                    deniedMarkdown(tokens = listOf("status"), actorRole = UserRole.AI_USER) shouldBe
+                        "You don't have permission to use `status`. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("a DEVELOPER runs `grant`") {
+                then("the administration command is denied") {
+                    deniedMarkdown(tokens = listOf("grant", "developer"), actorRole = UserRole.DEVELOPER) shouldBe
+                        "You don't have permission to use `grant`. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("a DEVELOPER runs `notice` and `ask`") {
+                val noticeResult =
+                    createParser(
+                        mention = mentionOf(tokens = listOf("notice", "hi"), userIds = listOf(TEST_USER_ID)),
+                        intentQueue = createIntentQueue(),
+                        actorRole = UserRole.DEVELOPER,
+                    ).parseContext(idempotencyKey = idempotencyKey)
+                val askResult =
+                    createParser(
+                        mention = mentionOf(tokens = listOf("ask", "hello")),
+                        intentQueue = createIntentQueue(),
+                        actorRole = UserRole.DEVELOPER,
+                    ).parseContext(idempotencyKey = idempotencyKey)
+
+                then("both operational and AI commands route") {
+                    noticeResult.shouldBeInstanceOf<NoticeContext>()
+                    askResult.shouldBeInstanceOf<AgentChatContext>()
+                }
+            }
+        }
+
+        given("role management commands (as ADMIN)") {
+            fun firstEffectOf(tokens: List<String>, userIds: List<String> = emptyList()): Any {
+                val queue = createIntentQueue()
+                createParser(
+                    mention = mentionOf(tokens = tokens, userIds = userIds),
+                    intentQueue = queue,
+                ).parseContext(idempotencyKey = idempotencyKey).runCommand()
+                return queue.snapshot().first()
+            }
+
+            `when`("`grant @user developer` is well-formed") {
+                then("a GrantRole intent carries the target and parsed role") {
+                    firstEffectOf(tokens = listOf("grant", "developer"), userIds = listOf(TEST_USER_ID)) shouldBe
+                        CommandIntent.GrantRole(targetUserId = TEST_USER_ID, role = UserRole.DEVELOPER)
+                }
+            }
+
+            `when`("`grant` has no mentioned user") {
+                then("the usage text is returned instead of an intent") {
+                    firstEffectOf(tokens = listOf("grant", "developer"))
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AppMentionContextParser.GRANT_USAGE
+                }
+            }
+
+            `when`("`grant` carries extra trailing tokens") {
+                then("the usage text is returned instead of mutating state") {
+                    firstEffectOf(tokens = listOf("grant", "developer", "extra"), userIds = listOf(TEST_USER_ID))
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AppMentionContextParser.GRANT_USAGE
+                }
+            }
+
+            `when`("`grant` names an unknown role") {
+                then("the usage text is returned") {
+                    firstEffectOf(tokens = listOf("grant", "superuser"), userIds = listOf(TEST_USER_ID))
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AppMentionContextParser.GRANT_USAGE
+                }
+            }
+
+            `when`("`revoke @user` is well-formed") {
+                then("a RevokeRole intent carries the target") {
+                    firstEffectOf(tokens = listOf("revoke"), userIds = listOf(TEST_USER_ID)) shouldBe
+                        CommandIntent.RevokeRole(targetUserId = TEST_USER_ID)
+                }
+            }
+
+            `when`("`revoke` has no mentioned user") {
+                then("the usage text is returned") {
+                    firstEffectOf(tokens = listOf("revoke"))
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AppMentionContextParser.REVOKE_USAGE
+                }
+            }
+
+            `when`("`revoke` carries extra trailing tokens") {
+                then("the usage text is returned instead of mutating state") {
+                    firstEffectOf(tokens = listOf("revoke", "extra"), userIds = listOf(TEST_USER_ID))
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AppMentionContextParser.REVOKE_USAGE
+                }
+            }
+
+            `when`("`roles` is issued") {
+                then("a ListRoles intent is emitted") {
+                    firstEffectOf(tokens = listOf("roles")) shouldBe CommandIntent.ListRoles
+                }
+            }
+
+            `when`("`roles` carries arguments") {
+                then("the usage text is returned") {
+                    firstEffectOf(tokens = listOf("roles", "extra"))
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AppMentionContextParser.ROLES_USAGE
                 }
             }
         }

@@ -18,6 +18,9 @@ import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
+import dev.notypie.domain.command.entity.event.RoleManageAction
+import dev.notypie.domain.command.entity.event.RoleManagePayload
+import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
@@ -111,6 +114,45 @@ class SlackIntentResolver {
                     idempotencyKey = basicInfo.idempotencyKey,
                     payload = StatusReportPayload(responseBasicInfo = basicInfo),
                     type = CommandDetailType.STATUS_REPORT,
+                )
+            }
+
+            is CommandIntent.GrantRole -> {
+                RoleManageRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        RoleManagePayload(
+                            action = RoleManageAction.GRANT,
+                            targetUserId = intent.targetUserId,
+                            role = intent.role,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
+                )
+            }
+
+            is CommandIntent.RevokeRole -> {
+                RoleManageRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        RoleManagePayload(
+                            action = RoleManageAction.REVOKE,
+                            targetUserId = intent.targetUserId,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
+                )
+            }
+
+            is CommandIntent.ListRoles -> {
+                RoleManageRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        RoleManagePayload(
+                            action = RoleManageAction.LIST,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
                 )
             }
 

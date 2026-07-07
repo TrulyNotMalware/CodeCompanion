@@ -5,6 +5,7 @@ import dev.notypie.application.exception.AppIdNotFoundException
 import dev.notypie.application.exception.PayloadParseErrorCode
 import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.InteractionCommand
@@ -21,6 +22,7 @@ import java.util.UUID
 @Service
 class SlackMentionEventHandlerImpl(
     private val commandExecutor: CommandExecutor,
+    private val commandRoleResolver: CommandRoleResolver,
 ) : AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
@@ -54,6 +56,7 @@ class SlackMentionEventHandlerImpl(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
             commandData = commandData,
+            actorRole = commandRoleResolver.resolve(userId = commandData.actorId),
         )
 
     @Transactional

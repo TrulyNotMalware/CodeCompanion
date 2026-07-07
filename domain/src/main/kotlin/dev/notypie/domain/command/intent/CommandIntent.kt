@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.intent
 
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
@@ -58,6 +59,20 @@ sealed class CommandIntent : CommandEffect {
 
     /** Ops-tooling request from `@bot status`; routing context lives on the resolver's basicInfo. */
     data object StatusReport : CommandIntent()
+
+    /** Admin-only role grant from `@bot grant @user <role>`; row upsert in `user_command_role`. */
+    data class GrantRole(
+        val targetUserId: String,
+        val role: UserRole,
+    ) : CommandIntent()
+
+    /** Admin-only grant removal from `@bot revoke @user`; the target falls back to USER. */
+    data class RevokeRole(
+        val targetUserId: String,
+    ) : CommandIntent()
+
+    /** Admin-only listing of every explicit role grant, from `@bot roles`. */
+    data object ListRoles : CommandIntent()
 
     /**
      * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. The turn itself

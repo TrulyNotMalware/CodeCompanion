@@ -2,6 +2,7 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.approveAction
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createInteractionResponseInboundCommand
 import dev.notypie.domain.command.createMentionInboundCommand
@@ -24,6 +25,7 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
+                    actorRole = UserRole.ADMIN,
                 )
 
             `when`("handleEvent") {
@@ -52,6 +54,7 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
+                    actorRole = UserRole.ADMIN,
                 )
 
             `when`("handleEvent") {
@@ -79,6 +82,7 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
+                    actorRole = UserRole.ADMIN,
                 )
 
             `when`("handleEvent") {
@@ -109,6 +113,7 @@ class InteractionCommandTest :
                         appName = "TestApp",
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
+                        actorRole = UserRole.ADMIN,
                     )
 
                 val definition = command.findSubCommandDefinition()
@@ -128,6 +133,7 @@ class InteractionCommandTest :
                         appName = "TestApp",
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
+                        actorRole = UserRole.ADMIN,
                     )
 
                 val definition = command.findSubCommandDefinition()

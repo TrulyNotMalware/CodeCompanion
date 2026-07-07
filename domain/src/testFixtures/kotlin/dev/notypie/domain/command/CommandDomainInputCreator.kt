@@ -7,6 +7,7 @@ import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -14,6 +15,9 @@ import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
+import dev.notypie.domain.command.entity.event.RoleManageAction
+import dev.notypie.domain.command.entity.event.RoleManagePayload
+import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -84,6 +88,24 @@ fun createAgentConverseRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.AGENT_CONVERSE,
+)
+
+fun createRoleManageRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: RoleManageAction = RoleManageAction.GRANT,
+    targetUserId: String? = TEST_USER_ID,
+    role: UserRole? = UserRole.DEVELOPER,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = RoleManageRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        RoleManagePayload(
+            action = action,
+            targetUserId = targetUserId,
+            role = role,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.SIMPLE_TEXT,
 )
 
 fun createApprovalContents(
