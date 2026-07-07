@@ -39,9 +39,12 @@ class SidecarAgentClient(
         private const val EVENT_ERROR = "error"
     }
 
+    // Pinned to HTTP/1.1: the default (HTTP/2) sends an h2c upgrade on plain-http URLs, which
+    // uvicorn rejects and then fails to read the request body (400 "body: Field required").
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(5L))
             .build()
 
