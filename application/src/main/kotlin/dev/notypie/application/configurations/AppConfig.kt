@@ -24,6 +24,7 @@ data class AppConfig(
     val authorization: Authorization = Authorization(),
     val mcp: Mcp = Mcp(),
     val cve: Cve = Cve(),
+    val ai: Ai = Ai(),
 ) {
     data class Authorization(
         // Slack user ids treated as ADMIN without a DB row — breaks the bootstrap chicken-and-egg
@@ -134,6 +135,17 @@ data class AppConfig(
             val active: Boolean = true,
         )
     }
+
+    // AI summarization for CVE events. `provider` selects the AiSummarizer implementation
+    // (noop = no external calls, the safe default; sidecar = reuse the agent lane). The remaining
+    // knobs tune the summarize-once worker's claim/retry loop.
+    data class Ai(
+        val provider: String = "noop",
+        val batchSize: Int = 10,
+        val maxRetries: Int = 5,
+        val backoffMinutes: Long = 10,
+        val stuckMinutes: Long = 15,
+    )
 
     // AI-agent backend (claude-sidecar co-process). The sidecar shares the Pod, so the default
     // base URL is Pod-loopback; `bearerSecret` is the shared secret both processes are booted with.

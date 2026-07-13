@@ -37,6 +37,9 @@ open class CveTopicRepositoryImpl(
     override fun findActiveTopics(): List<CveTopic> =
         jpaCveTopicRepository.findByActiveTrueOrderByTopicKey().map { toRecord(schema = it) }
 
+    override fun findById(id: Long): CveTopic? =
+        jpaCveTopicRepository.findById(id).map { toRecord(schema = it) }.orElse(null)
+
     private fun matches(schema: CveTopicSchema, definition: CveTopicDefinition): Boolean =
         schema.displayName == definition.displayName &&
             schema.category == definition.category &&

@@ -14,7 +14,7 @@ import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDateTime
 
-enum class CveSummaryStatus { PENDING, DONE, FAILED }
+enum class CveSummaryStatus { PENDING, SUMMARIZING, DONE, FAILED }
 
 /**
  * One ingested source event (release, CVE advisory, ...). unique(topic_id, external_id)

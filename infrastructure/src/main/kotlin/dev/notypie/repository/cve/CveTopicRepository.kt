@@ -34,4 +34,7 @@ interface CveTopicRepository {
 
     /** Topics offered to subscribers (active only), ordered by topicKey. */
     fun findActiveTopics(): List<CveTopic>
+
+    /** The topic with [id] regardless of active flag, or null when it no longer exists. */
+    fun findById(id: Long): CveTopic?
 }

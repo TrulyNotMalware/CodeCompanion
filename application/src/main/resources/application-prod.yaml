@@ -123,6 +123,10 @@ slack:
         base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
         bearer-secret: ${SIDECAR_BEARER_SECRET:}
         request-timeout-seconds: ${SIDECAR_REQUEST_TIMEOUT_SECONDS:120}
+    # CVE summary provider. Operating choice is sidecar (reuse the agent lane), but the default
+    # stays noop so summary traffic is opt-in via AI_PROVIDER once the collector rolls out.
+    ai:
+      provider: ${AI_PROVIDER:noop}
     mcp:
       enabled: ${MCP_ENABLED:false}
       signing-secret: ${MCP_SIGNING_SECRET:}
