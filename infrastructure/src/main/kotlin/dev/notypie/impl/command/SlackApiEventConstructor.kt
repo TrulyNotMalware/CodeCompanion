@@ -14,6 +14,7 @@ import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.standup.dto.RoutineMemberDto
 import dev.notypie.domain.standup.dto.StandupAnswerDto
@@ -394,6 +395,66 @@ class SlackApiEventConstructor(
                 viewJson = viewJson,
                 // DM target user for any modal-open failure fallback (generalized field name).
                 participantUserId = creatorId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openCveSubscribeModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        topics: List<TopicOption>,
+    ): OpenViewEvent =
+        openCveTopicPickerModalRequest(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            triggerId = triggerId,
+            viewJson =
+                templateBuilder.cveSubscribeModalViewJson(
+                    idempotencyKey = commandBasicInfo.idempotencyKey,
+                    topics = topics,
+                ),
+        )
+
+    fun openCveUnsubscribeModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        topics: List<TopicOption>,
+    ): OpenViewEvent =
+        openCveTopicPickerModalRequest(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            triggerId = triggerId,
+            viewJson =
+                templateBuilder.cveUnsubscribeModalViewJson(
+                    idempotencyKey = commandBasicInfo.idempotencyKey,
+                    topics = topics,
+                ),
+        )
+
+    private fun openCveTopicPickerModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        viewJson: String,
+    ): OpenViewEvent {
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = commandBasicInfo.publisherId,
             )
         return OpenViewEvent(
             idempotencyKey = commandBasicInfo.idempotencyKey,

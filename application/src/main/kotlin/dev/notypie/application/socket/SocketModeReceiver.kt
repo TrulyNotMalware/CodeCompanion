@@ -5,6 +5,7 @@ import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.socket_mode.response.AckResponse
 import dev.notypie.application.common.parseRequestBodyData
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.mention.AppMentionEventHandler
@@ -37,6 +38,7 @@ class SocketModeReceiver(
     private val appConfig: AppConfig,
     private val meetingService: MeetingService,
     private val standupSlashService: StandupSlashService,
+    private val cveSubscriptionSlashService: CveSubscriptionSlashService,
     private val interactionHandler: InteractionHandler,
     private val appMentionEventHandler: AppMentionEventHandler,
 ) : SmartLifecycle {
@@ -115,6 +117,27 @@ class SocketModeReceiver(
 
                 appConfig.socket.standupCommand ->
                     standupSlashService.handleStandup(
+                        headers = noHeaders,
+                        payload = payload,
+                        commandData = commandData,
+                    )
+
+                appConfig.socket.subscribeCommand ->
+                    cveSubscriptionSlashService.handleSubscribe(
+                        headers = noHeaders,
+                        payload = payload,
+                        commandData = commandData,
+                    )
+
+                appConfig.socket.unsubscribeCommand ->
+                    cveSubscriptionSlashService.handleUnsubscribe(
+                        headers = noHeaders,
+                        payload = payload,
+                        commandData = commandData,
+                    )
+
+                appConfig.socket.subscriptionsCommand ->
+                    cveSubscriptionSlashService.handleSubscriptions(
                         headers = noHeaders,
                         payload = payload,
                         commandData = commandData,

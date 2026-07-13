@@ -2,6 +2,7 @@ package dev.notypie.templates
 
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.standup.dto.RoutineMemberDto
 import dev.notypie.domain.standup.dto.StandupAnswerDto
@@ -128,6 +129,17 @@ interface SlackTemplateBuilder {
      * for [dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext].
      */
     fun standupSetupModalViewJson(idempotencyKey: UUID, creatorId: String, commandChannel: String): String
+
+    /**
+     * Builds the `/subscribe` modal `view` JSON: a single multi-select rendered from [topics] (option
+     * value = topic key). `private_metadata` uses the shared comma-tokenized routing format
+     * `"<idempotencyKey>,CVE_SUBSCRIBE_SUBMIT"`; the submission carries no routing extras because the
+     * subscriber is the submitting actor.
+     */
+    fun cveSubscribeModalViewJson(idempotencyKey: UUID, topics: List<TopicOption>): String
+
+    /** Builds the `/unsubscribe` modal `view` JSON; mirrors [cveSubscribeModalViewJson]. */
+    fun cveUnsubscribeModalViewJson(idempotencyKey: UUID, topics: List<TopicOption>): String
 
     fun standupSummaryTemplate(
         routineName: String,

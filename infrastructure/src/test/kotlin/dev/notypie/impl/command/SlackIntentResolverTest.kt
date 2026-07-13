@@ -3,6 +3,8 @@ package dev.notypie.impl.command
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
+import dev.notypie.domain.command.entity.event.CveSubscriptionAction
+import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
@@ -184,6 +186,71 @@ class SlackIntentResolverTest :
                     record.payload.userId shouldBe "U_STANDUP"
                     record.payload.responses shouldBe listOf("Finished #12", "Working on #13")
                     record.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                }
+            }
+        }
+
+        given("CveSubscribe intent") {
+            val intent =
+                CommandIntent.CveSubscribe(
+                    userId = "U_SUBSCRIBER",
+                    topicKeys = listOf("kotlin", "spring"),
+                )
+
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces a SUBSCRIBE CveSubscriptionRequestEvent") {
+                    val request = event.shouldBeInstanceOf<CveSubscriptionRequestEvent>()
+                    request.payload.action shouldBe CveSubscriptionAction.SUBSCRIBE
+                    request.payload.userId shouldBe "U_SUBSCRIBER"
+                    request.payload.topicKeys shouldBe listOf("kotlin", "spring")
+                    request.payload.responseBasicInfo shouldBe basicInfo
+                    request.type shouldBe CommandDetailType.CVE_SUBSCRIBE_SUBMIT
+                }
+            }
+        }
+
+        given("CveUnsubscribe intent") {
+            val intent =
+                CommandIntent.CveUnsubscribe(
+                    userId = "U_SUBSCRIBER",
+                    topicKeys = listOf("cve-java"),
+                )
+
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces an UNSUBSCRIBE CveSubscriptionRequestEvent") {
+                    val request = event.shouldBeInstanceOf<CveSubscriptionRequestEvent>()
+                    request.payload.action shouldBe CveSubscriptionAction.UNSUBSCRIBE
+                    request.payload.topicKeys shouldBe listOf("cve-java")
+                    request.type shouldBe CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT
+                }
+            }
+        }
+
+        given("CveListSubscriptions intent") {
+            val intent = CommandIntent.CveListSubscriptions(userId = "U_SUBSCRIBER")
+
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces a LIST CveSubscriptionRequestEvent with no topic keys") {
+                    val request = event.shouldBeInstanceOf<CveSubscriptionRequestEvent>()
+                    request.payload.action shouldBe CveSubscriptionAction.LIST
+                    request.payload.userId shouldBe "U_SUBSCRIBER"
+                    request.payload.topicKeys shouldBe emptyList()
+                    request.type shouldBe CommandDetailType.CVE_SUBSCRIPTIONS_LIST
                 }
             }
         }

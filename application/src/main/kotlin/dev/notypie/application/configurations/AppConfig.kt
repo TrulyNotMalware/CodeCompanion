@@ -1,5 +1,8 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.repository.cve.schema.CveDeliveryMode
+import dev.notypie.repository.cve.schema.CveSourceType
+import dev.notypie.repository.cve.schema.CveTopicCategory
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
@@ -20,6 +23,7 @@ data class AppConfig(
     val agent: Agent = Agent(),
     val authorization: Authorization = Authorization(),
     val mcp: Mcp = Mcp(),
+    val cve: Cve = Cve(),
 ) {
     data class Authorization(
         // Slack user ids treated as ADMIN without a DB row — breaks the bootstrap chicken-and-egg
@@ -97,6 +101,9 @@ data class AppConfig(
     data class Socket(
         val meetingCommand: String = "/meetup",
         val standupCommand: String = "/standup",
+        val subscribeCommand: String = "/subscribe",
+        val unsubscribeCommand: String = "/unsubscribe",
+        val subscriptionsCommand: String = "/subscriptions",
     )
 
     // MCP domain tools exposed to the agent lane. The endpoint is loopback-only by default
@@ -109,6 +116,24 @@ data class AppConfig(
         val clockSkewSeconds: Long = 30L,
         val allowRemote: Boolean = false,
     )
+
+    // CVE-Bot topic subscriptions. Topics are config-supplied: at boot each entry is upserted
+    // into cve_topic by key, so the yaml stays the admin-managed source while rows added by
+    // other means survive restarts.
+    data class Cve(
+        val enabled: Boolean = false,
+        val topics: List<TopicDefinition> = emptyList(),
+    ) {
+        data class TopicDefinition(
+            val key: String = "",
+            val displayName: String = "",
+            val category: CveTopicCategory = CveTopicCategory.ETC,
+            val sourceType: CveSourceType = CveSourceType.RSS,
+            val sourceConfig: String? = null,
+            val deliveryMode: CveDeliveryMode = CveDeliveryMode.DIGEST,
+            val active: Boolean = true,
+        )
+    }
 
     // AI-agent backend (claude-sidecar co-process). The sidecar shares the Pod, so the default
     // base URL is Pod-loopback; `bearerSecret` is the shared secret both processes are booted with.

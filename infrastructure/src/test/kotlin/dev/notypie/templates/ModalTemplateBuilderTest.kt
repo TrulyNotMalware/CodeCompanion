@@ -11,6 +11,7 @@ import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
@@ -1049,6 +1050,78 @@ class ModalTemplateBuilderTest :
                     json shouldContain "\"type\":\"timepicker\""
                     json shouldContain "\"type\":\"static_select\""
                     json shouldContain "\"type\":\"plain_text_input\""
+                }
+            }
+        }
+
+        given("cveSubscribeModalViewJson") {
+            val subscribeKey = UUID.randomUUID()
+
+            `when`("called with active topics") {
+                val json =
+                    templateBuilder.cveSubscribeModalViewJson(
+                        idempotencyKey = subscribeKey,
+                        topics =
+                            listOf(
+                                TopicOption(key = "kotlin", label = "Kotlin"),
+                                TopicOption(key = "spring", label = "Spring Framework"),
+                            ),
+                    )
+
+                then("private_metadata routes the submission to CVE_SUBSCRIBE_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${CveSubscriptionModalIds.SUBSCRIBE_CALLBACK_ID}\""
+                    json shouldContain "\"private_metadata\":\"$subscribeKey,CVE_SUBSCRIBE_SUBMIT\""
+                }
+
+                then("the multi-select renders an option per topic with value = topic key") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe CveSubscriptionModalIds.SUBSCRIBE_CALLBACK_ID
+                    view.submit.text shouldBe "Subscribe"
+                    val input =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == CveSubscriptionModalIds.SUBSCRIBE_TOPICS_BLOCK_ID }
+                    val select =
+                        input.element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    select.actionId shouldBe CveSubscriptionModalIds.SUBSCRIBE_TOPICS_ACTION_ID
+                    select.options.map { it.value } shouldBe listOf("kotlin", "spring")
+                }
+            }
+        }
+
+        given("cveUnsubscribeModalViewJson") {
+            val unsubscribeKey = UUID.randomUUID()
+
+            `when`("called with the user's subscribed topics") {
+                val json =
+                    templateBuilder.cveUnsubscribeModalViewJson(
+                        idempotencyKey = unsubscribeKey,
+                        topics = listOf(TopicOption(key = "cve-java", label = "Java CVE")),
+                    )
+
+                then("private_metadata routes the submission to CVE_UNSUBSCRIBE_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${CveSubscriptionModalIds.UNSUBSCRIBE_CALLBACK_ID}\""
+                    json shouldContain "\"private_metadata\":\"$unsubscribeKey,CVE_UNSUBSCRIBE_SUBMIT\""
+                }
+
+                then("the emitted JSON round-trips through the Slack SDK view deserializer") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    view.submit.text shouldBe "Unsubscribe"
+                    val input =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_BLOCK_ID }
+                    val select =
+                        input.element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    select.actionId shouldBe CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_ACTION_ID
+                    select.options.single().value shouldBe "cve-java"
                 }
             }
         }

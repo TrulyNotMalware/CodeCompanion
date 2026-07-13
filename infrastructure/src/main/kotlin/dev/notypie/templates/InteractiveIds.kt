@@ -64,6 +64,22 @@ object StandupSetupModalIds {
 }
 
 /**
+ * Identifiers for the `/subscribe` and `/unsubscribe` topic-picker modals. Each `TOPICS_BLOCK_ID`
+ * delegates to [InboundFieldKeys] — the single source of truth also read back by
+ * [dev.notypie.domain.command.entity.context.form.CveSubscribeSubmissionContext] and its unsubscribe
+ * counterpart.
+ */
+object CveSubscriptionModalIds {
+    const val SUBSCRIBE_CALLBACK_ID: String = "cve_subscribe_modal"
+    const val SUBSCRIBE_TOPICS_BLOCK_ID: String = InboundFieldKeys.CVE_SUBSCRIBE_TOPICS
+    const val SUBSCRIBE_TOPICS_ACTION_ID: String = "cve_subscribe_topics_select"
+
+    const val UNSUBSCRIBE_CALLBACK_ID: String = "cve_unsubscribe_modal"
+    const val UNSUBSCRIBE_TOPICS_BLOCK_ID: String = InboundFieldKeys.CVE_UNSUBSCRIBE_TOPICS
+    const val UNSUBSCRIBE_TOPICS_ACTION_ID: String = "cve_unsubscribe_topics_select"
+}
+
+/**
  * Identifiers for the decline-reason modal opened when a meeting participant clicks Deny.
  * `ACTION_ID` is kept stable across UI changes (radio_buttons → static_select) so upgraded
  * clients don't lose in-flight submissions.

@@ -3,6 +3,7 @@ package dev.notypie.templates
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.dto.RoutineMemberDto
@@ -550,6 +551,68 @@ class ModalTemplateBuilder(
                             placeholder = "Select a timezone",
                         ) {
                             TIMEZONE_OPTIONS.forEach { zone -> option(text = zone, value = zone) }
+                        }
+                    }
+                }
+            }
+        return jsonMapper.writeValueAsString(view)
+    }
+
+    override fun cveSubscribeModalViewJson(idempotencyKey: UUID, topics: List<TopicOption>): String =
+        cveTopicPickerModalViewJson(
+            idempotencyKey = idempotencyKey,
+            submitType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
+            callbackId = CveSubscriptionModalIds.SUBSCRIBE_CALLBACK_ID,
+            blockId = CveSubscriptionModalIds.SUBSCRIBE_TOPICS_BLOCK_ID,
+            actionId = CveSubscriptionModalIds.SUBSCRIBE_TOPICS_ACTION_ID,
+            titleText = "Subscribe",
+            submitText = "Subscribe",
+            topics = topics,
+        )
+
+    override fun cveUnsubscribeModalViewJson(idempotencyKey: UUID, topics: List<TopicOption>): String =
+        cveTopicPickerModalViewJson(
+            idempotencyKey = idempotencyKey,
+            submitType = CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT,
+            callbackId = CveSubscriptionModalIds.UNSUBSCRIBE_CALLBACK_ID,
+            blockId = CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_BLOCK_ID,
+            actionId = CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_ACTION_ID,
+            titleText = "Unsubscribe",
+            submitText = "Unsubscribe",
+            topics = topics,
+        )
+
+    private fun cveTopicPickerModalViewJson(
+        idempotencyKey: UUID,
+        submitType: CommandDetailType,
+        callbackId: String,
+        blockId: String,
+        actionId: String,
+        titleText: String,
+        submitText: String,
+        topics: List<TopicOption>,
+    ): String {
+        val view =
+            modal {
+                callbackId(id = callbackId)
+                privateMetadata(
+                    metadata =
+                        listOf(
+                            idempotencyKey.toString(),
+                            submitType.name,
+                        ).joinToString(","),
+                )
+                title(text = titleText)
+                submit(text = submitText)
+                close(text = "Cancel")
+                blocks {
+                    input(blockId = blockId) {
+                        label(text = "Topics")
+                        multiStaticSelect(
+                            actionId = actionId,
+                            placeholder = "Select topics",
+                        ) {
+                            topics.forEach { topic -> option(text = topic.label, value = topic.key) }
                         }
                     }
                 }

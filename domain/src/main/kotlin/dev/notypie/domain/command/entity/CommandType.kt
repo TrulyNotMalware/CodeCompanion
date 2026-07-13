@@ -11,6 +11,8 @@ import dev.notypie.domain.command.entity.context.form.AddParticipantContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
+import dev.notypie.domain.command.entity.context.form.CveSubscribeSubmissionContext
+import dev.notypie.domain.command.entity.context.form.CveUnsubscribeSubmissionContext
 import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
@@ -62,6 +64,12 @@ enum class CommandDetailType {
     STANDUP_SETUP_SUBMIT,
     STANDUP_SUMMARY,
     APPROVAL_CALLBACK,
+
+    CVE_SUBSCRIBE_REQUEST,
+    CVE_SUBSCRIBE_SUBMIT,
+    CVE_UNSUBSCRIBE_REQUEST,
+    CVE_UNSUBSCRIBE_SUBMIT,
+    CVE_SUBSCRIPTIONS_LIST,
 }
 
 /**
@@ -186,6 +194,22 @@ internal fun CommandDetailType.createContext(
 
         CommandDetailType.APPROVAL_CALLBACK -> {
             ApprovalCallbackContext(
+                commandBasicInfo = commandBasicInfo,
+                subCommand = subCommand,
+                intents = intents,
+            )
+        }
+
+        CommandDetailType.CVE_SUBSCRIBE_SUBMIT -> {
+            CveSubscribeSubmissionContext(
+                commandBasicInfo = commandBasicInfo,
+                subCommand = subCommand,
+                intents = intents,
+            )
+        }
+
+        CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT -> {
+            CveUnsubscribeSubmissionContext(
                 commandBasicInfo = commandBasicInfo,
                 subCommand = subCommand,
                 intents = intents,

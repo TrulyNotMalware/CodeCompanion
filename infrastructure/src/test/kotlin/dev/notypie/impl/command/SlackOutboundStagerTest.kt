@@ -9,6 +9,7 @@ import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createStandupSessionDto
@@ -411,6 +412,88 @@ class SlackOutboundStagerTest :
 
                 then("a blank trigger yields null without touching the repository (unstubbed calls would throw)") {
                     event shouldBe null
+                }
+            }
+        }
+
+        given("an OpenModal with a CveSubscribe form") {
+            val topics = listOf(TopicOption(key = "kotlin", label = "Kotlin"))
+            val message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = "trigger-subscribe"),
+                    form = ModalForm.CveSubscribe(topics = topics),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.openCveSubscribeModalRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        triggerId = any(),
+                        topics = any(),
+                    )
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.CVE_SUBSCRIBE_REQUEST)
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to openCveSubscribeModalRequest with CVE_SUBSCRIBE_REQUEST and the topics") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.openCveSubscribeModalRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.CVE_SUBSCRIBE_REQUEST,
+                            triggerId = "trigger-subscribe",
+                            topics = topics,
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an OpenModal with a CveSubscribe form and a blank trigger") {
+            val message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = ""),
+                    form = ModalForm.CveSubscribe(topics = listOf(TopicOption(key = "kotlin", label = "Kotlin"))),
+                )
+
+            `when`("stage is called") {
+                val event = stager.stage(message = message, basicInfo = basicInfo)
+
+                then("a blank trigger yields null (an accidental builder call would throw, unstubbed)") {
+                    event shouldBe null
+                }
+            }
+        }
+
+        given("an OpenModal with a CveUnsubscribe form") {
+            val topics = listOf(TopicOption(key = "cve-java", label = "Java CVE"))
+            val message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = "trigger-unsubscribe"),
+                    form = ModalForm.CveUnsubscribe(topics = topics),
+                )
+
+            `when`("stage is called") {
+                every {
+                    slackEventBuilder.openCveUnsubscribeModalRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        triggerId = any(),
+                        topics = any(),
+                    )
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.CVE_UNSUBSCRIBE_REQUEST)
+
+                stager.stage(message = message, basicInfo = basicInfo)
+
+                then("delegates to openCveUnsubscribeModalRequest with CVE_UNSUBSCRIBE_REQUEST and the topics") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.openCveUnsubscribeModalRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.CVE_UNSUBSCRIBE_REQUEST,
+                            triggerId = "trigger-unsubscribe",
+                            topics = topics,
+                        )
+                    }
                 }
             }
         }

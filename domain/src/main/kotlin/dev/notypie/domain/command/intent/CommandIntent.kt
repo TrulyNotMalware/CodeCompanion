@@ -117,5 +117,22 @@ sealed class CommandIntent : CommandEffect {
         val timezone: java.time.ZoneId,
     ) : CommandIntent()
 
+    /** Subscribes [userId] to the topics identified by [topicKeys]; unknown keys are skipped downstream. */
+    data class CveSubscribe(
+        val userId: String,
+        val topicKeys: List<String>,
+    ) : CommandIntent()
+
+    /** Removes [userId]'s subscriptions to the topics identified by [topicKeys]. */
+    data class CveUnsubscribe(
+        val userId: String,
+        val topicKeys: List<String>,
+    ) : CommandIntent()
+
+    /** Lists [userId]'s current topic subscriptions, delivered as a DM. */
+    data class CveListSubscriptions(
+        val userId: String,
+    ) : CommandIntent()
+
     data object Nothing : CommandIntent()
 }

@@ -109,6 +109,10 @@ object InboundFieldKeys {
     const val STANDUP_SETUP_TIME: String = "standup_setup_time"
     const val STANDUP_SETUP_CUTOFF: String = "standup_setup_cutoff"
     const val STANDUP_SETUP_TIMEZONE: String = "standup_setup_timezone"
+
+    // cve subscribe / unsubscribe modals — the topic multi-select block ids
+    const val CVE_SUBSCRIBE_TOPICS: String = "cve_subscribe_topics"
+    const val CVE_UNSUBSCRIBE_TOPICS: String = "cve_unsubscribe_topics"
 }
 
 /**
@@ -161,6 +165,16 @@ sealed interface InboundSubmission {
         val timeRaw: String,
         val cutoffRaw: String,
         val timezoneRaw: String,
+    ) : InboundSubmission
+
+    /** Topic keys selected in the `/subscribe` modal (already split from the multi-select). */
+    data class CveSubscribe(
+        val topicKeys: List<String>,
+    ) : InboundSubmission
+
+    /** Topic keys selected in the `/unsubscribe` modal (already split from the multi-select). */
+    data class CveUnsubscribe(
+        val topicKeys: List<String>,
     ) : InboundSubmission
 }
 

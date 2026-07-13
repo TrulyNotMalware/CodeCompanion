@@ -7,6 +7,10 @@ import dev.notypie.repository.agent.JpaAgentSessionRepository
 import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
 import dev.notypie.repository.authorization.JpaUserCommandRoleRepository
 import dev.notypie.repository.authorization.UserCommandRoleRepositoryImpl
+import dev.notypie.repository.cve.CveSubscriptionRepositoryImpl
+import dev.notypie.repository.cve.CveTopicRepositoryImpl
+import dev.notypie.repository.cve.JpaCveSubscriptionRepository
+import dev.notypie.repository.cve.JpaCveTopicRepository
 import dev.notypie.repository.mcp.JpaMcpToolCallHistoryRepository
 import dev.notypie.repository.mcp.McpToolCallHistoryRepositoryImpl
 import dev.notypie.repository.meeting.AgendaDispatchRepositoryImpl
@@ -88,6 +92,21 @@ class JpaConfiguration {
     @Primary
     fun mcpToolCallHistoryRepository(jpaMcpToolCallHistoryRepository: JpaMcpToolCallHistoryRepository) =
         McpToolCallHistoryRepositoryImpl(jpaMcpToolCallHistoryRepository = jpaMcpToolCallHistoryRepository)
+
+    @Bean
+    @Primary
+    fun cveTopicRepository(jpaCveTopicRepository: JpaCveTopicRepository) =
+        CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+
+    @Bean
+    @Primary
+    fun cveSubscriptionRepository(
+        jpaCveSubscriptionRepository: JpaCveSubscriptionRepository,
+        jpaCveTopicRepository: JpaCveTopicRepository,
+    ) = CveSubscriptionRepositoryImpl(
+        jpaCveSubscriptionRepository = jpaCveSubscriptionRepository,
+        jpaCveTopicRepository = jpaCveTopicRepository,
+    )
 
     @Bean
     @Primary

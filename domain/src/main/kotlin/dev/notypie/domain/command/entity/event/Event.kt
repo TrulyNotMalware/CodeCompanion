@@ -168,6 +168,32 @@ data class RoleManageRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<RoleManagePayload>
 
+enum class CveSubscriptionAction {
+    SUBSCRIBE,
+    UNSUBSCRIBE,
+    LIST,
+}
+
+class CveSubscriptionPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: CveSubscriptionAction,
+    val userId: String,
+    /** Selected topic keys; empty for LIST. */
+    val topicKeys: List<String> = emptyList(),
+    /** Originating slash/interaction context; the listener DMs the confirmation to [userId]. */
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CveSubscriptionRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CveSubscriptionRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CveSubscriptionPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<CveSubscriptionPayload>
+
 /**
  * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. [threadId] is the
  * conversation anchor the async listener keys session continuity on and replies into;

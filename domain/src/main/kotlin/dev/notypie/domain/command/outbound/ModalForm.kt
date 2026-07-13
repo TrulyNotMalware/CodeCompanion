@@ -37,4 +37,20 @@ sealed interface ModalForm {
         val meetingTitle: String,
         val originNotice: MessageRef?,
     ) : ModalForm
+
+    /** Topics offered in the `/subscribe` modal; queried and mapped by the application service. */
+    data class CveSubscribe(
+        val topics: List<TopicOption>,
+    ) : ModalForm
+
+    /** The user's current subscriptions offered in the `/unsubscribe` modal. */
+    data class CveUnsubscribe(
+        val topics: List<TopicOption>,
+    ) : ModalForm
 }
+
+/** A single modal option: [key] is the wire value (topic key), [label] the display name. */
+data class TopicOption(
+    val key: String,
+    val label: String,
+)

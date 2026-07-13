@@ -11,6 +11,9 @@ import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
+import dev.notypie.domain.command.entity.event.CveSubscriptionAction
+import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
+import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
@@ -202,6 +205,47 @@ class SlackIntentResolver {
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                )
+            }
+
+            is CommandIntent.CveSubscribe -> {
+                CveSubscriptionRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveSubscriptionPayload(
+                            action = CveSubscriptionAction.SUBSCRIBE,
+                            userId = intent.userId,
+                            topicKeys = intent.topicKeys,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
+                )
+            }
+
+            is CommandIntent.CveUnsubscribe -> {
+                CveSubscriptionRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveSubscriptionPayload(
+                            action = CveSubscriptionAction.UNSUBSCRIBE,
+                            userId = intent.userId,
+                            topicKeys = intent.topicKeys,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT,
+                )
+            }
+
+            is CommandIntent.CveListSubscriptions -> {
+                CveSubscriptionRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveSubscriptionPayload(
+                            action = CveSubscriptionAction.LIST,
+                            userId = intent.userId,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.CVE_SUBSCRIPTIONS_LIST,
                 )
             }
 

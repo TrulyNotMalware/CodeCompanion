@@ -116,6 +116,32 @@ class SlackOutboundStager(
                     }
                 }
 
+            is ModalForm.CveSubscribe ->
+                if (message.handle.raw.isBlank()) {
+                    log.warn { "Blank triggerId; cannot open cve subscribe modal" }
+                    null
+                } else {
+                    slackEventBuilder.openCveSubscribeModalRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = CommandDetailType.CVE_SUBSCRIBE_REQUEST,
+                        triggerId = message.handle.raw,
+                        topics = form.topics,
+                    )
+                }
+
+            is ModalForm.CveUnsubscribe ->
+                if (message.handle.raw.isBlank()) {
+                    log.warn { "Blank triggerId; cannot open cve unsubscribe modal" }
+                    null
+                } else {
+                    slackEventBuilder.openCveUnsubscribeModalRequest(
+                        commandBasicInfo = basicInfo,
+                        commandDetailType = CommandDetailType.CVE_UNSUBSCRIBE_REQUEST,
+                        triggerId = message.handle.raw,
+                        topics = form.topics,
+                    )
+                }
+
             is ModalForm.DeclineReason ->
                 slackEventBuilder.openDeclineReasonModalRequest(
                     commandBasicInfo = basicInfo,

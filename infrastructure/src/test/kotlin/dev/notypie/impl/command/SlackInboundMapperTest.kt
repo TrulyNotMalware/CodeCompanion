@@ -108,6 +108,61 @@ class SlackInboundMapperTest :
             }
         }
 
+        given("a cve subscribe view_submission with a comma-joined multi-select") {
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.MULTI_STATIC_SELECT,
+                                isSelected = true,
+                                // The parser joins selected option values with ", " — the mapper must split+trim.
+                                selectedValue = "kotlin, spring",
+                                blockId = InboundFieldKeys.CVE_SUBSCRIBE_TOPICS,
+                            ),
+                        ),
+                    idempotencyKey = UUID.randomUUID(),
+                )
+
+            `when`("mapped to the neutral inbound model") {
+                val submission = payload.toInbound().submission
+
+                then("it builds a CveSubscribe with trimmed topic keys") {
+                    val subscribe = submission.shouldBeInstanceOf<InboundSubmission.CveSubscribe>()
+                    subscribe.topicKeys shouldContainExactly listOf("kotlin", "spring")
+                }
+            }
+        }
+
+        given("a cve unsubscribe view_submission") {
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.MULTI_STATIC_SELECT,
+                                isSelected = true,
+                                selectedValue = "cve-java",
+                                blockId = InboundFieldKeys.CVE_UNSUBSCRIBE_TOPICS,
+                            ),
+                        ),
+                    idempotencyKey = UUID.randomUUID(),
+                )
+
+            `when`("mapped to the neutral inbound model") {
+                val submission = payload.toInbound().submission
+
+                then("it builds a CveUnsubscribe with the selected key") {
+                    val unsubscribe = submission.shouldBeInstanceOf<InboundSubmission.CveUnsubscribe>()
+                    unsubscribe.topicKeys shouldContainExactly listOf("cve-java")
+                }
+            }
+        }
+
         given("States covering every element type") {
             fun field(type: ActionElementTypes) =
                 States(type = type, isSelected = true, selectedValue = "v", blockId = "b").toInboundField()

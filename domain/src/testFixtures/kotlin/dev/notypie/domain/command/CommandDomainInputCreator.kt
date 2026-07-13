@@ -15,6 +15,9 @@ import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
+import dev.notypie.domain.command.entity.event.CveSubscriptionAction
+import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
+import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
@@ -106,6 +109,25 @@ fun createRoleManageRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.SIMPLE_TEXT,
+)
+
+fun createCveSubscriptionRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: CveSubscriptionAction = CveSubscriptionAction.SUBSCRIBE,
+    userId: String = TEST_USER_ID,
+    topicKeys: List<String> = listOf("cve-java"),
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+    type: CommandDetailType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
+) = CveSubscriptionRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CveSubscriptionPayload(
+            action = action,
+            userId = userId,
+            topicKeys = topicKeys,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = type,
 )
 
 fun createApprovalContents(

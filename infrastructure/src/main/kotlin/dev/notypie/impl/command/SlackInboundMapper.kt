@@ -103,8 +103,25 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 timezoneRaw = form.value(key = InboundFieldKeys.STANDUP_SETUP_TIMEZONE),
             )
 
+        CommandDetailType.CVE_SUBSCRIBE_SUBMIT ->
+            InboundSubmission.CveSubscribe(
+                topicKeys = form.selectedTopicKeys(key = InboundFieldKeys.CVE_SUBSCRIBE_TOPICS),
+            )
+
+        CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT ->
+            InboundSubmission.CveUnsubscribe(
+                topicKeys = form.selectedTopicKeys(key = InboundFieldKeys.CVE_UNSUBSCRIBE_TOPICS),
+            )
+
         else -> null
     }
+
+/** Splits a multi-select's comma-joined raw value (the parser joins with `, `) into distinct keys. */
+private fun InboundForm.selectedTopicKeys(key: String): List<String> =
+    value(key = key)
+        .split(",")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
 
 /** First non-blank raw value for [kind], mirroring the reschedule context's date/time selection. */
 private fun InboundForm.firstNonBlankValue(kind: InboundFieldKind): String =
