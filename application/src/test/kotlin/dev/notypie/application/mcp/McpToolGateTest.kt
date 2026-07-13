@@ -168,4 +168,37 @@ class McpToolGateTest :
                 }
             }
         }
+
+        given("a role resolver that throws") {
+            val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
+            val roleResolver = mockk<CommandRoleResolver>()
+            every { roleResolver.resolve(userId = token.userId) } throws IllegalStateException("role lookup down")
+            val gate =
+                McpToolGate(
+                    commandRoleResolver = roleResolver,
+                    mcpToolCallHistoryRepository = auditRepository,
+                )
+
+            `when`("a tool is dispatched") {
+                val result =
+                    gate.execute(
+                        transportContext = contextWith(token = token),
+                        toolName = "get_status",
+                        requiredPermission = CommandPermission.OPERATIONS,
+                    ) { "must not run" }
+
+                then("it fails closed as a tool error without running the body") {
+                    result.isError shouldBe true
+                    result.text() shouldContain "get_status"
+                }
+
+                then("a FAILED audit row records the floor role and the error code") {
+                    val recorded = slot<McpToolCallRecord>()
+                    verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
+                    recorded.captured.outcome shouldBe McpToolCallOutcome.FAILED
+                    recorded.captured.resolvedRole shouldBe UserRole.USER
+                    recorded.captured.errorCode shouldBe "IllegalStateException"
+                }
+            }
+        }
     })

@@ -4,6 +4,7 @@ import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.ScopedTurnToken
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.domain.command.authorization.CommandPermission
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository
 import dev.notypie.repository.mcp.McpToolCallRecord
 import dev.notypie.repository.mcp.schema.McpToolCallOutcome
@@ -37,10 +38,9 @@ class McpToolGate(
                 ?: return errorResult(text = "Unauthenticated tool call.")
                     .also { log.warn { "MCP tool call without a verified turn token: tool=$toolName" } }
 
-        val resolvedRole = commandRoleResolver.resolve(userId = token.userId)
         val startedAt = System.nanoTime()
 
-        fun audit(outcome: McpToolCallOutcome, errorCode: String? = null) =
+        fun audit(role: UserRole, outcome: McpToolCallOutcome, errorCode: String? = null) =
             runCatching {
                 mcpToolCallHistoryRepository.record(
                     call =
@@ -49,7 +49,7 @@ class McpToolGate(
                             requesterId = token.userId,
                             sessionKey = token.sessionKey,
                             turnId = token.turnId,
-                            resolvedRole = resolvedRole,
+                            resolvedRole = role,
                             outcome = outcome,
                             errorCode = errorCode,
                             argumentsJson = argumentsSummary,
@@ -58,8 +58,21 @@ class McpToolGate(
                 )
             }.onFailure { log.error(it) { "MCP tool audit write failed: tool=$toolName outcome=$outcome" } }
 
+        val resolvedRole =
+            runCatching { commandRoleResolver.resolve(userId = token.userId) }
+                .getOrElse { failure ->
+                    log.error(failure) { "MCP role resolution failed: tool=$toolName" }
+                    // The audit row needs a role; record the floor so the attempt stays attributable.
+                    audit(
+                        role = UserRole.USER,
+                        outcome = McpToolCallOutcome.FAILED,
+                        errorCode = failure.javaClass.simpleName,
+                    )
+                    return errorResult(text = "`$toolName` failed to execute. Try again or contact an admin.")
+                }
+
         if (!resolvedRole.grants(permission = requiredPermission)) {
-            audit(outcome = McpToolCallOutcome.DENIED)
+            audit(role = resolvedRole, outcome = McpToolCallOutcome.DENIED)
             return errorResult(
                 text =
                     "You don't have permission to use `$toolName` " +
@@ -70,7 +83,7 @@ class McpToolGate(
         return runCatching { body(token) }
             .fold(
                 onSuccess = { text ->
-                    audit(outcome = McpToolCallOutcome.COMPLETED)
+                    audit(role = resolvedRole, outcome = McpToolCallOutcome.COMPLETED)
                     CallToolResult
                         .builder()
                         .addTextContent(text)
@@ -79,7 +92,11 @@ class McpToolGate(
                 },
                 onFailure = { failure ->
                     log.error(failure) { "MCP tool execution failed: tool=$toolName" }
-                    audit(outcome = McpToolCallOutcome.FAILED, errorCode = failure.javaClass.simpleName)
+                    audit(
+                        role = resolvedRole,
+                        outcome = McpToolCallOutcome.FAILED,
+                        errorCode = failure.javaClass.simpleName,
+                    )
                     errorResult(text = "`$toolName` failed to execute. Try again or contact an admin.")
                 },
             )

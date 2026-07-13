@@ -54,6 +54,7 @@ spring:
           tool: true
         streamable-http:
           mcp-endpoint: /mcp
+          disallow-delete: true
 
   kafka:
     bootstrap-servers: [ "kafka:port" ]
