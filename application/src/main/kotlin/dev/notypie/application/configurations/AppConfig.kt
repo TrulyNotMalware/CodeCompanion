@@ -19,6 +19,7 @@ data class AppConfig(
     val socket: Socket = Socket(),
     val agent: Agent = Agent(),
     val authorization: Authorization = Authorization(),
+    val mcp: Mcp = Mcp(),
 ) {
     data class Authorization(
         // Slack user ids treated as ADMIN without a DB row — breaks the bootstrap chicken-and-egg
@@ -96,6 +97,17 @@ data class AppConfig(
     data class Socket(
         val meetingCommand: String = "/meetup",
         val standupCommand: String = "/standup",
+    )
+
+    // MCP domain tools exposed to the agent lane. The endpoint is loopback-only by default
+    // because the sidecar shares the Pod network namespace; every call authenticates with a
+    // per-turn token minted from `signingSecret`.
+    data class Mcp(
+        val enabled: Boolean = false,
+        val signingSecret: String = "",
+        val tokenTtlSeconds: Long = 300L,
+        val clockSkewSeconds: Long = 30L,
+        val allowRemote: Boolean = false,
     )
 
     // AI-agent backend (claude-sidecar co-process). The sidecar shares the Pod, so the default

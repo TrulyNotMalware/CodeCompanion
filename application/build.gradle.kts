@@ -50,6 +50,10 @@ dependencies {
     // AOP
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
+    // MCP server — domain tools for the AI agent lane (streamable HTTP on /mcp)
+    implementation(platform("org.springframework.ai:spring-ai-bom:${rootProject.extra.get("springAiVersion")}"))
+    implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
+
     // rest docs
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     developmentOnly("org.springframework.boot:spring-boot-devtools:${rootProject.extra.get("springBootVersion")}")

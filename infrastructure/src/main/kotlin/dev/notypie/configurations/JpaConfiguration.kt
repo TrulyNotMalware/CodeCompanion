@@ -7,6 +7,8 @@ import dev.notypie.repository.agent.JpaAgentSessionRepository
 import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
 import dev.notypie.repository.authorization.JpaUserCommandRoleRepository
 import dev.notypie.repository.authorization.UserCommandRoleRepositoryImpl
+import dev.notypie.repository.mcp.JpaMcpToolCallHistoryRepository
+import dev.notypie.repository.mcp.McpToolCallHistoryRepositoryImpl
 import dev.notypie.repository.meeting.AgendaDispatchRepositoryImpl
 import dev.notypie.repository.meeting.JpaAgendaDispatchRepository
 import dev.notypie.repository.meeting.JpaMeetingReminderRepository
@@ -81,6 +83,11 @@ class JpaConfiguration {
     @Primary
     fun userCommandRoleRepository(jpaUserCommandRoleRepository: JpaUserCommandRoleRepository) =
         UserCommandRoleRepositoryImpl(jpaUserCommandRoleRepository = jpaUserCommandRoleRepository)
+
+    @Bean
+    @Primary
+    fun mcpToolCallHistoryRepository(jpaMcpToolCallHistoryRepository: JpaMcpToolCallHistoryRepository) =
+        McpToolCallHistoryRepositoryImpl(jpaMcpToolCallHistoryRepository = jpaMcpToolCallHistoryRepository)
 
     @Bean
     @Primary

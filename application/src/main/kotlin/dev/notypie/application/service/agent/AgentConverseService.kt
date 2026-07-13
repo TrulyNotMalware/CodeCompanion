@@ -1,6 +1,7 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.common.runInTx
+import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentConversePayload
@@ -63,6 +64,8 @@ class AgentConverseService(
     private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
+    // Null when MCP is disabled — the turn then carries no token and the model has no tools.
+    private val scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
 ) {
     companion object {
         internal const val RESPONSE_HEADLINE = "CodeCompanion — AI assistant"
@@ -97,6 +100,12 @@ class AgentConverseService(
                         sessionId = agentSessionRepository.findProviderSessionId(sessionKey = sessionKey),
                         userId = basicInfo.publisherId,
                         appendSystemPrompt = contextPrompt(payload = payload),
+                        scopedToken =
+                            scopedTurnTokenCodec?.mint(
+                                userId = basicInfo.publisherId,
+                                sessionKey = sessionKey,
+                                turnId = event.idempotencyKey.toString(),
+                            ),
                     ),
             )
         val durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000L

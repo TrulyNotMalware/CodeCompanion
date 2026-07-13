@@ -65,7 +65,8 @@ class OpsStatusService(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    private fun renderReport(): String {
+    // Internal: the MCP `get_status` tool renders the same report so chat and tool output agree.
+    internal fun renderReport(): String {
         val now = clock.instant().atZone(clock.zone).toLocalDateTime()
         val cutoff = now.minusSeconds(stuckThresholdSeconds)
 

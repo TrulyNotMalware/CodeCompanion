@@ -26,6 +26,7 @@ ext {
     set("springBootVersion", "4.1.0")
     set("jacksonVersion", "3.2.0")
     set("kotlinLoggingVersion", "8.0.4")
+    set("springAiVersion", "2.0.0")
 }
 
 kotlin {

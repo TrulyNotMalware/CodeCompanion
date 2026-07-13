@@ -109,6 +109,23 @@ The application receives environment variables from:
 
 All environment variables are injected into the container via `envFrom`.
 
+## AI Agent Sidecar (Optional)
+
+The AI assistant lane (`@bot ask`) requires [agent-sidecar](https://github.com/TrulyNotMalware/agent-sidecar) running inside the same Pod. The manifests in this directory do not include it by default; to enable it:
+
+1. **Add the sidecar as a native sidecar container** — an `initContainers` entry with `restartPolicy: Always` (Kubernetes v1.29+), so it starts before and outlives the app container.
+2. **Sidecar environment**:
+   - `PROVIDER`: `claude` or `codex`
+   - `BEARER_SECRET`: shared secret, must match the app's `slack.app.agent.sidecar.bearer-secret`
+   - `WORKSPACE_ROOT`: a writable path (mount an `emptyDir` when running as non-root)
+3. **Provider auth** — store exactly one of these in a Secret and inject it into the sidecar container:
+   - `CLAUDE_CODE_OAUTH_TOKEN` (Claude subscription, from `claude setup-token`)
+   - `ANTHROPIC_API_KEY` (Claude API)
+   - `OPENAI_API_KEY` (Codex — the sidecar materializes `~/.codex/auth.json` at startup)
+4. **App configuration**: `slack.app.agent.sidecar.base-url` stays at the Pod-loopback default `http://127.0.0.1:7300`; only the bearer secret needs to be injected (e.g. as an environment variable from the same Secret).
+
+Because both containers share the Pod network namespace, no Service or NetworkPolicy changes are needed — the sidecar should bind to `127.0.0.1` only.
+
 ## Notes
 
 - The deployment uses `$IMAGE_NAME` variable which should be replaced during CI/CD
@@ -228,6 +245,23 @@ k8s/
 - **Secret**: 민감한 인증 정보
 
 모든 환경 변수는 `envFrom`을 통해 컨테이너에 주입됩니다.
+
+## AI 에이전트 사이드카 (선택)
+
+AI 어시스턴트 기능(`@bot ask`)을 사용하려면 [agent-sidecar](https://github.com/TrulyNotMalware/agent-sidecar)가 같은 Pod 안에서 실행되어야 합니다. 이 디렉토리의 매니페스트에는 기본 포함되어 있지 않으며, 활성화하려면:
+
+1. **네이티브 사이드카 컨테이너로 추가** — `restartPolicy: Always`를 가진 `initContainers` 항목 (Kubernetes v1.29+). 앱 컨테이너보다 먼저 시작되고 앱보다 오래 유지됩니다.
+2. **사이드카 환경 변수**:
+   - `PROVIDER`: `claude` 또는 `codex`
+   - `BEARER_SECRET`: 공유 시크릿, 앱의 `slack.app.agent.sidecar.bearer-secret`과 일치해야 함
+   - `WORKSPACE_ROOT`: 쓰기 가능한 경로 (non-root 실행 시 `emptyDir` 마운트 권장)
+3. **프로바이더 인증** — 아래 중 하나만 Secret에 저장하고 사이드카 컨테이너에 주입:
+   - `CLAUDE_CODE_OAUTH_TOKEN` (Claude 구독, `claude setup-token`으로 발급)
+   - `ANTHROPIC_API_KEY` (Claude API)
+   - `OPENAI_API_KEY` (Codex — 사이드카가 시작 시 `~/.codex/auth.json`을 생성)
+4. **앱 설정**: `slack.app.agent.sidecar.base-url`은 Pod 루프백 기본값 `http://127.0.0.1:7300`을 그대로 사용하고, bearer 시크릿만 주입하면 됩니다 (예: 같은 Secret의 환경 변수로).
+
+두 컨테이너가 Pod 네트워크 네임스페이스를 공유하므로 Service나 NetworkPolicy 변경은 필요 없습니다 — 사이드카는 `127.0.0.1`에만 바인드하는 것이 안전합니다.
 
 ## 참고 사항
 

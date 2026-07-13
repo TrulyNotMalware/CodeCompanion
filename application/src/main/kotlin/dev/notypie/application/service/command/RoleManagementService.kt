@@ -82,7 +82,8 @@ class RoleManagementService(
         }
     }
 
-    private fun renderGrants(): String {
+    // Internal: the MCP `list_roles` tool renders the same listing so chat and tool output agree.
+    internal fun renderGrants(): String {
         val bootstrapLines =
             commandRoleResolver.bootstrapAdmins
                 .sorted()

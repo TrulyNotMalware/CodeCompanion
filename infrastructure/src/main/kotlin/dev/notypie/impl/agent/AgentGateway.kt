@@ -16,6 +16,8 @@ interface AgentGateway {
  * `X-User-Id` for per-user concurrency gating and MCP tool attribution — the model never sees it.
  * [appendSystemPrompt] is appended to the sidecar's static base prompt (CLAUDE.md) for this turn —
  * the seam for per-request context like requester, channel, and current time.
+ * [scopedToken] is the per-turn MCP credential (`X-Turn-Token`); the sidecar hands it to the
+ * model's MCP client as the bearer for this app's domain-tool endpoint.
  */
 data class AgentTurnRequest(
     val sessionKey: String,
@@ -23,6 +25,7 @@ data class AgentTurnRequest(
     val sessionId: String? = null,
     val userId: String? = null,
     val appendSystemPrompt: String? = null,
+    val scopedToken: String? = null,
 )
 
 sealed interface AgentTurnResult {

@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
@@ -8,6 +9,7 @@ import dev.notypie.impl.agent.SidecarAgentClient
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -43,6 +45,8 @@ class AgentConfiguration(
         eventPublisher: EventPublisher,
         meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
+        // Present only when MCP is enabled (McpServerConfiguration) — turns then carry a token.
+        scopedTurnTokenCodec: ObjectProvider<ScopedTurnTokenCodec>,
     ): AgentConverseService =
         AgentConverseService(
             agentGateway = agentGateway,
@@ -52,5 +56,6 @@ class AgentConfiguration(
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
             transactionManager = transactionManager,
+            scopedTurnTokenCodec = scopedTurnTokenCodec.getIfAvailable(),
         )
 }

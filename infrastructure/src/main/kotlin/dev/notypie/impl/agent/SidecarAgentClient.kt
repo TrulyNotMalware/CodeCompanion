@@ -67,6 +67,9 @@ class SidecarAgentClient(
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream")
                 .apply { request.userId?.let { header("X-User-Id", it) } }
+                // Header, not body: the sidecar's request schema forbids unknown fields, and a
+                // header keeps the credential out of request-body logging.
+                .apply { request.scopedToken?.let { header("X-Turn-Token", it) } }
                 .POST(HttpRequest.BodyPublishers.ofString(toRequestBody(request = request)))
                 .build()
 

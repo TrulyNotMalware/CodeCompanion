@@ -22,6 +22,7 @@ class SidecarAgentClientTest :
         var capturedBody = ""
         var capturedAuthorization: String? = null
         var capturedUserId: String? = null
+        var capturedTurnToken: String? = null
 
         val server =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -29,6 +30,7 @@ class SidecarAgentClientTest :
                     capturedBody = exchange.requestBody.readBytes().decodeToString()
                     capturedAuthorization = exchange.requestHeaders.getFirst("Authorization")
                     capturedUserId = exchange.requestHeaders.getFirst("X-User-Id")
+                    capturedTurnToken = exchange.requestHeaders.getFirst("X-Turn-Token")
                     respond(exchange)
                 }
                 start()
@@ -110,6 +112,10 @@ class SidecarAgentClientTest :
                     capturedUserId shouldBe "U1"
                 }
 
+                then("sends no turn-token header when the request carries no token") {
+                    capturedTurnToken shouldBe null
+                }
+
                 then("echoes sessionKey, prompt, resume sessionId, and the appended prompt in the body") {
                     @Suppress("UNCHECKED_CAST")
                     val body = jsonMapper.readValue(capturedBody, Map::class.java) as Map<String, Any?>
@@ -117,6 +123,36 @@ class SidecarAgentClientTest :
                     body["prompt"] shouldBe "hi"
                     body["sessionId"] shouldBe "sess-0"
                     body["appendSystemPrompt"] shouldBe "## Conversation context"
+                }
+            }
+        }
+
+        given("a turn carrying an MCP scoped token") {
+            respond =
+                sseResponse(
+                    """
+                    event: session
+                    data: {"sessionId":"sess-2"}
+
+                    event: done
+                    data: {"finalText":"ok","usage":{"inputTokens":1,"outputTokens":1}}
+
+                    """.trimIndent(),
+                )
+
+            `when`("converse") {
+                client.converse(
+                    request =
+                        AgentTurnRequest(
+                            sessionKey = "C1:1712345678.000100",
+                            prompt = "hi",
+                            scopedToken = "v1.payload.signature",
+                        ),
+                )
+
+                then("the token travels as the X-Turn-Token header, not in the body") {
+                    capturedTurnToken shouldBe "v1.payload.signature"
+                    capturedBody shouldNotContain "v1.payload.signature"
                 }
             }
         }

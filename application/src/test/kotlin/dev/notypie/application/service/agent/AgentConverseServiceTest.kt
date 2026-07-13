@@ -1,6 +1,7 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_THREAD_TS
 import dev.notypie.domain.TEST_USER_NAME
@@ -21,6 +22,7 @@ import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -34,6 +36,7 @@ import io.mockk.slot
 import io.mockk.verify
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import java.time.Duration
 import java.time.LocalDateTime
 
 class AgentConverseServiceTest :
@@ -57,6 +60,7 @@ class AgentConverseServiceTest :
             outboundStager: OutboundMessageStager = mockk(),
             eventPublisher: EventPublisher = mockk(relaxed = true),
             meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry(),
+            scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
         ) = AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
@@ -66,6 +70,7 @@ class AgentConverseServiceTest :
             meterRegistry = meterRegistry,
             transactionManager = stubTransactionManager(),
             clock = createFixedUtcClock(now = fixedNow),
+            scopedTurnTokenCodec = scopedTurnTokenCodec,
         )
 
         val stubStagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
@@ -126,6 +131,10 @@ class AgentConverseServiceTest :
                     turnRequest.captured.prompt shouldBe "what is on my calendar"
                     turnRequest.captured.sessionId shouldBe "sess-prev"
                     turnRequest.captured.userId shouldBe basicInfo.publisherId
+                }
+
+                then("no MCP token rides the turn while MCP is disabled") {
+                    turnRequest.captured.scopedToken shouldBe null
                 }
 
                 then("the per-request context block carries requester, channel, date, and mrkdwn rules") {
@@ -321,6 +330,47 @@ class AgentConverseServiceTest :
                     turnRequest.captured.sessionKey shouldBe "${basicInfo.channel}:${basicInfo.publisherId}"
                     val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
                     staged.threadId shouldBe null
+                }
+            }
+        }
+
+        given("MCP enabled via a wired token codec") {
+            val basicInfo = createCommandBasicInfo()
+            val event =
+                createAgentConverseRequestEvent(
+                    prompt = "what's the outbox status?",
+                    threadId = TEST_THREAD_TS,
+                    responseBasicInfo = basicInfo,
+                )
+            val codec =
+                ScopedTurnTokenCodec(
+                    signingSecret = "test-signing-secret",
+                    tokenTtl = Duration.ofSeconds(300L),
+                    clockSkew = Duration.ofSeconds(30L),
+                )
+
+            val gateway = mockk<AgentGateway>()
+            val turnRequest = slot<AgentTurnRequest>()
+            every { gateway.converse(request = capture(turnRequest)) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "done")
+
+            val stagedMessage = slot<OutboundMessage>()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    scopedTurnTokenCodec = codec,
+                )
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = event)
+
+                then("the turn carries a token the codec verifies back to this turn's identity") {
+                    val scopedToken = turnRequest.captured.scopedToken.shouldNotBeNull()
+                    val decoded = codec.verify(token = scopedToken).shouldNotBeNull()
+                    decoded.userId shouldBe basicInfo.publisherId
+                    decoded.sessionKey shouldBe "${basicInfo.channel}:$TEST_THREAD_TS"
+                    decoded.turnId shouldBe event.idempotencyKey.toString()
                 }
             }
         }

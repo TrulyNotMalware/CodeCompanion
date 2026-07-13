@@ -39,6 +39,22 @@ spring:
     console:
       enabled: false
 
+  # MCP server for the agent lane's domain tools. `MCP_ENABLED` drives both this switch and
+  # `slack.app.mcp.enabled` so the transport and the token pipeline cannot diverge.
+  ai:
+    mcp:
+      server:
+        enabled: ${MCP_ENABLED:false}
+        name: codecompanion
+        version: ${VERSION:unknown}
+        type: SYNC
+        protocol: STREAMABLE
+        instructions: "Read-only CodeCompanion domain tools; caller identity comes from the per-turn token."
+        capabilities:
+          tool: true
+        streamable-http:
+          mcp-endpoint: /mcp
+
   kafka:
     bootstrap-servers: [ "kafka:port" ]
     producer:
@@ -106,3 +122,6 @@ slack:
         base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
         bearer-secret: ${SIDECAR_BEARER_SECRET:}
         request-timeout-seconds: ${SIDECAR_REQUEST_TIMEOUT_SECONDS:120}
+    mcp:
+      enabled: ${MCP_ENABLED:false}
+      signing-secret: ${MCP_SIGNING_SECRET:}
