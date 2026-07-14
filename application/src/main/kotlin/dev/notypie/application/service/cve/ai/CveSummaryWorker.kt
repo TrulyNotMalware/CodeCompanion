@@ -76,7 +76,8 @@ class CveSummaryWorker(
 
         // A lost claim here means the row was reset and re-owned; the summary is done, so marking
         // it FAILED would burn the retry budget for nothing — log and leave the row to its owner.
-        if (cveEventRepository.markDone(id = event.id, token = token, summary = summary) == 0) {
+        val doneAt = LocalDateTime.now()
+        if (cveEventRepository.markDone(id = event.id, token = token, summary = summary, now = doneAt) == 0) {
             log.warn {
                 "CVE summary for event=${event.id} completed but the claim was lost; leaving row to its new owner"
             }

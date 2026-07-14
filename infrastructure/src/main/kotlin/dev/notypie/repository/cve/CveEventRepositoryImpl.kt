@@ -34,8 +34,12 @@ open class CveEventRepositoryImpl(
         jpaCveEventRepository.claimForSummary(id = id, token = token, now = now)
 
     @Transactional
-    override fun markDone(id: Long, token: String, summary: String): Int =
-        jpaCveEventRepository.markDone(id = id, token = token, summary = summary)
+    override fun markDone(
+        id: Long,
+        token: String,
+        summary: String,
+        now: LocalDateTime,
+    ): Int = jpaCveEventRepository.markDone(id = id, token = token, summary = summary, now = now)
 
     @Transactional
     override fun markFailed(id: Long, token: String, nextAttemptAt: LocalDateTime): Int =

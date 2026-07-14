@@ -126,14 +126,14 @@ class CveEventRepositoryImplTest :
         given("markDone") {
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
-            every { jpa.markDone(id = 7L, token = "tok", summary = "summary") } returns 1
+            every { jpa.markDone(id = 7L, token = "tok", summary = "summary", now = now) } returns 1
 
             `when`("marking done") {
-                val updated = repository.markDone(id = 7L, token = "tok", summary = "summary")
+                val updated = repository.markDone(id = 7L, token = "tok", summary = "summary", now = now)
 
-                then("it delegates with the summary and owning token") {
+                then("it delegates with the summary, owning token and app-clock timestamp") {
                     updated shouldBe 1
-                    verify(exactly = 1) { jpa.markDone(id = 7L, token = "tok", summary = "summary") }
+                    verify(exactly = 1) { jpa.markDone(id = 7L, token = "tok", summary = "summary", now = now) }
                 }
             }
         }

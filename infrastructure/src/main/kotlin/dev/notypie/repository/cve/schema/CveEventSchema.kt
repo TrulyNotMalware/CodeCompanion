@@ -29,6 +29,8 @@ enum class CveSummaryStatus { PENDING, SUMMARIZING, DONE, FAILED }
     ],
     indexes = [
         Index(name = "idx_cve_event_summary_status", columnList = "summary_status"),
+        // Keys the notification dispatcher's DONE scan within the created_at horizon (see V16).
+        Index(name = "idx_cve_event_status_created_at", columnList = "summary_status, created_at"),
     ],
 )
 class CveEventSchema(

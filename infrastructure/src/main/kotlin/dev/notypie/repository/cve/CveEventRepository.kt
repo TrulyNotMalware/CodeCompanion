@@ -50,8 +50,17 @@ interface CveEventRepository {
      */
     fun claimForSummary(id: Long, token: String, now: LocalDateTime): Int
 
-    /** Records [summary] and marks the row DONE, guarded by the owning [token]. Returns rows affected. */
-    fun markDone(id: Long, token: String, summary: String): Int
+    /**
+     * Records [summary] and marks the row DONE, guarded by the owning [token], stamping updated_at
+     * from the app clock [now] (the dispatcher's digest cutoff compares against it). Returns rows
+     * affected.
+     */
+    fun markDone(
+        id: Long,
+        token: String,
+        summary: String,
+        now: LocalDateTime,
+    ): Int
 
     /**
      * Marks the row FAILED, increments retry_count and schedules the next attempt at [nextAttemptAt],

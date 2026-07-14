@@ -127,6 +127,7 @@ data class AppConfig(
         val github: Github = Github(),
         val nvd: Nvd = Nvd(),
         val collector: Collector = Collector(),
+        val notification: Notification = Notification(),
     ) {
         data class TopicDefinition(
             val key: String = "",
@@ -157,6 +158,19 @@ data class AppConfig(
         data class Collector(
             val requestTimeoutSeconds: Long = 30,
             val windowMinutes: Long = 5,
+        )
+
+        // Notification dispatcher knobs. [batchSize] caps the (event, user) pairs claimed per tick;
+        // [digestSendAt] is the earliest local time (HH:mm in [digestTimezone]) a DIGEST bundle may
+        // go out; [digestSummaryMaxLength] truncates each event's summary inside the digest DM;
+        // [deliveryHorizonDays] bounds the undelivered scan so cve_event's lack of a TTL never turns
+        // it into a full-table sweep.
+        data class Notification(
+            val batchSize: Int = 50,
+            val digestSendAt: String = "09:00",
+            val digestTimezone: String = "Asia/Seoul",
+            val digestSummaryMaxLength: Int = 700,
+            val deliveryHorizonDays: Long = 7,
         )
     }
 

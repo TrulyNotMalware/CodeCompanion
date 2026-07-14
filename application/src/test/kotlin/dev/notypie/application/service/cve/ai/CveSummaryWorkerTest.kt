@@ -45,7 +45,9 @@ class CveSummaryWorkerTest :
             every { topicRepository.findById(id = 10L) } returns
                 createCveTopic(id = 10L, displayName = "Java CVE")
             every { summarizer.summarize(request = any()) } returns "SUMMARY"
-            every { eventRepository.markDone(id = 1L, token = capture(doneToken), summary = "SUMMARY") } returns 1
+            every {
+                eventRepository.markDone(id = 1L, token = capture(doneToken), summary = "SUMMARY", now = any())
+            } returns 1
             val worker = workerWith(eventRepository, topicRepository, summarizer)
 
             `when`("the tick runs") {
@@ -57,7 +59,9 @@ class CveSummaryWorkerTest :
                 }
 
                 then("the summarizer output is stored under the same claim token, no failure recorded") {
-                    verify(exactly = 1) { eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY") }
+                    verify(exactly = 1) {
+                        eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY", now = any())
+                    }
                     claimToken.captured shouldBe doneToken.captured
                     verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
                 }
@@ -80,7 +84,9 @@ class CveSummaryWorkerTest :
                 then("the summarizer is never invoked and nothing is marked done or failed") {
                     verify(exactly = 0) { summarizer.summarize(request = any()) }
                     verify(exactly = 0) { topicRepository.findById(id = any()) }
-                    verify(exactly = 0) { eventRepository.markDone(id = any(), token = any(), summary = any()) }
+                    verify(exactly = 0) {
+                        eventRepository.markDone(id = any(), token = any(), summary = any(), now = any())
+                    }
                     verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
                 }
             }
@@ -107,7 +113,7 @@ class CveSummaryWorkerTest :
             every {
                 eventRepository.markFailed(id = 1L, token = capture(failToken), nextAttemptAt = capture(nextAttemptAt))
             } returns 1
-            every { eventRepository.markDone(id = 2L, token = any(), summary = "OK") } returns 1
+            every { eventRepository.markDone(id = 2L, token = any(), summary = "OK", now = any()) } returns 1
             val worker = workerWith(eventRepository, topicRepository, summarizer)
 
             `when`("the tick runs") {
@@ -127,7 +133,9 @@ class CveSummaryWorkerTest :
                 }
 
                 then("the loop continues and the healthy event is summarized and marked done") {
-                    verify(exactly = 1) { eventRepository.markDone(id = 2L, token = any(), summary = "OK") }
+                    verify(
+                        exactly = 1,
+                    ) { eventRepository.markDone(id = 2L, token = any(), summary = "OK", now = any()) }
                 }
             }
         }
@@ -168,7 +176,9 @@ class CveSummaryWorkerTest :
                         eventRepository.releaseClaim(id = 1L, token = any(), nextAttemptAt = any())
                     }
                     verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
-                    verify(exactly = 0) { eventRepository.markDone(id = any(), token = any(), summary = any()) }
+                    verify(exactly = 0) {
+                        eventRepository.markDone(id = any(), token = any(), summary = any(), now = any())
+                    }
                 }
             }
         }
@@ -183,7 +193,7 @@ class CveSummaryWorkerTest :
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any()) } returns 1
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = any()) } returns "SUMMARY"
-            every { eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY") } returns 0
+            every { eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY", now = any()) } returns 0
             val worker = workerWith(eventRepository, topicRepository, summarizer)
 
             `when`("the tick runs") {

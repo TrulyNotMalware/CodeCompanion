@@ -2,6 +2,7 @@ package dev.notypie.schema
 
 import dev.notypie.impl.cve.RawSourceEvent
 import dev.notypie.repository.cve.CveEvent
+import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveEventSchema
 import dev.notypie.repository.cve.schema.CveSummaryStatus
 import java.time.LocalDateTime
@@ -65,4 +66,21 @@ fun createRawSourceEvent(
         title = title,
         rawContent = rawContent,
         publishedAt = publishedAt,
+    )
+
+fun createUndeliveredCveEvent(
+    eventId: Long = 1L,
+    userId: String = "U_SUBSCRIBER",
+    topicKey: String = "cve-java",
+    topicDisplayName: String = "Java CVE",
+    title: String = "Sample advisory",
+    aiSummary: String? = "Sample summary",
+): UndeliveredCveEvent =
+    UndeliveredCveEvent(
+        eventId = eventId,
+        userId = userId,
+        topicKey = topicKey,
+        topicDisplayName = topicDisplayName,
+        title = title,
+        aiSummary = aiSummary,
     )

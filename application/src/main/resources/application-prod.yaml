@@ -139,6 +139,14 @@ slack:
       collector:
         request-timeout-seconds: ${CVE_COLLECTOR_REQUEST_TIMEOUT_SECONDS:30}
         window-minutes: ${CVE_COLLECTOR_WINDOW_MINUTES:5}
+      # Notification dispatcher: IMMEDIATE topics DM on a frequent tick; DIGEST topics bundle into one
+      # daily DM per user after digest-send-at (local time in digest-timezone). No secrets here.
+      notification:
+        batch-size: 50
+        digest-send-at: "09:00"
+        digest-timezone: "Asia/Seoul"
+        digest-summary-max-length: 700
+        delivery-horizon-days: 7
     mcp:
       enabled: ${MCP_ENABLED:false}
       signing-secret: ${MCP_SIGNING_SECRET:}

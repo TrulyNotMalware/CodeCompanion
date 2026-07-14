@@ -60,6 +60,8 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
     // entity lifecycle, so Hibernate's @UpdateTimestamp never fires — resetStuck relies on it.
     // The claim stamps updated_at from the app clock (:now), not the DB clock, because resetStuck
     // compares it against an app-clock threshold — mixing clock sources would skew stuck detection.
+    // markDone stamps it from :now for the same reason: the notification dispatcher's digest cutoff
+    // compares a DONE row's updated_at against an app-clock send time.
     @Modifying
     @Transactional
     @Query(
@@ -100,7 +102,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         value = """
             UPDATE cve_event
             SET summary_status = 'DONE', ai_summary = :summary, claim_token = NULL,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = :now
             WHERE id = :id AND summary_status = 'SUMMARIZING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -109,6 +111,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         @Param("id") id: Long,
         @Param("token") token: String,
         @Param("summary") summary: String,
+        @Param("now") now: LocalDateTime,
     ): Int
 
     @Modifying

@@ -3,6 +3,8 @@ package dev.notypie.schema
 import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.CveTopicDefinition
 import dev.notypie.repository.cve.schema.CveDeliveryMode
+import dev.notypie.repository.cve.schema.CveDeliverySchema
+import dev.notypie.repository.cve.schema.CveDeliveryStatus
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.cve.schema.CveSubscriptionSchema
 import dev.notypie.repository.cve.schema.CveTopicCategory
@@ -78,4 +80,17 @@ fun createCveSubscriptionSchema(
         id = id,
         userId = userId,
         topicId = topicId,
+    )
+
+fun createCveDeliverySchema(
+    id: Long = 0L,
+    eventId: Long = 1L,
+    userId: String = "U_SUBSCRIBER",
+    status: CveDeliveryStatus = CveDeliveryStatus.SENT,
+): CveDeliverySchema =
+    CveDeliverySchema(
+        id = id,
+        eventId = eventId,
+        userId = userId,
+        status = status,
     )

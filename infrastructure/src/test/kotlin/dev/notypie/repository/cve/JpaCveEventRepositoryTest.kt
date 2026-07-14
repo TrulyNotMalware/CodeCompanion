@@ -56,8 +56,8 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = id, token = "owner", now = now)
 
                 `when`("markDone runs with the wrong then the owning token") {
-                    val wrong = repository.markDone(id = id, token = "intruder", summary = "S")
-                    val right = repository.markDone(id = id, token = "owner", summary = "S")
+                    val wrong = repository.markDone(id = id, token = "intruder", summary = "S", now = now)
+                    val right = repository.markDone(id = id, token = "owner", summary = "S", now = now)
 
                     then("only the owner completes the row and the token is cleared") {
                         wrong shouldBe 0
@@ -146,7 +146,20 @@ class JpaCveEventRepositoryTest
                         repository.findClaimable(now = now, maxRetries = 5, pageable = PageRequest.of(0, 10))
 
                     then("only PENDING and retry-elapsed FAILED rows below the budget come back, id-ordered") {
-                        claimable.map { it.id } shouldContainExactly listOf(pending, retryElapsed)
+                        // Other committing specs share this H2 db, so scope the assertion to this
+                        // block's own fixture rows by their externalIds.
+                        val blockExternalIds =
+                            setOf(
+                                "claimable-pending",
+                                "claimable-failed",
+                                "dead-max-retries",
+                                "backoff-future",
+                                "already-done",
+                                "in-flight",
+                            )
+                        claimable
+                            .filter { it.externalId in blockExternalIds }
+                            .map { it.id } shouldContainExactly listOf(pending, retryElapsed)
                     }
                 }
             }

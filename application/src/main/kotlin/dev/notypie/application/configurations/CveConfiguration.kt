@@ -7,17 +7,25 @@ import dev.notypie.application.service.cve.ai.CveSummaryWorker
 import dev.notypie.application.service.cve.ai.NoopAiSummarizer
 import dev.notypie.application.service.cve.ai.SidecarAiSummarizer
 import dev.notypie.application.service.cve.collector.CveCollector
+import dev.notypie.application.service.cve.notification.CveNotificationDispatcher
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.cve.GithubReleaseSourceAdapter
 import dev.notypie.impl.cve.NvdCveSourceAdapter
 import dev.notypie.impl.cve.SourceAdapter
 import dev.notypie.repository.cve.CveCollectLedgerRepository
+import dev.notypie.repository.cve.CveDeliveryRepository
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.OutboundMessagePort
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.transaction.PlatformTransactionManager
+import java.time.Clock
 import java.time.Duration
+import java.time.LocalTime
+import java.time.ZoneId
 
 /**
  * CVE-Bot wiring, off by default: without `slack.app.cve.enabled=true` no bean here
@@ -119,6 +127,60 @@ class CveConfiguration {
             cveCollectLedgerRepository = cveCollectLedgerRepository,
             adapters = sourceAdapters,
             windowMinutes = windowMinutes,
+        )
+    }
+
+    /**
+     * DMs summarized events to subscribers via the outbox. [clock] resolves to the single
+     * application Clock bean (the same one the meeting/standup schedulers get); the timezone the
+     * digest gate compares against is [Notification.digestTimezone], applied to the clock's instant,
+     * so the clock's own zone is irrelevant.
+     */
+    @Bean
+    fun cveNotificationDispatcher(
+        appConfig: AppConfig,
+        cveDeliveryRepository: CveDeliveryRepository,
+        outboxRepository: MessageOutboxRepository,
+        outboundMessagePort: OutboundMessagePort,
+        transactionManager: PlatformTransactionManager,
+        clock: Clock,
+    ): CveNotificationDispatcher {
+        val notification = appConfig.cve.notification
+        val digestSendAt =
+            runCatching { LocalTime.parse(notification.digestSendAt) }
+                .getOrElse {
+                    error("slack.app.cve.notification.digest-send-at ('${notification.digestSendAt}') must be HH:mm")
+                }
+        val digestZone =
+            runCatching { ZoneId.of(notification.digestTimezone) }
+                .getOrElse {
+                    error(
+                        "slack.app.cve.notification.digest-timezone ('${notification.digestTimezone}') " +
+                            "must be a valid zone id",
+                    )
+                }
+        require(notification.batchSize > 0) {
+            "slack.app.cve.notification.batch-size (${notification.batchSize}) must be > 0"
+        }
+        require(notification.digestSummaryMaxLength > 0) {
+            "slack.app.cve.notification.digest-summary-max-length " +
+                "(${notification.digestSummaryMaxLength}) must be > 0"
+        }
+        require(notification.deliveryHorizonDays > 0) {
+            "slack.app.cve.notification.delivery-horizon-days " +
+                "(${notification.deliveryHorizonDays}) must be > 0"
+        }
+        return CveNotificationDispatcher(
+            cveDeliveryRepository = cveDeliveryRepository,
+            outboxRepository = outboxRepository,
+            outboundMessagePort = outboundMessagePort,
+            transactionManager = transactionManager,
+            batchSize = notification.batchSize,
+            digestSendAt = digestSendAt,
+            digestZone = digestZone,
+            digestSummaryMaxLength = notification.digestSummaryMaxLength,
+            deliveryHorizonDays = notification.deliveryHorizonDays,
+            clock = clock,
         )
     }
 }
