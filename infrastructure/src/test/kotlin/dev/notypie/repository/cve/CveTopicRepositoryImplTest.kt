@@ -55,7 +55,7 @@ class CveTopicRepositoryImplTest :
             }
         }
 
-        given("upsert with an existing row whose fields differ") {
+        given("upsert with an existing row whose non-active fields differ") {
             val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
             val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
             val existing = createCveTopicSchema(id = 7L, deliveryMode = CveDeliveryMode.DIGEST, active = false)
@@ -66,11 +66,61 @@ class CveTopicRepositoryImplTest :
             `when`("upserted") {
                 val written = repository.upsert(definition = definition)
 
-                then("the existing row is updated in place and saved") {
+                then("non-active fields sync but the DB active flag is preserved (yaml never reactivates)") {
                     written shouldBe true
                     verify(exactly = 1) { jpaCveTopicRepository.save(existing) }
                     existing.deliveryMode shouldBe CveDeliveryMode.IMMEDIATE
-                    existing.active shouldBe true
+                    existing.active shouldBe false
+                }
+            }
+        }
+
+        given("upsert with an existing row that differs only in active") {
+            val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
+            val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+            // Chat deactivated the topic (DB active=false); the yaml still declares active=true.
+            val existing = createCveTopicSchema(id = 7L, active = false)
+            val definition = createCveTopicDefinition(active = true)
+            every { jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey) } returns existing
+
+            `when`("upserted") {
+                val written = repository.upsert(definition = definition)
+
+                then("nothing is written, so the chat deactivation survives the reboot") {
+                    written shouldBe false
+                    verify(exactly = 0) { jpaCveTopicRepository.save(any()) }
+                    existing.active shouldBe false
+                }
+            }
+        }
+
+        given("findAllTopics") {
+            val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
+            val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+            val active = createCveTopicSchema(id = 1L, topicKey = "a-topic", active = true)
+            val inactive = createCveTopicSchema(id = 2L, topicKey = "b-topic", active = false)
+            every { jpaCveTopicRepository.findAllOrderByTopicKey() } returns listOf(active, inactive)
+
+            `when`("queried") {
+                val topics = repository.findAllTopics()
+
+                then("both active and inactive topics are mapped, order preserved") {
+                    topics.map { it.topicKey } shouldBe listOf("a-topic", "b-topic")
+                    topics.map { it.active } shouldBe listOf(true, false)
+                }
+            }
+        }
+
+        given("countActive and setActive delegate to the jpa repository") {
+            val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
+            val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+            every { jpaCveTopicRepository.countActive() } returns 4L
+            every { jpaCveTopicRepository.setActive(topicKey = "kotlin", active = false) } returns 1
+
+            `when`("called") {
+                then("the delegated results pass through") {
+                    repository.countActive() shouldBe 4L
+                    repository.setActive(topicKey = "kotlin", active = false) shouldBe 1
                 }
             }
         }

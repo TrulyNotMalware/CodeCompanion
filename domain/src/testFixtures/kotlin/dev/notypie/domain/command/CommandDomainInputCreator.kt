@@ -15,6 +15,11 @@ import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
+import dev.notypie.domain.command.entity.event.CveLatestPayload
+import dev.notypie.domain.command.entity.event.CveLatestRequestEvent
+import dev.notypie.domain.command.entity.event.CveOpsAction
+import dev.notypie.domain.command.entity.event.CveOpsPayload
+import dev.notypie.domain.command.entity.event.CveOpsRequestEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
@@ -128,6 +133,40 @@ fun createCveSubscriptionRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = type,
+)
+
+fun createCveOpsRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: CveOpsAction = CveOpsAction.LIST_TOPICS,
+    topicKey: String? = null,
+    targetEventId: Long? = null,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = CveOpsRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CveOpsPayload(
+            action = action,
+            topicKey = topicKey,
+            targetEventId = targetEventId,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.SIMPLE_TEXT,
+)
+
+fun createCveLatestRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    userId: String = TEST_USER_ID,
+    topicKey: String? = null,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = CveLatestRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CveLatestPayload(
+            userId = userId,
+            topicKey = topicKey,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.CVE_LATEST,
 )
 
 fun createApprovalContents(

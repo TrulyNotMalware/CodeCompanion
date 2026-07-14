@@ -37,4 +37,7 @@ interface JpaCveCollectLedgerRepository : JpaRepository<CveCollectLedgerSchema, 
     fun deleteOlderThan(
         @Param("cutoff") cutoff: LocalDateTime,
     ): Int
+
+    @Query("SELECT MAX(l.windowStart) FROM cve_collect_ledger l")
+    fun findLatestWindowStart(): LocalDateTime?
 }

@@ -9,14 +9,21 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.repository.cve.CveCollectLedgerRepository
+import dev.notypie.repository.cve.CveEventRepository
+import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.repository.cve.schema.CveSummaryStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Duration
+import java.time.format.DateTimeFormatter
 
 private val log = KotlinLogging.logger {}
+
+private val CVE_WINDOW_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
 /**
  * Renders an outbox-status report in response to `@bot status` mentions. Reads the same
@@ -32,10 +39,17 @@ class OpsStatusService(
     private val outboxRepository: MessageOutboxRepository,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
+    // Always wired (JpaConfiguration registers the CVE repositories unconditionally), so injection is
+    // safe even when the CVE feature is off; the section is only rendered when cve.enabled is true.
+    private val cveTopicRepository: CveTopicRepository,
+    private val cveEventRepository: CveEventRepository,
+    private val cveCollectLedgerRepository: CveCollectLedgerRepository,
     private val clock: Clock = Clock.systemDefaultZone(),
     appConfig: AppConfig = AppConfig(),
 ) {
     private val stuckThresholdSeconds: Long = appConfig.outbox.health.stuckThresholdSeconds
+    private val cveEnabled: Boolean = appConfig.cve.enabled
+    private val cveMaxRetries: Int = appConfig.ai.maxRetries
 
     @EventListener
     fun handleStatusReport(event: StatusReportRequestEvent) {
@@ -92,6 +106,30 @@ class OpsStatusService(
             )
             appendLine("• Stuck threshold: ${stuckThresholdSeconds}s")
             append(healthLine)
+            if (cveEnabled) {
+                appendLine()
+                append(cveSection())
+            }
+        }
+    }
+
+    // CVE feed health: active topic count, event backlog by summary status (FAILED split into still-
+    // retryable vs dead-letter at the retry ceiling), and the newest collect window. Rendered only when
+    // the feature is on; the outbox section above stays identical either way.
+    private fun cveSection(): String {
+        val activeTopics = cveTopicRepository.countActive()
+        val pending = cveEventRepository.countByStatus(status = CveSummaryStatus.PENDING)
+        val summarizing = cveEventRepository.countByStatus(status = CveSummaryStatus.SUMMARIZING)
+        val retryable = cveEventRepository.countFailedRetryable(maxRetries = cveMaxRetries)
+        val deadLetter = cveEventRepository.countDeadLetter(maxRetries = cveMaxRetries)
+        val lastCollected = cveCollectLedgerRepository.latestWindowStart()?.format(CVE_WINDOW_FORMAT) ?: "never"
+        return buildString {
+            appendLine("• *CVE topics:* $activeTopics active")
+            appendLine(
+                "• *CVE events:* $pending pending, $summarizing summarizing, " +
+                    "$retryable failed (retryable), $deadLetter dead-letter",
+            )
+            append("• *CVE last collect window:* $lastCollected")
         }
     }
 }

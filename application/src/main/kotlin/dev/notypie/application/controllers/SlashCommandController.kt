@@ -1,6 +1,7 @@
 package dev.notypie.application.controllers
 
 import dev.notypie.application.common.parseRequestBodyData
+import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.standup.StandupSlashService
@@ -14,6 +15,7 @@ class SlashCommandController(
     private val meetingService: MeetingService,
     private val standupSlashService: StandupSlashService,
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
+    private val cveQuerySlashService: CveQuerySlashService,
 ) {
     @PostMapping(value = ["/meet"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestMeeting(
@@ -82,6 +84,19 @@ class SlashCommandController(
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
         cveSubscriptionSlashService.handleSubscriptions(
+            headers = headers,
+            payload = payload,
+            commandData = commandData,
+        )
+    }
+
+    @PostMapping(value = ["/latest"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun latest(
+        @RequestHeader headers: MultiValueMap<String, String>,
+        @RequestParam data: Map<String, String>,
+    ) {
+        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        cveQuerySlashService.handleLatest(
             headers = headers,
             payload = payload,
             commandData = commandData,

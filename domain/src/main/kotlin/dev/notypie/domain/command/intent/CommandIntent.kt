@@ -134,5 +134,31 @@ sealed class CommandIntent : CommandEffect {
         val userId: String,
     ) : CommandIntent()
 
+    /**
+     * DMs [userId] the most recent DONE-summarized events. [topicKey] scopes the read to a single
+     * active topic; null reads across the caller's subscriptions. DB-only — no AI call.
+     */
+    data class CveLatest(
+        val userId: String,
+        val topicKey: String?,
+    ) : CommandIntent()
+
+    /** Admin-only listing of every CVE topic (active or not) from `@bot cve topics`. */
+    data object CveListTopics : CommandIntent()
+
+    /** Admin-only flip of a topic's active flag from `@bot cve topic activate|deactivate <key>`. */
+    data class CveSetTopicActive(
+        val topicKey: String,
+        val active: Boolean,
+    ) : CommandIntent()
+
+    /** Admin-only revival of every dead-letter event from `@bot cve retry all`. */
+    data object CveRetryDeadLetters : CommandIntent()
+
+    /** Admin-only revival of one dead-letter event from `@bot cve retry <event-id>`. */
+    data class CveRetryDeadLetter(
+        val eventId: Long,
+    ) : CommandIntent()
+
     data object Nothing : CommandIntent()
 }

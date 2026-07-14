@@ -46,6 +46,20 @@ class CveCollectLedgerRepositoryImplTest :
             }
         }
 
+        given("a ledger with a newest claimed window") {
+            val jpa = mockk<JpaCveCollectLedgerRepository>()
+            val repository = CveCollectLedgerRepositoryImpl(jpaCveCollectLedgerRepository = jpa)
+            every { jpa.findLatestWindowStart() } returns windowStart
+
+            `when`("asking for the latest window") {
+                val latest = repository.latestWindowStart()
+
+                then("the max window start is forwarded unchanged") {
+                    latest shouldBe windowStart
+                }
+            }
+        }
+
         given("ledger rows past the retention horizon") {
             val jpa = mockk<JpaCveCollectLedgerRepository>()
             val repository = CveCollectLedgerRepositoryImpl(jpaCveCollectLedgerRepository = jpa)

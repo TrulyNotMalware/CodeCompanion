@@ -70,6 +70,7 @@ enum class CommandDetailType {
     CVE_UNSUBSCRIBE_REQUEST,
     CVE_UNSUBSCRIBE_SUBMIT,
     CVE_SUBSCRIPTIONS_LIST,
+    CVE_LATEST,
 }
 
 /**

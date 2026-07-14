@@ -5,6 +5,7 @@ import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.socket_mode.response.AckResponse
 import dev.notypie.application.common.parseRequestBodyData
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.meeting.MeetingService
@@ -39,6 +40,7 @@ class SocketModeReceiver(
     private val meetingService: MeetingService,
     private val standupSlashService: StandupSlashService,
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
+    private val cveQuerySlashService: CveQuerySlashService,
     private val interactionHandler: InteractionHandler,
     private val appMentionEventHandler: AppMentionEventHandler,
 ) : SmartLifecycle {
@@ -138,6 +140,13 @@ class SocketModeReceiver(
 
                 appConfig.socket.subscriptionsCommand ->
                     cveSubscriptionSlashService.handleSubscriptions(
+                        headers = noHeaders,
+                        payload = payload,
+                        commandData = commandData,
+                    )
+
+                appConfig.socket.latestCommand ->
+                    cveQuerySlashService.handleLatest(
                         headers = noHeaders,
                         payload = payload,
                         commandData = commandData,

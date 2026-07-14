@@ -194,6 +194,54 @@ data class CveSubscriptionRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<CveSubscriptionPayload>
 
+/** DB-only `/latest` read; the listener DMs [userId] the most recent DONE summaries. */
+class CveLatestPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val userId: String,
+    /** Single-topic scope; null reads across the caller's subscriptions. */
+    val topicKey: String? = null,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CveLatestRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CveLatestRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CveLatestPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<CveLatestPayload>
+
+enum class CveOpsAction {
+    LIST_TOPICS,
+    ACTIVATE_TOPIC,
+    DEACTIVATE_TOPIC,
+    RETRY_ALL,
+    RETRY_EVENT,
+}
+
+/** Admin-only CVE operations from `@bot cve ...` mentions; the listener replies on the same channel. */
+class CveOpsPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: CveOpsAction,
+    /** Topic key for ACTIVATE_TOPIC/DEACTIVATE_TOPIC; null otherwise. */
+    val topicKey: String? = null,
+    /** Target cve_event id for RETRY_EVENT; null otherwise. */
+    val targetEventId: Long? = null,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CveOpsRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CveOpsRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CveOpsPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<CveOpsPayload>
+
 /**
  * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. [threadId] is the
  * conversation anchor the async listener keys session continuity on and replies into;

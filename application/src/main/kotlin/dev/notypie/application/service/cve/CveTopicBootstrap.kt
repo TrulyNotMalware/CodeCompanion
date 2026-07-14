@@ -14,6 +14,11 @@ private val log = KotlinLogging.logger {}
  * rows absent from the config are deliberately left untouched so topics added by other
  * means survive restarts. Invalid definitions fail the boot — a silently dropped topic
  * would just look like a missing modal option.
+ *
+ * The `active` flag is deliberately NOT re-synced from yaml for rows that already exist: after the
+ * initial insert it is owned by the `cve topic activate|deactivate` chat command, so a topic an admin
+ * deactivated in chat is not silently reactivated on the next reboot (see [CveTopicRepository.upsert]).
+ * The yaml `active` therefore only seeds brand-new inserts.
  */
 class CveTopicBootstrap(
     private val topics: List<AppConfig.Cve.TopicDefinition>,

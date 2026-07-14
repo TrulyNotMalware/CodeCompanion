@@ -105,6 +105,7 @@ data class AppConfig(
         val subscribeCommand: String = "/subscribe",
         val unsubscribeCommand: String = "/unsubscribe",
         val subscriptionsCommand: String = "/subscriptions",
+        val latestCommand: String = "/latest",
     )
 
     // MCP domain tools exposed to the agent lane. The endpoint is loopback-only by default

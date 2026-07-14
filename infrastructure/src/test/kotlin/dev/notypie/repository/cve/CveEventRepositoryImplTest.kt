@@ -185,4 +185,39 @@ class CveEventRepositoryImplTest :
                 }
             }
         }
+
+        given("topic-scoped reads with an empty topic id list") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+
+            `when`("countEventsByTopic and findRecentDoneEvents run") {
+                val counts = repository.countEventsByTopic(topicIds = emptyList())
+                val recent = repository.findRecentDoneEvents(topicIds = emptyList(), limit = 5)
+
+                then("both short-circuit to empty without touching the database") {
+                    counts shouldBe emptyList()
+                    recent shouldBe emptyList()
+                    verify(exactly = 0) { jpa.countEventsByTopic(topicIds = any()) }
+                    verify(exactly = 0) { jpa.findRecentDoneEvents(topicIds = any(), pageable = any()) }
+                }
+            }
+        }
+
+        given("findRecentDoneEvents with duplicated topic ids and a limit") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            every {
+                jpa.findRecentDoneEvents(topicIds = listOf(1L, 2L), pageable = PageRequest.of(0, 3))
+            } returns emptyList()
+
+            `when`("delegated") {
+                repository.findRecentDoneEvents(topicIds = listOf(1L, 2L, 1L), limit = 3)
+
+                then("ids are deduped and the limit maps to the first page") {
+                    verify(exactly = 1) {
+                        jpa.findRecentDoneEvents(topicIds = listOf(1L, 2L), pageable = PageRequest.of(0, 3))
+                    }
+                }
+            }
+        }
     })

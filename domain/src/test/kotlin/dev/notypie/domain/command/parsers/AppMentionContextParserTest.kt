@@ -406,4 +406,101 @@ class AppMentionContextParserTest :
                 }
             }
         }
+
+        given("cve operations commands (as ADMIN)") {
+            fun firstEffectOf(tokens: List<String>): Any {
+                val queue = createIntentQueue()
+                createParser(mention = mentionOf(tokens = tokens), intentQueue = queue)
+                    .parseContext(idempotencyKey = idempotencyKey)
+                    .runCommand()
+                return queue.snapshot().first()
+            }
+
+            fun usageOf(tokens: List<String>): String =
+                firstEffectOf(tokens = tokens)
+                    .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    .content
+                    .shouldBeInstanceOf<MessageContent.Text>()
+                    .markdown
+
+            `when`("`cve topics` is issued") {
+                then("a CveListTopics intent is emitted") {
+                    firstEffectOf(tokens = listOf("cve", "topics")) shouldBe CommandIntent.CveListTopics
+                }
+            }
+
+            `when`("`cve topic activate <key>` is well-formed") {
+                then("a CveSetTopicActive intent carries the key and active=true") {
+                    firstEffectOf(tokens = listOf("cve", "topic", "activate", "spring")) shouldBe
+                        CommandIntent.CveSetTopicActive(topicKey = "spring", active = true)
+                }
+            }
+
+            `when`("`cve topic deactivate <key>` is well-formed") {
+                then("a CveSetTopicActive intent carries the key and active=false") {
+                    firstEffectOf(tokens = listOf("cve", "topic", "deactivate", "spring")) shouldBe
+                        CommandIntent.CveSetTopicActive(topicKey = "spring", active = false)
+                }
+            }
+
+            `when`("`cve retry all` is issued") {
+                then("a CveRetryDeadLetters intent is emitted") {
+                    firstEffectOf(tokens = listOf("cve", "retry", "all")) shouldBe CommandIntent.CveRetryDeadLetters
+                }
+            }
+
+            `when`("`cve retry <event-id>` names a numeric id") {
+                then("a CveRetryDeadLetter intent carries the parsed id") {
+                    firstEffectOf(tokens = listOf("cve", "retry", "42")) shouldBe
+                        CommandIntent.CveRetryDeadLetter(eventId = 42L)
+                }
+            }
+
+            `when`("`cve retry` names a non-numeric id") {
+                then("the usage text is returned instead of an intent") {
+                    usageOf(tokens = listOf("cve", "retry", "nope")) shouldBe AppMentionContextParser.CVE_USAGE
+                }
+            }
+
+            `when`("`cve` is issued with no sub-command") {
+                then("the usage text is returned") {
+                    usageOf(tokens = listOf("cve")) shouldBe AppMentionContextParser.CVE_USAGE
+                }
+            }
+
+            `when`("`cve` carries an unknown sub-command") {
+                then("the usage text is returned") {
+                    usageOf(tokens = listOf("cve", "bogus", "thing")) shouldBe AppMentionContextParser.CVE_USAGE
+                }
+            }
+
+            `when`("a DEVELOPER runs `cve topics`") {
+                val denialIntents = createIntentQueue()
+                val result =
+                    createParser(
+                        mention = mentionOf(tokens = listOf("cve", "topics")),
+                        intentQueue = denialIntents,
+                        actorRole = UserRole.DEVELOPER,
+                    ).parseContext(idempotencyKey = idempotencyKey)
+
+                then("the administration command is denied with the permission message") {
+                    result.shouldBeInstanceOf<TextResponseContext>()
+                    result.runCommand()
+                    denialIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe "You don't have permission to use `cve`. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("`cve topic activate` carries an upper-cased key") {
+                then("the key is normalized to the lowercase convention") {
+                    firstEffectOf(tokens = listOf("cve", "topic", "activate", "Kotlin")) shouldBe
+                        CommandIntent.CveSetTopicActive(topicKey = "kotlin", active = true)
+                }
+            }
+        }
     })

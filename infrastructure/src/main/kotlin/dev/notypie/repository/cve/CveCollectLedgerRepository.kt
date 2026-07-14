@@ -23,4 +23,7 @@ interface CveCollectLedgerRepository {
      * 5-minute default) — the collector prunes them past a retention horizon. Returns rows deleted.
      */
     fun deleteOlderThan(cutoff: LocalDateTime): Int
+
+    /** The most recent claimed collect window across all topics, or null when nothing was ever collected. */
+    fun latestWindowStart(): LocalDateTime?
 }

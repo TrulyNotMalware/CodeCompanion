@@ -15,6 +15,19 @@ data class CveEvent(
     val retryCount: Int,
 )
 
+/** Event count for one topic (the ops topic listing). Topics with zero events are absent from the result. */
+data class TopicEventCount(
+    val topicId: Long,
+    val count: Long,
+)
+
+/** One DONE-summarized event projected for the `/latest` DM (newest first). */
+data class CveRecentEvent(
+    val topicDisplayName: String,
+    val title: String,
+    val aiSummary: String?,
+)
+
 /**
  * Read/CAS surface for the AI summary worker. Ingestion is idempotent via [insertIgnore];
  * multi-instance safety of the summary side rests entirely on the atomic claim-token CAS
@@ -77,4 +90,35 @@ interface CveEventRepository {
 
     /** Returns SUMMARIZING rows untouched since [olderThan] to PENDING (crash recovery). Returns count. */
     fun resetStuck(olderThan: LocalDateTime): Int
+
+    /** Count of events in [status] (ops status report). */
+    fun countByStatus(status: CveSummaryStatus): Long
+
+    /** Count of FAILED events still under the retry budget (retryCount < [maxRetries]). */
+    fun countFailedRetryable(maxRetries: Int): Long
+
+    /** Count of dead-letter events: FAILED and out of retry budget (retryCount >= [maxRetries]). */
+    fun countDeadLetter(maxRetries: Int): Long
+
+    /** Total event counts for [topicIds]; topics with no events are omitted. Empty input returns empty. */
+    fun countEventsByTopic(topicIds: List<Long>): List<TopicEventCount>
+
+    /**
+     * The most recent DONE-summarized events across [topicIds], joined to their topic display name,
+     * newest first (id DESC), capped at [limit]. Empty [topicIds] returns empty. DB-only — no AI call.
+     */
+    fun findRecentDoneEvents(topicIds: List<Long>, limit: Int): List<CveRecentEvent>
+
+    /**
+     * Revives every dead-letter event (FAILED, retryCount >= [maxRetries]) back to PENDING with the
+     * retry budget reset and any claim/backoff cleared, so the summary worker re-drives it on its next
+     * tick. The WHERE guard resets only true dead-letters. Returns the number of rows revived.
+     */
+    fun resetDeadLetters(maxRetries: Int): Int
+
+    /**
+     * Revives one dead-letter event [id] (same guard as [resetDeadLetters]). Returns 0 when [id] is not
+     * a dead-letter (unknown id, wrong status, or still within budget), so the caller can report it.
+     */
+    fun resetDeadLetter(id: Long, maxRetries: Int): Int
 }

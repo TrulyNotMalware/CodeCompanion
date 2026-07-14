@@ -11,6 +11,11 @@ import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
+import dev.notypie.domain.command.entity.event.CveLatestPayload
+import dev.notypie.domain.command.entity.event.CveLatestRequestEvent
+import dev.notypie.domain.command.entity.event.CveOpsAction
+import dev.notypie.domain.command.entity.event.CveOpsPayload
+import dev.notypie.domain.command.entity.event.CveOpsRequestEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
@@ -246,6 +251,70 @@ class SlackIntentResolver {
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.CVE_SUBSCRIPTIONS_LIST,
+                )
+            }
+
+            is CommandIntent.CveLatest -> {
+                CveLatestRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveLatestPayload(
+                            userId = intent.userId,
+                            topicKey = intent.topicKey,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.CVE_LATEST,
+                )
+            }
+
+            is CommandIntent.CveListTopics -> {
+                CveOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveOpsPayload(
+                            action = CveOpsAction.LIST_TOPICS,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
+                )
+            }
+
+            is CommandIntent.CveSetTopicActive -> {
+                CveOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveOpsPayload(
+                            action =
+                                if (intent.active) CveOpsAction.ACTIVATE_TOPIC else CveOpsAction.DEACTIVATE_TOPIC,
+                            topicKey = intent.topicKey,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
+                )
+            }
+
+            is CommandIntent.CveRetryDeadLetters -> {
+                CveOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveOpsPayload(
+                            action = CveOpsAction.RETRY_ALL,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
+                )
+            }
+
+            is CommandIntent.CveRetryDeadLetter -> {
+                CveOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        CveOpsPayload(
+                            action = CveOpsAction.RETRY_EVENT,
+                            targetEventId = intent.eventId,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.SIMPLE_TEXT,
                 )
             }
 

@@ -24,12 +24,13 @@ open class CveTopicRepositoryImpl(
             return true
         }
         if (matches(schema = existing, definition = definition)) return false
+        // `active` is intentionally NOT synced from the definition: after the initial insert it belongs
+        // to the chat toggle (`cve topic activate|deactivate`), so a yaml reboot preserves the DB value.
         existing.displayName = definition.displayName
         existing.category = definition.category
         existing.sourceType = definition.sourceType
         existing.sourceConfig = definition.sourceConfig
         existing.deliveryMode = definition.deliveryMode
-        existing.active = definition.active
         jpaCveTopicRepository.save(existing)
         return true
     }
@@ -37,16 +38,26 @@ open class CveTopicRepositoryImpl(
     override fun findActiveTopics(): List<CveTopic> =
         jpaCveTopicRepository.findByActiveTrueOrderByTopicKey().map { toRecord(schema = it) }
 
+    override fun findAllTopics(): List<CveTopic> =
+        jpaCveTopicRepository.findAllOrderByTopicKey().map { toRecord(schema = it) }
+
     override fun findById(id: Long): CveTopic? =
         jpaCveTopicRepository.findById(id).map { toRecord(schema = it) }.orElse(null)
 
+    override fun countActive(): Long = jpaCveTopicRepository.countActive()
+
+    @Transactional
+    override fun setActive(topicKey: String, active: Boolean): Int =
+        jpaCveTopicRepository.setActive(topicKey = topicKey, active = active)
+
+    // `active` is excluded here so an existing row differing only in `active` is treated as a match
+    // (no write): the yaml value must not override a chat toggle. See [upsert]'s contract.
     private fun matches(schema: CveTopicSchema, definition: CveTopicDefinition): Boolean =
         schema.displayName == definition.displayName &&
             schema.category == definition.category &&
             schema.sourceType == definition.sourceType &&
             schema.sourceConfig == definition.sourceConfig &&
-            schema.deliveryMode == definition.deliveryMode &&
-            schema.active == definition.active
+            schema.deliveryMode == definition.deliveryMode
 
     private fun toRecord(schema: CveTopicSchema): CveTopic =
         CveTopic(

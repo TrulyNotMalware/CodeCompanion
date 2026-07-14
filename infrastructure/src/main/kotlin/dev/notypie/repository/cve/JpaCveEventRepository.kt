@@ -1,6 +1,7 @@
 package dev.notypie.repository.cve
 
 import dev.notypie.repository.cve.schema.CveEventSchema
+import dev.notypie.repository.cve.schema.CveSummaryStatus
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
@@ -143,5 +144,97 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
     )
     fun resetStuck(
         @Param("olderThan") olderThan: LocalDateTime,
+    ): Int
+
+    @Query("SELECT COUNT(e) FROM cve_event e WHERE e.summaryStatus = :status")
+    fun countByStatus(
+        @Param("status") status: CveSummaryStatus,
+    ): Long
+
+    @Query(
+        """
+        SELECT COUNT(e) FROM cve_event e
+        WHERE e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.FAILED
+          AND e.retryCount < :maxRetries
+        """,
+    )
+    fun countFailedRetryable(
+        @Param("maxRetries") maxRetries: Int,
+    ): Long
+
+    @Query(
+        """
+        SELECT COUNT(e) FROM cve_event e
+        WHERE e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.FAILED
+          AND e.retryCount >= :maxRetries
+        """,
+    )
+    fun countDeadLetter(
+        @Param("maxRetries") maxRetries: Int,
+    ): Long
+
+    @Query(
+        """
+        SELECT new dev.notypie.repository.cve.TopicEventCount(e.topicId, COUNT(e))
+        FROM cve_event e
+        WHERE e.topicId IN :topicIds
+        GROUP BY e.topicId
+        """,
+    )
+    fun countEventsByTopic(
+        @Param("topicIds") topicIds: List<Long>,
+    ): List<TopicEventCount>
+
+    // Entity join on the unrelated cve_topic (topicId is a plain column, not a mapped relation); it
+    // renders to a plain SQL join, so this runs on H2. Mirrors JpaCveDeliveryRepository.findUndelivered.
+    @Query(
+        """
+        SELECT new dev.notypie.repository.cve.CveRecentEvent(t.displayName, e.title, e.aiSummary)
+        FROM cve_event e
+        JOIN cve_topic t ON t.id = e.topicId
+        WHERE e.topicId IN :topicIds
+          AND e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.DONE
+        ORDER BY e.id DESC
+        """,
+    )
+    fun findRecentDoneEvents(
+        @Param("topicIds") topicIds: List<Long>,
+        pageable: Pageable,
+    ): List<CveRecentEvent>
+
+    // Guarded so only true dead-letters (FAILED and out of budget) reset; a live retryable FAILED row
+    // or a SUMMARIZING/DONE row is left untouched. updated_at is intentionally NOT stamped here
+    // (unlike the CAS updates above): nothing reads it on PENDING rows — resetStuck only reads
+    // SUMMARIZING and the digest cutoff only reads DONE, and the next claim re-stamps it anyway.
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE cve_event e
+        SET e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.PENDING,
+            e.retryCount = 0, e.nextAttemptAt = NULL, e.claimToken = NULL
+        WHERE e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.FAILED
+          AND e.retryCount >= :maxRetries
+        """,
+    )
+    fun resetDeadLetters(
+        @Param("maxRetries") maxRetries: Int,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE cve_event e
+        SET e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.PENDING,
+            e.retryCount = 0, e.nextAttemptAt = NULL, e.claimToken = NULL
+        WHERE e.id = :id
+          AND e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.FAILED
+          AND e.retryCount >= :maxRetries
+        """,
+    )
+    fun resetDeadLetter(
+        @Param("id") id: Long,
+        @Param("maxRetries") maxRetries: Int,
     ): Int
 }

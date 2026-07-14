@@ -15,6 +15,7 @@ internal enum class CommandSet(
     GRANT(CommandPermission.ADMINISTRATION),
     REVOKE(CommandPermission.ADMINISTRATION),
     ROLES(CommandPermission.ADMINISTRATION),
+    CVE(CommandPermission.ADMINISTRATION),
     ;
 
     companion object {

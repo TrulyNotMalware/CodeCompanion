@@ -7,6 +7,7 @@ import dev.notypie.domain.command.entity.CommandSet
 import dev.notypie.domain.command.entity.context.AgentChatContext
 import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
+import dev.notypie.domain.command.entity.context.CveOpsContext
 import dev.notypie.domain.command.entity.context.NoticeContext
 import dev.notypie.domain.command.entity.context.RoleManagementContext
 import dev.notypie.domain.command.entity.context.StatusContext
@@ -46,6 +47,9 @@ internal class AppMentionContextParser(
             • `@CodeCompanion grant @user <user|ai_user|developer|admin>` — grant a role (admin only)
             • `@CodeCompanion revoke @user` — remove a role grant (admin only)
             • `@CodeCompanion roles` — list all role grants (admin only)
+            • `@CodeCompanion cve topics` — list CVE topics (admin only)
+            • `@CodeCompanion cve topic activate|deactivate <topic-key>` — flip a topic (admin only)
+            • `@CodeCompanion cve retry all|<event-id>` — re-queue dead-letter summaries (admin only)
 
             Anything that isn't a command above is treated as `ask`.
             `status`, `notice` and `ask` require a granted role — ask an admin if you need access.
@@ -58,6 +62,10 @@ internal class AppMentionContextParser(
             "Usage: `@CodeCompanion revoke @user` — mention exactly one user."
 
         internal const val ROLES_USAGE: String = "Usage: `@CodeCompanion roles` — no arguments."
+
+        internal const val CVE_USAGE: String =
+            "Usage: `@CodeCompanion cve topics` · `cve topic activate|deactivate <topic-key>` · " +
+                "`cve retry all|<event-id>`."
     }
 
     override fun parseContext(idempotencyKey: UUID): CommandContext<NoSubCommands> {
@@ -111,11 +119,42 @@ internal class AppMentionContextParser(
                     usageContext(usage = ROLES_USAGE)
                 }
 
+            CommandSet.CVE -> cveOpsContext()
+
             // Free-text fallback: any mention that doesn't match a command is a question for the
             // AI assistant, keyword included ("what does status mean" must not lose "what").
             CommandSet.UNKNOWN -> agentChatContext(promptTokens = mention.commandTokens)
         }
     }
+
+    // `cve` sub-dispatch. The feature gate lives in the application listener (it owns cve.enabled),
+    // so an admin whose feature is off still routes here and gets a "disabled" reply, never silence.
+    private fun cveOpsContext(): CommandContext<NoSubCommands> {
+        val tokens = mention.commandTokens
+        return when {
+            tokens.size == 2 && tokens[1] == "topics" -> cveContext(intent = CommandIntent.CveListTopics)
+            // Topic keys are lowercase by convention; normalizing here makes the toggle forgiving of
+            // `cve topic activate Kotlin` without touching the stored keys.
+            tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "activate" ->
+                cveContext(intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = true))
+            tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "deactivate" ->
+                cveContext(intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = false))
+            tokens.size == 3 && tokens[1] == "retry" && tokens[2] == "all" ->
+                cveContext(intent = CommandIntent.CveRetryDeadLetters)
+            tokens.size == 3 && tokens[1] == "retry" -> {
+                val eventId = tokens[2].toLongOrNull() ?: return usageContext(usage = CVE_USAGE)
+                cveContext(intent = CommandIntent.CveRetryDeadLetter(eventId = eventId))
+            }
+            else -> usageContext(usage = CVE_USAGE)
+        }
+    }
+
+    private fun cveContext(intent: CommandIntent): CveOpsContext =
+        CveOpsContext(
+            intent = intent,
+            commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+            intents = intents,
+        )
 
     private fun grantRoleContext(): CommandContext<NoSubCommands> {
         val targetUserId = mention.mentionedUserIds.singleOrNull() ?: return usageContext(usage = GRANT_USAGE)

@@ -2,6 +2,7 @@ package dev.notypie.repository.cve
 
 import dev.notypie.repository.cve.schema.CveSummaryStatus
 import dev.notypie.schema.createCveEventSchema
+import dev.notypie.schema.createCveTopicSchema
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -27,6 +28,7 @@ class JpaCveEventRepositoryTest
     @Autowired
     constructor(
         private val repository: JpaCveEventRepository,
+        private val topicRepository: JpaCveTopicRepository,
     ) : BehaviorSpec({
             val now = LocalDateTime.of(2026, 7, 13, 12, 0)
 
@@ -179,6 +181,173 @@ class JpaCveEventRepositoryTest
                         val liveRow = repository.findById(live).orElseThrow()
                         liveRow.summaryStatus shouldBe CveSummaryStatus.SUMMARIZING
                         liveRow.claimToken.shouldNotBeNull()
+                    }
+                }
+            }
+
+            given("the ops status counters over a mixed population") {
+                // The counters are global and earlier blocks leave committed rows behind, so every
+                // assertion compares against a baseline captured before this block's own writes.
+                val basePending = repository.countByStatus(status = CveSummaryStatus.PENDING)
+                val baseSummarizing = repository.countByStatus(status = CveSummaryStatus.SUMMARIZING)
+                val baseRetryable = repository.countFailedRetryable(maxRetries = 5)
+                val baseDeadLetter = repository.countDeadLetter(maxRetries = 5)
+                repository.saveAndFlush(createCveEventSchema(externalId = "counter-pending"))
+                repository.saveAndFlush(
+                    createCveEventSchema(externalId = "counter-inflight", summaryStatus = CveSummaryStatus.SUMMARIZING),
+                )
+                repository.saveAndFlush(
+                    createCveEventSchema(
+                        externalId = "counter-retryable",
+                        summaryStatus = CveSummaryStatus.FAILED,
+                        retryCount = 1,
+                    ),
+                )
+                repository.saveAndFlush(
+                    createCveEventSchema(
+                        externalId = "counter-dead",
+                        summaryStatus = CveSummaryStatus.FAILED,
+                        retryCount = 5,
+                    ),
+                )
+
+                `when`("the counters run at a retry ceiling of 5") {
+                    then("each status delta is one, and FAILED splits at the ceiling") {
+                        repository.countByStatus(status = CveSummaryStatus.PENDING) shouldBe basePending + 1
+                        repository.countByStatus(status = CveSummaryStatus.SUMMARIZING) shouldBe baseSummarizing + 1
+                        repository.countFailedRetryable(maxRetries = 5) shouldBe baseRetryable + 1
+                        repository.countDeadLetter(maxRetries = 5) shouldBe baseDeadLetter + 1
+                    }
+                }
+            }
+
+            given("events spread over two topics and a third topic with none") {
+                repository.saveAndFlush(createCveEventSchema(topicId = 9001L, externalId = "topic-count-a1"))
+                repository.saveAndFlush(createCveEventSchema(topicId = 9001L, externalId = "topic-count-a2"))
+                repository.saveAndFlush(createCveEventSchema(topicId = 9002L, externalId = "topic-count-b1"))
+
+                `when`("countEventsByTopic runs over all three ids") {
+                    val counts = repository.countEventsByTopic(topicIds = listOf(9001L, 9002L, 9003L))
+
+                    then("counts group per topic and the empty topic is absent") {
+                        counts.sortedBy { it.topicId } shouldContainExactly
+                            listOf(
+                                TopicEventCount(topicId = 9001L, count = 2L),
+                                TopicEventCount(topicId = 9002L, count = 1L),
+                            )
+                    }
+                }
+            }
+
+            given("a topic with summarized, unsummarized, and foreign-topic events") {
+                val topicId =
+                    topicRepository
+                        .saveAndFlush(
+                            createCveTopicSchema(topicKey = "latest-topic", displayName = "Latest Topic"),
+                        ).id
+                repository.saveAndFlush(
+                    createCveEventSchema(
+                        topicId = topicId,
+                        externalId = "latest-old",
+                        title = "Old advisory",
+                        aiSummary = "Old summary",
+                        summaryStatus = CveSummaryStatus.DONE,
+                    ),
+                )
+                repository.saveAndFlush(
+                    createCveEventSchema(
+                        topicId = topicId,
+                        externalId = "latest-new",
+                        title = "New advisory",
+                        aiSummary = "New summary",
+                        summaryStatus = CveSummaryStatus.DONE,
+                    ),
+                )
+                repository.saveAndFlush(
+                    createCveEventSchema(topicId = topicId, externalId = "latest-pending", title = "Unsummarized"),
+                )
+                repository.saveAndFlush(
+                    createCveEventSchema(
+                        topicId = 9099L,
+                        externalId = "latest-foreign",
+                        summaryStatus = CveSummaryStatus.DONE,
+                    ),
+                )
+
+                `when`("findRecentDoneEvents runs scoped to the topic") {
+                    val recent =
+                        repository.findRecentDoneEvents(
+                            topicIds = listOf(topicId),
+                            pageable = PageRequest.of(0, 5),
+                        )
+
+                    then("only DONE events of that topic come back, newest first, joined to the display name") {
+                        recent.map { it.title } shouldContainExactly listOf("New advisory", "Old advisory")
+                        recent.first().topicDisplayName shouldBe "Latest Topic"
+                        recent.first().aiSummary shouldBe "New summary"
+                    }
+                }
+
+                `when`("findRecentDoneEvents runs with a limit of one") {
+                    val recent =
+                        repository.findRecentDoneEvents(
+                            topicIds = listOf(topicId),
+                            pageable = PageRequest.of(0, 1),
+                        )
+
+                    then("only the newest event returns") {
+                        recent.map { it.title } shouldContainExactly listOf("New advisory")
+                    }
+                }
+            }
+
+            given("dead-letter, retryable, and completed rows at a retry ceiling of 50") {
+                // Ceiling 50 keeps this block exact: rows leaked by other blocks stay below it.
+                val dead1 =
+                    repository
+                        .saveAndFlush(
+                            createCveEventSchema(
+                                externalId = "revive-dead-1",
+                                summaryStatus = CveSummaryStatus.FAILED,
+                                retryCount = 50,
+                                nextAttemptAt = now.plusMinutes(10),
+                            ),
+                        ).id
+                val dead2 =
+                    repository
+                        .saveAndFlush(
+                            createCveEventSchema(
+                                externalId = "revive-dead-2",
+                                summaryStatus = CveSummaryStatus.FAILED,
+                                retryCount = 51,
+                            ),
+                        ).id
+                val retryable =
+                    repository
+                        .saveAndFlush(
+                            createCveEventSchema(
+                                externalId = "revive-retryable",
+                                summaryStatus = CveSummaryStatus.FAILED,
+                                retryCount = 49,
+                            ),
+                        ).id
+
+                `when`("one dead-letter is revived by id, then the rest in bulk") {
+                    val retryableRefused = repository.resetDeadLetter(id = retryable, maxRetries = 50)
+                    val singleRevived = repository.resetDeadLetter(id = dead1, maxRetries = 50)
+                    val bulkRevived = repository.resetDeadLetters(maxRetries = 50)
+
+                    then("guards admit only true dead-letters and revival resets the full budget") {
+                        retryableRefused shouldBe 0
+                        singleRevived shouldBe 1
+                        bulkRevived shouldBe 1
+                        val revived = repository.findById(dead1).orElseThrow()
+                        revived.summaryStatus shouldBe CveSummaryStatus.PENDING
+                        revived.retryCount shouldBe 0
+                        revived.nextAttemptAt.shouldBeNull()
+                        revived.claimToken.shouldBeNull()
+                        repository.findById(dead2).orElseThrow().summaryStatus shouldBe CveSummaryStatus.PENDING
+                        repository.findById(retryable).orElseThrow().summaryStatus shouldBe CveSummaryStatus.FAILED
                     }
                 }
             }
