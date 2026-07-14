@@ -8,6 +8,22 @@ import java.time.LocalDateTime
 open class CveEventRepositoryImpl(
     private val jpaCveEventRepository: JpaCveEventRepository,
 ) : CveEventRepository {
+    @Transactional
+    override fun insertIgnore(
+        topicId: Long,
+        externalId: String,
+        title: String,
+        rawContent: String,
+        publishedAt: LocalDateTime?,
+    ): Int =
+        jpaCveEventRepository.insertIgnore(
+            topicId = topicId,
+            externalId = externalId,
+            title = title.take(TITLE_MAX_LENGTH),
+            rawContent = rawContent.take(RAW_CONTENT_MAX_LENGTH),
+            publishedAt = publishedAt,
+        )
+
     override fun findClaimable(now: LocalDateTime, maxRetries: Int, limit: Int): List<CveEvent> =
         jpaCveEventRepository
             .findClaimable(now = now, maxRetries = maxRetries, pageable = PageRequest.of(0, limit))
@@ -43,4 +59,10 @@ open class CveEventRepositoryImpl(
             summaryStatus = schema.summaryStatus,
             retryCount = schema.retryCount,
         )
+
+    companion object {
+        // Match the cve_event column limits so an over-long feed payload never overflows the insert.
+        const val TITLE_MAX_LENGTH = 512
+        const val RAW_CONTENT_MAX_LENGTH = 60_000
+    }
 }

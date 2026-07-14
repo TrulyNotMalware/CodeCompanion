@@ -6,6 +6,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.springframework.data.domain.PageRequest
 import java.time.LocalDateTime
@@ -13,6 +14,76 @@ import java.time.LocalDateTime
 class CveEventRepositoryImplTest :
     BehaviorSpec({
         val now = LocalDateTime.of(2026, 7, 13, 9, 0)
+
+        given("insertIgnore for a new event") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            val publishedAt = now.minusHours(1)
+            every {
+                jpa.insertIgnore(
+                    topicId = 1L,
+                    externalId = "R1",
+                    title = "Title",
+                    rawContent = "Body",
+                    publishedAt = publishedAt,
+                )
+            } returns 1
+
+            `when`("inserting") {
+                val inserted =
+                    repository.insertIgnore(
+                        topicId = 1L,
+                        externalId = "R1",
+                        title = "Title",
+                        rawContent = "Body",
+                        publishedAt = publishedAt,
+                    )
+
+                then("it delegates and returns the affected-row count") {
+                    inserted shouldBe 1
+                    verify(exactly = 1) {
+                        jpa.insertIgnore(
+                            topicId = 1L,
+                            externalId = "R1",
+                            title = "Title",
+                            rawContent = "Body",
+                            publishedAt = publishedAt,
+                        )
+                    }
+                }
+            }
+        }
+
+        given("insertIgnore with an over-long title and rawContent") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            val titleSlot = slot<String>()
+            val rawContentSlot = slot<String>()
+            every {
+                jpa.insertIgnore(
+                    topicId = 1L,
+                    externalId = "R2",
+                    title = capture(titleSlot),
+                    rawContent = capture(rawContentSlot),
+                    publishedAt = null,
+                )
+            } returns 1
+
+            `when`("inserting") {
+                repository.insertIgnore(
+                    topicId = 1L,
+                    externalId = "R2",
+                    title = "t".repeat(600),
+                    rawContent = "b".repeat(70_000),
+                    publishedAt = null,
+                )
+
+                then("title is truncated to 512 and rawContent to 60000 before delegation") {
+                    titleSlot.captured.length shouldBe CveEventRepositoryImpl.TITLE_MAX_LENGTH
+                    rawContentSlot.captured.length shouldBe CveEventRepositoryImpl.RAW_CONTENT_MAX_LENGTH
+                }
+            }
+        }
 
         given("findClaimable") {
             val jpa = mockk<JpaCveEventRepository>()

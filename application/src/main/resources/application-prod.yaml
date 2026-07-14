@@ -127,6 +127,18 @@ slack:
     # stays noop so summary traffic is opt-in via AI_PROVIDER once the collector rolls out.
     ai:
       provider: ${AI_PROVIDER:noop}
+    # CVE feed collector sources. Tokens/keys default empty (anonymous, rate-limited) and are never
+    # logged; the collector only runs when slack.app.cve.enabled is true.
+    cve:
+      github:
+        token: ${GITHUB_TOKEN:}
+        per-page: ${GITHUB_RELEASES_PER_PAGE:10}
+      nvd:
+        api-key: ${NVD_API_KEY:}
+        lookback-minutes: ${NVD_LOOKBACK_MINUTES:120}
+      collector:
+        request-timeout-seconds: ${CVE_COLLECTOR_REQUEST_TIMEOUT_SECONDS:30}
+        window-minutes: ${CVE_COLLECTOR_WINDOW_MINUTES:5}
     mcp:
       enabled: ${MCP_ENABLED:false}
       signing-secret: ${MCP_SIGNING_SECRET:}

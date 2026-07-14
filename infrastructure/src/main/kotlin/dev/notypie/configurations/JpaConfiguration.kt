@@ -7,9 +7,11 @@ import dev.notypie.repository.agent.JpaAgentSessionRepository
 import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
 import dev.notypie.repository.authorization.JpaUserCommandRoleRepository
 import dev.notypie.repository.authorization.UserCommandRoleRepositoryImpl
+import dev.notypie.repository.cve.CveCollectLedgerRepositoryImpl
 import dev.notypie.repository.cve.CveEventRepositoryImpl
 import dev.notypie.repository.cve.CveSubscriptionRepositoryImpl
 import dev.notypie.repository.cve.CveTopicRepositoryImpl
+import dev.notypie.repository.cve.JpaCveCollectLedgerRepository
 import dev.notypie.repository.cve.JpaCveEventRepository
 import dev.notypie.repository.cve.JpaCveSubscriptionRepository
 import dev.notypie.repository.cve.JpaCveTopicRepository
@@ -114,6 +116,11 @@ class JpaConfiguration {
         jpaCveSubscriptionRepository = jpaCveSubscriptionRepository,
         jpaCveTopicRepository = jpaCveTopicRepository,
     )
+
+    @Bean
+    @Primary
+    fun cveCollectLedgerRepository(jpaCveCollectLedgerRepository: JpaCveCollectLedgerRepository) =
+        CveCollectLedgerRepositoryImpl(jpaCveCollectLedgerRepository = jpaCveCollectLedgerRepository)
 
     @Bean
     @Primary

@@ -6,12 +6,18 @@ import dev.notypie.application.service.cve.ai.CveSummaryPromptBuilder
 import dev.notypie.application.service.cve.ai.CveSummaryWorker
 import dev.notypie.application.service.cve.ai.NoopAiSummarizer
 import dev.notypie.application.service.cve.ai.SidecarAiSummarizer
+import dev.notypie.application.service.cve.collector.CveCollector
 import dev.notypie.impl.agent.AgentGateway
+import dev.notypie.impl.cve.GithubReleaseSourceAdapter
+import dev.notypie.impl.cve.NvdCveSourceAdapter
+import dev.notypie.impl.cve.SourceAdapter
+import dev.notypie.repository.cve.CveCollectLedgerRepository
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import java.time.Duration
 
 /**
  * CVE-Bot wiring, off by default: without `slack.app.cve.enabled=true` no bean here
@@ -75,4 +81,44 @@ class CveConfiguration {
             backoffMinutes = appConfig.ai.backoffMinutes,
             stuckMinutes = appConfig.ai.stuckMinutes,
         )
+
+    @Bean
+    fun githubReleaseSourceAdapter(appConfig: AppConfig): SourceAdapter =
+        GithubReleaseSourceAdapter(
+            token = appConfig.cve.github.token,
+            perPage = appConfig.cve.github.perPage,
+            requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
+        )
+
+    @Bean
+    fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter =
+        NvdCveSourceAdapter(
+            apiKey = appConfig.cve.nvd.apiKey,
+            lookbackMinutes = appConfig.cve.nvd.lookbackMinutes,
+            requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
+        )
+
+    /** Collects into cve_event (PENDING); every registered [SourceAdapter] bean is injected here. */
+    @Bean
+    fun cveCollector(
+        appConfig: AppConfig,
+        cveTopicRepository: CveTopicRepository,
+        cveEventRepository: CveEventRepository,
+        cveCollectLedgerRepository: CveCollectLedgerRepository,
+        sourceAdapters: List<SourceAdapter>,
+    ): CveCollector {
+        // Bucket math divides minute-of-hour by the window size: 0 throws every tick, and a
+        // non-divisor of 60 drifts bucket boundaries across the hour.
+        val windowMinutes = appConfig.cve.collector.windowMinutes
+        require(windowMinutes in 1L..60L && 60L % windowMinutes == 0L) {
+            "slack.app.cve.collector.window-minutes ($windowMinutes) must be a divisor of 60 in 1..60"
+        }
+        return CveCollector(
+            cveTopicRepository = cveTopicRepository,
+            cveEventRepository = cveEventRepository,
+            cveCollectLedgerRepository = cveCollectLedgerRepository,
+            adapters = sourceAdapters,
+            windowMinutes = windowMinutes,
+        )
+    }
 }

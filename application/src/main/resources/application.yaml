@@ -7,6 +7,12 @@ spring:
         # The MCP starter auto-configures an open /mcp endpoint when left at its default (true).
         # Off everywhere unless a profile opts in (prod does via MCP_ENABLED).
         enabled: false
+  task:
+    scheduling:
+      pool:
+        # Spring's default scheduler pool is a single thread shared by every @Scheduled job; one
+        # slow job (e.g. the CVE collector's outbound HTTP) would starve all the others.
+        size: 4
 
 slack:
   app:

@@ -120,10 +120,13 @@ data class AppConfig(
 
     // CVE-Bot topic subscriptions. Topics are config-supplied: at boot each entry is upserted
     // into cve_topic by key, so the yaml stays the admin-managed source while rows added by
-    // other means survive restarts.
+    // other means survive restarts. [github]/[nvd]/[collector] tune the M4 feed collector.
     data class Cve(
         val enabled: Boolean = false,
         val topics: List<TopicDefinition> = emptyList(),
+        val github: Github = Github(),
+        val nvd: Nvd = Nvd(),
+        val collector: Collector = Collector(),
     ) {
         data class TopicDefinition(
             val key: String = "",
@@ -133,6 +136,27 @@ data class AppConfig(
             val sourceConfig: String? = null,
             val deliveryMode: CveDeliveryMode = CveDeliveryMode.DIGEST,
             val active: Boolean = true,
+        )
+
+        // GitHub Releases source. [token] lifts the unauthenticated rate limit (blank = anonymous);
+        // it is never logged. [perPage] caps releases fetched per topic per tick.
+        data class Github(
+            val token: String = "",
+            val perPage: Int = 10,
+        )
+
+        // NVD 2.0 source. [apiKey] raises the rate limit (blank = anonymous); it is never logged.
+        // [lookbackMinutes] sizes the lastModStartDate..now scan window; overlaps are dedup-safe.
+        data class Nvd(
+            val apiKey: String = "",
+            val lookbackMinutes: Long = 120,
+        )
+
+        // Collector tick knobs. [requestTimeoutSeconds] bounds one source HTTP call; [windowMinutes]
+        // is the once-per-window claim bucket the tick time is truncated to.
+        data class Collector(
+            val requestTimeoutSeconds: Long = 30,
+            val windowMinutes: Long = 5,
         )
     }
 

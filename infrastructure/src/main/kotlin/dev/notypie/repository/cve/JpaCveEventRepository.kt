@@ -12,6 +12,32 @@ import java.time.LocalDateTime
 
 @Repository
 interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
+    /**
+     * Atomically ingests one source event. `INSERT IGNORE` swallows the duplicate-key error on
+     * unique(topic_id, external_id), so re-collecting an overlapping window is a no-op; the
+     * affected-row count (1 = inserted, 0 = already present) is the ingestion signal — no
+     * check-then-act race. Mirrors `JpaCveSubscriptionRepository.insertIgnore`.
+     */
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            INSERT IGNORE INTO cve_event
+                (topic_id, external_id, title, raw_content, published_at,
+                 summary_status, retry_count, created_at)
+            VALUES (:topicId, :externalId, :title, :rawContent, :publishedAt,
+                    'PENDING', 0, CURRENT_TIMESTAMP(6))
+        """,
+        nativeQuery = true,
+    )
+    fun insertIgnore(
+        @Param("topicId") topicId: Long,
+        @Param("externalId") externalId: String,
+        @Param("title") title: String,
+        @Param("rawContent") rawContent: String,
+        @Param("publishedAt") publishedAt: LocalDateTime?,
+    ): Int
+
     @Query(
         """
         SELECT e FROM cve_event e

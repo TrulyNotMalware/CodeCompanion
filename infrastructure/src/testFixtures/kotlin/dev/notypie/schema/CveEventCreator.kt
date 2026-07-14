@@ -1,5 +1,6 @@
 package dev.notypie.schema
 
+import dev.notypie.impl.cve.RawSourceEvent
 import dev.notypie.repository.cve.CveEvent
 import dev.notypie.repository.cve.schema.CveEventSchema
 import dev.notypie.repository.cve.schema.CveSummaryStatus
@@ -50,5 +51,18 @@ fun createCveEventSchema(
         claimToken = claimToken,
         retryCount = retryCount,
         nextAttemptAt = nextAttemptAt,
+        publishedAt = publishedAt,
+    )
+
+fun createRawSourceEvent(
+    externalId: String = "R-0001",
+    title: String = "Sample release",
+    rawContent: String = "Raw release notes.",
+    publishedAt: LocalDateTime? = null,
+): RawSourceEvent =
+    RawSourceEvent(
+        externalId = externalId,
+        title = title,
+        rawContent = rawContent,
         publishedAt = publishedAt,
     )

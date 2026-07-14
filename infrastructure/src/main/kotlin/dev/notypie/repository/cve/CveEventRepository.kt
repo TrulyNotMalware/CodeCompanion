@@ -16,11 +16,27 @@ data class CveEvent(
 )
 
 /**
- * Read/CAS surface for the AI summary worker. Multi-instance safety rests entirely on the
- * atomic claim-token CAS ([claimForSummary]/[markDone]/[markFailed]) — mirrors the standup
- * dispatch pattern. [resetStuck] recovers rows a crashed worker left mid-flight.
+ * Read/CAS surface for the AI summary worker. Ingestion is idempotent via [insertIgnore];
+ * multi-instance safety of the summary side rests entirely on the atomic claim-token CAS
+ * ([claimForSummary]/[markDone]/[markFailed]) — mirrors the standup dispatch pattern.
+ * [resetStuck] recovers rows a crashed worker left mid-flight.
  */
 interface CveEventRepository {
+    /**
+     * Ingests one collected source event as PENDING, idempotently: the collector may re-fetch an
+     * overlapping window, and `INSERT IGNORE` swallows the duplicate-key error on the existing
+     * unique(topic_id, external_id) so a re-seen event is a no-op. Returns 1 when the row was newly
+     * inserted, 0 when it already existed. The impl truncates [title] and [rawContent] to the column
+     * limits before insert. Mirrors `JpaCveSubscriptionRepository.insertIgnore`.
+     */
+    fun insertIgnore(
+        topicId: Long,
+        externalId: String,
+        title: String,
+        rawContent: String,
+        publishedAt: LocalDateTime?,
+    ): Int
+
     /**
      * Events eligible for a summary attempt: PENDING or FAILED, below [maxRetries], whose backoff
      * (if any) has elapsed by [now]. Ordered by id, capped at [limit].
