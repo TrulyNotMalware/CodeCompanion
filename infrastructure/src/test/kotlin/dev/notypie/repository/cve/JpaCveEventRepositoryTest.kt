@@ -39,8 +39,8 @@ class JpaCveEventRepositoryTest
                 val id = freshRow(externalId = "race-1")
 
                 `when`("both attempt the claim") {
-                    val first = repository.claimForSummary(id = id, token = "token-a", now = now)
-                    val second = repository.claimForSummary(id = id, token = "token-b", now = now)
+                    val first = repository.claimForSummary(id = id, token = "token-a", now = now, maxRetries = 5)
+                    val second = repository.claimForSummary(id = id, token = "token-b", now = now, maxRetries = 5)
 
                     then("exactly one wins and the row carries the winner's token") {
                         first shouldBe 1
@@ -55,7 +55,7 @@ class JpaCveEventRepositoryTest
 
             given("a claimed row and a foreign token") {
                 val id = freshRow(externalId = "done-1")
-                repository.claimForSummary(id = id, token = "owner", now = now)
+                repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("markDone runs with the wrong then the owning token") {
                     val wrong = repository.markDone(id = id, token = "intruder", summary = "S", now = now)
@@ -74,7 +74,7 @@ class JpaCveEventRepositoryTest
 
             given("a claimed row that fails") {
                 val id = freshRow(externalId = "fail-1")
-                repository.claimForSummary(id = id, token = "owner", now = now)
+                repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("markFailed runs with the owning token") {
                     val marked = repository.markFailed(id = id, token = "owner", nextAttemptAt = now.plusMinutes(10))
@@ -92,7 +92,7 @@ class JpaCveEventRepositoryTest
 
             given("a claimed row released for backpressure") {
                 val id = freshRow(externalId = "busy-1")
-                repository.claimForSummary(id = id, token = "owner", now = now)
+                repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("releaseClaim runs with the owning token") {
                     val released = repository.releaseClaim(id = id, token = "owner", nextAttemptAt = now.plusMinutes(2))
@@ -168,9 +168,9 @@ class JpaCveEventRepositoryTest
 
             given("one stale and one live SUMMARIZING row") {
                 val stale = freshRow(externalId = "stuck-old")
-                repository.claimForSummary(id = stale, token = "crashed", now = now.minusMinutes(30))
+                repository.claimForSummary(id = stale, token = "crashed", now = now.minusMinutes(30), maxRetries = 5)
                 val live = freshRow(externalId = "stuck-live")
-                repository.claimForSummary(id = live, token = "working", now = now.minusMinutes(1))
+                repository.claimForSummary(id = live, token = "working", now = now.minusMinutes(1), maxRetries = 5)
 
                 `when`("resetStuck runs with a 15-minute threshold") {
                     val reset = repository.resetStuck(olderThan = now.minusMinutes(15))
@@ -348,6 +348,27 @@ class JpaCveEventRepositoryTest
                         revived.claimToken.shouldBeNull()
                         repository.findById(dead2).orElseThrow().summaryStatus shouldBe CveSummaryStatus.PENDING
                         repository.findById(retryable).orElseThrow().summaryStatus shouldBe CveSummaryStatus.FAILED
+                    }
+                }
+            }
+
+            given("a FAILED row that exhausted its retry budget after a worker read it") {
+                val dead =
+                    repository
+                        .saveAndFlush(
+                            createCveEventSchema(
+                                externalId = "stale-claim-dead",
+                                summaryStatus = CveSummaryStatus.FAILED,
+                                retryCount = 5,
+                            ),
+                        ).id
+
+                `when`("the worker attempts the claim with its stale candidate") {
+                    val claimed = repository.claimForSummary(id = dead, token = "stale", now = now, maxRetries = 5)
+
+                    then("the CAS refuses the dead-letter row") {
+                        claimed shouldBe 0
+                        repository.findById(dead).orElseThrow().summaryStatus shouldBe CveSummaryStatus.FAILED
                     }
                 }
             }

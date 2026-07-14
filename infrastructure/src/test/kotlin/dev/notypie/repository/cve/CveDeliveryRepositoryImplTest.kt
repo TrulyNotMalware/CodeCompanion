@@ -85,4 +85,20 @@ class CveDeliveryRepositoryImplTest :
                 }
             }
         }
+
+        given("the database clock") {
+            val jpa = mockk<JpaCveDeliveryRepository>()
+            val repository = CveDeliveryRepositoryImpl(jpaCveDeliveryRepository = jpa)
+            val dbNow = LocalDateTime.of(2026, 7, 14, 7, 30)
+            every { jpa.dbNow() } returns dbNow
+
+            `when`("reading dbNow") {
+                val result = repository.dbNow()
+
+                then("it delegates unchanged") {
+                    result shouldBe dbNow
+                    verify(exactly = 1) { jpa.dbNow() }
+                }
+            }
+        }
     })

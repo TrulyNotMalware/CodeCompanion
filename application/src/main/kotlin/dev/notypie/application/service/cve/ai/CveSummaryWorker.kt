@@ -47,8 +47,16 @@ class CveSummaryWorker(
 
     private fun dispatchOne(event: CveEvent) {
         val token = UUID.randomUUID().toString()
-        // Someone else already claimed this row — skip without touching the summarizer.
-        if (cveEventRepository.claimForSummary(id = event.id, token = token, now = LocalDateTime.now()) == 0) return
+        // Someone else already claimed this row (or it dead-lettered since we read it) — skip
+        // without touching the summarizer.
+        val claimed =
+            cveEventRepository.claimForSummary(
+                id = event.id,
+                token = token,
+                now = LocalDateTime.now(),
+                maxRetries = maxRetries,
+            )
+        if (claimed == 0) return
 
         val summary =
             try {

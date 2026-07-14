@@ -99,12 +99,22 @@ class CveConfiguration {
         )
 
     @Bean
-    fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter =
-        NvdCveSourceAdapter(
+    fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter {
+        val lookbackMinutes = appConfig.cve.nvd.lookbackMinutes
+        val windowMinutes = appConfig.cve.collector.windowMinutes
+        // The collector claims its window ledger BEFORE the fetch, so a failed fetch burns the
+        // window; the next scan must reach back across at least one burned window or the CVEs
+        // modified inside it are silently skipped.
+        require(lookbackMinutes >= windowMinutes * 2) {
+            "slack.app.cve.nvd.lookback-minutes ($lookbackMinutes) must be >= twice " +
+                "slack.app.cve.collector.window-minutes ($windowMinutes) to cover a burned window"
+        }
+        return NvdCveSourceAdapter(
             apiKey = appConfig.cve.nvd.apiKey,
-            lookbackMinutes = appConfig.cve.nvd.lookbackMinutes,
+            lookbackMinutes = lookbackMinutes,
             requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
         )
+    }
 
     /** Collects into cve_event (PENDING); every registered [SourceAdapter] bean is injected here. */
     @Bean

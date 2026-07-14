@@ -58,10 +58,16 @@ interface CveEventRepository {
 
     /**
      * Atomically claims [id] for this worker by stamping [token] and flipping to SUMMARIZING,
-     * only while the row is still claimable at [now]. Returns 1 when this call won the row, 0
-     * when another instance already claimed it.
+     * only while the row is still claimable at [now] and its retry count is under [maxRetries]
+     * (a stale candidate must not revive a row dead-lettered since it was read). Returns 1 when
+     * this call won the row, 0 when another instance already claimed it.
      */
-    fun claimForSummary(id: Long, token: String, now: LocalDateTime): Int
+    fun claimForSummary(
+        id: Long,
+        token: String,
+        now: LocalDateTime,
+        maxRetries: Int,
+    ): Int
 
     /**
      * Records [summary] and marks the row DONE, guarded by the owning [token], stamping updated_at

@@ -43,4 +43,11 @@ interface CveDeliveryRepository {
         doneBefore: LocalDateTime,
         limit: Int,
     ): List<UndeliveredCveEvent>
+
+    /**
+     * The database's current wall-clock time. [findUndelivered]'s horizon bound compares against
+     * DB-stamped created_at, so its [LocalDateTime] must come from here, not the app clock — the
+     * two clocks can sit in different zones.
+     */
+    fun dbNow(): LocalDateTime
 }

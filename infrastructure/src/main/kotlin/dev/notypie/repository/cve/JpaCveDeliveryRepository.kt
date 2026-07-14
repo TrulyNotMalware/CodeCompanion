@@ -37,11 +37,11 @@ interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
 
     // Joins cve_topic and cve_subscription to cve_event by unrelated-entity ON, then anti-joins the
     // delivery ledger (d.id IS NULL) to keep only undelivered pairs. createdAt >= :since bounds the
-    // scan to the delivery horizon (cve_event has no TTL); createdAt is DB-clock stamped while :since
-    // is app-clock, but the zone skew (up to ~9h here — the DB runs UTC, the app JVM KST) is
-    // immaterial at a multi-day horizon. updatedAt < :doneBefore is the visibility cutoff (updatedAt
-    // is stamped by markDone from the app clock when the summary lands). Hibernate entity joins render
-    // to plain SQL joins, so this runs on H2.
+    // scan to the delivery horizon (cve_event has no TTL); createdAt is DB-clock stamped, so callers
+    // must derive :since from [dbNow] — an app-clock value would skew the horizon by the app/DB zone
+    // gap (up to ~9h here: DB UTC, app JVM KST). updatedAt < :doneBefore is the visibility cutoff and
+    // stays app-clock (markDone stamps updatedAt from the app clock when the summary lands).
+    // Hibernate entity joins render to plain SQL joins, so this runs on H2.
     @Query(
         """
         SELECT new dev.notypie.repository.cve.UndeliveredCveEvent(
@@ -66,4 +66,9 @@ interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
         @Param("doneBefore") doneBefore: LocalDateTime,
         pageable: Pageable,
     ): List<UndeliveredCveEvent>
+
+    // LOCALTIMESTAMP matches what CURRENT_TIMESTAMP(6) stamps into created_at on MariaDB (both are
+    // the session-zone wall clock) and, unlike CURRENT_TIMESTAMP, is zone-less on H2 too.
+    @Query(value = "SELECT LOCALTIMESTAMP(6)", nativeQuery = true)
+    fun dbNow(): LocalDateTime
 }

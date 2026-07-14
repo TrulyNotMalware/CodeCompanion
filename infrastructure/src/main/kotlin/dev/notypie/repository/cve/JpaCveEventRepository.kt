@@ -63,6 +63,9 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
     // compares it against an app-clock threshold — mixing clock sources would skew stuck detection.
     // markDone stamps it from :now for the same reason: the notification dispatcher's digest cutoff
     // compares a DONE row's updated_at against an app-clock send time.
+    // retry_count < :maxRetries is re-checked here, not just in findClaimable: a worker holding a
+    // stale candidate (read before another instance burned the last retry) must not claim what has
+    // since become a dead-letter row.
     @Modifying
     @Transactional
     @Query(
@@ -70,6 +73,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
             UPDATE cve_event
             SET summary_status = 'SUMMARIZING', claim_token = :token, updated_at = :now
             WHERE id = :id AND summary_status IN ('PENDING', 'FAILED')
+              AND retry_count < :maxRetries
               AND (next_attempt_at IS NULL OR next_attempt_at <= :now)
         """,
         nativeQuery = true,
@@ -78,6 +82,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         @Param("id") id: Long,
         @Param("token") token: String,
         @Param("now") now: LocalDateTime,
+        @Param("maxRetries") maxRetries: Int,
     ): Int
 
     @Modifying

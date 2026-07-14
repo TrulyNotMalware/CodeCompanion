@@ -111,14 +111,14 @@ class CveEventRepositoryImplTest :
         given("claimForSummary") {
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
-            every { jpa.claimForSummary(id = 7L, token = "tok", now = now) } returns 1
+            every { jpa.claimForSummary(id = 7L, token = "tok", now = now, maxRetries = 5) } returns 1
 
             `when`("claiming") {
-                val claimed = repository.claimForSummary(id = 7L, token = "tok", now = now)
+                val claimed = repository.claimForSummary(id = 7L, token = "tok", now = now, maxRetries = 5)
 
                 then("it delegates and returns the affected-row count") {
                     claimed shouldBe 1
-                    verify(exactly = 1) { jpa.claimForSummary(id = 7L, token = "tok", now = now) }
+                    verify(exactly = 1) { jpa.claimForSummary(id = 7L, token = "tok", now = now, maxRetries = 5) }
                 }
             }
         }

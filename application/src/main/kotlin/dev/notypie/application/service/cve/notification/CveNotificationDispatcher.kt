@@ -52,7 +52,9 @@ class CveNotificationDispatcher(
         val pairs =
             cveDeliveryRepository.findUndelivered(
                 deliveryMode = CveDeliveryMode.IMMEDIATE,
-                since = now.minusDays(deliveryHorizonDays),
+                // The horizon bounds DB-stamped created_at, so it is computed on the DB clock;
+                // doneBefore bounds app-stamped updated_at, so it stays on the app clock.
+                since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays),
                 // Immediate: everything summarized by now is due.
                 doneBefore = now,
                 limit = batchSize,
@@ -88,11 +90,11 @@ class CveNotificationDispatcher(
                 .atZone(digestZone)
                 .withZoneSameInstant(ZoneId.systemDefault())
                 .toLocalDateTime()
-        val now = LocalDateTime.ofInstant(clock.instant(), ZoneId.systemDefault())
         val pairs =
             cveDeliveryRepository.findUndelivered(
                 deliveryMode = CveDeliveryMode.DIGEST,
-                since = now.minusDays(deliveryHorizonDays),
+                // DB clock for the created_at horizon, app clock for the updated_at cutoff above.
+                since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays),
                 doneBefore = doneBefore,
                 limit = batchSize,
             )
@@ -147,7 +149,7 @@ class CveNotificationDispatcher(
     private fun immediateMarkdown(pair: UndeliveredCveEvent): String {
         val head = "*${pair.topicDisplayName}* — ${pair.title}"
         val summary = pair.aiSummary
-        return if (summary.isNullOrBlank()) head else "$head\n\n${summary.take(IMMEDIATE_SUMMARY_MAX_LENGTH)}"
+        return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n$summary")
     }
 
     private fun digestMarkdown(events: List<UndeliveredCveEvent>): String =
@@ -157,7 +159,13 @@ class CveNotificationDispatcher(
             .joinToString(separator = "\n\n") { (topicDisplayName, topicEvents) ->
                 val lines = topicEvents.joinToString(separator = "\n") { digestEventLine(event = it) }
                 "*$topicDisplayName*\n$lines"
-            }
+            }.let { capBody(body = it) }
+
+    // An oversized body would be rejected by Slack AFTER the delivery claim committed — the outbox
+    // would retry the same rejected payload forever and the notification silently drops. Capping
+    // the aggregate under the 3000-char section limit removes that failure mode entirely.
+    private fun capBody(body: String): String =
+        if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
 
     private fun digestEventLine(event: UndeliveredCveEvent): String {
         val summary = event.aiSummary
@@ -172,7 +180,7 @@ class CveNotificationDispatcher(
         private const val IMMEDIATE_HEADLINE = "CodeCompanion — CVE alert"
         private const val DIGEST_HEADLINE = "CodeCompanion — CVE digest"
 
-        // Slack section-block text tops out at 3000 chars; cap the single-event summary to fit.
-        private const val IMMEDIATE_SUMMARY_MAX_LENGTH = 3000
+        // Slack section-block text tops out at 3000 chars; headroom covers the truncation marker.
+        private const val BODY_MAX_LENGTH = 2_900
     }
 }

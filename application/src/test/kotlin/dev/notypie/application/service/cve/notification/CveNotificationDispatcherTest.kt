@@ -10,6 +10,7 @@ import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.schema.createUndeliveredCveEvent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldEndWith
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -29,6 +30,7 @@ import java.util.UUID
 
 private val AFTER_SEND_AT: Instant = Instant.parse("2026-07-14T10:00:00Z")
 private val BEFORE_SEND_AT: Instant = Instant.parse("2026-07-14T08:00:00Z")
+private val DB_NOW: LocalDateTime = LocalDateTime.of(2026, 7, 14, 10, 0)
 
 private fun OutboundMessage.channelId(): String = (this as OutboundMessage.ChannelMessage).target.id
 
@@ -60,8 +62,10 @@ class CveNotificationDispatcherTest :
             outboxRepository: MessageOutboxRepository = mockk(relaxed = true),
             clock: Clock = Clock.fixed(AFTER_SEND_AT, ZoneOffset.UTC),
             digestSummaryMaxLength: Int = 700,
-        ): CveNotificationDispatcher =
-            CveNotificationDispatcher(
+        ): CveNotificationDispatcher {
+            // The created_at horizon reads the DB clock through the repository; pin it per test.
+            every { deliveryRepository.dbNow() } returns DB_NOW
+            return CveNotificationDispatcher(
                 cveDeliveryRepository = deliveryRepository,
                 outboxRepository = outboxRepository,
                 outboundMessagePort = outboundMessagePort,
@@ -73,6 +77,7 @@ class CveNotificationDispatcherTest :
                 deliveryHorizonDays = 7,
                 clock = clock,
             )
+        }
 
         given("an immediate pair whose claim is won") {
             val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
@@ -449,8 +454,9 @@ class CveNotificationDispatcherTest :
             `when`("the immediate tick runs") {
                 dispatcher.immediateTick()
 
-                then("the summary is truncated to the 3000-char section limit") {
-                    messages.single().channelText().markdown shouldBe "*Alpha* — t\n\n${"x".repeat(3000)}"
+                then("the whole body is capped under the section limit with a truncation marker") {
+                    messages.single().channelText().markdown shouldBe
+                        "*Alpha* — t\n\n${"x".repeat(2887)}\n…(truncated)"
                 }
             }
         }
@@ -493,6 +499,76 @@ class CveNotificationDispatcherTest :
 
                 then("the DM falls back to a title-only line") {
                     messages.single().channelText().markdown shouldBe "*Alpha* — t"
+                }
+            }
+        }
+
+        given("a digest bundle whose aggregate body exceeds the Slack section limit") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                (1L..5L).map { eventId ->
+                    createUndeliveredCveEvent(
+                        eventId = eventId,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t$eventId",
+                        aiSummary = "x".repeat(700),
+                    )
+                }
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("the bundled body is capped under the section limit with a truncation marker") {
+                    val markdown = messages.single().channelText().markdown
+                    markdown.length shouldBe 2900 + "\n…(truncated)".length
+                    markdown shouldEndWith "…(truncated)"
+                }
+            }
+        }
+
+        given("the delivery horizon bound") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val since = slot<LocalDateTime>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.IMMEDIATE,
+                    since = capture(since),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns emptyList()
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = mockk(),
+                )
+
+            `when`("the immediate tick runs") {
+                dispatcher.immediateTick()
+
+                then("the horizon is derived from the DB clock, not the app clock") {
+                    since.captured shouldBe DB_NOW.minusDays(7)
                 }
             }
         }

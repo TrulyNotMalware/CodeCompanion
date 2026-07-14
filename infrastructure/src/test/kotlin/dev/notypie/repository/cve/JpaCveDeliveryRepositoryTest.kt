@@ -11,6 +11,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
@@ -18,6 +19,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.jdbc.core.JdbcTemplate
 import java.sql.Timestamp
+import java.time.Duration
 import java.time.LocalDateTime
 import javax.sql.DataSource
 
@@ -237,6 +239,16 @@ class JpaCveDeliveryRepositoryTest
 
                     then("no more than the limit is returned") {
                         result.size shouldBe 2
+                    }
+                }
+            }
+
+            given("the database clock read that anchors the delivery horizon") {
+                `when`("dbNow runs") {
+                    val dbNow = deliveryRepository.dbNow()
+
+                    then("the native scalar maps to a LocalDateTime near the JVM clock (in-process H2)") {
+                        Duration.between(dbNow, LocalDateTime.now()).abs().seconds shouldBeLessThan 60L
                     }
                 }
             }

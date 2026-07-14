@@ -41,7 +41,9 @@ class CveSummaryWorkerTest :
             every { eventRepository.resetStuck(olderThan = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
-            every { eventRepository.claimForSummary(id = 1L, token = capture(claimToken), now = any()) } returns 1
+            every {
+                eventRepository.claimForSummary(id = 1L, token = capture(claimToken), now = any(), maxRetries = 5)
+            } returns 1
             every { topicRepository.findById(id = 10L) } returns
                 createCveTopic(id = 10L, displayName = "Java CVE")
             every { summarizer.summarize(request = any()) } returns "SUMMARY"
@@ -75,7 +77,7 @@ class CveSummaryWorkerTest :
             every { eventRepository.resetStuck(olderThan = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
-            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any()) } returns 0
+            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 0
             val worker = workerWith(eventRepository, topicRepository, summarizer)
 
             `when`("the tick runs") {
@@ -104,8 +106,10 @@ class CveSummaryWorkerTest :
                     createCveEvent(id = 1L, topicId = 10L, retryCount = 2),
                     createCveEvent(id = 2L, topicId = 10L, retryCount = 0),
                 )
-            every { eventRepository.claimForSummary(id = 1L, token = capture(failToken), now = any()) } returns 1
-            every { eventRepository.claimForSummary(id = 2L, token = any(), now = any()) } returns 1
+            every {
+                eventRepository.claimForSummary(id = 1L, token = capture(failToken), now = any(), maxRetries = 5)
+            } returns 1
+            every { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) } returns 1
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = match { it.eventId == 1L }) } throws
                 AiSummarizationException(message = "boom")
@@ -161,7 +165,7 @@ class CveSummaryWorkerTest :
             every { eventRepository.resetStuck(olderThan = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L, retryCount = 3))
-            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any()) } returns 1
+            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 1
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = any()) } throws
                 AiSummarizerBusyException(message = "Sidecar busy (code=busy) for event=1")
@@ -190,7 +194,7 @@ class CveSummaryWorkerTest :
             every { eventRepository.resetStuck(olderThan = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
-            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any()) } returns 1
+            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 1
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = any()) } returns "SUMMARY"
             every { eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY", now = any()) } returns 0

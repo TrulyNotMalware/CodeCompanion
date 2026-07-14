@@ -31,8 +31,12 @@ open class CveEventRepositoryImpl(
             .map { toRecord(schema = it) }
 
     @Transactional
-    override fun claimForSummary(id: Long, token: String, now: LocalDateTime): Int =
-        jpaCveEventRepository.claimForSummary(id = id, token = token, now = now)
+    override fun claimForSummary(
+        id: Long,
+        token: String,
+        now: LocalDateTime,
+        maxRetries: Int,
+    ): Int = jpaCveEventRepository.claimForSummary(id = id, token = token, now = now, maxRetries = maxRetries)
 
     @Transactional
     override fun markDone(

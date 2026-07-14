@@ -24,4 +24,6 @@ open class CveDeliveryRepositoryImpl(
             doneBefore = doneBefore,
             pageable = PageRequest.of(0, limit),
         )
+
+    override fun dbNow(): LocalDateTime = jpaCveDeliveryRepository.dbNow()
 }
