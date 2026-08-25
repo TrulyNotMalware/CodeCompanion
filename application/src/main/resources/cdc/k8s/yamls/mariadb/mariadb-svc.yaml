@@ -21,7 +21,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mariadb-slave
-  namespace: mariadb
+  namespace: database
   labels:
     app: mariadb
     role: slave
@@ -39,7 +39,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mariadb-headless-svc
+  name: mariadb-headless
   namespace: database
   labels:
     app: mariadb

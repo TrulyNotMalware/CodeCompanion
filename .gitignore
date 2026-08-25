@@ -42,6 +42,8 @@ out/
 ### TODO ###
 todo
 gradle.properties
+# timestamped backups written by gradle-config/apply.sh
+gradle.properties.backup.*
 logs
 
 .DS_Store

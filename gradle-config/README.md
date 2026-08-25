@@ -12,7 +12,7 @@ and re-run `./apply.sh` rather than editing the generated file.
 ```bash
 ./apply.sh
 
-# For cross-platform compatibility (requires gradle-common.properties — see note below)
+# For cross-platform compatibility
 ./apply.sh common
 ```
 
@@ -20,11 +20,12 @@ and re-run `./apply.sh` rather than editing the generated file.
 Copy the appropriate configuration file to your project root as `gradle.properties`:
 - `gradle-macos.properties` → macOS (Apple Silicon & Intel)
 - `gradle-linux.properties` → Linux distributions
-- `gradle-common.properties` → Universal compatibility — **not currently included in this directory**
+- `gradle-common.properties` → Universal compatibility
 
-> **Note:** `apply.sh` still references `gradle-common.properties` for both `./apply.sh common` and its
-> unsupported-OS fallback, but the file is not checked in. Both paths fail until it is added. On macOS
-> and Linux the plain `./apply.sh` works normally.
+> **Note:** `apply.sh` maps `uname -s` to `macos`, `linux`, `windows`, or `unknown`, but only
+> `gradle-macos.properties` and `gradle-linux.properties` exist. A Git Bash / MSYS / Cygwin host
+> resolves to `windows` and fails with "Configuration file not found" rather than falling back to the
+> common preset — run `./apply.sh common` explicitly there.
 
 ## Configuration Files
 
@@ -46,16 +47,16 @@ Copy the appropriate configuration file to your project root as `gradle.properti
 
 **Recommended System:** 16GB+ RAM, server environment
 
-### gradle-common.properties *(not currently included)*
+### gradle-common.properties
 **Optimized for:** Cross-platform compatibility
-**Intended Features:**
-- Safe defaults for all operating systems
-- 4GB memory allocation
-- Basic optimizations only
+**Key Features:**
+- No GC selection and no experimental VM options — the JVM default collector, valid everywhere
+- 4GB heap (2GB Kotlin daemon)
+- Worker count left to Gradle's processor-count default
+- Kotlin daemon fallback **enabled**, so an untuned platform degrades to in-process compilation
+  instead of failing the build
 
 **Recommended System:** 8GB+ RAM
-
-Add this file if you need `./apply.sh common` or support for an OS other than macOS/Linux.
 
 ## Advanced Usage
 
@@ -123,7 +124,7 @@ Fine-tune Kotlin compilation performance:
 |---------------------------|---|---|---|
 | macOS | gradle-macos.properties | Full Support | Optimized for M1/M2/M3 |
 | Linux                     | gradle-linux.properties | Full Support | Maximum performance |
-| Other OS                  | gradle-common.properties | Not available | File not checked in |
+| Other OS                  | gradle-common.properties | Basic Support | Run `./apply.sh common` explicitly |
 
 ---
 
@@ -141,7 +142,7 @@ OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디
 ```bash
 ./apply.sh
 
-# 크로스 플랫폼 호환성을 위한 공통 설정 (gradle-common.properties 필요 — 아래 참고)
+# 크로스 플랫폼 호환성을 위한 공통 설정
 ./apply.sh common
 ```
 
@@ -149,11 +150,12 @@ OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디
 적절한 설정 파일을 프로젝트 루트에 `gradle.properties`로 복사:
 - `gradle-macos.properties` → macOS (Apple Silicon 및 Intel)
 - `gradle-linux.properties` → Linux 배포판
-- `gradle-common.properties` → 범용 호환성 — **현재 이 디렉토리에 포함되어 있지 않음**
+- `gradle-common.properties` → 범용 호환성
 
-> **참고:** `apply.sh`는 `./apply.sh common`과 미지원 OS 폴백에서 여전히 `gradle-common.properties`를
-> 참조하지만 해당 파일은 커밋되어 있지 않습니다. 파일을 추가하기 전까지 두 경로 모두 실패합니다.
-> macOS와 Linux에서는 `./apply.sh`가 정상 동작합니다.
+> **참고:** `apply.sh`는 `uname -s`를 `macos`/`linux`/`windows`/`unknown`으로 매핑하지만 실제 존재하는
+> 파일은 `gradle-macos.properties`와 `gradle-linux.properties`뿐입니다. Git Bash·MSYS·Cygwin 환경은
+> `windows`로 판정되어 공통 프리셋으로 폴백하지 않고 "Configuration file not found"로 종료되므로,
+> 해당 환경에서는 `./apply.sh common`을 명시적으로 실행하세요.
 
 ## 설정 파일 설명
 
@@ -175,16 +177,15 @@ OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디
 
 **권장 시스템:** 16GB+ RAM, 서버 환경
 
-### gradle-common.properties *(현재 미포함)*
+### gradle-common.properties
 **최적화 대상:** 크로스 플랫폼 호환성
-**의도된 기능:**
-- 모든 운영체제에서 안전한 기본 설정
-- 4GB 메모리 할당
-- 기본 최적화만 적용
+**주요 기능:**
+- GC 지정과 실험적 VM 옵션 없음 — 모든 플랫폼에서 유효한 JVM 기본 컬렉터 사용
+- 4GB 힙 (Kotlin 데몬 2GB)
+- 워커 수는 Gradle의 프로세서 개수 기본값에 위임
+- Kotlin 데몬 폴백 **활성화** — 튜닝되지 않은 플랫폼에서 빌드 실패 대신 인프로세스 컴파일로 degrade
 
 **권장 시스템:** 8GB+ RAM
-
-`./apply.sh common`이나 macOS/Linux 외 OS 지원이 필요하면 이 파일을 추가하세요.
 
 ## 고급 사용법
 
@@ -252,4 +253,4 @@ Kotlin 컴파일 성능 미세 조정:
 |---|---|---|---|
 | macOS | gradle-macos.properties | 완전 지원 | M1/M2/M3 최적화 |
 | Linux | gradle-linux.properties | 완전 지원 | 최대 성능 |
-| 기타 OS | gradle-common.properties | 사용 불가 | 파일 미포함 |
+| 기타 OS | gradle-common.properties | 기본 지원 | `./apply.sh common` 명시 실행 |
