@@ -30,5 +30,12 @@ class CommandSetTest :
                     result shouldBe CommandSet.NOTICE
                 }
             }
+
+            `when`("parse the ask command") {
+                val result = CommandSet.parseCommand(stringCommand = "ask")
+                then("return CommandSet.ASK") {
+                    result shouldBe CommandSet.ASK
+                }
+            }
         }
     })

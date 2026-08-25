@@ -1,71 +1,71 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 
 internal abstract class ReactionContext<T : SubCommandDefinition>(
-    slackEventBuilder: SlackEventBuilder,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     commandBasicInfo: CommandBasicInfo,
-    events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand<T>,
+    intents: IntentQueue,
 ) : CommandContext<T>(
         commandBasicInfo = commandBasicInfo,
-        requestHeaders = requestHeaders,
-        slackEventBuilder = slackEventBuilder,
-        events = events,
+        intents = intents,
         subCommand = subCommand,
     ) {
-    protected fun interactionSuccessResponse(responseUrl: String, mkdMessage: String = "Successfully processed.") =
-        replaceMessage(responseUrl = responseUrl, mkdMessage = mkdMessage)
+    protected fun interactionSuccessResponse(
+        replyHandle: String,
+        mkdMessage: String = "Successfully processed.",
+    ): CommandOutput {
+        addOutbound(
+            OutboundMessage.ReplaceMessage(
+                handle = ResponseReplaceHandle(raw = replyHandle),
+                content = MessageContent.Text(headline = null, markdown = mkdMessage),
+            ),
+        )
+        return CommandOutput.success(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+        )
+    }
 
     protected fun interactionSuccessResponse(
-        responseUrl: String,
+        replyHandle: String,
         mkdMessage: String = "Successfully processed.",
         results: CommandOutput,
     ): CommandOutput {
-        replaceMessage(responseUrl = responseUrl, mkdMessage = mkdMessage)
+        addOutbound(
+            OutboundMessage.ReplaceMessage(
+                handle = ResponseReplaceHandle(raw = replyHandle),
+                content = MessageContent.Text(headline = null, markdown = mkdMessage),
+            ),
+        )
         return results
     }
 
-    private fun replaceMessage(responseUrl: String, mkdMessage: String) =
-        ReplaceMessageContext(
-            commandBasicInfo = commandBasicInfo,
-            requestHeaders = requestHeaders,
-            slackEventBuilder = slackEventBuilder,
-            responseUrl = responseUrl,
-            markdownMessage = mkdMessage,
-            events = events,
-        ).runCommand()
-
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()
 
-    internal open fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
-        interactionSuccessResponse(responseUrl = interactionPayload.responseUrl)
+    internal open fun handleInteraction(interaction: InboundInteraction): CommandOutput =
+        interactionSuccessResponse(replyHandle = interaction.reply.raw)
 }
 
 internal abstract class ResponseContext(
-    slackEventBuilder: SlackEventBuilder,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     commandBasicInfo: CommandBasicInfo,
-    events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     val isOk: Boolean = false,
+    intents: IntentQueue,
 ) : CommandContext<NoSubCommands>(
         commandBasicInfo = commandBasicInfo,
-        requestHeaders = requestHeaders,
-        slackEventBuilder = slackEventBuilder,
-        events = events,
+        intents = intents,
         subCommand = subCommand,
     ) {
     internal open fun runCommand(commandDetailType: CommandDetailType): CommandOutput = CommandOutput.empty()

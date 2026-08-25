@@ -45,3 +45,14 @@ gradle.properties
 logs
 
 .DS_Store
+.omc
+.claude
+AGENTS.md
+CveBotPlan.md
+*.hprof
+
+### Local working docs (not part of the repo) ###
+Handoff.md
+Refactor.md
+RealTestSetup.md
+STYLE_GUIDE.local.md

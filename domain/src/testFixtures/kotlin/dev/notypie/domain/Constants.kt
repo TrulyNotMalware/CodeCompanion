@@ -1,9 +1,5 @@
 package dev.notypie.domain
 
-import dev.notypie.domain.command.dto.interactions.Channel
-import dev.notypie.domain.command.dto.interactions.Team
-import dev.notypie.domain.command.dto.interactions.User
-
 const val TEST_APP_ID = "A12ABCDEFG" // starts with A
 const val TEST_USER_ID = "U012ABCDEFG" // starts with U
 const val TEST_USER_NAME = "I_AM_TEST_USER"
@@ -15,7 +11,6 @@ const val TEST_TEAM_DOMAIN = "I_AM_TEST_TEAM_DOMAIN"
 const val TEST_BOT_ID = "B012ABCDEFG"
 const val TEST_BOT_TOKEN = "xoxb-test-bot-token"
 const val TEST_BASE_URL = "https://hooks.example.com/actions"
+const val TEST_MESSAGE_TS = "1712345678.000100"
+const val TEST_THREAD_TS = "1712345600.000200"
 const val UNKNOWN_SUB_COMMAND_IDENTIFIER = "I_AM_ONLY_FOR_TEST_UNKNOWN_COMMAND"
-val TEST_USER = User(id = TEST_USER_ID, userName = TEST_USER_NAME, name = TEST_USER_NAME, teamId = TEST_TEAM_ID)
-val TEST_TEAM = Team(id = TEST_TEAM_ID, domain = TEST_TEAM_DOMAIN)
-val TEST_CHANNEL = Channel(id = TEST_CHANNEL_ID, name = TEST_CHANNEL_NAME)

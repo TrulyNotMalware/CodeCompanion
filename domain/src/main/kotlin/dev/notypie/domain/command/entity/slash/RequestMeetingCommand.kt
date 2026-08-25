@@ -1,44 +1,37 @@
 package dev.notypie.domain.command.entity.slash
 
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
+import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.common.error.exceptionDetails
-import dev.notypie.domain.history.entity.Status
 import dev.notypie.domain.meet.entity.Meeting
 import java.util.UUID
 
 class RequestMeetingCommand(
     idempotencyKey: UUID,
-    commandData: SlackCommandData,
-    slackEventBuilder: SlackEventBuilder,
-    eventPublisher: EventPublisher,
+    commandData: InboundCommand,
 ) : Command<MeetingSubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
-        slackEventBuilder = slackEventBuilder,
-        eventPublisher = eventPublisher,
     ) {
     override fun parseContext(
         subCommand: SubCommand<MeetingSubCommandDefinition>,
     ): CommandContext<MeetingSubCommandDefinition> =
         RequestMeetingContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            slackEventBuilder = slackEventBuilder,
-            events = events,
             subCommand = subCommand,
+            intents = intents,
         )
 
     override fun findSubCommandDefinition(): MeetingSubCommandDefinition {
@@ -72,7 +65,7 @@ enum class MeetingSubCommandDefinition(
     ),
     LIST(
         subCommandIdentifier = "list",
-        usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | week | month]",
+        usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | tomorrow | week | month]",
     ),
 }
 
@@ -90,5 +83,5 @@ data class RequestMeetingContextResult(
         channel = commandBasicInfo.channel,
         token = commandBasicInfo.appToken,
         commandType = CommandType.PIPELINE,
-        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
     )

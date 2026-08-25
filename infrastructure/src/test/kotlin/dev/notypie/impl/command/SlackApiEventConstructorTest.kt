@@ -2,13 +2,12 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.TEST_BOT_TOKEN
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
-import dev.notypie.domain.command.entity.event.MessageType
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
+import dev.notypie.impl.command.event.ActionEventPayloadContents
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.PostEventPayloadContents
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import io.kotest.core.spec.style.BehaviorSpec
@@ -49,7 +48,6 @@ class SlackApiEventConstructorTest :
                         headLineText = "Test Title",
                         commandBasicInfo = commandBasicInfo,
                         simpleString = "Hello World",
-                        commandType = CommandType.SIMPLE,
                     )
 
                 then("calls templateBuilder.simpleTextResponseTemplate with given arguments") {
@@ -92,7 +90,6 @@ class SlackApiEventConstructorTest :
                     constructor.simpleEphemeralTextRequest(
                         textMessage = "Ephemeral Message",
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                     )
 
@@ -120,15 +117,18 @@ class SlackApiEventConstructorTest :
                     constructor.simpleEphemeralTextRequest(
                         textMessage = "DM Message",
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                         targetUserId = targetUserId,
                     )
 
-                then("payload channel and userId are set to targetUserId") {
+                then("ephemeral posts into commandBasicInfo.channel and only `user` targets targetUserId") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
                     val payload = result.payload as PostEventPayloadContents
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
+                    // chat.postEphemeral must use the real channel; putting the user id in `channel`
+                    // would route the ephemeral into a DM instead of the channel.
+                    payload.body["channel"] shouldBe commandBasicInfo.channel
+                    payload.body["user"] shouldBe targetUserId
                 }
             }
         }
@@ -149,7 +149,6 @@ class SlackApiEventConstructorTest :
                         errorClassName = "IllegalArgumentException",
                         errorMessage = "Invalid input",
                         details = "detail info",
-                        commandType = CommandType.SIMPLE,
                         commandBasicInfo = commandBasicInfo,
                     )
 
@@ -186,7 +185,6 @@ class SlackApiEventConstructorTest :
                         markdownText = "Updated text",
                         responseUrl = responseUrl,
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.RESPONSE,
                         commandDetailType = CommandDetailType.REPLACE_TEXT,
                     )
 
@@ -214,8 +212,7 @@ class SlackApiEventConstructorTest :
                 val result =
                     constructor.requestMeetingFormRequest(
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         approvalContents = null,
                     )
 
@@ -238,17 +235,16 @@ class SlackApiEventConstructorTest :
                 } returns emptyLayout
 
                 val approvalContents =
-                    ApprovalContents(
+                    createApprovalContents(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         reason = "Custom Reason",
                         publisherId = commandBasicInfo.publisherId,
                     )
                 val result =
                     constructor.requestMeetingFormRequest(
                         commandBasicInfo = commandBasicInfo,
-                        commandType = CommandType.SIMPLE,
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
+                        commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                         approvalContents = approvalContents,
                     )
 

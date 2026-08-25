@@ -6,15 +6,16 @@ import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import dev.notypie.application.configurations.conditions.OnPollingConsumer
 import dev.notypie.application.service.relay.DebeziumLogTailingProcessor
 import dev.notypie.application.service.relay.MessageProcessor
+import dev.notypie.application.service.relay.OutboxPayloadRenderer
 import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
-import dev.notypie.domain.command.MessageDispatcher
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.exception.ErrorBroadcaster
 import dev.notypie.exception.KafkaErrorBroadcaster
 import dev.notypie.exception.StdoutErrorBroadcaster
 import dev.notypie.impl.command.AppEventPublisher
 import dev.notypie.impl.command.KafkaEventPublisher
+import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
@@ -46,8 +47,10 @@ class CdcPublisherConfig {
     fun debeziumLogTailingProcessor(
         applicationEventPublisher: ApplicationEventPublisher,
         messageDispatcher: MessageDispatcher,
+        payloadRenderer: OutboxPayloadRenderer,
     ) = DebeziumLogTailingProcessor(
         messageDispatcher = messageDispatcher,
+        payloadRenderer = payloadRenderer,
         eventPublisher = applicationEventPublisher,
     )
 }

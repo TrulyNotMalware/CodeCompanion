@@ -4,35 +4,31 @@ import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
+import dev.notypie.domain.command.createInboundInteraction
+import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.dto.isEmpty
-import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 
 class AbstractCommandContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
-        val eventQueue = createDomainEventQueue()
+        val intentQueue = createIntentQueue()
 
         given("Not implemented abstract command context") {
             val abstractCommandContext =
                 object : CommandContext<NoSubCommands>(
                     commandBasicInfo = createCommandBasicInfo(),
-                    requestHeaders = SlackRequestHeaders(),
-                    slackEventBuilder = eventBuilder,
-                    events = eventQueue,
+                    intents = intentQueue,
                     subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
@@ -55,9 +51,7 @@ class AbstractCommandContextTest :
             val overrideContext =
                 object : CommandContext<NoSubCommands>(
                     commandBasicInfo = createCommandBasicInfo(),
-                    requestHeaders = SlackRequestHeaders(),
-                    slackEventBuilder = eventBuilder,
-                    events = eventQueue,
+                    intents = intentQueue,
                     subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
@@ -77,25 +71,22 @@ class AbstractCommandContextTest :
 
 class AbstractReactionCommandContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
-        val eventQueue = createDomainEventQueue()
+        val intentQueue = createIntentQueue()
 
         given("Not implemented abstract reaction context") {
             val runCommandReturnValue = CommandOutput.empty()
             val handleInteractionReturnValue = CommandOutput.empty()
             val reactionContext =
                 object : ReactionContext<NoSubCommands>(
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
                     commandBasicInfo = createCommandBasicInfo(),
-                    events = eventQueue,
+                    intents = intentQueue,
                     subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
                     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTHING
 
-                    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput =
+                    override fun handleInteraction(interaction: InboundInteraction): CommandOutput =
                         handleInteractionReturnValue
 
                     override fun runCommand(): CommandOutput = runCommandReturnValue
@@ -109,7 +100,7 @@ class AbstractReactionCommandContextTest :
             `when`("handleInteraction") {
                 val res =
                     reactionContext.handleInteraction(
-                        interactionPayload = createInteractionPayloadInput(),
+                        interaction = createInboundInteraction(),
                     )
                 then("should return override value") {
                     res shouldBe handleInteractionReturnValue
@@ -119,14 +110,12 @@ class AbstractReactionCommandContextTest :
 
         given("ReactionContext interactionSuccessResponse") {
             val testCommandBasicInfo = createCommandBasicInfo()
-            val testEventQueue = createDomainEventQueue()
+            val testIntentQueue = createIntentQueue()
 
             val reactionContext =
                 object : ReactionContext<NoSubCommands>(
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
                     commandBasicInfo = testCommandBasicInfo,
-                    events = testEventQueue,
+                    intents = testIntentQueue,
                     subCommand = SubCommand.empty(),
                 ) {
                     override fun parseCommandType(): CommandType = CommandType.SIMPLE
@@ -134,19 +123,19 @@ class AbstractReactionCommandContextTest :
                     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.REPLACE_TEXT
 
                     fun callInteractionSuccessResponse(
-                        responseUrl: String,
+                        replyHandle: String,
                         mkdMessage: String = "Successfully processed.",
                     ) = interactionSuccessResponse(
-                        responseUrl = responseUrl,
+                        replyHandle = replyHandle,
                         mkdMessage = mkdMessage,
                     )
 
                     fun callInteractionSuccessResponseWithResults(
-                        responseUrl: String,
+                        replyHandle: String,
                         mkdMessage: String = "Successfully processed.",
                         results: CommandOutput,
                     ) = interactionSuccessResponse(
-                        responseUrl = responseUrl,
+                        replyHandle = replyHandle,
                         mkdMessage = mkdMessage,
                         results = results,
                     )
@@ -155,16 +144,20 @@ class AbstractReactionCommandContextTest :
             `when`("interactionSuccessResponse without results") {
                 val result =
                     reactionContext.callInteractionSuccessResponse(
-                        responseUrl = TEST_BASE_URL,
+                        replyHandle = TEST_BASE_URL,
                     )
 
                 then("should return success CommandOutput") {
                     result.ok shouldBe true
                 }
 
-                then("should add replace message event to the queue") {
-                    testEventQueue.poll() shouldNotBe null
-                    testEventQueue.flushQueue()
+                then("should add ReplaceMessage to the queue") {
+                    val intents = testIntentQueue.drainSnapshot()
+                    intents.size shouldBe 1
+                    val replace = intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                    replace.handle.raw shouldBe TEST_BASE_URL
+                    replace.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "Successfully processed."
                 }
             }
 
@@ -182,7 +175,7 @@ class AbstractReactionCommandContextTest :
                     )
                 val result =
                     reactionContext.callInteractionSuccessResponseWithResults(
-                        responseUrl = TEST_BASE_URL,
+                        replyHandle = TEST_BASE_URL,
                         results = expectedResults,
                     )
 
@@ -190,9 +183,10 @@ class AbstractReactionCommandContextTest :
                     result shouldBe expectedResults
                 }
 
-                then("should still add replace message event to the queue") {
-                    testEventQueue.poll() shouldNotBe null
-                    testEventQueue.flushQueue()
+                then("should still add ReplaceMessage to the queue") {
+                    val intents = testIntentQueue.drainSnapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
                 }
             }
         }

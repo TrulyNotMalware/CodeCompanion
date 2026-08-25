@@ -1,12 +1,34 @@
 package dev.notypie.configurations
 
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.repository.agent.AgentSessionRepositoryImpl
+import dev.notypie.repository.agent.AgentTurnHistoryRepositoryImpl
+import dev.notypie.repository.agent.JpaAgentSessionRepository
+import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
+import dev.notypie.repository.authorization.JpaUserCommandRoleRepository
+import dev.notypie.repository.authorization.UserCommandRoleRepositoryImpl
+import dev.notypie.repository.cve.CveCollectLedgerRepositoryImpl
+import dev.notypie.repository.cve.CveDeliveryRepositoryImpl
+import dev.notypie.repository.cve.CveEventRepositoryImpl
+import dev.notypie.repository.cve.CveSubscriptionRepositoryImpl
+import dev.notypie.repository.cve.CveTopicRepositoryImpl
+import dev.notypie.repository.cve.JpaCveCollectLedgerRepository
+import dev.notypie.repository.cve.JpaCveDeliveryRepository
+import dev.notypie.repository.cve.JpaCveEventRepository
+import dev.notypie.repository.cve.JpaCveSubscriptionRepository
+import dev.notypie.repository.cve.JpaCveTopicRepository
+import dev.notypie.repository.mcp.JpaMcpToolCallHistoryRepository
+import dev.notypie.repository.mcp.McpToolCallHistoryRepositoryImpl
+import dev.notypie.repository.meeting.AgendaDispatchRepositoryImpl
+import dev.notypie.repository.meeting.JpaAgendaDispatchRepository
+import dev.notypie.repository.meeting.JpaMeetingReminderRepository
 import dev.notypie.repository.meeting.JpaMeetingRepository
+import dev.notypie.repository.meeting.MeetingReminderRepositoryImpl
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
-import dev.notypie.repository.user.JpaTeamEntityRepository
-import dev.notypie.repository.user.JpaTeamRepository
-import dev.notypie.repository.user.JpaUserEntityRepository
-import dev.notypie.repository.user.JpaUserRepository
+import dev.notypie.repository.standup.JpaRoutineRepository
+import dev.notypie.repository.standup.JpaSessionDispatchRepository
+import dev.notypie.repository.standup.JpaStandupSessionRepository
+import dev.notypie.repository.standup.StandupRepositoryImpl
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -34,21 +56,88 @@ class JpaConfiguration {
 
     @Bean
     @Primary
-    fun userRepository(
-        jpaUserEntityRepository: JpaUserEntityRepository,
-        jpaTeamEntityRepository: JpaTeamEntityRepository,
-    ) = JpaUserRepository(
-        jpaUserEntityRepository = jpaUserEntityRepository,
-        jpaTeamEntityRepository = jpaTeamEntityRepository,
+    fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository) =
+        MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+
+    @Bean
+    @Primary
+    fun meetingReminderRepository(
+        jpaMeetingRepository: JpaMeetingRepository,
+        jpaMeetingReminderRepository: JpaMeetingReminderRepository,
+    ) = MeetingReminderRepositoryImpl(
+        jpaMeetingRepository = jpaMeetingRepository,
+        jpaMeetingReminderRepository = jpaMeetingReminderRepository,
     )
 
     @Bean
     @Primary
-    fun teamRepository(jpaTeamEntityRepository: JpaTeamEntityRepository) =
-        JpaTeamRepository(teamRepository = jpaTeamEntityRepository)
+    fun agendaDispatchRepository(
+        jpaMeetingRepository: JpaMeetingRepository,
+        jpaAgendaDispatchRepository: JpaAgendaDispatchRepository,
+    ) = AgendaDispatchRepositoryImpl(
+        jpaMeetingRepository = jpaMeetingRepository,
+        jpaAgendaDispatchRepository = jpaAgendaDispatchRepository,
+    )
 
     @Bean
     @Primary
-    fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository) =
-        MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+    fun agentSessionRepository(jpaAgentSessionRepository: JpaAgentSessionRepository) =
+        AgentSessionRepositoryImpl(jpaAgentSessionRepository = jpaAgentSessionRepository)
+
+    @Bean
+    @Primary
+    fun agentTurnHistoryRepository(jpaAgentTurnHistoryRepository: JpaAgentTurnHistoryRepository) =
+        AgentTurnHistoryRepositoryImpl(jpaAgentTurnHistoryRepository = jpaAgentTurnHistoryRepository)
+
+    @Bean
+    @Primary
+    fun userCommandRoleRepository(jpaUserCommandRoleRepository: JpaUserCommandRoleRepository) =
+        UserCommandRoleRepositoryImpl(jpaUserCommandRoleRepository = jpaUserCommandRoleRepository)
+
+    @Bean
+    @Primary
+    fun mcpToolCallHistoryRepository(jpaMcpToolCallHistoryRepository: JpaMcpToolCallHistoryRepository) =
+        McpToolCallHistoryRepositoryImpl(jpaMcpToolCallHistoryRepository = jpaMcpToolCallHistoryRepository)
+
+    @Bean
+    @Primary
+    fun cveTopicRepository(jpaCveTopicRepository: JpaCveTopicRepository) =
+        CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+
+    @Bean
+    @Primary
+    fun cveEventRepository(jpaCveEventRepository: JpaCveEventRepository) =
+        CveEventRepositoryImpl(jpaCveEventRepository = jpaCveEventRepository)
+
+    @Bean
+    @Primary
+    fun cveSubscriptionRepository(
+        jpaCveSubscriptionRepository: JpaCveSubscriptionRepository,
+        jpaCveTopicRepository: JpaCveTopicRepository,
+    ) = CveSubscriptionRepositoryImpl(
+        jpaCveSubscriptionRepository = jpaCveSubscriptionRepository,
+        jpaCveTopicRepository = jpaCveTopicRepository,
+    )
+
+    @Bean
+    @Primary
+    fun cveCollectLedgerRepository(jpaCveCollectLedgerRepository: JpaCveCollectLedgerRepository) =
+        CveCollectLedgerRepositoryImpl(jpaCveCollectLedgerRepository = jpaCveCollectLedgerRepository)
+
+    @Bean
+    @Primary
+    fun cveDeliveryRepository(jpaCveDeliveryRepository: JpaCveDeliveryRepository) =
+        CveDeliveryRepositoryImpl(jpaCveDeliveryRepository = jpaCveDeliveryRepository)
+
+    @Bean
+    @Primary
+    fun standupRepository(
+        jpaRoutineRepository: JpaRoutineRepository,
+        jpaStandupSessionRepository: JpaStandupSessionRepository,
+        jpaSessionDispatchRepository: JpaSessionDispatchRepository,
+    ) = StandupRepositoryImpl(
+        jpaRoutineRepository = jpaRoutineRepository,
+        jpaStandupSessionRepository = jpaStandupSessionRepository,
+        jpaSessionDispatchRepository = jpaSessionDispatchRepository,
+    )
 }

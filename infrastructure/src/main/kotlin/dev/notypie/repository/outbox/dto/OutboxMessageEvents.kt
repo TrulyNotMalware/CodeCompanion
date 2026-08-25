@@ -1,34 +1,27 @@
 package dev.notypie.repository.outbox.dto
 
 import dev.notypie.domain.command.dto.response.CommandOutput
-import dev.notypie.domain.command.entity.event.SlackEventPayload
 import dev.notypie.repository.outbox.schema.MessageStatus
-import dev.notypie.repository.outbox.schema.OutboxMessage
 import java.util.UUID
 
 sealed class OutboxUpdateEvent(
-    open val idempotencyKey: UUID,
+    open val eventId: UUID,
     open val status: MessageStatus,
 )
 
 data class MessagePublishFailedEvent(
-    override val idempotencyKey: UUID,
+    override val eventId: UUID,
     val reason: String,
-) : OutboxUpdateEvent(idempotencyKey = idempotencyKey, status = MessageStatus.FAILURE)
+) : OutboxUpdateEvent(eventId = eventId, status = MessageStatus.FAILURE)
 
 data class MessagePublishSuccessEvent(
-    override val idempotencyKey: UUID,
-) : OutboxUpdateEvent(idempotencyKey = idempotencyKey, status = MessageStatus.SUCCESS)
+    override val eventId: UUID,
+    val messageTs: String = "",
+) : OutboxUpdateEvent(eventId = eventId, status = MessageStatus.SUCCESS)
 
-data class NewMessagePublishedEvent(
-    val reason: String,
-    val outboxMessage: OutboxMessage,
-    val slackEventPayload: SlackEventPayload,
-)
-
-fun CommandOutput.toOutboxUpdateEvent(): OutboxUpdateEvent =
+fun CommandOutput.toOutboxUpdateEvent(eventId: UUID): OutboxUpdateEvent =
     if (ok) {
-        MessagePublishSuccessEvent(idempotencyKey = idempotencyKey)
+        MessagePublishSuccessEvent(eventId = eventId, messageTs = messageTs)
     } else {
-        MessagePublishFailedEvent(idempotencyKey = idempotencyKey, reason = errorReason)
+        MessagePublishFailedEvent(eventId = eventId, reason = errorReason)
     }

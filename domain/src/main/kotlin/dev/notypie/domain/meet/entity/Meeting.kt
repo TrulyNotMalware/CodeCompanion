@@ -2,6 +2,7 @@ package dev.notypie.domain.meet.entity
 
 import dev.notypie.domain.common.validate
 import java.time.LocalDateTime
+import java.util.UUID
 
 class Meeting(
     val title: String,
@@ -11,6 +12,7 @@ class Meeting(
     val startAt: LocalDateTime,
     val endAt: LocalDateTime = startAt.plusHours(1),
     val isCanceled: Boolean = false,
+    val meetingUid: UUID = UUID.randomUUID(),
 ) {
     private val participants: MutableSet<Member> = mutableSetOf()
     val host: Member
@@ -28,7 +30,7 @@ class Meeting(
             "meeting start time" of startAt shouldBeAfter LocalDateTime.now()
             "meeting end time" of endAt shouldBeAfter startAt
         }
-        host = Member(userId = publisher, isHost = false)
+        host = Member(userId = publisher, isHost = true)
         participants.addAll(elements = members.map { Member(userId = it) })
     }
 

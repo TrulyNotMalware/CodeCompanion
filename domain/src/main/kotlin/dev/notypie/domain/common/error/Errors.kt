@@ -5,7 +5,7 @@ interface ErrorCode {
     val message: String
 }
 
-enum class CommonErrorCode(
+internal enum class CommonErrorCode(
     override val statusCode: Int,
     override val message: String,
 ) : ErrorCode {
@@ -44,7 +44,7 @@ class ReasonBuilder(
     }
 }
 
-sealed class ErrorResponse(
+internal sealed class ErrorResponse(
     errorCode: ErrorCode,
     val code: Int = errorCode.statusCode,
     val message: String = errorCode.message,
@@ -56,3 +56,20 @@ abstract class CodeCompanionRuntimeException(
     errorCode: ErrorCode,
     val details: List<ExceptionArgument> = emptyList(),
 ) : RuntimeException(errorCode.message)
+
+internal class ValidationException(
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )
+
+internal class ValidationExceptionWithName(
+    val className: String,
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument> = emptyList(),
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )

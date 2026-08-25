@@ -1,25 +1,22 @@
 package dev.notypie.domain.command.context
 
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
-import dev.notypie.domain.command.dto.SlackRequestHeaders
+import dev.notypie.domain.command.createIntentQueue
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.RequestApprovalContext
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
-import dev.notypie.domain.history.entity.Status
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.LinkedList
 
 class RequestApprovalContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
 
         given("RequestApprovalContext") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val users = LinkedList(listOf("U001", "U002"))
             val commands = LinkedList(listOf("approve this PR"))
@@ -28,10 +25,8 @@ class RequestApprovalContextTest :
                 RequestApprovalContext(
                     users = users,
                     commands = commands,
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
                     basicInfo = basicInfo,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("checking command metadata") {
@@ -39,8 +34,8 @@ class RequestApprovalContextTest :
                     context.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("commandDetailType should be REQUEST_APPLY_FORM") {
-                    context.commandDetailType shouldBe CommandDetailType.REQUEST_APPLY_FORM
+                then("commandDetailType should be APPLY_REQUEST") {
+                    context.commandDetailType shouldBe CommandDetailType.APPLY_REQUEST
                 }
             }
 
@@ -56,15 +51,20 @@ class RequestApprovalContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("should add apply/reject event to queue") {
-                    eventQueue.poll() shouldNotBe null
-                    eventQueue.flushQueue()
+                then("should add an Approval outbound message to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    effects.first().shouldBeInstanceOf<OutboundMessage.Approval>()
+                    val approval = effects.first() as OutboundMessage.Approval
+                    approval.approval.reason shouldBe "approve this PR"
+                    approval.recipient shouldBe null
+                    approval.target.id shouldBe basicInfo.channel
                 }
             }
         }
 
         given("RequestApprovalContext with empty commands queue") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val users = LinkedList<String>()
             val commands = LinkedList(listOf("reason text"))
@@ -73,10 +73,8 @@ class RequestApprovalContextTest :
                 RequestApprovalContext(
                     users = users,
                     commands = commands,
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
                     basicInfo = basicInfo,
-                    events = eventQueue,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand with a reason in commands") {
@@ -86,9 +84,10 @@ class RequestApprovalContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add event to queue") {
-                    eventQueue.poll() shouldNotBe null
-                    eventQueue.flushQueue()
+                then("should add an Approval outbound message to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    effects.first().shouldBeInstanceOf<OutboundMessage.Approval>()
                 }
             }
         }

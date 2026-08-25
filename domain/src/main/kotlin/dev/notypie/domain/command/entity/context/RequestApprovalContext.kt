@@ -1,50 +1,47 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContentType
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.*
 
 internal class RequestApprovalContext(
     private val users: Queue<String>,
     private val commands: Queue<String>,
-    slackEventBuilder: SlackEventBuilder,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     basicInfo: CommandBasicInfo,
-    events: EventQueue<CommandEvent<EventPayload>>,
+    intents: IntentQueue,
 ) : CommandContext<NoSubCommands>(
-        slackEventBuilder = slackEventBuilder,
-        requestHeaders = requestHeaders,
         commandBasicInfo = basicInfo,
-        events = events,
+        intents = intents,
         subCommand = SubCommand.empty(),
     ) {
     private val approvalContents: ApprovalContents = buildContents()
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType() = CommandDetailType.REQUEST_APPLY_FORM
+    override fun parseCommandDetailType() = CommandDetailType.APPLY_REQUEST
 
     override fun runCommand(): CommandOutput {
-        val event =
-            slackEventBuilder.simpleApplyRejectRequest(
-                approvalContents = approvalContents,
-                commandType = commandType,
-                commandDetailType = commandDetailType,
-                commandBasicInfo = commandBasicInfo,
-            )
-        addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload, commandType = commandType)
+        addOutbound(
+            OutboundMessage.Approval(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                recipient = null,
+                approval = approvalContents,
+            ),
+        )
+        return CommandOutput.success(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+        )
     }
 
     // FIXME Changed to receive input from Modal. 7.15 test for approval button.

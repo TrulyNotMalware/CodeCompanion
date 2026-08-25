@@ -2,7 +2,7 @@ package dev.notypie.schema
 
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.dto.interactions.RejectReason
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.repository.meeting.schema.ParticipantsSchema
 import java.time.LocalDateTime
@@ -10,6 +10,7 @@ import java.util.UUID
 
 fun createMeetingSchema(
     id: Long = 0L,
+    meetingUid: UUID = UUID.randomUUID(),
     idempotencyKey: UUID = UUID.randomUUID(),
     name: String = "test meeting schema",
     startAt: LocalDateTime = LocalDateTime.now(),
@@ -20,6 +21,7 @@ fun createMeetingSchema(
     participants: MutableList<ParticipantsSchema> = mutableListOf(),
 ) = MeetingSchema(
     id = id,
+    meetingUid = meetingUid,
     idempotencyKey = idempotencyKey,
     name = name,
     startAt = startAt,
@@ -47,6 +49,22 @@ fun createParticipants(
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
+
+fun createMeetingSchemaWithParticipant(
+    publisherId: String = TEST_USER_ID,
+    participantUserId: String = TEST_USER_ID,
+    name: String = "test meeting schema",
+    startAt: LocalDateTime = LocalDateTime.now(),
+): MeetingSchema {
+    val meeting =
+        createMeetingSchema(
+            publisherId = publisherId,
+            name = name,
+            startAt = startAt,
+        )
+    meeting.participants.add(createParticipants(meeting = meeting, userId = participantUserId))
+    return meeting
+}
 
 fun createMeetingSchema(member: Int, startIterator: Int = 1): MeetingSchema {
     val meeting =

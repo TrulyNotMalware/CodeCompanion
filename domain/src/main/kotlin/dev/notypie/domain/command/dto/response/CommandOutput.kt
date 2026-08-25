@@ -1,11 +1,8 @@
 package dev.notypie.domain.command.dto.response
 
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.interactions.States
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.SlackEventPayload
-import dev.notypie.domain.history.entity.Status
 import java.util.UUID
 
 open class CommandOutput(
@@ -18,8 +15,8 @@ open class CommandOutput(
     val channel: String,
     val token: String = "", // FIXME ChatPostRequest doesn't have any token?
     val commandType: CommandType,
-    val actionStates: List<States> = listOf(),
     val errorReason: String = "",
+    val messageTs: String = "",
 ) {
     companion object {
         fun empty() =
@@ -34,46 +31,33 @@ open class CommandOutput(
                 publisherId = "",
             )
 
-        fun fail(event: SlackEventPayload, reason: String) =
-            CommandOutput(
-                ok = false,
-                apiAppId = event.apiAppId,
-                status = Status.FAILED,
-                channel = event.channel,
-                commandType = CommandType.SIMPLE,
-                commandDetailType = event.commandDetailType,
-                idempotencyKey = event.idempotencyKey,
-                publisherId = event.publisherId,
-                errorReason = reason,
-            )
-
         fun fail(
-            slackCommandData: SlackCommandData,
+            basicInfo: CommandBasicInfo,
             commandDetailType: CommandDetailType,
-            idempotencyKey: UUID,
             reason: String,
+            commandType: CommandType = CommandType.SIMPLE,
         ) = CommandOutput(
             ok = false,
-            apiAppId = slackCommandData.appId,
+            apiAppId = basicInfo.appId,
             status = Status.FAILED,
-            channel = slackCommandData.channel,
-            commandType = CommandType.SIMPLE,
+            channel = basicInfo.channel,
+            commandType = commandType,
             commandDetailType = commandDetailType,
-            idempotencyKey = idempotencyKey,
-            publisherId = slackCommandData.publisherId,
+            idempotencyKey = basicInfo.idempotencyKey,
+            publisherId = basicInfo.publisherId,
             errorReason = reason,
         )
 
-        fun success(payload: SlackEventPayload, commandType: CommandType) =
+        fun success(basicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType) =
             CommandOutput(
                 ok = true,
-                apiAppId = payload.apiAppId,
+                apiAppId = basicInfo.appId,
                 status = Status.SUCCESS,
-                channel = payload.channel,
+                channel = basicInfo.channel,
                 commandType = commandType,
-                commandDetailType = payload.commandDetailType,
-                idempotencyKey = payload.idempotencyKey,
-                publisherId = payload.publisherId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = basicInfo.idempotencyKey,
+                publisherId = basicInfo.publisherId,
             )
     }
 }

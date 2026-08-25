@@ -39,6 +39,23 @@ spring:
     console:
       enabled: false
 
+  # MCP server for the agent lane's domain tools. `MCP_ENABLED` drives both this switch and
+  # `slack.app.mcp.enabled` so the transport and the token pipeline cannot diverge.
+  ai:
+    mcp:
+      server:
+        enabled: ${MCP_ENABLED:false}
+        name: codecompanion
+        version: ${VERSION:unknown}
+        type: SYNC
+        protocol: STREAMABLE
+        instructions: "Read-only CodeCompanion domain tools; caller identity comes from the per-turn token."
+        capabilities:
+          tool: true
+        streamable-http:
+          mcp-endpoint: /mcp
+          disallow-delete: true
+
   kafka:
     bootstrap-servers: [ "kafka:port" ]
     producer:
@@ -69,7 +86,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
+        include: health,info,metrics
       base-path: ${ACTUATOR_BASE_PATH}
       path-mapping:
         loggers: logs
@@ -92,8 +109,44 @@ slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
+      signing-secret: ${SLACK_SIGNING_SECRET}
+      request-timestamp-tolerance-seconds: 300
     mode:
       outbox-reading-strategy: cdc
       event-publisher: kafka
       cdc:
         topic: ${SLACK_CDC_TOPIC}
+    # AI agent backend — the claude-sidecar runs in the same Pod (k8s native sidecar), so the
+    # base URL stays Pod-loopback. The bearer secret is shared with the sidecar via one Secret.
+    agent:
+      sidecar:
+        base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
+        bearer-secret: ${SIDECAR_BEARER_SECRET:}
+        request-timeout-seconds: ${SIDECAR_REQUEST_TIMEOUT_SECONDS:120}
+    # CVE summary provider. Operating choice is sidecar (reuse the agent lane), but the default
+    # stays noop so summary traffic is opt-in via AI_PROVIDER once the collector rolls out.
+    ai:
+      provider: ${AI_PROVIDER:noop}
+    # CVE feed collector sources. Tokens/keys default empty (anonymous, rate-limited) and are never
+    # logged; the collector only runs when slack.app.cve.enabled is true.
+    cve:
+      github:
+        token: ${GITHUB_TOKEN:}
+        per-page: ${GITHUB_RELEASES_PER_PAGE:10}
+      nvd:
+        api-key: ${NVD_API_KEY:}
+        lookback-minutes: ${NVD_LOOKBACK_MINUTES:120}
+      collector:
+        request-timeout-seconds: ${CVE_COLLECTOR_REQUEST_TIMEOUT_SECONDS:30}
+        window-minutes: ${CVE_COLLECTOR_WINDOW_MINUTES:5}
+      # Notification dispatcher: IMMEDIATE topics DM on a frequent tick; DIGEST topics bundle into one
+      # daily DM per user after digest-send-at (local time in digest-timezone). No secrets here.
+      notification:
+        batch-size: 50
+        digest-send-at: "09:00"
+        digest-timezone: "Asia/Seoul"
+        digest-summary-max-length: 700
+        delivery-horizon-days: 7
+    mcp:
+      enabled: ${MCP_ENABLED:false}
+      signing-secret: ${MCP_SIGNING_SECRET:}

@@ -1,32 +1,27 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 
 internal class ReplaceMessageContext(
     commandBasicInfo: CommandBasicInfo,
-    requestHeaders: SlackRequestHeaders,
-    slackEventBuilder: SlackEventBuilder,
-    events: EventQueue<CommandEvent<EventPayload>>,
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
-    private val responseUrl: String,
+    private val replyHandle: String,
     private val markdownMessage: String,
+    intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        requestHeaders = requestHeaders,
-        slackEventBuilder = slackEventBuilder,
         commandBasicInfo = commandBasicInfo,
-        events = events,
         subCommand = subCommand,
+        intents = intents,
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
@@ -34,23 +29,19 @@ internal class ReplaceMessageContext(
 
     override fun runCommand(): CommandOutput = replaceText()
 
-    override fun handleInteraction(interactionPayload: InteractionPayload): CommandOutput = replaceText()
+    override fun handleInteraction(interaction: InboundInteraction): CommandOutput = replaceText()
 
-    /**
-     * Replaces the original text of a Slack message with the specified Markdown content.
-     *
-     * @return A SlackApiResponse indicating the result of the replace text operation.
-     */
     private fun replaceText(): CommandOutput {
-        val event =
-            slackEventBuilder.replaceOriginalText(
-                markdownText = markdownMessage,
-                responseUrl = responseUrl,
-                commandBasicInfo = commandBasicInfo,
-                commandDetailType = commandDetailType,
-                commandType = commandType,
-            )
-        addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload, commandType = commandType)
+        addOutbound(
+            OutboundMessage.ReplaceMessage(
+                handle = ResponseReplaceHandle(raw = replyHandle),
+                content = MessageContent.Text(headline = null, markdown = markdownMessage),
+            ),
+        )
+        return CommandOutput.success(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+        )
     }
 }

@@ -1,49 +1,23 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.createAppMentionSlackCommandData
-import dev.notypie.domain.command.createEventCallbackData
-import dev.notypie.domain.command.createInteractionPayloadInput
-import dev.notypie.domain.command.createRichTextBlock
-import dev.notypie.domain.command.createSlackEventCallBackRequest
-import dev.notypie.domain.command.createTextElement
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
-import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.approveAction
+import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.createInboundInteraction
+import dev.notypie.domain.command.createInteractionResponseInboundCommand
+import dev.notypie.domain.command.createMentionInboundCommand
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
-import dev.notypie.domain.command.mockEventBuilder
-import dev.notypie.domain.history.entity.Status
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import io.mockk.mockk
 import java.util.UUID
 
 class InteractionCommandTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
-        val eventPublisher = mockk<EventPublisher>(relaxed = true)
 
-        given("InteractionCommand with EVENT_CALLBACK (app_mention)") {
-            val body =
-                createSlackEventCallBackRequest(
-                    event =
-                        createEventCallbackData(
-                            blocks =
-                                listOf(
-                                    createRichTextBlock(
-                                        createTextElement(text = " notice hello"),
-                                    ),
-                                ),
-                        ),
-                )
-            val commandData =
-                createAppMentionSlackCommandData(body = body).copy(
-                    slackCommandType = SlackCommandType.EVENT_CALLBACK,
-                )
+        given("InteractionCommand with a MENTION payload (app_mention)") {
+            val commandData = createMentionInboundCommand(commandTokens = listOf("notice", "hello"))
             val idempotencyKey = UUID.randomUUID()
 
             val command =
@@ -51,8 +25,7 @@ class InteractionCommandTest :
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
+                    actorRole = UserRole.ADMIN,
                 )
 
             `when`("handleEvent") {
@@ -68,33 +41,20 @@ class InteractionCommandTest :
         given("InteractionCommand with INTERACTION_RESPONSE (ReactionContext)") {
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.NOTICE_FORM,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.APPROVAL_CALLBACK,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData =
-                SlackCommandData(
-                    appId = "A_TEST",
-                    appToken = "TOKEN",
-                    publisherId = "U_TEST",
-                    publisherName = "tester",
-                    channel = "C_TEST",
-                    channelName = "general",
-                    slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                    rawHeader = SlackRequestHeaders(),
-                    rawBody = emptyMap(),
-                    body = interactionPayload,
-                )
+            val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
             val command =
                 InteractionCommand(
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
+                    actorRole = UserRole.ADMIN,
                 )
 
             `when`("handleEvent") {
@@ -109,39 +69,26 @@ class InteractionCommandTest :
         given("InteractionCommand with INTERACTION_RESPONSE (non-ReactionContext)") {
             val idempotencyKey = UUID.randomUUID()
             val interactionPayload =
-                createInteractionPayloadInput(
-                    commandDetailType = CommandDetailType.APPROVAL_FORM,
-                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                    states = emptyList(),
+                createInboundInteraction(
+                    detailType = CommandDetailType.APPROVAL_REQUEST,
+                    action = approveAction(isSelected = true),
+                    form = emptyList(),
                     idempotencyKey = idempotencyKey,
                 )
-            val commandData =
-                SlackCommandData(
-                    appId = "A_TEST",
-                    appToken = "TOKEN",
-                    publisherId = "U_TEST",
-                    publisherName = "tester",
-                    channel = "C_TEST",
-                    channelName = "general",
-                    slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                    rawHeader = SlackRequestHeaders(),
-                    rawBody = emptyMap(),
-                    body = interactionPayload,
-                )
+            val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
             val command =
                 InteractionCommand(
                     appName = "TestApp",
                     idempotencyKey = idempotencyKey,
                     commandData = commandData,
-                    slackEventBuilder = eventBuilder,
-                    eventPublisher = eventPublisher,
+                    actorRole = UserRole.ADMIN,
                 )
 
             `when`("handleEvent") {
                 val result = command.handleEvent()
 
-                then("should fail because APPROVAL_FORM creates non-ReactionContext") {
+                then("should fail because APPROVAL_REQUEST creates non-ReactionContext") {
                     result.ok shouldBe false
                     result.status shouldBe Status.FAILED
                     result.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
@@ -150,36 +97,23 @@ class InteractionCommandTest :
         }
 
         given("InteractionCommand findSubCommandDefinition") {
-            `when`("body is InteractionPayload with REQUEST_MEETING_FORM") {
+            `when`("payload is InboundInteraction with MEETING_CREATE_REQUEST") {
                 val idempotencyKey = UUID.randomUUID()
                 val interactionPayload =
-                    createInteractionPayloadInput(
-                        commandDetailType = CommandDetailType.REQUEST_MEETING_FORM,
-                        currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
-                        states = emptyList(),
+                    createInboundInteraction(
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                        action = approveAction(isSelected = true),
+                        form = emptyList(),
                         idempotencyKey = idempotencyKey,
                     )
-                val commandData =
-                    SlackCommandData(
-                        appId = "A_TEST",
-                        appToken = "TOKEN",
-                        publisherId = "U_TEST",
-                        publisherName = "tester",
-                        channel = "C_TEST",
-                        channelName = "general",
-                        slackCommandType = SlackCommandType.INTERACTION_RESPONSE,
-                        rawHeader = SlackRequestHeaders(),
-                        rawBody = emptyMap(),
-                        body = interactionPayload,
-                    )
+                val commandData = createInteractionResponseInboundCommand(interaction = interactionPayload)
 
                 val command =
                     InteractionCommand(
                         appName = "TestApp",
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
+                        actorRole = UserRole.ADMIN,
                     )
 
                 val definition = command.findSubCommandDefinition()
@@ -190,21 +124,8 @@ class InteractionCommandTest :
                 }
             }
 
-            `when`("body is not InteractionPayload") {
-                val body =
-                    createSlackEventCallBackRequest(
-                        event =
-                            createEventCallbackData(
-                                blocks =
-                                    listOf(
-                                        createRichTextBlock(createTextElement(text = " notice")),
-                                    ),
-                            ),
-                    )
-                val commandData =
-                    createAppMentionSlackCommandData(body = body).copy(
-                        slackCommandType = SlackCommandType.EVENT_CALLBACK,
-                    )
+            `when`("payload is not InboundInteraction") {
+                val commandData = createMentionInboundCommand(commandTokens = listOf("notice"))
                 val idempotencyKey = UUID.randomUUID()
 
                 val command =
@@ -212,8 +133,7 @@ class InteractionCommandTest :
                         appName = "TestApp",
                         idempotencyKey = idempotencyKey,
                         commandData = commandData,
-                        slackEventBuilder = eventBuilder,
-                        eventPublisher = eventPublisher,
+                        actorRole = UserRole.ADMIN,
                     )
 
                 val definition = command.findSubCommandDefinition()

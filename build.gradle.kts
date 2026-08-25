@@ -1,13 +1,13 @@
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "4.0.5" apply false
+    id("org.springframework.boot") version "4.1.0" apply false
     id("java-library")
     id("java-test-fixtures")
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
-    kotlin("jvm") version "2.3.20"
-    kotlin("plugin.spring") version "2.3.20" apply false
-    kotlin("plugin.jpa") version "2.3.20" apply false
+    kotlin("jvm") version "2.4.0"
+    kotlin("plugin.spring") version "2.4.0" apply false
+    kotlin("plugin.jpa") version "2.4.0" apply false
 }
 
 java {
@@ -20,12 +20,13 @@ java {
 }
 
 ext {
-    set("kotestVersion", "6.1.11") // https://kotest.io/docs/changelog.html
-    set("slackSdkVersion", "1.48.0")
-    set("mockkVersion", "1.14.9")
-    set("springBootVersion", "4.0.5")
-    set("jacksonVersion", "3.1.1")
-    set("kotlinLoggingVersion", "8.0.01")
+    set("kotestVersion", "6.2.0") // https://kotest.io/docs/changelog.html
+    set("slackSdkVersion", "1.49.0")
+    set("mockkVersion", "1.14.11")
+    set("springBootVersion", "4.1.0")
+    set("jacksonVersion", "3.2.0")
+    set("kotlinLoggingVersion", "8.0.4")
+    set("springAiVersion", "2.0.0")
 }
 
 kotlin {
@@ -97,12 +98,12 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        // BOM platforms — use api so they propagate to testFixtures and other configurations
+        // BOM platforms — use api so they propagate to testFixtures and other configurations.
+        // Jackson is intentionally NOT injected here: domain must stay Jackson-free, so the
+        // modules that actually serialize (application/infrastructure) declare it themselves.
         api(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
-        api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
 
         implementation(kotlin("reflect"))
-        implementation("tools.jackson.module:jackson-module-kotlin")
 
         // Kotlin logging
         implementation("io.github.oshai:kotlin-logging-jvm:${rootProject.extra.get("kotlinLoggingVersion")}")

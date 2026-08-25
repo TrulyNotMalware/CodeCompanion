@@ -1,33 +1,29 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.createDomainEventQueue
-import dev.notypie.domain.command.dto.SlackRequestHeaders
-import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.createIntentQueue
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
-import dev.notypie.domain.command.flushQueue
-import dev.notypie.domain.command.mockEventBuilder
-import dev.notypie.domain.history.entity.Status
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 
 class ApprovalCallbackContextTest :
     BehaviorSpec({
-        val eventBuilder = mockEventBuilder(relaxed = true) {}
 
         given("ApprovalCallbackContext with no participants") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = emptySet(),
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -37,8 +33,8 @@ class ApprovalCallbackContextTest :
                     result.commandType shouldBe CommandType.PIPELINE
                 }
 
-                then("commandDetailType should be NOTICE_FORM") {
-                    result.commandDetailType shouldBe CommandDetailType.NOTICE_FORM
+                then("commandDetailType should be APPROVAL_CALLBACK") {
+                    result.commandDetailType shouldBe CommandDetailType.APPROVAL_CALLBACK
                 }
 
                 then("ok should be true (vacuously true for empty list)") {
@@ -49,24 +45,22 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("no events should be added to the queue") {
-                    eventQueue.poll() shouldBe null
+                then("no intents should be added to the queue") {
+                    intentQueue.isEmpty() shouldBe true
                 }
             }
         }
 
         given("ApprovalCallbackContext with participants") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
             val participants = setOf("U001", "U002", "U003")
 
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = participants,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -80,28 +74,32 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("actionStates should contain results from all participants") {
+                then("result should carry basic info from all participants") {
                     result.publisherId shouldBe basicInfo.publisherId
                     result.apiAppId shouldBe basicInfo.appId
                 }
 
-                then("events should be added for each participant") {
-                    var eventCount = 0
-                    while (eventQueue.poll() != null) eventCount++
-                    eventCount shouldBe 3
+                then("an Approval outbound message should be added for each participant") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 3
+                    effects.forEach { effect ->
+                        effect.shouldBeInstanceOf<OutboundMessage.Approval>()
+                    }
+                    val targetUsers = effects.map { (it as OutboundMessage.Approval).recipient?.id }.toSet()
+                    targetUsers shouldBe participants
                 }
             }
         }
 
         given("ApprovalCallbackContext with custom ApprovalContents") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val customApprovalContents =
-                ApprovalContents(
+                createApprovalContents(
                     reason = "Custom approval reason",
                     idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.NOTICE_FORM,
+                    commandDetailType = CommandDetailType.APPROVAL_CALLBACK,
                     publisherId = basicInfo.publisherId,
                     headLineText = "Custom Headline",
                 )
@@ -109,11 +107,9 @@ class ApprovalCallbackContextTest :
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = setOf("U001"),
                     approvalContents = customApprovalContents,
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -124,23 +120,25 @@ class ApprovalCallbackContextTest :
                     result.status shouldBe Status.SUCCESS
                 }
 
-                then("event should be added") {
-                    eventQueue.flushQueue()
+                then("outbound message should contain custom approval contents") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    val approval = effects.first() as OutboundMessage.Approval
+                    approval.approval.reason shouldBe "Custom approval reason"
+                    approval.recipient?.id shouldBe "U001"
                 }
             }
         }
 
         given("ApprovalCallbackContext with default ApprovalContents") {
-            val eventQueue = createDomainEventQueue()
+            val intentQueue = createIntentQueue()
             val basicInfo = createCommandBasicInfo()
 
             val context =
                 ApprovalCallbackContext(
                     commandBasicInfo = basicInfo,
-                    slackEventBuilder = eventBuilder,
-                    requestHeaders = SlackRequestHeaders(),
-                    events = eventQueue,
                     participants = setOf("U001"),
+                    intents = intentQueue,
                 )
 
             `when`("runCommand") {
@@ -150,8 +148,10 @@ class ApprovalCallbackContextTest :
                     result.ok shouldBe true
                 }
 
-                then("should add event to queue") {
-                    eventQueue.flushQueue()
+                then("should add an Approval outbound message to the queue") {
+                    val effects = intentQueue.snapshot()
+                    effects.size shouldBe 1
+                    effects.first().shouldBeInstanceOf<OutboundMessage.Approval>()
                 }
             }
         }

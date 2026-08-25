@@ -10,10 +10,10 @@ import com.slack.api.model.block.element.MultiUsersSelectElement
 import com.slack.api.model.block.element.PlainTextInputElement
 import com.slack.api.model.block.element.RadioButtonsElement
 import com.slack.api.model.block.element.TimePickerElement
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
+import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.CheckBoxOptions
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe

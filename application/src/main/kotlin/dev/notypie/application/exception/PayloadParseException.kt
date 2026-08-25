@@ -12,9 +12,22 @@ enum class PayloadParseErrorCode(
         statusCode = 400,
         message = "Application ID not found in payload.",
     ),
+    UNSUPPORTED_SLACK_COMMAND_TYPE(
+        statusCode = 400,
+        message = "Unsupported Slack command type in payload.",
+    ),
 }
 
 class AppIdNotFoundException(
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    )
+
+class UnsupportedSlackCommandTypeException(
+    val rawCommandType: String,
     errorCode: ErrorCode,
     details: List<ExceptionArgument>,
 ) : CodeCompanionRuntimeException(

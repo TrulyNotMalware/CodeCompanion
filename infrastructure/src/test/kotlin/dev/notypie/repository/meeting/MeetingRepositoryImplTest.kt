@@ -9,6 +9,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import java.util.UUID
 
 class MeetingRepositoryImplTest :
     BehaviorSpec({
@@ -39,7 +40,7 @@ class MeetingRepositoryImplTest :
                     result.meetingId shouldBe 1L
                     result.title shouldBe meetingSchema.name
                     result.creator shouldBe meetingSchema.publisherId
-                    result.participantIds.size shouldBe 2
+                    result.participants.size shouldBe 2
                 }
             }
 
@@ -123,6 +124,36 @@ class MeetingRepositoryImplTest :
                     shouldThrow<DatabaseException> {
                         repository.getParticipants(meetingId = 999L)
                     }
+                }
+            }
+        }
+
+        given("participantExists") {
+            val meetingKey = UUID.randomUUID()
+
+            `when`("the participant row is present") {
+                every {
+                    jpaMeetingRepository.existsParticipant(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_PRESENT",
+                    )
+                } returns true
+
+                then("returns true so callers can treat a zero-row UPDATE as a no-op instead of failing") {
+                    repository.participantExists(meetingKey, "U_PRESENT") shouldBe true
+                }
+            }
+
+            `when`("the participant row is missing") {
+                every {
+                    jpaMeetingRepository.existsParticipant(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_MISSING",
+                    )
+                } returns false
+
+                then("returns false so callers can distinguish a truly-missing row from a no-op UPDATE") {
+                    repository.participantExists(meetingKey, "U_MISSING") shouldBe false
                 }
             }
         }

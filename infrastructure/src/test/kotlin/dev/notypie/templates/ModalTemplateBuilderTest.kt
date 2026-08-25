@@ -1,22 +1,33 @@
 package dev.notypie.templates
 
+import com.slack.api.model.block.DividerBlock
+import com.slack.api.model.block.HeaderBlock
+import com.slack.api.model.block.SectionBlock
+import com.slack.api.model.block.composition.MarkdownTextObject
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.TopicOption
+import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createMeetingParticipantDto
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.Profile
 import dev.notypie.impl.command.dto.SlackUserProfileDto
+import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -33,11 +44,9 @@ class ModalTemplateBuilderTest :
 
         val testIdempotencyKey = UUID.randomUUID()
         val testApprovalContents =
-            ApprovalContents(
+            createApprovalContents(
                 idempotencyKey = testIdempotencyKey,
-                commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 reason = "Test Reason",
-                publisherId = TEST_USER_ID,
             )
 
         given("requestApprovalFormTemplate") {
@@ -258,6 +267,460 @@ class ModalTemplateBuilderTest :
             }
         }
 
+        given("meetingListFormTemplate") {
+            `when`("called with an empty meeting list") {
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = emptyList(),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("template has header, divider, and empty-state section (3 blocks)") {
+                    result.template.size shouldBe 3
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    val emptySection = result.template[2].shouldBeInstanceOf<SectionBlock>()
+                    val mrkdwn = emptySection.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "No upcoming meetings found"
+                }
+
+                then("interactionStates is empty") {
+                    result.interactionStates shouldBe emptyList()
+                }
+            }
+
+            `when`("called with a single non-canceled meeting (viewer is not the host)") {
+                val meetingUid = UUID.fromString("11111111-2222-3333-4444-555555555555")
+                val meeting =
+                    createMeetingDto(
+                        meetingUid = meetingUid,
+                        title = "Project sync",
+                        startAt = LocalDateTime.of(2026, 4, 20, 10, 0),
+                        endAt = LocalDateTime.of(2026, 4, 20, 11, 0),
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(userId = "U1"),
+                                createMeetingParticipantDto(userId = "U2"),
+                                createMeetingParticipantDto(userId = "U3"),
+                            ),
+                        isCanceled = false,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("template has header + divider + single meeting section (3 blocks, no trailing divider)") {
+                    result.template.size shouldBe 3
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    result.template[2].shouldBeInstanceOf<SectionBlock>()
+                }
+
+                then("meeting section renders title, times, accepted/total count, and meetingUid in backticks") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "*Project sync*"
+                    mrkdwn.text shouldContain "2026-04-20 10:00"
+                    mrkdwn.text shouldContain "~ 2026-04-20 11:00"
+                    // host(1) + 3 attending invitees = 4/4
+                    mrkdwn.text shouldContain "Participants: 4/4"
+                    mrkdwn.text shouldContain "`$meetingUid`"
+                }
+
+                then("no CANCELED marker appears") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text as MarkdownTextObject
+                    (mrkdwn.text.contains("CANCELED")) shouldBe false
+                }
+            }
+
+            `when`("a participant has declined the invitation") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Mixed response",
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(userId = "U1", isAttending = true),
+                                createMeetingParticipantDto(
+                                    userId = "U2",
+                                    isAttending = false,
+                                    absentReason = RejectReason.SCHEDULE_CONFLICT,
+                                ),
+                                createMeetingParticipantDto(userId = "U3", isAttending = true),
+                            ),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("decliner is subtracted from accepted but stays in the denominator") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    // host(1) + 2 attending invitees = 3; total = host(1) + 3 invitees = 4
+                    mrkdwn.text shouldContain "Participants: 3/4"
+                }
+
+                then("the decliner is listed as a mention with their reason") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Declined:"
+                    mrkdwn.text shouldContain "<@U2> — ${RejectReason.SCHEDULE_CONFLICT.showMessage}"
+                    // Only the decliner appears in the declined list.
+                    mrkdwn.text.contains("<@U1>") shouldBe false
+                }
+            }
+
+            `when`("a participant declined with the Other reason and a free-text detail") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Other decline",
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(
+                                    userId = "U2",
+                                    isAttending = false,
+                                    absentReason = RejectReason.OTHER,
+                                    absentReasonDetail = "Visa appointment overseas",
+                                ),
+                            ),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("the free-text detail is shown alongside the Other reason") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "<@U2> — ${RejectReason.OTHER.showMessage}"
+                    mrkdwn.text shouldContain "Visa appointment overseas"
+                }
+            }
+
+            `when`("meeting has no participants") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Solo sync",
+                        participants = emptyList(),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("participant line renders host-only count") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Participants: 1/1"
+                }
+            }
+
+            `when`("called with a canceled meeting") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Standup",
+                        isCanceled = true,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("meeting section includes [CANCELED] marker") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "*[CANCELED]*"
+                }
+            }
+
+            `when`("viewer is the host of an active meeting") {
+                val meetingUid = UUID.fromString("99999999-aaaa-bbbb-cccc-dddddddddddd")
+                val listKey = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb")
+                val meeting =
+                    createMeetingDto(
+                        meetingUid = meetingUid,
+                        creator = TEST_USER_ID,
+                        title = "My standup",
+                        isCanceled = false,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = listKey,
+                    )
+
+                then("an inline host-actions block is appended right after the meeting section") {
+                    // header + divider + section + host-actions = 4 blocks (no inter-divider for single meeting)
+                    result.template.size shouldBe 4
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    result.template[2].shouldBeInstanceOf<SectionBlock>()
+                    result.template[3].shouldBeInstanceOf<com.slack.api.model.block.ActionsBlock>()
+                }
+
+                then("the reschedule + add-participant + cancel buttons carry the routing values the parser expects") {
+                    val actionsBlock =
+                        result.template[3] as com.slack.api.model.block.ActionsBlock
+                    // block_id and action_id are suffixed with the meeting uid so multiple host rows
+                    // in one message don't collide (Slack rejects duplicate ids with invalid_blocks).
+                    actionsBlock.blockId shouldBe "${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid"
+                    val buttons =
+                        actionsBlock.elements.map { it as com.slack.api.model.block.element.ButtonElement }
+                    buttons.size shouldBe 3
+
+                    val rescheduleButton = buttons[0]
+                    rescheduleButton.actionId shouldBe "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid"
+                    rescheduleButton.style shouldBe "primary"
+                    rescheduleButton.value shouldBe "$listKey,MEETING_RESCHEDULE_REQUEST,$meetingUid"
+
+                    val addParticipantButton = buttons[1]
+                    addParticipantButton.actionId shouldBe "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid"
+                    addParticipantButton.value shouldBe "$listKey,MEETING_ADD_PARTICIPANT_REQUEST,$meetingUid"
+
+                    val cancelButton = buttons[2]
+                    cancelButton.actionId shouldBe "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid"
+                    cancelButton.style shouldBe "danger"
+                    cancelButton.value shouldBe "$listKey,CANCEL_MEETING,$meetingUid"
+                }
+
+                then(
+                    "the interactionStates expose the reschedule + add-participant (APPLY) and cancel (REJECT) buttons",
+                ) {
+                    val stateTypes = result.interactionStates.map { it.type }
+                    stateTypes shouldBe
+                        listOf(
+                            ActionElementTypes.APPLY_BUTTON,
+                            ActionElementTypes.APPLY_BUTTON,
+                            ActionElementTypes.REJECT_BUTTON,
+                        )
+                }
+            }
+
+            `when`("the host owns multiple active meetings in one list") {
+                val listKey = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb")
+                val firstUid = UUID.fromString("11111111-aaaa-bbbb-cccc-dddddddddddd")
+                val secondUid = UUID.fromString("22222222-aaaa-bbbb-cccc-dddddddddddd")
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings =
+                            listOf(
+                                createMeetingDto(meetingUid = firstUid, creator = TEST_USER_ID, title = "First"),
+                                createMeetingDto(meetingUid = secondUid, creator = TEST_USER_ID, title = "Second"),
+                            ),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = listKey,
+                    )
+
+                then("every block_id and action_id is unique so Slack does not reject with invalid_blocks") {
+                    val actionsBlocks =
+                        result.template.filterIsInstance<com.slack.api.model.block.ActionsBlock>()
+                    actionsBlocks.size shouldBe 2
+
+                    val blockIds = actionsBlocks.map { it.blockId }
+                    blockIds shouldBe blockIds.distinct()
+
+                    val actionIds =
+                        actionsBlocks
+                            .flatMap { it.elements }
+                            .map { (it as com.slack.api.model.block.element.ButtonElement).actionId }
+                    // 3 buttons (reschedule, add-participant, cancel) x 2 host rows
+                    actionIds.size shouldBe 6
+                    actionIds shouldBe actionIds.distinct()
+                }
+            }
+
+            `when`("viewer is the host but the meeting is already canceled") {
+                val meeting =
+                    createMeetingDto(
+                        creator = TEST_USER_ID,
+                        title = "Postmortem",
+                        isCanceled = true,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("the cancel button is suppressed so the user can't double-cancel") {
+                    val actionsCount =
+                        result.template.count { it is com.slack.api.model.block.ActionsBlock }
+                    actionsCount shouldBe 0
+                    result.interactionStates shouldBe emptyList()
+                }
+            }
+
+            `when`("viewer is the host of one meeting and a participant in another") {
+                val hostMeetingUid = UUID.randomUUID()
+                val listKey = UUID.randomUUID()
+                val hostMeeting =
+                    createMeetingDto(
+                        meetingUid = hostMeetingUid,
+                        creator = TEST_USER_ID,
+                        title = "Mine",
+                        isCanceled = false,
+                    )
+                val participantMeeting =
+                    createMeetingDto(
+                        creator = "U_OTHER",
+                        title = "Theirs",
+                        isCanceled = false,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(hostMeeting, participantMeeting),
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = listKey,
+                    )
+
+                then("only the host's row gets a host-actions block carrying reschedule + add-participant + cancel") {
+                    val actionsBlocks =
+                        result.template
+                            .filterIsInstance<com.slack.api.model.block.ActionsBlock>()
+                    actionsBlocks.size shouldBe 1
+                    val buttons =
+                        actionsBlocks
+                            .single()
+                            .elements
+                            .map { it as com.slack.api.model.block.element.ButtonElement }
+                    buttons.map { it.value } shouldBe
+                        listOf(
+                            "$listKey,MEETING_RESCHEDULE_REQUEST,$hostMeetingUid",
+                            "$listKey,MEETING_ADD_PARTICIPANT_REQUEST,$hostMeetingUid",
+                            "$listKey,CANCEL_MEETING,$hostMeetingUid",
+                        )
+                }
+            }
+
+            `when`("called with multiple meetings (viewer is not the host)") {
+                val meetings =
+                    listOf(
+                        createMeetingDto(title = "First"),
+                        createMeetingDto(title = "Second"),
+                        createMeetingDto(title = "Third"),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("template has header + divider + (section+divider)*2 + section (7 blocks)") {
+                    // 1 header + 1 top divider + 3 sections + 2 inter-meeting dividers = 7
+                    result.template.size shouldBe 7
+                }
+
+                then("dividers separate consecutive meetings but not the last") {
+                    result.template[0].shouldBeInstanceOf<HeaderBlock>()
+                    result.template[1].shouldBeInstanceOf<DividerBlock>()
+                    result.template[2].shouldBeInstanceOf<SectionBlock>()
+                    result.template[3].shouldBeInstanceOf<DividerBlock>()
+                    result.template[4].shouldBeInstanceOf<SectionBlock>()
+                    result.template[5].shouldBeInstanceOf<DividerBlock>()
+                    result.template[6].shouldBeInstanceOf<SectionBlock>()
+                }
+            }
+
+            `when`("called with more meetings than MAX_MEETINGS_PER_LIST (viewer is not the host)") {
+                val overflowSize = ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 5
+                val meetings = (1..overflowSize).map { createMeetingDto(title = "M$it") }
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("renders only the first MAX meetings plus a truncation notice") {
+                    val sectionCount = result.template.count { it is SectionBlock }
+                    sectionCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 1 // meetings + notice
+                    val lastBlock = result.template.last()
+                    val lastSection = lastBlock.shouldBeInstanceOf<SectionBlock>()
+                    val mrkdwn = lastSection.text.shouldBeInstanceOf<MarkdownTextObject>()
+                    mrkdwn.text shouldContain "Showing the first ${ModalTemplateBuilder.MAX_MEETINGS_PER_LIST}"
+                    mrkdwn.text shouldContain "5 more omitted"
+                }
+
+                then("total block count must not exceed Slack's 50-block message limit") {
+                    (result.template.size <= 50) shouldBe true
+                }
+            }
+
+            `when`("called with more meetings than MAX_MEETINGS_PER_LIST (viewer IS the host)") {
+                // Worst case for the 50-block budget: every row gets a Cancel actions block.
+                // Total = 1 header + 1 top-divider + N*(section+cancel) + (N-1) inter-dividers
+                //         + 1 overflow notice = 3N + 2.
+                val overflowSize = ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 3
+                val meetings = (1..overflowSize).map { createMeetingDto(title = "H$it") }
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("total block count must not exceed Slack's 50-block message limit") {
+                    (result.template.size <= 50) shouldBe true
+                }
+
+                then("each rendered meeting carries an inline cancel actions block") {
+                    val actionsCount =
+                        result.template.count { it is com.slack.api.model.block.ActionsBlock }
+                    actionsCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST
+                }
+            }
+
+            `when`("meeting has no endAt") {
+                val meeting =
+                    createMeetingDto(
+                        title = "Half-open",
+                        startAt = LocalDateTime.of(2026, 4, 20, 10, 0),
+                        endAt = null,
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("section omits the end-time suffix") {
+                    val section = result.template[2] as SectionBlock
+                    val mrkdwn = section.text as MarkdownTextObject
+                    mrkdwn.text shouldContain "2026-04-20 10:00"
+                    (mrkdwn.text.contains("~")) shouldBe false
+                }
+            }
+        }
+
         given("errorNoticeTemplate") {
             `when`("called without details") {
                 val result =
@@ -282,6 +745,383 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, text, and detail blocks") {
                     result.template.size shouldBe 4
+                }
+            }
+        }
+
+        given("declineReasonModalViewJson") {
+            val meetingKey = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+            val participantUserId = "U_PARTICIPANT"
+            val noticeChannel = "C_NOTICE"
+            val noticeMessageTs = "1700000000.000100"
+
+            `when`("called with a non-blank meeting title") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "Project sync",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+
+                then("the view envelope carries modal metadata plus the tokenized private_metadata") {
+                    json shouldContain "\"type\":\"modal\""
+                    json shouldContain "\"callback_id\":\"decline_reason_modal\""
+                    // tokenized as meetingKey,MEETING_DECLINE_REASON,participantUserId,noticeChannel,noticeMessageTs
+                    // so DeclineReasonSubmissionContext can chat.update the notice DM.
+                    json shouldContain
+                        "\"private_metadata\":\"$meetingKey,MEETING_DECLINE_REASON," +
+                        "$participantUserId,$noticeChannel,$noticeMessageTs\""
+                    json shouldContain "\"title\""
+                    json shouldContain "Why can't you attend?"
+                    json shouldContain "\"submit\""
+                    json shouldContain "\"close\""
+                }
+
+                then("a title section is rendered before the input block") {
+                    json shouldContain "*Project sync*"
+                }
+
+                then("the input block uses the agreed block_id and action_id so parser can read state") {
+                    json shouldContain "\"block_id\":\"decline_reason_block\""
+                    json shouldContain "\"action_id\":\"decline_reason_select\""
+                    json shouldContain "\"type\":\"static_select\""
+                    json shouldContain "\"placeholder\""
+                }
+
+                then("dropdown options include all reject reasons except ATTENDING") {
+                    json shouldContain "\"value\":\"SCHEDULE_CONFLICT\""
+                    json shouldContain "\"value\":\"UNEXPECTED_EMERGENCY\""
+                    json shouldContain "\"value\":\"HEALTH_ISSUE\""
+                    json shouldContain "\"value\":\"PRIOR_COMMITMENT\""
+                    json shouldContain "\"value\":\"REQUEST_DELAY\""
+                    json shouldContain "\"value\":\"VACATION\""
+                    json shouldContain "\"value\":\"PERSONAL_REASON\""
+                    json shouldContain "\"value\":\"OTHER\""
+                    (json.contains("\"value\":\"ATTENDING\"")) shouldBe false
+                }
+            }
+
+            `when`("called with a blank meeting title") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+
+                then("the meeting-title section is omitted so the modal is dropdown-only") {
+                    // a blank title would otherwise render "**" which Slack renders as empty
+                    (json.contains("\"type\":\"section\"")) shouldBe false
+                    json shouldContain "\"type\":\"static_select\""
+                }
+            }
+
+            `when`("called with blank notice channel and message_ts") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "Project sync",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = "",
+                        noticeMessageTs = "",
+                    )
+
+                then("private_metadata keeps all 5 positions so parser indices stay stable") {
+                    // trailing empty tokens are intentional — routingExtras[1..2] read as ""
+                    json shouldContain
+                        "\"private_metadata\":\"$meetingKey,MEETING_DECLINE_REASON," +
+                        "$participantUserId,,\""
+                }
+            }
+
+            `when`("the emitted JSON is fed back through the Slack SDK's view deserializer") {
+                // Block Kit validator test: proves our hand-built JSON structurally matches
+                // Slack's official `View` schema. Guards against typos like missing "type",
+                // malformed element payloads, or option shapes Slack would reject at views.open.
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = "Project sync",
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+                val view =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(json, com.slack.api.model.view.View::class.java)
+
+                then("top-level envelope parses into a View with the callback_id and private_metadata") {
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe DeclineReasonModalIds.CALLBACK_ID
+                    view.privateMetadata shouldBe
+                        "$meetingKey,MEETING_DECLINE_REASON,$participantUserId," +
+                        "$noticeChannel,$noticeMessageTs"
+                    view.title.text shouldBe "Why can't you attend?"
+                    view.submit.text shouldBe "Submit"
+                    view.close.text shouldBe "Cancel"
+                }
+
+                then("blocks include the title section and the dropdown input with the expected action_id") {
+                    val inputBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == DeclineReasonModalIds.BLOCK_ID }
+                    val dropdown =
+                        inputBlock.element as com.slack.api.model.block.element.StaticSelectElement
+                    dropdown.actionId shouldBe DeclineReasonModalIds.ACTION_ID
+                    // All RejectReason entries except ATTENDING (8 options).
+                    dropdown.options.size shouldBe 8
+                }
+
+                then("blocks include an optional free-text detail input for the Other reason") {
+                    val detailBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
+                    detailBlock.isOptional shouldBe true
+                    val textInput =
+                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    textInput.actionId shouldBe DeclineReasonModalIds.DETAIL_ACTION_ID
+                }
+            }
+        }
+
+        given("rescheduleMeetingModalViewJson") {
+            val meetingUid = UUID.fromString("12121212-3434-5656-7878-909090909090")
+            val requesterId = "U_HOST"
+            val channel = "C_LIST"
+            val currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30)
+
+            `when`("called with the meeting uid, current start, requester, and channel") {
+                val json =
+                    templateBuilder.rescheduleMeetingModalViewJson(
+                        meetingUid = meetingUid,
+                        currentStartAt = currentStartAt,
+                        requesterId = requesterId,
+                        channel = channel,
+                    )
+
+                then("private_metadata routes the submission to MEETING_RESCHEDULE_SUBMIT with the channel") {
+                    json shouldContain "\"callback_id\":\"${RescheduleMeetingModalIds.CALLBACK_ID}\""
+                    json shouldContain
+                        "\"private_metadata\":\"$meetingUid,MEETING_RESCHEDULE_SUBMIT,$requesterId,$channel\""
+                }
+
+                then("the date and time pickers are pre-filled from the current start") {
+                    json shouldContain "\"type\":\"datepicker\""
+                    json shouldContain "\"initial_date\":\"2026-07-01\""
+                    json shouldContain "\"type\":\"timepicker\""
+                    json shouldContain "\"initial_time\":\"14:30\""
+                }
+
+                then("the emitted JSON round-trips through the Slack SDK view deserializer") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                    val blockIds = inputs.map { it.blockId }
+
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe RescheduleMeetingModalIds.CALLBACK_ID
+                    view.privateMetadata shouldBe "$meetingUid,MEETING_RESCHEDULE_SUBMIT,$requesterId,$channel"
+                    view.title.text shouldBe "Reschedule meeting"
+                    view.submit.text shouldBe "Reschedule"
+                    view.close.text shouldBe "Cancel"
+                    blockIds shouldContainAll
+                        listOf(
+                            RescheduleMeetingModalIds.DATE_BLOCK_ID,
+                            RescheduleMeetingModalIds.TIME_BLOCK_ID,
+                        )
+                    val datePicker =
+                        inputs
+                            .single { it.blockId == RescheduleMeetingModalIds.DATE_BLOCK_ID }
+                            .element as com.slack.api.model.block.element.DatePickerElement
+                    datePicker.actionId shouldBe RescheduleMeetingModalIds.DATE_ACTION_ID
+                    val timePicker =
+                        inputs
+                            .single { it.blockId == RescheduleMeetingModalIds.TIME_BLOCK_ID }
+                            .element as com.slack.api.model.block.element.TimePickerElement
+                    timePicker.actionId shouldBe RescheduleMeetingModalIds.TIME_ACTION_ID
+                }
+            }
+        }
+
+        given("standupModalViewJson") {
+            val sessionUid = UUID.randomUUID()
+
+            `when`("called with routine questions") {
+                val json =
+                    templateBuilder.standupModalViewJson(
+                        routineName = "Daily Standup",
+                        sessionDate = LocalDate.of(2026, 5, 4),
+                        sessionUid = sessionUid,
+                        userId = "U_STANDUP",
+                        noticeChannel = "D_NOTICE",
+                        noticeMessageTs = "1700000000.000400",
+                        questions =
+                            listOf(
+                                "What did you do yesterday?",
+                                "What are you doing today?",
+                            ),
+                    )
+
+                then("private_metadata routes the submission to STANDUP_ANSWER_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${StandupModalIds.CALLBACK_ID}\""
+                    json shouldContain
+                        "\"private_metadata\":\"$sessionUid,STANDUP_ANSWER_SUBMIT," +
+                        "U_STANDUP,D_NOTICE,1700000000.000400\""
+                }
+
+                then("each question is rendered as a multiline plain_text_input") {
+                    json shouldContain "\"block_id\":\"${StandupModalIds.BLOCK_ID_PREFIX}0\""
+                    json shouldContain "\"action_id\":\"${StandupModalIds.ACTION_ID_PREFIX}0\""
+                    json shouldContain "\"type\":\"plain_text_input\""
+                    json shouldContain "\"multiline\":true"
+                    json shouldContain "What are you doing today?"
+                }
+
+                then("the emitted JSON parses as a Slack View") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe StandupModalIds.CALLBACK_ID
+                    inputs.size shouldBe 2
+                }
+            }
+        }
+
+        given("standupSetupModalViewJson") {
+            val setupKey = UUID.randomUUID()
+
+            `when`("called with the invoking creator and channel") {
+                val json =
+                    templateBuilder.standupSetupModalViewJson(
+                        idempotencyKey = setupKey,
+                        creatorId = "U_CREATOR",
+                        commandChannel = "C_COMMAND",
+                    )
+
+                then("private_metadata routes the submission to STANDUP_SETUP_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${StandupSetupModalIds.CALLBACK_ID}\""
+                    json shouldContain
+                        "\"private_metadata\":\"$setupKey,STANDUP_SETUP_SUBMIT,U_CREATOR,C_COMMAND\""
+                }
+
+                then("the emitted JSON round-trips through the Slack SDK view deserializer") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                    val blockIds = inputs.map { it.blockId }
+
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe StandupSetupModalIds.CALLBACK_ID
+                    view.title.text shouldBe "Standup setup"
+                    view.submit.text shouldBe "Create"
+                    view.close.text shouldBe "Cancel"
+                    blockIds shouldContainAll
+                        listOf(
+                            StandupSetupModalIds.NAME_BLOCK_ID,
+                            StandupSetupModalIds.QUESTIONS_BLOCK_ID,
+                            StandupSetupModalIds.MEMBERS_BLOCK_ID,
+                            StandupSetupModalIds.SUMMARY_CHANNEL_BLOCK_ID,
+                            StandupSetupModalIds.WEEKDAYS_BLOCK_ID,
+                            StandupSetupModalIds.TIME_BLOCK_ID,
+                            StandupSetupModalIds.CUTOFF_BLOCK_ID,
+                            StandupSetupModalIds.TIMEZONE_BLOCK_ID,
+                        )
+                }
+
+                then("each Block Kit element type is rendered") {
+                    json shouldContain "\"type\":\"multi_users_select\""
+                    json shouldContain "\"type\":\"conversations_select\""
+                    json shouldContain "\"type\":\"multi_static_select\""
+                    json shouldContain "\"type\":\"timepicker\""
+                    json shouldContain "\"type\":\"static_select\""
+                    json shouldContain "\"type\":\"plain_text_input\""
+                }
+            }
+        }
+
+        given("cveSubscribeModalViewJson") {
+            val subscribeKey = UUID.randomUUID()
+
+            `when`("called with active topics") {
+                val json =
+                    templateBuilder.cveSubscribeModalViewJson(
+                        idempotencyKey = subscribeKey,
+                        topics =
+                            listOf(
+                                TopicOption(key = "kotlin", label = "Kotlin"),
+                                TopicOption(key = "spring", label = "Spring Framework"),
+                            ),
+                    )
+
+                then("private_metadata routes the submission to CVE_SUBSCRIBE_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${CveSubscriptionModalIds.SUBSCRIBE_CALLBACK_ID}\""
+                    json shouldContain "\"private_metadata\":\"$subscribeKey,CVE_SUBSCRIBE_SUBMIT\""
+                }
+
+                then("the multi-select renders an option per topic with value = topic key") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    view.type shouldBe "modal"
+                    view.callbackId shouldBe CveSubscriptionModalIds.SUBSCRIBE_CALLBACK_ID
+                    view.submit.text shouldBe "Subscribe"
+                    val input =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == CveSubscriptionModalIds.SUBSCRIBE_TOPICS_BLOCK_ID }
+                    val select =
+                        input.element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    select.actionId shouldBe CveSubscriptionModalIds.SUBSCRIBE_TOPICS_ACTION_ID
+                    select.options.map { it.value } shouldBe listOf("kotlin", "spring")
+                }
+            }
+        }
+
+        given("cveUnsubscribeModalViewJson") {
+            val unsubscribeKey = UUID.randomUUID()
+
+            `when`("called with the user's subscribed topics") {
+                val json =
+                    templateBuilder.cveUnsubscribeModalViewJson(
+                        idempotencyKey = unsubscribeKey,
+                        topics = listOf(TopicOption(key = "cve-java", label = "Java CVE")),
+                    )
+
+                then("private_metadata routes the submission to CVE_UNSUBSCRIBE_SUBMIT") {
+                    json shouldContain "\"callback_id\":\"${CveSubscriptionModalIds.UNSUBSCRIBE_CALLBACK_ID}\""
+                    json shouldContain "\"private_metadata\":\"$unsubscribeKey,CVE_UNSUBSCRIBE_SUBMIT\""
+                }
+
+                then("the emitted JSON round-trips through the Slack SDK view deserializer") {
+                    val view =
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                    view.submit.text shouldBe "Unsubscribe"
+                    val input =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_BLOCK_ID }
+                    val select =
+                        input.element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    select.actionId shouldBe CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_ACTION_ID
+                    select.options.single().value shouldBe "cve-java"
                 }
             }
         }

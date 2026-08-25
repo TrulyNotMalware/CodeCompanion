@@ -1,34 +1,29 @@
 package dev.notypie.domain.command.entity.context.form
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.SlackRequestHeaders
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
-import dev.notypie.domain.history.entity.Status
+import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 
 internal class ApprovalCallbackContext(
     commandBasicInfo: CommandBasicInfo,
-    slackEventBuilder: SlackEventBuilder,
-    requestHeaders: SlackRequestHeaders = SlackRequestHeaders(),
     approvalContents: ApprovalContents? = null,
-    events: EventQueue<CommandEvent<EventPayload>>,
     private val participants: Set<String> = emptySet(),
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
+    intents: IntentQueue,
 ) : ReactionContext<NoSubCommands>(
-        slackEventBuilder = slackEventBuilder,
-        requestHeaders = requestHeaders,
         commandBasicInfo = commandBasicInfo,
-        events = events,
         subCommand = subCommand,
+        intents = intents,
     ) {
     private val approvalContents: ApprovalContents = approvalContents ?: createDefaultApprovalContents()
 
@@ -42,7 +37,7 @@ internal class ApprovalCallbackContext(
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
-    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTICE_FORM
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.APPROVAL_CALLBACK
 
     override fun runCommand() = handleCommand()
 
@@ -66,22 +61,29 @@ internal class ApprovalCallbackContext(
             channel = commandBasicInfo.channel,
             token = commandBasicInfo.appToken,
             commandType = commandType,
-            actionStates = results.flatMap { it.actionStates },
             commandDetailType = commandDetailType,
         )
     }
 
-    private fun sendNoticeToParticipants(commandDetailType: CommandDetailType = this.commandDetailType) =
+    /**
+     * Routing type comes from [approvalContents.commandDetailType] (the single source of truth
+     * shared with the Slack button value); [commandDetailType] here is only [CommandOutput] metadata.
+     */
+    private fun sendNoticeToParticipants(
+        commandDetailType: CommandDetailType = this.commandDetailType,
+    ): List<CommandOutput> =
         participants.map { participant ->
-            val event =
-                slackEventBuilder.simpleApplyRejectRequest(
-                    commandDetailType = commandDetailType,
-                    approvalContents = approvalContents,
-                    commandBasicInfo = commandBasicInfo,
-                    commandType = commandType,
-                    targetUserId = participant,
-                )
-            addNewEvent(commandEvent = event)
-            CommandOutput.success(payload = event.payload, commandType = commandType)
+            addOutbound(
+                OutboundMessage.Approval(
+                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    recipient = UserRef(id = participant),
+                    approval = approvalContents,
+                ),
+            )
+            CommandOutput.success(
+                basicInfo = commandBasicInfo,
+                commandType = commandType,
+                commandDetailType = commandDetailType,
+            )
         }
 }

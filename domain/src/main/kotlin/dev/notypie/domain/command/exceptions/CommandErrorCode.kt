@@ -2,7 +2,7 @@ package dev.notypie.domain.command.exceptions
 
 import dev.notypie.domain.common.error.ErrorCode
 
-enum class CommandErrorCode(
+internal enum class CommandErrorCode(
     override val statusCode: Int,
     override val message: String,
 ) : ErrorCode {

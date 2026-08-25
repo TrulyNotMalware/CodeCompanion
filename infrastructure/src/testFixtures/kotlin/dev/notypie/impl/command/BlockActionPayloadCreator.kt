@@ -11,7 +11,10 @@ import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.slack.ActionElementTypes
+import dev.notypie.impl.command.slack.InteractionTypes
 import dev.notypie.templates.ButtonType
+import dev.notypie.templates.DeclineReasonModalIds
 import java.util.UUID
 
 // ============ Action JSON Builders ============
@@ -20,15 +23,18 @@ fun buttonActionJson(
     buttonType: ButtonType = ButtonType.PRIMARY,
     value: String = "",
     actionId: String = "action_approve",
-) = """[{"type":"button","action_id":"$actionId","style":"${buttonType.name.lowercase()}","value":"$value"}]"""
+) =
+    """[{"type":"${ActionElementTypes.BUTTON.elementName}","action_id":"$actionId","style":"${buttonType.name.lowercase()}","value":"$value"}]"""
 
 fun buttonActionJsonWithoutStyle(value: String = "", actionId: String = "action_btn") =
-    """[{"type":"button","action_id":"$actionId","value":"$value"}]"""
+    """[{"type":"${ActionElementTypes.BUTTON.elementName}","action_id":"$actionId","value":"$value"}]"""
 
-fun multiStaticSelectActionJson(selectedValues: List<String>, actionId: String = "static_select") =
-    """[{"type":"multi_static_select","action_id":"$actionId","selected_options":[${
-        selectedValues.joinToString(",") { """{"value":"$it"}""" }
-    }]}]"""
+fun multiStaticSelectActionJson(
+    selectedValues: List<String>,
+    actionId: String = ActionElementTypes.STATIC_SELECT.elementName,
+) = """[{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","action_id":"$actionId","selected_options":[${
+    selectedValues.joinToString(",") { """{"value":"$it"}""" }
+}]}]"""
 
 fun multiUsersSelectActionJson(selectedUsers: List<String>, actionId: String = "user_select") =
     """[{"type":"multi_users_select","action_id":"$actionId","selected_users":[${
@@ -43,11 +49,17 @@ fun unknownActionJson(type: String = "overflow", actionId: String = "overflow_1"
 fun stateValuesJson(blockId: String = "block_1", actionId: String = "action_1", stateEntry: String) =
     """{"$blockId":{"$actionId":$stateEntry}}"""
 
+/** Multi-block variant of [stateValuesJson]; action ids are derived from the block ids. */
+fun stateValuesJson(vararg blocks: Pair<String, String>): String =
+    blocks.joinToString(separator = ",", prefix = "{", postfix = "}") { (blockId, stateEntry) ->
+        """"$blockId":{"${blockId}_action":$stateEntry}"""
+    }
+
 fun multiStaticSelectStateJson(selectedOptions: List<Pair<String, String>>) =
     if (selectedOptions.isEmpty()) {
-        """{"type":"multi_static_select","selected_options":[]}"""
+        """{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","selected_options":[]}"""
     } else {
-        """{"type":"multi_static_select","selected_options":[${
+        """{"type":"${ActionElementTypes.MULTI_STATIC_SELECT.elementName}","selected_options":[${
             selectedOptions.joinToString(",") { (text, value) ->
                 """{"text":{"type":"plain_text","text":"$text"},"value":"$value"}"""
             }
@@ -82,11 +94,166 @@ fun checkboxesStateJson(selectedOptions: List<Pair<String, String>>) =
 
 fun unknownStateJson(type: String = "some_unknown_type") = """{"type":"$type"}"""
 
+// ============ View Submission Payload Builder ============
+
+/**
+ * Builds a minimal `view_submission` payload for the decline-reason modal. The block_id /
+ * action_id constants match [dev.notypie.templates.ModalTemplateBuilder]'s companion object
+ * so that the parser can locate the selected radio value.
+ */
+fun createDeclineReasonViewSubmissionJson(
+    meetingIdempotencyKey: UUID,
+    participantUserId: String,
+    selectedReason: String,
+    noticeChannel: String = "",
+    noticeMessageTs: String = "",
+    teamId: String = TEST_TEAM_ID,
+    teamDomain: String = TEST_TEAM_DOMAIN,
+    userId: String = TEST_USER_ID,
+    userName: String = TEST_USER_NAME,
+    appId: String = TEST_APP_ID,
+    token: String = TEST_TOKEN,
+): String {
+    // Default to the legacy 3-token format so existing tests keep working; when the caller
+    // supplies channel/ts, emit the 5-token Wave 2 format.
+    val privateMetadata =
+        if (noticeChannel.isBlank() && noticeMessageTs.isBlank()) {
+            "$meetingIdempotencyKey,MEETING_DECLINE_REASON,$participantUserId"
+        } else {
+            "$meetingIdempotencyKey,MEETING_DECLINE_REASON,$participantUserId,$noticeChannel,$noticeMessageTs"
+        }
+    val stateValues =
+        if (selectedReason.isNotBlank()) {
+            """
+            {
+                "${DeclineReasonModalIds.BLOCK_ID}": {
+                    "${DeclineReasonModalIds.ACTION_ID}": {
+                        "type": "${ActionElementTypes.STATIC_SELECT.elementName}",
+                        "selected_option": {
+                            "text": {"type": "plain_text", "text": "$selectedReason"},
+                            "value": "$selectedReason"
+                        }
+                    }
+                }
+            }
+            """.trimIndent()
+        } else {
+            "{}"
+        }
+    return """
+        {
+            "type": "${InteractionTypes.VIEW_SUBMISSION}",
+            "token": "$token",
+            "api_app_id": "$appId",
+            "trigger_id": "trigger_view_submission_123",
+            "is_enterprise_install": false,
+            "team": {"id": "$teamId", "domain": "$teamDomain"},
+            "user": {
+                "id": "$userId",
+                "username": "$userName",
+                "name": "$userName",
+                "team_id": "$teamId"
+            },
+            "view": {
+                "id": "V_TEST_123",
+                "type": "modal",
+                "callback_id": "${DeclineReasonModalIds.CALLBACK_ID}",
+                "private_metadata": "$privateMetadata",
+                "state": { "values": $stateValues }
+            }
+        }
+        """.trimIndent()
+}
+
+fun createStandupAnswerViewSubmissionJson(
+    sessionUid: UUID,
+    userId: String,
+    responses: List<String>,
+    noticeChannel: String = "D_NOTICE",
+    noticeMessageTs: String = "1700000000.000500",
+    teamId: String = TEST_TEAM_ID,
+    teamDomain: String = TEST_TEAM_DOMAIN,
+    appId: String = TEST_APP_ID,
+    token: String = TEST_TOKEN,
+): String {
+    val privateMetadata =
+        "$sessionUid,STANDUP_ANSWER_SUBMIT,$userId,$noticeChannel,$noticeMessageTs"
+    val stateValues =
+        responses
+            .mapIndexed { index, response ->
+                """
+                "${dev.notypie.templates.StandupModalIds.BLOCK_ID_PREFIX}$index": {
+                    "${dev.notypie.templates.StandupModalIds.ACTION_ID_PREFIX}$index": {
+                        "type": "${ActionElementTypes.PLAIN_TEXT_INPUT.elementName}",
+                        "value": "$response"
+                    }
+                }
+                """.trimIndent()
+            }.joinToString(",")
+    return """
+        {
+            "type": "${InteractionTypes.VIEW_SUBMISSION}",
+            "token": "$token",
+            "api_app_id": "$appId",
+            "trigger_id": "trigger_view_submission_456",
+            "is_enterprise_install": false,
+            "team": {"id": "$teamId", "domain": "$teamDomain"},
+            "user": {
+                "id": "$userId",
+                "username": "$userId",
+                "name": "$userId",
+                "team_id": "$teamId"
+            },
+            "view": {
+                "id": "V_STANDUP_123",
+                "type": "modal",
+                "callback_id": "${dev.notypie.templates.StandupModalIds.CALLBACK_ID}",
+                "private_metadata": "$privateMetadata",
+                "state": { "values": { $stateValues } }
+            }
+        }
+        """.trimIndent()
+}
+
+/**
+ * Builds a minimal `view_submission` payload carrying `private_metadata` routing (plus optional
+ * form state), for asserting how the parser recovers the originating channel per flow.
+ */
+fun createRoutingOnlyViewSubmissionJson(
+    callbackId: String,
+    privateMetadata: String,
+    stateValues: String = "{}",
+    teamId: String = TEST_TEAM_ID,
+    teamDomain: String = TEST_TEAM_DOMAIN,
+    userId: String = TEST_USER_ID,
+    userName: String = TEST_USER_NAME,
+    appId: String = TEST_APP_ID,
+    token: String = TEST_TOKEN,
+): String =
+    """
+    {
+        "type": "${InteractionTypes.VIEW_SUBMISSION}",
+        "token": "$token",
+        "api_app_id": "$appId",
+        "trigger_id": "trigger_view_submission_789",
+        "is_enterprise_install": false,
+        "team": {"id": "$teamId", "domain": "$teamDomain"},
+        "user": {"id": "$userId", "username": "$userName", "name": "$userName", "team_id": "$teamId"},
+        "view": {
+            "id": "V_ROUTING_123",
+            "type": "modal",
+            "callback_id": "$callbackId",
+            "private_metadata": "$privateMetadata",
+            "state": { "values": $stateValues }
+        }
+    }
+    """.trimIndent()
+
 // ============ Full Payload Builder ============
 
 fun createBlockActionPayloadJson(
     idempotencyKey: UUID = UUID.randomUUID(),
-    commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_FORM,
+    commandDetailType: CommandDetailType = CommandDetailType.APPROVAL_REQUEST,
     isEphemeral: Boolean = false,
     buttonType: ButtonType = ButtonType.PRIMARY,
     buttonValue: String? = null,
@@ -104,8 +271,8 @@ fun createBlockActionPayloadJson(
     channelName: String = TEST_CHANNEL_NAME,
     botId: String = TEST_BOT_ID,
 ): String {
-    val resolvedButtonValue = buttonValue ?: "$idempotencyKey, $commandDetailType"
-    val resolvedMessageText = messageText ?: "$idempotencyKey, $commandDetailType"
+    val resolvedButtonValue = buttonValue ?: "$idempotencyKey, ${commandDetailType.name}"
+    val resolvedMessageText = messageText ?: "$idempotencyKey, ${commandDetailType.name}"
     val resolvedActions =
         actions ?: buttonActionJson(buttonType = buttonType, value = resolvedButtonValue)
 
@@ -125,7 +292,7 @@ fun createBlockActionPayloadJson(
 
     return """
         {
-            "type": "block_actions",
+            "type": "${InteractionTypes.BLOCK_ACTIONS}",
             "token": "$token",
             "trigger_id": "trigger_123",
             "api_app_id": "$appId",

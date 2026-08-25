@@ -1,15 +1,34 @@
 package dev.notypie.domain.command
 
 import dev.notypie.domain.TEST_APP_ID
-import dev.notypie.domain.TEST_BASE_URL
 import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_CHANNEL_NAME
+import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
+import dev.notypie.domain.TEST_USER_NAME
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
+import dev.notypie.domain.command.entity.event.AgentConversePayload
+import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
+import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
+import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
+import dev.notypie.domain.command.entity.event.CveLatestPayload
+import dev.notypie.domain.command.entity.event.CveLatestRequestEvent
+import dev.notypie.domain.command.entity.event.CveOpsAction
+import dev.notypie.domain.command.entity.event.CveOpsPayload
+import dev.notypie.domain.command.entity.event.CveOpsRequestEvent
+import dev.notypie.domain.command.entity.event.CveSubscriptionAction
+import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
+import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
+import dev.notypie.domain.command.entity.event.RoleManageAction
+import dev.notypie.domain.command.entity.event.RoleManagePayload
+import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
+import java.time.DayOfWeek
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 fun createCommandBasicInfo(
@@ -26,75 +45,140 @@ fun createCommandBasicInfo(
     idempotencyKey = idempotencyKey,
 )
 
-fun createPostEventPayloadContents(
-    commandDetailType: CommandDetailType,
-    targetUserId: String? = null,
-    appId: String = TEST_APP_ID,
-    publisherId: String = TEST_USER_ID,
-    channel: String = TEST_CHANNEL_ID,
+fun createCreateStandupRoutineEvent(
     idempotencyKey: UUID = UUID.randomUUID(),
-    body: Map<String, Any> = mapOf(),
-) = PostEventPayloadContents(
-    apiAppId = appId,
-    commandDetailType = commandDetailType,
-    idempotencyKey = idempotencyKey,
-    publisherId = publisherId,
-    channel = channel,
-    eventId = UUID.randomUUID(),
-    messageType = toMessageTypeByTargetUser(targetUserId = targetUserId),
-    replaceOriginal = false,
-    body = body,
-)
-
-fun createActionEventPayloadContents(
-    commandDetailType: CommandDetailType,
-    body: String = "",
-    appId: String = TEST_APP_ID,
-    publisherId: String = TEST_USER_ID,
-    channel: String = TEST_CHANNEL_ID,
-    idempotencyKey: UUID = UUID.randomUUID(),
-    responseUrl: String = TEST_BASE_URL,
-) = ActionEventPayloadContents(
-    eventId = UUID.randomUUID(),
-    apiAppId = appId,
-    publisherId = publisherId,
-    channel = channel,
-    idempotencyKey = idempotencyKey,
-    commandDetailType = commandDetailType,
-    body = body,
-    responseUrl = responseUrl,
-)
-
-fun createSendSlackMessageEvent(
-    commandDetailType: CommandDetailType,
-    idempotencyKey: UUID,
-    isPostEventPayload: Boolean = true,
-    targetUserId: String? = null,
-    appId: String = TEST_APP_ID,
-    publisherId: String = TEST_USER_ID,
-    channel: String = TEST_CHANNEL_ID,
-) = SendSlackMessageEvent(
+    name: String = "Daily Standup",
+    creatorId: String = TEST_USER_ID,
+    commandChannel: String = TEST_CHANNEL_ID,
+    summaryChannel: String = TEST_CHANNEL_ID,
+    questions: List<String> = listOf("What did you do?", "What are you doing?"),
+    memberIds: List<String> = listOf("U_ALICE", "U_BOB"),
+    weekdays: Set<DayOfWeek> = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY),
+    triggerLocalTime: LocalTime = LocalTime.of(10, 0),
+    cutoffMinutes: Long = 120L,
+    timezone: ZoneId = ZoneId.of("Asia/Seoul"),
+    responseBasicInfo: dev.notypie.domain.command.dto.CommandBasicInfo =
+        createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = commandChannel),
+) = CreateStandupRoutineEvent(
     idempotencyKey = idempotencyKey,
     payload =
-        if (isPostEventPayload) {
-            createPostEventPayloadContents(
-                idempotencyKey = idempotencyKey,
-                appId = appId,
-                publisherId = publisherId,
-                channel = channel,
-                targetUserId = targetUserId,
-                commandDetailType = commandDetailType,
-            )
-        } else {
-            createActionEventPayloadContents(
-                idempotencyKey = idempotencyKey,
-                appId = appId,
-                publisherId = publisherId,
-                channel = channel,
-                commandDetailType = commandDetailType,
-            )
-        },
-    destination = "",
-    timestamp = System.currentTimeMillis(),
-    type = commandDetailType,
+        CreateStandupRoutinePayload(
+            name = name,
+            creatorId = creatorId,
+            commandChannel = commandChannel,
+            summaryChannel = summaryChannel,
+            questions = questions,
+            memberIds = memberIds,
+            weekdays = weekdays,
+            triggerLocalTime = triggerLocalTime,
+            cutoffMinutes = cutoffMinutes,
+            timezone = timezone,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.STANDUP_SETUP_SUBMIT,
+)
+
+fun createAgentConverseRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    prompt: String = "What meetings do I have today?",
+    threadId: String? = TEST_MESSAGE_TS,
+    requesterName: String = TEST_USER_NAME,
+    channelName: String = TEST_CHANNEL_NAME,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = AgentConverseRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        AgentConversePayload(
+            prompt = prompt,
+            threadId = threadId,
+            requesterName = requesterName,
+            channelName = channelName,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.AGENT_CONVERSE,
+)
+
+fun createRoleManageRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: RoleManageAction = RoleManageAction.GRANT,
+    targetUserId: String? = TEST_USER_ID,
+    role: UserRole? = UserRole.DEVELOPER,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = RoleManageRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        RoleManagePayload(
+            action = action,
+            targetUserId = targetUserId,
+            role = role,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.SIMPLE_TEXT,
+)
+
+fun createCveSubscriptionRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: CveSubscriptionAction = CveSubscriptionAction.SUBSCRIBE,
+    userId: String = TEST_USER_ID,
+    topicKeys: List<String> = listOf("cve-java"),
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+    type: CommandDetailType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
+) = CveSubscriptionRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CveSubscriptionPayload(
+            action = action,
+            userId = userId,
+            topicKeys = topicKeys,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = type,
+)
+
+fun createCveOpsRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: CveOpsAction = CveOpsAction.LIST_TOPICS,
+    topicKey: String? = null,
+    targetEventId: Long? = null,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = CveOpsRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CveOpsPayload(
+            action = action,
+            topicKey = topicKey,
+            targetEventId = targetEventId,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.SIMPLE_TEXT,
+)
+
+fun createCveLatestRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    userId: String = TEST_USER_ID,
+    topicKey: String? = null,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = CveLatestRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CveLatestPayload(
+            userId = userId,
+            topicKey = topicKey,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.CVE_LATEST,
+)
+
+fun createApprovalContents(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    commandDetailType: CommandDetailType = CommandDetailType.SIMPLE_TEXT,
+    reason: String = "Test reason",
+    publisherId: String = TEST_USER_ID,
+    headLineText: String? = null,
+) = ApprovalContents(
+    idempotencyKey = idempotencyKey,
+    commandDetailType = commandDetailType,
+    reason = reason,
+    publisherId = publisherId,
+    headLineText = headLineText ?: "Approval Requests",
 )

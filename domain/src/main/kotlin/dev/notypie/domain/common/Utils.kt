@@ -1,9 +1,9 @@
 package dev.notypie.domain.common
 
-import dev.notypie.domain.command.exceptions.ValidationException
-import dev.notypie.domain.command.exceptions.ValidationExceptionWithName
 import dev.notypie.domain.common.error.CommonErrorCode
 import dev.notypie.domain.common.error.ExceptionArgument
+import dev.notypie.domain.common.error.ValidationException
+import dev.notypie.domain.common.error.ValidationExceptionWithName
 import java.time.LocalDateTime
 
 class ValidationBuilder {
@@ -225,9 +225,6 @@ class ValidationBuilder {
         return this
     }
 
-    /**
-     * Validates that the integer field is positive (greater than zero).
-     */
     fun Field<Int>.shouldBePositive(): Field<Int> {
         if (value <= 0) {
             errors.add(
@@ -445,11 +442,9 @@ class ValidationBuilder {
     }
 }
 
-// Entrypoint
 fun validate(className: String = "", block: ValidationBuilder.() -> Unit) {
     ValidationBuilder().apply(block).validate(className = className)
 }
 
-// Entrypoint
-fun validateAndReturn(className: String = "", block: ValidationBuilder.() -> Unit): List<ExceptionArgument> =
+internal fun validateAndReturn(className: String = "", block: ValidationBuilder.() -> Unit): List<ExceptionArgument> =
     ValidationBuilder().apply(block).getErrors()

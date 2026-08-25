@@ -9,8 +9,9 @@ import dev.notypie.domain.TEST_TEAM_ID
 import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.ButtonType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
@@ -27,7 +28,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         buttonType = ButtonType.PRIMARY,
                     )
 
@@ -46,7 +47,7 @@ class SlackInteractionRequestParserTest :
                 }
 
                 then("should parse command detail type from message text") {
-                    result.type shouldBe CommandDetailType.APPROVAL_FORM
+                    result.type shouldBe CommandDetailType.APPROVAL_REQUEST
                     result.idempotencyKey shouldBe idempotencyKey.toString()
                 }
 
@@ -61,7 +62,7 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         buttonType = ButtonType.DANGER,
                     )
 
@@ -81,7 +82,7 @@ class SlackInteractionRequestParserTest :
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                         actions =
                             buttonActionJsonWithoutStyle(
-                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT}",
+                                value = "$idempotencyKey, ${CommandDetailType.SIMPLE_TEXT.name}",
                             ),
                     )
 
@@ -98,17 +99,17 @@ class SlackInteractionRequestParserTest :
                 val payload =
                     createBlockActionPayloadJson(
                         idempotencyKey = idempotencyKey,
-                        commandDetailType = CommandDetailType.APPROVAL_FORM,
+                        commandDetailType = CommandDetailType.APPROVAL_REQUEST,
                         isEphemeral = true,
                         buttonType = ButtonType.PRIMARY,
-                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_FORM}",
+                        buttonValue = "$idempotencyKey, ${CommandDetailType.APPROVAL_REQUEST.name}",
                     )
 
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("should use button value for idempotency key and type") {
                     result.idempotencyKey shouldBe idempotencyKey.toString()
-                    result.type shouldBe CommandDetailType.APPROVAL_FORM
+                    result.type shouldBe CommandDetailType.APPROVAL_REQUEST
                 }
 
                 then("container should be ephemeral") {
@@ -244,6 +245,42 @@ class SlackInteractionRequestParserTest :
                 }
             }
 
+            `when`("payload contains two timepicker entries in the same block") {
+                val stateValues =
+                    """{"block_1":{""" +
+                        """"action_1":${timepickerStateJson(selectedTime = "10:00")},""" +
+                        """"action_2":${timepickerStateJson(selectedTime = "11:30")}""" +
+                        """}}"""
+                val payload = createBlockActionPayloadJson(stateValues = stateValues)
+
+                val result = parser.parseStringPayload(payload = payload)
+                val timePickers = result.states.filter { it.type == ActionElementTypes.TIME_PICKER }
+
+                then("both TIME_PICKERs are preserved in insertion order (start, end)") {
+                    timePickers.size shouldBe 2
+                    timePickers[0].selectedValue shouldBe "10:00"
+                    timePickers[1].selectedValue shouldBe "11:30"
+                }
+            }
+
+            `when`("payload contains an empty timepicker state") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = """{"type":"timepicker","selected_time":null}""",
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("TIME_PICKER state is not selected and carries an empty value") {
+                    val state = result.states.first { it.type == ActionElementTypes.TIME_PICKER }
+                    state.isSelected shouldBe false
+                    state.selectedValue shouldBe ""
+                }
+            }
+
             `when`("payload contains checkboxes state with selections") {
                 val payload =
                     createBlockActionPayloadJson(
@@ -355,10 +392,236 @@ class SlackInteractionRequestParserTest :
                         messageText = "$idempotencyKey, INVALID_TYPE",
                     )
 
-                then("should throw IllegalArgumentException") {
+                then("fails fast on the unknown routing token") {
                     shouldThrow<IllegalArgumentException> {
                         parser.parseStringPayload(payload = payload)
                     }
+                }
+            }
+
+            `when`("message text contains routing extras (3rd token meetingId)") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = "$idempotencyKey,${CommandDetailType.SIMPLE_TEXT.name},42",
+                    )
+
+                then("routingExtras should expose the meetingId token") {
+                    val result = parser.parseStringPayload(payload = payload)
+                    result.type shouldBe CommandDetailType.SIMPLE_TEXT
+                    result.routingExtras shouldBe listOf("42")
+                }
+            }
+
+            `when`("message text is only an idempotencyKey (1 token)") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = idempotencyKey.toString(),
+                    )
+
+                then("type falls back to NOTHING, no throw") {
+                    val result = parser.parseStringPayload(payload = payload)
+                    result.idempotencyKey shouldBe idempotencyKey.toString()
+                    result.type shouldBe CommandDetailType.NOTHING
+                    result.routingExtras shouldBe emptyList()
+                }
+            }
+        }
+
+        given("parseStringPayload for view_submission") {
+            `when`("a decline-reason modal submission arrives with a selected radio value") {
+                val meetingKey = UUID.randomUUID()
+                val participantUserId = "U_PARTICIPANT_A"
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        selectedReason = RejectReason.HEALTH_ISSUE.name,
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("routing type is recovered from private_metadata, not message text") {
+                    result.type shouldBe CommandDetailType.MEETING_DECLINE_REASON
+                    result.idempotencyKey shouldBe meetingKey.toString()
+                    result.routingExtras shouldBe listOf(participantUserId)
+                    result.privateMetadata shouldBe
+                        "$meetingKey,MEETING_DECLINE_REASON,$participantUserId"
+                }
+
+                then("currentAction is synthesized as APPLY_BUTTON so routing treats submission as primary") {
+                    result.currentAction.type shouldBe ActionElementTypes.APPLY_BUTTON
+                    result.currentAction.isSelected shouldBe true
+                }
+
+                then("dropdown selection is surfaced as a STATIC_SELECT state carrying the enum name") {
+                    val selection =
+                        result.states.single { it.type == ActionElementTypes.STATIC_SELECT }
+                    selection.isSelected shouldBe true
+                    selection.selectedValue shouldBe RejectReason.HEALTH_ISSUE.name
+                }
+            }
+
+            `when`("a submission arrives with no radio selection") {
+                val meetingKey = UUID.randomUUID()
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_P",
+                        selectedReason = "",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("the STATIC_SELECT state marks isSelected=false with a blank value") {
+                    val selection =
+                        result.states.single { it.type == ActionElementTypes.STATIC_SELECT }
+                    selection.isSelected shouldBe false
+                    selection.selectedValue shouldBe ""
+                }
+
+                then("routing still resolves from private_metadata") {
+                    result.type shouldBe CommandDetailType.MEETING_DECLINE_REASON
+                }
+            }
+
+            `when`("a submission carries the 5-token private_metadata (Wave 2 chat.update format)") {
+                val meetingKey = UUID.randomUUID()
+                val participantUserId = "U_WAVE2"
+                val noticeChannel = "C_NOTICE_WAVE2"
+                val noticeMessageTs = "1700000000.000400"
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = participantUserId,
+                        selectedReason = RejectReason.HEALTH_ISSUE.name,
+                        noticeChannel = noticeChannel,
+                        noticeMessageTs = noticeMessageTs,
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("routingExtras surfaces participant + channel + messageTs in order") {
+                    // DeclineReasonSubmissionContext reads by index: [0]=user, [1]=channel, [2]=ts.
+                    result.routingExtras shouldBe listOf(participantUserId, noticeChannel, noticeMessageTs)
+                    result.privateMetadata shouldBe
+                        "$meetingKey,MEETING_DECLINE_REASON,$participantUserId," +
+                        "$noticeChannel,$noticeMessageTs"
+                }
+            }
+
+            `when`("a standup answer modal submission arrives") {
+                val sessionUid = UUID.randomUUID()
+                val payload =
+                    createStandupAnswerViewSubmissionJson(
+                        sessionUid = sessionUid,
+                        userId = "U_STANDUP",
+                        responses = listOf("Finished #12", "Working on #13"),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("routing type and notice metadata are recovered from private_metadata") {
+                    result.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                    result.idempotencyKey shouldBe sessionUid.toString()
+                    result.routingExtras shouldBe listOf("U_STANDUP", "D_NOTICE", "1700000000.000500")
+                }
+
+                then("plain_text_input responses are surfaced in modal order") {
+                    val responses =
+                        result.states
+                            .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+                            .map { it.selectedValue }
+
+                    responses shouldBe listOf("Finished #12", "Working on #13")
+                }
+
+                then("each plain_text_input state carries its originating block_id") {
+                    val blockIds =
+                        result.states
+                            .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+                            .map { it.blockId }
+
+                    // StandupAnswerSubmissionContext sorts by these to keep responses[i]
+                    // aligned with routine.questions[i] even when the parser flattens
+                    // Slack's unordered view.state.values map.
+                    blockIds shouldBe listOf("standup_q_0", "standup_q_1")
+                }
+            }
+        }
+
+        given("parseStringPayload for view_submission — delivery channel recovery") {
+            `when`("a reschedule submission ferries the originating channel in private_metadata") {
+                val meetingUid = UUID.randomUUID()
+                val payload =
+                    createRoutingOnlyViewSubmissionJson(
+                        callbackId = "reschedule_meeting_modal",
+                        privateMetadata =
+                            "$meetingUid,MEETING_RESCHEDULE_SUBMIT,U_REQUESTER,C_ORIGIN_CHANNEL",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("channel.id is recovered so basicInfo routes the confirmation in-channel") {
+                    result.type shouldBe CommandDetailType.MEETING_RESCHEDULE_SUBMIT
+                    result.channel.id shouldBe "C_ORIGIN_CHANNEL"
+                }
+            }
+
+            `when`("an add-participant submission ferries the originating channel") {
+                val meetingUid = UUID.randomUUID()
+                val payload =
+                    createRoutingOnlyViewSubmissionJson(
+                        callbackId = "add_participant_modal",
+                        privateMetadata =
+                            "$meetingUid,MEETING_ADD_PARTICIPANT_SUBMIT,U_REQUESTER,C_ADD_CHANNEL",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("channel.id is recovered from routingExtras[1]") {
+                    result.type shouldBe CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT
+                    result.channel.id shouldBe "C_ADD_CHANNEL"
+                }
+            }
+
+            `when`("a decline-reason submission carries a notice channel (not a delivery channel)") {
+                val meetingKey = UUID.randomUUID()
+                val payload =
+                    createDeclineReasonViewSubmissionJson(
+                        meetingIdempotencyKey = meetingKey,
+                        participantUserId = "U_P",
+                        selectedReason = RejectReason.HEALTH_ISSUE.name,
+                        noticeChannel = "C_NOTICE",
+                        noticeMessageTs = "1700000000.000900",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("channel stays blank — notice routing is read from routingExtras, not basicInfo") {
+                    result.channel.id shouldBe ""
+                }
+            }
+        }
+
+        given("parseStringPayload for block_actions — Container.messageTs") {
+            `when`("a non-ephemeral block_actions arrives with a message_ts") {
+                val idempotencyKey = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = idempotencyKey,
+                        messageText = "$idempotencyKey,${CommandDetailType.MEETING_APPROVAL_REQUEST.name}",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("Container.messageTs carries the raw ts string so chat.update can use it later") {
+                    // Wave 2: MeetingApprovalResponseContext pulls this into OpenDeclineReasonModal
+                    // so the submission handler can chat.update the notice DM.
+                    result.container.messageTs shouldBe "1234567890.123"
                 }
             }
         }

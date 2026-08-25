@@ -1,6 +1,6 @@
 package dev.notypie.domain.command.dto
 
-data class UrlVerificationRequest(
+internal data class UrlVerificationRequest(
     val type: String,
     val channel: String,
     val token: String,

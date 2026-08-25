@@ -1,20 +1,29 @@
 package dev.notypie.domain.meet.dto
 
+import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
 
-data class MeetingListDto(
+internal data class MeetingListDto(
     val meetings: List<MeetingDto>,
 )
 
 data class MeetingDto(
     val meetingId: Long,
+    val meetingUid: UUID,
     val idempotencyKey: UUID,
     val creator: String,
     val title: String,
     val reason: String,
     val startAt: LocalDateTime,
     val endAt: LocalDateTime? = null,
-    val participantIds: List<String>,
+    val participants: List<MeetingParticipantDto>,
     val isCanceled: Boolean,
+)
+
+data class MeetingParticipantDto(
+    val userId: String,
+    val isAttending: Boolean,
+    val absentReason: RejectReason = RejectReason.ATTENDING,
+    val absentReasonDetail: String? = null,
 )

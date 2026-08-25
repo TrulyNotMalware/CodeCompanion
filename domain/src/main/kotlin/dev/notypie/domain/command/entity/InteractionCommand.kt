@@ -1,113 +1,81 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackCommandType
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
-import dev.notypie.domain.command.dto.SlackCommandData
-import dev.notypie.domain.command.dto.interactions.InteractionPayload
-import dev.notypie.domain.command.dto.mention.SlackEventCallBackRequest
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.context.SlackTextResponseContext
-import dev.notypie.domain.command.entity.event.EventPublisher
-import dev.notypie.domain.command.entity.parsers.AppMentionCommandParser
+import dev.notypie.domain.command.entity.parsers.AppMentionContextParser
 import dev.notypie.domain.command.entity.parsers.ContextParser
-import dev.notypie.domain.command.entity.parsers.InteractionCotextParser
+import dev.notypie.domain.command.entity.parsers.InteractionContextParser
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
+import dev.notypie.domain.command.exceptions.CommandErrorCode
+import dev.notypie.domain.command.exceptions.UnSupportedCommandException
+import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.MentionInvocation
+import dev.notypie.domain.common.error.exceptionDetails
 import java.util.UUID
 
 class InteractionCommand(
     val appName: String,
     idempotencyKey: UUID,
-    commandData: SlackCommandData,
-    slackEventBuilder: SlackEventBuilder,
-    eventPublisher: EventPublisher,
+    commandData: InboundCommand,
+    /** Role of the actor issuing the command; mention routing denies commands it does not grant. */
+    private val actorRole: UserRole,
 ) : Command<SubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
-        slackEventBuilder = slackEventBuilder,
-        eventPublisher = eventPublisher,
     ) {
-    companion object {
-        const val BASE_URL: String = "https://slack.com/api/"
-    }
-
-    private val commandParser: ContextParser = buildParser(commandData)
+    // Lazy so that UnSupportedCommandException thrown here is captured by Command.handleEvent()
+    // rather than breaking Command construction.
+    private val commandParser: ContextParser by lazy { buildParser(commandData) }
 
     override fun parseContext(subCommand: SubCommand<SubCommandDefinition>): CommandContext<out SubCommandDefinition> =
         commandParser.parseContext(idempotencyKey = idempotencyKey)
 
     override fun findSubCommandDefinition(): SubCommandDefinition {
-        val payload =
-            commandData.body as? InteractionPayload
+        val interaction =
+            commandData.payload as? InboundInteraction
                 ?: return NoSubCommands()
 
-        return when (payload.type) {
-            CommandDetailType.MEETING_APPROVAL_NOTICE_FORM,
-            CommandDetailType.REQUEST_MEETING_FORM,
+        return when (interaction.detailType) {
+            CommandDetailType.MEETING_APPROVAL_REQUEST,
+            CommandDetailType.MEETING_CREATE_REQUEST,
             -> MeetingSubCommandDefinition.NONE
 
             else -> NoSubCommands()
         }
     }
 
-    private fun buildParser(commandData: SlackCommandData): ContextParser =
-        when (commandData.slackCommandType) {
-            // Removal challenge requests.
-            SlackCommandType.EVENT_CALLBACK -> handleEventCallBackContext(commandData = commandData)
-
-            SlackCommandType.INTERACTION_RESPONSE -> handleInteractions(commandData = commandData)
-
-            else -> TODO()
-        }
-
-    private fun handleEventCallBackContext(commandData: SlackCommandData): ContextParser {
-        val eventCallBack = commandData.body as SlackEventCallBackRequest
-        val type = SlackCommandType.valueOf(eventCallBack.event.type.uppercase())
-        return when (type) {
-            SlackCommandType.APP_MENTION -> {
-                AppMentionCommandParser(
-                    slackCommandData = commandData,
-                    baseUrl = BASE_URL,
-                    slackEventBuilder = slackEventBuilder,
-                    commandId = commandId,
+    private fun buildParser(commandData: InboundCommand): ContextParser =
+        when (val payload = commandData.payload) {
+            is MentionInvocation ->
+                AppMentionContextParser(
+                    commandData = commandData,
+                    mention = payload,
                     idempotencyKey = idempotencyKey,
-                    events = events,
+                    intents = intents,
+                    actorRole = actorRole,
                 )
-            }
 
-            else -> {
-                TODO()
-            }
-        }
-    }
-
-    private fun handleInteractions(commandData: SlackCommandData): ContextParser {
-        val interactionPayload = commandData.body as InteractionPayload
-        val type = interactionPayload.type
-        return InteractionCotextParser(
-            slackCommandData = commandData,
-            baseUrl = BASE_URL,
-            commandId = commandId,
-            idempotencyKey = idempotencyKey,
-            slackEventBuilder = slackEventBuilder,
-            events = events,
-        )
-//        return when(type){
-//            CommandDetailType.APPROVAL_FORM
-//        }
-    }
-
-    private fun handleNotSupportedCommand(): SlackTextResponseContext =
-        SlackTextResponseContext(
-            requestHeaders = commandData.rawHeader,
-            slackEventBuilder = slackEventBuilder,
-            text = "Command Not supported.",
-            commandBasicInfo =
-                commandData.extractBasicInfo(
+            is InboundInteraction ->
+                InteractionContextParser(
+                    commandData = commandData,
+                    interaction = payload,
                     idempotencyKey = idempotencyKey,
-                ),
-            events = events,
-        )
+                    intents = intents,
+                )
+
+            else ->
+                throw UnSupportedCommandException(
+                    commandType = commandData.kind.toString(),
+                    errorCode = CommandErrorCode.UNSUPPORTED_COMMAND_TYPE,
+                    details =
+                        exceptionDetails {
+                            "kind" value commandData.kind.toString() because
+                                "Only MENTION and INTERACTION payloads are supported by InteractionCommand"
+                        },
+                )
+        }
 }

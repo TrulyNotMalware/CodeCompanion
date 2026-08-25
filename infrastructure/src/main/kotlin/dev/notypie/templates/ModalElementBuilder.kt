@@ -3,11 +3,11 @@ package dev.notypie.templates
 import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*
 import com.slack.api.model.block.element.*
-import dev.notypie.domain.command.dto.interactions.ActionElementTypes
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
 import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
+import dev.notypie.impl.command.slack.ActionElementTypes
+import dev.notypie.impl.command.slack.States
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractiveObject
 import java.time.LocalDate
@@ -61,6 +61,78 @@ class ModalElementBuilder {
                     interactionPayload = interactionPayload,
                     style = ButtonType.DANGER,
                 ),
+        )
+
+    /**
+     * Danger-style button used to cancel a meeting from the inline `/meetup list` row.
+     * The [interactionPayload] is the comma-tokenized routing string the parser will
+     * read back as `idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`.
+     * `actionId` is set explicitly so the click can be tied back to a deterministic id
+     * (existing approval/reject buttons rely on payload parsing alone, but this one
+     * gets a stable id for clarity in client-side debugging).
+     */
+    fun cancelMeetingButtonElement(
+        buttonName: String,
+        interactionPayload: String,
+        actionId: String = MeetingActionIds.CANCEL_ACTION_ID,
+    ): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.REJECT_BUTTON),
+            element =
+                ButtonElement
+                    .builder()
+                    .text(plainTextObject(text = buttonName))
+                    .actionId(actionId)
+                    .value(interactionPayload)
+                    .style(ButtonType.DANGER.toString().lowercase())
+                    .build(),
+        )
+
+    /**
+     * Primary-style button used to reschedule a meeting from the inline `/meetup list` row.
+     * The [interactionPayload] is the comma-tokenized routing string the parser will read back
+     * as `idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`. PRIMARY style makes
+     * the parser classify the click as an [ActionElementTypes.APPLY_BUTTON] (a primary action),
+     * distinct from the danger-styled Cancel button next to it. `actionId` is set explicitly so
+     * the click maps to a deterministic id.
+     */
+    fun rescheduleMeetingButtonElement(
+        buttonName: String,
+        interactionPayload: String,
+        actionId: String = MeetingActionIds.RESCHEDULE_ACTION_ID,
+    ): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.APPLY_BUTTON),
+            element =
+                ButtonElement
+                    .builder()
+                    .text(plainTextObject(text = buttonName))
+                    .actionId(actionId)
+                    .value(interactionPayload)
+                    .style(ButtonType.PRIMARY.toString().lowercase())
+                    .build(),
+        )
+
+    /**
+     * Neutral-style button used to add participants to a meeting from the inline `/meetup list` row.
+     * Routing is driven entirely by the comma-tokenized [interactionPayload] value
+     * (`idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`), so the default style here
+     * only distinguishes it visually from the PRIMARY Reschedule and DANGER Cancel buttons beside it.
+     */
+    fun addParticipantButtonElement(
+        buttonName: String,
+        interactionPayload: String,
+        actionId: String = MeetingActionIds.ADD_PARTICIPANT_ACTION_ID,
+    ): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.APPLY_BUTTON),
+            element =
+                ButtonElement
+                    .builder()
+                    .text(plainTextObject(text = buttonName))
+                    .actionId(actionId)
+                    .value(interactionPayload)
+                    .build(),
         )
 
     private fun buttonElement(
@@ -125,16 +197,19 @@ class ModalElementBuilder {
             .multiline(multiline)
             .build()
 
-    fun timePickerElement(placeholderText: String = "Select time") =
-        toInteractiveObject(
-            state = States(type = ActionElementTypes.TIME_PICKER),
-            element =
-                TimePickerElement
-                    .builder()
-                    .initialTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")))
-                    .placeholder(plainTextObject(text = placeholderText))
-                    .build(),
-        )
+    fun timePickerElement(
+        placeholderText: String = "Select time",
+        initialTime: String? = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")),
+    ) = toInteractiveObject(
+        state = States(type = ActionElementTypes.TIME_PICKER),
+        element =
+            TimePickerElement
+                .builder()
+                .apply {
+                    if (initialTime != null) initialTime(initialTime)
+                    placeholder(plainTextObject(text = placeholderText))
+                }.build(),
+    )
 
     fun datePickerElement(placeholderText: String = "Select a date") =
         toInteractiveObject(

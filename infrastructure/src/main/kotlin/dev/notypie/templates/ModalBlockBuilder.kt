@@ -2,11 +2,13 @@ package dev.notypie.templates
 
 import com.slack.api.model.block.*
 import com.slack.api.model.block.Blocks.*
-import dev.notypie.domain.command.dto.interactions.States
 import dev.notypie.domain.command.dto.modals.*
+import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.slack.States
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.InteractiveObject
+import java.util.UUID
 
 class ModalBlockBuilder(
     private val modalElementBuilder: ModalElementBuilder = ModalElementBuilder(),
@@ -56,15 +58,18 @@ class ModalBlockBuilder(
      * @return An `ActionsBlock` object representing the approval block.
      */
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
+        // Slack button value routing string: idempotencyKey + detailType, tokenized the same way
+        // the interaction parser reads it back. This transport concern lives here, not in the domain.
+        val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType.name}"
         val approvalButton: InteractiveObject =
             modalElementBuilder.approvalButtonElement(
                 approvalButtonName = approvalContents.approvalButtonName,
-                interactionPayload = approvalContents.interactionValue,
+                interactionPayload = interactionPayload,
             )
         val rejectButton: InteractiveObject =
             modalElementBuilder.rejectButtonElement(
                 rejectButtonName = approvalContents.rejectButtonName,
-                interactionPayload = approvalContents.interactionValue,
+                interactionPayload = interactionPayload,
             )
 
         val layout =
@@ -77,6 +82,75 @@ class ModalBlockBuilder(
                 )
             }
         return toInteractionLayout(approvalButton.state, rejectButton.state, layout = layout)
+    }
+
+    /**
+     * Builds a one-button actions block for the inline Cancel control on `/meetup list`.
+     * The button's `value` follows the standard routing format the interaction parser already
+     * reads — `<listIdempotencyKey>,CANCEL_MEETING,<meetingUid>` — so click handling reuses the
+     * existing tokenization path without introducing a new metadata format.
+     */
+    fun cancelMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
+        val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
+        val cancelButton: InteractiveObject =
+            modalElementBuilder.cancelMeetingButtonElement(
+                buttonName = "Cancel",
+                interactionPayload = routingValue,
+            )
+        val layout =
+            actions {
+                it.blockId(MeetingActionIds.CANCEL_BLOCK_ID)
+                it.elements(listOf(cancelButton.element))
+            }
+        return toInteractionLayout(cancelButton.state, layout = layout)
+    }
+
+    /**
+     * Builds a single actions block carrying both the Reschedule and Cancel controls for a
+     * host-owned `/meetup list` row. Co-locating the two buttons in one block keeps the worst-case
+     * block budget at `3N+2` (the same as a Cancel-only row), so the 50-block Slack cap math in
+     * [ModalTemplateBuilder] is unaffected. Each button's `value` follows the standard routing
+     * format the interaction parser already reads — `<listIdempotencyKey>,<detailType>,<meetingUid>`
+     * — with Reschedule (PRIMARY) routed to `MEETING_RESCHEDULE_REQUEST` and Cancel (DANGER) to
+     * `CANCEL_MEETING`.
+     */
+    fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
+        fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.name},$meetingUid"
+        val rescheduleRoutingValue = routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)
+        val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
+        val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)
+        // A list can render several host rows in one message, so block_id and action_id must be
+        // unique per meeting — Slack rejects the whole message (invalid_blocks) when any collide.
+        // Routing reads the button value + style, not these ids, so suffixing with the uid is safe.
+        val rescheduleButton: InteractiveObject =
+            modalElementBuilder.rescheduleMeetingButtonElement(
+                buttonName = "Reschedule",
+                interactionPayload = rescheduleRoutingValue,
+                actionId = "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid",
+            )
+        val addParticipantButton: InteractiveObject =
+            modalElementBuilder.addParticipantButtonElement(
+                buttonName = "Add participant",
+                interactionPayload = addParticipantRoutingValue,
+                actionId = "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid",
+            )
+        val cancelButton: InteractiveObject =
+            modalElementBuilder.cancelMeetingButtonElement(
+                buttonName = "Cancel",
+                interactionPayload = cancelRoutingValue,
+                actionId = "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid",
+            )
+        val layout =
+            actions {
+                it.blockId("${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid")
+                it.elements(listOf(rescheduleButton.element, addParticipantButton.element, cancelButton.element))
+            }
+        return toInteractionLayout(
+            rescheduleButton.state,
+            addParticipantButton.state,
+            cancelButton.state,
+            layout = layout,
+        )
     }
 
     /**
@@ -201,19 +275,27 @@ class ModalBlockBuilder(
 
     fun selectDateTimeScheduleBlock(): InteractionLayoutBlock {
         val datePickerElement = modalElementBuilder.datePickerElement()
-        val timePickerElement = modalElementBuilder.timePickerElement()
+        val startTimePickerElement =
+            modalElementBuilder.timePickerElement(placeholderText = "Start time")
+        val endTimePickerElement =
+            modalElementBuilder.timePickerElement(
+                placeholderText = "End time (optional)",
+                initialTime = null,
+            )
         val layout =
             actions {
                 it.elements(
                     listOf(
                         datePickerElement.element,
-                        timePickerElement.element,
+                        startTimePickerElement.element,
+                        endTimePickerElement.element,
                     ),
                 )
             }
         return toInteractionLayout(
             datePickerElement.state,
-            timePickerElement.state,
+            startTimePickerElement.state,
+            endTimePickerElement.state,
             layout = layout,
         )
     }

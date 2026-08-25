@@ -5,40 +5,46 @@ import com.slack.api.app_backend.interactive_components.response.ActionResponse
 import com.slack.api.methods.RequestFormBuilder
 import com.slack.api.methods.request.chat.ChatPostEphemeralRequest
 import com.slack.api.methods.request.chat.ChatPostMessageRequest
+import com.slack.api.methods.request.chat.ChatUpdateRequest
 import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.ActionEventPayloadContents
-import dev.notypie.domain.command.entity.event.MessageType
-import dev.notypie.domain.command.entity.event.PostEventPayloadContents
-import dev.notypie.domain.command.entity.event.SendSlackMessageEvent
-import dev.notypie.domain.command.entity.event.SlackEventPayload
-import dev.notypie.domain.command.toMessageTypeByTargetUser
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.standup.dto.RoutineMemberDto
+import dev.notypie.domain.standup.dto.StandupAnswerDto
+import dev.notypie.impl.command.event.ActionEventPayloadContents
+import dev.notypie.impl.command.event.MessageType
+import dev.notypie.impl.command.event.OpenViewEvent
+import dev.notypie.impl.command.event.OpenViewPayloadContents
+import dev.notypie.impl.command.event.PostEventPayloadContents
+import dev.notypie.impl.command.event.SendSlackMessageEvent
+import dev.notypie.impl.command.event.SlackEventPayload
+import dev.notypie.impl.command.event.toMessageTypeByTargetUser
 import dev.notypie.templates.SlackTemplateBuilder
 import dev.notypie.templates.dto.LayoutBlocks
 import okhttp3.FormBody
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 class SlackApiEventConstructor(
     private val botToken: String,
     private val templateBuilder: SlackTemplateBuilder,
-) : SlackEventBuilder {
+) {
     private val slackConfig = Slack.getInstance().config
 
-    override fun simpleTextRequest(
+    fun simpleTextRequest(
         commandDetailType: CommandDetailType,
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         simpleString: String,
-        commandType: CommandType,
+        threadTs: String? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.simpleTextResponseTemplate(
@@ -49,23 +55,21 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
+            threadTs = threadTs,
         )
     }
 
-    override fun simpleEphemeralTextRequest(
+    fun simpleEphemeralTextRequest(
         textMessage: String,
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
-        targetUserId: String?,
+        targetUserId: String? = null,
     ): SendSlackMessageEvent {
         val layout = templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
         return buildEphemeralMessage(
             commandDetailType = commandDetailType,
-            commandType = commandType,
             commandBasicInfo = commandBasicInfo,
             layout = layout,
             replaceOriginal = false,
@@ -73,12 +77,11 @@ class SlackApiEventConstructor(
         )
     }
 
-    override fun detailErrorTextRequest(
+    fun detailErrorTextRequest(
         commandDetailType: CommandDetailType,
         errorClassName: String,
         errorMessage: String,
         details: String?,
-        commandType: CommandType,
         commandBasicInfo: CommandBasicInfo,
     ): SendSlackMessageEvent {
         val errorHeaderText = "Error : $errorClassName"
@@ -91,18 +94,16 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
     }
 
-    override fun simpleTimeScheduleRequest(
+    fun simpleTimeScheduleRequest(
         commandDetailType: CommandDetailType,
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         timeScheduleInfo: TimeScheduleInfo,
-        commandType: CommandType,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.simpleScheduleNoticeTemplate(
@@ -112,18 +113,17 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
     }
 
-    override fun simpleApplyRejectRequest(
+    fun simpleApplyRejectRequest(
         commandDetailType: CommandDetailType,
         commandBasicInfo: CommandBasicInfo,
         approvalContents: ApprovalContents,
-        commandType: CommandType,
-        targetUserId: String?,
+        targetUserId: String? = null,
+        routingExtras: List<String> = emptyList(),
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.approvalTemplate(
@@ -135,21 +135,20 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
             targetUserId = targetUserId,
+            routingExtras = routingExtras,
         )
     }
 
-    override fun simpleApprovalFormRequest(
+    fun simpleApprovalFormRequest(
         commandDetailType: CommandDetailType,
         headLineText: String,
         commandBasicInfo: CommandBasicInfo,
         selectionFields: List<SelectionContents>,
-        commandType: CommandType,
-        reasonInput: TextInputContents?,
-        approvalContents: ApprovalContents?,
+        reasonInput: TextInputContents? = null,
+        approvalContents: ApprovalContents? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.requestApprovalFormTemplate(
@@ -171,17 +170,15 @@ class SlackApiEventConstructor(
         return buildMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
     }
 
-    override fun requestMeetingFormRequest(
+    fun requestMeetingFormRequest(
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
-        approvalContents: ApprovalContents?,
+        approvalContents: ApprovalContents? = null,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.requestMeetingFormTemplate(
@@ -196,33 +193,352 @@ class SlackApiEventConstructor(
         return buildEphemeralMessage(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = false,
         )
     }
 
-    override fun getMeetingListFormRequest(
+    fun getMeetingListFormRequest(
         myMeetings: List<MeetingDto>,
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
+        currentUserId: String = commandBasicInfo.publisherId,
     ): SendSlackMessageEvent {
-        TODO() // FIXME
+        val layout =
+            templateBuilder.meetingListFormTemplate(
+                meetings = myMeetings,
+                currentUserId = currentUserId,
+                listIdempotencyKey = commandBasicInfo.idempotencyKey,
+            )
+        return buildEphemeralMessage(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            layout = layout,
+            replaceOriginal = false,
+        )
     }
 
-    override fun replaceOriginalText(
+    fun openDeclineReasonModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        meetingIdempotencyKey: UUID,
+        participantUserId: String,
+        meetingTitle: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.declineReasonModalViewJson(
+                meetingTitle = meetingTitle,
+                meetingIdempotencyKey = meetingIdempotencyKey,
+                participantUserId = participantUserId,
+                noticeChannel = noticeChannel,
+                noticeMessageTs = noticeMessageTs,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                meetingIdempotencyKey = meetingIdempotencyKey,
+                participantUserId = participantUserId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openRescheduleMeetingModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+        currentStartAt: LocalDateTime,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.rescheduleMeetingModalViewJson(
+                meetingUid = meetingUid,
+                currentStartAt = currentStartAt,
+                requesterId = requesterId,
+                channel = channel,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = requesterId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openAddParticipantModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.addParticipantModalViewJson(
+                meetingUid = meetingUid,
+                requesterId = requesterId,
+                channel = channel,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = requesterId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openStandupModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        sessionUid: UUID,
+        routineName: String,
+        sessionDate: LocalDate,
+        questions: List<String>,
+        userId: String,
+        noticeChannel: String,
+        noticeMessageTs: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.standupModalViewJson(
+                routineName = routineName,
+                sessionDate = sessionDate,
+                sessionUid = sessionUid,
+                userId = userId,
+                noticeChannel = noticeChannel,
+                noticeMessageTs = noticeMessageTs,
+                questions = questions,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // Surfacing the standup-filler so the dispatcher's failure branch can target the
+                // ephemeral fallback at the right user. The field is named for the decline flow
+                // but has been generalized to "DM target user" for any modal open failure.
+                participantUserId = userId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openStandupSetupModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        creatorId: String,
+        commandChannel: String,
+    ): OpenViewEvent {
+        val viewJson =
+            templateBuilder.standupSetupModalViewJson(
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                creatorId = creatorId,
+                commandChannel = commandChannel,
+            )
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = creatorId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun openCveSubscribeModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        topics: List<TopicOption>,
+    ): OpenViewEvent =
+        openCveTopicPickerModalRequest(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            triggerId = triggerId,
+            viewJson =
+                templateBuilder.cveSubscribeModalViewJson(
+                    idempotencyKey = commandBasicInfo.idempotencyKey,
+                    topics = topics,
+                ),
+        )
+
+    fun openCveUnsubscribeModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        topics: List<TopicOption>,
+    ): OpenViewEvent =
+        openCveTopicPickerModalRequest(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            triggerId = triggerId,
+            viewJson =
+                templateBuilder.cveUnsubscribeModalViewJson(
+                    idempotencyKey = commandBasicInfo.idempotencyKey,
+                    topics = topics,
+                ),
+        )
+
+    private fun openCveTopicPickerModalRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        triggerId: String,
+        viewJson: String,
+    ): OpenViewEvent {
+        val payload =
+            OpenViewPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = commandBasicInfo.channel,
+                triggerId = triggerId,
+                viewJson = viewJson,
+                // DM target user for any modal-open failure fallback (generalized field name).
+                participantUserId = commandBasicInfo.publisherId,
+            )
+        return OpenViewEvent(
+            idempotencyKey = commandBasicInfo.idempotencyKey,
+            payload = payload,
+            type = commandDetailType,
+        )
+    }
+
+    fun standupSummaryRequest(
+        commandBasicInfo: CommandBasicInfo,
+        routineName: String,
+        sessionDate: LocalDate,
+        members: List<RoutineMemberDto>,
+        answers: List<StandupAnswerDto>,
+        questions: List<String>,
+    ): SendSlackMessageEvent {
+        val layout =
+            templateBuilder.standupSummaryTemplate(
+                routineName = routineName,
+                sessionDate = sessionDate,
+                members = members,
+                answers = answers,
+                questions = questions,
+            )
+        return buildMessage(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = CommandDetailType.STANDUP_SUMMARY,
+            layout = layout,
+            replaceOriginal = false,
+        )
+    }
+
+    /**
+     * Builds a `chat.update` request that rewrites the notice DM with a plain markdown body.
+     * Routed through the outbox like any other [PostEventPayloadContents] — not latency-bound
+     * (no trigger_id involved). The dispatcher branches on [MessageType.UPDATE_MESSAGE] to
+     * call `chat.update` instead of `chat.postMessage`.
+     */
+    fun updateNoticeMessageRequest(
+        commandBasicInfo: CommandBasicInfo,
+        commandDetailType: CommandDetailType,
+        channel: String,
+        messageTs: String,
+        markdownText: String,
+    ): SendSlackMessageEvent {
+        val layout = templateBuilder.onlyTextTemplate(message = markdownText, isMarkDown = true)
+        val body =
+            extractBodyData(
+                chatUpdateRequest =
+                    chatUpdateBuilder(
+                        channel = channel,
+                        ts = messageTs,
+                        blocks = layout.template,
+                        fallbackText = markdownText,
+                    ),
+            )
+        val payload =
+            PostEventPayloadContents(
+                eventId = UUID.randomUUID(),
+                apiAppId = commandBasicInfo.appId,
+                messageType = MessageType.UPDATE_MESSAGE,
+                commandDetailType = commandDetailType,
+                idempotencyKey = commandBasicInfo.idempotencyKey,
+                publisherId = commandBasicInfo.publisherId,
+                channel = channel,
+                replaceOriginal = false,
+                body = body,
+            )
+        return payload.toSlackMessageEvent(
+            commandBasicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+        )
+    }
+
+    fun replaceOriginalText(
         markdownText: String,
         responseUrl: String,
         commandBasicInfo: CommandBasicInfo,
-        commandType: CommandType,
         commandDetailType: CommandDetailType,
     ): SendSlackMessageEvent {
         val layout = templateBuilder.onlyTextTemplate(message = markdownText, isMarkDown = true)
         return buildActionResponse(
             commandBasicInfo = commandBasicInfo,
             commandDetailType = commandDetailType,
-            commandType = commandType,
             layout = layout,
             replaceOriginal = true,
             responseUrl = responseUrl,
@@ -232,10 +548,11 @@ class SlackApiEventConstructor(
     private fun buildMessage(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
-        commandType: CommandType,
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         targetUserId: String? = null,
+        routingExtras: List<String> = emptyList(),
+        threadTs: String? = null,
     ): SendSlackMessageEvent {
         val messageType = toMessageTypeByTargetUser(targetUserId = targetUserId)
         val payload =
@@ -252,6 +569,8 @@ class SlackApiEventConstructor(
                                 idempotencyKey = commandBasicInfo.idempotencyKey,
                                 commandDetailType = commandDetailType,
                                 targetUserId = targetUserId,
+                                routingExtras = routingExtras,
+                                threadTs = threadTs,
                             ),
                     ),
                 messageType = messageType,
@@ -265,7 +584,6 @@ class SlackApiEventConstructor(
     private fun buildEphemeralMessage(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
-        commandType: CommandType,
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         targetUserId: String? = null,
@@ -279,8 +597,10 @@ class SlackApiEventConstructor(
                     extractBodyData(
                         chatPostEphemeralRequest =
                             chatPostEphemeralBuilder(
-                                channel =
-                                    targetUserId ?: commandBasicInfo.channel,
+                                // chat.postEphemeral needs the *channel* the message lives in, with
+                                // `user` controlling who sees it. Putting a user id in `channel` makes
+                                // Slack route the ephemeral into that user's DM instead of the channel.
+                                channel = commandBasicInfo.channel,
                                 blocks = layout.template,
                                 idempotencyKey = commandBasicInfo.idempotencyKey,
                                 commandDetailType = commandDetailType,
@@ -298,7 +618,6 @@ class SlackApiEventConstructor(
     private fun buildActionResponse(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
-        commandType: CommandType,
         layout: LayoutBlocks,
         replaceOriginal: Boolean,
         responseUrl: String,
@@ -339,6 +658,9 @@ class SlackApiEventConstructor(
 
     private fun extractBodyData(chatPostMessageRequest: ChatPostMessageRequest) =
         toMap(formBody = RequestFormBuilder.toForm(chatPostMessageRequest).build())
+
+    private fun extractBodyData(chatUpdateRequest: ChatUpdateRequest) =
+        toMap(formBody = RequestFormBuilder.toForm(chatUpdateRequest).build())
 
     private fun toSnakeCaseJsonString(actionResponse: ActionResponse) =
         GsonFactory.createSnakeCase(slackConfig).toJson(actionResponse)
@@ -389,13 +711,35 @@ class SlackApiEventConstructor(
         channel: String,
         blocks: List<LayoutBlock>,
         targetUserId: String? = null,
+        routingExtras: List<String> = emptyList(),
+        threadTs: String? = null,
     ) = ChatPostMessageRequest
         .builder()
         .channel(targetUserId ?: channel)
-        .text("$idempotencyKey,$commandDetailType")
+        .text(buildRoutingText(idempotencyKey, commandDetailType, routingExtras))
         .token(botToken)
         .blocks(blocks)
+        .threadTs(threadTs)
         .build()
+
+    /**
+     * Builds the comma-separated routing text embedded in `message.text`. The parser mirrors
+     * this format by splitting on `,` — every extra must therefore be URL-encoded so that
+     * values with commas (meeting titles typed by users) don't collide with delimiters.
+     */
+    private fun buildRoutingText(
+        idempotencyKey: UUID,
+        commandDetailType: CommandDetailType,
+        routingExtras: List<String>,
+    ): String {
+        val prefix = "$idempotencyKey,${commandDetailType.name}"
+        if (routingExtras.isEmpty()) return prefix
+        val encoded =
+            routingExtras.joinToString(",") {
+                java.net.URLEncoder.encode(it, java.nio.charset.StandardCharsets.UTF_8)
+            }
+        return "$prefix,$encoded"
+    }
 
     // FIXME Ephemeral message cannot include any texts with blocks field
     private fun chatPostEphemeralBuilder(
@@ -407,9 +751,24 @@ class SlackApiEventConstructor(
     ) = ChatPostEphemeralRequest
         .builder()
         .channel(channel)
-        .text("$idempotencyKey, $commandDetailType")
+        .text("$idempotencyKey, ${commandDetailType.name}")
         .token(botToken)
         .blocks(blocks)
         .user(userId)
+        .build()
+
+    // https://api.slack.com/methods/chat.update — requires the original message's channel + ts.
+    private fun chatUpdateBuilder(
+        channel: String,
+        ts: String,
+        blocks: List<LayoutBlock>,
+        fallbackText: String,
+    ) = ChatUpdateRequest
+        .builder()
+        .channel(channel)
+        .ts(ts)
+        .text(fallbackText)
+        .token(botToken)
+        .blocks(blocks)
         .build()
 }

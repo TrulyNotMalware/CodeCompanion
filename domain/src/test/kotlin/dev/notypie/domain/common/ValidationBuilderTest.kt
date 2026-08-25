@@ -1,6 +1,6 @@
 package dev.notypie.domain.common
 
-import dev.notypie.domain.command.exceptions.ValidationException
+import dev.notypie.domain.common.error.ValidationException
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec

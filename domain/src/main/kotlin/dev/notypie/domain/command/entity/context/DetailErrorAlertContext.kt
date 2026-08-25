@@ -1,30 +1,27 @@
 package dev.notypie.domain.command.entity.context
 
-import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SlackEventBuilder
 import dev.notypie.domain.command.SubCommand
-import dev.notypie.domain.command.dto.SlackCommandData
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.event.CommandEvent
-import dev.notypie.domain.command.entity.event.EventPayload
+import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import java.util.UUID
 
 internal class DetailErrorAlertContext(
-    slackCommandData: SlackCommandData,
+    commandData: InboundCommand,
     private val targetClassName: String,
     private val errorMessage: String,
     private val details: String?,
-    events: EventQueue<CommandEvent<EventPayload>>,
-    slackEventBuilder: SlackEventBuilder,
     idempotencyKey: UUID,
+    intents: IntentQueue,
 ) : CommandContext<NoSubCommands>(
-        requestHeaders = slackCommandData.rawHeader,
-        slackEventBuilder = slackEventBuilder,
-        commandBasicInfo = slackCommandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-        events = events,
+        commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+        intents = intents,
         subCommand = SubCommand.empty(),
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
@@ -32,16 +29,21 @@ internal class DetailErrorAlertContext(
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
-        val event =
-            slackEventBuilder.detailErrorTextRequest(
-                errorClassName = targetClassName,
-                errorMessage = errorMessage,
-                details = details,
-                commandType = commandType,
-                commandBasicInfo = commandBasicInfo,
-                commandDetailType = commandDetailType,
-            )
-        addNewEvent(commandEvent = event)
-        return CommandOutput.success(payload = event.payload, commandType = commandType)
+        addOutbound(
+            OutboundMessage.ChannelMessage(
+                target = ConversationTarget(id = commandBasicInfo.channel),
+                content =
+                    MessageContent.ErrorNotice(
+                        className = targetClassName,
+                        message = errorMessage,
+                        details = details,
+                    ),
+            ),
+        )
+        return CommandOutput.success(
+            basicInfo = commandBasicInfo,
+            commandType = commandType,
+            commandDetailType = commandDetailType,
+        )
     }
 }

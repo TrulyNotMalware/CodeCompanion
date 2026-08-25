@@ -26,6 +26,10 @@ dependencies {
 
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
+
+    // Jackson — declared per-module so :domain's classpath stays Jackson-free
+    api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+    implementation("tools.jackson.module:jackson-module-kotlin")
 //    api("org.springframework.retry:spring-retry") now spring core
 
     // CDC
@@ -41,8 +45,6 @@ dependencies {
     runtimeOnly("com.h2database:h2")
     // MariaDB
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
-    // MCP Server
-    api("org.springframework.ai:spring-ai-starter-mcp-server-webmvc:1.0.1")
 
     // Test code
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")

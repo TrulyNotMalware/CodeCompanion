@@ -1,13 +1,24 @@
 package dev.notypie.application.common
 
-import dev.notypie.common.jsonMapper
+import dev.notypie.domain.command.createInteractionInboundCommand
+import dev.notypie.domain.command.createMentionInboundCommand
+import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.common.IdempotencyData
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
 data class TestIdempotencyData(
     val value: String,
+) : IdempotencyData
+
+data class NonSerializableInner(
+    val text: String,
+)
+
+data class NestedNonSerializableIdempotencyData(
+    val wrapper: NonSerializableInner,
 ) : IdempotencyData
 
 class IdempotencyCreatorTest :
@@ -91,6 +102,53 @@ class IdempotencyCreatorTest :
                     result1 shouldNotBe result2
                 }
             }
+
+            `when`("IdempotencyData contains a field whose type does NOT implement java.io.Serializable") {
+                val data =
+                    NestedNonSerializableIdempotencyData(
+                        wrapper = NonSerializableInner(text = "nested-value"),
+                    )
+                val timeMillis = 5000L
+
+                then("Jackson-based serializer should succeed without NotSerializableException") {
+                    val result1 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    val result2 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    result1 shouldBe result2
+                }
+            }
+
+            `when`("called twice with the same real InboundCommand (app_mention) in the same time window") {
+                val data = createMentionInboundCommand()
+                val timeMillis = 5000L
+
+                then("should return the same UUID — idempotency preserved (regression for seeds jitter)") {
+                    val key1 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    val key2 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    key1 shouldBe key2
+                }
+            }
+
+            `when`("called with a real InboundCommand wrapping an InboundInteraction payload") {
+                val data = createInteractionInboundCommand()
+                val timeMillis = 5000L
+
+                then("Jackson should serialize the neutral nested payload without NotSerializableException") {
+                    val key = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    key.shouldNotBeNull()
+                }
+            }
+
+            `when`("called with a slash InboundCommand whose payload nests a @JvmInline TriggerHandle") {
+                val data = createSlashInboundCommand(triggerId = "T-12345")
+                val timeMillis = 5000L
+
+                then("Jackson should serialize the value-class handle cleanly and stay idempotent") {
+                    val key1 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    val key2 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
+                    key1.shouldNotBeNull()
+                    key1 shouldBe key2
+                }
+            }
         }
 
         given("DefaultIdempotencyDataSerializer") {
@@ -121,36 +179,16 @@ class IdempotencyCreatorTest :
                     result.all { it in '0'..'9' || it in 'a'..'f' } shouldBe true
                 }
             }
-        }
 
-        given("JacksonIdempotencyDataSerializer") {
-            val serializer = JacksonIdempotencyDataSerializer(mapper = jsonMapper)
+            `when`("serializing an IdempotencyData with a non-Serializable nested field") {
+                val data =
+                    NestedNonSerializableIdempotencyData(
+                        wrapper = NonSerializableInner(text = "value"),
+                    )
 
-            `when`("serializing the same data twice") {
-                val data = TestIdempotencyData(value = "hello")
-                val result1 = serializer.serialize(data = data)
-                val result2 = serializer.serialize(data = data)
-
-                then("should produce the same hash") {
-                    result1 shouldBe result2
-                }
-            }
-
-            `when`("serializing different data") {
-                val result1 = serializer.serialize(data = TestIdempotencyData(value = "a"))
-                val result2 = serializer.serialize(data = TestIdempotencyData(value = "b"))
-
-                then("should produce different hashes") {
-                    result1 shouldNotBe result2
-                }
-            }
-
-            `when`("result format") {
-                val result = serializer.serialize(data = TestIdempotencyData(value = "test"))
-
-                then("should be a hex string (SHA-256 = 64 hex chars)") {
+                then("should serialize without throwing NotSerializableException") {
+                    val result = DefaultIdempotencyDataSerializer.serialize(data = data)
                     result.length shouldBe 64
-                    result.all { it in '0'..'9' || it in 'a'..'f' } shouldBe true
                 }
             }
         }

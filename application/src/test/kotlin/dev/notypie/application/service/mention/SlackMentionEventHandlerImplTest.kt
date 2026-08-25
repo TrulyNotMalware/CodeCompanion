@@ -1,14 +1,13 @@
 package dev.notypie.application.service.mention
 
 import dev.notypie.application.exception.AppIdNotFoundException
-import dev.notypie.application.service.history.HistoryHandler
-import dev.notypie.application.service.mention.createAppMentionPayload
+import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
+import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
-import dev.notypie.domain.command.SlackEventBuilder
-import dev.notypie.domain.command.entity.event.EventPublisher
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -18,15 +17,13 @@ import org.springframework.util.LinkedMultiValueMap
 
 class SlackMentionEventHandlerImplTest :
     BehaviorSpec({
-        val slackEventBuilder = mockk<SlackEventBuilder>()
-        val historyHandler = mockk<HistoryHandler>(relaxed = true)
-        val eventPublisher = mockk<EventPublisher>(relaxed = true)
+        val commandExecutor = mockk<CommandExecutor>(relaxed = true)
+        val commandRoleResolver = mockk<CommandRoleResolver>()
 
         val handler =
             SlackMentionEventHandlerImpl(
-                slackEventBuilder = slackEventBuilder,
-                historyHandler = historyHandler,
-                eventPublisher = eventPublisher,
+                commandExecutor = commandExecutor,
+                commandRoleResolver = commandRoleResolver,
             )
 
         val testHeaders =
@@ -46,7 +43,7 @@ class SlackMentionEventHandlerImplTest :
 
                 then("parsed command data fields should be correct") {
                     result.channel shouldBe TEST_CHANNEL_ID
-                    result.publisherId shouldBe TEST_USER_ID
+                    result.actorId shouldBe TEST_USER_ID
                     result.appToken shouldBe TEST_BOT_TOKEN
                 }
             }
@@ -58,6 +55,42 @@ class SlackMentionEventHandlerImplTest :
                     shouldThrow<AppIdNotFoundException> {
                         handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
                     }
+                }
+            }
+
+            `when`("payload type is not a known Slack event type") {
+                val payload = createAppMentionPayload(type = "not_a_real_type")
+
+                then("should throw UnsupportedSlackCommandTypeException") {
+                    val exception =
+                        shouldThrow<UnsupportedSlackCommandTypeException> {
+                            handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+                        }
+                    exception.rawCommandType shouldBe "not_a_real_type"
+                }
+            }
+
+            // Regression: a human-typed mention has no bot_id / bot_profile / app_id / channel_type
+            // in the event body; parsing must not require them.
+            `when`("payload is a human-typed mention without bot metadata") {
+                val payload = createAppMentionPayload(botId = null)
+
+                val result = handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+
+                then("parsing succeeds and carries the actor and channel") {
+                    result.channel shouldBe TEST_CHANNEL_ID
+                    result.actorId shouldBe TEST_USER_ID
+                }
+            }
+
+            `when`("payload is an app-posted mention carrying bot metadata") {
+                val payload = createAppMentionPayload(botId = "B001")
+
+                val result = handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+
+                then("parsing succeeds as before") {
+                    result.channel shouldBe TEST_CHANNEL_ID
+                    result.actorId shouldBe TEST_USER_ID
                 }
             }
 
@@ -73,7 +106,7 @@ class SlackMentionEventHandlerImplTest :
 
                 then("parsed values should reflect the custom parameters") {
                     result.channel shouldBe "C_CUSTOM"
-                    result.publisherId shouldBe "U_CUSTOM"
+                    result.actorId shouldBe "U_CUSTOM"
                 }
             }
         }

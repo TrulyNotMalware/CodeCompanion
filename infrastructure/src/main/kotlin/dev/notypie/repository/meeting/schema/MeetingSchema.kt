@@ -1,9 +1,10 @@
 package dev.notypie.repository.meeting.schema
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import dev.notypie.domain.command.dto.interactions.RejectReason
 import dev.notypie.domain.meet.dto.MeetingDto
+import dev.notypie.domain.meet.dto.MeetingParticipantDto
 import dev.notypie.domain.meet.entity.Meeting
+import dev.notypie.domain.meet.entity.RejectReason
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
@@ -16,6 +17,8 @@ class MeetingSchema(
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
     @field:Column(name = "id")
     val id: Long = 0,
+    @field:Column(name = "meeting_uid", unique = true, nullable = false, length = 36)
+    val meetingUid: UUID,
     @field:Column(name = "idempotency_key", unique = true, nullable = false)
     val idempotencyKey: UUID,
     @field:Column(name = "name", nullable = false)
@@ -51,6 +54,7 @@ class MeetingSchema(
 fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
     val meetingSchema =
         MeetingSchema(
+            meetingUid = meetingUid,
             idempotencyKey = idempotencyKey,
             startAt = startAt,
             endAt = endAt,
@@ -81,11 +85,13 @@ fun MeetingSchema.toDomainEntity() =
         title = name,
         members = participants.map { it.userId }.toSet(),
         reason = reason ?: "",
+        meetingUid = meetingUid,
     )
 
 fun MeetingSchema.toMeetingDto() =
     MeetingDto(
         meetingId = id,
+        meetingUid = meetingUid,
         idempotencyKey = idempotencyKey,
         startAt = startAt,
         endAt = endAt,
@@ -93,7 +99,15 @@ fun MeetingSchema.toMeetingDto() =
         title = name,
         creator = publisherId,
         reason = "",
-        participantIds = participants.map { it.userId },
+        participants =
+            participants.map { p ->
+                MeetingParticipantDto(
+                    userId = p.userId,
+                    isAttending = p.isAttending,
+                    absentReason = p.absentReason,
+                    absentReasonDetail = p.absentReasonDetail,
+                )
+            },
     )
 
 @Entity(name = "meeting_participants")
@@ -111,6 +125,9 @@ class ParticipantsSchema(
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "absent_reason")
     val absentReason: RejectReason = RejectReason.ATTENDING,
+    // Free-text explanation captured only when the decliner picks RejectReason.OTHER.
+    @field:Column(name = "absent_reason_detail")
+    val absentReasonDetail: String? = null,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),

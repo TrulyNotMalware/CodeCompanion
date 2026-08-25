@@ -1,0 +1,22 @@
+-- -----------------------------------------------------------------------------
+-- Meetings: add end_at column to support user-specified meeting duration
+-- -----------------------------------------------------------------------------
+-- Rationale:
+--   The /meetup modal now collects an optional end time in addition to start.
+--   The domain entity `Meeting` carries a non-null `endAt`, but the JPA schema
+--   stores it as nullable: when the user leaves the picker empty we persist
+--   NULL and the domain layer rehydrates with `startAt + 1 hour`
+--   (see MeetingSchema.toDomainEntity).
+--
+-- Behaviour:
+--   - Adds `end_at DATETIME NULL`; safe for existing rows which simply stay NULL.
+--   - No backfill: NULL is the canonical "default +1h" marker and is interpreted
+--     consistently by the domain and list-view renderer (omits the "~ end" suffix
+--     when null).
+--
+-- Apply this script BEFORE rolling out application code that reads or persists
+-- `end_at`. For dev/local with auto-ddl enabled, Hibernate applies it
+-- automatically. In prod, execute manually — schema auto-migration is disabled.
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS end_at DATETIME NULL;

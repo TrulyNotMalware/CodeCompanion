@@ -20,7 +20,9 @@ fun createAppMentionPayload(
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     eventType: String = "app_mention",
-    botId: String = "B001",
+    // A human-typed mention (the default) carries no bot metadata; pass a botId to shape the
+    // event as an app-posted message instead.
+    botId: String? = null,
 ): Map<String, Any> =
     buildMap {
         appId?.let { put("api_app_id", it) }
@@ -47,33 +49,38 @@ fun createAppMentionPayload(
         )
         put(
             "event",
-            mapOf(
-                "type" to eventType,
-                "user" to publisherId,
-                "app_id" to (appId ?: TEST_APP_ID),
-                "bot_id" to botId,
-                "ts" to 1234567890.123,
-                "team" to teamId,
-                "channel" to channel,
-                "event_ts" to 1234567890.123,
-                "channel_type" to "channel",
-                "bot_profile" to
-                    mapOf(
-                        "id" to botId,
-                        "name" to "TestBot",
-                        "deleted" to false,
-                        "updated" to 1234567890L,
-                        "app_id" to (appId ?: TEST_APP_ID),
-                        "user_id" to publisherId,
-                        "team_id" to teamId,
-                        "icons" to
-                            mapOf(
-                                "image_36" to "https://example.com/36.png",
-                                "image_48" to "https://example.com/48.png",
-                                "image_72" to "https://example.com/72.png",
-                            ),
-                    ),
-                "blocks" to emptyList<Any>(),
-            ),
+            buildMap {
+                put("type", eventType)
+                put("user", publisherId)
+                // Slack sends ts as a string on the wire; keep the fixture faithful to it.
+                put("ts", "1234567890.000123")
+                put("team", teamId)
+                put("channel", channel)
+                put("event_ts", 1234567890.123)
+                put("blocks", emptyList<Any>())
+                botId?.let {
+                    put("app_id", appId ?: TEST_APP_ID)
+                    put("bot_id", it)
+                    put("channel_type", "channel")
+                    put(
+                        "bot_profile",
+                        mapOf(
+                            "id" to it,
+                            "name" to "TestBot",
+                            "deleted" to false,
+                            "updated" to 1234567890L,
+                            "app_id" to (appId ?: TEST_APP_ID),
+                            "user_id" to publisherId,
+                            "team_id" to teamId,
+                            "icons" to
+                                mapOf(
+                                    "image_36" to "https://example.com/36.png",
+                                    "image_48" to "https://example.com/48.png",
+                                    "image_72" to "https://example.com/72.png",
+                                ),
+                        ),
+                    )
+                }
+            },
         )
     }
