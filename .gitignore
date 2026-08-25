@@ -47,7 +47,6 @@ logs
 .DS_Store
 .omc
 .claude
-AGENTS.md
 CveBotPlan.md
 *.hprof
 
