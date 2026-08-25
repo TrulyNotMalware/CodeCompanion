@@ -32,10 +32,14 @@ Both presets share: parallel + caching + configuration cache (`problems=warn`), 
   `unknown`-OS fallback, so it must stay valid on platforms nobody here tests. That is why it selects
   no GC, sets no experimental VM options, leaves `workers.max` unset, and enables
   `kotlin.daemon.useFallbackStrategy` — the opposite of the macOS/Linux presets. Do not "optimize" it.
-- **Windows never reaches the common preset automatically.** `detect_os` maps MSYS/Cygwin/MinGW to
-  `windows`, which is not `unknown`, so `apply_os_config` looks for a non-existent
-  `gradle-windows.properties` and exits 1. Either add that file or route `windows` to
-  `apply_common_config`; until then Windows users must run `./apply.sh common` explicitly.
+- **Preset selection degrades, it does not fail.** `detect_os` recognises `macos`, `linux`, `windows`,
+  and `unknown`, but only two presets exist. `apply_os_config` warns and delegates to
+  `apply_common_config` when `gradle-<os>.properties` is absent, so Windows and any future platform
+  land on the portable preset instead of exiting 1. Adding `gradle-windows.properties` overrides it
+  with no code change — that is the intended way to tune a new platform.
+- `force` is threaded through both paths: `apply_os_config "$os" "$force"` passes it to
+  `apply_common_config`, which skips `backup_existing_config` when set. Keep them consistent, or
+  `--force` starts meaning different things depending on which preset was chosen.
 - All three presets now declare `kotlin.version=2.4.0`, matching the Kotlin plugin in the root
   `build.gradle.kts`. The property is inert — no build script reads it — but keep the three files
   agreeing with the plugin so it does not drift back into a misleading second source of truth.
@@ -50,6 +54,10 @@ There is no automated test. Verify manually:
 ./gradle-config/apply.sh common   # exercises the portable preset
 ./gradlew --stop && ./gradlew build
 ```
+To exercise a platform you are not on, shim `uname` onto `PATH` (it must answer both `-s` and `-m`)
+and run `apply.sh` against it. Caveat: `gradlew` itself branches on `uname` (line ~113) and calls
+`cygpath` for MSYS/MinGW, so a Windows shim makes the script's own `verify_config` fail on a Unix
+host — that is the shim, not the preset. Verify the preset separately without the shim.
 `apply.sh` ends by running `./gradlew help` itself, so a malformed preset fails there. Also compile at
 least one module (`./gradlew :domain:compileKotlin`) — `help` does not start the Kotlin daemon, which
 is where the `kotlin.daemon.*` keys actually take effect. Confirm the configuration cache reports no

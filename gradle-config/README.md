@@ -22,10 +22,10 @@ Copy the appropriate configuration file to your project root as `gradle.properti
 - `gradle-linux.properties` → Linux distributions
 - `gradle-common.properties` → Universal compatibility
 
-> **Note:** `apply.sh` maps `uname -s` to `macos`, `linux`, `windows`, or `unknown`, but only
-> `gradle-macos.properties` and `gradle-linux.properties` exist. A Git Bash / MSYS / Cygwin host
-> resolves to `windows` and fails with "Configuration file not found" rather than falling back to the
-> common preset — run `./apply.sh common` explicitly there.
+> **Note:** you rarely need to pick manually. `apply.sh` maps `uname -s` to `macos`, `linux`,
+> `windows`, or `unknown`, and any platform without a matching `gradle-<os>.properties` — Windows via
+> Git Bash / MSYS / Cygwin included — automatically falls back to the common preset with a warning.
+> Adding a `gradle-windows.properties` here is all it takes to override that.
 
 ## Configuration Files
 
@@ -124,7 +124,7 @@ Fine-tune Kotlin compilation performance:
 |---------------------------|---|---|---|
 | macOS | gradle-macos.properties | Full Support | Optimized for M1/M2/M3 |
 | Linux                     | gradle-linux.properties | Full Support | Maximum performance |
-| Other OS                  | gradle-common.properties | Basic Support | Run `./apply.sh common` explicitly |
+| Windows / Other OS        | gradle-common.properties | Basic Support | Automatic fallback — no preset tuned for these |
 
 ---
 
@@ -152,10 +152,10 @@ OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디
 - `gradle-linux.properties` → Linux 배포판
 - `gradle-common.properties` → 범용 호환성
 
-> **참고:** `apply.sh`는 `uname -s`를 `macos`/`linux`/`windows`/`unknown`으로 매핑하지만 실제 존재하는
-> 파일은 `gradle-macos.properties`와 `gradle-linux.properties`뿐입니다. Git Bash·MSYS·Cygwin 환경은
-> `windows`로 판정되어 공통 프리셋으로 폴백하지 않고 "Configuration file not found"로 종료되므로,
-> 해당 환경에서는 `./apply.sh common`을 명시적으로 실행하세요.
+> **참고:** 대개 직접 고를 필요가 없습니다. `apply.sh`는 `uname -s`를 `macos`/`linux`/`windows`/
+> `unknown`으로 매핑하고, 대응하는 `gradle-<os>.properties`가 없는 플랫폼(Git Bash·MSYS·Cygwin의
+> Windows 포함)은 경고와 함께 공통 프리셋으로 자동 폴백합니다. `gradle-windows.properties`를 이
+> 디렉토리에 추가하면 그 파일이 우선 적용됩니다.
 
 ## 설정 파일 설명
 
@@ -253,4 +253,4 @@ Kotlin 컴파일 성능 미세 조정:
 |---|---|---|---|
 | macOS | gradle-macos.properties | 완전 지원 | M1/M2/M3 최적화 |
 | Linux | gradle-linux.properties | 완전 지원 | 최대 성능 |
-| 기타 OS | gradle-common.properties | 기본 지원 | `./apply.sh common` 명시 실행 |
+| Windows / 기타 OS | gradle-common.properties | 기본 지원 | 자동 폴백 — 전용 프리셋 없음 |
