@@ -11,6 +11,12 @@ on:
       - "infrastructure/**"
       - "*.gradle.kts"
       - "gradle/**"
+      # Documentation-only merges must never reach production. GitHub evaluates negative patterns
+      # after the positive ones above, so a PR whose entire diff is markdown (AGENTS.md, the k8s
+      # and cdc READMEs) matches nothing and the workflow never starts. Every doc file under the
+      # watched paths is .md; banner.txt is a runtime asset and Dockerfile is build input, so
+      # neither is excluded here.
+      - "!**/*.md"
 
 permissions:
   contents: read
@@ -44,6 +50,12 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: changes
         with:
+          # No '!' patterns here on purpose. With the default predicate-quantifier ('some') a
+          # negated pattern is a no-op, and 'every' would break the two-pattern gradle filter
+          # below; 'some-with-excludes' would do what we want but only exists in paths-filter v4.
+          # It is not needed: the workflow-level `paths:` gate above already guarantees this job
+          # only runs when a non-markdown file changed, so should-deploy cannot be true for a
+          # docs-only merge.
           filters: |
             app:
               - 'application/**'

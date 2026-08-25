@@ -11,6 +11,8 @@ on:
       - "infrastructure/**"
       - "*.gradle.kts"
       - "gradle/**"
+      # No test covers markdown; a docs-only push should not start a build.
+      - "!**/*.md"
 permissions:
   contents: read
 

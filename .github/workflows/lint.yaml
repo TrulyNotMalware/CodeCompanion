@@ -2,7 +2,9 @@ name: Lint Check
 on:
   push:
     branches: ["feature/*", "feat/*", "features/*"]
-    paths: ["application/**", "domain/**", "infrastructure/**", "*.gradle.kts"]
+    # ktlint has nothing to say about markdown, so docs-only pushes should not burn a CI run.
+    paths:
+      ["application/**", "domain/**", "infrastructure/**", "*.gradle.kts", "!**/*.md"]
 
 jobs:
   lint:

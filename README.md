@@ -8,6 +8,8 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Meeting Orchestration** — Request, approve/decline, cancel, and list team meetings through interactive Slack modals, with host-only authorization enforced at the repository layer.
 - **Standup Automation** — Schedule recurring standups, collect answers, and post summaries.
 - **AI Assistant** — `@bot ask <question>` runs one agent turn against a claude/codex sidecar (HTTP+SSE) and replies in a thread; mentioning again in the thread continues the same session.
+- **CVE Watch** — Watched topics are polled from external sources (NVD, GitHub Releases) on a schedule, summarized once each by the AI lane, then delivered to subscribers as an immediate DM or a daily digest. Admins manage topics in-chat with `@bot cve ...`.
+- **MCP Server** — A role-gated Model Context Protocol endpoint (`/mcp`, streamable HTTP) exposing read-only domain tools (`get_status`, `list_meetings`, `list_roles`) to the AI agent, authenticated per turn and audited to `mcp_tool_call_history`.
 - **Role-Based Access Control** — Commands are gated by per-user roles (`user` → `ai_user` → `developer` → `admin`) stored in `user_command_role`; admins manage grants in-chat via `@bot grant / revoke / roles`, and bootstrap admins come from configuration.
 - **Event-Driven Architecture** — Asynchronous processing over Kafka with a **transactional outbox** and **Debezium-driven CDC relay** for exactly-once-style, ordered delivery.
 - **Turn Auditing** — Every AI turn is persisted to `agent_turn_history` (token usage, duration, outcome) for cost tracking and debugging.
@@ -21,6 +23,7 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Messaging**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC outbox relay
 - **Persistence**: JPA / Hibernate — MariaDB (runtime), H2 (local & tests)
 - **Slack**: Slack Java SDK `1.49.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
+- **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
 - **Serialization**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
 - **Logging**: kotlin-logging `8.0.4`
 - **Testing**: Kotest `6.2.0` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
@@ -44,9 +47,12 @@ CodeCompanion/
 │
 ├── application/                 # Spring Boot bootstrap + use-case orchestration
 │   ├── controllers/             # Slack event / slash / interaction endpoints
-│   ├── service/                 # Use cases: agent, command (roles), interaction, meeting, mention, ops, relay, standup
+│   ├── service/                 # Use cases: agent, command (roles), cve, interaction, meeting, mention, ops, relay, standup
+│   │   └── cve/                 #   Collector, AI summary worker, subscription, query, notification, ops
 │   ├── socket/                  # Slack Socket Mode connector
 │   ├── security/                # Slack signature verification & retry dedup filter
+│   │   └── mcp/                 #   Scoped per-turn tokens for the MCP endpoint
+│   ├── mcp/                     # Role-gated MCP tools (McpToolGate, DomainReadTools)
 │   ├── health/                  # Outbox health indicator
 │   └── configurations/          # Beans, conditions, async/Kafka wiring
 │
@@ -56,8 +62,9 @@ CodeCompanion/
     │   ├── command/             # Slack adapter: inbound mapping, intent resolving, outbound rendering & staging
     │   │   ├── slack/           #   Slack wire DTOs & inbound mappers (payload → InboundCommand)
     │   │   └── event/           #   Slack event payloads, dispatch events, message dispatcher
+    │   ├── cve/                 # CVE feed adapters (NVD, GitHub Releases)
     │   └── retry/               # Retry support
-    ├── repository/              # JPA repositories: agent, authorization, meeting, outbox, standup
+    ├── repository/              # JPA repositories: agent, authorization, cve, mcp, meeting, outbox, standup
     └── templates/               # Slack message & modal builders
 ```
 
@@ -77,6 +84,13 @@ Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_us
 | `@bot grant @user <user\|ai_user\|developer\|admin>` | Mention | `admin` |
 | `@bot revoke @user` | Mention | `admin` |
 | `@bot roles` | Mention | `admin` |
+| `@bot cve topics` | Mention | `admin` |
+| `@bot cve topic activate\|deactivate <topic-key>` | Mention | `admin` |
+| `@bot cve retry all\|<event-id>` | Mention | `admin` |
+
+CVE subscription and query are additionally exposed as slash commands, backed by
+`/api/slash/subscribe`, `/unsubscribe`, `/subscriptions`, and `/latest` (all `user`-level). Map them to
+whatever Slack command names you prefer when configuring the Slack app.
 
 A user's role is resolved in order: `slack.app.authorization.bootstrap-admins` (config-managed admins, immutable from chat) → `user_command_role` table row → default `user`. Admins manage grants entirely in-chat via `grant` / `revoke` / `roles`; interactive components and slash commands are `user`-level surfaces, so modals keep working for everyone.
 
@@ -138,6 +152,8 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **미팅 오케스트레이션** — 상호작용 모달을 통한 미팅 요청·수락/거절·취소·조회. 리포지토리 계층에서 호스트 전용 권한을 원자적으로 강제
 - **스탠드업 자동화** — 반복 스탠드업 스케줄링, 응답 수집, 요약 게시
 - **AI 어시스턴트** — `@bot ask <질문>`이 claude/codex 사이드카(HTTP+SSE)로 에이전트 턴을 실행하고 스레드로 응답. 같은 스레드에서 재멘션하면 세션이 이어짐
+- **CVE 감시** — 등록된 토픽을 외부 소스(NVD, GitHub Releases)에서 주기적으로 수집하고, AI 레인이 이벤트당 정확히 한 번 요약한 뒤, 구독자에게 즉시 DM 또는 일일 다이제스트로 전달. 관리자는 `@bot cve ...`로 채팅에서 토픽을 관리
+- **MCP 서버** — 역할로 게이트되는 Model Context Protocol 엔드포인트(`/mcp`, streamable HTTP)로 읽기 전용 도메인 도구(`get_status`, `list_meetings`, `list_roles`)를 AI 에이전트에 노출. 턴 단위로 인증하고 `mcp_tool_call_history`에 감사 기록
 - **역할 기반 접근 제어** — 사용자별 역할(`user` → `ai_user` → `developer` → `admin`, `user_command_role` 테이블)로 명령을 게이트. 관리자는 `@bot grant / revoke / roles`로 채팅에서 직접 권한을 관리하고, 부트스트랩 관리자는 설정으로 지정
 - **이벤트 기반 아키텍처** — Kafka 비동기 처리 + **트랜잭셔널 아웃박스** + **Debezium 기반 CDC 릴레이**로 순서 보장 전달
 - **턴 감사 기록** — 모든 AI 턴을 `agent_turn_history`에 영속화(토큰 사용량·소요 시간·결과)하여 비용 추적과 디버깅에 활용
@@ -151,6 +167,7 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **메시징**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC 아웃박스 릴레이
 - **영속성**: JPA / Hibernate — MariaDB(런타임), H2(로컬·테스트)
 - **슬랙**: Slack Java SDK `1.49.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
+- **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
 - **직렬화**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
 - **로깅**: kotlin-logging `8.0.4`
 - **테스트**: Kotest `6.2.0` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
@@ -174,9 +191,12 @@ CodeCompanion/
 │
 ├── application/                 # Spring Boot 부트스트랩 + 유스케이스 오케스트레이션
 │   ├── controllers/             # 슬랙 이벤트 / 슬래시 / 상호작용 엔드포인트
-│   ├── service/                 # 유스케이스: agent, command(역할), interaction, meeting, mention, ops, relay, standup
+│   ├── service/                 # 유스케이스: agent, command(역할), cve, interaction, meeting, mention, ops, relay, standup
+│   │   └── cve/                 #   수집기, AI 요약 워커, 구독, 조회, 알림, 운영
 │   ├── socket/                  # 슬랙 Socket Mode 커넥터
 │   ├── security/                # 슬랙 서명 검증 및 재시도 중복 제거 필터
+│   │   └── mcp/                 #   MCP 엔드포인트용 턴 단위 스코프 토큰
+│   ├── mcp/                     # 역할 게이트 MCP 도구 (McpToolGate, DomainReadTools)
 │   ├── health/                  # 아웃박스 헬스 인디케이터
 │   └── configurations/          # 빈, 조건부 설정, 비동기/Kafka 와이어링
 │
@@ -186,8 +206,9 @@ CodeCompanion/
     │   ├── command/             # 슬랙 어댑터: 인바운드 매핑, 인텐트 해석, 아웃바운드 렌더링·스테이징
     │   │   ├── slack/           #   슬랙 wire DTO 및 인바운드 매퍼 (payload → InboundCommand)
     │   │   └── event/           #   슬랙 이벤트 페이로드, 디스패치 이벤트, 메시지 디스패처
+    │   ├── cve/                 # CVE 피드 어댑터 (NVD, GitHub Releases)
     │   └── retry/               # 재시도 지원
-    ├── repository/              # JPA 리포지토리: agent, authorization, meeting, outbox, standup
+    ├── repository/              # JPA 리포지토리: agent, authorization, cve, mcp, meeting, outbox, standup
     └── templates/               # 슬랙 메시지 및 모달 빌더
 ```
 
@@ -207,6 +228,13 @@ CodeCompanion/
 | `@bot grant @user <user\|ai_user\|developer\|admin>` | 멘션 | `admin` |
 | `@bot revoke @user` | 멘션 | `admin` |
 | `@bot roles` | 멘션 | `admin` |
+| `@bot cve topics` | 멘션 | `admin` |
+| `@bot cve topic activate\|deactivate <topic-key>` | 멘션 | `admin` |
+| `@bot cve retry all\|<event-id>` | 멘션 | `admin` |
+
+CVE 구독·조회는 슬래시 명령으로도 제공되며, `/api/slash/subscribe`, `/unsubscribe`,
+`/subscriptions`, `/latest` 엔드포인트가 처리합니다(모두 `user` 등급). 슬랙 앱 설정에서 원하는
+명령 이름으로 매핑하세요.
 
 역할은 다음 순서로 결정됩니다: `slack.app.authorization.bootstrap-admins`(설정으로 관리되는 관리자, 채팅에서 변경 불가) → `user_command_role` 테이블 행 → 기본값 `user`. 관리자는 `grant` / `revoke` / `roles`로 채팅에서 직접 권한을 관리합니다. 상호작용 컴포넌트와 슬래시 명령은 `user` 수준이므로 모달은 모든 사용자에게 열려 있습니다.
 

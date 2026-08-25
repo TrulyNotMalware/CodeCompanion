@@ -18,8 +18,15 @@ pipeline when a PR merges into `main`.
 
 ### Working In This Directory
 - **All three workflows are path-filtered** on `application/**`, `domain/**`, `infrastructure/**`,
-  `*.gradle.kts`, and (except lint) `gradle/**`. A new top-level source directory will be silently
-  skipped by CI until it is added to every filter.
+  `*.gradle.kts`, and (except lint) `gradle/**`, each ending with `!**/*.md` so documentation-only
+  changes never start a run — critically, so a docs-only merge never reaches production. A new
+  top-level source directory will be silently skipped by CI until it is added to every filter.
+- **Do not add `!` patterns to the `dorny/paths-filter` block** in `deploy_action.yaml`. Under the
+  action's default `predicate-quantifier: 'some'` a negated pattern is a no-op (patterns are OR-ed),
+  `'every'` would break the two-pattern `gradle` filter, and `'some-with-excludes'` — which has the
+  semantics we want — only exists in paths-filter **v4**, while the workflow pins `@v3`. The
+  workflow-level `paths:` gate already makes the job unreachable for a docs-only merge, so the
+  exclusion belongs there and only there.
 - `simple_test_action.yaml` runs **only the changed modules'** tests via `dorny/paths-filter`, and falls
   back to the full `test` task when Gradle files change. If you add a module, extend both the `filters`
   block and the `Collect test modules` script.

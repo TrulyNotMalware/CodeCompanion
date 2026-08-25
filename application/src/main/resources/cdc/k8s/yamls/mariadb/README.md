@@ -16,6 +16,19 @@ A production-ready MariaDB Master-Slave cluster optimized for Change Data Captur
 - Storage class configured
 - Namespace: `database`
 
+> ### ⚠️ Known manifest mismatches — fix before applying
+>
+> These manifests do not currently agree with each other. Both break the documented connection
+> endpoints, so patch them before `kubectl apply`:
+>
+> 1. **Headless service name.** `mariadb-sts.yaml` declares `serviceName: mariadb-headless` and
+>    `mariadb-job.yaml` resolves `mariadb-<n>.mariadb-headless.database.svc.cluster.local`, but
+>    `mariadb-svc.yaml` names the headless Service `mariadb-headless-svc`. Per-pod DNS will not
+>    resolve and the replication job hangs. Rename the Service to `mariadb-headless`.
+> 2. **Slave service namespace.** In `mariadb-svc.yaml` the `mariadb-slave` Service is declared with
+>    `namespace: mariadb` while every other object is in `database`, so
+>    `mariadb-slave.database.svc.cluster.local` does not exist. Change it to `namespace: database`.
+
 ## Configuration Before Deployment
 
 ### 1. Update Storage Class
@@ -109,8 +122,14 @@ kubectl exec -it mariadb-1 -n database -- mariadb -u root -p -e "SHOW SLAVE STAT
 - **Slaves (Read Only)**: `mariadb-slave.database.svc.cluster.local:3306`
 - **Headless Service**: `mariadb-headless.database.svc.cluster.local:3306`
 
+These are the intended endpoints. Two of them only resolve after the manifest mismatches listed under
+[Prerequisites](#prerequisites) are fixed.
+
 ### Default Credentials
 - **Replication User**: `replicator` / `replicator`
+
+Change these before any non-local use — they are placeholders, and the replication password is also
+base64-encoded in `mariadb-config.yaml`.
 
 ## Verification Commands
 
@@ -147,6 +166,19 @@ CDC(Change Data Capture)에 최적화된 프로덕션 환경용 MariaDB Master-S
 - Kubernetes 클러스터
 - 스토리지 클래스 설정
 - 네임스페이스: `database`
+
+> ### ⚠️ 매니페스트 불일치 — 적용 전 수정 필요
+>
+> 현재 매니페스트들이 서로 맞지 않습니다. 아래 두 가지 모두 문서에 적힌 접속 엔드포인트를 깨뜨리므로
+> `kubectl apply` 전에 수정하세요:
+>
+> 1. **헤드리스 서비스 이름.** `mariadb-sts.yaml`은 `serviceName: mariadb-headless`를 선언하고
+>    `mariadb-job.yaml`은 `mariadb-<n>.mariadb-headless.database.svc.cluster.local`을 조회하지만,
+>    `mariadb-svc.yaml`의 헤드리스 서비스 이름은 `mariadb-headless-svc`입니다. Pod별 DNS가 해석되지
+>    않아 복제 설정 Job이 멈춥니다. 서비스 이름을 `mariadb-headless`로 변경하세요.
+> 2. **Slave 서비스 네임스페이스.** `mariadb-svc.yaml`의 `mariadb-slave` 서비스만
+>    `namespace: mariadb`로 선언되어 있고 나머지는 모두 `database`입니다. 따라서
+>    `mariadb-slave.database.svc.cluster.local`은 존재하지 않습니다. `namespace: database`로 변경하세요.
 
 ## 배포 전 설정
 
@@ -241,8 +273,14 @@ kubectl exec -it mariadb-1 -n database -- mariadb -u root -p -e "SHOW SLAVE STAT
 - **Slave (읽기 전용)**: `mariadb-slave.database.svc.cluster.local:3306`
 - **헤드리스 서비스**: `mariadb-headless.database.svc.cluster.local:3306`
 
+위는 의도된 엔드포인트입니다. 이 중 두 개는 [사전 요구사항](#사전-요구사항)에 정리한 매니페스트
+불일치를 수정해야 실제로 해석됩니다.
+
 ### 기본 계정
 - **복제 사용자**: `replicator` / `replicator`
+
+로컬 외 용도로 쓰기 전에 반드시 변경하세요. 플레이스홀더이며, 복제 비밀번호는
+`mariadb-config.yaml`에도 base64로 인코딩되어 들어 있습니다.
 
 
 ## 검증 명령어

@@ -26,11 +26,14 @@ Both presets share: parallel + caching + configuration cache (`problems=warn`), 
   it as the fix for a shared build setting — edit the preset here and re-run `./gradle-config/apply.sh`.
 - Keep the presets **in sync where the setting is not OS-specific** (configuration cache, caching,
   incremental compilation, code style). Only memory, GC flags, and worker counts should diverge.
-- `README.md` documents a `gradle-common.properties` preset that is not currently present in this
-  directory. If you add the `common` path in `apply.sh`, add the file too — or correct the README.
+- **`gradle-common.properties` is referenced but missing.** `apply.sh` uses it in two places —
+  `apply_common_config()` for `./apply.sh common`, and the unsupported-OS fallback — but the file is
+  not checked in, so both paths fail. macOS and Linux are unaffected. Add the file rather than
+  removing the code paths, since the fallback is the only thing covering a non-macOS/Linux machine.
 - The presets pin `kotlin.version=2.3.21` while the root build applies the Kotlin plugin at `2.4.0`.
   The plugin version in `build.gradle.kts` is what governs compilation; treat the property as stale
   metadata rather than a second source of truth, and update it when you touch these files.
+  `README.md` now states the real toolchain (Gradle 9.5.1 / Java 25 / Kotlin 2.4.0 / Boot 4.1.0).
 - CI runs `./gradle-config/apply.sh` in the test workflow, so a change here affects CI build behaviour.
   A syntax error in `apply.sh` breaks every test run.
 

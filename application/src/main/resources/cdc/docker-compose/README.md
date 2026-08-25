@@ -117,6 +117,33 @@ curl http://localhost:8083/connectors/mariadb-event-connector/status
 | Debezium Connect | http://localhost:8083 | - |
 | Debezium UI | http://localhost:9091 | - |
 
+## Connecting the Application
+
+The app's `local` profile ships with bootstrap servers pointing at a separate local Kafka
+(`~/infra`), **not** at this stack. To run CodeCompanion against this compose stack, point it at the
+external listeners:
+
+```yaml
+# application/src/main/resources/application-local.yaml
+spring:
+  kafka:
+    bootstrap-servers:
+      - "localhost:9092"
+      - "localhost:9093"
+      - "localhost:9094"
+```
+
+Use `9092`/`9093`/`9094` (the `EXTERNAL` listeners published to the host), not `19092`-`19094` —
+those are the in-network `PLAINTEXT` listeners reachable only between containers, and `29092`-`29094`
+are the KRaft controller ports.
+
+The relay reads the CDC topic named by `slack.app.mode.cdc.topic`. The connector registered by
+`debezium/connect_mariadb.sh` uses `topic.prefix: cdc` on `code_companion.outbox_message`, producing
+`cdc.code_companion.outbox_message` — which is exactly what the `local`, `dev`, and `prod` profiles
+already configure. Those profiles also already set `slack.app.mode.outbox-reading-strategy: cdc`;
+the code default is `POLLING`, so a profile that omits the key (like `real`) polls the outbox instead
+and never reads this topic.
+
 ## Monitoring CDC Events
 
 ### Using Kafka UI
@@ -298,6 +325,31 @@ curl http://localhost:8083/connectors/mariadb-event-connector/status
 | Kafka UI | http://localhost:9090 | KAFKA_UI_USER_NAME / KAFKA_UI_USER_PASSWD |
 | Debezium Connect | http://localhost:8083 | - |
 | Debezium UI | http://localhost:9091 | - |
+
+## 애플리케이션 연결
+
+앱의 `local` 프로필은 이 스택이 아니라 별도의 로컬 Kafka(`~/infra`)를 바라보도록 설정되어 있습니다.
+이 compose 스택에 붙이려면 external 리스너로 바꿔야 합니다:
+
+```yaml
+# application/src/main/resources/application-local.yaml
+spring:
+  kafka:
+    bootstrap-servers:
+      - "localhost:9092"
+      - "localhost:9093"
+      - "localhost:9094"
+```
+
+`19092`-`19094`가 아니라 `9092`/`9093`/`9094`(호스트에 게시된 `EXTERNAL` 리스너)를 사용하세요.
+`19092`-`19094`는 컨테이너 간에만 접근 가능한 `PLAINTEXT` 리스너이고, `29092`-`29094`는 KRaft
+컨트롤러 포트입니다.
+
+릴레이는 `slack.app.mode.cdc.topic`에 지정된 CDC 토픽을 구독합니다. `debezium/connect_mariadb.sh`가
+등록하는 커넥터는 `code_companion.outbox_message`에 `topic.prefix: cdc`를 붙이므로 토픽명은
+`cdc.code_companion.outbox_message`이며, `local`·`dev`·`prod` 프로필에 이미 그대로 설정되어 있습니다.
+이 프로필들은 `slack.app.mode.outbox-reading-strategy: cdc`도 이미 지정합니다. 코드 기본값은
+`POLLING`이므로, 이 키를 생략한 프로필(예: `real`)은 이 토픽을 읽지 않고 아웃박스를 폴링합니다.
 
 ## CDC 이벤트 모니터링
 
