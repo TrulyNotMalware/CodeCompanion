@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # domain/standup
 
@@ -20,6 +20,12 @@ dispatches, and the collected answers. Pure Kotlin; JPA schemas mirroring these 
 | `entity/enums/DispatchStatus.kt` | Lifecycle of one member's DM dispatch |
 | `dto/RoutineDto.kt` | Routine read-model crossing the repository boundary |
 | `dto/StandupSessionDto.kt` | Session read-model used by the scheduler and summary service |
+
+## Subdirectories
+| Directory | Purpose |
+|-----------|---------|
+| `entity/` | `Routine` / `RoutineMember`, `StandupSession` / `SessionDispatch` / `StandupAnswer` and the `enums/` state machines (see `entity/AGENTS.md`) |
+| `dto/` | `RoutineDto`, `RoutineMemberDto`, `StandupSessionDto`, `SessionDispatchDto`, `StandupAnswerDto` read models (see `dto/AGENTS.md`) |
 
 ## For AI Agents
 

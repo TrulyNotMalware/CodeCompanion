@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # domain/command
 
@@ -21,20 +21,20 @@ queue and hands the effects to the infrastructure resolver/stager.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `authorization/` | `UserRole` (`user` ⊂ `ai_user` ⊂ `developer` ⊂ `admin`) and `CommandPermission` gating |
-| `inbound/` | Neutral inbound envelopes: `InboundCommand`, `InboundKind`, `InboundPayload` (`SlashInvocation`, `MentionInvocation`), `InboundInteraction` |
-| `outbound/` | Neutral outbound: `OutboundMessage` variants, `MessageContent`, `OutboundTargets`, `ModalForm`, `InteractionHandles`, `OutboundMessageStager` |
-| `intent/` | `CommandEffect`, `CommandIntent` sealed hierarchy, `IntentQueue` |
-| `entity/` | `Command` aggregate, `CommandSet`, `CommandType` / `CommandDetailType`, `InteractionCommand`, `ReplaceTextResponseCommand` |
-| `entity/context/` | One `CommandContext` per user-visible behaviour (notice, status, approval, agent chat, CVE ops, reaction, ...) |
-| `entity/context/form/` | Modal-backed contexts: request/reschedule/cancel meeting, add participant, standup setup & fill, CVE subscription, decline reason |
-| `entity/parsers/` | `ContextParser` and its `AppMentionContextParser` / `InteractionContextParser` implementations |
-| `entity/slash/` | Slash-command definitions: `RequestMeetingCommand`, `SetupStandupCommand`, `CveLatestSlashCommand`, `CveSubscriptionCommands`, `MeetingListRange` |
-| `entity/event/` | `Event`, `EventPublisher` contracts implemented by infrastructure |
-| `exceptions/` | `CommandException` hierarchy and `CommandErrorCode` |
-| `dto/` | `CommandBasicInfo`, `UrlVerificationRequest` |
-| `dto/modals/` | Modal payload DTOs: `ApprovalContents`, `SelectionContents`, `TextInputContents`, `TimeScheduleInfo` |
-| `dto/response/` | `CommandOutput` (`empty` / `fail`) and `Status` |
+| `authorization/` | `UserRole` (`user` ⊂ `ai_user` ⊂ `developer` ⊂ `admin`) and `CommandPermission` gating (see `authorization/AGENTS.md`) |
+| `inbound/` | Neutral inbound envelopes: `InboundCommand`, `InboundKind`, `InboundPayload` (`SlashInvocation`, `MentionInvocation`), `InboundInteraction` (see `inbound/AGENTS.md`) |
+| `outbound/` | Neutral outbound: `OutboundMessage` variants, `MessageContent`, `OutboundTargets`, `ModalForm`, `InteractionHandles`, `OutboundMessageStager` (see `outbound/AGENTS.md`) |
+| `intent/` | `CommandEffect`, `CommandIntent` sealed hierarchy, `IntentQueue` (see `intent/AGENTS.md`) |
+| `entity/` | `Command` aggregate, `CommandSet`, `CommandType` / `CommandDetailType`, `InteractionCommand`, `ReplaceTextResponseCommand` (see `entity/AGENTS.md`) |
+| `entity/context/` | One `CommandContext` per user-visible behaviour (notice, status, approval, agent chat, CVE ops, reaction, ...) (see `entity/context/AGENTS.md`) |
+| `entity/context/form/` | Modal-backed contexts: request/reschedule/cancel meeting, add participant, standup setup & fill, CVE subscription, decline reason (see `entity/context/form/AGENTS.md`) |
+| `entity/parsers/` | `ContextParser` and its `AppMentionContextParser` / `InteractionContextParser` implementations (see `entity/parsers/AGENTS.md`) |
+| `entity/slash/` | Slash-command definitions: `RequestMeetingCommand`, `SetupStandupCommand`, `CveLatestSlashCommand`, `CveSubscriptionCommands`, `MeetingListRange` (see `entity/slash/AGENTS.md`) |
+| `entity/event/` | `Event`, `EventPublisher` contracts implemented by infrastructure (see `entity/event/AGENTS.md`) |
+| `exceptions/` | `CommandException` hierarchy and `CommandErrorCode` (see `exceptions/AGENTS.md`) |
+| `dto/` | `CommandBasicInfo`, `UrlVerificationRequest` (see `dto/AGENTS.md`) |
+| `dto/modals/` | Modal payload DTOs: `ApprovalContents`, `SelectionContents`, `TextInputContents`, `TimeScheduleInfo` (see `dto/modals/AGENTS.md`) |
+| `dto/response/` | `CommandOutput` (`empty` / `fail`) and `Status` (see `dto/response/AGENTS.md`) |
 
 ## For AI Agents
 

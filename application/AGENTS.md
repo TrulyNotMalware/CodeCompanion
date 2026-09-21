@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-21 -->
 
 # application
 
@@ -22,16 +22,17 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `src/main/kotlin/dev/notypie/application/controllers/` | `SlackEventController` (`/api/slack/events`, `/interaction`) and `SlashCommandController` (`/api/slash/*`) |
+| `src/main/kotlin/dev/notypie/application/controllers/` | `SlackEventController` (`/api/slack/events`, `/interaction`) and `SlashCommandController` (`/api/slash/*`) (see `src/main/kotlin/dev/notypie/application/controllers/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/service/` | Use-case services (see `src/main/kotlin/dev/notypie/application/service/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/security/` | Slack signature verification, retry dedup, MCP turn tokens (see `src/main/kotlin/dev/notypie/application/security/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/configurations/` | Bean wiring, conditions, Kafka/async/scheduling config (see `src/main/kotlin/dev/notypie/application/configurations/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/mcp/` | `McpToolGate` + `DomainReadTools` — role-gated MCP tools exposed to the AI agent |
 | `src/main/kotlin/dev/notypie/application/socket/` | `SocketModeReceiver` — local-only WebSocket inbound transport (`local` profile) |
 | `src/main/kotlin/dev/notypie/application/health/` | `OutboxHealthIndicator` — Actuator health contribution reporting pending lag and stuck rows |
-| `src/main/kotlin/dev/notypie/application/exception/` | `ControllerAdvice`, `PayloadParseException` |
-| `src/main/kotlin/dev/notypie/application/common/` | `SlackRequestParser`, `IdempotencyCreator`, `TransactionTemplateExt` |
-| `src/main/resources/` | Profile YAML, Flyway-style migrations, k8s and CDC manifests (see `src/main/resources/AGENTS.md`) |
+| `src/main/kotlin/dev/notypie/application/exception/` | `ControllerAdvice`, `PayloadParseException` (see `src/main/kotlin/dev/notypie/application/exception/AGENTS.md`) |
+| `src/main/kotlin/dev/notypie/application/common/` | `SlackRequestParser`, `IdempotencyCreator`, `TransactionTemplateExt` (see `src/main/kotlin/dev/notypie/application/common/AGENTS.md`) |
+| `src/main/resources/` | Profile YAML, hand-applied SQL migrations, k8s and CDC manifests (see `src/main/resources/AGENTS.md`) |
+| `src/` | Module sources: main, test, testFixtures (see `src/AGENTS.md`) |
 
 ## For AI Agents
 
@@ -54,8 +55,9 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ```bash
 ./gradlew :application:test
 ```
-Specs mirror the package layout under `src/test/kotlin/`. Most are plain Kotest + MockK unit specs (no
-Spring context); the outbox and Kafka paths use `EmbeddedKafka` and H2. Shared builders live in
+Specs mirror the package layout under `src/test/kotlin/`. All of them are plain Kotest + MockK unit specs —
+this module starts no Spring context and has no `src/test/resources`; the H2 / `EmbeddedKafka` slices live in
+`:infrastructure`. Shared builders live in
 `src/testFixtures/kotlin/` (`OutboxTestFixtures`, `AppMentionPayloadCreator`, `AgendaItemCreator`,
 `ScopedTurnTokenCreator`, `CveTopicConfigCreator`, ...) and `dev/notypie/docs/` holds the REST Docs DSL.
 This module also consumes `testFixtures(project(":domain"))` and `testFixtures(project(":infrastructure"))`.

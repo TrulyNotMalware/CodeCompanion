@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # application/security
 
@@ -22,6 +22,11 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 | `mcp/ScopedTurnToken.kt` | Token claims: subject user, scope key, turn id, issued/expiry |
 | `mcp/ScopedTurnTokenCodec.kt` | Mint/verify `v1.<b64url(payload)>.<b64url(hmac-sha256)>` |
 | `mcp/McpTurnTokenFilter.kt` | Rejects unauthenticated MCP requests before any protocol handling; loopback-only unless `allowRemote` |
+
+## Subdirectories
+| Directory | Purpose |
+|-----------|---------|
+| `mcp/` | Authentication for the MCP endpoint (see `mcp/AGENTS.md`) |
 
 ## For AI Agents
 

@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
 
 # infrastructure/repository
 
@@ -12,13 +12,13 @@ subpackage of `@Entity` classes.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `outbox/` | The transactional outbox: `MessageOutboxRepository`, `OutboundMessagePort`, `OutboundMessageCodec`, `OutboundEnvelope`, `Transport`, `schema/` (`OutboxMessage`, `MessageStatus`, `OutboxSchemaVersion`), `dto/OutboxMessageEvents` |
-| `meeting/` | Meetings, participants, agenda dispatch, reminders; `AddParticipantResult` |
-| `standup/` | Routines, sessions, per-member dispatches |
-| `cve/` | Topics, events, subscriptions, deliveries, collect ledger |
-| `agent/` | `agent_session` and `agent_turn_history` (token usage, duration, outcome) |
-| `authorization/` | `user_command_role` grants backing the role system |
-| `mcp/` | `mcp_tool_call_history` audit trail |
+| `outbox/` | The transactional outbox: `MessageOutboxRepository`, `OutboundMessagePort`, `OutboundMessageCodec`, `OutboundEnvelope`, `Transport`, `schema/` (`OutboxMessage`, `MessageStatus`, `OutboxSchemaVersion`), `dto/OutboxMessageEvents` (see `outbox/AGENTS.md`) |
+| `meeting/` | Meetings, participants, agenda dispatch, reminders; `AddParticipantResult` (see `meeting/AGENTS.md`) |
+| `standup/` | Routines, sessions, per-member dispatches (see `standup/AGENTS.md`) |
+| `cve/` | Topics, events, subscriptions, deliveries, collect ledger (see `cve/AGENTS.md`) |
+| `agent/` | `agent_session` and `agent_turn_history` (token usage, duration, outcome) (see `agent/AGENTS.md`) |
+| `authorization/` | `user_command_role` grants backing the role system (see `authorization/AGENTS.md`) |
+| `mcp/` | `mcp_tool_call_history` audit trail (see `mcp/AGENTS.md`) |
 
 ## For AI Agents
 

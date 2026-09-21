@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # application/service/cve
 
@@ -20,12 +20,12 @@ The whole lane is **feature-gated**: every bean here is declared conditionally i
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `collector/` | `CveCollector` — `@Scheduled(fixedDelay = 300_000)` poll of every active topic, ingesting raw events as `PENDING` |
-| `ai/` | `AiSummarizer` port with `SidecarAiSummarizer` / `NoopAiSummarizer`, plus `CveSummaryWorker` and `CveSummaryPromptBuilder` |
-| `notification/` | `CveNotificationDispatcher` — immediate and digest delivery through the outbox |
-| `subscription/` | `CveSubscriptionService` + slash-command service for per-user topic subscriptions |
-| `query/` | `CveLatestQueryService` and the `/cve latest` slash service |
-| `ops/` | `CveOpsService` — admin topic activate/deactivate and lane status |
+| `collector/` | `CveCollector` — `@Scheduled(fixedDelay = 300_000)` poll of every active topic, ingesting raw events as `PENDING` (see `collector/AGENTS.md`) |
+| `ai/` | `AiSummarizer` port with `SidecarAiSummarizer` / `NoopAiSummarizer`, plus `CveSummaryWorker` and `CveSummaryPromptBuilder` (see `ai/AGENTS.md`) |
+| `notification/` | `CveNotificationDispatcher` — immediate and digest delivery through the outbox (see `notification/AGENTS.md`) |
+| `subscription/` | `CveSubscriptionService` + slash-command service for per-user topic subscriptions (see `subscription/AGENTS.md`) |
+| `query/` | `CveLatestQueryService` and the `/cve latest` slash service (see `query/AGENTS.md`) |
+| `ops/` | `CveOpsService` — admin topic activate/deactivate and lane status (see `ops/AGENTS.md`) |
 
 ## For AI Agents
 

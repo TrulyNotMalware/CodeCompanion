@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
 
 # infrastructure/impl
 
@@ -12,13 +12,13 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `command/` | Slack transport adapter (inbound mapping, intent resolution, staging, rendering, dispatch, publishing) |
-| `command/slack/` | Slack wire DTOs: `InteractionPayload`, `SlackEventCallBackRequest`, `EventCallbackData`, `Block`, `Element`, `States`, `Users`, `Container`, `Authorization`, `SlackEventType`, `ActionElementTypes`, `InteractionTypes`, `SlashCommandRequestBody`, `SlackMentionMapper` |
-| `command/event/` | Staged-event envelopes and dispatch: `SlackCommandEvents`, `SlackEventPayloads`, `SlackCommandOutputs`, `OutboundMessageEnqueued`, `MessageDispatcher` |
-| `command/dto/` | `SlackUserProfileDto` |
-| `agent/` | `AgentGateway` port + `SidecarAgentClient` (HTTP + SSE) |
-| `cve/` | `SourceAdapter` port + `NvdCveSourceAdapter`, `GithubReleaseSourceAdapter` |
-| `retry/` | `RetryService` |
+| `command/` | Slack transport adapter (inbound mapping, intent resolution, staging, rendering, dispatch, publishing) (see `command/AGENTS.md`) |
+| `command/slack/` | Slack wire DTOs: `InteractionPayload`, `SlackEventCallBackRequest`, `EventCallbackData`, `Block`, `Element`, `States`, `Users`, `Container`, `Authorization`, `SlackEventType`, `ActionElementTypes`, `InteractionTypes`, `SlashCommandRequestBody`, `SlackMentionMapper` (see `command/slack/AGENTS.md`) |
+| `command/event/` | Staged-event envelopes and dispatch: `SlackCommandEvents`, `SlackEventPayloads`, `SlackCommandOutputs`, `OutboundMessageEnqueued`, `MessageDispatcher` (see `command/event/AGENTS.md`) |
+| `command/dto/` | `SlackUserProfileDto` (see `command/dto/AGENTS.md`) |
+| `agent/` | `AgentGateway` port + `SidecarAgentClient` (HTTP + SSE) (see `agent/AGENTS.md`) |
+| `cve/` | `SourceAdapter` port + `NvdCveSourceAdapter`, `GithubReleaseSourceAdapter` (see `cve/AGENTS.md`) |
+| `retry/` | `RetryService` (see `retry/AGENTS.md`) |
 
 ## Key Files
 | File | Description |

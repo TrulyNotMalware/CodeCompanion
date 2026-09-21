@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # application/service
 
@@ -12,15 +12,15 @@ that the relay lane dispatches.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `command/` | `CommandExecutor` (drain → resolve → publish), `CommandRoleResolver`, `RoleManagementService` (`grant`/`revoke`/`roles`) |
-| `mention/` | `AppMentionEventHandler` / `SlackMentionEventHandlerImpl` — routes `@bot ...` mentions |
-| `interaction/` | `InteractionHandler` / `SlackInteractionHandlerImpl` — buttons, selects, view submissions |
-| `meeting/` | Meeting use cases plus the daily-agenda and reminder schedulers |
-| `standup/` | Routine setup, answer collection, nudging, summary posting, scheduler |
-| `agent/` | `AgentConverseService` — one AI turn against the sidecar, persisted to `agent_turn_history` |
+| `command/` | `CommandExecutor` (drain → resolve → publish), `CommandRoleResolver`, `RoleManagementService` (`grant`/`revoke`/`roles`) (see `command/AGENTS.md`) |
+| `mention/` | `AppMentionEventHandler` / `SlackMentionEventHandlerImpl` — routes `@bot ...` mentions (see `mention/AGENTS.md`) |
+| `interaction/` | `InteractionHandler` / `SlackInteractionHandlerImpl` — buttons, selects, view submissions (see `interaction/AGENTS.md`) |
+| `meeting/` | Meeting use cases plus the daily-agenda and reminder schedulers (see `meeting/AGENTS.md`) |
+| `standup/` | Routine setup, answer collection, nudging, summary posting, scheduler (see `standup/AGENTS.md`) |
+| `agent/` | `AgentConverseService` — one AI turn against the sidecar, persisted to `agent_turn_history` (see `agent/AGENTS.md`) |
 | `cve/` | CVE collection, AI summarization, subscription, query, notification (see `cve/AGENTS.md`) |
-| `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering |
-| `ops/` | `OpsStatusService` — backs `@bot status` |
+| `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering (see `relay/AGENTS.md`) |
+| `ops/` | `OpsStatusService` — backs `@bot status` (see `ops/AGENTS.md`) |
 
 ## Key Files
 | File | Description |

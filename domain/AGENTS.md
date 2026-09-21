@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # domain
 
@@ -25,9 +25,10 @@ Kotest, MockK).
 | `src/main/kotlin/dev/notypie/domain/command/` | Transport-neutral command core (see `src/main/kotlin/dev/notypie/domain/command/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/domain/meet/` | Meeting aggregate (see `src/main/kotlin/dev/notypie/domain/meet/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/domain/standup/` | Standup routines, sessions, answers (see `src/main/kotlin/dev/notypie/domain/standup/AGENTS.md`) |
-| `src/main/kotlin/dev/notypie/domain/common/` | `ValidationBuilder` DSL, `IdempotencyData`, shared error types |
+| `src/main/kotlin/dev/notypie/domain/common/` | `ValidationBuilder` DSL, `IdempotencyData`, shared error types (see `src/main/kotlin/dev/notypie/domain/common/AGENTS.md`) |
 | `src/test/kotlin/` | Kotest specs, including the architecture guard |
 | `src/testFixtures/kotlin/` | Factories consumed by `application` and `infrastructure` tests |
+| `src/` | Module sources: main, test, testFixtures (see `src/AGENTS.md`) |
 
 ## For AI Agents
 

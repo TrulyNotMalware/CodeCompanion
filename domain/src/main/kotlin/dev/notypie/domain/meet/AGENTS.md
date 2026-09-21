@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # domain/meet
 
@@ -18,6 +18,12 @@ Pure Kotlin: no persistence annotations, no Slack types. JPA schemas mirroring t
 | `entity/enums/MeetingReminderStatus.kt` | `PENDING` / `SENDING` / `SENT` / `FAILED` |
 | `dto/MeetingDto.kt` | Read-model DTOs crossing the repository boundary |
 | `dto/MeetingReminderDto.kt` | Reminder read-model DTO for the scheduler |
+
+## Subdirectories
+| Directory | Purpose |
+|-----------|---------|
+| `entity/` | `Meeting` / `Member`, `MeetingReminder`, `RejectReason` and the `enums/` state machine (see `entity/AGENTS.md`) |
+| `dto/` | `MeetingDto`, `MeetingParticipantDto`, `MeetingReminderDto` read models (see `dto/AGENTS.md`) |
 
 ## For AI Agents
 

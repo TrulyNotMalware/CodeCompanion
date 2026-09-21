@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
 
 # application/configurations
 
@@ -23,6 +23,11 @@ is the map of what actually exists at runtime in a given profile.
 | `AppConfig`-driven feature configs | `CveConfiguration.kt` (whole CVE lane), `AgentConfiguration.kt` (sidecar client + agent service), `McpServerConfiguration.kt` (MCP tools, gate, turn-token filter) |
 | `RestClientConfiguration.kt` | Shared `RestClient` used by Slack and source adapters |
 | `SlackRequestBuilderConfiguration.kt` | Slack request/template builder beans |
+
+## Subdirectories
+| Directory | Purpose |
+|-----------|---------|
+| `conditions/` | The custom Spring `Condition`s that pick a deployment mode at context-refresh time, plus the `Environment.extractAppConfig()` helper they share (see `conditions/AGENTS.md`) |
 
 ## For AI Agents
 

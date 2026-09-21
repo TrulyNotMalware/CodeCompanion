@@ -1,5 +1,5 @@
-<!-- Parent: ../../../../../../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
 
 # infrastructure/templates
 
@@ -21,6 +21,11 @@ modal payloads — behind small type-safe DSLs.
 | `dto/LayoutBlocks.kt` | Layout block DTOs |
 | `dto/TimeScheduleAlertContents.kt` | Schedule-alert message contents |
 | `dto/CheckBoxOptions.kt` | Checkbox option model |
+
+## Subdirectories
+| Directory | Purpose |
+|-----------|---------|
+| `dto/` | `LayoutBlocks` / `InteractionLayoutBlock` / `InteractiveObject` wrappers, `CheckBoxOptions`, `TimeScheduleAlertContents` (see `dto/AGENTS.md`) |
 
 ## For AI Agents
 
