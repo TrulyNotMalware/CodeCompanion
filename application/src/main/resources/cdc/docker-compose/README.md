@@ -141,7 +141,7 @@ The relay reads the CDC topic named by `slack.app.mode.cdc.topic`. The connector
 `debezium/connect_mariadb.sh` uses `topic.prefix: cdc` on `code_companion.outbox_message`, producing
 `cdc.code_companion.outbox_message` — which is exactly what the `local`, `dev`, and `prod` profiles
 already configure. Those profiles also already set `slack.app.mode.outbox-reading-strategy: cdc`;
-the code default is `POLLING`, so a profile that omits the key (like `real`) polls the outbox instead
+the code default is `POLLING`, so a profile that omits the key (like `slack-live`) polls the outbox instead
 and never reads this topic.
 
 ## Monitoring CDC Events
@@ -349,7 +349,7 @@ spring:
 등록하는 커넥터는 `code_companion.outbox_message`에 `topic.prefix: cdc`를 붙이므로 토픽명은
 `cdc.code_companion.outbox_message`이며, `local`·`dev`·`prod` 프로필에 이미 그대로 설정되어 있습니다.
 이 프로필들은 `slack.app.mode.outbox-reading-strategy: cdc`도 이미 지정합니다. 코드 기본값은
-`POLLING`이므로, 이 키를 생략한 프로필(예: `real`)은 이 토픽을 읽지 않고 아웃박스를 폴링합니다.
+`POLLING`이므로, 이 키를 생략한 프로필(예: `slack-live`)은 이 토픽을 읽지 않고 아웃박스를 폴링합니다.
 
 ## CDC 이벤트 모니터링
 
