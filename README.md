@@ -17,7 +17,7 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Security** — Slack request signature verification and retry de-duplication via a servlet filter.
 
 ## Tech Stack
-- **Language / Runtime**: Kotlin `2.4.20`, Java `25` (Adoptium toolchain)
+- **Language / Runtime**: Kotlin `2.4.10`, Java `25` (Adoptium toolchain)
 - **Framework**: Spring Boot `4.1.1` (Web on Jetty, Actuator, AOP/AspectJ, Data JPA)
 - **Build**: Gradle `9.7.1` (multi-module), ktlint `14.2.0`
 - **Messaging**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC outbox relay
@@ -165,7 +165,7 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **보안** — 서블릿 필터를 통한 슬랙 요청 서명 검증 및 재시도 중복 제거
 
 ## 기술 스택
-- **언어 / 런타임**: Kotlin `2.4.20`, Java `25` (Adoptium 툴체인)
+- **언어 / 런타임**: Kotlin `2.4.10`, Java `25` (Adoptium 툴체인)
 - **프레임워크**: Spring Boot `4.1.1` (Jetty 기반 Web, Actuator, AOP/AspectJ, Data JPA)
 - **빌드**: Gradle `9.7.1` (멀티 모듈), ktlint `14.2.0`
 - **메시징**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC 아웃박스 릴레이

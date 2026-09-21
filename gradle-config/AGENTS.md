@@ -40,10 +40,10 @@ Both presets share: parallel + caching + configuration cache (`problems=warn`), 
 - `force` is threaded through both paths: `apply_os_config "$os" "$force"` passes it to
   `apply_common_config`, which skips `backup_existing_config` when set. Keep them consistent, or
   `--force` starts meaning different things depending on which preset was chosen.
-- All three presets now declare `kotlin.version=2.4.20`, matching the Kotlin plugin in the root
+- All three presets now declare `kotlin.version=2.4.10`, matching the Kotlin plugin in the root
   `build.gradle.kts`. The property is inert — no build script reads it — but keep the three files
   agreeing with the plugin so it does not drift back into a misleading second source of truth.
-  `README.md` states the real toolchain (Gradle 9.7.1 / Java 25 / Kotlin 2.4.20 / Boot 4.1.1).
+  `README.md` states the real toolchain (Gradle 9.7.1 / Java 25 / Kotlin 2.4.10 / Boot 4.1.1).
 - CI runs `./gradle-config/apply.sh` in the test workflow, so a change here affects CI build behaviour.
   A syntax error in `apply.sh` breaks every test run.
 

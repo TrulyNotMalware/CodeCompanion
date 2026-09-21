@@ -16,7 +16,7 @@ flow **application → infrastructure → domain** (and **application → domain
 | File | Description |
 |------|-------------|
 | `settings.gradle.kts` | Declares root project `CodeCompanion` and the three modules |
-| `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.20, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
+| `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.10, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
 | `gradlew` / `gradlew.bat` | Gradle 9.7.1 wrapper entry points |
 | `run` | Bash launcher for the built Spring Boot jar (`./run -e prod build/libs/app.jar`); handles profile, heap, GC, JMX, heap dump, GC log |
 | `.editorconfig` | Formatting contract enforced by ktlint (120 cols, LF, 4-space indent, wildcard imports allowed) |
@@ -94,7 +94,7 @@ Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.
 ## Dependencies
 
 ### External
-- Kotlin 2.4.20 / Java 25 (Adoptium toolchain) — language and runtime
+- Kotlin 2.4.10 / Java 25 (Adoptium toolchain) — language and runtime
 - Spring Boot 4.1.1 — Web on **Jetty** (Tomcat excluded; Undertow unsupported on Boot 4), Actuator,
   AOP/AspectJ, Data JPA
 - Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC — outbox relay

@@ -49,7 +49,10 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   failed analysis. If Kotlin extraction ever fails with the daemon, the first knob to try is
   `-Pkotlin.compiler.execution.strategy=in-process`. Supported Kotlin range is published at
   https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/ — check it before
-  bumping the Kotlin plugin past what CodeQL lists.
+  bumping the Kotlin plugin past what CodeQL lists. An unsupported version fails `compileKotlin` under
+  the tracer with `Kotlin version X is too recent. CodeQL currently supports versions below X`
+  (seen with 2.4.20, so the plugin is pinned to 2.4.10); a Dependabot `kotlin` group PR that goes red
+  here for that reason waits for a CodeQL release rather than getting merged.
 - **The dependency graph is populated only by `gradle/actions/dependency-submission`.** GitHub cannot
   parse Gradle build scripts by itself, so without that step Dependabot alerts and
   `dependency-review-action` see nothing. It needs `contents: write`, granted at job level: Dependabot

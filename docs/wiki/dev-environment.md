@@ -8,7 +8,7 @@ _type: guide · updated: 2026-09-21_
 
 - **JDK 25 (Adoptium)는 필수다.** 루트 `build.gradle.kts`가 `toolchain { languageVersion = 25, vendor = ADOPTIUM }`과
   `sourceCompatibility`/`targetCompatibility = 25`를 고정하고, `settings.gradle.kts`의 foojay resolver가 없는 JDK를 받아
-  온다. Kotlin 2.4.20 · Spring Boot 4.1.1 · ktlint 14.2.0의 원본은 루트 빌드의 `plugins` 블록이다.
+  온다. Kotlin 2.4.10 · Spring Boot 4.1.1 · ktlint 14.2.0의 원본은 루트 빌드의 `plugins` 블록이다.
 - Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.7.1로 고정한다. 항상 `./gradlew`를 쓴다.
 - `gradle.properties`는 **생성물이며 git-ignored**다. `./gradle-config/apply.sh`가 `uname -s`로 OS를 판별해
   `gradle-config/gradle-{macos,linux}.properties` 중 하나를 루트로 복사하고, 프리셋이 없는 OS(Windows 등)와
