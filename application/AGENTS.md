@@ -15,7 +15,7 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ## Key Files
 | File | Description |
 |------|-------------|
-| `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator, AOP/AspectJ, Spring AI MCP server, Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
+| `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator, AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
 | `src/main/kotlin/dev/notypie/CodeCompanion.kt` | `@SpringBootApplication @ConfigurationPropertiesScan` entry point and `main()` |
 | `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs with `-Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul`. Build context for the deploy workflow |
 

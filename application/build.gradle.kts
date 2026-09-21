@@ -43,7 +43,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
     implementation(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
-    implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
+    // Modules, not the MCP webmvc starter: it re-imports starter-web and leaks Tomcat past the exclude above.
+    implementation("org.springframework.ai:spring-ai-autoconfigure-mcp-server-webmvc")
+    implementation("org.springframework.ai:spring-ai-mcp")
+    implementation("org.springframework.ai:spring-ai-mcp-annotations")
+    implementation("org.springframework.ai:mcp-spring-webmvc")
 
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     developmentOnly("org.springframework.boot:spring-boot-devtools:$springBootVersion")
