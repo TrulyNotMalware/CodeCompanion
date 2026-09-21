@@ -7,7 +7,7 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     kotlin("jvm") version "2.4.10"
     kotlin("plugin.spring") version "2.4.10" apply false
-    kotlin("plugin.jpa") version "2.4.10" apply false
+    kotlin("plugin.jpa") version "2.4.20" apply false
 }
 
 java {
