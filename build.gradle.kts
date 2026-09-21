@@ -19,15 +19,18 @@ java {
     }
 }
 
-ext {
-    set("kotestVersion", "6.2.0") // https://kotest.io/docs/changelog.html
-    set("slackSdkVersion", "1.49.0")
-    set("mockkVersion", "1.14.11")
-    set("springBootVersion", "4.1.0")
-    set("jacksonVersion", "3.2.0")
-    set("kotlinLoggingVersion", "8.0.4")
-    set("springAiVersion", "2.0.0")
-}
+// Dependabot's Gradle parser only reads `extra["x"] = "…"` / `extra.set` declarations, not an `ext {}` block.
+extra["kotestVersion"] = "6.2.0" // https://kotest.io/docs/changelog.html
+extra["slackSdkVersion"] = "1.49.0"
+extra["mockkVersion"] = "1.14.11"
+extra["springBootVersion"] = "4.1.0"
+extra["jacksonVersion"] = "3.2.0"
+extra["kotlinLoggingVersion"] = "8.0.4"
+extra["springAiVersion"] = "2.0.0"
+
+val kotestVersion: String by extra
+val mockkVersion: String by extra
+val kotlinLoggingVersion: String by extra
 
 kotlin {
     jvmToolchain(25)
@@ -101,16 +104,16 @@ subprojects {
         // BOM platforms — use api so they propagate to testFixtures and other configurations.
         // Jackson is intentionally NOT injected here: domain must stay Jackson-free, so the
         // modules that actually serialize (application/infrastructure) declare it themselves.
-        api(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
+        api(platform("io.kotest:kotest-bom:$kotestVersion"))
 
         implementation(kotlin("reflect"))
 
         // Kotlin logging
-        implementation("io.github.oshai:kotlin-logging-jvm:${rootProject.extra.get("kotlinLoggingVersion")}")
+        implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
         testFixturesImplementation(kotlin("reflect"))
 
-        testImplementation("io.mockk:mockk:${rootProject.extra.get("mockkVersion")}")
-        testFixturesImplementation("io.mockk:mockk:${rootProject.extra.get("mockkVersion")}")
+        testImplementation("io.mockk:mockk:$mockkVersion")
+        testFixturesImplementation("io.mockk:mockk:$mockkVersion")
         testImplementation("io.kotest:kotest-runner-junit5")
         testImplementation("io.kotest:kotest-extensions-spring")
         testImplementation("io.kotest:kotest-assertions-core")

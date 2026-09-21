@@ -5,6 +5,7 @@ on:
       - "feature/*"
       - "feat/*"
       - "features/*"
+      - "dependabot/**"
     paths:
       - "application/**"
       - "domain/**"

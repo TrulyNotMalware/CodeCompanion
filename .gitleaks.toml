@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Sample MariaDB manifest for the CDC stack ships SCREAMING_SNAKE placeholder Secret values that the kubernetes-secret-yaml rule reports as leaks"
+paths = ['''application/src/main/resources/cdc/k8s/yamls/mariadb/mariadb-config\.yaml''']

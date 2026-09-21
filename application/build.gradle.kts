@@ -1,6 +1,10 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 val jarName: String? = findProperty("jarName") as String?
+val springBootVersion: String by rootProject.extra
+val jacksonVersion: String by rootProject.extra
+val slackSdkVersion: String by rootProject.extra
+val springAiVersion: String by rootProject.extra
 
 tasks.named<BootJar>("bootJar") {
     if (!jarName.isNullOrBlank()) {
@@ -10,19 +14,15 @@ tasks.named<BootJar>("bootJar") {
 
 dependencies {
     // Spring-boot bom
-    implementation(
-        platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"),
-    )
-    testFixturesImplementation(
-        platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"),
-    )
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
+    testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
 
     implementation(project(":domain"))
     implementation(project(":infrastructure"))
     testFixturesImplementation(project(":infrastructure"))
 
     // Jackson — declared per-module so :domain's classpath stays Jackson-free
-    api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+    api(platform("tools.jackson:jackson-bom:$jacksonVersion"))
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     implementation("org.springframework.boot:spring-boot-starter-web") {
@@ -34,9 +34,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 
-    // Slack Socket Mode — local-only inbound transport (gated to the `socket` Spring profile).
+    // Slack Socket Mode — local-only inbound transport (gated to the `local` Spring profile).
     // slack-api-client provides SocketModeClient; tyrus is its default WebSocket backend.
-    implementation("com.slack.api:slack-api-client:${rootProject.extra.get("slackSdkVersion")}")
+    implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("javax.websocket:javax.websocket-api:1.1")
     runtimeOnly("org.glassfish.tyrus.bundles:tyrus-standalone-client:1.20")
 
@@ -51,12 +51,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
     // MCP server — domain tools for the AI agent lane (streamable HTTP on /mcp)
-    implementation(platform("org.springframework.ai:spring-ai-bom:${rootProject.extra.get("springAiVersion")}"))
+    implementation(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
     implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
 
     // rest docs
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
-    developmentOnly("org.springframework.boot:spring-boot-devtools:${rootProject.extra.get("springBootVersion")}")
+    developmentOnly("org.springframework.boot:spring-boot-devtools:$springBootVersion")
 }
 
 allOpen {

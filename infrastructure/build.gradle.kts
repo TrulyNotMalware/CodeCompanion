@@ -2,42 +2,33 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 val jar: Jar by tasks
 val bootJar: BootJar by tasks
+val springBootVersion: String by rootProject.extra
+val jacksonVersion: String by rootProject.extra
+val slackSdkVersion: String by rootProject.extra
 
 bootJar.enabled = false
 jar.enabled = true
 
 dependencies {
     // Spring-boot bom
-    implementation(
-        platform(
-            "org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}",
-        ),
-    )
-    testImplementation(
-        platform(
-            "org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}",
-        ),
-    )
-    testFixturesImplementation(
-        platform(
-            "org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}",
-        ),
-    )
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
+    testImplementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
+    testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
 
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
 
     // Jackson — declared per-module so :domain's classpath stays Jackson-free
-    api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+    api(platform("tools.jackson:jackson-bom:$jacksonVersion"))
     implementation("tools.jackson.module:jackson-module-kotlin")
 //    api("org.springframework.retry:spring-retry") now spring core
 
     // CDC
     api("org.springframework.boot:spring-boot-starter-kafka")
     // Slack API
-    implementation("com.slack.api:slack-api-model:${rootProject.extra.get("slackSdkVersion")}")
-    implementation("com.slack.api:slack-api-client:${rootProject.extra.get("slackSdkVersion")}")
-    implementation("com.slack.api:slack-app-backend:${rootProject.extra.get("slackSdkVersion")}")
+    implementation("com.slack.api:slack-api-model:$slackSdkVersion")
+    implementation("com.slack.api:slack-api-client:$slackSdkVersion")
+    implementation("com.slack.api:slack-app-backend:$slackSdkVersion")
     // Springboot starter jpa
     api("org.springframework.boot:spring-boot-starter-data-jpa")
 
