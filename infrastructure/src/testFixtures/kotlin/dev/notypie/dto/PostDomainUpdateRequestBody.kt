@@ -7,7 +7,6 @@ data class PostDomainUpdateRequestBody(
     val id: Int,
 ) {
     companion object {
-        // Reference from https://jsonplaceholder.typicode.com/guide/
         fun getDefault() =
             PostDomainUpdateRequestBody(
                 title = "foo",

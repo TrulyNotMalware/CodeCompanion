@@ -27,11 +27,10 @@ class DebeziumLogTailingProcessor(
             "spring.json.value.default.type=dev.notypie.application.service.relay.Envelope",
         ],
     )
-    override fun getPendingMessages(messageParameter: MessageProcessorParameter) {
-        val consumeRecord = messageParameter as Envelope
+    fun consume(envelope: Envelope) {
         val outboxMessage: OutboxMessage =
             try {
-                consumeRecord.payload.after
+                envelope.payload.after
                     ?.toMutableMap()
                     ?.toOutboxMessage()
                     ?: return

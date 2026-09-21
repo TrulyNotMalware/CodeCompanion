@@ -11,14 +11,6 @@ private const val ELEMENT_TYPE_USER = "user"
 private const val ELEMENT_TYPE_TEXT = "text"
 private const val COMMAND_DELIMITER = " "
 
-/**
- * Flattens a Slack app_mention event into a transport-neutral [InboundCommand] carrying a
- * [MentionInvocation]. The rich_text walk is hosted here (moved verbatim from the old domain
- * `AppMentionContextParser`): the bot id comes from `authorizations`, user mentions are filtered
- * against it, and command text is split on spaces with blanks dropped. `hasCommandStructure` is
- * true iff a `rich_text_section` was found, so the domain can distinguish "not supported" (no
- * structure) from "empty command" (structure but no tokens).
- */
 fun SlackEventCallBackRequest.toMentionInboundCommand(
     appId: String,
     channelName: String,

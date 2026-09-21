@@ -37,8 +37,7 @@ class ModalTemplateBuilder(
         private val STANDUP_SESSION_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-        // Must stay aligned with RescheduleMeetingSubmissionContext's DATE_PATTERN / TIME_PATTERN,
-        // which reads these picker values back.
+        // Must stay aligned with RescheduleMeetingSubmissionContext's DATE_PATTERN/TIME_PATTERN, which reads these.
         private val RESCHEDULE_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
         private val RESCHEDULE_TIME_FORMAT: DateTimeFormatter =
@@ -59,7 +58,6 @@ class ModalTemplateBuilder(
                 DayOfWeek.SUNDAY to "Sunday",
             )
 
-        // Value is the IANA id parsed by ZoneId.of(...) in the submission context.
         private val TIMEZONE_OPTIONS: List<String> =
             listOf(
                 "Asia/Seoul",
@@ -91,7 +89,6 @@ class ModalTemplateBuilder(
             add(block = modalBlockBuilder.timeScheduleBlock(timeScheduleInfo = timeScheduleInfo))
         }
 
-    // userNameWithThumbnailBlock requires the users.profile.get scope.
     override fun approvalTemplate(
         headLineText: String,
         approvalContents: ApprovalContents,
@@ -200,7 +197,6 @@ class ModalTemplateBuilder(
             }
             if (meetings.size > MAX_MEETINGS_PER_LIST) {
                 val hidden = meetings.size - MAX_MEETINGS_PER_LIST
-                // No preceding divider: skipping it keeps the worst case at 3*MAX+2 = 50 blocks.
                 add(
                     block =
                         modalBlockBuilder.simpleText(
@@ -225,7 +221,6 @@ class ModalTemplateBuilder(
                 append(meeting.startAt.format(MEETING_LIST_TIMESTAMP_FORMAT))
                 meeting.endAt?.let { append(" ~ ${it.format(MEETING_LIST_TIMESTAMP_FORMAT)}") }
             }
-        // Host always counts as attending; invitees count toward accepted only while isAttending.
         val totalCount = 1 + meeting.participants.size
         val acceptedCount = 1 + meeting.participants.count { it.isAttending }
         val participantsLine = "Participants: $acceptedCount/$totalCount"
@@ -235,7 +230,6 @@ class ModalTemplateBuilder(
             .joinToString(separator = "\n")
     }
 
-    /** Lists decliners with their reason, one per line; null when nobody declined. */
     private fun renderDeclinedLine(meeting: MeetingDto): String? {
         val declined = meeting.participants.filter { !it.isAttending }
         if (declined.isEmpty()) return null
@@ -314,9 +308,6 @@ class ModalTemplateBuilder(
         noticeChannel: String,
         noticeMessageTs: String,
     ): String {
-        // Token order must match SlackInteractionRequestParser: idempotencyKey, detailType, then
-        // routingExtras — participantUserId, noticeChannel, noticeMessageTs. Blank values still
-        // occupy a slot so indices stay stable.
         val view =
             modal {
                 callbackId(id = DeclineReasonModalIds.CALLBACK_ID)
@@ -339,7 +330,6 @@ class ModalTemplateBuilder(
                     }
                     input(blockId = DeclineReasonModalIds.BLOCK_ID) {
                         label(text = "Reason")
-                        // static_select over radio_buttons: 8 radios push Submit below the fold.
                         staticSelect(
                             actionId = DeclineReasonModalIds.ACTION_ID,
                             placeholder = "Pick a reason",
@@ -351,8 +341,6 @@ class ModalTemplateBuilder(
                                 }
                         }
                     }
-                    // Optional in Slack; the "required when Other" rule is enforced on submit via
-                    // response_action errors (DeclineReasonSubmissionContext).
                     input(blockId = DeclineReasonModalIds.DETAIL_BLOCK_ID) {
                         optional(value = true)
                         label(text = "Details (required if you pick Other)")
@@ -369,8 +357,6 @@ class ModalTemplateBuilder(
         requesterId: String,
         channel: String,
     ): String {
-        // Token order must match SlackInteractionRequestParser: meetingUid, detailType, then
-        // routingExtras — requesterId, originating channel. Pickers pre-fill the current start.
         val view =
             modal {
                 callbackId(id = RescheduleMeetingModalIds.CALLBACK_ID)
@@ -407,8 +393,6 @@ class ModalTemplateBuilder(
     }
 
     override fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String {
-        // Token order must match SlackInteractionRequestParser: meetingUid, detailType, then
-        // routingExtras — requesterId, originating channel; user ids come from the multi-users select.
         val view =
             modal {
                 callbackId(id = AddParticipantModalIds.CALLBACK_ID)

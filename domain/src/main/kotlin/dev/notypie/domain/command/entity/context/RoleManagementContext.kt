@@ -9,12 +9,6 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Context for the admin-only role-management mentions (`grant`/`revoke`/`roles`). The parser
- * validates the mention shape and hands over a ready [CommandIntent]; the application listener
- * with access to the role repository executes it and replies — the domain layer must not reach
- * into infrastructure.
- */
 internal class RoleManagementContext(
     private val intent: CommandIntent,
     commandBasicInfo: CommandBasicInfo,

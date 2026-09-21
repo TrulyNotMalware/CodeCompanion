@@ -25,22 +25,11 @@ private val log = KotlinLogging.logger {}
 
 private val CVE_WINDOW_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-/**
- * Renders an outbox-status report in response to `@bot status` mentions. Reads the same
- * counters that drive [dev.notypie.application.health.OutboxHealthIndicator] so the chat
- * reply and the actuator health endpoint never disagree about lag/in-flight numbers.
- *
- * The text is posted as a regular channel message (not ephemeral): operators may want to
- * scroll back through historical status reports, and the only invocation path is an
- * intentional `@bot status` mention.
- */
 @Service
 class OpsStatusService(
     private val outboxRepository: MessageOutboxRepository,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
-    // Always wired (JpaConfiguration registers the CVE repositories unconditionally), so injection is
-    // safe even when the CVE feature is off; the section is only rendered when cve.enabled is true.
     private val cveTopicRepository: CveTopicRepository,
     private val cveEventRepository: CveEventRepository,
     private val cveCollectLedgerRepository: CveCollectLedgerRepository,
@@ -79,7 +68,6 @@ class OpsStatusService(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    // Internal: the MCP `get_status` tool renders the same report so chat and tool output agree.
     internal fun renderReport(): String {
         val now = clock.instant().atZone(clock.zone).toLocalDateTime()
         val cutoff = now.minusSeconds(stuckThresholdSeconds)
@@ -113,9 +101,6 @@ class OpsStatusService(
         }
     }
 
-    // CVE feed health: active topic count, event backlog by summary status (FAILED split into still-
-    // retryable vs dead-letter at the retry ceiling), and the newest collect window. Rendered only when
-    // the feature is on; the outbox section above stays identical either way.
     private fun cveSection(): String {
         val activeTopics = cveTopicRepository.countActive()
         val pending = cveEventRepository.countByStatus(status = CveSummaryStatus.PENDING)

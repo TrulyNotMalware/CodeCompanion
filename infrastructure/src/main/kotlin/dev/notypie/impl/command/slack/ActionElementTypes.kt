@@ -2,7 +2,7 @@ package dev.notypie.impl.command.slack
 
 enum class ActionElementTypes(
     val elementName: String,
-    val isPrimary: Boolean, // Primary Element means that can run the events
+    val isPrimary: Boolean,
 ) {
     APPLY_BUTTON("button", true),
     REJECT_BUTTON("button", true),

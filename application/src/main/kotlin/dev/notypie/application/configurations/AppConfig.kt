@@ -27,8 +27,6 @@ data class AppConfig(
     val ai: Ai = Ai(),
 ) {
     data class Authorization(
-        // Slack user ids treated as ADMIN without a DB row — breaks the bootstrap chicken-and-egg
-        // for the user_command_role table.
         val bootstrapAdmins: List<String> = emptyList(),
     )
 
@@ -40,8 +38,6 @@ data class AppConfig(
 
     data class Api(
         val token: String = "",
-        // App-level token (xapp-, scope connections:write) — only used by the local-only Socket
-        // Mode receiver. Blank in every non-local environment.
         val appToken: String = "",
         val signingSecret: String = "",
         val requestTimestampToleranceSeconds: Long = 300,
@@ -97,8 +93,6 @@ data class AppConfig(
         )
     }
 
-    // Local-only Socket Mode receiver settings. Socket delivers every slash command to one
-    // listener, so the command names are mapped to their handlers here.
     data class Socket(
         val meetingCommand: String = "/meetup",
         val standupCommand: String = "/standup",
@@ -108,9 +102,6 @@ data class AppConfig(
         val latestCommand: String = "/latest",
     )
 
-    // MCP domain tools exposed to the agent lane. The endpoint is loopback-only by default
-    // because the sidecar shares the Pod network namespace; every call authenticates with a
-    // per-turn token minted from `signingSecret`.
     data class Mcp(
         val enabled: Boolean = false,
         val signingSecret: String = "",
@@ -119,9 +110,6 @@ data class AppConfig(
         val allowRemote: Boolean = false,
     )
 
-    // CVE-Bot topic subscriptions. Topics are config-supplied: at boot each entry is upserted
-    // into cve_topic by key, so the yaml stays the admin-managed source while rows added by
-    // other means survive restarts. [github]/[nvd]/[collector] tune the M4 feed collector.
     data class Cve(
         val enabled: Boolean = false,
         val topics: List<TopicDefinition> = emptyList(),
@@ -140,32 +128,21 @@ data class AppConfig(
             val active: Boolean = true,
         )
 
-        // GitHub Releases source. [token] lifts the unauthenticated rate limit (blank = anonymous);
-        // it is never logged. [perPage] caps releases fetched per topic per tick.
         data class Github(
             val token: String = "",
             val perPage: Int = 10,
         )
 
-        // NVD 2.0 source. [apiKey] raises the rate limit (blank = anonymous); it is never logged.
-        // [lookbackMinutes] sizes the lastModStartDate..now scan window; overlaps are dedup-safe.
         data class Nvd(
             val apiKey: String = "",
             val lookbackMinutes: Long = 120,
         )
 
-        // Collector tick knobs. [requestTimeoutSeconds] bounds one source HTTP call; [windowMinutes]
-        // is the once-per-window claim bucket the tick time is truncated to.
         data class Collector(
             val requestTimeoutSeconds: Long = 30,
             val windowMinutes: Long = 5,
         )
 
-        // Notification dispatcher knobs. [batchSize] caps the (event, user) pairs claimed per tick;
-        // [digestSendAt] is the earliest local time (HH:mm in [digestTimezone]) a DIGEST bundle may
-        // go out; [digestSummaryMaxLength] truncates each event's summary inside the digest DM;
-        // [deliveryHorizonDays] bounds the undelivered scan so cve_event's lack of a TTL never turns
-        // it into a full-table sweep.
         data class Notification(
             val batchSize: Int = 50,
             val digestSendAt: String = "09:00",
@@ -175,9 +152,6 @@ data class AppConfig(
         )
     }
 
-    // AI summarization for CVE events. `provider` selects the AiSummarizer implementation
-    // (noop = no external calls, the safe default; sidecar = reuse the agent lane). The remaining
-    // knobs tune the summarize-once worker's claim/retry loop.
     data class Ai(
         val provider: String = "noop",
         val batchSize: Int = 10,
@@ -186,16 +160,13 @@ data class AppConfig(
         val stuckMinutes: Long = 15,
     )
 
-    // AI-agent backend (claude-sidecar co-process). The sidecar shares the Pod, so the default
-    // base URL is Pod-loopback; `bearerSecret` is the shared secret both processes are booted with.
     data class Agent(
         val sidecar: Sidecar = Sidecar(),
     ) {
         data class Sidecar(
             val baseUrl: String = "http://127.0.0.1:7300",
             val bearerSecret: String = "",
-            // Client-side ceiling on one converse exchange; keep above the sidecar's own
-            // TURN_TIMEOUT_SEC (default 90s) so the server-side timeout is the one that fires.
+            // Keep above the sidecar's own TURN_TIMEOUT_SEC (90s) so the server-side timeout fires, not this.
             val requestTimeoutSeconds: Long = 120L,
         )
     }

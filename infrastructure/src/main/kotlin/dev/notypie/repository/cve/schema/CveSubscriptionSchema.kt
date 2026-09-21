@@ -11,10 +11,6 @@ import jakarta.persistence.UniqueConstraint
 import org.hibernate.annotations.CreationTimestamp
 import java.time.LocalDateTime
 
-/**
- * One subscription of a Slack user to a topic. User identity is the raw Slack user
- * id string — no FK user table exists in this schema, matching the rest of the app.
- */
 @Entity(name = "cve_subscription")
 @Table(
     uniqueConstraints = [

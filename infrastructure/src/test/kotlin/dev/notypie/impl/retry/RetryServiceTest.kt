@@ -58,7 +58,7 @@ class RetryServiceTest :
                     val result =
                         retryService.execute(
                             action = countExceptionAction,
-                            recoveryCallBack = recoveryAction, // Recovery if retry fails completely
+                            recoveryCallBack = recoveryAction,
                             maxAttempts = maxFailures + 1,
                         )
                     result shouldBe "Success"

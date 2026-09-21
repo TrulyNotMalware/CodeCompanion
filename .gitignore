@@ -42,12 +42,13 @@ out/
 ### TODO ###
 todo
 gradle.properties
+# timestamped backups written by gradle-config/apply.sh
+gradle.properties.backup.*
 logs
 
 .DS_Store
 .omc
 .claude
-AGENTS.md
 CveBotPlan.md
 *.hprof
 

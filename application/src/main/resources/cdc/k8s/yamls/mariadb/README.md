@@ -16,6 +16,12 @@ A production-ready MariaDB Master-Slave cluster optimized for Change Data Captur
 - Storage class configured
 - Namespace: `database`
 
+> **All objects live in the `database` namespace**, and the headless Service is named
+> `mariadb-headless` to match `serviceName` in `mariadb-sts.yaml` — which is also what the per-pod
+> DNS in `mariadb-job.yaml` resolves against. Keep those three names aligned if you rename anything;
+> a mismatch silently breaks per-pod DNS and the replication job hangs waiting for a host that never
+> resolves.
+
 ## Configuration Before Deployment
 
 ### 1. Update Storage Class
@@ -112,6 +118,9 @@ kubectl exec -it mariadb-1 -n database -- mariadb -u root -p -e "SHOW SLAVE STAT
 ### Default Credentials
 - **Replication User**: `replicator` / `replicator`
 
+Change these before any non-local use — they are placeholders, and the replication password is also
+base64-encoded in `mariadb-config.yaml`.
+
 ## Verification Commands
 
 ```bash
@@ -147,6 +156,11 @@ CDC(Change Data Capture)에 최적화된 프로덕션 환경용 MariaDB Master-S
 - Kubernetes 클러스터
 - 스토리지 클래스 설정
 - 네임스페이스: `database`
+
+> **모든 오브젝트는 `database` 네임스페이스에 있으며**, 헤드리스 서비스 이름은 `mariadb-sts.yaml`의
+> `serviceName`과 맞추어 `mariadb-headless`입니다. `mariadb-job.yaml`의 Pod별 DNS 조회도 같은 이름을
+> 사용합니다. 이름을 바꿀 때는 이 세 곳을 반드시 함께 맞추세요. 어긋나면 Pod별 DNS가 조용히 깨지고
+> 복제 설정 Job이 존재하지 않는 호스트를 기다리며 멈춥니다.
 
 ## 배포 전 설정
 
@@ -243,6 +257,9 @@ kubectl exec -it mariadb-1 -n database -- mariadb -u root -p -e "SHOW SLAVE STAT
 
 ### 기본 계정
 - **복제 사용자**: `replicator` / `replicator`
+
+로컬 외 용도로 쓰기 전에 반드시 변경하세요. 플레이스홀더이며, 복제 비밀번호는
+`mariadb-config.yaml`에도 base64로 인코딩되어 들어 있습니다.
 
 
 ## 검증 명령어

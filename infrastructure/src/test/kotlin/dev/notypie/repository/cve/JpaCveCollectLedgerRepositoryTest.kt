@@ -10,11 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import java.time.LocalDateTime
 
-/**
- * Runs the ledger's JPQL reads against a real database (`claimWindow` itself is a MariaDB-native
- * INSERT IGNORE, delegation-tested elsewhere). No other spec commits ledger rows on the shared H2,
- * and afterSpec clears this spec's own writes, so the empty-table branch is assertable first.
- */
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
 class JpaCveCollectLedgerRepositoryTest

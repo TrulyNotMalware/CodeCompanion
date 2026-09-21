@@ -31,36 +31,14 @@ class SlackMessageRelayServiceImpl(
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val relayTaskExecutor: Executor,
 ) : MessageRelayService {
-    /**
-     * Submits each PENDING message to [relayTaskExecutor] directly. We cannot use
-     * Spring's [@Async] here because [batchPendingMessagesAsync] would be invoked
-     * from within the same bean; self-invocation bypasses the AOP proxy and the
-     * dispatch would run synchronously on the polling scheduler thread.
-     */
+    // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
     override fun batchPendingMessages(pendingMessages: List<OutboxMessage>) {
         pendingMessages.forEach { message ->
             relayTaskExecutor.execute { batchPendingMessagesAsync(pendingMessage = message) }
         }
     }
 
-    /**
-     * Renders a PENDING outbox row to a transport payload, dispatches it, and publishes an
-     * [OutboxUpdateEvent] carrying the dispatch result so that [updateOutboxMessageStatus]
-     * transitions the row out of PENDING. Without this publish step, the polling loop would
-     * re-read the same rows forever.
-     *
-     * The status event always keys on the ROW eventId (parsed up front), never on the payload
-     * eventId the renderer mints — that one is throwaway; the row PK is the identity.
-     *
-     * Render and dispatch both sit inside the try: a malformed/unsupported payload surfaces as a
-     * failure event, exactly as the old row-side decode did. Render is deliberately NOT retried
-     * (retrying a codec/schema failure cannot help); only dispatch is retried, inside the
-     * dispatcher.
-     *
-     * Note: we catch [Exception] (not [Throwable]) intentionally. [Error] subclasses
-     * (OutOfMemoryError, StackOverflowError, etc.) indicate fatal JVM conditions and
-     * should propagate to the executor's uncaught handler.
-     */
+    // Keyed on the row's eventId, not the renderer's payload eventId, which is throwaway.
     internal fun batchPendingMessagesAsync(pendingMessage: OutboxMessage) {
         val eventId =
             runCatching { UUID.fromString(pendingMessage.eventId) }
@@ -78,6 +56,7 @@ class SlackMessageRelayServiceImpl(
                 val result = messageDispatcher.dispatch(event = rendered)
                 result.toOutboxUpdateEvent(eventId = eventId)
             } catch (exception: Exception) {
+                // Catches Exception, not Throwable, so fatal Errors (OOM, StackOverflow) still propagate.
                 logger.error(exception) {
                     "Dispatch failed for eventId=$eventId idempotencyKey=${pendingMessage.idempotencyKey}"
                 }
@@ -86,13 +65,10 @@ class SlackMessageRelayServiceImpl(
                     reason = exception.toString(),
                 )
             }
+        // Publishing is required so the row leaves PENDING; skipping it makes polling re-read it forever.
         applicationEventPublisher.publishEvent(updateEvent)
     }
 
-    // The read-modify-write below relies on OutboxMessage's @Version optimistic lock, which is
-    // enforced when save() (merge) flushes — the detached entity carries the version it was read
-    // with, so a racing claim is still detected and retried. A service-level transaction would add
-    // nothing here, so the persistence boundary stays in the repository's save().
     @EventListener
     fun updateOutboxMessageStatus(event: OutboxUpdateEvent) =
         retryService.execute(
@@ -109,9 +85,7 @@ class SlackMessageRelayServiceImpl(
         return outboxRepository.save(message)
     }
 
-    // Interactive outbound path: builds the transport-neutral row from the enqueued message inside
-    // the command's transaction so it commits atomically with the command's own writes. Spring
-    // Data's save() runs in its own transaction; no service-level boundary needed.
+    // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun saveOutboxMessage(event: OutboundMessageEnqueued) {
         retryService.execute(

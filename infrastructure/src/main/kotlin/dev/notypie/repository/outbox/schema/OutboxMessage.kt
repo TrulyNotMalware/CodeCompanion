@@ -34,8 +34,6 @@ class OutboxMessage(
     // Debezium CDC delivers enum types as null, so transport rides as a plain string column.
     @field:Column(name = "transport", nullable = false)
     val transport: String = Transport.SLACK.name,
-    // Codec-encoded OutboundEnvelope. Stored as opaque TEXT (not JSON): the relay decodes it via
-    // OutboundMessageCodec at deliver time, so the DB never needs to reason about its structure.
     @field:Column(name = "payload", columnDefinition = "TEXT", nullable = false)
     val payload: String,
     @field:CreationTimestamp
@@ -46,11 +44,6 @@ class OutboxMessage(
     @field:JsonProperty("updated_at")
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
-    /**
-     * Payload schema version. New rows are written with [OutboxSchemaVersion.CURRENT]; the relay
-     * refuses to decode a row whose version is not in [OutboxSchemaVersion.SUPPORTED] so a
-     * future-binary downgrade (or an attacker-injected row) cannot trigger a malformed request.
-     */
     @field:JsonProperty("schema_version")
     @field:Column(
         name = "schema_version",

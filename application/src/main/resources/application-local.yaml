@@ -7,11 +7,6 @@ spring:
     virtual:
       enabled: true
 
-  # Points at the local orbstack infra (~/infra). Flyway off + ddl-auto=update stands the schema
-  # up (the V* migrations are incremental patches assuming Hibernate created the base tables).
-  flyway:
-    enabled: false
-
   datasource:
     driver-class-name: org.mariadb.jdbc.Driver
     url: ${DATABASE_URL:jdbc:mariadb://localhost:3306/code_companion}
@@ -99,7 +94,6 @@ slack:
       meeting-command: ${SLACK_MEETING_COMMAND:/meetup}
       standup-command: ${SLACK_STANDUP_COMMAND:/standup}
     mode:
-      stand-alone: true
       # Full local pipeline against orbstack: outbox -> Debezium CDC -> Kafka -> consumer -> Slack.
       outbox-reading-strategy: cdc
       event-publisher: kafka

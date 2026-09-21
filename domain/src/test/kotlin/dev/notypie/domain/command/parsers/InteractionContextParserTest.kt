@@ -6,10 +6,13 @@ import dev.notypie.domain.command.createInteractionResponseInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.EmptyContext
+import dev.notypie.domain.command.entity.context.IgnoredSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
 import dev.notypie.domain.command.entity.parsers.InteractionContextParser
+import dev.notypie.domain.command.inbound.InboundSubmission
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
@@ -81,6 +84,45 @@ class InteractionContextParserTest :
 
                 then("should return EmptyContext") {
                     result.shouldBeInstanceOf<EmptyContext>()
+                }
+            }
+
+            `when`("the interaction carries a parseable submission variant") {
+                val interaction =
+                    createInboundInteraction(
+                        detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                        idempotencyKey = idempotencyKey,
+                        submission =
+                            InboundSubmission.StandupAnswer(
+                                sessionUidRaw = UUID.randomUUID().toString(),
+                                userId = "U_M",
+                                noticeChannel = "C",
+                                noticeMessageTs = "1.2",
+                                answers = listOf("a"),
+                            ),
+                    )
+                val parser =
+                    InteractionContextParser(
+                        commandData = createInteractionResponseInboundCommand(interaction = interaction),
+                        interaction = interaction,
+                        idempotencyKey = idempotencyKey,
+                        intents = intents,
+                    )
+
+                val result = parser.parseContext(idempotencyKey = idempotencyKey)
+
+                then("the submission route wins over detail-type routing") {
+                    result.shouldBeInstanceOf<StandupAnswerSubmissionContext>()
+                }
+            }
+
+            `when`("a SUBMIT detail type arrives without a submission payload") {
+                val parser = createParser(detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT)
+
+                val result = parser.parseContext(idempotencyKey = idempotencyKey)
+
+                then("it resolves to IgnoredSubmissionContext, never EmptyContext") {
+                    result.shouldBeInstanceOf<IgnoredSubmissionContext>()
                 }
             }
         }

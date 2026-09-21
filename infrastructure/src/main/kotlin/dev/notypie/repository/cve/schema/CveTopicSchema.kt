@@ -19,11 +19,6 @@ enum class CveSourceType { GITHUB_RELEASE, NVD_CVE, RSS }
 
 enum class CveDeliveryMode { IMMEDIATE, DIGEST }
 
-/**
- * Admin-managed subscription topic. Rows are upserted from yaml at boot (keyed by
- * [topicKey]); rows absent from the config are left untouched, so runtime-added
- * topics survive restarts.
- */
 @Entity(name = "cve_topic")
 @Table(
     uniqueConstraints = [

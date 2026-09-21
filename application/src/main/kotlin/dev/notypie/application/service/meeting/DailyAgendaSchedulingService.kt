@@ -25,11 +25,6 @@ private val log = KotlinLogging.logger {}
 
 private val AGENDA_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-/**
- * Sends each user a once-per-day DM listing the meetings they attend today. Two guards keep it
- * correct under repeated ticks/restarts: a time-of-day gate (the configured send time in [zone])
- * and an atomic per-date `INSERT IGNORE` claim so the agenda is built at most once.
- */
 @Service
 class DailyAgendaSchedulingService(
     private val agendaDispatchRepository: AgendaDispatchRepository,
@@ -52,10 +47,8 @@ class DailyAgendaSchedulingService(
         val today = LocalDate.ofInstant(now, zone)
         val localTime = now.atZone(zone).toLocalTime()
 
-        // Don't fire before the configured morning send time.
         if (localTime.isBefore(sendTime)) return
 
-        // Atomic once-per-day claim — a tick that already claimed today stands down.
         if (!agendaDispatchRepository.claim(agendaDate = today)) return
 
         val dayStart = today.atStartOfDay()
@@ -93,7 +86,6 @@ class DailyAgendaSchedulingService(
         }
     }
 
-    /** Fans each meeting out to its attending participants, one [AgendaItem] list per user. */
     private fun groupByAttendingUser(meetings: List<AgendaCandidateMeeting>): Map<String, List<AgendaItem>> {
         val byUser = mutableMapOf<String, MutableList<AgendaItem>>()
         meetings.forEach { meeting ->
@@ -106,10 +98,6 @@ class DailyAgendaSchedulingService(
     }
 }
 
-/**
- * Builds the morning daily-agenda DM: a date header followed by one line per meeting, sorted by
- * start time. A scheduler tick has no `trigger_id`, so this is a plain `chat.postMessage`.
- */
 internal fun buildAgendaDm(
     agendaDate: LocalDate,
     meetings: List<AgendaItem>,

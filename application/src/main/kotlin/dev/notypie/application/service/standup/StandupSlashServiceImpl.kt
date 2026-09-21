@@ -9,12 +9,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 
-/**
- * Slash entry point for `/standup setup`. Mirrors [dev.notypie.application.service.meeting.MeetingServiceImpl]:
- * builds the [SetupStandupCommand] from the parsed slash body and hands it to the
- * [CommandExecutor], which runs the context pipeline and resolves the emitted intents
- * (the synchronous `views.open` for the setup modal).
- */
 @Service
 class StandupSlashServiceImpl(
     private val commandExecutor: CommandExecutor,

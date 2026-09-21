@@ -54,12 +54,6 @@ class ApplicationMessageDispatcher(
                             MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
                             MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
                             MessageType.UPDATE_MESSAGE -> dispatchChatUpdateContents(event = event)
-                            MessageType.ACTION_RESPONSE ->
-                                throw IllegalStateException(
-                                    "PostEventPayloadContents with ACTION_RESPONSE messageType is invalid; " +
-                                        "ACTION_RESPONSE must be dispatched as ActionEventPayloadContents " +
-                                        "(idempotencyKey=${event.idempotencyKey})",
-                                )
                         }
                     }
 
@@ -107,11 +101,6 @@ class ApplicationMessageDispatcher(
         return buildCommandOutputFromResponse(result = result, event = event)
     }
 
-    /**
-     * Synchronous `views.open`, bypassing the outbox because [OpenViewPayloadContents.triggerId]
-     * expires 3s after issuance. On any failure it logs and publishes the fallback open-failed event
-     * rather than rethrowing, so subsequent intent dispatch from the same batch is not aborted.
-     */
     override fun dispatchImmediate(event: OpenViewPayloadContents): CommandOutput {
         val response =
             runCatching {
@@ -144,10 +133,6 @@ class ApplicationMessageDispatcher(
         )
     }
 
-    /**
-     * Routes a `views.open` failure to the feature-specific fallback event. Requires
-     * [OpenViewPayloadContents.participantUserId] so the listener has someone to DM; blank fires nothing.
-     */
     private fun publishOpenFailure(event: OpenViewPayloadContents, reason: String) {
         if (event.participantUserId.isBlank()) return
         when (event.commandDetailType) {

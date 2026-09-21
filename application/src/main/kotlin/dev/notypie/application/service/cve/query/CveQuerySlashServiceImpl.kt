@@ -11,12 +11,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 
-/**
- * Builds the `/latest` slash command and runs it through the [CommandExecutor], mirroring
- * [dev.notypie.application.service.cve.subscription.CveSubscriptionSlashServiceImpl]. The optional
- * topic-key argument rides through as plain data; the listener owns the persistence read and the DM.
- * Fail-closed on the feature gate at this layer (the listener re-checks in case of a runtime toggle).
- */
 @Service
 class CveQuerySlashServiceImpl(
     private val appConfig: AppConfig,
@@ -46,7 +40,6 @@ class CveQuerySlashServiceImpl(
     }
 
     companion object {
-        // Keys are lowercase by convention; normalizing makes `/latest Kotlin` find `kotlin`.
         internal fun extractTopicKey(subCommands: List<String>): String? =
             subCommands.firstOrNull { it.isNotBlank() }?.lowercase()
     }

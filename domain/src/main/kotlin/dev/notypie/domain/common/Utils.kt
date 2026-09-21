@@ -16,7 +16,6 @@ class ValidationBuilder {
 
     infix fun <T> String.of(value: T): Field<T> = Field(name = this, value = value)
 
-    // ============ And / Or Chaining ============
     infix fun <T> Field<T>.and(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
         block(this)
         return this
@@ -55,7 +54,6 @@ class ValidationBuilder {
         return this
     }
 
-    // ============ String Validations ============
     fun notBlank(block: StringFieldsBuilder.() -> Unit) {
         val builder = StringFieldsBuilder()
         builder.block()
@@ -159,7 +157,6 @@ class ValidationBuilder {
         return this
     }
 
-    // ============ Int Validations ============
     infix fun Field<Int>.shouldBeLessThan(max: Int): Field<Int> {
         if (value >= max) {
             errors.add(
@@ -264,7 +261,6 @@ class ValidationBuilder {
         return this
     }
 
-    // ============ LocalDateTime Validations ============
     infix fun Field<LocalDateTime>.shouldBeAfter(other: LocalDateTime): Field<LocalDateTime> {
         if (!value.isAfter(other)) {
             errors.add(
@@ -319,7 +315,6 @@ class ValidationBuilder {
         return this
     }
 
-    // ============ Collection Validations ============
     infix fun <T, C : Collection<T>> Field<C>.shouldHaveSize(size: Int): Field<C> {
         if (value.size != size) {
             errors.add(
@@ -372,7 +367,6 @@ class ValidationBuilder {
         return this
     }
 
-    // ============ Custom Validations ============
     infix fun <T> Field<T>.shouldBeOneOf(options: Collection<T>): Field<T> {
         if (value !in options) {
             errors.add(

@@ -21,16 +21,6 @@ import org.springframework.transaction.annotation.Transactional
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Applies a CVE subscription change and confirms it in a DM. Mirrors
- * [dev.notypie.application.service.command.RoleManagementService]: the resolver lifted the intent into
- * a [CveSubscriptionRequestEvent], and this listener owns the repository write plus the reply. The
- * confirmation is a `ChannelMessage` whose channel is the user id — `chat.postMessage(channel=userId)`
- * delivers it as a DM, so no `conversations.open` is needed.
- *
- * `@Transactional` so the write and the outbox-staged reply (persisted by a BEFORE_COMMIT listener)
- * share one boundary even though the event is published from the command executor.
- */
 @Service
 class CveSubscriptionService(
     private val appConfig: AppConfig,
@@ -46,8 +36,6 @@ class CveSubscriptionService(
     @Transactional
     @EventListener
     fun handleCveSubscription(event: CveSubscriptionRequestEvent) {
-        // The slash layer already gates, but a submission can still be in flight across a runtime
-        // toggle-off — fail closed here too so a disabled feature never writes or DMs.
         if (!appConfig.cve.enabled) {
             log.warn { "CVE subscription event ignored while the feature is disabled: action=${event.payload.action}" }
             return
@@ -60,8 +48,6 @@ class CveSubscriptionService(
                 CveSubscriptionAction.LIST -> renderSubscriptions(userId = payload.userId)
             }
 
-        // DM: chat.postMessage(channel=userId). forOutbound keeps appToken blank so the reply
-        // authenticates with the bot token, and the channel is the user id itself.
         val dmBasicInfo =
             CommandBasicInfo.forOutbound(
                 publisherId = payload.userId,

@@ -32,7 +32,7 @@ class MeetingSchema(
     @field:OneToMany(
         mappedBy = "meeting",
         fetch = FetchType.LAZY,
-        orphanRemoval = false, // Delete N+1
+        orphanRemoval = false,
         cascade = [CascadeType.MERGE, CascadeType.PERSIST],
     )
     val participants: MutableList<ParticipantsSchema> = mutableListOf(),
@@ -125,7 +125,6 @@ class ParticipantsSchema(
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "absent_reason")
     val absentReason: RejectReason = RejectReason.ATTENDING,
-    // Free-text explanation captured only when the decliner picks RejectReason.OTHER.
     @field:Column(name = "absent_reason_detail")
     val absentReasonDetail: String? = null,
     @field:CreationTimestamp

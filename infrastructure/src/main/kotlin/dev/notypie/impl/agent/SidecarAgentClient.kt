@@ -11,17 +11,6 @@ import java.util.stream.Stream
 
 private val log = KotlinLogging.logger {}
 
-/**
- * [AgentGateway] adapter for the claude-sidecar HTTP+SSE contract (`POST /v1/converse`).
- *
- * The sidecar streams `session` → 0..N `text`/`tool_use`/`tool_result` → terminal `done`|`error`
- * as Server-Sent Events; this client folds the stream into a single terminal [AgentTurnResult].
- * Wire field names are camelCase per the sidecar's `openapi.yaml` (the contract source of truth).
- *
- * Timeout note: [requestTimeout] bounds the whole exchange from the client side as a safety net;
- * the turn ceiling itself is enforced server-side (`TURN_TIMEOUT_SEC` → terminal `error: timeout`),
- * so configure this comfortably above the sidecar's ceiling.
- */
 class SidecarAgentClient(
     private val baseUrl: String,
     private val bearerSecret: String,
@@ -39,8 +28,7 @@ class SidecarAgentClient(
         private const val EVENT_ERROR = "error"
     }
 
-    // Pinned to HTTP/1.1: the default (HTTP/2) sends an h2c upgrade on plain-http URLs, which
-    // uvicorn rejects and then fails to read the request body (400 "body: Field required").
+    // Pinned to HTTP/1.1: default HTTP/2 sends an h2c upgrade that uvicorn rejects (400 "body: Field required").
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
@@ -67,8 +55,7 @@ class SidecarAgentClient(
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream")
                 .apply { request.userId?.let { header("X-User-Id", it) } }
-                // Header, not body: the sidecar's request schema forbids unknown fields, and a
-                // header keeps the credential out of request-body logging.
+                // Header, not body: sidecar schema forbids unknown fields, and this keeps the token out of body logs.
                 .apply { request.scopedToken?.let { header("X-Turn-Token", it) } }
                 .POST(HttpRequest.BodyPublishers.ofString(toRequestBody(request = request)))
                 .build()
@@ -83,7 +70,7 @@ class SidecarAgentClient(
         }
     }
 
-    /** Serialized by hand-built map so null optionals are omitted — the sidecar forbids unknown/extra fields. */
+    // Hand-built map omits null optionals — the sidecar rejects unknown/extra fields.
     private fun toRequestBody(request: AgentTurnRequest): String {
         val body = mutableMapOf<String, String>("sessionKey" to request.sessionKey, "prompt" to request.prompt)
         request.sessionId?.let { body["sessionId"] = it }
@@ -103,11 +90,6 @@ class SidecarAgentClient(
         }
     }
 
-    /**
-     * Folds the SSE line stream into the terminal result. Frames are `event:`/`data:` line pairs
-     * separated by blank lines; `:keep-alive` comment lines are ignored per the SSE spec. Text
-     * deltas are accumulated only as a fallback — `done.finalText` is authoritative when present.
-     */
     private fun foldSseStream(lines: Stream<String>): AgentTurnResult {
         var eventName = ""
         val dataLines = mutableListOf<String>()
@@ -140,8 +122,7 @@ class SidecarAgentClient(
                 line.startsWith("data:") -> dataLines.add(line.removePrefix("data:").trimStart())
             }
         }
-        // A stream may close right after the terminal frame's data line without a trailing blank
-        // line — flush so that frame still dispatches before we call the stream incomplete.
+        // Stream may end without a trailing blank line after the terminal frame; flush once more before failing.
         flushFrame()?.let { return it }
         return AgentTurnResult.Failed(
             code = ERROR_CODE_INCOMPLETE_STREAM,
@@ -180,7 +161,6 @@ class SidecarAgentClient(
                 }
             }
 
-            // tool_use / tool_result relay only progress metadata — nothing to fold into the result.
             else -> log.debug { "Ignoring sidecar SSE event '$eventName'" }
         }
         return null

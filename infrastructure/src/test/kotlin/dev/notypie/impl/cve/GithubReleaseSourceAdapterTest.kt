@@ -13,11 +13,6 @@ import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.LocalDateTime
 
-/**
- * Exercises the adapter against a real HTTP server (JDK built-in, no extra deps): happy-path JSON
- * mapping, the name→tag_name title fallback, the auth header appearing only with a configured
- * token, and empty-list handling for malformed config and non-2xx responses.
- */
 class GithubReleaseSourceAdapterTest :
     BehaviorSpec({
         lateinit var respond: (HttpExchange) -> Unit
@@ -112,7 +107,6 @@ class GithubReleaseSourceAdapterTest :
         }
 
         given("a release whose name is an empty string") {
-            // GitHub sends "" (not null) for tag-only releases; blank must also fall through.
             respond =
                 jsonResponse(
                     status = 200,

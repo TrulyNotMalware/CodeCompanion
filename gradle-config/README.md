@@ -1,6 +1,10 @@
 # OS-Specific Gradle Configuration
 
-This directory contains OS-optimized Gradle configuration files and automated setup scripts for Java 25 + Kotlin 2.3.20 + Spring Boot 4 projects.
+This directory contains OS-optimized Gradle configuration files and automated setup scripts. Tuned for this
+repository's toolchain: Java 25 (Adoptium) + Kotlin 2.4.10 + Spring Boot 4.1.1 on Gradle 9.7.1.
+
+The generated `gradle.properties` at the repository root is **git-ignored** — always edit the preset here
+and re-run `./apply.sh` rather than editing the generated file.
 
 ## Quick Start
 
@@ -17,6 +21,11 @@ Copy the appropriate configuration file to your project root as `gradle.properti
 - `gradle-macos.properties` → macOS (Apple Silicon & Intel)
 - `gradle-linux.properties` → Linux distributions
 - `gradle-common.properties` → Universal compatibility
+
+> **Note:** you rarely need to pick manually. `apply.sh` maps `uname -s` to `macos`, `linux`,
+> `windows`, or `unknown`, and any platform without a matching `gradle-<os>.properties` — Windows via
+> Git Bash / MSYS / Cygwin included — automatically falls back to the common preset with a warning.
+> Adding a `gradle-windows.properties` here is all it takes to override that.
 
 ## Configuration Files
 
@@ -41,9 +50,11 @@ Copy the appropriate configuration file to your project root as `gradle.properti
 ### gradle-common.properties
 **Optimized for:** Cross-platform compatibility
 **Key Features:**
-- Safe defaults for all operating systems
-- 4GB memory allocation
-- Basic optimizations only
+- No GC selection and no experimental VM options — the JVM default collector, valid everywhere
+- 4GB heap (2GB Kotlin daemon)
+- Worker count left to Gradle's processor-count default
+- Kotlin daemon fallback **enabled**, so an untuned platform degrades to in-process compilation
+  instead of failing the build
 
 **Recommended System:** 8GB+ RAM
 
@@ -99,23 +110,31 @@ Fine-tune Kotlin compilation performance:
 ## Compatibility
 
 ### Supported Versions
-- **Gradle:** 9.1.0+
-- **Java:** 21 LTS+ (Eclipse Temurin recommended)
-- **Kotlin:** 2.3.20+
-- **Spring Boot:** 4.0.5+
+- **Gradle:** 9.7.1 (pinned by `gradle/wrapper/gradle-wrapper.properties`)
+- **Java:** 25 — required, not just recommended. The root build pins an Adoptium toolchain and sets
+  `sourceCompatibility`/`targetCompatibility` to 25, so an older JDK will not build this project.
+- **Kotlin:** 2.4.10 (declared by the Kotlin plugin in the root `build.gradle.kts`)
+- **Spring Boot:** 4.1.1
+
+> The `kotlin.version` key inside the preset files is stale metadata; the Kotlin plugin version in the
+> root `build.gradle.kts` is what actually governs compilation.
 
 ### OS Support Matrix
 | OS                        | File | Status | Notes |
 |---------------------------|---|---|---|
 | macOS | gradle-macos.properties | Full Support | Optimized for M1/M2/M3 |
 | Linux                     | gradle-linux.properties | Full Support | Maximum performance |
-| Other OS                  | gradle-common.properties | Basic Support | Safe defaults |
+| Windows / Other OS        | gradle-common.properties | Basic Support | Automatic fallback — no preset tuned for these |
 
 ---
 
 # OS별 Gradle 설정
 
-Java 25 + Kotlin 2.3.20 + Spring Boot 4 프로젝트를 위한 OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디렉토리입니다.
+OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디렉토리입니다. 이 저장소의 툴체인 기준으로
+튜닝되어 있습니다: Java 25 (Adoptium) + Kotlin 2.4.10 + Spring Boot 4.1.1, Gradle 9.7.1.
+
+저장소 루트에 생성되는 `gradle.properties`는 **git-ignore 대상**입니다. 공유 설정을 바꿀 때는 생성된
+파일이 아니라 이 디렉토리의 프리셋을 수정하고 `./apply.sh`를 다시 실행하세요.
 
 ## 빠른 시작
 
@@ -132,6 +151,11 @@ Java 25 + Kotlin 2.3.20 + Spring Boot 4 프로젝트를 위한 OS 최적화 Grad
 - `gradle-macos.properties` → macOS (Apple Silicon 및 Intel)
 - `gradle-linux.properties` → Linux 배포판
 - `gradle-common.properties` → 범용 호환성
+
+> **참고:** 대개 직접 고를 필요가 없습니다. `apply.sh`는 `uname -s`를 `macos`/`linux`/`windows`/
+> `unknown`으로 매핑하고, 대응하는 `gradle-<os>.properties`가 없는 플랫폼(Git Bash·MSYS·Cygwin의
+> Windows 포함)은 경고와 함께 공통 프리셋으로 자동 폴백합니다. `gradle-windows.properties`를 이
+> 디렉토리에 추가하면 그 파일이 우선 적용됩니다.
 
 ## 설정 파일 설명
 
@@ -156,9 +180,10 @@ Java 25 + Kotlin 2.3.20 + Spring Boot 4 프로젝트를 위한 OS 최적화 Grad
 ### gradle-common.properties
 **최적화 대상:** 크로스 플랫폼 호환성
 **주요 기능:**
-- 모든 운영체제에서 안전한 기본 설정
-- 4GB 메모리 할당
-- 기본 최적화만 적용
+- GC 지정과 실험적 VM 옵션 없음 — 모든 플랫폼에서 유효한 JVM 기본 컬렉터 사용
+- 4GB 힙 (Kotlin 데몬 2GB)
+- 워커 수는 Gradle의 프로세서 개수 기본값에 위임
+- Kotlin 데몬 폴백 **활성화** — 튜닝되지 않은 플랫폼에서 빌드 실패 대신 인프로세스 컴파일로 degrade
 
 **권장 시스템:** 8GB+ RAM
 
@@ -214,14 +239,18 @@ Kotlin 컴파일 성능 미세 조정:
 ## 호환성
 
 ### 지원 버전
-- **Gradle:** 9.1.0+
-- **Java:** 21 LTS+ (Eclipse Temurin 권장)
-- **Kotlin:** 2.3.20+
-- **Spring Boot:** 4.0.5+
+- **Gradle:** 9.7.1 (`gradle/wrapper/gradle-wrapper.properties`에 고정)
+- **Java:** 25 — 권장이 아니라 필수입니다. 루트 빌드가 Adoptium 툴체인을 고정하고
+  `sourceCompatibility`/`targetCompatibility`를 25로 설정하므로 하위 JDK로는 빌드되지 않습니다.
+- **Kotlin:** 2.4.10 (루트 `build.gradle.kts`의 Kotlin 플러그인이 선언)
+- **Spring Boot:** 4.1.1
+
+> 프리셋 파일 안의 `kotlin.version` 값은 갱신되지 않은 메타데이터입니다. 실제 컴파일 버전은 루트
+> `build.gradle.kts`의 Kotlin 플러그인 버전이 결정합니다.
 
 ### OS 지원 매트릭스
 | OS | 파일 | 상태 | 비고 |
 |---|---|---|---|
 | macOS | gradle-macos.properties | 완전 지원 | M1/M2/M3 최적화 |
 | Linux | gradle-linux.properties | 완전 지원 | 최대 성능 |
-| 기타 OS | gradle-common.properties | 기본 지원 | 안전한 기본값 |
+| Windows / 기타 OS | gradle-common.properties | 기본 지원 | 자동 폴백 — 전용 프리셋 없음 |

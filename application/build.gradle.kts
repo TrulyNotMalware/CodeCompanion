@@ -1,6 +1,10 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 val jarName: String? = findProperty("jarName") as String?
+val springBootVersion = rootProject.extra["springBootVersion"] as String
+val jacksonVersion = rootProject.extra["jacksonVersion"] as String
+val slackSdkVersion = rootProject.extra["slackSdkVersion"] as String
+val springAiVersion = rootProject.extra["springAiVersion"] as String
 
 tasks.named<BootJar>("bootJar") {
     if (!jarName.isNullOrBlank()) {
@@ -9,54 +13,45 @@ tasks.named<BootJar>("bootJar") {
 }
 
 dependencies {
-    // Spring-boot bom
-    implementation(
-        platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"),
-    )
-    testFixturesImplementation(
-        platform("org.springframework.boot:spring-boot-dependencies:${rootProject.extra.get("springBootVersion")}"),
-    )
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
+    testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
 
     implementation(project(":domain"))
     implementation(project(":infrastructure"))
     testFixturesImplementation(project(":infrastructure"))
 
-    // Jackson — declared per-module so :domain's classpath stays Jackson-free
-    api(platform("tools.jackson:jackson-bom:${rootProject.extra.get("jacksonVersion")}"))
+    api(platform("tools.jackson:jackson-bom:$jacksonVersion"))
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     implementation("org.springframework.boot:spring-boot-starter-web") {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
     }
-    // Springboot 4 does not support undertow.
     implementation("org.springframework.boot:spring-boot-starter-jetty")
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("io.kotest:kotest-extensions-spring")
 
-    // Slack Socket Mode — local-only inbound transport (gated to the `socket` Spring profile).
-    // slack-api-client provides SocketModeClient; tyrus is its default WebSocket backend.
-    implementation("com.slack.api:slack-api-client:${rootProject.extra.get("slackSdkVersion")}")
+    implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("javax.websocket:javax.websocket-api:1.1")
-    runtimeOnly("org.glassfish.tyrus.bundles:tyrus-standalone-client:1.20")
+    runtimeOnly("org.glassfish.tyrus.bundles:tyrus-standalone-client:1.22")
 
-    // Domain test fixtures
     testImplementation(testFixtures(project(":domain")))
     testFixturesImplementation(testFixtures(project(":domain")))
 
-    // Infrastructure test fixtures (Slack event payload/event builders)
     testImplementation(testFixtures(project(":infrastructure")))
 
-    // AOP
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
-    // MCP server — domain tools for the AI agent lane (streamable HTTP on /mcp)
-    implementation(platform("org.springframework.ai:spring-ai-bom:${rootProject.extra.get("springAiVersion")}"))
-    implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
+    implementation(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
+    // Modules, not the MCP webmvc starter: it re-imports starter-web and leaks Tomcat past the exclude above.
+    implementation("org.springframework.ai:spring-ai-autoconfigure-mcp-server-webmvc")
+    implementation("org.springframework.ai:spring-ai-mcp")
+    implementation("org.springframework.ai:spring-ai-mcp-annotations")
+    implementation("org.springframework.ai:mcp-spring-webmvc")
 
-    // rest docs
     testFixturesImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
-    developmentOnly("org.springframework.boot:spring-boot-devtools:${rootProject.extra.get("springBootVersion")}")
+    developmentOnly("org.springframework.boot:spring-boot-devtools:$springBootVersion")
 }
 
 allOpen {

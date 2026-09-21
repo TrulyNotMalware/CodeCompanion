@@ -7,12 +7,6 @@ import io.mockk.mockk
 import io.mockk.verify
 import java.time.LocalDateTime
 
-/**
- * Delegation-only: `claimWindow` is a native `INSERT IGNORE` (MariaDB-specific), so its
- * affected-row semantics cannot be exercised on H2 — this asserts the impl maps the affected-row
- * count to the boolean claim signal and forwards its arguments unchanged. `deleteOlderThan` is
- * asserted the same way for symmetry.
- */
 class CveCollectLedgerRepositoryImplTest :
     BehaviorSpec({
         val windowStart = LocalDateTime.of(2026, 7, 13, 12, 0)

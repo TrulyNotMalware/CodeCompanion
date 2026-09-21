@@ -505,7 +505,6 @@ class SlackInteractionRequestParserTest :
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("routingExtras surfaces participant + channel + messageTs in order") {
-                    // DeclineReasonSubmissionContext reads by index: [0]=user, [1]=channel, [2]=ts.
                     result.routingExtras shouldBe listOf(participantUserId, noticeChannel, noticeMessageTs)
                     result.privateMetadata shouldBe
                         "$meetingKey,MEETING_DECLINE_REASON,$participantUserId," +
@@ -545,9 +544,6 @@ class SlackInteractionRequestParserTest :
                             .filter { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
                             .map { it.blockId }
 
-                    // StandupAnswerSubmissionContext sorts by these to keep responses[i]
-                    // aligned with routine.questions[i] even when the parser flattens
-                    // Slack's unordered view.state.values map.
                     blockIds shouldBe listOf("standup_q_0", "standup_q_1")
                 }
             }
@@ -619,8 +615,6 @@ class SlackInteractionRequestParserTest :
                 val result = parser.parseStringPayload(payload = payload)
 
                 then("Container.messageTs carries the raw ts string so chat.update can use it later") {
-                    // Wave 2: MeetingApprovalResponseContext pulls this into OpenDeclineReasonModal
-                    // so the submission handler can chat.update the notice DM.
                     result.container.messageTs shouldBe "1234567890.123"
                 }
             }

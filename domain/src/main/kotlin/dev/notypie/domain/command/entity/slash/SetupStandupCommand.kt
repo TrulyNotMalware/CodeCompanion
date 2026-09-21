@@ -9,17 +9,9 @@ import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
 import dev.notypie.domain.command.inbound.InboundCommand
-import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.common.error.exceptionDetails
 import java.util.UUID
 
-/**
- * `/standup setup` slash command. Mirrors [RequestMeetingCommand]: a slash invocation whose
- * sole job is to open a modal synchronously so the Slack `trigger_id` is consumed before it
- * expires. The live trigger handle and the invoking channel are read off the
- * [SlashInvocation] (carried on [InboundCommand.payload]) and threaded into
- * [RequestStandupSetupContext], which emits the modal-opening intent.
- */
 class SetupStandupCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
@@ -30,7 +22,7 @@ class SetupStandupCommand(
     override fun parseContext(
         subCommand: SubCommand<StandupSubCommandDefinition>,
     ): CommandContext<StandupSubCommandDefinition> {
-        val slashPayload = commandData.payload as SlashInvocation
+        val slashPayload = commandData.slashInvocation(commandName = "SetupStandupCommand")
         return RequestStandupSetupContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             triggerHandle = slashPayload.trigger.raw,

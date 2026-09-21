@@ -20,8 +20,6 @@ fun createAppMentionPayload(
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     eventType: String = "app_mention",
-    // A human-typed mention (the default) carries no bot metadata; pass a botId to shape the
-    // event as an app-posted message instead.
     botId: String? = null,
 ): Map<String, Any> =
     buildMap {
@@ -52,7 +50,6 @@ fun createAppMentionPayload(
             buildMap {
                 put("type", eventType)
                 put("user", publisherId)
-                // Slack sends ts as a string on the wire; keep the fixture faithful to it.
                 put("ts", "1234567890.000123")
                 put("team", teamId)
                 put("channel", channel)

@@ -9,12 +9,6 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Context for the admin-only CVE operations mentions (`cve topics`, `cve topic activate|deactivate`,
- * `cve retry ...`). Mirrors [RoleManagementContext]: the parser validates the mention shape and hands
- * over a ready [CommandIntent]; the application listener (which owns the CVE repositories and the
- * feature gate) executes it and replies.
- */
 internal class CveOpsContext(
     private val intent: CommandIntent,
     commandBasicInfo: CommandBasicInfo,

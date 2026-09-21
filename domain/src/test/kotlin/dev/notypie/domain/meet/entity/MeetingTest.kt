@@ -72,7 +72,6 @@ class MeetingTest :
             }
 
             `when`("endAt defaults to startAt + 1 hour") {
-                // Constructed directly to exercise the entity's own `endAt` default.
                 val meeting =
                     Meeting(
                         title = "Quick sync",

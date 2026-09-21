@@ -4,19 +4,6 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.io.File
 
-/**
- * Architectural guards that keep the domain layer honest after the transport-agnostic refactor.
- *
- * 1. The pure-domain packages (meet/standup/common) must never depend on the command package —
- *    command may depend on them, not the reverse, which prevents the removed package cycle from
- *    silently returning.
- * 2. The whole domain source set must stay free of transport/serialization coupling (Slack SDK,
- *    Slack API URLs, Jackson, Gson). Neutral abstractions may *describe* their Slack origin in a
- *    comment (e.g. "was Slack trigger_id"); they may not import or hardcode the transport itself.
- *
- * Known, intentionally-deferred leaks tracked elsewhere (not guarded here yet): the `CommandDetailType`
- * routing enum and the `slackUserId`/`slackTeamId` business identifiers.
- */
 class DomainLayeringGuardTest :
     StringSpec({
         val domainMain = File("src/main/kotlin/dev/notypie/domain")
@@ -44,7 +31,6 @@ class DomainLayeringGuardTest :
             domainMain.exists() shouldBe true
             val forbidden =
                 listOf(
-                    // Catches imports AND fully-qualified inline references.
                     "Slack SDK reference" to Regex("""\bcom\.slack\b"""),
                     "Slack API URL literal" to Regex("""slack\.com"""),
                     "Jackson import" to Regex("""import\s+(com\.fasterxml\.jackson|tools\.jackson)"""),
@@ -67,9 +53,6 @@ class DomainLayeringGuardTest :
             violations shouldBe emptyList()
         }
 
-        // Source scanning cannot see the dependency graph: the root build once injected Jackson into
-        // every subproject, so domain compiled against it with zero imports. Probing the test-runtime
-        // classpath fails fast if a shared-injection regression ever puts these libraries back.
         "domain classpath must stay free of transport and serialization libraries" {
             val forbiddenClasses =
                 listOf(
@@ -82,8 +65,6 @@ class DomainLayeringGuardTest :
             present shouldBe emptyList()
         }
 
-        // Slack vocabulary in code identifiers was neutralized to handle names (replyHandle /
-        // triggerHandle); comments may still describe Slack origin ("was Slack trigger_id").
         "domain identifiers must not reuse raw Slack vocabulary" {
             val forbiddenVocabulary =
                 listOf(

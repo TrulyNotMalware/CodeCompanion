@@ -10,15 +10,7 @@ data class CommandBasicInfo(
     val idempotencyKey: UUID,
 ) {
     companion object {
-        /**
-         * Builds a [CommandBasicInfo] for bot-initiated outbound Slack events that don't
-         * originate from a user-driven HTTP request — e.g. fallback ephemerals from
-         * `views.open` failures, scheduler-driven DM dispatches, channel summary posts.
-         *
-         * `appToken` is intentionally blank: outbound messages authenticate via the bot
-         * token already configured on the Slack API client, not the per-request app token
-         * carried on inbound payloads.
-         */
+        // appToken is intentionally blank; outbound calls authenticate via the client's bot token.
         fun forOutbound(
             publisherId: String,
             channel: String,

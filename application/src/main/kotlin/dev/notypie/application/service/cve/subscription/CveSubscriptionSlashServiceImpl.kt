@@ -24,13 +24,6 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 import java.util.UUID
 
-/**
- * Builds the CVE subscription slash commands and runs them through the [CommandExecutor], mirroring
- * [dev.notypie.application.service.standup.StandupSlashServiceImpl]. Topics are queried here (the
- * domain stays persistence-blind) and passed into the command as plain option data. When there is
- * nothing to show — no active topics for `/subscribe`, no subscriptions for `/unsubscribe` — an
- * informative ephemeral is sent instead of opening an empty modal.
- */
 @Service
 class CveSubscriptionSlashServiceImpl(
     private val appConfig: AppConfig,

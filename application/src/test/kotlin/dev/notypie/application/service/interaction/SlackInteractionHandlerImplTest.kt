@@ -5,6 +5,7 @@ import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
+import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.slack.ActionElementTypes
@@ -26,14 +27,6 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.util.LinkedMultiValueMap
 import java.util.UUID
 
-/**
- * Unit tests for [SlackInteractionHandlerImpl].
- *
- * We lock down the legacy whitelist constant so that new `CommandDetailType`
- * values cannot accidentally inherit the global "Canceled." short-circuit
- * without explicit opt-in, and exercise the primary execution paths of
- * `handleInteraction` end-to-end through a mocked executor/parser.
- */
 class SlackInteractionHandlerImplTest :
     BehaviorSpec({
         val payloadParser = mockk<InteractionPayloadParser>()
@@ -44,6 +37,7 @@ class SlackInteractionHandlerImplTest :
                 interactionPayloadParser = payloadParser,
                 applicationEventPublisher = applicationEventPublisher,
                 commandExecutor = commandExecutor,
+                submissionParseObserver = SubmissionParseObserver.NONE,
             )
 
         given("legacy whitelist constant") {

@@ -14,9 +14,7 @@ import java.time.Instant
 interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Long> {
     fun findByMeetingIdAndOffsetMinutes(meetingId: Long, offsetMinutes: Int): MeetingReminderSchema?
 
-    // DISTINCT collapses the participant cartesian (JOIN FETCH on the to-many collection would
-    // otherwise repeat each reminder row once per attendee). The claim CAS already makes a
-    // duplicate harmless, but without DISTINCT those duplicates would also eat into the page limit.
+    // DISTINCT avoids the JOIN FETCH cartesian on participants — duplicates would also eat into the page limit.
     @Query(
         """
         SELECT DISTINCT r FROM meeting_reminder r
@@ -33,6 +31,7 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         pageable: Pageable,
     ): List<MeetingReminderSchema>
 
+    // Atomic UPDATE guarded by status = 'PENDING' — a derived find-then-save here would race and double-dispatch.
     @Modifying
     @Transactional
     @Query(

@@ -9,11 +9,7 @@ import java.net.InetAddress
 
 private const val BEARER_PREFIX = "Bearer "
 
-/**
- * Gate in front of the MCP endpoint: rejects before ANY protocol handling (`initialize` and
- * `tools/list` included), so no anonymous request reaches the MCP server. Registered via a
- * FilterRegistrationBean scoped to the endpoint path — only when MCP is enabled.
- */
+// Applies to every request uniformly — do not exempt initialize/tools/list from the token check.
 class McpTurnTokenFilter(
     private val scopedTurnTokenCodec: ScopedTurnTokenCodec,
     private val allowRemote: Boolean,

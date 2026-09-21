@@ -13,7 +13,6 @@ sealed interface ModalForm {
     data class AddParticipant(
         val meetingUid: UUID,
         val requesterId: String,
-        // Ferried through the modal's private_metadata; a view_submission carries no channel.
         val channel: ConversationTarget,
     ) : ModalForm
 
@@ -27,7 +26,6 @@ sealed interface ModalForm {
 
     data class StandupSetup(
         val creatorId: String,
-        // Ferried through the modal's private_metadata; a view_submission carries no channel.
         val commandChannel: ConversationTarget,
     ) : ModalForm
 
@@ -38,18 +36,15 @@ sealed interface ModalForm {
         val originNotice: MessageRef?,
     ) : ModalForm
 
-    /** Topics offered in the `/subscribe` modal; queried and mapped by the application service. */
     data class CveSubscribe(
         val topics: List<TopicOption>,
     ) : ModalForm
 
-    /** The user's current subscriptions offered in the `/unsubscribe` modal. */
     data class CveUnsubscribe(
         val topics: List<TopicOption>,
     ) : ModalForm
 }
 
-/** A single modal option: [key] is the wire value (topic key), [label] the display name. */
 data class TopicOption(
     val key: String,
     val label: String,

@@ -9,11 +9,6 @@ import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Mints and verifies the per-turn MCP token: `v1.<base64url(payload)>.<base64url(hmac-sha256)>`.
- * Deliberately not JWT — this app is the only issuer and the only audience, so a fixed
- * algorithm plus a constant-time compare avoids the alg-confusion surface of a JWT library.
- */
 class ScopedTurnTokenCodec(
     private val signingSecret: String,
     private val tokenTtl: Duration,

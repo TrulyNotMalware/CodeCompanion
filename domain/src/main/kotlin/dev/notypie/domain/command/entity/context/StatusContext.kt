@@ -9,12 +9,6 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Context for `@bot status` mentions. Emits a [CommandIntent.StatusReport] which the resolver
- * lifts to an internal [dev.notypie.domain.command.entity.event.StatusReportRequestEvent].
- * The application listener with access to the outbox repository renders fresh metrics —
- * we don't compute them here because the domain layer must not reach into infrastructure.
- */
 internal class StatusContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

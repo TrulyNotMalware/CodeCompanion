@@ -24,9 +24,6 @@ class StandupAnswerService(
     private val eventPublisher: EventPublisher,
     private val clock: Clock = Clock.systemDefaultZone(),
 ) {
-    // Transaction boundary lives on StandupRepositoryImpl.recordAnswer (the read-modify-write
-    // over the session's answer collection). This listener only forwards the payload, so it
-    // carries no transaction of its own.
     @EventListener
     fun recordAnswer(event: RecordStandupAnswerEvent) {
         val payload = event.payload
@@ -42,23 +39,12 @@ class StandupAnswerService(
         }
     }
 
-    /**
-     * Fallback path invoked when `views.open` for the standup answer modal fails. Unlike the
-     * decline-reason flow there is no provisional persistence to fall back on — the answers
-     * exist only in the unopened modal — so the only remediation is to surface an ephemeral
-     * notice telling the user the link is still actionable from the original DM. We don't
-     * attempt to reopen the modal; the trigger_id is dead by the time this fires.
-     */
     @EventListener
     fun onStandupModalOpenFailed(event: StandupModalOpenFailedEvent) {
         answerLog.warn {
             "views.open fallback triggered for standup: userId=${event.userId} " +
                 "channel=${event.channel} reason=${event.reason}"
         }
-        // `chat.postEphemeral` requires `channel` to be an IM/channel ID and `user` to be the
-        // recipient's user ID. The originating DM's channel was already captured on
-        // [event.channel] (a D-channel for the bot↔user IM); routing it through CommandBasicInfo
-        // — and leaving the recipient null — keeps `channel` and `user` distinct on the wire.
         val basicInfo =
             CommandBasicInfo.forOutbound(
                 appId = event.apiAppId,

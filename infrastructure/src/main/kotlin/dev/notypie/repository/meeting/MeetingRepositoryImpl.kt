@@ -103,7 +103,6 @@ open class MeetingRepositoryImpl(
         if (schema.publisherId != requesterId || schema.isCanceled) {
             return AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
         }
-        // Meeting requires startAt in the future, so adding to a started meeting isn't representable.
         if (!schema.startAt.isAfter(LocalDateTime.now())) {
             return AddParticipantResult(
                 outcome = AddParticipantResult.Outcome.MEETING_STARTED,
@@ -123,7 +122,6 @@ open class MeetingRepositoryImpl(
                 meeting = schema.toMeetingDto(),
             )
         }
-        // Enforce MAX_PARTICIPANTS through the Meeting aggregate so the limit stays domain-owned.
         val withinCapacity =
             runCatching {
                 val meeting = schema.toDomainEntity()

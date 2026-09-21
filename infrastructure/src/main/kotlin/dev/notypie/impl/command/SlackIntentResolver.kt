@@ -36,7 +36,6 @@ import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
 import dev.notypie.domain.command.intent.CommandIntent
 
 class SlackIntentResolver {
-    /** Resolves each intent individually, assigning its per-variant routing detail type. */
     fun resolveAll(intents: List<CommandIntent>, basicInfo: CommandBasicInfo): List<CommandEvent<EventPayload>> =
         intents.mapNotNull { intent ->
             resolve(

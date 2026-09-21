@@ -101,9 +101,14 @@ apply_os_config() {
 
     local config_file="$GRADLE_CONFIG_DIR/gradle-${os_type}.properties"
 
+    # detect_os recognises more platforms than we ship presets for (today: windows). Falling back to
+    # the portable common preset beats failing a script whose entire job is to make the build run.
+    # Dropping a gradle-${os_type}.properties into this directory is all it takes to override this.
     if [ ! -f "$config_file" ]; then
-        log_error "Configuration file not found: $config_file"
-        exit 1
+        log_warning "No preset tuned for ${os_type} (gradle-${os_type}.properties not found)."
+        log_info "Falling back to the common configuration."
+        apply_common_config "$force"
+        return
     fi
 
     if [ "$force" != "force" ] && [ -f "$GRADLE_PROPERTIES" ]; then
@@ -118,6 +123,7 @@ apply_os_config() {
 
 # Apply common config
 apply_common_config() {
+    local force="$1"
     local config_file="$GRADLE_CONFIG_DIR/gradle-common.properties"
 
     if [ ! -f "$config_file" ]; then
@@ -125,7 +131,10 @@ apply_common_config() {
         exit 1
     fi
 
-    backup_existing_config
+    if [ "$force" != "force" ]; then
+        backup_existing_config
+    fi
+
     cp "$config_file" "$GRADLE_PROPERTIES"
 
     log_success "Common configuration applied!"
@@ -165,7 +174,7 @@ show_usage() {
     echo "Supported OS:"
     echo "  macOS     gradle-macos.properties"
     echo "  Linux     gradle-linux.properties"
-    echo "  Common    gradle-common.properties"
+    echo "  Other     gradle-common.properties (automatic fallback, e.g. Windows/MSYS)"
 }
 
 # Main function
@@ -196,7 +205,7 @@ main() {
 
     if [ "$detected_os" = "unknown" ]; then
         log_warning "Unsupported OS detected. Applying common configuration."
-        apply_common_config
+        apply_common_config "$option"
     else
         log_info "Detected OS: $detected_os"
         check_system_info "$detected_os"

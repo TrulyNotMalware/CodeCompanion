@@ -78,7 +78,6 @@ class CveTopicRepositoryImplTest :
         given("upsert with an existing row that differs only in active") {
             val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
             val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
-            // Chat deactivated the topic (DB active=false); the yaml still declares active=true.
             val existing = createCveTopicSchema(id = 7L, active = false)
             val definition = createCveTopicDefinition(active = true)
             every { jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey) } returns existing

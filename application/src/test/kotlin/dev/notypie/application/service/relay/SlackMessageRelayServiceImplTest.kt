@@ -187,7 +187,6 @@ class SlackMessageRelayServiceImplTest :
                     try {
                         service.updateOutboxMessageStatus(event = event)
                     } catch (expected: Exception) {
-                        // retryService re-throws once the missing row exhausts all attempts
                     }
                     verify(exactly = 0) { outboxRepository.save(any()) }
                 }

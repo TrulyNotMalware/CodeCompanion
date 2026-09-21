@@ -16,26 +16,12 @@ class ModalBlockBuilder(
     companion object {
         const val DEFAULT_CALENDAR_IMAGE_URLS = "https://api.slack.com/img/blocks/bkb_template_images/notifications.png"
     }
-    // Reference from https://api.slack.com/reference/block-kit/blocks
 
-    /**
-     * Creates a header block with the specified text as the headline.
-     *
-     * @param text The text content of the headline.
-     * @return A `HeaderBlock` object representing the header block with the specified headline.
-     */
     fun headerBlock(text: String): HeaderBlock =
         header {
             it.text(modalElementBuilder.plainTextObject(text = text))
         }
 
-    /**
-     * Generates a section block for time schedule information.
-     *
-     * @param timeScheduleInfo The time schedule information.
-     * @param isMarkDown A flag indicating whether the text should be formatted as Markdown. The default value is false.
-     * @return A `SectionBlock` object representing the section block with the time schedule information.
-     */
     fun timeScheduleBlock(timeScheduleInfo: TimeScheduleInfo, isMarkDown: Boolean = false): SectionBlock =
         section {
             if (isMarkDown) {
@@ -51,15 +37,7 @@ class ModalBlockBuilder(
             )
         }
 
-    /**
-     * Generates an `ActionsBlock` object representing a block with approval and reject buttons.
-     *
-     * @param approvalContents The approval contents including button names and interaction values.
-     * @return An `ActionsBlock` object representing the approval block.
-     */
     fun approvalBlock(approvalContents: ApprovalContents): InteractionLayoutBlock {
-        // Slack button value routing string: idempotencyKey + detailType, tokenized the same way
-        // the interaction parser reads it back. This transport concern lives here, not in the domain.
         val interactionPayload = "${approvalContents.idempotencyKey}, ${approvalContents.commandDetailType.name}"
         val approvalButton: InteractiveObject =
             modalElementBuilder.approvalButtonElement(
@@ -84,12 +62,6 @@ class ModalBlockBuilder(
         return toInteractionLayout(approvalButton.state, rejectButton.state, layout = layout)
     }
 
-    /**
-     * Builds a one-button actions block for the inline Cancel control on `/meetup list`.
-     * The button's `value` follows the standard routing format the interaction parser already
-     * reads — `<listIdempotencyKey>,CANCEL_MEETING,<meetingUid>` — so click handling reuses the
-     * existing tokenization path without introducing a new metadata format.
-     */
     fun cancelMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
         val routingValue = "$listIdempotencyKey,${CommandDetailType.CANCEL_MEETING.name},$meetingUid"
         val cancelButton: InteractiveObject =
@@ -105,23 +77,12 @@ class ModalBlockBuilder(
         return toInteractionLayout(cancelButton.state, layout = layout)
     }
 
-    /**
-     * Builds a single actions block carrying both the Reschedule and Cancel controls for a
-     * host-owned `/meetup list` row. Co-locating the two buttons in one block keeps the worst-case
-     * block budget at `3N+2` (the same as a Cancel-only row), so the 50-block Slack cap math in
-     * [ModalTemplateBuilder] is unaffected. Each button's `value` follows the standard routing
-     * format the interaction parser already reads — `<listIdempotencyKey>,<detailType>,<meetingUid>`
-     * — with Reschedule (PRIMARY) routed to `MEETING_RESCHEDULE_REQUEST` and Cancel (DANGER) to
-     * `CANCEL_MEETING`.
-     */
     fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
         fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.name},$meetingUid"
         val rescheduleRoutingValue = routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)
         val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
         val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)
-        // A list can render several host rows in one message, so block_id and action_id must be
-        // unique per meeting — Slack rejects the whole message (invalid_blocks) when any collide.
-        // Routing reads the button value + style, not these ids, so suffixing with the uid is safe.
+        // block_id/action_id must be unique per row; Slack rejects the whole message (invalid_blocks) on collision.
         val rescheduleButton: InteractiveObject =
             modalElementBuilder.rescheduleMeetingButtonElement(
                 buttonName = "Reschedule",
@@ -153,13 +114,6 @@ class ModalBlockBuilder(
         )
     }
 
-    /**
-     * Generates a section block with a simple text.
-     *
-     * @param text The text content to be displayed.
-     * @param isMarkDown A flag indicating whether the text is in Markdown format or not. Default is false.
-     * @return A `SectionBlock` object representing the section block with the specified text.
-     */
     fun simpleText(text: String, isMarkDown: Boolean = false): SectionBlock =
         section {
             if (isMarkDown) {
@@ -169,13 +123,6 @@ class ModalBlockBuilder(
             }
         }
 
-    /**
-     * A function that generates a section block with multiple texts.
-     *
-     * @param texts The texts to be included in the section block.
-     * @param isMarkDown A flag indicating whether the texts should be formatted as Markdown. The default value is false.
-     * @return A `SectionBlock` object representing the section block with the specified texts.
-     */
     fun textBlock(vararg texts: String, isMarkDown: Boolean = false): SectionBlock =
         section {
             it.fields(
@@ -189,19 +136,8 @@ class ModalBlockBuilder(
             )
         }
 
-    /**
-     * Creates a divider block for Slack templates.
-     *
-     * @return A `DividerBlock` object representing a horizontal divider.
-     */
     fun dividerBlock(): DividerBlock = divider()
 
-    /**
-     * Creates a section block for a modal with a selection element.
-     *
-     * @param selectionContents The contents of the selection element.
-     * @return The created section block.
-     */
     fun selectionBlock(selectionContents: SelectionContents): InteractionLayoutBlock {
         val multiSelection =
             modalElementBuilder.selectionElement(
@@ -220,12 +156,6 @@ class ModalBlockBuilder(
         return toInteractionLayout(multiSelection.state, layout = layout)
     }
 
-    /**
-     * Generates a section block with a multi-user selection element for a modal.
-     *
-     * @param contents The contents of the multi-user selection element.
-     * @return A `SectionBlock` object representing the section block with the multi-user selection element.
-     */
     fun multiUserSelectBlock(contents: MultiUserSelectContents): InteractionLayoutBlock {
         val multiUserSelection = modalElementBuilder.multiUserSelectionElement(contents = contents)
         val layout =
@@ -236,12 +166,6 @@ class ModalBlockBuilder(
         return toInteractionLayout(multiUserSelection.state, layout = layout)
     }
 
-    /**
-     * Generates a section block with a plain text input element.
-     *
-     * @param contents The contents of the plain text input element.
-     * @return The generated section block.
-     */
     fun plainTextInputBlock(contents: TextInputContents): InputBlock =
         input {
             it.label(modalElementBuilder.plainTextObject(text = contents.title))

@@ -13,11 +13,6 @@ import java.util.UUID
 
 @Repository
 interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long> {
-    /**
-     * Returns the session for a routine on a specific date with dispatches and answers
-     * eagerly fetched. The unique constraint `(routine_uid, session_date)` guarantees at
-     * most one row.
-     */
     @Query(
         """
         SELECT DISTINCT s FROM standup_session s
@@ -56,8 +51,7 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("sessionUid") sessionUid: UUID,
     ): StandupSessionSchema?
 
-    // Dispatches and answers are eagerly fetched so the caller can map the full session graph
-    // (toStandupSessionDto) outside the persistence context without a LazyInitializationException.
+    // Eagerly fetched so the caller can map the full graph outside the persistence context (else Lazy exception).
     @Query(
         """
         SELECT DISTINCT s FROM standup_session s
@@ -86,11 +80,6 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("messageTs") messageTs: String,
     ): Int
 
-    /**
-     * COLLECTING sessions inside the nudge window — cutoff still ahead of `now` but reached
-     * within `nudgeWindowEnd`, and not yet nudged. Dispatches and answers are eagerly fetched
-     * so the scheduler can compute non-responders without re-loading the session graph.
-     */
     @Query(
         """
         SELECT DISTINCT s FROM standup_session s
@@ -107,6 +96,7 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("nudgeWindowEnd") nudgeWindowEnd: Instant,
     ): List<StandupSessionSchema>
 
+    // Guarded by nudged_at IS NULL AND status = 'COLLECTING' — loosening either lets a session be nudged twice.
     @Modifying
     @Transactional
     @Query(

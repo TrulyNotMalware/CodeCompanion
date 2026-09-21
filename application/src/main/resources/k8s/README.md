@@ -35,7 +35,8 @@ Defines the application deployment with:
 - 2 replicas for high availability
 - Container port 80
 - References to ConfigMap and Secret for environment variables
-- Timezone configuration (Asia/Seoul)
+- `imagePullSecrets: dockercred` for the private registry
+- Timezone configuration (Asia/Seoul) via a `hostPath` mount of `/etc/localtime`
 - PodDisruptionBudget ensuring at least 1 pod remains available during disruptions
 
 ### Service (service.yaml)
@@ -98,6 +99,15 @@ Configure:
 
 - Kubernetes cluster (v1.31+)
 - kubectl configured
+- An image pull secret named `dockercred` in the target namespace — `deployment.yaml` references it via
+  `imagePullSecrets`, so the pod cannot pull from the private registry without it:
+  ```bash
+  kubectl create secret docker-registry dockercred \
+    --docker-server=harbor.registry.notypie.dev \
+    --docker-username=<user> --docker-password=<password> -n <namespace>
+  ```
+- Nodes must have `/usr/share/zoneinfo/Asia/Seoul` present — the timezone is mounted with a `hostPath`,
+  not a ConfigMap, so a node without that file will fail to start the pod
 - For Gateway API: Gateway API CRDs installed
 - For Ingress: NGINX Ingress Controller and cert-manager installed
 
@@ -172,7 +182,8 @@ k8s/
 - 고가용성을 위한 2개의 레플리카
 - 컨테이너 포트 80
 - 환경 변수를 위한 ConfigMap 및 Secret 참조
-- 타임존 설정 (Asia/Seoul)
+- 프라이빗 레지스트리용 `imagePullSecrets: dockercred`
+- `/etc/localtime`의 `hostPath` 마운트를 통한 타임존 설정 (Asia/Seoul)
 - 중단 시 최소 1개의 파드를 유지하는 PodDisruptionBudget
 
 ### Service (service.yaml)
@@ -235,6 +246,15 @@ k8s/
 
 - Kubernetes 클러스터 (v1.31+)
 - kubectl 설정 완료
+- 대상 네임스페이스에 `dockercred` 이미지 풀 시크릿 — `deployment.yaml`이 `imagePullSecrets`로
+  참조하므로, 없으면 프라이빗 레지스트리에서 이미지를 받을 수 없습니다:
+  ```bash
+  kubectl create secret docker-registry dockercred \
+    --docker-server=harbor.registry.notypie.dev \
+    --docker-username=<user> --docker-password=<password> -n <namespace>
+  ```
+- 노드에 `/usr/share/zoneinfo/Asia/Seoul` 파일이 존재해야 합니다 — 타임존은 ConfigMap이 아니라
+  `hostPath`로 마운트되므로, 해당 파일이 없는 노드에서는 파드가 기동되지 않습니다
 - Gateway API의 경우: Gateway API CRD 설치 필요
 - Ingress의 경우: NGINX Ingress Controller 및 cert-manager 설치 필요
 

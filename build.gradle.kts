@@ -1,13 +1,13 @@
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "4.1.0" apply false
+    id("org.springframework.boot") version "4.1.1" apply false
     id("java-library")
     id("java-test-fixtures")
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
-    kotlin("jvm") version "2.4.0"
-    kotlin("plugin.spring") version "2.4.0" apply false
-    kotlin("plugin.jpa") version "2.4.0" apply false
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.spring") version "2.4.10" apply false
+    kotlin("plugin.jpa") version "2.4.10" apply false
 }
 
 java {
@@ -19,15 +19,18 @@ java {
     }
 }
 
-ext {
-    set("kotestVersion", "6.2.0") // https://kotest.io/docs/changelog.html
-    set("slackSdkVersion", "1.49.0")
-    set("mockkVersion", "1.14.11")
-    set("springBootVersion", "4.1.0")
-    set("jacksonVersion", "3.2.0")
-    set("kotlinLoggingVersion", "8.0.4")
-    set("springAiVersion", "2.0.0")
-}
+// Dependabot's Gradle parser only reads `extra["x"] = "…"` / `extra.set` declarations, not an `ext {}` block.
+extra["kotestVersion"] = "6.2.5"
+extra["slackSdkVersion"] = "1.51.0"
+extra["mockkVersion"] = "1.14.11"
+extra["springBootVersion"] = "4.1.1"
+extra["jacksonVersion"] = "3.2.2"
+extra["kotlinLoggingVersion"] = "8.0.4"
+extra["springAiVersion"] = "2.0.1"
+
+val kotestVersion = extra["kotestVersion"] as String
+val mockkVersion = extra["mockkVersion"] as String
+val kotlinLoggingVersion = extra["kotlinLoggingVersion"] as String
 
 kotlin {
     jvmToolchain(25)
@@ -83,12 +86,7 @@ allprojects {
     }
 }
 
-/*
- * Removed the `io.spring.dependency-management` plugin to explicitly override the
- * BOM version for kotlinx-coroutines. When that plugin is applied, Spring's dependency
- * management can pin or supersede BOM coordinates, which makes it hard to import and
- * control the desired kotlinx-coroutines BOM via Gradle platforms.
- */
+// io.spring.dependency-management is intentionally not applied — it can override the kotlinx-coroutines BOM version.
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "org.jetbrains.kotlin.plugin.spring")
@@ -98,21 +96,16 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        // BOM platforms — use api so they propagate to testFixtures and other configurations.
-        // Jackson is intentionally NOT injected here: domain must stay Jackson-free, so the
-        // modules that actually serialize (application/infrastructure) declare it themselves.
-        api(platform("io.kotest:kotest-bom:${rootProject.extra.get("kotestVersion")}"))
+        api(platform("io.kotest:kotest-bom:$kotestVersion"))
 
         implementation(kotlin("reflect"))
 
-        // Kotlin logging
-        implementation("io.github.oshai:kotlin-logging-jvm:${rootProject.extra.get("kotlinLoggingVersion")}")
+        implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
         testFixturesImplementation(kotlin("reflect"))
 
-        testImplementation("io.mockk:mockk:${rootProject.extra.get("mockkVersion")}")
-        testFixturesImplementation("io.mockk:mockk:${rootProject.extra.get("mockkVersion")}")
+        testImplementation("io.mockk:mockk:$mockkVersion")
+        testFixturesImplementation("io.mockk:mockk:$mockkVersion")
         testImplementation("io.kotest:kotest-runner-junit5")
-        testImplementation("io.kotest:kotest-extensions-spring")
         testImplementation("io.kotest:kotest-assertions-core")
     }
 }

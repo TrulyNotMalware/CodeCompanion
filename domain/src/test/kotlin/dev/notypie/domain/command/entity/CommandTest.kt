@@ -42,7 +42,7 @@ class CommandTest :
                 val result = command.handleEvent()
 
                 then("should return CommandOutput from context.runCommand") {
-                    result.ok shouldBe false // EmptyContext returns CommandOutput.empty()
+                    result.ok shouldBe false
                 }
             }
         }
@@ -85,7 +85,7 @@ class CommandTest :
                 val result = command.handleEvent()
 
                 then("should return success from handleInteraction") {
-                    result.ok shouldBe true // default handleInteraction calls interactionSuccessResponse
+                    result.ok shouldBe true
                 }
             }
 

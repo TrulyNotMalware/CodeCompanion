@@ -31,6 +31,5 @@ fun createDomainEventQueue(): EventQueue<CommandEvent<EventPayload>> = DefaultEv
 
 fun EventQueue<CommandEvent<EventPayload>>.flushQueue() {
     while (poll() != null) {
-        // keep polling until queue is empty
     }
 }

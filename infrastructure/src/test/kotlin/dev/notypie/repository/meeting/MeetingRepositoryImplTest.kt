@@ -19,7 +19,6 @@ class MeetingRepositoryImplTest :
         given("getMeeting") {
             val meetingSchema =
                 createMeetingSchema(member = 2).let { schema ->
-                    // Assign a non-zero id to simulate a persisted entity
                     createMeetingSchema(
                         id = 1L,
                         idempotencyKey = schema.idempotencyKey,

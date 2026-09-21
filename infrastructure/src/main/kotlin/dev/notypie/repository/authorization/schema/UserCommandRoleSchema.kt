@@ -14,10 +14,6 @@ import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDateTime
 
-/**
- * Role grant for one workspace member. Absence of a row means the default [UserRole.USER];
- * rows are managed directly in the DB for now (no in-bot grant commands yet).
- */
 @Entity(name = "user_command_role")
 @Table(
     uniqueConstraints = [

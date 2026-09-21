@@ -146,8 +146,6 @@ open class StandupRepositoryImpl(
                     sessionUid = schema.sessionUid,
                     routineUid = schema.routineUid,
                     cutoffAt = schema.cutoffAt,
-                    // Only members whose prompt actually landed (SENT) can be "non-responders".
-                    // PENDING/SENDING/FAILED rows never received a prompt to ignore.
                     sentMemberIds =
                         schema.dispatches
                             .filter { it.dmStatus == DispatchStatus.SENT }

@@ -63,8 +63,6 @@ class StandupDispatchMessageBuilderTest :
         given("buildNudgeNotice") {
             `when`("called with a routine name, cutoff, and timezone") {
                 val basicInfo = createCommandBasicInfo()
-                // 2026-05-04T01:00:00Z = Asia/Seoul 10:00 — verifies the cutoff renders in the
-                // routine's own zone, not UTC.
                 val cutoffAt = Instant.parse("2026-05-04T01:00:00Z")
 
                 val channelMessage =

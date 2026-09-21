@@ -11,13 +11,6 @@ import io.mockk.verify
 import org.springframework.data.domain.PageRequest
 import java.time.LocalDateTime
 
-/**
- * Delegation-only: `claim` is a native `INSERT IGNORE` (MariaDB-specific), so its affected-row
- * semantics cannot be exercised on H2 — this asserts the impl maps the affected-row count to the
- * boolean claim signal and forwards its arguments unchanged. `findUndelivered` (whose JPQL is covered
- * end-to-end in `JpaCveDeliveryRepositoryTest`) is asserted the same way, including the limit ->
- * Pageable conversion and the forwarded scan bounds.
- */
 class CveDeliveryRepositoryImplTest :
     BehaviorSpec({
         given("a delivery this instance wins") {

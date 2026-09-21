@@ -72,14 +72,7 @@ class MeetingServiceImpl(
         )
     }
 
-    /**
-     * Persists a participant's Accept/Decline decision atomically with the enclosing
-     * `@Transactional` boundary of the interaction handler that produced this event.
-     *
-     * Throws if zero rows matched so the enclosing transaction rolls back instead of
-     * silently acknowledging a decision that was never recorded. Practical triggers:
-     * meeting deleted, participant removed, idempotencyKey corruption in button value.
-     */
+    // Throws on zero rows matched so the enclosing tx rolls back instead of silently no-op'ing.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
     fun updateParticipantAttendance(event: UpdateMeetingAttendanceEvent) {
         val payload = event.payload
@@ -95,11 +88,7 @@ class MeetingServiceImpl(
                     )
                 },
             )
-        // MariaDB's default CLIENT_FOUND_ROWS=false makes UPDATE return 0 both when
-        // no row matches AND when the row already holds the requested values (a no-op).
-        // A no-op is legitimate here — it happens every time a user re-submits the same
-        // reason, or picks OTHER after the provisional-OTHER write recorded by Deny click.
-        // We only fail the transaction when the participant row truly doesn't exist.
+        // MariaDB CLIENT_FOUND_ROWS=false: UPDATE returns 0 for "no match" and "no-op" alike.
         if (rowsUpdated == 0 &&
             !meetingRepository.participantExists(
                 meetingIdempotencyKey = payload.meetingIdempotencyKey,
@@ -113,15 +102,7 @@ class MeetingServiceImpl(
         }
     }
 
-    /**
-     * Fallback path invoked when `views.open` for the decline-reason modal fails (trigger_id
-     * expired, Slack API error, network). Persistence is NOT re-published here — the Deny
-     * click already emitted a provisional [UpdateMeetingAttendanceEvent] with
-     * [RejectReason.OTHER] from [MeetingApprovalResponseContext.handleDecline], so by the
-     * time this listener runs the decline is either already durable in the txn or about to
-     * be committed alongside it. We only surface the failure to the user so they can retry
-     * and pick a specific reason.
-     */
+    // Decline is already persisted elsewhere (OTHER); this only notifies, never re-publishes.
     @EventListener
     fun onDeclineModalOpenFailed(event: DeclineModalOpenFailedEvent) {
         log.warn {
@@ -153,14 +134,7 @@ class MeetingServiceImpl(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    /**
-     * Cancels a meeting on behalf of a host who clicked the inline Cancel button on
-     * `/meetup list`. Authorization is enforced atomically by the repository's WHERE clause —
-     * the UPDATE only matches when [CancelMeetingEvent.payload.requesterId] equals
-     * `meetings.publisherId` AND `is_canceled = false`. Returning `false` collapses three
-     * failure modes (missing meeting, non-host, already-canceled) into a single no-op
-     * branch that surfaces a friendly ephemeral instead of an error.
-     */
+    // Authorization enforced atomically via the repository's WHERE clause, not a separate check.
     @EventListener
     fun cancelMeeting(event: CancelMeetingEvent) {
         val payload = event.payload
@@ -200,14 +174,6 @@ class MeetingServiceImpl(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    /**
-     * Adds participants to an existing meeting on behalf of a host who submitted the add-participant
-     * modal opened from `/meetup list`. Authorization (host-only), de-duplication, the already-started
-     * guard, and the `MAX_PARTICIPANTS` invariant are all enforced by [MeetingRepository.addParticipants]
-     * through the Meeting aggregate. On success each newly added user receives the same Accept/Decline
-     * approval notice the creation flow sends (keyed by the meeting's idempotency key so their decision
-     * updates the right meeting), and the host gets an in-channel confirmation ephemeral.
-     */
     @EventListener
     fun addParticipants(event: AddParticipantEvent) {
         val payload = event.payload
@@ -272,8 +238,6 @@ class MeetingServiceImpl(
                 headLineText = "Meeting Request!",
                 reason = "You've been added to this meeting.",
                 subTitle = meeting.title,
-                // Key the notice by the meeting's own idempotencyKey so the recipient's Accept/Decline
-                // updates this meeting's participant row (mirrors the creation-time notice).
                 idempotencyKey = meeting.idempotencyKey,
                 publisherId = meeting.creator,
                 commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,

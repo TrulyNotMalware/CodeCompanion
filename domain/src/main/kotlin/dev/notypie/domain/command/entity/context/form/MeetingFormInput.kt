@@ -9,13 +9,6 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-/**
- * Snapshot of the meeting-request modal's submitted state, already decoded into domain values.
- *
- * Owning the Slack `view_submission` parsing here keeps [RequestMeetingContext] focused on command
- * execution (validate → build → notice) rather than on how the Slack payload is shaped. The Meeting
- * entity still owns its own invariants — [toMeeting] simply hands the parsed values to its constructor.
- */
 internal data class MeetingFormInput(
     val publisher: String,
     val participants: Set<String>,
@@ -25,10 +18,6 @@ internal data class MeetingFormInput(
     val reason: String,
     val noticeRequired: Boolean,
 ) {
-    /**
-     * Precondition: [startAt] was validated to be a non-null future moment, and [endAt] (if present)
-     * is strictly after it. The Meeting entity re-validates these invariants and may throw.
-     */
     fun toMeeting(): Meeting {
         val start =
             requireNotNull(startAt) { "Meeting startAt must be validated before building Meeting entity" }
@@ -84,10 +73,7 @@ internal data class MeetingFormInput(
                 ?.toSet()
                 ?: emptySet()
 
-        /**
-         * Reads the first of the modal's two TIME pickers (start, end) combined with the DATE picker.
-         * Returns null if date/start-time is missing or the combined moment is not strictly in the future.
-         */
+        // Assumes the modal's TIME pickers appear in order: index 0 = start, index 1 = end.
         private fun parseStartDateTime(form: InboundForm): LocalDateTime? {
             val timeString =
                 form
@@ -103,10 +89,6 @@ internal data class MeetingFormInput(
             }
         }
 
-        /**
-         * Reads the second TIME picker (end) against the same DATE picker. Returns null when the
-         * end-time picker is empty, when [startAt] is null, or when the date picker is missing.
-         */
         private fun parseEndDateTime(form: InboundForm, startAt: LocalDateTime?): LocalDateTime? {
             if (startAt == null) return null
             val endTimeString =

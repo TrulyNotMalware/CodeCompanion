@@ -15,11 +15,6 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
-/**
- * Exercises the adapter against a real HTTP server (JDK built-in): happy-path JSON mapping, the
- * cpe→virtualMatchString / keyword→keywordSearch query mapping, the apiKey header appearing only
- * when configured, and empty-list handling for malformed config and non-2xx responses.
- */
 class NvdCveSourceAdapterTest :
     BehaviorSpec({
         lateinit var respond: (HttpExchange) -> Unit
@@ -136,8 +131,6 @@ class NvdCveSourceAdapterTest :
 
         given("a fixed clock in a non-UTC default zone") {
             respond = jsonResponse(status = 200, body = """{"vulnerabilities":[]}""")
-            // KST (+9) zone on the clock must not shift the window: NVD reads the offset-free
-            // params as UTC, so the adapter derives them from the UTC instant regardless of zone.
             val clock = Clock.fixed(Instant.parse("2026-07-14T12:00:00Z"), ZoneOffset.ofHours(9))
 
             `when`("fetch") {

@@ -28,11 +28,6 @@ internal class RescheduleMeetingContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST
 
-    /**
-     * Reschedule button carries `<listIdempotencyKey>,MEETING_RESCHEDULE_REQUEST,<meetingUid>`; the meetingUid
-     * surfaces as the first routing extra. Emits [OutboundMessage.OpenModal] so the stager opens the
-     * modal before the trigger_id expires. Missing extras or a blank trigger_id fall through to a no-op.
-     */
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingUid =
             interaction.routingExtras

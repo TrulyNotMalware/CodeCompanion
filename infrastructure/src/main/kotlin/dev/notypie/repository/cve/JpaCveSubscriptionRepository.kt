@@ -12,12 +12,6 @@ interface JpaCveSubscriptionRepository : JpaRepository<CveSubscriptionSchema, Lo
 
     fun deleteByUserIdAndTopicIdIn(userId: String, topicIds: List<Long>): Long
 
-    /**
-     * Atomically inserts one (user, topic) pair. `INSERT IGNORE` swallows the duplicate-key error
-     * when the pair already exists (double-submit or a concurrent instance), so the affected-row
-     * count is the insert signal — no check-then-act race against the unique constraint. Mirrors
-     * `JpaAgendaDispatchRepository.claimAgenda`.
-     */
     @Modifying
     @Transactional
     @Query(

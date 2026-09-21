@@ -16,12 +16,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Duration
 
-/**
- * Wires the AI-agent lane: the sidecar HTTP+SSE adapter and the async converse listener.
- * [AgentConverseService] is an explicit `@Bean` (not component-scanned) because the class-level
- * `@Async` relies on a CGLIB subclass proxy, and co-locating the wiring here keeps the
- * bean-ordering explicit.
- */
+// Explicit @Bean, not component-scanned — class-level @Async needs a CGLIB subclass proxy.
 @Configuration
 class AgentConfiguration(
     private val appConfig: AppConfig,
@@ -45,7 +40,6 @@ class AgentConfiguration(
         eventPublisher: EventPublisher,
         meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
-        // Present only when MCP is enabled (McpServerConfiguration) — turns then carry a token.
         scopedTurnTokenCodec: ObjectProvider<ScopedTurnTokenCodec>,
     ): AgentConverseService =
         AgentConverseService(

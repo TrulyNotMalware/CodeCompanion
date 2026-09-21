@@ -13,21 +13,12 @@ import java.time.Duration
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Fetches recent GitHub releases for a topic. `source_config` is `{"repo": "owner/name"}`; the
- * request is `GET /repos/{repo}/releases?per_page={perPage}` with the `application/vnd.github+json`
- * Accept header and, when a [token] is configured, a bearer credential. A malformed config, a
- * non-2xx response, or a transport failure logs and returns an empty list so a single bad topic
- * never breaks the collection tick — the collector retries next window and `insertIgnore` dedups.
- */
 class GithubReleaseSourceAdapter(
     private val token: String,
     private val perPage: Int,
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
 ) : SourceAdapter {
-    // Pinned to HTTP/1.1 to match the sidecar client — the JDK default (HTTP/2) is unnecessary here
-    // and HTTP/1.1 keeps request behaviour uniform across the app's outbound clients.
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
@@ -51,7 +42,6 @@ class GithubReleaseSourceAdapter(
         val response =
             runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
                 .getOrElse { ex ->
-                    // Never logs the token: only the topic key and the exception surface here.
                     log.warn(ex) { "GitHub releases request failed for topic=${topic.topicKey}" }
                     return emptyList()
                 }
@@ -78,8 +68,7 @@ class GithubReleaseSourceAdapter(
             log.error { "GitHub topic=${topic.topicKey} source_config missing 'repo'" }
             return null
         }
-        // The repo lands in the URL path unencoded; anything outside owner/name shape would either
-        // blow up URI.create (breaking fetch's never-throw contract) or reshape the request.
+        // repo lands unencoded in the URL path; violating owner/name shape could break URI.create or reshape it.
         if (!REPO_PATTERN.matches(repo)) {
             log.error { "GitHub topic=${topic.topicKey} source_config 'repo' is not owner/name shaped" }
             return null

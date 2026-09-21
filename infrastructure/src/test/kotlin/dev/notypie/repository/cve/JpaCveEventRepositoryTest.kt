@@ -15,13 +15,6 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.data.domain.PageRequest
 import java.time.LocalDateTime
 
-/**
- * Runs the claim-token CAS against a real database: the native WHERE guards below are what
- * multi-instance safety rests on, and mocked-JPA tests cannot exercise them. Setup writes go
- * through the repository (self-transactional) because kotest container scopes run outside the
- * test transaction; rows therefore persist across blocks, so every externalId is unique and the
- * findClaimable assertion accounts for rows left behind by earlier blocks.
- */
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
 class JpaCveEventRepositoryTest
@@ -148,8 +141,6 @@ class JpaCveEventRepositoryTest
                         repository.findClaimable(now = now, maxRetries = 5, pageable = PageRequest.of(0, 10))
 
                     then("only PENDING and retry-elapsed FAILED rows below the budget come back, id-ordered") {
-                        // Other committing specs share this H2 db, so scope the assertion to this
-                        // block's own fixture rows by their externalIds.
                         val blockExternalIds =
                             setOf(
                                 "claimable-pending",
@@ -186,8 +177,6 @@ class JpaCveEventRepositoryTest
             }
 
             given("the ops status counters over a mixed population") {
-                // The counters are global and earlier blocks leave committed rows behind, so every
-                // assertion compares against a baseline captured before this block's own writes.
                 val basePending = repository.countByStatus(status = CveSummaryStatus.PENDING)
                 val baseSummarizing = repository.countByStatus(status = CveSummaryStatus.SUMMARIZING)
                 val baseRetryable = repository.countFailedRetryable(maxRetries = 5)
@@ -302,7 +291,6 @@ class JpaCveEventRepositoryTest
             }
 
             given("dead-letter, retryable, and completed rows at a retry ceiling of 50") {
-                // Ceiling 50 keeps this block exact: rows leaked by other blocks stay below it.
                 val dead1 =
                     repository
                         .saveAndFlush(

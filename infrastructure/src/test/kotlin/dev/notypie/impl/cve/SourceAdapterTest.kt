@@ -7,11 +7,6 @@ import io.kotest.matchers.shouldBe
 import tools.jackson.databind.JsonNode
 import java.time.LocalDateTime
 
-/**
- * Pins the shared parsing helpers both adapters depend on: `stringOrNull` must fold absent, JSON
- * null, non-scalar, and blank values to null (so `?:` fallback chains fire), and
- * `parseSourceTimestamp` must accept both source timestamp shapes and never throw.
- */
 class SourceAdapterTest :
     BehaviorSpec({
         fun field(json: String): JsonNode? = jsonMapper.readTree(json)["a"]

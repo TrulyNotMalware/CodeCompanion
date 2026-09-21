@@ -15,15 +15,6 @@ import java.time.LocalDateTime
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Routes an outbound effect onto the event bus, splitting on the one thing that can't be relayed:
- * modals. `views.open` needs the request thread's `trigger_id` (it expires 3s after issuance), so a
- * modal is rendered here and staged synchronously into an [dev.notypie.impl.command.event.OpenViewEvent].
- *
- * Every other family is wrapped, unrendered, in an [OutboundMessageEnqueued]: it is persisted to the
- * outbox transport-neutral and rendered to a wire payload only at deliver time by [SlackOutboundRenderer].
- * This keeps rendering in exactly one place while the stager owns the modal-vs-enqueue decision.
- */
 class SlackOutboundStager(
     private val slackEventBuilder: SlackApiEventConstructor,
     private val standupRepository: StandupRepository,
@@ -56,7 +47,6 @@ class SlackOutboundStager(
                         meetingUid = form.meetingUid,
                         requesterId = form.requesterId,
                         channel = form.channel.id,
-                        // Message carries no stored start; the host adjusts both pickers anyway.
                         currentStartAt = LocalDateTime.now(),
                     )
                 }

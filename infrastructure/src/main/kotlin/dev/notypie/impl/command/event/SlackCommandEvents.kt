@@ -14,11 +14,6 @@ data class SendSlackMessageEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<SlackEventPayload>
 
-/**
- * Synchronous `views.open` command event. Must be consumed on the request thread because
- * [OpenViewPayloadContents.triggerId] expires in 3 seconds; `isInternal = true` keeps it on
- * the in-process event bus (never the outbox), handled by a dedicated non-`@Async` listener.
- */
 data class OpenViewEvent(
     override val idempotencyKey: UUID,
     override val name: String = OpenViewEvent::class.java.simpleName,

@@ -27,10 +27,6 @@ import java.time.Duration
 import java.time.LocalTime
 import java.time.ZoneId
 
-/**
- * CVE-Bot wiring, off by default: without `slack.app.cve.enabled=true` no bean here
- * exists and the feature leaves zero footprint.
- */
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
 class CveConfiguration {
@@ -44,11 +40,6 @@ class CveConfiguration {
     @Bean
     fun cveSummaryPromptBuilder(): CveSummaryPromptBuilder = CveSummaryPromptBuilder()
 
-    /**
-     * Selects the summarizer from `slack.app.ai.provider`. `sidecar` reuses the agent lane's
-     * gateway (always wired by AgentConfiguration); an unknown value fails the boot rather than
-     * silently degrading to noop.
-     */
     @Bean
     fun aiSummarizer(
         appConfig: AppConfig,
@@ -58,8 +49,7 @@ class CveConfiguration {
         when (val provider = appConfig.ai.provider.lowercase()) {
             "noop" -> NoopAiSummarizer()
             "sidecar" -> {
-                // A live summarize call must never outlast the stuck threshold, or resetStuck can
-                // reclaim the row mid-call and a second instance double-summarizes it.
+                // A call outlasting stuckMinutes lets resetStuck reclaim the row mid-call, double-summarizing it.
                 require(appConfig.ai.stuckMinutes * 60 > appConfig.agent.sidecar.requestTimeoutSeconds) {
                     "slack.app.ai.stuck-minutes (${appConfig.ai.stuckMinutes}m) must exceed " +
                         "slack.app.agent.sidecar.request-timeout-seconds " +
@@ -102,9 +92,6 @@ class CveConfiguration {
     fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter {
         val lookbackMinutes = appConfig.cve.nvd.lookbackMinutes
         val windowMinutes = appConfig.cve.collector.windowMinutes
-        // The collector claims its window ledger BEFORE the fetch, so a failed fetch burns the
-        // window; the next scan must reach back across at least one burned window or the CVEs
-        // modified inside it are silently skipped.
         require(lookbackMinutes >= windowMinutes * 2) {
             "slack.app.cve.nvd.lookback-minutes ($lookbackMinutes) must be >= twice " +
                 "slack.app.cve.collector.window-minutes ($windowMinutes) to cover a burned window"
@@ -116,7 +103,6 @@ class CveConfiguration {
         )
     }
 
-    /** Collects into cve_event (PENDING); every registered [SourceAdapter] bean is injected here. */
     @Bean
     fun cveCollector(
         appConfig: AppConfig,
@@ -125,8 +111,7 @@ class CveConfiguration {
         cveCollectLedgerRepository: CveCollectLedgerRepository,
         sourceAdapters: List<SourceAdapter>,
     ): CveCollector {
-        // Bucket math divides minute-of-hour by the window size: 0 throws every tick, and a
-        // non-divisor of 60 drifts bucket boundaries across the hour.
+        // windowMinutes must divide 60 evenly, or bucket boundaries drift across the hour (0 throws).
         val windowMinutes = appConfig.cve.collector.windowMinutes
         require(windowMinutes in 1L..60L && 60L % windowMinutes == 0L) {
             "slack.app.cve.collector.window-minutes ($windowMinutes) must be a divisor of 60 in 1..60"
@@ -140,12 +125,6 @@ class CveConfiguration {
         )
     }
 
-    /**
-     * DMs summarized events to subscribers via the outbox. [clock] resolves to the single
-     * application Clock bean (the same one the meeting/standup schedulers get); the timezone the
-     * digest gate compares against is [Notification.digestTimezone], applied to the clock's instant,
-     * so the clock's own zone is irrelevant.
-     */
     @Bean
     fun cveNotificationDispatcher(
         appConfig: AppConfig,

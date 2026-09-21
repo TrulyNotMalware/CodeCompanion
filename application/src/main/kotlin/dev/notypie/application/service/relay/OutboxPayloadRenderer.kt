@@ -7,15 +7,7 @@ import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 
-/**
- * Turns a stored outbox row into a ready-to-send transport payload at deliver time. Shared by both
- * relay readers (polling + CDC) so the schema guard, envelope decode, and transport→renderer lookup
- * live in exactly one place.
- *
- * The schema guard is enforced here (before decode) so a relay binary that cannot reason about a
- * future payload shape refuses to send rather than emitting a malformed request — the same
- * contract the old row-side `toSlackEvent` held.
- */
+// Schema guard runs before decode, so a future payload shape refuses to send rather than garbling.
 class OutboxPayloadRenderer(
     private val renderers: Map<Transport, OutboundRenderer>,
 ) {

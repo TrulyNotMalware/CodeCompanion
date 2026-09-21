@@ -8,20 +8,13 @@ import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantContext
-import dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
-import dev.notypie.domain.command.entity.context.form.CveSubscribeSubmissionContext
-import dev.notypie.domain.command.entity.context.form.CveUnsubscribeSubmissionContext
-import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
-import dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext
-import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
-import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
 
@@ -32,11 +25,7 @@ enum class CommandType {
     EXTERNAL_API,
 }
 
-/**
- * Routing discriminator for a command interaction, serialized by [name] into the outbox column and
- * Slack modal `private_metadata` / button values, read back with [valueOf] (unknown tokens fail
- * fast). Renaming a value requires a local DB reset and invalidates buttons already posted to Slack.
- */
+// Renaming a value breaks persisted rows and invalidates buttons already posted to Slack.
 enum class CommandDetailType {
     NOTHING,
     SIMPLE_TEXT,
@@ -73,10 +62,6 @@ enum class CommandDetailType {
     CVE_LATEST,
 }
 
-/**
- * Maps a routed interaction type to the command context that handles it. Kept out of the enum body
- * so [CommandDetailType] stays a pure routing token rather than also owning context construction.
- */
 internal fun CommandDetailType.createContext(
     commandBasicInfo: CommandBasicInfo,
     subCommand: SubCommand<NoSubCommands>,
@@ -109,14 +94,6 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.MEETING_DECLINE_REASON -> {
-            DeclineReasonSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.CANCEL_MEETING -> {
             CancelMeetingContext(
                 commandBasicInfo = commandBasicInfo,
@@ -133,24 +110,8 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.MEETING_RESCHEDULE_SUBMIT -> {
-            RescheduleMeetingSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST -> {
             AddParticipantContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
-        CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT -> {
-            AddParticipantSubmissionContext(
                 commandBasicInfo = commandBasicInfo,
                 subCommand = subCommand,
                 intents = intents,
@@ -165,19 +126,8 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.STANDUP_ANSWER_SUBMIT -> {
-            StandupAnswerSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.STANDUP_SETUP_REQUEST -> {
-            // The slash entry point builds this context directly with the live trigger_id
-            // (see SetupStandupCommand). This branch only exists for completeness so an
-            // interaction routed here still resolves to the modal-opening context; the
-            // blank trigger_id collapses to a no-op in the resolver.
+            // triggerHandle="" is intentional; SetupStandupCommand sets the real one — this path is a no-op.
             RequestStandupSetupContext(
                 commandBasicInfo = commandBasicInfo,
                 triggerHandle = "",
@@ -185,32 +135,8 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.STANDUP_SETUP_SUBMIT -> {
-            StandupSetupSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.APPROVAL_CALLBACK -> {
             ApprovalCallbackContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
-        CommandDetailType.CVE_SUBSCRIBE_SUBMIT -> {
-            CveSubscribeSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
-        CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT -> {
-            CveUnsubscribeSubmissionContext(
                 commandBasicInfo = commandBasicInfo,
                 subCommand = subCommand,
                 intents = intents,

@@ -2,13 +2,6 @@ package dev.notypie.domain.command.entity.slash
 
 import java.time.LocalDateTime
 
-/**
- * Date range filter for the `/meetup list` slash command.
- *
- * Each variant defines a half-open window `[start, end)` calculated relative to a reference
- * `LocalDateTime`. TODAY/TOMORROW snap to the day boundary; WEEK/MONTH are rolling windows
- * anchored at `now` (not calendar boundaries).
- */
 internal enum class MeetingListRange(
     val token: String,
 ) {
@@ -36,9 +29,6 @@ internal enum class MeetingListRange(
     companion object {
         val DEFAULT: MeetingListRange = WEEK
 
-        /**
-         * Case-insensitive, whitespace-tolerant token match. Returns null for unknown or blank input.
-         */
         fun parseOrNull(token: String): MeetingListRange? {
             val normalized = token.trim().lowercase()
             if (normalized.isEmpty()) return null

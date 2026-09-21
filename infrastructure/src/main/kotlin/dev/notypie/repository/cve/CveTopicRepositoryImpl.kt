@@ -24,8 +24,7 @@ open class CveTopicRepositoryImpl(
             return true
         }
         if (matches(schema = existing, definition = definition)) return false
-        // `active` is intentionally NOT synced from the definition: after the initial insert it belongs
-        // to the chat toggle (`cve topic activate|deactivate`), so a yaml reboot preserves the DB value.
+        // active is never overwritten here — a yaml reboot must not undo a chat activate|deactivate toggle.
         existing.displayName = definition.displayName
         existing.category = definition.category
         existing.sourceType = definition.sourceType
@@ -50,8 +49,6 @@ open class CveTopicRepositoryImpl(
     override fun setActive(topicKey: String, active: Boolean): Int =
         jpaCveTopicRepository.setActive(topicKey = topicKey, active = active)
 
-    // `active` is excluded here so an existing row differing only in `active` is treated as a match
-    // (no write): the yaml value must not override a chat toggle. See [upsert]'s contract.
     private fun matches(schema: CveTopicSchema, definition: CveTopicDefinition): Boolean =
         schema.displayName == definition.displayName &&
             schema.category == definition.category &&

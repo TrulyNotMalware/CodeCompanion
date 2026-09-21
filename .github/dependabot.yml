@@ -1,0 +1,60 @@
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 5
+    commit-message:
+      # Repository convention is "<type> : <subject>" (see .gitmessage). Ending the prefix with
+      # the colon stops Dependabot from appending its own.
+      prefix: "chore :"
+    groups:
+      # The Kotlin compiler and its spring/jpa plugins must move in lockstep.
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*"
+      spring:
+        patterns:
+          - "org.springframework*"
+      test-libraries:
+        patterns:
+          - "io.kotest*"
+          - "io.mockk*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    commit-message:
+      prefix: "chore :"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/application"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    commit-message:
+      prefix: "chore :"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/application/src/main/resources/cdc/docker-compose"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    commit-message:
+      prefix: "chore :"

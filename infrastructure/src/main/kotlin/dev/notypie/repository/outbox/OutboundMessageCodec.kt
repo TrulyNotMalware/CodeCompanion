@@ -14,9 +14,6 @@ import tools.jackson.module.kotlin.KotlinFeature
 import tools.jackson.module.kotlin.KotlinModule
 import tools.jackson.module.kotlin.readValue
 
-// The domain stays annotation-free; all polymorphism and the non-serializable DateTimeFormatter
-// are handled here through Jackson mix-ins registered on the codec's own mapper.
-
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
 @JsonSubTypes(
     JsonSubTypes.Type(value = OutboundMessage.ChannelMessage::class, name = "ChannelMessage"),
@@ -26,8 +23,7 @@ import tools.jackson.module.kotlin.readValue
     JsonSubTypes.Type(value = OutboundMessage.UpdateMessage::class, name = "UpdateMessage"),
     JsonSubTypes.Type(value = OutboundMessage.ReplaceMessage::class, name = "ReplaceMessage"),
 )
-// OpenModal and DirectMessage are intentionally unregistered: neither is outbox-bound, so encoding
-// or decoding one fails fast with an unresolved-type-id error rather than silently round-tripping.
+// OpenModal/DirectMessage are intentionally unregistered — not outbox-bound, so (de)coding one fails fast.
 private interface OutboundMessageMixin
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
@@ -42,8 +38,7 @@ private interface OutboundMessageMixin
 )
 private interface MessageContentMixin
 
-// DateTimeFormatter has no stable JSON form and no equals(); excluded so the Kotlin default
-// reconstructs it on decode.
+// DateTimeFormatter has no stable JSON form or equals() — excluded so the Kotlin default reconstructs it.
 @JsonIgnoreProperties("timeFormatter")
 private interface TimeScheduleInfoMixin
 
@@ -52,11 +47,6 @@ class OutboundMessageCodecException(
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
-/**
- * Round-trips an [OutboundEnvelope] to and from the single JSON string stored in the outbox.
- * Decoding fails fast with [OutboundMessageCodecException] on malformed JSON or an unregistered
- * message/content subtype.
- */
 object OutboundMessageCodec {
     private val mapper: JsonMapper =
         JsonMapper

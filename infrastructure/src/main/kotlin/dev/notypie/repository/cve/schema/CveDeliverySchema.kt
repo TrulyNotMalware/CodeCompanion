@@ -15,11 +15,6 @@ import java.time.LocalDateTime
 
 enum class CveDeliveryStatus { SENT, FAILED }
 
-/**
- * Per-(event, user) delivery ledger. The outbox retries transport but does not
- * deduplicate, so this unique key is what prevents a subscriber from receiving
- * the same event twice.
- */
 @Entity(name = "cve_delivery")
 @Table(
     uniqueConstraints = [

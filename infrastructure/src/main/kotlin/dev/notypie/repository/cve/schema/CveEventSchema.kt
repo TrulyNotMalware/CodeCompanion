@@ -16,12 +16,6 @@ import java.time.LocalDateTime
 
 enum class CveSummaryStatus { PENDING, SUMMARIZING, DONE, FAILED }
 
-/**
- * One ingested source event (release, CVE advisory, ...). unique(topic_id, external_id)
- * makes collection idempotent. The AI summary is produced exactly once by a worker
- * claiming PENDING/FAILED rows via [claimToken] CAS; reads (/latest, digests, resends)
- * reuse [aiSummary] with zero AI calls.
- */
 @Entity(name = "cve_event")
 @Table(
     uniqueConstraints = [
@@ -29,11 +23,8 @@ enum class CveSummaryStatus { PENDING, SUMMARIZING, DONE, FAILED }
     ],
     indexes = [
         Index(name = "idx_cve_event_summary_status", columnList = "summary_status"),
-        // Keys the notification dispatcher's DONE scan within the created_at horizon (see V16).
         Index(name = "idx_cve_event_status_created_at", columnList = "summary_status, created_at"),
-        // Keys /latest's per-topic DONE read in id order (see V17).
         Index(name = "idx_cve_event_topic_status_id", columnList = "topic_id, summary_status, id"),
-        // Keys the worker's findClaimable due-check off the DONE majority (see V17).
         Index(name = "idx_cve_event_status_next_attempt", columnList = "summary_status, next_attempt_at"),
     ],
 )

@@ -47,10 +47,6 @@ data class ActionEventPayloadContents(
         channel = channel,
     )
 
-/**
- * Payload for a synchronous `views.open` call. Unlike [PostEventPayloadContents] (outbox-relayed),
- * this must be dispatched inline on the request thread because `trigger_id` expires 3s after issuance.
- */
 data class OpenViewPayloadContents(
     override val eventId: UUID,
     override val apiAppId: String,
@@ -74,9 +70,6 @@ enum class MessageType {
     CHANNEL_ALERT,
     EPHEMERAL_MESSAGE,
     DIRECT_MESSAGE,
-    ACTION_RESPONSE,
-
-    /** `chat.update` — rewrites an existing message in place using `channel` + `ts`. */
     UPDATE_MESSAGE,
 }
 

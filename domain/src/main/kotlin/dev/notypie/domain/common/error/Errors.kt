@@ -51,7 +51,6 @@ internal sealed class ErrorResponse(
     val detail: List<ExceptionArgument> = emptyList(),
 )
 
-// Base Exception
 abstract class CodeCompanionRuntimeException(
     errorCode: ErrorCode,
     val details: List<ExceptionArgument> = emptyList(),

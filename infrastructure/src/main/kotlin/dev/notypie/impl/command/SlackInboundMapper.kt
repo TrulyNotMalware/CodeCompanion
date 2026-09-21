@@ -19,11 +19,7 @@ import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.InteractionPayload
 import dev.notypie.impl.command.slack.States
 
-/**
- * Adapts the Slack-shaped [InteractionPayload] into the transport-neutral [InboundInteraction] the
- * domain contexts consume. The order of [InboundForm.fields] mirrors the parser's `states` order,
- * which several contexts read positionally (e.g. the meeting form's start/end TIME pickers).
- */
+// fields order mirrors the parser's states order; some contexts read positionally (e.g. start/end TIME pickers).
 fun InteractionPayload.toInbound(): InboundInteraction {
     val form = InboundForm(fields = states.map { it.toInboundField() })
     return InboundInteraction(
@@ -41,11 +37,6 @@ fun InteractionPayload.toInbound(): InboundInteraction {
     )
 }
 
-/**
- * Resolves the positional `routingExtras`/block-id reads into a typed per-flow [InboundSubmission]
- * so the domain contexts consume named fields and keep only their interpretation policy. Mirrors the
- * extraction each `view_submission` context previously performed inline; unrelated types yield null.
- */
 private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmission? =
     when (type) {
         CommandDetailType.MEETING_RESCHEDULE_SUBMIT ->
@@ -79,8 +70,7 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 userId = routingExtras.getOrNull(0).orEmpty(),
                 noticeChannel = routingExtras.getOrNull(1).orEmpty(),
                 noticeMessageTs = routingExtras.getOrNull(2).orEmpty(),
-                // view.state.values arrives unordered; sort by the `standup_q_<index>` block id so
-                // answers[i] stays aligned with the routine's questions[i].
+                // view.state.values arrives unordered; sort by block id so answers[i] aligns with questions[i].
                 answers =
                     form
                         .all(kind = InboundFieldKind.TEXT)
@@ -116,18 +106,15 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
         else -> null
     }
 
-/** Splits a multi-select's comma-joined raw value (the parser joins with `, `) into distinct keys. */
 private fun InboundForm.selectedTopicKeys(key: String): List<String> =
     value(key = key)
         .split(",")
         .map { it.trim() }
         .filter { it.isNotBlank() }
 
-/** First non-blank raw value for [kind], mirroring the reschedule context's date/time selection. */
 private fun InboundForm.firstNonBlankValue(kind: InboundFieldKind): String =
     all(kind = kind).firstOrNull { it.rawValue.isNotBlank() }?.rawValue.orEmpty()
 
-/** Trailing index of a `standup_q_<index>` block id; unparseable ids sort last via [Int.MAX_VALUE]. */
 private fun standupAnswerIndex(blockId: String?): Int {
     val tail = blockId?.removePrefix(InboundFieldKeys.STANDUP_ANSWER_QUESTION_PREFIX)
     return tail?.toIntOrNull() ?: Int.MAX_VALUE
@@ -166,11 +153,6 @@ private fun ActionElementTypes.toInboundFieldKind(): InboundFieldKind =
         else -> InboundFieldKind.UNKNOWN
     }
 
-/**
- * Boundary translation from the parsed Slack payload into the queue-carried [InboundCommand].
- * The neutral [InboundInteraction] rides directly in [InboundCommand.payload]; identity fields keep
- * reading the Slack payload directly (this runs in the application/infra layer, not the domain).
- */
 fun InteractionPayload.toInboundCommand() =
     InboundCommand(
         appId = apiAppId,

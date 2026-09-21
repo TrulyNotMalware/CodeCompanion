@@ -48,9 +48,7 @@ internal class MeetingApprovalResponseContext(
                     meetingIdempotencyKey = meetingIdempotencyKey,
                     participantUserId = participantUserId,
                     triggerHandle = interaction.trigger.raw,
-                    // Meeting title, surfaced as the first routing extra; blank omits the title section.
                     meetingTitle = interaction.routingExtras.firstOrNull().orEmpty(),
-                    // Notice DM channel + message_ts; let the submission handler chat.update the notice.
                     noticeChannel = interaction.channelId,
                     noticeMessageTs = interaction.message?.raw.orEmpty(),
                 )
@@ -78,17 +76,6 @@ internal class MeetingApprovalResponseContext(
         )
     }
 
-    /**
-     * Records a provisional decline with [RejectReason.OTHER], then opens the reason-picker modal.
-     * The provisional write honors the Deny intent even if `views.open` fails, the user cancels the
-     * modal, or `view_submission` never arrives; a later submission overwrites it with the real reason.
-     *
-     * Order matters: [OutboundMessage.OpenModal] is emitted first so `views.open` fires before
-     * trigger_id expires (3s). The provisional update runs at BEFORE_COMMIT, off the trigger window.
-     *
-     * Intentionally does NOT call `interactionSuccessResponse`: replacing the notice with a
-     * "You declined" banner before a reason is confirmed would destroy context if the modal fails.
-     */
     private fun handleDecline(
         meetingIdempotencyKey: UUID,
         participantUserId: String,

@@ -85,10 +85,6 @@ class MeetingApprovalResponseContextTest :
                     intents = intentQueue,
                 )
             val meetingKey = UUID.randomUUID()
-            // The notice DM is sent with ApprovalContents.subTitle propagated through the
-            // routing text by SlackIntentResolver; the parser surfaces it as routingExtras[0].
-            // Container.messageTs is what lets DeclineReasonSubmissionContext later chat.update
-            // the original notice — carry it through so the modal's private_metadata can round-trip it.
             val payload =
                 createInboundInteraction(
                     detailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
@@ -117,11 +113,7 @@ class MeetingApprovalResponseContextTest :
                     val form = open.form.shouldBeInstanceOf<ModalForm.DeclineReason>()
                     form.meetingIdempotencyKey shouldBe meetingKey
                     form.participantUserId shouldBe payload.actor.id
-                    // Title flows end-to-end from ApprovalContents.subTitle → routing text →
-                    // parser.routingExtras[0] → form so the modal can render it.
                     form.meetingTitle shouldBe "Weekly sync"
-                    // Channel + message_ts must flow through so the modal submission can later
-                    // chat.update the original notice instead of leaving stale buttons.
                     form.originNotice?.conversation?.id shouldBe payload.channelId
                     form.originNotice?.messageId shouldBe "1700000000.000050"
                 }
@@ -158,8 +150,6 @@ class MeetingApprovalResponseContextTest :
                     commandBasicInfo = basicInfo,
                     intents = intentQueue,
                 )
-            // Payload carries only a button click (no MULTI_USERS_SELECT state).
-            // Under the old routing this would trip "Select participants".
             val payload =
                 createInboundInteraction(
                     detailType = CommandDetailType.MEETING_APPROVAL_REQUEST,

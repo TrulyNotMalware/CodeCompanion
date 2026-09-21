@@ -38,9 +38,6 @@ class SlackOutboundStagerTest :
         val basicInfo = createCommandBasicInfo()
         val target = ConversationTarget(id = basicInfo.channel)
 
-        // Non-modal families are never rendered by the stager; they are wrapped transport-neutral
-        // and rendered at deliver time (that path is covered by SlackOutboundRendererTest). A strict
-        // slackEventBuilder mock means an accidental render call here would throw, unstubbed.
         given("a ChannelMessage with Text content") {
             val message =
                 OutboundMessage.ChannelMessage(

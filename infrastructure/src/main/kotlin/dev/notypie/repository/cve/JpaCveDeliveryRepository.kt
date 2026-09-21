@@ -13,14 +13,7 @@ import java.time.LocalDateTime
 
 @Repository
 interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
-    /**
-     * Atomically claims delivery of [eventId] to [userId]. `INSERT IGNORE` swallows the
-     * duplicate-key error on unique(event_id, user_id), so the affected-row count (1 = claimed,
-     * 0 = already delivered) is the claim signal — no check-then-act race. `INSERT IGNORE` is
-     * MariaDB-specific and cannot be exercised on H2, so the impl carries a delegation unit test.
-     * The dispatcher issues this inside the same transaction as the outbox save, so a rolled-back
-     * send undoes the claim too.
-     */
+    // MariaDB-only INSERT IGNORE (untestable on H2) on unique(event_id,user_id) — the only guard against a double DM.
     @Modifying
     @Transactional
     @Query(
@@ -35,13 +28,6 @@ interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
         @Param("userId") userId: String,
     ): Int
 
-    // Joins cve_topic and cve_subscription to cve_event by unrelated-entity ON, then anti-joins the
-    // delivery ledger (d.id IS NULL) to keep only undelivered pairs. createdAt >= :since bounds the
-    // scan to the delivery horizon (cve_event has no TTL); createdAt is DB-clock stamped, so callers
-    // must derive :since from [dbNow] — an app-clock value would skew the horizon by the app/DB zone
-    // gap (up to ~9h here: DB UTC, app JVM KST). updatedAt < :doneBefore is the visibility cutoff and
-    // stays app-clock (markDone stamps updatedAt from the app clock when the summary lands).
-    // Hibernate entity joins render to plain SQL joins, so this runs on H2.
     @Query(
         """
         SELECT new dev.notypie.repository.cve.UndeliveredCveEvent(
@@ -67,8 +53,7 @@ interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
         pageable: Pageable,
     ): List<UndeliveredCveEvent>
 
-    // LOCALTIMESTAMP matches what CURRENT_TIMESTAMP(6) stamps into created_at on MariaDB (both are
-    // the session-zone wall clock) and, unlike CURRENT_TIMESTAMP, is zone-less on H2 too.
+    // Must read the DB clock, not the app clock — DB is UTC, app JVM is KST; the delivery horizon depends on this.
     @Query(value = "SELECT LOCALTIMESTAMP(6)", nativeQuery = true)
     fun dbNow(): LocalDateTime
 }
