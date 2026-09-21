@@ -11,7 +11,7 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **CVE Watch** — Watched topics are polled from external sources (NVD, GitHub Releases) on a schedule, summarized once each by the AI lane, then delivered to subscribers as an immediate DM or a daily digest. Admins manage topics in-chat with `@bot cve ...`.
 - **MCP Server** — A role-gated Model Context Protocol endpoint (`/mcp`, streamable HTTP) exposing read-only domain tools (`get_status`, `list_meetings`, `list_roles`) to the AI agent, authenticated per turn and audited to `mcp_tool_call_history`.
 - **Role-Based Access Control** — Commands are gated by per-user roles (`user` → `ai_user` → `developer` → `admin`) stored in `user_command_role`; admins manage grants in-chat via `@bot grant / revoke / roles`, and bootstrap admins come from configuration.
-- **Event-Driven Architecture** — Asynchronous processing over Kafka with a **transactional outbox** and **Debezium-driven CDC relay** for exactly-once-style, ordered delivery.
+- **Event-Driven Architecture** — Asynchronous processing over Kafka with a **transactional outbox** and **Debezium-driven CDC relay** for durable, at-least-once delivery with idempotent consumers (see `docs/wiki/events-and-outbox.md` for the exact guarantees).
 - **Turn Auditing** — Every AI turn is persisted to `agent_turn_history` (token usage, duration, outcome) for cost tracking and debugging.
 - **Operational Health** — Spring Boot Actuator endpoints plus a custom outbox health indicator reporting pending lag and stuck rows.
 - **Security** — Slack request signature verification and retry de-duplication via a servlet filter.
@@ -21,7 +21,7 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Framework**: Spring Boot `4.1.0` (Web on Jetty, Actuator, AOP/AspectJ, Data JPA)
 - **Build**: Gradle `9.5.1` (multi-module), ktlint `14.2.0`
 - **Messaging**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC outbox relay
-- **Persistence**: JPA / Hibernate — MariaDB (runtime), H2 (local & tests)
+- **Persistence**: JPA / Hibernate — MariaDB (runtime, every profile), H2 (tests only)
 - **Slack**: Slack Java SDK `1.49.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
 - **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
 - **Serialization**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
@@ -69,6 +69,10 @@ CodeCompanion/
 ```
 
 Each module ships its own `src/testFixtures/kotlin/` factories (Gradle `java-test-fixtures`), reused cross-module via `testFixtures(project(":domain"))`.
+
+Design philosophy, layering rules, the outbox/event model, coding style and the decision log live in the
+project wiki: [`docs/wiki/index.md`](docs/wiki/index.md). Per-directory working notes for AI agents are the
+`AGENTS.md` files.
 
 ## Bot Commands & Roles
 Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_user` ⊂ `developer` ⊂ `admin`, each level includes everything below it.
@@ -155,7 +159,7 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **CVE 감시** — 등록된 토픽을 외부 소스(NVD, GitHub Releases)에서 주기적으로 수집하고, AI 레인이 이벤트당 정확히 한 번 요약한 뒤, 구독자에게 즉시 DM 또는 일일 다이제스트로 전달. 관리자는 `@bot cve ...`로 채팅에서 토픽을 관리
 - **MCP 서버** — 역할로 게이트되는 Model Context Protocol 엔드포인트(`/mcp`, streamable HTTP)로 읽기 전용 도메인 도구(`get_status`, `list_meetings`, `list_roles`)를 AI 에이전트에 노출. 턴 단위로 인증하고 `mcp_tool_call_history`에 감사 기록
 - **역할 기반 접근 제어** — 사용자별 역할(`user` → `ai_user` → `developer` → `admin`, `user_command_role` 테이블)로 명령을 게이트. 관리자는 `@bot grant / revoke / roles`로 채팅에서 직접 권한을 관리하고, 부트스트랩 관리자는 설정으로 지정
-- **이벤트 기반 아키텍처** — Kafka 비동기 처리 + **트랜잭셔널 아웃박스** + **Debezium 기반 CDC 릴레이**로 순서 보장 전달
+- **이벤트 기반 아키텍처** — Kafka 비동기 처리 + **트랜잭셔널 아웃박스** + **Debezium 기반 CDC 릴레이**로 내구성 있는 at-least-once 전달(멱등 소비자; 정확한 보장은 `docs/wiki/events-and-outbox.md` 참고)
 - **턴 감사 기록** — 모든 AI 턴을 `agent_turn_history`에 영속화(토큰 사용량·소요 시간·결과)하여 비용 추적과 디버깅에 활용
 - **운영 헬스 체크** — Spring Boot Actuator 엔드포인트와, 아웃박스 지연·정체 행을 보고하는 커스텀 헬스 인디케이터
 - **보안** — 서블릿 필터를 통한 슬랙 요청 서명 검증 및 재시도 중복 제거
@@ -165,7 +169,7 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **프레임워크**: Spring Boot `4.1.0` (Jetty 기반 Web, Actuator, AOP/AspectJ, Data JPA)
 - **빌드**: Gradle `9.5.1` (멀티 모듈), ktlint `14.2.0`
 - **메시징**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC 아웃박스 릴레이
-- **영속성**: JPA / Hibernate — MariaDB(런타임), H2(로컬·테스트)
+- **영속성**: JPA / Hibernate — MariaDB(런타임, 모든 프로파일), H2(테스트 전용)
 - **슬랙**: Slack Java SDK `1.49.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
 - **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
 - **직렬화**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
@@ -213,6 +217,9 @@ CodeCompanion/
 ```
 
 각 모듈은 자체 `src/testFixtures/kotlin/` 팩토리(Gradle `java-test-fixtures`)를 제공하며, `testFixtures(project(":domain"))` 형태로 모듈 간 재사용됩니다.
+
+설계 철학, 계층 규칙, 아웃박스/이벤트 모델, 코딩 스타일, 기술 결정 기록은 프로젝트 위키
+[`docs/wiki/index.md`](docs/wiki/index.md)에 있습니다. 디렉터리별 작업 지침(AI 에이전트용)은 각 `AGENTS.md`입니다.
 
 ## 봇 명령어와 역할
 모든 명령은 사용자별 역할로 게이트됩니다. 역할은 누적 구조입니다 — `user` ⊂ `ai_user` ⊂ `developer` ⊂ `admin`, 상위 역할은 하위 역할의 모든 권한을 포함합니다.
