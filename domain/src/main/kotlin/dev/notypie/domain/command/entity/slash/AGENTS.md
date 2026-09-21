@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # domain/command/entity/slash
 
@@ -23,9 +23,11 @@ grammar, and the one `CommandOutput` subclass that carries a built `Meeting` bac
 - These commands are constructed by application services with data already resolved
   (`topics`, `topicKey`) — the domain never queries persistence. Keep that shape: look things up in the
   service, pass values into the constructor.
-- Modal-opening commands cast `commandData.payload as SlashInvocation`. A non-slash payload throws
-  `ClassCastException`, which `Command.handleEvent()` turns into an `ERROR_RESPONSE`; the modal must be
-  requested synchronously because the trigger handle expires in about three seconds.
+- Modal-opening commands recover the payload via `commandData.slashInvocation(commandName)`
+  (`SlashInvocations.kt`, a sealed `when` — no cast). A non-slash payload throws
+  `UnSupportedCommandException`, which `Command.handleEvent()` turns into an `ERROR_RESPONSE`
+  (pinned by `SlashPayloadResolutionTest`); the modal must be requested synchronously because the
+  trigger handle expires in about three seconds.
 - `subCommands` is `[identifier, options...]`. `LIST` has `requiresArguments = false`, so `/meetup
   list` alone is valid and the optional range token is validated in
   `RequestMeetingContext.runListSubCommand` ("Too many arguments" / "Unknown range").
@@ -46,9 +48,8 @@ grammar, and the one `CommandOutput` subclass that carries a built `Meeting` bac
 ```
 `SubCommandDefinitionTest` (`domain/src/test/kotlin/dev/notypie/domain/command/`) covers
 `validateArguments` and `findSubCommandByIdentifier`. `SetupStandupCommand` and the CVE slash commands
-have no domain spec — their behaviour is pinned through the contexts they build
-(`context/StandupSetupSubmissionContextTest`, `CveSubscriptionSubmissionContextTest`) and the
-application service specs.
+are pinned by `command/SlashPayloadResolutionTest` (slash payload → modal-open intent; non-slash
+payload → ERROR_RESPONSE inside the command boundary) and by the application service specs.
 
 ### Common Patterns
 - `enum XxxSubCommandDefinition : SubCommandDefinition` with a `NONE` entry (blank identifier) so a bare

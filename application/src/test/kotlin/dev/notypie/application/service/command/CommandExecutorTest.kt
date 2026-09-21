@@ -4,6 +4,7 @@ import dev.notypie.domain.command.TestCommand
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
@@ -13,6 +14,7 @@ import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -156,6 +158,22 @@ class CommandExecutorTest :
 
                 then("publisher is not invoked when resolver yields empty list") {
                     verify(exactly = 0) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+        }
+
+        given("a command that produces an effect the executor cannot classify") {
+            val command =
+                TestCommand(
+                    idempotencyKey = UUID.randomUUID(),
+                    commandData = createMentionInboundCommand(),
+                    rawEffectToProduce = object : CommandEffect {},
+                )
+
+            `when`("execute drains the effect queue") {
+                then("the unknown effect fails loudly instead of being dropped") {
+                    shouldThrow<IllegalStateException> { executor.execute(command = command) }
+                        .message shouldContain "Unclassified CommandEffect"
                 }
             }
         }

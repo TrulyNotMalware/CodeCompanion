@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
 
 # domain/command/context (test)
 
@@ -17,25 +17,21 @@ All specs are Kotest `BehaviorSpec`s.
 |------|-------------|
 | `AbstractCommandContextTest.kt` | Two spec classes (`AbstractCommandContextTest`, `AbstractReactionCommandContextTest`) that pin the base contracts via anonymous subclasses: default `runCommand()` returns `CommandOutput.empty()`, `runCommand` stays `open` (guards against dropping the keyword), `ReactionContext.interactionSuccessResponse` enqueues a `ReplaceMessage` on the reply handle and returns either the default success or the supplied `results`. It is a contract test, not a base class — nothing extends it |
 | `AddParticipantContextTest.kt` | `form.AddParticipantContext`: "Add participant" click → `OpenModal(ModalForm.AddParticipant)` with trigger, `meetingUid` from `routingExtras[0]`, requester, channel; malformed uid → success with no effects |
-| `AddParticipantSubmissionContextTest.kt` | `form.AddParticipantSubmissionContext`: `InboundSubmission.AddParticipant` → `CommandIntent.AddParticipant` with comma-split user ids; empty selection or bad uid → success, no intents |
 | `AgentChatContextTest.kt` | `AgentChatContext`: `PIPELINE` / `AGENT_CONVERSE`; `CommandIntent.AgentConverse` carries prompt, `threadId` (nullable), requester and channel names; blank prompt → failed output plus an `Ephemeral` with `EMPTY_PROMPT_MESSAGE` |
 | `ApprovalCallbackContextTest.kt` | `form.ApprovalCallbackContext`: one `OutboundMessage.Approval` per participant, empty set is a vacuous success, custom `ApprovalContents` (via `createApprovalContents`) vs the default |
 | `ApprovalFormContextTest.kt` | `ApprovalFormContext`: `PIPELINE` / `APPROVAL_REQUEST`; single `ChannelMessage` whose content is a `MessageContent.Form` headlined "Approve Form" |
-| `CveSubscriptionSubmissionContextTest.kt` | `form.CveSubscribeSubmissionContext` and `form.CveUnsubscribeSubmissionContext`: typed submissions → `CveSubscribe` / `CveUnsubscribe` intents keyed by `actor.id`; a `null` submission → success without an intent |
-| `DeclineReasonSubmissionContextTest.kt` | `form.DeclineReasonSubmissionContext`: `MeetingAttendanceUpdate(isAttending = false)` then `UpdateMessage` collapsing the notice DM (persistence before UI, asserted by index); `OTHER` keeps the free-text detail, other reasons drop it; missing channel/ts → no `UpdateMessage`; unknown or `ATTENDING` reason coerced to `OTHER`; bad uuid → success, no intents |
 | `DetailErrorAlertContextTest.kt` | `DetailErrorAlertContext`: `ChannelMessage` with `MessageContent.ErrorNotice` (`className`, `message`, nullable `details`); built from `createMentionInboundCommand` |
 | `EmptyContextTest.kt` | `EmptyContext`: `SIMPLE` / `NOTHING`, `CommandOutput.empty()` (checked with `dto.isEmpty()`), no effects |
 | `EphemeralTextContextTest.kt` | `EphemeralTextResponseContext`: `Ephemeral` to the publisher (`recipient == null`) in the command channel; `isOk = false` yields `FAILED` but still emits |
 | `MeetingApprovalResponseContextTest.kt` | `form.MeetingApprovalResponseContext`: APPROVE → `MeetingAttendanceUpdate(true, ATTENDING)` + `ReplaceMessage` "You accepted the meeting invitation."; DECLINE → `OpenModal(ModalForm.DeclineReason)` first (title from `routingExtras[0]`, origin notice from `message`), a provisional `MeetingAttendanceUpdate(OTHER)`, and **no** `ReplaceMessage`; regression case proving a button-only payload never triggers "Select participants". Uses `applyButtonField`, `rejectButtonField` |
 | `MeetingContextTest.kt` | `form.RequestMeetingContext`, the largest spec. `NONE` → `ChannelMessage(MeetingRequest)`; `LIST` with no / blank / each valid / unknown / too-many options → `MeetingListRequest` window per `MeetingListRange` or an `Ephemeral` usage hint (`recipient` must stay `null`); form submission: happy path, explicit end time, same start/end ("End time must be after start time."), no end time (entity default), reject button ("Meeting request canceled."), no participants ("Select participants"), over-long title (message rendered from the `Meeting` entity's own validation). Uses `plainTextField`, `datePickerField`, `timePickerField`, `multiUsersField`, `MeetingFormInput.DATE_PATTERN` / `SIMPLE_TIME_PATTERN` |
+| `ParsedSubmissionsTest.kt` | The per-variant `*Parsed.from` factories (Phase 11): uid/date/time rejection, actor fallback for blank routing tokens, `RejectReason` coercion, blank-OTHER detail surviving as `""`, `NoticeTarget.of` partial routing → `None`, standup-setup defaults, CVE parsers never rejecting |
 | `NoticeContextTest.kt` | `NoticeContext`: `OutboundMessage.Notice` with `UserRef` mentions and space-joined command text; empty inputs still succeed |
 | `ReplaceMessageContextTest.kt` | `ReplaceMessageContext`: `SIMPLE` / `REPLACE_TEXT`; both `runCommand` and `handleInteraction` enqueue a `ReplaceMessage` on the reply handle |
 | `RequestApprovalContextTest.kt` | `RequestApprovalContext`: `PIPELINE` / `APPLY_REQUEST`; one `Approval` targeted at the channel, reason taken from the commands queue. Constructor parameter is `basicInfo`, not `commandBasicInfo` |
 | `RescheduleMeetingContextTest.kt` | `form.RescheduleMeetingContext`: click → `OpenModal(ModalForm.Reschedule)`; malformed uid → no effects |
-| `RescheduleMeetingSubmissionContextTest.kt` | `form.RescheduleMeetingSubmissionContext`: date + time strings (formatted with the context's `DATE_PATTERN` / `TIME_PATTERN`) → `CommandIntent.RescheduleMeeting.newStartAt`; missing time or bad uid → no intents |
-| `StandupAnswerSubmissionContextTest.kt` | `form.StandupAnswerSubmissionContext`: `InboundSubmission.StandupAnswer` → `RecordStandupAnswer` (answers already ordered by the mapper) + `UpdateMessage` "Standup submitted." on the origin DM; bad uuid → no intents |
 | `StandupFillContextTest.kt` | `form.StandupFillContext`: Fill click with `routingExtras = [sessionUid, routineUid]` → `OpenModal(ModalForm.StandupFill)` carrying the origin notice ref; malformed extras → no intents |
-| `StandupSetupSubmissionContextTest.kt` | `form.StandupSetupSubmissionContext`: raw modal strings → `CreateStandupRoutine` (blank question lines trimmed, weekdays / time / cutoff / timezone parsed); empty optionals fall back to `DEFAULT_CUTOFF_MINUTES`, `Asia/Seoul`, 10:00 |
+| `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue |
 | `TextResponseContextTest.kt` | `TextResponseContext`: `ChannelMessage(Text)` in the command channel with headline "Simple Text Response" |
 
 ## For AI Agents
@@ -43,11 +39,13 @@ All specs are Kotest `BehaviorSpec`s.
 ### Working In This Directory
 - Every new `CommandContext` in main gets a spec here, named `<Context>Test.kt`, in this package
   regardless of whether main puts it in `context/` or `context/form/`.
-- Honour the graceful-degradation contract the modal contexts share: malformed routing data or uuid
+- Honour the graceful-degradation contract the modal flows share: malformed routing data or uuid
   → `result.ok == true` **and** an empty queue. Slack must still get a 200 so the modal closes; the
-  absence of intents is the signal. Assert both halves.
+  absence of intents is the signal. Since Phase 11 rejection happens in the `*Parsed.from` factories
+  (`ParsedSubmissionsTest`) and routing to `IgnoredSubmissionContext` in `../parsers/SubmissionRouterTest`;
+  leaves no longer see malformed input.
 - When persistence and UI effects are both emitted, assert their order with `indexOfFirst` as
-  `DeclineReasonSubmissionContextTest` and `MeetingApprovalResponseContextTest` do — the resolver
+  `SubmissionContextsTest` (decline) and `MeetingApprovalResponseContextTest` do — the resolver
   processes the queue in order and the tests are the only place that order is written down.
 - Constructor signatures differ between contexts (`commandBasicInfo` vs `basicInfo`, extra ctor args
   such as `prompt`, `replyHandle`, `participants`); check the class before copying a sibling spec.

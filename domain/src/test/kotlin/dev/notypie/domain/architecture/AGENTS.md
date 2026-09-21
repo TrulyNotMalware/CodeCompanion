@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
 
 # domain/architecture (test)
 
@@ -12,6 +12,7 @@ transport-agnostic refactor permanent by failing the build the moment Slack, Jac
 | File | Description |
 |------|-------------|
 | `DomainLayeringGuardTest.kt` | `StringSpec` with four checks over `src/main/kotlin/dev/notypie/domain` (see below); no fixtures used |
+| `EnvelopeCastGuardTest.kt` | Phase 11 cast guard: `domain/command` may contain no explicit `as`/`as?` expression beyond a shrinking baseline (empty since A2 — the slash commands now resolve their payload through `slashInvocation()`). Scans stripped source (comments/strings/import aliases excluded, scanner self-tested); a regression brake, not a proof — routing correctness lives in `SubmissionRouterTest` and the characterization suite |
 
 The four checks, in file order:
 

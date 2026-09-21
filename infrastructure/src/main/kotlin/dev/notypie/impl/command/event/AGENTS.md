@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
 
 # infrastructure/impl/command/event
 
@@ -12,7 +12,7 @@ and the `CommandOutput` helpers.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackEventPayloads.kt` | `sealed class SlackEventPayload(apiAppId, commandDetailType, idempotencyKey, publisherId, channel) : EventPayload`; `PostEventPayloadContents(eventId, …, messageType, replaceOriginal, body: Map<String, Any>)`; `ActionEventPayloadContents(…, responseUrl, body: String)`; `OpenViewPayloadContents(…, triggerId, viewJson, meetingIdempotencyKey?, participantUserId = "")`; `enum MessageType { CHANNEL_ALERT, EPHEMERAL_MESSAGE, DIRECT_MESSAGE, ACTION_RESPONSE, UPDATE_MESSAGE }`; `toMessageTypeByTargetUser(targetUserId?)` |
+| `SlackEventPayloads.kt` | `sealed class SlackEventPayload(apiAppId, commandDetailType, idempotencyKey, publisherId, channel) : EventPayload`; `PostEventPayloadContents(eventId, …, messageType, replaceOriginal, body: Map<String, Any>)`; `ActionEventPayloadContents(…, responseUrl, body: String)`; `OpenViewPayloadContents(…, triggerId, viewJson, meetingIdempotencyKey?, participantUserId = "")`; `enum MessageType { CHANNEL_ALERT, EPHEMERAL_MESSAGE, DIRECT_MESSAGE, UPDATE_MESSAGE }` (no `ACTION_RESPONSE` since B1 — action responses are their own payload type); `toMessageTypeByTargetUser(targetUserId?)` |
 | `SlackCommandEvents.kt` | `SendSlackMessageEvent(idempotencyKey, payload: SlackEventPayload, destination, timestamp, type, isInternal = true)`; `OpenViewEvent(idempotencyKey, payload: OpenViewPayloadContents, type, isInternal = true, destination = "")` |
 | `OutboundMessageEnqueued.kt` | `OutboundMessageEnqueuedPayload(eventId, message: OutboundMessage, basicInfo)` and `OutboundMessageEnqueued(idempotencyKey, payload, isInternal = true, type = SIMPLE_TEXT)` — the transport-neutral effect a BEFORE_COMMIT listener turns into an outbox row |
 | `MessageDispatcher.kt` | `interface MessageDispatcher { dispatch(SlackEventPayload): CommandOutput; dispatchImmediate(OpenViewPayloadContents): CommandOutput }` |
@@ -29,8 +29,8 @@ and the `CommandOutput` helpers.
 - **`PostEventPayloadContents.body` is typed `Map<String, Any>` but always holds form strings**
   (`RequestFormBuilder.toForm` output); the dispatcher calls `toString()` on each value. Keep it flat —
   nested values would be stringified with Kotlin's default `toString`.
-- **`MessageType.ACTION_RESPONSE` is never assigned by the constructor**; action responses are
-  `ActionEventPayloadContents`. The dispatcher throws if it meets a post payload with that type.
+- **Action responses are a distinct payload type, not a `MessageType`** (the enum value was removed in B1 — it was never produced); they are
+  `ActionEventPayloadContents`, and the invalid post/action pairing is unrepresentable by type.
   `UPDATE_MESSAGE` selects `chat.update` and requires `channel` + `ts` in the body.
 - **`OutboundMessageEnqueued.type` is inert** (`SIMPLE_TEXT` default) because the event is internal and
   the real routing type is inside the encoded message; do not read it for dispatch decisions.

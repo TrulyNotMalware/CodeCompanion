@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
 
 # infrastructure/impl/command
 
@@ -50,7 +50,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   and the dispatcher treats `DIRECT_MESSAGE` exactly like `CHANNEL_ALERT` (`chat.postMessage`).
 - **Retry covers exceptions only.** `dispatch` runs in `RetryService.execute` with the defaults; a Slack
   `ok = false` becomes `failOutput` (logged with `error` / `warning`) and is *not* retried. A
-  `PostEventPayloadContents` with `MessageType.ACTION_RESPONSE` throws `IllegalStateException`.
+  the invalid `PostEventPayloadContents`/action-response pairing is unrepresentable since B1 — `MessageType` no longer carries `ACTION_RESPONSE`.
 - **`dispatchImmediate` fallbacks need `participantUserId`.** Every `open*ModalRequest` sets it (requester,
   creator, or publisher); blank means no failure event is published. Only `MEETING_DECLINE_REASON` and
   `STANDUP_PROMPT` have a fallback event — other modal failures are logged and returned as `failOutput`.

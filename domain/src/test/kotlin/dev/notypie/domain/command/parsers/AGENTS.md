@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
 
 # domain/command/parsers (test)
 
@@ -15,7 +15,8 @@ Both specs are Kotest `BehaviorSpec`s.
 | File | Description |
 |------|-------------|
 | `AppMentionContextParserTest.kt` | `AppMentionContextParser(commandData, mention, idempotencyKey, intents, actorRole)`. **Routing** (as `ADMIN`): `notice` → `NoticeContext`, `approval` → `ApprovalFormContext`, `help` → `TextResponseContext`, `status` → `StatusContext`, `ask …` → `AgentChatContext` with the keyword stripped, `message` as thread anchor, and an enclosing `thread` winning over `message`; unknown free text → `AgentChatContext` with the full text as prompt; no command structure → `TextResponseContext`; command structure but zero tokens → `IllegalArgumentException`. **Authorization**: `USER` is denied `status`, `notice`, and free text with the exact denial strings, but `help` routes; `AI_USER` may `ask` but not `status`; `DEVELOPER` may `notice` and `ask` but not `grant` or `cve`. **Role management**: `grant @user <role>` → `GrantRole`, `revoke @user` → `RevokeRole`, `roles` → `ListRoles`; missing mention, extra tokens, or unknown role → `GRANT_USAGE` / `REVOKE_USAGE` / `ROLES_USAGE` text instead of an intent. **CVE ops**: `cve topics` → `CveListTopics`, `cve topic activate\|deactivate <key>` → `CveSetTopicActive` (key lower-cased), `cve retry all` → `CveRetryDeadLetters`, `cve retry <id>` → `CveRetryDeadLetter`; no sub-command, unknown sub-command, or non-numeric id → `CVE_USAGE`. Uses `createIntentQueue`, `createMentionInboundCommand`, `TEST_MESSAGE_TS`, `TEST_THREAD_TS`, `TEST_USER_ID`, `TEST_USER_NAME` |
-| `InteractionContextParserTest.kt` | `InteractionContextParser.parseContext` by `CommandDetailType`: `APPROVAL_REQUEST` → `ApprovalFormContext`, `APPROVAL_CALLBACK` → `ApprovalCallbackContext`, `MEETING_CREATE_REQUEST` → `RequestMeetingContext`, `MEETING_APPROVAL_REQUEST` → `MeetingApprovalResponseContext`, anything else (`SIMPLE_TEXT`) → `EmptyContext`. Only these five detail types are asserted; every other type the parser routes is covered indirectly by `../context/` specs, not here. Uses `createInboundInteraction`, `createInteractionResponseInboundCommand`, `createIntentQueue` |
+| `InteractionContextParserTest.kt` | `InteractionContextParser.parseContext` by `CommandDetailType`: `APPROVAL_REQUEST` → `ApprovalFormContext`, `APPROVAL_CALLBACK` → `ApprovalCallbackContext`, `MEETING_CREATE_REQUEST` → `RequestMeetingContext`, `MEETING_APPROVAL_REQUEST` → `MeetingApprovalResponseContext`, anything else (`SIMPLE_TEXT`) → `EmptyContext`; a submission-bearing interaction → its leaf (submission routing wins); a SUBMIT detail type without a submission → `IgnoredSubmissionContext`. Uses `createInboundInteraction`, `createInteractionResponseInboundCommand`, `createIntentQueue` |
+| `SubmissionRouterTest.kt` | `SubmissionRouter.route` (Phase 11): every variant reaches its own leaf regardless of the envelope detail type (variant wins), parser rejection → `IgnoredSubmissionContext` + `PARSE_REJECTED` observed, missing submission on a SUBMIT route → `MISSING_SUBMISSION` observed, non-submission interactions → `null` (detail-type routing continues) |
 
 ## For AI Agents
 

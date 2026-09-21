@@ -1,21 +1,12 @@
 package dev.notypie.application.service.relay
 
 /**
- * Fetches PENDING outbox rows from the source the impl is bound to (DB poll, Debezium CDC,
- * future Kafka consumer, …) and routes them downstream for relay. Each impl interprets the
- * [MessageProcessorParameter] subtype that matches its source — the polling impl ignores
- * input via [NoParameter], the CDC impl deserializes Debezium's `Envelope` payload.
+ * Marker for the single outbox relay reader in the context (DB poll, Debezium CDC, future Kafka
+ * consumer, …). Carries no method on purpose: each impl's entry point is typed to its own source
+ * (`PollingMessageProcessor.pollPending()` on a schedule, `DebeziumLogTailingProcessor.consume(Envelope)`
+ * on a Kafka listener), so no impl narrows a shared parameter at runtime. The interface exists for
+ * bean selection — the polling bean is created only in POLLING mode, and its
+ * `@ConditionalOnMissingBean(MessageProcessor::class)` additionally backs off when another
+ * processor bean was already registered.
  */
-interface MessageProcessor {
-    fun getPendingMessages(messageParameter: MessageProcessorParameter)
-}
-
-/**
- * Sealed root of the per-source input parameter for [MessageProcessor.getPendingMessages].
- * Subtypes live in the same package because Kotlin requires sealed-hierarchy members to
- * share a package.
- */
-sealed class MessageProcessorParameter
-
-/** Placeholder param for impls that poll on a schedule and need no caller-supplied input. */
-object NoParameter : MessageProcessorParameter()
+interface MessageProcessor

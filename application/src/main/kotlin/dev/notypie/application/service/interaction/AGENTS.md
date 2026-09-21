@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # application/service/interaction
 
@@ -14,7 +14,8 @@ persisting anything.
 | File | Description |
 |------|-------------|
 | `InteractionHandler.kt` | Interface `handleInteraction(headers, payload: String): String?` — `null` is the normal empty ack; a non-null string is the `response_action` JSON the caller must relay to Slack (HTTP 200 body in `SlackEventController`, ack body in `SocketModeReceiver.handleInteractive`) |
-| `SlackInteractionHandlerImpl.kt` | `@Service`, `@Transactional handleInteraction`: `InteractionPayloadParser.parseStringPayload` → `declineDetailErrorOrNull` (early return with the errors body) → `toInboundCommand()` → `IdempotencyCreator.create`. `LEGACY_AUTO_REJECT_TYPES = {APPLY_REQUEST, APPROVAL_REQUEST}` + `isCanceled()` → `ReplaceTextResponseCommand("Canceled.", replyHandle = responseUrl)`; otherwise `isPrimary() || isCanceled()` → `InteractionCommand(actorRole = UserRole.USER)` → `commandExecutor.execute`, and `applicationEventPublisher.publishEvent(result)` when `result.ok` |
+| `SlackInteractionHandlerImpl.kt` | `@Service`, `@Transactional handleInteraction`: `InteractionPayloadParser.parseStringPayload` → `declineDetailErrorOrNull` (early return with the errors body) → `toInboundCommand()` → `IdempotencyCreator.create`. `LEGACY_AUTO_REJECT_TYPES = {APPLY_REQUEST, APPROVAL_REQUEST}` + `isCanceled()` → `ReplaceTextResponseCommand("Canceled.", replyHandle = responseUrl)`; otherwise `isPrimary() || isCanceled()` → `InteractionCommand(actorRole = UserRole.USER, parseObserver = MeteredSubmissionParseObserver)` → `commandExecutor.execute`, and `applicationEventPublisher.publishEvent(result)` when `result.ok` |
+| `MeteredSubmissionParseObserver.kt` | `@Component` binding the domain `SubmissionParseObserver` port to Micrometer: `codecompanion.submission.ignored` counter tagged `detail_type` × `reason` plus a debug log; raw form values never reach a tag or log line |
 
 ## For AI Agents
 

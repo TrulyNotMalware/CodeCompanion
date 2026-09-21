@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # domain/command/inbound
 
@@ -14,6 +14,7 @@ a Slack payload.
 |------|-------------|
 | `InboundCommand.kt` | `InboundKind` (`SLASH`, `MENTION`, `INTERACTION`); `sealed InboundPayload` with `SlashInvocation(trigger)` and `MentionInvocation(mentionedUserIds, commandTokens, hasCommandStructure, message?, thread?)`; `InboundCommand(appId, appToken, actorId, actorName, channel, channelName, teamId?, kind, subCommands, payload) : IdempotencyData` with `extractBasicInfo(idempotencyKey)` |
 | `InboundInteraction.kt` | Value classes `TriggerHandle`, `ReplyHandle`, `MessageHandle`; `InboundActor(id)`; `InboundActionRole(triggersEvent)` = `APPROVE` / `REJECT` / `ACTIVATE` / `PASSIVE`; `InboundAction(role, isSelected)`; `InboundFieldKind(alwaysComplete)` = `TEXT` / `DATE` / `TIME` / `CHOICE` / `MULTI_CHOICE` / `USERS` / `CONVERSATION` / `TOGGLE` / `UNKNOWN`; `InboundField(key?, kind, isSelected, rawValue)`; `InboundForm(fields)` with `field` / `value` / `isSelected` / `first` / `all` / `firstValue`; `object InboundFieldKeys` (modal block-id constants); `sealed InboundSubmission` (`RescheduleMeeting`, `AddParticipant`, `DeclineReason`, `StandupAnswer`, `StandupSetup`, `CveSubscribe`, `CveUnsubscribe`); `InboundInteraction(detailType, actor, channelId, trigger, reply, message?, idempotencyKey: String, routingExtras, form, action, submission?) : InboundPayload`; extensions `isPrimary()`, `isCanceled()`, `isComplete()` |
+| `SubmissionParseObserver.kt` | `fun interface SubmissionParseObserver` + `SubmissionIgnoreReason` (`MISSING_SUBMISSION` / `PARSE_REJECTED`): the observation port for submissions that fall open. Domain stays dependency-free (`NONE` default); the application binds it to Micrometer (`MeteredSubmissionParseObserver`). Expected per-flow defaults are not ignores |
 
 ## For AI Agents
 
@@ -31,9 +32,14 @@ a Slack payload.
   `MEETING_ADD_PARTICIPANT_REQUEST`; `[sessionUid, routineUid]` for `STANDUP_PROMPT`; `[meetingTitle]`
   for `MEETING_APPROVAL_REQUEST`. Modal submissions reuse `idempotencyKey` for the meeting uid from
   `private_metadata`, which is why it is a `String`, not a `UUID`.
-- `submission` is non-null only for `view_submission`; block-action interactions carry `null`, and the
-  form contexts `as?`-cast and no-op on a mismatch. Add a new modal by adding an `InboundSubmission`
-  variant here, its mapping in the infra mapper, and a `*SubmissionContext` under `entity/context/form/`.
+- `submission` is non-null exactly when the detail type is a submission route: the mapper keys
+  `buildSubmission` on the detail type, which also makes a detail-type/variant mismatch
+  unrepresentable on the real path; block-action detail types carry `null`. Since Phase 11 the leaf
+  contexts never touch this field: `entity/SubmissionRouting.kt` parses the variant
+  into its `*Parsed` model before constructing the leaf, and a rejected or missing submission becomes
+  `IgnoredSubmissionContext`, reported through `SubmissionParseObserver`. Add a new modal by adding an
+  `InboundSubmission` variant here, its mapping in the infra mapper, a `*Parsed` model + leaf under
+  `entity/context/form/`, and the `SubmissionRouter` branch (the exhaustive `when` forces it).
 - `isComplete()` = primary action, selected, and every field either selected or of an `alwaysComplete`
   kind (`TEXT`, `TOGGLE`). `RequestMeetingContext` relies on it for "Please select all options".
 - Names are deliberately neutral: `DomainLayeringGuardTest` fails on the identifiers `responseUrl` /

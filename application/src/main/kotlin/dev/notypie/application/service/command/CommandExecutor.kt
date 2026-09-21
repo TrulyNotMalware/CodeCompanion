@@ -45,8 +45,23 @@ class CommandExecutor(
     }
 
     private fun <T : SubCommandDefinition> publishIntents(effects: List<CommandEffect>, command: Command<T>) {
-        val intents = effects.filterIsInstance<CommandIntent>()
-        val outbound = effects.filterIsInstance<OutboundMessage>()
+        // Explicit classification instead of filterIsInstance partitions: CommandEffect is not
+        // sealable (its two implementors live in different packages), so an unrouted third
+        // implementor must fail loudly here rather than vanish from the effect queue.
+        val intents = mutableListOf<CommandIntent>()
+        val outbound = mutableListOf<OutboundMessage>()
+        effects.forEach { effect ->
+            when (effect) {
+                is CommandIntent -> intents.add(effect)
+                is OutboundMessage -> outbound.add(effect)
+                else ->
+                    error(
+                        "Unclassified CommandEffect ${effect::class.qualifiedName} for " +
+                            "commandId=${command.commandId} idempotencyKey=${command.idempotencyKey} — " +
+                            "route the new effect type here explicitly or it would be dropped",
+                    )
+            }
+        }
 
         val basicInfo =
             command.commandData.extractBasicInfo(

@@ -54,12 +54,6 @@ class ApplicationMessageDispatcher(
                             MessageType.CHANNEL_ALERT -> dispatchChatPostMessageContents(event = event)
                             MessageType.DIRECT_MESSAGE -> dispatchChatPostMessageContents(event = event)
                             MessageType.UPDATE_MESSAGE -> dispatchChatUpdateContents(event = event)
-                            MessageType.ACTION_RESPONSE ->
-                                throw IllegalStateException(
-                                    "PostEventPayloadContents with ACTION_RESPONSE messageType is invalid; " +
-                                        "ACTION_RESPONSE must be dispatched as ActionEventPayloadContents " +
-                                        "(idempotencyKey=${event.idempotencyKey})",
-                                )
                         }
                     }
 

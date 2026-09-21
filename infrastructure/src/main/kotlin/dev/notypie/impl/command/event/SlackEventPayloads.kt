@@ -70,11 +70,13 @@ data class OpenViewPayloadContents(
         channel = channel,
     )
 
+// ACTION_RESPONSE is deliberately absent: an action response is its own payload type
+// (ActionEventPayloadContents), so the invalid Post/ACTION_RESPONSE combination is
+// unrepresentable instead of a dispatcher-time throw. No producer ever emitted it.
 enum class MessageType {
     CHANNEL_ALERT,
     EPHEMERAL_MESSAGE,
     DIRECT_MESSAGE,
-    ACTION_RESPONSE,
 
     /** `chat.update` — rewrites an existing message in place using `channel` + `ts`. */
     UPDATE_MESSAGE,

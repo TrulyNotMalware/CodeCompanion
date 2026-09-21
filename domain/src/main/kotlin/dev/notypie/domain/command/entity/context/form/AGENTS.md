@@ -1,19 +1,22 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # domain/command/entity/context/form
 
 ## Purpose
 The button- and modal-driven contexts. Each user flow is two contexts: a `*Context` that reacts to a
-button (it has a live trigger handle and opens a modal) and a `*SubmissionContext` that reacts to the
-modal's `view_submission` (it reads a typed `InboundSubmission` and queues an intent). All extend
-`ReactionContext`.
+button (it has a live trigger handle and opens a modal) and a `*SubmissionContext` that executes the
+modal's `view_submission`. Since Phase 11 a submission leaf never sees the raw `InboundSubmission`:
+`entity/SubmissionRouting.kt` parses the variant through its `*Parsed.from` factory here first and
+constructs the leaf with the non-null model, so leaves contain no casts, no nulls, and no fallback
+paths. Button contexts extend `ReactionContext`; submission leaves extend `SubmissionContext<M>`.
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `RequestMeetingContext.kt` | `/meetup` and the meeting modal (`MEETING_CREATE_REQUEST`). `runCommand`: `LIST` → `MeetingListRange` parse → `CommandIntent.MeetingListRequest`, else `MessageContent.MeetingRequest`. `handleInteraction`: Deny → "Meeting request canceled."; else `MeetingFormInput.from(...)`, four form checks, `toMeeting()` (domain validation rendered as `field: reason` lines), optional notice fan-out via `ApprovalCallbackContext`, returns `RequestMeetingContextResult` |
 | `MeetingFormInput.kt` | `internal data class` decoded from the meeting modal: participants = `USERS` field minus publisher; `startAt` = `DATE` + first `TIME` (must be in the future); `endAt` = second `TIME`; title / reason = first two `TEXT` fields with defaults "New Meeting" / "request meeting"; `noticeRequired` = `TOGGLE`; `toMeeting()` |
+| `ParsedSubmissions.kt` | The Phase 11 parse seam: `toUuidOrNull()`, `sealed NoticeTarget` (`None`/`Update`), and one `*Parsed` model per submission variant with a `from(raw, actorId)` factory — the only place a submission may be rejected (`null`). Standup-setup and the CVE parsers never reject; blank routing tokens fall back to the actor; the blank-OTHER decline detail survives as `""` on purpose |
 | `ApprovalCallbackContext.kt` | Fans out one `OutboundMessage.Approval` per participant (`APPROVAL_CALLBACK`); aggregates a `CommandOutput` from the per-participant results |
 | `MeetingApprovalResponseContext.kt` | Accept / Deny buttons on the notice (`MEETING_APPROVAL_REQUEST`). `APPROVE` → `MeetingAttendanceUpdate(isAttending = true)` + "You accepted" reply; `REJECT` → `OpenModal(DeclineReason)` first, then a provisional `MeetingAttendanceUpdate(OTHER)`, no reply |
 | `DeclineReasonSubmissionContext.kt` | Decline modal submit (`MEETING_DECLINE_REASON`): parses `RejectReason` (unknown / `ATTENDING` → `OTHER`), detail kept only for `OTHER`, queues the final `MeetingAttendanceUpdate` and an `UpdateMessage` on the original notice |
@@ -63,24 +66,40 @@ modal's `view_submission` (it reads a typed `InboundSubmission` and queues an in
 ```
 Specs (all under `domain/src/test/kotlin/dev/notypie/domain/command/context/`): `MeetingContextTest`
 (for `RequestMeetingContext` + `MeetingFormInput`), `ApprovalCallbackContextTest`,
-`MeetingApprovalResponseContextTest`, `DeclineReasonSubmissionContextTest`,
-`RescheduleMeetingContextTest`, `RescheduleMeetingSubmissionContextTest`, `AddParticipantContextTest`,
-`AddParticipantSubmissionContextTest`, `StandupFillContextTest`, `StandupAnswerSubmissionContextTest`,
-`StandupSetupSubmissionContextTest`, `CveSubscriptionSubmissionContextTest`. Not covered:
+`MeetingApprovalResponseContextTest`, `RescheduleMeetingContextTest`, `AddParticipantContextTest`,
+`StandupFillContextTest`; the submission side is `ParsedSubmissionsTest` (parse factories) plus
+`SubmissionContextsTest` (all seven leaves + `IgnoredSubmissionContext`), with the full path in
+`../SubmissionPipelineCharacterizationTest` and routing in `../parsers/SubmissionRouterTest`. Not covered:
 `CancelMeetingContext`, `RequestStandupSetupContext`, `RequestCveLatestContext`, the three
 `RequestCve*Context`s — add a spec when touching them. Build interactions with
 `InboundInteractionInputCreator` (`testFixtures`), extend `AbstractReactionCommandContextTest`.
 
 ### Common Patterns
 ```kotlin
-override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
-    val s = interaction.submission as? InboundSubmission.Xxx ?: return successOutput()
-    val uid = runCatching { UUID.fromString(s.uidRaw) }.getOrElse { return successOutput() }
-    addIntent(CommandIntent.Xxx(...))
-    return successOutput()
+internal data class XxxParsed(...) {
+    companion object {
+        fun from(raw: InboundSubmission.Xxx, actorId: String): XxxParsed? { ... } // the ONLY null seam
+    }
+}
+
+internal class XxxSubmissionContext(
+    commandBasicInfo: CommandBasicInfo,
+    intents: IntentQueue,
+    model: XxxParsed,
+) : SubmissionContext<XxxParsed>(commandBasicInfo = commandBasicInfo, intents = intents, model = model) {
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.XXX_SUBMIT
+
+    override fun accept(model: XxxParsed) {
+        addIntent(CommandIntent.Xxx(...))
+    }
 }
 ```
-- `private fun successOutput()` per context wrapping the three-argument `CommandOutput.success`.
+- New submission flow: `InboundSubmission` variant + mapper branch, a `*Parsed` model here, the leaf
+  above, and a `SubmissionRouter` branch — the exhaustive `when`s and `EnvelopeCastGuardTest` enforce
+  the domain wiring (the mapper branch and end-to-end coverage remain manual). Legitimately-absent
+  data the leaf must branch on is a sealed variant (`NoticeTarget`); a value that merely passes into
+  an existing nullable intent field (decline's `reasonDetail`) is precomputed at the parse seam and
+  forwarded without any leaf branching.
 - Modal-open contexts read `interaction.trigger.raw` into `ModalOpenHandle` and `interaction.channelId`
   into `ConversationTarget` for the form's private metadata.
 

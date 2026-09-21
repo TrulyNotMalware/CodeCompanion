@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # domain/command/entity/parsers
 
@@ -13,7 +13,7 @@ is a thin lookup from `CommandDetailType` to context.
 |------|-------------|
 | `ContextParser.kt` | `internal interface ContextParser { parseContext(idempotencyKey): CommandContext<out SubCommandDefinition> }` |
 | `AppMentionContextParser.kt` | `internal class (commandData, mention, idempotencyKey, intents, actorRole)`. Constants `HELP_MESSAGE`, `GRANT_USAGE`, `REVOKE_USAGE`, `ROLES_USAGE`, `CVE_USAGE`. Flow: no command structure → "Command Not supported."; first token → `CommandSet`; permission gate → denial text; then per-keyword dispatch: `notice`, `approval`, `help`, `status`, `ask`, `grant @user <role>`, `revoke @user`, `roles`, `cve topics` / `cve topic activate|deactivate <key>` / `cve retry all|<event-id>`, and the free-text fallback to `AgentChatContext` |
-| `InteractionContextParser.kt` | `internal class (commandData, interaction, idempotencyKey, intents)`; delegates to `interaction.detailType.createContext(...)` with `SubCommand.empty()` |
+| `InteractionContextParser.kt` | `internal class (commandData, interaction, idempotencyKey, intents[, observer])`; tries `SubmissionRouter.route(interaction)` first (submission variants win, SUBMIT-without-submission → `IgnoredSubmissionContext`), then falls back to `interaction.detailType.createContext(...)` with `SubCommand.empty()` |
 
 ## For AI Agents
 
@@ -37,14 +37,17 @@ is a thin lookup from `CommandDetailType` to context.
   (caught upstream).
 - `InteractionContextParser` passes an empty `SubCommand`; `createContext` substitutes
   `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST` itself. The `else -> EmptyContext`
-  arm there is why an unrouted detail type is a silent no-op.
+  arm there resolves an unrouted non-submission interaction to `EmptyContext`, which
+  `Command.executeInteraction()` turns into an `ERROR_RESPONSE` (it is not a `ReactionContext`);
+  submission routes can no longer fall through to it — `SubmissionRouter` intercepts them first.
 
 ### Testing Requirements
 ```bash
 ./gradlew :domain:test --tests 'dev.notypie.domain.command.parsers.*'
 ```
 `AppMentionContextParserTest` (keyword routing, permission denial, usage strings, help text, CVE
-sub-dispatch) and `InteractionContextParserTest` (detail type → context class). Mention inputs come
+sub-dispatch), `InteractionContextParserTest` (detail type → context class, submission precedence)
+and `SubmissionRouterTest` (variant routing, ignore reasons, variant-wins policy). Mention inputs come
 from `InboundCommandCreator` in `testFixtures`; specs live under
 `domain/src/test/kotlin/dev/notypie/domain/command/parsers/`.
 

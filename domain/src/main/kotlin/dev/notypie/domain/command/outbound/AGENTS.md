@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # domain/command/outbound
 
@@ -12,7 +12,7 @@ adapter implements to turn these into staged events.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboundMessage.kt` | `sealed interface OutboundMessage : CommandEffect` — `ChannelMessage(target, content, detailType?, threadId?)`, `Ephemeral(target, recipient?, content, detailType?)`, `DirectMessage(recipient, content)`, `UpdateMessage(ref, content, detailType)`, `ReplaceMessage(handle, content)`, `OpenModal(handle, form)`, `Approval(target, recipient?, approval, routingExtras)`, `Notice(target, mentions, message)` |
+| `OutboundMessage.kt` | `sealed interface OutboundMessage : CommandEffect` — `ChannelMessage(target, content, detailType?, threadId?)`, `Ephemeral(target, recipient?, content, detailType?)`, `DirectMessage(recipient, content)`, `UpdateMessage(ref, content: MessageContent.Text, detailType)`, `ReplaceMessage(handle, content: MessageContent.Text)` (Text by type since B1 — both rewrite markdown in place, so non-Text content is unrepresentable), `OpenModal(handle, form)`, `Approval(target, recipient?, approval, routingExtras)`, `Notice(target, mentions, message)` |
 | `MessageContent.kt` | `sealed interface` — `Text(headline?, markdown)`, `ErrorNotice(className, message, details?)`, `Schedule(headline, info: TimeScheduleInfo)`, `Form(headline, fields, reason?, approval?)`, `MeetingRequest(approval?)`, `MeetingList(meetings: List<MeetingDto>, currentUserId)`, `StandupSummary(routineName, sessionDate, members, answers, questions)` |
 | `ModalForm.kt` | `sealed interface` — `Reschedule`, `AddParticipant` (both `meetingUid`, `requesterId`, `channel`), `StandupFill(sessionUid, routineUid, requesterId, originNotice)`, `StandupSetup(creatorId, commandChannel)`, `DeclineReason(meetingIdempotencyKey, participantUserId, meetingTitle, originNotice?)`, `CveSubscribe(topics)`, `CveUnsubscribe(topics)`; `TopicOption(key, label)` |
 | `OutboundTargets.kt` | Value classes `ConversationTarget(id)`, `UserRef(id)`; `MessageRef(conversation, messageId)` |

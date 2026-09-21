@@ -17,9 +17,7 @@ interface IntentQueue {
 internal class DefaultIntentQueue : IntentQueue {
     private val queue: ArrayDeque<CommandEffect> = ArrayDeque()
 
-    override fun offer(effect: CommandEffect) {
-        queue.addLast(effect)
-    }
+    override fun offer(effect: CommandEffect) = queue.addLast(effect)
 
     override fun snapshot(): List<CommandEffect> = queue.toList()
 

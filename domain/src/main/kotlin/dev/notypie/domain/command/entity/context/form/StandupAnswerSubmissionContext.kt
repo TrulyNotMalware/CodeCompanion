@@ -1,79 +1,56 @@
 package dev.notypie.domain.command.entity.context.form
 
-import dev.notypie.domain.command.NoSubCommands
-import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.CommandType
-import dev.notypie.domain.command.entity.context.ReactionContext
-import dev.notypie.domain.command.inbound.InboundInteraction
-import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.command.entity.context.SubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
-import java.util.UUID
 
+/**
+ * Executes the parsed standup answer submission. An empty answer list suppresses persistence but
+ * the notice update still goes out — the member did submit, so the prompt must stop offering the
+ * form.
+ */
 internal class StandupAnswerSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
-    subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),
     intents: IntentQueue,
-) : ReactionContext<NoSubCommands>(
+    model: StandupAnswerParsed,
+) : SubmissionContext<StandupAnswerParsed>(
         commandBasicInfo = commandBasicInfo,
-        subCommand = subCommand,
         intents = intents,
+        model = model,
     ) {
-    override fun parseCommandType(): CommandType = CommandType.PIPELINE
-
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT
 
-    override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
-        val s =
-            interaction.submission as? InboundSubmission.StandupAnswer
-                ?: return successOutput()
-        val sessionUid =
-            runCatching { UUID.fromString(s.sessionUidRaw) }
-                .getOrElse {
-                    return successOutput()
-                }
-        val userId = s.userId.ifBlank { interaction.actor.id }
-        val noticeChannel = s.noticeChannel
-        val noticeMessageTs = s.noticeMessageTs
-        // Answers arrive already trimmed and ordered by question index from the inbound mapper.
-        val responses = s.answers
-
-        if (responses.isNotEmpty()) {
+    override fun accept(model: StandupAnswerParsed) {
+        if (model.responses.isNotEmpty()) {
             addIntent(
                 CommandIntent.RecordStandupAnswer(
-                    sessionUid = sessionUid,
-                    userId = userId,
-                    responses = responses,
+                    sessionUid = model.sessionUid,
+                    userId = model.userId,
+                    responses = model.responses,
                 ),
             )
         }
-        if (noticeChannel.isNotBlank() && noticeMessageTs.isNotBlank()) {
-            addOutbound(
-                OutboundMessage.UpdateMessage(
-                    ref =
-                        MessageRef(
-                            conversation = ConversationTarget(id = noticeChannel),
-                            messageId = noticeMessageTs,
-                        ),
-                    content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
-                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                ),
-            )
-        }
-        return successOutput()
-    }
+        when (val notice = model.notice) {
+            is NoticeTarget.Update ->
+                addOutbound(
+                    OutboundMessage.UpdateMessage(
+                        ref =
+                            MessageRef(
+                                conversation = ConversationTarget(id = notice.channel),
+                                messageId = notice.messageTs,
+                            ),
+                        content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
+                        detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                    ),
+                )
 
-    private fun successOutput() =
-        CommandOutput.success(
-            basicInfo = commandBasicInfo,
-            commandType = commandType,
-            commandDetailType = commandDetailType,
-        )
+            NoticeTarget.None -> Unit
+        }
+    }
 }

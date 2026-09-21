@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
 
 # application/service/command
 
@@ -13,7 +13,7 @@ single source of truth for a user's `UserRole`, and `RoleManagementService` appl
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandExecutor.kt` | `class CommandExecutor(intentResolver: SlackIntentResolver, outboundStager, eventPublisher)`. `execute(command): CommandOutput` = `command.handleEvent()` → `command.drainIntents()` (always, so error effects reach Slack) → `publishIntents`: splits `CommandIntent` vs `OutboundMessage`, builds `basicInfo = commandData.extractBasicInfo(idempotencyKey)`, `intentResolver.resolveAll(...) + outbound.mapNotNull { outboundStager.stage(...) }`, queues into `DefaultEventQueue`, `eventPublisher.publishEvent(events)`. Resolution and publish failures are logged with `commandId` / `idempotencyKey` / counts and rethrown. Declared as `@Bean commandExecutor` in `configurations/SlackRequestBuilderConfiguration` with the `SlackOutboundStager` |
+| `CommandExecutor.kt` | `class CommandExecutor(intentResolver: SlackIntentResolver, outboundStager, eventPublisher)`. `execute(command): CommandOutput` = `command.handleEvent()` → `command.drainIntents()` (always, so error effects reach Slack) → `publishIntents`: classifies every effect explicitly (`CommandIntent` / `OutboundMessage`; an unrouted third `CommandEffect` implementor fails loudly instead of being dropped — the interface cannot be sealed across packages), builds `basicInfo = commandData.extractBasicInfo(idempotencyKey)`, `intentResolver.resolveAll(...) + outbound.mapNotNull { outboundStager.stage(...) }`, queues into `DefaultEventQueue`, `eventPublisher.publishEvent(events)`. Resolution and publish failures are logged with `commandId` / `idempotencyKey` / counts and rethrown. Declared as `@Bean commandExecutor` in `configurations/SlackRequestBuilderConfiguration` with the `SlackOutboundStager` |
 | `CommandRoleResolver.kt` | `@Service class CommandRoleResolver(appConfig, userCommandRoleRepository)`. `bootstrapAdmins: Set<String>` from `slack.app.authorization.bootstrap-admins`; `resolve(userId)` = bootstrap → `ADMIN`, else `findRole(userId) ?: USER`; `isBootstrapAdmin(userId)` |
 | `RoleManagementService.kt` | `@Service`. `@Transactional @EventListener handleRoleManage(RoleManageRequestEvent)` runs `GRANT` (`saveRole`), `REVOKE` (`deleteRole`, reports "no role grant" when nothing was removed) or `LIST` (`renderGrants()`), refuses to touch bootstrap admins, and stages a `ChannelMessage` headlined `CodeCompanion — role management` via `checkNotNull(outboundStager.stage(...))` + `publishOne`. `internal fun renderGrants()` is shared with the MCP `list_roles` tool |
 

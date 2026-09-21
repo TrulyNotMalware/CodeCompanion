@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # test/kotlin/dev/notypie/application/service/relay
 
@@ -22,9 +22,9 @@ transitions row status from publish events.
 - `createOutboxRow(eventId)` is a `relaxed` `OutboxMessage` mock, which is why
   `verify { storedMessage.updateMessageStatus(status = SUCCESS) }` works and why the renderer spec builds a
   real `OutboxMessage(...)` for the schema-version case instead.
-- `getPendingMessages(messageParameter = NoParameter)` — `NoParameter` is the `MessageProcessorParameter`
-  object in `MessageProcessor.kt`. Stubs use `limit = 100, offset = 0` and `findStuckInProgress(limit = 100)`
-  because the fixture's `batchSize` default is 100.
+- `pollPending()` is the poller's typed entry point (no parameter since A4). Stubs use
+  `limit = 100, offset = 0` and `findStuckInProgress(limit = 100)` because the fixture's `batchSize`
+  default is 100.
 - The claim-count cases encode the race contract: dispatch exactly `claimPending` rows, taken from the front
   of the candidate list, and never claim stuck IN_PROGRESS rows.
 - The relay service uses a real `RetryTemplate()`; the "row no longer exists" case walks the default retry
@@ -54,7 +54,7 @@ Fixtures used: `application` testFixtures `outbox/OutboxTestFixtures.kt` (`creat
 
 ### Internal
 - `application/service/relay/OutboxPayloadRenderer.kt`, `PollingMessageProcessor.kt`, `MessageProcessor.kt`
-  (`NoParameter`), `SlackMessageRelayServiceImpl.kt`, `application/configurations/AppConfig.Outbox.Polling`
+  (marker), `SlackMessageRelayServiceImpl.kt`, `application/configurations/AppConfig.Outbox.Polling`
 - `infrastructure/repository/outbox/MessageOutboxRepository`, `OutboundMessagePort`,
   `CodecOutboundMessagePort`, `Transport`, `schema/OutboxMessage`, `MessageStatus`,
   `dto/MessagePublishSuccessEvent`, `MessagePublishFailedEvent`, `impl/command/OutboundRenderer`,

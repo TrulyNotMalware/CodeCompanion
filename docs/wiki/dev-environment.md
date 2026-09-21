@@ -156,7 +156,6 @@ _type: guide · updated: 2026-09-21_
 - `src/main/resources` 아래는 **전부 jar에 들어간다.** `processResources`에 exclude가 없어 `AGENTS.md`, `k8s/`·`cdc/` README와
   매니페스트, `application-local.yaml`까지 `BOOT-INF/classes/`에 포함된다(기존 빌드 산출물로 확인). 거기에 실제 값을 두지 않는 이유다.
 - `deploy_action.yaml`의 `dorny/paths-filter@v3` 블록에는 `!` 패턴을 넣지 않는다(무효). 마크다운 제외는 워크플로 레벨 `paths`에만.
-- `application-local.yaml`의 `slack.app.mode.stand-alone`은 `AppConfig.Mode`에 대응 필드가 없어 아무 효과가 없다.
 
 ## 근거
 

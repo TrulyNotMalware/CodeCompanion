@@ -15,14 +15,14 @@ class PollingMessageProcessorTest :
     BehaviorSpec({
         val clock = createFixedUtcClock()
 
-        given("PollingMessageProcessor.getPendingMessages") {
+        given("PollingMessageProcessor.pollPending") {
             `when`("no PENDING and no stuck IN_PROGRESS rows exist") {
                 val (outboxRepository, relayService, processor) = createPollingProcessorFixture(clock = clock)
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = 100) } returns emptyList()
                 every { outboxRepository.findPendingMessages(limit = 100, offset = 0) } returns emptyList()
 
-                processor.getPendingMessages(messageParameter = NoParameter)
+                processor.pollPending()
 
                 then("nothing is dispatched and no claim is attempted") {
                     verify(exactly = 0) { relayService.batchPendingMessages(pendingMessages = any()) }
@@ -46,7 +46,7 @@ class PollingMessageProcessorTest :
                 val captured = slot<List<OutboxMessage>>()
                 every { relayService.batchPendingMessages(pendingMessages = capture(captured)) } returns Unit
 
-                processor.getPendingMessages(messageParameter = NoParameter)
+                processor.pollPending()
 
                 then("all candidates are forwarded to the relay service exactly once") {
                     captured.captured shouldHaveSize 3
@@ -74,7 +74,7 @@ class PollingMessageProcessorTest :
                 val captured = slot<List<OutboxMessage>>()
                 every { relayService.batchPendingMessages(pendingMessages = capture(captured)) } returns Unit
 
-                processor.getPendingMessages(messageParameter = NoParameter)
+                processor.pollPending()
 
                 then("only the first claim-count rows are dispatched") {
                     captured.captured shouldHaveSize 2
@@ -89,7 +89,7 @@ class PollingMessageProcessorTest :
                     listOf(createOutboxRow(eventId = "x"))
                 every { outboxRepository.claimPending(eventIds = listOf("x")) } returns 0
 
-                processor.getPendingMessages(messageParameter = NoParameter)
+                processor.pollPending()
 
                 then("nothing is dispatched even though the candidate read returned a row") {
                     verify(exactly = 0) { relayService.batchPendingMessages(pendingMessages = any()) }
@@ -110,7 +110,7 @@ class PollingMessageProcessorTest :
                 val captured = slot<List<OutboxMessage>>()
                 every { relayService.batchPendingMessages(pendingMessages = capture(captured)) } returns Unit
 
-                processor.getPendingMessages(messageParameter = NoParameter)
+                processor.pollPending()
 
                 then("they are re-dispatched, no claim attempt is made for them") {
                     captured.captured shouldHaveSize 2

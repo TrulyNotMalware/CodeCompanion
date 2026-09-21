@@ -23,6 +23,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 
 class OutboundMessageCodecTest :
     StringSpec({
@@ -256,6 +257,53 @@ class OutboundMessageCodecTest :
                         content = MessageContent.Text(headline = null, markdown = "replaced"),
                     ),
             )
+        }
+
+        // Frozen wire fixtures: byte-for-byte what the pre-B1 codec (content: MessageContent) wrote
+        // for Text-valued rows. Decoding proves persisted rows survive the type narrowing; encoding
+        // back to the exact literal proves the shape did not drift for readers of new rows.
+        "pre-narrowing update/replace rows decode, and the encoded wire shape is frozen" {
+            val fixtureBasicInfo =
+                createCommandBasicInfo(idempotencyKey = UUID.fromString("00000000-0000-0000-0000-000000000001"))
+            val basicInfoJson =
+                "\"basicInfo\":{\"appId\":\"A12ABCDEFG\",\"appToken\":\"I_AM_TEST_TOKEN\"," +
+                    "\"publisherId\":\"U012ABCDEFG\",\"channel\":\"C012ABCDEFG\"," +
+                    "\"idempotencyKey\":\"00000000-0000-0000-0000-000000000001\"}"
+            val updateFixture =
+                "{\"message\":{\"@type\":\"UpdateMessage\",\"ref\":{\"conversation\":\"D_NOTICE\"," +
+                    "\"messageId\":\"1700000000.000700\"},\"content\":{\"@type\":\"Text\"," +
+                    "\"headline\":null,\"markdown\":\"updated\"},\"detailType\":\"STANDUP_ANSWER_SUBMIT\"},$basicInfoJson}"
+            val replaceFixture =
+                "{\"message\":{\"@type\":\"ReplaceMessage\",\"handle\":\"https://hooks.example.com/actions/123\"," +
+                    "\"content\":{\"@type\":\"Text\",\"headline\":null,\"markdown\":\"replaced\"}},$basicInfoJson}"
+            val updateEnvelope =
+                OutboundEnvelope(
+                    message =
+                        OutboundMessage.UpdateMessage(
+                            ref =
+                                MessageRef(
+                                    conversation = ConversationTarget(id = "D_NOTICE"),
+                                    messageId = "1700000000.000700",
+                                ),
+                            content = MessageContent.Text(headline = null, markdown = "updated"),
+                            detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                        ),
+                    basicInfo = fixtureBasicInfo,
+                )
+            val replaceEnvelope =
+                OutboundEnvelope(
+                    message =
+                        OutboundMessage.ReplaceMessage(
+                            handle = ResponseReplaceHandle(raw = "https://hooks.example.com/actions/123"),
+                            content = MessageContent.Text(headline = null, markdown = "replaced"),
+                        ),
+                    basicInfo = fixtureBasicInfo,
+                )
+
+            OutboundMessageCodec.decode(json = updateFixture) shouldBe updateEnvelope
+            OutboundMessageCodec.decode(json = replaceFixture) shouldBe replaceEnvelope
+            OutboundMessageCodec.encode(envelope = updateEnvelope) shouldBe updateFixture
+            OutboundMessageCodec.encode(envelope = replaceEnvelope) shouldBe replaceFixture
         }
 
         "OpenModal is not outbox-bound and fails fast on round-trip" {

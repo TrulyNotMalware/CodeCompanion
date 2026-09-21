@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-08-28_
+_type: architecture · updated: 2026-09-21_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -56,7 +56,14 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   출력을 돌려준다. 인터랙션을 받는 컨텍스트는 `ReactionContext` 하위뿐이며, 아니면 `UnSupportedCommandException`이다.
 - **기능별 컨텍스트**: 멘션 → `Notice/ApprovalForm/TextResponse/Status/AgentChat/RoleManagement/CveOpsContext`;
   슬래시 → `RequestMeeting/RequestStandupSetup/RequestCve*Context`; 모달 제출 → `context/form/*SubmissionContext`.
-  인터랙션 → 컨텍스트 매핑은 `CommandDetailType.createContext()`(`entity/CommandType.kt`), 미매핑은 `EmptyContext`.
+  비제출 인터랙션 → 컨텍스트 매핑은 `CommandDetailType.createContext()`(`entity/CommandType.kt`), 미매핑은 `EmptyContext`.
+- **제출 라우팅(2026-09-21, Phase 11)**: `view_submission`은 `SubmissionRouter`(`entity/SubmissionRouting.kt`)가
+  가로챈다. sealed `InboundSubmission` 변종에 대한 exhaustive `when`이 변종별 `*Parsed.from`(`form/ParsedSubmissions.kt`)
+  으로 **먼저 파싱**하고, leaf 컨텍스트는 non-null 파스 모델을 생성자로 받는다 — leaf에는 캐스트도 null도 없다.
+  파싱 거부·submission 누락은 `IgnoredSubmissionContext`(성공, 효과 없음)로 가고 `SubmissionParseObserver`
+  (`codecompanion.submission.ignored` 카운터)로 관측된다. 라우팅 판별자는 변종에서 유도하며(`detailType()`),
+  봉투의 detailType은 제출 경로를 결정하지 않는다. `domain/command`의 명시적 캐스트는 `EnvelopeCastGuardTest`가
+  축소 전용 baseline(현재 비어 있음 — 슬래시 3건은 A2에서 `slashInvocation()` sealed when으로 대체)으로 막는다.
 - **`CommandOutput` + `Status`**(`dto/response/`): `ok`, `status`(`IN_PROGRESSED/SUCCESS/FAILED/DO_NOTHING`),
   `commandDetailType` 등 실행 메타데이터. 특이점: `RequestMeetingContextResult`는 `CommandOutput`을 상속해 `Meeting`을
   나르고, `SlackInteractionHandlerImpl`이 `ok`일 때 Spring 이벤트로 발행하면 `MeetingServiceImpl.createNewMeeting`
@@ -135,8 +142,11 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
    (`CveSubscriptionSlashServiceImpl`의 `topics`).
 6. 상태를 바꾸면 `CommandIntent` 변종 + `SlackIntentResolver` 분기 + `CommandEvent`/`EventPayload` + 리스너. 새
    `OutboundMessage`/`MessageContent`를 만들면 `SlackOutboundRenderer` 분기. 빠지면 효과가 **조용히 버려진다**.
-7. 모달 제출이 돌아와야 하면 `CommandDetailType` 항목 + `CommandDetailType.createContext` 분기 +
-   `SlackInboundMapper.buildSubmission`의 `InboundSubmission` 변종 + `InboundFieldKeys`의 block id 상수(템플릿과 공유).
+7. 모달 제출이 돌아와야 하면 `CommandDetailType` 항목 + `SlackInboundMapper.buildSubmission`의 `InboundSubmission`
+   변종 + `InboundFieldKeys`의 block id 상수(템플릿과 공유) + `form/ParsedSubmissions.kt`의 `*Parsed` 모델 +
+   `SubmissionContext<M>` leaf + `SubmissionRouter` 분기. 컴파일이 강제하는 것은 `SubmissionRouting.kt`의
+   exhaustive `when` 두 개(라우터·판별자 유도)뿐이다 — `isSubmissionRoute` 수동 목록은 `SubmissionRouterTest`의
+   일치 검증이, mapper 분기는 writer→parser 회귀 테스트가 잡고, 새 변종의 엔드투엔드 커버는 사람이 추가해야 한다.
 8. README "Bot Commands & Roles" 표와 `AppMentionContextParser.HELP_MESSAGE` 갱신(파서 테스트가 문구를 고정한다).
 
 **멘션 하위 명령** — `CommandSet`에 항목과 `requiredPermission` 추가 → `AppMentionContextParser.parseContext`의

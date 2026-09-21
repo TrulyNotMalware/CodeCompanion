@@ -8,20 +8,13 @@ import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantContext
-import dev.notypie.domain.command.entity.context.form.AddParticipantSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
-import dev.notypie.domain.command.entity.context.form.CveSubscribeSubmissionContext
-import dev.notypie.domain.command.entity.context.form.CveUnsubscribeSubmissionContext
-import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
-import dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext
-import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
-import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
 
@@ -109,14 +102,6 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.MEETING_DECLINE_REASON -> {
-            DeclineReasonSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.CANCEL_MEETING -> {
             CancelMeetingContext(
                 commandBasicInfo = commandBasicInfo,
@@ -133,14 +118,6 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.MEETING_RESCHEDULE_SUBMIT -> {
-            RescheduleMeetingSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST -> {
             AddParticipantContext(
                 commandBasicInfo = commandBasicInfo,
@@ -149,24 +126,8 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT -> {
-            AddParticipantSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.STANDUP_PROMPT -> {
             StandupFillContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
-        CommandDetailType.STANDUP_ANSWER_SUBMIT -> {
-            StandupAnswerSubmissionContext(
                 commandBasicInfo = commandBasicInfo,
                 subCommand = subCommand,
                 intents = intents,
@@ -185,32 +146,8 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        CommandDetailType.STANDUP_SETUP_SUBMIT -> {
-            StandupSetupSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.APPROVAL_CALLBACK -> {
             ApprovalCallbackContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
-        CommandDetailType.CVE_SUBSCRIBE_SUBMIT -> {
-            CveSubscribeSubmissionContext(
-                commandBasicInfo = commandBasicInfo,
-                subCommand = subCommand,
-                intents = intents,
-            )
-        }
-
-        CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT -> {
-            CveUnsubscribeSubmissionContext(
                 commandBasicInfo = commandBasicInfo,
                 subCommand = subCommand,
                 intents = intents,

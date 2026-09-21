@@ -30,7 +30,7 @@ class SetupStandupCommand(
     override fun parseContext(
         subCommand: SubCommand<StandupSubCommandDefinition>,
     ): CommandContext<StandupSubCommandDefinition> {
-        val slashPayload = commandData.payload as SlashInvocation
+        val slashPayload = commandData.slashInvocation(commandName = "SetupStandupCommand")
         return RequestStandupSetupContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             triggerHandle = slashPayload.trigger.raw,

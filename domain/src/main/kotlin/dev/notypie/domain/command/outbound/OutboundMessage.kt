@@ -33,14 +33,16 @@ sealed interface OutboundMessage : CommandEffect {
 
     data class UpdateMessage(
         val ref: MessageRef,
-        val content: MessageContent,
+        // Text by type: chat.update rewrites markdown in place, so a non-Text content is
+        // unrepresentable instead of a renderer-time check.
+        val content: MessageContent.Text,
         /** Per-emitter routing type so a chat.update routes back to the correct context. */
         val detailType: CommandDetailType,
     ) : OutboundMessage
 
     data class ReplaceMessage(
         val handle: ResponseReplaceHandle,
-        val content: MessageContent,
+        val content: MessageContent.Text,
     ) : OutboundMessage
 
     data class OpenModal(

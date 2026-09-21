@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 data class Envelope(
     val schema: Schema,
     val payload: Payload,
-) : MessageProcessorParameter()
+)
 
 data class Schema(
     val type: String,

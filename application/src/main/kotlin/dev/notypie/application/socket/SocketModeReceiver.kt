@@ -86,9 +86,8 @@ class SocketModeReceiver(
 
     override fun isRunning(): Boolean = client != null
 
-    private fun ack(socketClient: SocketModeClient, envelopeId: String) {
+    private fun ack(socketClient: SocketModeClient, envelopeId: String) =
         socketClient.sendSocketModeResponse(AckResponse.builder().envelopeId(envelopeId).build())
-    }
 
     private fun ackInteractive(socketClient: SocketModeClient, envelopeId: String, ackBody: String?) {
         if (ackBody == null) {

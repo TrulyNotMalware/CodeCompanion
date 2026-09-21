@@ -23,9 +23,7 @@ class PollingMessageProcessor(
         Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
 
     @Scheduled(fixedRate = 5000)
-    fun scheduleDispatch() = getPendingMessages(messageParameter = NoParameter)
-
-    override fun getPendingMessages(messageParameter: MessageProcessorParameter) {
+    fun pollPending() {
         recoverStuckInProgress()
         claimAndDispatch()
     }

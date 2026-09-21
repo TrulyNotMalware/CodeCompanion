@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
 
 # domain/command/entity/context
 
@@ -13,6 +13,7 @@ live in `form/`.
 |------|-------------|
 | `CommandContext.kt` | `internal abstract class CommandContext<T>(commandBasicInfo, tracking = true, subCommand, intents)`: lazy `commandType` / `commandDetailType` from the two abstract `parse*` methods; `runCommand()` defaults to `CommandOutput.empty()`; `createErrorResponse(errMessage[, results])` queues an error ephemeral then returns `fail` (or `results`); `addIntent` / `addOutbound` offer to the queue |
 | `ReactionContext.kt` | `internal abstract class ReactionContext<T>`: `interactionSuccessResponse(replyHandle, mkdMessage[, results])` emits `ReplaceMessage`; `runCommand(commandDetailType)`; `handleInteraction(interaction)` defaults to a success reply. `internal abstract class ResponseContext(isOk)` makes `runCommand()` final and delegates to `runCommand(commandDetailType)` |
+| `SubmissionContext.kt` | Phase 11: `internal abstract class SubmissionContext<M : Any>` — holds a non-null parsed model, `final handleInteraction` calls `accept(model)` then returns plain success; `IgnoredSubmissionContext(detailType)` — the terminal for a submission route with nothing to execute (success, empty queue, deliberately NOT the `ReactionContext` default reply) |
 | `AgentChatContext.kt` | `@bot ask` / free text → `CommandIntent.AgentConverse` (`AGENT_CONVERSE`); blank prompt → error ephemeral `EMPTY_PROMPT_MESSAGE` |
 | `StatusContext.kt` | `@bot status` → `CommandIntent.StatusReport` (`STATUS_REPORT`) |
 | `RoleManagementContext.kt` | `grant` / `revoke` / `roles` — forwards the intent the parser built (`SIMPLE_TEXT`) |

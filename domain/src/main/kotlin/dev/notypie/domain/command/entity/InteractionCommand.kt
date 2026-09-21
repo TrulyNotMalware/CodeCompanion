@@ -14,6 +14,8 @@ import dev.notypie.domain.command.exceptions.UnSupportedCommandException
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.inbound.MentionInvocation
+import dev.notypie.domain.command.inbound.SlashInvocation
+import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.common.error.exceptionDetails
 import java.util.UUID
 
@@ -23,51 +25,62 @@ class InteractionCommand(
     commandData: InboundCommand,
     /** Role of the actor issuing the command; mention routing denies commands it does not grant. */
     private val actorRole: UserRole,
+    private val parseObserver: SubmissionParseObserver = SubmissionParseObserver.NONE,
 ) : Command<SubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    private data class Route(
+        val parser: ContextParser,
+        val subCommandDefinition: SubCommandDefinition,
+    )
+
     // Lazy so that UnSupportedCommandException thrown here is captured by Command.handleEvent()
-    // rather than breaking Command construction.
-    private val commandParser: ContextParser by lazy { buildParser(commandData) }
+    // rather than breaking Command construction. Resolving parser and sub-command together keeps
+    // the payload narrowed exactly once, in the exhaustive when below.
+    private val route: Route by lazy { resolveRoute(commandData = commandData) }
 
     override fun parseContext(subCommand: SubCommand<SubCommandDefinition>): CommandContext<out SubCommandDefinition> =
-        commandParser.parseContext(idempotencyKey = idempotencyKey)
+        route.parser.parseContext(idempotencyKey = idempotencyKey)
 
-    override fun findSubCommandDefinition(): SubCommandDefinition {
-        val interaction =
-            commandData.payload as? InboundInteraction
-                ?: return NoSubCommands()
+    override fun findSubCommandDefinition(): SubCommandDefinition = route.subCommandDefinition
 
-        return when (interaction.detailType) {
-            CommandDetailType.MEETING_APPROVAL_REQUEST,
-            CommandDetailType.MEETING_CREATE_REQUEST,
-            -> MeetingSubCommandDefinition.NONE
-
-            else -> NoSubCommands()
-        }
-    }
-
-    private fun buildParser(commandData: InboundCommand): ContextParser =
+    private fun resolveRoute(commandData: InboundCommand): Route =
         when (val payload = commandData.payload) {
             is MentionInvocation ->
-                AppMentionContextParser(
-                    commandData = commandData,
-                    mention = payload,
-                    idempotencyKey = idempotencyKey,
-                    intents = intents,
-                    actorRole = actorRole,
+                Route(
+                    parser =
+                        AppMentionContextParser(
+                            commandData = commandData,
+                            mention = payload,
+                            idempotencyKey = idempotencyKey,
+                            intents = intents,
+                            actorRole = actorRole,
+                        ),
+                    subCommandDefinition = NoSubCommands(),
                 )
 
             is InboundInteraction ->
-                InteractionContextParser(
-                    commandData = commandData,
-                    interaction = payload,
-                    idempotencyKey = idempotencyKey,
-                    intents = intents,
+                Route(
+                    parser =
+                        InteractionContextParser(
+                            commandData = commandData,
+                            interaction = payload,
+                            idempotencyKey = idempotencyKey,
+                            intents = intents,
+                            observer = parseObserver,
+                        ),
+                    subCommandDefinition =
+                        when (payload.detailType) {
+                            CommandDetailType.MEETING_APPROVAL_REQUEST,
+                            CommandDetailType.MEETING_CREATE_REQUEST,
+                            -> MeetingSubCommandDefinition.NONE
+
+                            else -> NoSubCommands()
+                        },
                 )
 
-            else ->
+            is SlashInvocation ->
                 throw UnSupportedCommandException(
                     commandType = commandData.kind.toString(),
                     errorCode = CommandErrorCode.UNSUPPORTED_COMMAND_TYPE,

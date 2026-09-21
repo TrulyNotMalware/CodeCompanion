@@ -126,30 +126,24 @@ class SlackOutboundRenderer(
                     ).payload
             }
 
-            is OutboundMessage.UpdateMessage -> {
-                val content = message.content
-                check(content is MessageContent.Text) { "UpdateMessage content must be Text: $content" }
+            is OutboundMessage.UpdateMessage ->
                 slackEventBuilder
                     .updateNoticeMessageRequest(
                         commandBasicInfo = basicInfo,
                         commandDetailType = message.detailType,
                         channel = message.ref.conversation.id,
                         messageTs = message.ref.messageId,
-                        markdownText = content.markdown,
+                        markdownText = message.content.markdown,
                     ).payload
-            }
 
-            is OutboundMessage.ReplaceMessage -> {
-                val content = message.content
-                check(content is MessageContent.Text) { "ReplaceMessage content must be Text: $content" }
+            is OutboundMessage.ReplaceMessage ->
                 slackEventBuilder
                     .replaceOriginalText(
-                        markdownText = content.markdown,
+                        markdownText = message.content.markdown,
                         responseUrl = message.handle.raw,
                         commandBasicInfo = basicInfo,
                         commandDetailType = CommandDetailType.REPLACE_TEXT,
                     ).payload
-            }
 
             is OutboundMessage.OpenModal ->
                 error("OpenModal is not a renderer concern; open views synchronously via the stager: $message")

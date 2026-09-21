@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.slack.ActionElementTypes
@@ -28,6 +29,7 @@ class SlackInteractionHandlerImpl(
     private val interactionPayloadParser: InteractionPayloadParser,
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val commandExecutor: CommandExecutor,
+    private val submissionParseObserver: SubmissionParseObserver,
 ) : InteractionHandler {
     companion object {
         /**
@@ -113,6 +115,7 @@ class SlackInteractionHandlerImpl(
             idempotencyKey = idempotencyKey,
             commandData = commandData,
             actorRole = UserRole.USER,
+            parseObserver = submissionParseObserver,
         )
 
     private fun rejectCommand(
