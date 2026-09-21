@@ -106,7 +106,6 @@ subprojects {
         testImplementation("io.mockk:mockk:$mockkVersion")
         testFixturesImplementation("io.mockk:mockk:$mockkVersion")
         testImplementation("io.kotest:kotest-runner-junit5")
-        testImplementation("io.kotest:kotest-extensions-spring")
         testImplementation("io.kotest:kotest-assertions-core")
     }
 }

@@ -30,6 +30,7 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("io.kotest:kotest-extensions-spring")
 
     implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("javax.websocket:javax.websocket-api:1.1")
