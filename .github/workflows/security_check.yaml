@@ -74,7 +74,12 @@ jobs:
         # CodeQL only extracts code compiled by a JVM its tracer started: --no-daemon forces a
         # fresh traced build JVM and --no-build-cache prevents compiled classes being served
         # from the cache restored by setup-java instead of being compiled.
-        run: ./gradlew classes --no-daemon --no-build-cache
+        # gradle.properties is git-ignored, so without explicit heaps the Kotlin daemon gets the
+        # default and the CodeQL extractor running inside it dies with "GC overhead limit exceeded".
+        run: >-
+          ./gradlew classes --no-daemon --no-build-cache
+          -Dorg.gradle.jvmargs=-Xmx2g
+          -Pkotlin.daemon.jvmargs=-Xmx6g
         env:
           GRADLE_OPTS: "-Dorg.gradle.workers.max=4"
 

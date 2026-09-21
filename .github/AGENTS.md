@@ -46,7 +46,10 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   warning, and this project is pure Kotlin, so the job runs `./gradlew classes --no-daemon
   --no-build-cache` between `init` and `analyze`. Keep both flags: CodeQL only extracts code compiled
   by a JVM its tracer started, so a reused daemon or a build-cache hit yields an empty database and a
-  failed analysis. If Kotlin extraction ever fails with the daemon, the first knob to try is
+  failed analysis. The step also passes explicit heaps (`-Dorg.gradle.jvmargs`,
+  `-Pkotlin.daemon.jvmargs`): `gradle.properties` is git-ignored and this job does not run `apply.sh`, so
+  the Kotlin daemon otherwise gets the default heap and the extractor inside it dies with `GC overhead
+  limit exceeded` (seen on `:infrastructure:compileKotlin`). If Kotlin extraction still fails with the daemon, the next knob is
   `-Pkotlin.compiler.execution.strategy=in-process`. Supported Kotlin range is published at
   https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/ — check it before
   bumping the Kotlin plugin past what CodeQL lists. An unsupported version fails `compileKotlin` under
