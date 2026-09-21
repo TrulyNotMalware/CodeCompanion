@@ -4,11 +4,6 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
 
-/**
- * Summarizes over the existing agent lane (claude-sidecar). One-shot per event: a fresh sessionKey,
- * no resume sessionId, and no MCP scoped token — summarization needs no tools. A non-terminal
- * outcome (Busy) or a Failed frame throws so the worker records the failure and retries with backoff.
- */
 class SidecarAiSummarizer(
     private val agentGateway: AgentGateway,
     private val promptBuilder: CveSummaryPromptBuilder,

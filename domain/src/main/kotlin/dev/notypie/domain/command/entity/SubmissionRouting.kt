@@ -25,7 +25,6 @@ import dev.notypie.domain.command.inbound.SubmissionIgnoreReason
 import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.command.intent.IntentQueue
 
-/** The detail types whose interactions are `view_submission` routes. */
 internal val CommandDetailType.isSubmissionRoute: Boolean
     get() =
         when (this) {
@@ -41,7 +40,6 @@ internal val CommandDetailType.isSubmissionRoute: Boolean
             else -> false
         }
 
-/** Single source of the variant → detail-type derivation; the envelope's own discriminator never decides a submission route. */
 internal fun InboundSubmission.detailType(): CommandDetailType =
     when (this) {
         is InboundSubmission.RescheduleMeeting -> CommandDetailType.MEETING_RESCHEDULE_SUBMIT
@@ -53,19 +51,11 @@ internal fun InboundSubmission.detailType(): CommandDetailType =
         is InboundSubmission.CveUnsubscribe -> CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT
     }
 
-/**
- * The one seam that turns a submission-bearing interaction into an executable context. Parsing
- * happens here, BEFORE construction: a leaf is only built with its non-null parsed model, so the
- * leaves carry no casts and no nulls. A submission that parses to nothing — and a SUBMIT-typed
- * interaction that carries no submission at all — routes to [IgnoredSubmissionContext] (success,
- * no effects) and is reported to the [observer].
- */
 internal class SubmissionRouter(
     private val commandBasicInfo: CommandBasicInfo,
     private val intents: IntentQueue,
     private val observer: SubmissionParseObserver = SubmissionParseObserver.NONE,
 ) {
-    /** Returns null for non-submission interactions, which stay on the detail-type routing. */
     fun route(interaction: InboundInteraction): ReactionContext<NoSubCommands>? {
         val submission =
             interaction.submission

@@ -10,12 +10,6 @@ import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Handles `/latest [topic-key]` — no modal. Emits [CommandIntent.CveLatest] directly; the resolver
- * lifts it to [dev.notypie.domain.command.entity.event.CveLatestRequestEvent] and the listener DMs the
- * caller the most recent DONE summaries. [topicKey] is null for the no-argument form (read across the
- * caller's subscriptions); the application service already trimmed a blank argument to null.
- */
 internal class RequestCveLatestContext(
     commandBasicInfo: CommandBasicInfo,
     private val topicKey: String?,

@@ -12,19 +12,12 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import java.time.LocalDateTime
 
-/** Terminal outcome of one agent turn, mirrored from the gateway's result variants. */
 enum class AgentTurnOutcome {
     COMPLETED,
     BUSY,
     FAILED,
 }
 
-/**
- * Audit row for one AI-agent turn: who asked in which conversation, how it ended, and what it
- * cost. Token counts are the raw Anthropic usage numbers from the sidecar's terminal `done`
- * event — the Pod shares one Anthropic identity, so this table is what makes per-user/per-channel
- * consumption visible at all. Append-only; rows are never updated.
- */
 @Entity(name = "agent_turn_history")
 @Table(
     indexes = [

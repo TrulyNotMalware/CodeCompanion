@@ -129,7 +129,6 @@ class CveSummaryWorkerTest :
                     verify(exactly = 1) {
                         eventRepository.markFailed(id = 1L, token = any(), nextAttemptAt = any())
                     }
-                    // retryCount 2 -> multiplier 3 -> +30 minutes from the failure moment.
                     val lowerBound = before.plusMinutes(backoffMinutes * 3).minusSeconds(5)
                     val upperBound = after.plusMinutes(backoffMinutes * 3).plusSeconds(5)
                     (nextAttemptAt.captured.isAfter(lowerBound)) shouldBe true

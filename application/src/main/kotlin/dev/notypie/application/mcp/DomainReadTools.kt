@@ -16,11 +16,6 @@ import java.time.format.DateTimeFormatter
 private const val DEFAULT_DAYS_AHEAD = 7
 private val MEETING_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-/**
- * Read-only domain tools for the agent lane. Identity always comes from the verified turn
- * token — tools never accept user ids as arguments (a model could invent them), and every
- * dispatch goes through [McpToolGate] for role checks and auditing.
- */
 class DomainReadTools(
     private val mcpToolGate: McpToolGate,
     private val opsStatusService: OpsStatusService,

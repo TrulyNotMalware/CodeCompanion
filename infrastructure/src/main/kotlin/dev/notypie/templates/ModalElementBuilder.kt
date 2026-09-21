@@ -63,14 +63,6 @@ class ModalElementBuilder {
                 ),
         )
 
-    /**
-     * Danger-style button used to cancel a meeting from the inline `/meetup list` row.
-     * The [interactionPayload] is the comma-tokenized routing string the parser will
-     * read back as `idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`.
-     * `actionId` is set explicitly so the click can be tied back to a deterministic id
-     * (existing approval/reject buttons rely on payload parsing alone, but this one
-     * gets a stable id for clarity in client-side debugging).
-     */
     fun cancelMeetingButtonElement(
         buttonName: String,
         interactionPayload: String,
@@ -88,14 +80,7 @@ class ModalElementBuilder {
                     .build(),
         )
 
-    /**
-     * Primary-style button used to reschedule a meeting from the inline `/meetup list` row.
-     * The [interactionPayload] is the comma-tokenized routing string the parser will read back
-     * as `idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`. PRIMARY style makes
-     * the parser classify the click as an [ActionElementTypes.APPLY_BUTTON] (a primary action),
-     * distinct from the danger-styled Cancel button next to it. `actionId` is set explicitly so
-     * the click maps to a deterministic id.
-     */
+    // PRIMARY style makes SlackInteractionRequestParser classify this click as an APPLY_BUTTON action.
     fun rescheduleMeetingButtonElement(
         buttonName: String,
         interactionPayload: String,
@@ -113,12 +98,6 @@ class ModalElementBuilder {
                     .build(),
         )
 
-    /**
-     * Neutral-style button used to add participants to a meeting from the inline `/meetup list` row.
-     * Routing is driven entirely by the comma-tokenized [interactionPayload] value
-     * (`idempotencyKey, commandDetailType, routingExtras[0]=meetingUid`), so the default style here
-     * only distinguishes it visually from the PRIMARY Reschedule and DANGER Cancel buttons beside it.
-     */
     fun addParticipantButtonElement(
         buttonName: String,
         interactionPayload: String,
@@ -148,7 +127,6 @@ class ModalElementBuilder {
                 if (style != ButtonType.DEFAULT) style(style.toString().lowercase())
             }.build()
 
-    // Reference from https://api.slack.com/reference/block-kit/composition-objects
     fun confirmationDialogObject(
         title: String,
         text: String,

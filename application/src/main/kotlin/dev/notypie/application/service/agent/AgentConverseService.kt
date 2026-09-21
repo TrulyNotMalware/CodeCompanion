@@ -35,25 +35,6 @@ import java.util.Locale
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Runs one AI-agent conversation turn for an [AgentConverseRequestEvent] and posts the outcome
- * back into the originating Slack thread.
- *
- * Class-level `@Async`: a turn is a slow external network call (up to the sidecar's turn ceiling),
- * so it must leave the mention's HTTP request thread — and its `@Transactional` scope —
- * immediately. Because the listener therefore runs with no active transaction, each outcome's
- * writes are wrapped in a [TransactionTemplate] so the outbox's BEFORE_COMMIT listener has a
- * transaction to bind to (the scheduling services' pattern); the session upsert, the audit row,
- * and the staged reply commit atomically. Replies go through [OutboundMessageStager] as
- * transport-neutral [OutboundMessage]s and are rendered only at deliver time.
- *
- * Session continuity: the conversation anchor (`threadId`, falling back to the requester for
- * transports without message identity) keys both the sidecar workspace (`sessionKey`) and the
- * stored provider session id that must be echoed back on the next turn to resume context.
- *
- * Every turn also feeds [AgentTurnHistoryRepository] (per-user/channel token audit — the Pod
- * shares one Anthropic identity) and Micrometer counters/timers under `agent.*`.
- */
 @Async
 class AgentConverseService(
     private val agentGateway: AgentGateway,
@@ -64,7 +45,6 @@ class AgentConverseService(
     private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock = Clock.systemDefaultZone(),
-    // Null when MCP is disabled — the turn then carries no token and the model has no tools.
     private val scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
 ) {
     companion object {
@@ -128,12 +108,6 @@ class AgentConverseService(
         recordMetrics(result = result, durationMs = durationMs)
     }
 
-    /**
-     * Per-request context appended to the sidecar's static base prompt: who is asking where and
-     * when (so relative dates resolve), plus the Slack mrkdwn output contract — the model defaults
-     * to GitHub Markdown, which renders broken inside Slack section blocks. Facts only: identity
-     * for authorization purposes travels as `X-User-Id`, never as prompt text.
-     */
     private fun contextPrompt(payload: AgentConversePayload): String {
         val now = clock.instant().atZone(clock.zone)
         return buildString {
@@ -149,7 +123,6 @@ class AgentConverseService(
         }
     }
 
-    /** Commits the resumable session id, the audit row, and the staged reply atomically. */
     private fun publishAnswer(
         event: AgentConverseRequestEvent,
         sessionKey: String,
@@ -302,8 +275,7 @@ class AgentConverseService(
             basicInfo = event.payload.responseBasicInfo,
         )
 
-    // Non-modal messages always stage to an event; a null here means the reply would be silently
-    // lost, so the turn's transaction must fail instead.
+    // A null here means the reply would be silently lost, so we fail fast instead of swallowing it.
     private fun stageReply(message: OutboundMessage, basicInfo: CommandBasicInfo): CommandEvent<EventPayload> =
         checkNotNull(outboundStager.stage(message = message, basicInfo = basicInfo)) {
             "Agent reply failed to stage an outbox event: $message"

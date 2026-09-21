@@ -11,11 +11,6 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetSocketAddress
 import java.time.Duration
 
-/**
- * Exercises the client against a real HTTP server (JDK built-in, no extra deps) speaking the
- * sidecar's SSE wire format — camelCase field names per `openapi.yaml`, `:keep-alive` comments,
- * and the session → text* → done|error event sequence.
- */
 class SidecarAgentClientTest :
     BehaviorSpec({
         lateinit var respond: (HttpExchange) -> Unit
@@ -259,7 +254,6 @@ class SidecarAgentClientTest :
         given("a sidecar that is not reachable") {
             val unreachableClient =
                 SidecarAgentClient(
-                    // Reserved port on loopback: the connection is refused immediately.
                     baseUrl = "http://127.0.0.1:1",
                     bearerSecret = "test-secret",
                     requestTimeout = Duration.ofSeconds(1L),

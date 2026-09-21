@@ -25,18 +25,11 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
-/**
- * The rich_text flattening (bot filtering, token splitting) now lives in the infra mention mapper,
- * so this spec feeds a [MentionInvocation] directly and asserts routing only. The flattening golden
- * cases are ported to `SlackMentionMapperTest` in the infrastructure module.
- */
 class AppMentionContextParserTest :
     BehaviorSpec({
         val idempotencyKey = UUID.randomUUID()
         val intents = createIntentQueue()
 
-        // Routing cases below run as ADMIN so every command stays reachable; the dedicated
-        // authorization block exercises the restrictive roles.
         fun createParser(
             mention: MentionInvocation,
             intentQueue: IntentQueue = intents,

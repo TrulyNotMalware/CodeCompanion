@@ -10,11 +10,6 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 
-/**
- * Executes the parsed standup answer submission. An empty answer list suppresses persistence but
- * the notice update still goes out — the member did submit, so the prompt must stop offering the
- * form.
- */
 internal class StandupAnswerSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

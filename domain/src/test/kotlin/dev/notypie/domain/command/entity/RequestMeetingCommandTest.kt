@@ -85,7 +85,6 @@ class RequestMeetingCommandTest :
                     intents.size shouldBe 1
                     val intent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
                     intent.publisherId shouldBe TEST_USER_ID
-                    // TODAY range spans exactly one day starting at start-of-day
                     ChronoUnit.DAYS.between(intent.startDate, intent.endDate) shouldBe 1L
                     intent.startDate shouldBe before.toLocalDate().atStartOfDay()
                 }

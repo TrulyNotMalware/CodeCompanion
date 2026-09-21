@@ -22,11 +22,6 @@ import org.springframework.core.Ordered
 import tools.jackson.databind.json.JsonMapper
 import java.time.Duration
 
-/**
- * MCP server wiring for the agent lane's domain tools. Loaded only when
- * `slack.app.mcp.enabled=true`; `spring.ai.mcp.server.enabled` must be switched with it
- * (both ride the MCP_ENABLED env var) so the transport and the token pipeline stay in sync.
- */
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.mcp", name = ["enabled"], havingValue = "true")
 class McpServerConfiguration {
@@ -82,9 +77,6 @@ class McpServerConfiguration {
             urlPatterns = listOf(properties.mcpEndpoint, "${properties.mcpEndpoint}/*")
         }
 
-    // Overrides the starter's provider (@ConditionalOnMissingBean) to attach the context
-    // extractor: the verified turn token rides the McpTransportContext into every tool call.
-    // A vanilla JsonMapper is deliberate — MCP protocol JSON needs none of the app's modules.
     @Bean
     fun webMvcStreamableServerTransportProvider(
         properties: McpServerStreamableHttpProperties,

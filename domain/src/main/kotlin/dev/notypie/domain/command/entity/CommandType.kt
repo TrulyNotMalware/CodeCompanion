@@ -25,11 +25,7 @@ enum class CommandType {
     EXTERNAL_API,
 }
 
-/**
- * Routing discriminator for a command interaction, serialized by [name] into the outbox column and
- * Slack modal `private_metadata` / button values, read back with [valueOf] (unknown tokens fail
- * fast). Renaming a value requires a local DB reset and invalidates buttons already posted to Slack.
- */
+// Renaming a value breaks persisted rows and invalidates buttons already posted to Slack.
 enum class CommandDetailType {
     NOTHING,
     SIMPLE_TEXT,
@@ -66,10 +62,6 @@ enum class CommandDetailType {
     CVE_LATEST,
 }
 
-/**
- * Maps a routed interaction type to the command context that handles it. Kept out of the enum body
- * so [CommandDetailType] stays a pure routing token rather than also owning context construction.
- */
 internal fun CommandDetailType.createContext(
     commandBasicInfo: CommandBasicInfo,
     subCommand: SubCommand<NoSubCommands>,
@@ -135,10 +127,7 @@ internal fun CommandDetailType.createContext(
         }
 
         CommandDetailType.STANDUP_SETUP_REQUEST -> {
-            // The slash entry point builds this context directly with the live trigger_id
-            // (see SetupStandupCommand). This branch only exists for completeness so an
-            // interaction routed here still resolves to the modal-opening context; the
-            // blank trigger_id collapses to a no-op in the resolver.
+            // triggerHandle="" is intentional; SetupStandupCommand sets the real one — this path is a no-op.
             RequestStandupSetupContext(
                 commandBasicInfo = commandBasicInfo,
                 triggerHandle = "",

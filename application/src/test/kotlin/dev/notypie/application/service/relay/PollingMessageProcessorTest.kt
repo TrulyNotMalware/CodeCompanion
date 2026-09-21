@@ -67,8 +67,6 @@ class PollingMessageProcessorTest :
 
                 every { outboxRepository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
                 every { outboxRepository.findPendingMessages(limit = 100, offset = 0) } returns candidates
-                // Suppose only 2 of the 3 PENDING rows we read were still PENDING by the time the
-                // UPDATE ran — the third was claimed by a racing poller. We must dispatch 2, not 3.
                 every { outboxRepository.claimPending(eventIds = listOf("a", "b", "c")) } returns 2
 
                 val captured = slot<List<OutboxMessage>>()

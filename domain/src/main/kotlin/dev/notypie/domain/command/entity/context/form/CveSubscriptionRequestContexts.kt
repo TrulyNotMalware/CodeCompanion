@@ -14,11 +14,6 @@ import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.TopicOption
 
-/**
- * Handles `/subscribe` by emitting [OutboundMessage.OpenModal]; the stager lifts it to a synchronous
- * `views.open` so [triggerHandle] is consumed within Slack's 3-second window. [topics] are the active
- * topics the application service already resolved (the domain never touches persistence).
- */
 internal class RequestCveSubscribeContext(
     commandBasicInfo: CommandBasicInfo,
     private val triggerHandle: String,
@@ -49,10 +44,6 @@ internal class RequestCveSubscribeContext(
     }
 }
 
-/**
- * Handles `/unsubscribe` by opening a modal listing only [topics] — the user's current subscriptions,
- * resolved by the application service.
- */
 internal class RequestCveUnsubscribeContext(
     commandBasicInfo: CommandBasicInfo,
     private val triggerHandle: String,
@@ -83,11 +74,6 @@ internal class RequestCveUnsubscribeContext(
     }
 }
 
-/**
- * Handles `/subscriptions` — no modal. Emits [CommandIntent.CveListSubscriptions] directly; the
- * resolver lifts it to the same request event the modal flows use (action = LIST), and the listener
- * DMs the user their current subscription list.
- */
 internal class RequestCveSubscriptionsContext(
     commandBasicInfo: CommandBasicInfo,
     subCommand: SubCommand<NoSubCommands> = SubCommand.empty(),

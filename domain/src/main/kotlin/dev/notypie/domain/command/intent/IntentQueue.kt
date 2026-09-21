@@ -5,7 +5,6 @@ interface IntentQueue {
 
     fun snapshot(): List<CommandEffect>
 
-    /** Returns a defensive copy and clears the queue atomically. Idempotent for retries. */
     fun drainSnapshot(): List<CommandEffect>
 
     fun isEmpty(): Boolean
@@ -13,7 +12,6 @@ interface IntentQueue {
     val size: Int
 }
 
-// Thread Unsafe — same contract as existing EventQueue
 internal class DefaultIntentQueue : IntentQueue {
     private val queue: ArrayDeque<CommandEffect> = ArrayDeque()
 

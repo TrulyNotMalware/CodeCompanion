@@ -3,7 +3,6 @@ package dev.notypie.repository.agent
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import java.util.UUID
 
-/** One finished agent turn, ready to be appended to the audit table. */
 data class AgentTurnRecord(
     val sessionKey: String,
     val requesterId: String,

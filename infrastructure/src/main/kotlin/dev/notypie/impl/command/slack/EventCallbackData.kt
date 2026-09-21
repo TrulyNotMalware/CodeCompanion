@@ -3,9 +3,6 @@ package dev.notypie.impl.command.slack
 import com.fasterxml.jackson.annotation.JsonProperty
 
 data class EventCallbackData(
-    /**
-     * Required scopes : app_mention:read
-     */
     @field:JsonProperty("client_msg_id")
     val clientMessageId: String? = null,
     @field:JsonProperty("type")
@@ -14,16 +11,13 @@ data class EventCallbackData(
     val rawText: String? = null,
     @field:JsonProperty("user")
     val userId: String,
-    // app_id / bot_id / bot_profile only appear when the mentioning message was posted by an
-    // app; a human-typed mention carries none of them.
     @field:JsonProperty("app_id")
     val appId: String? = null,
     @field:JsonProperty("bot_id")
     val botId: String? = null,
     @field:JsonProperty("bot_profile")
     val botProfile: BotProfile? = null,
-    // Slack sends ts as a string ("1712345678.123456") and it must stay one: it is a message id
-    // (thread anchor / chat.update target), and a Double round-trip mangles the fixed-point format.
+    // ts must stay a String ("1712345678.123456"); it's a message id and a Double round-trip mangles it.
     val ts: String,
     @field:JsonProperty("thread_ts")
     val threadTs: String? = null,
@@ -35,7 +29,6 @@ data class EventCallbackData(
     val channel: String,
     @field:JsonProperty("event_ts")
     val eventTs: Double,
-    // Not part of the documented app_mention payload; present only on message-family events.
     @field:JsonProperty("channel_type")
     val channelType: String? = null,
 )

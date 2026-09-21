@@ -10,7 +10,6 @@ bootJar.enabled = false
 jar.enabled = true
 
 dependencies {
-    // Spring-boot bom
     implementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
     testFixturesImplementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
@@ -18,30 +17,21 @@ dependencies {
     implementation(project(":domain"))
     implementation("org.springframework:spring-web")
 
-    // Jackson — declared per-module so :domain's classpath stays Jackson-free
     api(platform("tools.jackson:jackson-bom:$jacksonVersion"))
     implementation("tools.jackson.module:jackson-module-kotlin")
-//    api("org.springframework.retry:spring-retry") now spring core
 
-    // CDC
     api("org.springframework.boot:spring-boot-starter-kafka")
-    // Slack API
     implementation("com.slack.api:slack-api-model:$slackSdkVersion")
     implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("com.slack.api:slack-app-backend:$slackSdkVersion")
-    // Springboot starter jpa
     api("org.springframework.boot:spring-boot-starter-data-jpa")
 
-    // Local & Test database
     runtimeOnly("com.h2database:h2")
-    // MariaDB
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 
-    // Test code
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
 
-    // Domain test fixtures
     testImplementation(testFixtures(project(":domain")))
     testFixturesImplementation(testFixtures(project(":domain")))
     testImplementation("org.springframework.boot:spring-boot-starter-test")

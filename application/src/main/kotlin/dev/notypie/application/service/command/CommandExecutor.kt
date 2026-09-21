@@ -14,14 +14,6 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 
-/**
- * Orchestrates Command execution: drains accumulated effects, resolves them to transport-layer
- * events, and dispatches them.
- *
- * Failures are logged and re-thrown for transactional rollback at the caller. Intents are NOT
- * re-queued: publishers dispatch sequentially, so a retry could duplicate publishes — retries
- * must happen upstream (outbox relay, Kafka retries, Slack replay) under the shared idempotencyKey.
- */
 class CommandExecutor(
     private val intentResolver: SlackIntentResolver,
     private val outboundStager: OutboundMessageStager,
@@ -32,7 +24,6 @@ class CommandExecutor(
     fun <T : SubCommandDefinition> execute(command: Command<T>): CommandOutput {
         val output = command.handleEvent()
 
-        // Drain regardless of success/failure: error effects must also reach Slack.
         val pendingEffects = command.drainIntents()
         if (pendingEffects.isNotEmpty()) {
             publishIntents(
@@ -45,9 +36,7 @@ class CommandExecutor(
     }
 
     private fun <T : SubCommandDefinition> publishIntents(effects: List<CommandEffect>, command: Command<T>) {
-        // Explicit classification instead of filterIsInstance partitions: CommandEffect is not
-        // sealable (its two implementors live in different packages), so an unrouted third
-        // implementor must fail loudly here rather than vanish from the effect queue.
+        // Not filterIsInstance: CommandEffect isn't sealed, so a new type must fail loudly, not vanish.
         val intents = mutableListOf<CommandIntent>()
         val outbound = mutableListOf<OutboundMessage>()
         effects.forEach { effect ->

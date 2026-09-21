@@ -2,13 +2,6 @@ package dev.notypie.application.service.cve.ai
 
 import dev.notypie.repository.cve.schema.CveTopicCategory
 
-/**
- * Builds the summarization prompt. Two concerns are enforced here:
- *  - category-specific guidance (CVE advisories vs release notes ask for different sections);
- *  - prompt-injection defense: the fixed instructions come first, and the untrusted source (event
- *    title + raw content) is confined to an explicitly delimited block the model is told never to
- *    obey. Only the admin-managed topic name appears outside that block.
- */
 class CveSummaryPromptBuilder {
     fun build(request: SummaryRequest): String =
         buildString {
@@ -24,8 +17,7 @@ class CveSummaryPromptBuilder {
             append(UNTRUSTED_END)
         }
 
-    // The fences are fixed strings, so source data containing them verbatim could close the block
-    // early and smuggle instructions into the trusted zone — strip them before embedding.
+    // Source data containing the fence strings could close the block early and smuggle instructions.
     private fun neutralizeFences(text: String): String =
         text
             .replace(UNTRUSTED_BEGIN, FENCE_REPLACEMENT)

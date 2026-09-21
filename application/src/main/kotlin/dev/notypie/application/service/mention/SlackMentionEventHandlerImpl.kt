@@ -42,7 +42,6 @@ class SlackMentionEventHandlerImpl(
     ): InboundCommand {
         val appId = resolveAppId(payload = payload)
         val body = convertBodyData(payload = payload)
-        // Validate the transport event type, preserving the reject for unknown Slack event types.
         resolveCommandType(rawType = body.type)
         return body.toMentionInboundCommand(
             appId = appId,

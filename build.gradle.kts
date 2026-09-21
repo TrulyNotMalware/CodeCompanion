@@ -20,7 +20,7 @@ java {
 }
 
 // Dependabot's Gradle parser only reads `extra["x"] = "…"` / `extra.set` declarations, not an `ext {}` block.
-extra["kotestVersion"] = "6.2.0" // https://kotest.io/docs/changelog.html
+extra["kotestVersion"] = "6.2.0"
 extra["slackSdkVersion"] = "1.49.0"
 extra["mockkVersion"] = "1.14.11"
 extra["springBootVersion"] = "4.1.0"
@@ -86,12 +86,7 @@ allprojects {
     }
 }
 
-/*
- * Removed the `io.spring.dependency-management` plugin to explicitly override the
- * BOM version for kotlinx-coroutines. When that plugin is applied, Spring's dependency
- * management can pin or supersede BOM coordinates, which makes it hard to import and
- * control the desired kotlinx-coroutines BOM via Gradle platforms.
- */
+// io.spring.dependency-management is intentionally not applied — it can override the kotlinx-coroutines BOM version.
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "org.jetbrains.kotlin.plugin.spring")
@@ -101,14 +96,10 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        // BOM platforms — use api so they propagate to testFixtures and other configurations.
-        // Jackson is intentionally NOT injected here: domain must stay Jackson-free, so the
-        // modules that actually serialize (application/infrastructure) declare it themselves.
         api(platform("io.kotest:kotest-bom:$kotestVersion"))
 
         implementation(kotlin("reflect"))
 
-        // Kotlin logging
         implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
         testFixturesImplementation(kotlin("reflect"))
 

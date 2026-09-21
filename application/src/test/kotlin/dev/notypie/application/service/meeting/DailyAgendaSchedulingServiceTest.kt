@@ -27,14 +27,12 @@ class DailyAgendaSchedulingServiceTest :
     BehaviorSpec({
         val seoul = ZoneId.of("Asia/Seoul")
 
-        // 2026-05-04T12:00 Asia/Seoul — well after the default 08:00 send time.
         val afterSendInstant =
             LocalDateTime
                 .of(2026, 5, 4, 12, 0)
                 .atZone(seoul)
                 .toInstant()
 
-        // 2026-05-04T07:00 Asia/Seoul — before the default 08:00 send time.
         val beforeSendInstant =
             LocalDateTime
                 .of(2026, 5, 4, 7, 0)
@@ -136,7 +134,6 @@ class DailyAgendaSchedulingServiceTest :
                         port = port,
                     )
 
-                // Two meetings; U_A attends both, U_B attends one.
                 val meetings =
                     listOf(
                         createAgendaCandidateMeeting(
@@ -232,8 +229,6 @@ class DailyAgendaSchedulingServiceTest :
                 val service =
                     buildService(repo = repo, outboxRepo = outboxRepo, clock = Clock.fixed(afterSendInstant, seoul))
                 every { repo.claim(agendaDate = any()) } returns true
-                // findAttendingMeetingsForDay reuses the reminder window query, which already
-                // excludes canceled meetings, so the candidate list contains no canceled meeting.
                 every { repo.findAttendingMeetingsForDay(from = any(), to = any()) } returns emptyList()
 
                 service.sendDailyAgenda()

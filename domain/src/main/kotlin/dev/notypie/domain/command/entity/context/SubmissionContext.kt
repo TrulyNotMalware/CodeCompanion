@@ -9,12 +9,6 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Base for `view_submission` leaf contexts. The routing seam (SubmissionRouter) parses the raw
- * variant BEFORE constructing the leaf, so a leaf holds a non-null [model] and only translates it
- * into effects in [accept] — no casts, no nulls, no interpretation of the envelope. Rejection is
- * not representable here; it routes to [IgnoredSubmissionContext] instead.
- */
 internal abstract class SubmissionContext<M : Any>(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,
@@ -38,12 +32,7 @@ internal abstract class SubmissionContext<M : Any>(
     }
 }
 
-/**
- * Terminal for a submission route that produced nothing to execute: the SUBMIT-typed interaction
- * carried no submission payload, or the payload was rejected by its parser. Returns plain success
- * (the modal must close on 200) and queues no effects. Deliberately NOT the [ReactionContext]
- * default handler, which would queue a replacement message.
- */
+// Returns success so the modal closes (200); the default handler would wrongly queue a message.
 internal class IgnoredSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

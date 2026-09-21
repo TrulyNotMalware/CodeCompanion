@@ -4,17 +4,11 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.intent.CommandEffect
 
-/**
- * Transport-neutral description of an outbound effect a CommandContext emits; a transport adapter
- * renders it into a staged CommandEvent. No Slack type appears here.
- */
 sealed interface OutboundMessage : CommandEffect {
     data class ChannelMessage(
         val target: ConversationTarget,
         val content: MessageContent,
-        /** Per-emitter routing type; null falls back to the content family's default. */
         val detailType: CommandDetailType? = null,
-        /** Conversation anchor within [target]; non-null posts the message as a threaded reply. */
         val threadId: String? = null,
     ) : OutboundMessage
 
@@ -22,7 +16,6 @@ sealed interface OutboundMessage : CommandEffect {
         val target: ConversationTarget,
         val recipient: UserRef? = null,
         val content: MessageContent,
-        /** Per-emitter routing type; null falls back to the content family's default. */
         val detailType: CommandDetailType? = null,
     ) : OutboundMessage
 
@@ -33,10 +26,7 @@ sealed interface OutboundMessage : CommandEffect {
 
     data class UpdateMessage(
         val ref: MessageRef,
-        // Text by type: chat.update rewrites markdown in place, so a non-Text content is
-        // unrepresentable instead of a renderer-time check.
         val content: MessageContent.Text,
-        /** Per-emitter routing type so a chat.update routes back to the correct context. */
         val detailType: CommandDetailType,
     ) : OutboundMessage
 

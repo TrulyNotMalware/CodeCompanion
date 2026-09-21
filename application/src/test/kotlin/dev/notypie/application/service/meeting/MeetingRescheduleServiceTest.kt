@@ -130,8 +130,6 @@ class MeetingRescheduleServiceTest :
             }
 
             `when`("the repository reports a no-op (non-host or canceled)") {
-                // Fresh mocks isolate call counts from the happy-path scenario above, which shares
-                // the spec-scope relaxed mocks (kotest accumulates verify counts across when-blocks).
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
                 val localStager = mockk<OutboundMessageStager>()

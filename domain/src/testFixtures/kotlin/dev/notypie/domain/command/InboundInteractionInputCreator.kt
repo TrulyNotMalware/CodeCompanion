@@ -23,11 +23,6 @@ import java.util.UUID
 
 const val SEPARATOR = ","
 
-/**
- * Builds a transport-neutral [InboundInteraction] directly, with sensible defaults. Domain context
- * tests construct their input through this factory (plus the field/action helpers below) instead of
- * building a Slack-shaped payload, keeping the domain free of any Slack interaction types.
- */
 fun createInboundInteraction(
     detailType: CommandDetailType = CommandDetailType.NOTHING,
     action: InboundAction = passiveAction(),
@@ -69,11 +64,6 @@ fun inboundField(
     key: String? = null,
 ) = InboundField(key = key, kind = kind, isSelected = isSelected, rawValue = rawValue)
 
-/**
- * Neutral projection of a selected primary (APPLY) button when it appears inside a form's fields.
- * A button carries no field semantics, so it maps to an [InboundFieldKind.UNKNOWN] field — the same
- * shape the production mapper produces for a non-input element.
- */
 fun applyButtonField() = inboundField(kind = InboundFieldKind.UNKNOWN, isSelected = true, rawValue = "apply")
 
 fun rejectButtonField() = inboundField(kind = InboundFieldKind.UNKNOWN, isSelected = true)

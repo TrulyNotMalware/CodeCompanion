@@ -20,16 +20,6 @@ import java.time.format.DateTimeFormatter
 
 private val setupLog = KotlinLogging.logger {}
 
-/**
- * Persists a new standup [Routine] assembled by the `/standup setup` modal submission, then
- * posts a confirmation back to the command channel. Mirrors [StandupAnswerService]'s
- * `@EventListener`-driven shape: the context emitted a [CreateStandupRoutineEvent], the
- * resolver lifted it, and this service owns the repository write.
- *
- * [Routine]'s `init` block is the single validation authority; any invalid combination
- * (empty questions, no weekdays, non-positive cutoff, etc.) throws here. We catch it, skip the
- * write, and surface a friendly ephemeral so the user can retry instead of silently failing.
- */
 @Service
 class StandupRoutineSetupService(
     private val standupRepository: StandupRepository,
@@ -78,7 +68,6 @@ class StandupRoutineSetupService(
                 weekdays = payload.weekdays,
                 routineTimezone = payload.timezone,
             )
-        // v1 simplification: each member adopts the routine's timezone.
         payload.memberIds.forEach { memberId ->
             routine.addMember(
                 member = RoutineMember(userId = memberId, userTimezone = payload.timezone),

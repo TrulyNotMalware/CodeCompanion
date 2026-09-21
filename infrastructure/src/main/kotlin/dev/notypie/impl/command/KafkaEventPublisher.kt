@@ -11,13 +11,6 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
-/**
- * Publishes CommandEvents. Internal events flow through the Spring application bus;
- * external events are written to Kafka.
- *
- * Kafka sends are awaited with a bounded timeout so that broker-side failures surface as
- * exceptions to the caller (CommandExecutor) and can be handled transactionally.
- */
 class KafkaEventPublisher(
     private val kafkaTemplate: KafkaTemplate<String, Any>,
     private val applicationEventPublisher: ApplicationEventPublisher,

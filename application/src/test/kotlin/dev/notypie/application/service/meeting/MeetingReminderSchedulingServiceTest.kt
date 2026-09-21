@@ -32,7 +32,6 @@ class MeetingReminderSchedulingServiceTest :
     BehaviorSpec({
         val seoul = ZoneId.of("Asia/Seoul")
 
-        // 2026-05-04T12:00 Asia/Seoul (= 2026-05-04T03:00:00Z UTC).
         val nowInstant =
             LocalDateTime
                 .of(2026, 5, 4, 12, 0)
@@ -77,7 +76,6 @@ class MeetingReminderSchedulingServiceTest :
             `when`("an active meeting falls in the forward window with attending participants") {
                 val repo = mockk<MeetingReminderRepository>()
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
-                // Starts 10 minutes from now → within the 15-minute max offset window.
                 val meeting =
                     createReminderCandidateMeeting(
                         meetingId = 7L,
@@ -352,8 +350,6 @@ class MeetingReminderSchedulingServiceTest :
             `when`("materialize sweeps the window") {
                 val repo = mockk<MeetingReminderRepository>()
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
-                // The repository window query already excludes canceled meetings, so the candidate
-                // list is empty and no reminder is produced.
                 every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns emptyList()
 
                 service.materializeReminders()

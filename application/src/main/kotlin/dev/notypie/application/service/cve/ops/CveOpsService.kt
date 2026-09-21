@@ -17,13 +17,6 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/**
- * Executes the admin-only CVE operations mentions (`cve topics`, `cve topic activate|deactivate`,
- * `cve retry ...`). Mirrors [dev.notypie.application.service.command.RoleManagementService]: the parser
- * already gated the actor as ADMIN and validated the mention shape, so this listener applies the change
- * and confirms it on the originating channel. Unlike the subscription listener, a disabled feature does
- * not fail silently — an admin who typed a command gets a reply saying the feature is off.
- */
 @Service
 class CveOpsService(
     private val appConfig: AppConfig,
@@ -39,8 +32,6 @@ class CveOpsService(
 
     private val maxRetries: Int = appConfig.ai.maxRetries
 
-    // The staged reply is persisted by a BEFORE_COMMIT listener, so the repository write and the
-    // confirmation must share one transaction (mirrors RoleManagementService).
     @Transactional
     @EventListener
     fun handleCveOps(event: CveOpsRequestEvent) {

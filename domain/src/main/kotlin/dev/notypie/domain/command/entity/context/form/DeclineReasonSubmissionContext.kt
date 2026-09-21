@@ -10,12 +10,6 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 
-/**
- * Executes the parsed decline-reason submission from the modal opened by
- * [MeetingApprovalResponseContext.handleDecline]. Reason/detail interpretation lives in
- * [DeclineReasonParsed]; when the original notice is addressable, it is updated so Accept/Deny
- * can't be clicked on a stale message.
- */
 internal class DeclineReasonSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

@@ -13,10 +13,6 @@ import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
 
-/**
- * Handles `/standup setup` by emitting [OutboundMessage.OpenModal]; the stager lifts it to a
- * synchronous `views.open` so [triggerHandle] is consumed within Slack's 3-second window.
- */
 internal class RequestStandupSetupContext(
     commandBasicInfo: CommandBasicInfo,
     private val triggerHandle: String,

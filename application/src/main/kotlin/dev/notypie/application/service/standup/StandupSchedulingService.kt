@@ -54,10 +54,6 @@ class StandupSchedulingService(
     private val dispatchBatchSize: Int = appConfig.standup.scheduler.dispatchBatchSize
     private val nudgeOffsetMinutes: Long = appConfig.standup.nudge.offsetMinutes
 
-    /**
-     * Phase 1: opens today's session + per-member dispatch rows for every active routine firing on
-     * today's weekday. The unique constraint `(routine_uid, session_date)` keeps it idempotent.
-     */
     fun openSessionsForToday() {
         val now = clock.instant()
         standupRepository.listActiveRoutines().forEach { routine ->
@@ -70,8 +66,6 @@ class StandupSchedulingService(
         if (today.dayOfWeek !in routine.weekdays) return
         if (standupRepository.findSession(routineUid = routine.routineUid, sessionDate = today) != null) return
 
-        // Each member's DM trigger is evaluated in their own zone — an LA member of a Seoul routine
-        // is prompted at LA 10:00, not Seoul 10:00.
         val memberDispatches =
             routine.members.map { member ->
                 val dmTriggerAt =
@@ -82,8 +76,6 @@ class StandupSchedulingService(
                 SessionDispatch(userId = member.userId, dmTriggerAt = dmTriggerAt)
             }
 
-        // Cutoff anchors on the LATEST member trigger so every member gets at least cutoffOffset to
-        // respond; a routine-zone-only cutoff could pass before a westward member's DM even fires.
         val routineFallbackTrigger =
             LocalDateTime.of(today, routine.triggerLocalTime).atZone(routine.routineTimezone).toInstant()
         val cutoffAnchor =
@@ -104,8 +96,7 @@ class StandupSchedulingService(
                 "Standup session opened: routine=${routine.routineUid} date=$today members=${routine.members.size}"
             }
         } catch (ex: DataIntegrityViolationException) {
-            // Unique-constraint violation is the expected race. Confirm the row exists before
-            // swallowing — any other violation must surface.
+            // Unique-constraint violation is the expected race; confirm the row exists before swallowing.
             val existing =
                 standupRepository.findSession(routineUid = routine.routineUid, sessionDate = today)
             if (existing != null) {
@@ -116,12 +107,7 @@ class StandupSchedulingService(
         }
     }
 
-    /**
-     * Phase 2: sends DM prompts for dispatches whose `dmTriggerAt` has passed. Queries by absolute
-     * UTC time across ALL sessions (not "today in the routine zone") so members whose local trigger
-     * lands on a different calendar day than the routine creator aren't stranded. Stuck SENDING rows
-     * are reset first; each dispatch is claimed atomically before sending.
-     */
+    // Queries absolute UTC across all sessions so cross-timezone members aren't stranded on the wrong day.
     fun sendPendingDispatches() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
@@ -131,7 +117,6 @@ class StandupSchedulingService(
         val ready = standupRepository.findPendingDispatchesBefore(before = now, limit = dispatchBatchSize)
         if (ready.isEmpty()) return
 
-        // One-shot lookup: minimise DB chatter when many dispatches share a routine.
         val routinesByUid = standupRepository.listActiveRoutines().associateBy { it.routineUid }
 
         ready.forEach { item ->
@@ -147,12 +132,7 @@ class StandupSchedulingService(
         }
     }
 
-    /**
-     * Sends one dispatch across three transaction boundaries: claim commits in its own tx; build +
-     * outbox.save + markDispatchSent run in one tx that rolls back if markDispatchSent is a no-op
-     * (recovery raced us); on failure markDispatchFailed records the audit in a fresh tx. The
-     * per-claim token gates every CAS so only our own claim's outcome can be acknowledged.
-     */
+    // Claim, save+markSent, and failure-record each run in their own tx; the claim token gates the CAS.
     private fun processDispatch(item: ReadyDispatch, routine: RoutineDto, sentAt: Instant) {
         val dispatchId = item.dispatch.id
         val userId = item.dispatch.userId
@@ -202,12 +182,6 @@ class StandupSchedulingService(
         }
     }
 
-    /**
-     * Phase 4: DMs members who got the prompt but haven't answered, once per session, within
-     * `[cutoffAt - nudgeOffset, cutoffAt)`. [StandupRepository.claimNudge]'s atomic CAS makes it
-     * fire exactly once across ticks/restarts. We claim only when non-responders actually exist, so
-     * an all-answered session leaves `nudged_at` NULL. Offset <= 0 disables the phase.
-     */
     fun nudgeNonResponders() {
         if (nudgeOffsetMinutes <= 0L) return
 
@@ -237,7 +211,6 @@ class StandupSchedulingService(
         val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
         if (nonResponders.isEmpty()) return
 
-        // Atomic once-only gate. Lost race / already nudged → another tick owns it.
         if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return
 
         val outcome: Result<Unit> =
@@ -259,8 +232,6 @@ class StandupSchedulingService(
             }
 
         if (outcome.isFailure) {
-            // The claim already committed, so this can't be re-nudged — at-most-once, the safer
-            // default for a reminder. Surface for the tick wrapper to log.
             log.error(outcome.exceptionOrNull()) {
                 "Standup nudge enqueue failed after claim: sessionUid=${candidate.sessionUid}"
             }
@@ -272,7 +243,6 @@ class StandupSchedulingService(
         }
     }
 
-    /** Phase 3: detects COLLECTING sessions past their cutoff and queues summaries. */
     fun detectCutoffs() {
         val now = clock.instant()
         standupRepository.findCollectingSessionsPastCutoff(before = now).forEach { session ->
@@ -289,11 +259,7 @@ class StandupSchedulingService(
     }
 }
 
-/**
- * Builds the standup-prompt DM with a "Fill in standup" button; clicking it yields the trigger_id
- * the follow-up [dev.notypie.domain.command.entity.context.form.StandupFillContext] needs to open
- * the modal (a scheduler tick has no trigger_id of its own).
- */
+// Button click yields the trigger_id the follow-up modal needs — a scheduler tick has none of its own.
 internal fun buildDmNotice(
     sessionUid: UUID,
     sessionDate: LocalDate,
@@ -320,10 +286,6 @@ internal fun buildDmNotice(
     )
 }
 
-/**
- * Builds the once-per-session non-responder reminder: a plain `chat.postMessage` (no buttons) that
- * points the member back to the original prompt's "Fill in standup" button.
- */
 internal fun buildNudgeNotice(
     routineName: String,
     cutoffAt: Instant,

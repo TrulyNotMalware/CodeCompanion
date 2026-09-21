@@ -87,7 +87,6 @@ class MeetingContextTest :
                     intents.size shouldBe 1
                     val listIntent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
                     listIntent.publisherId shouldBe testCommandBasicInfo.publisherId
-                    // DEFAULT is WEEK → endDate ≈ startDate + 7d (within 1-second window around "now")
                     ChronoUnit.SECONDS
                         .between(nowBefore, listIntent.startDate)
                         .shouldBeLessThanOrEqual(ChronoUnit.SECONDS.between(nowBefore, nowAfter) + 1)
@@ -127,7 +126,6 @@ class MeetingContextTest :
                         val intent = intents.first().shouldBeInstanceOf<CommandIntent.MeetingListRequest>()
                         val (expectedStart, expectedEnd) = expectedRange.dateRange(now = before)
                         val (expectedStartAfter, expectedEndAfter) = expectedRange.dateRange(now = after)
-                        // startDate/endDate must fall between dateRange(before) and dateRange(after)
                         (intent.startDate in expectedStart..expectedStartAfter) shouldBe true
                         (intent.endDate in expectedEnd..expectedEndAfter) shouldBe true
                     }
@@ -185,7 +183,6 @@ class MeetingContextTest :
                     val markdown = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
                     markdown.contains("Unknown range 'yesterday'") shouldBe true
                     markdown.contains("today | tomorrow | week | month") shouldBe true
-                    // recipient must stay null: chat.postEphemeral `channel` needs a channel ID
                     ephemeral.recipient shouldBe null
                 }
             }
@@ -514,8 +511,6 @@ class MeetingContextTest :
                     intents.size shouldBe 1
                     val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     val markdown = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
-                    // Message is rendered from the Meeting entity's own validation failure, so the
-                    // limit lives in the domain rather than being duplicated in this context.
                     markdown.contains("meeting title length") shouldBe true
                     markdown.contains("less than ${Meeting.MAX_TITLE_LENGTH}") shouldBe true
                 }

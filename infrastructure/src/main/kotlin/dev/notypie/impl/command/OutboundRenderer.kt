@@ -6,20 +6,10 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.SlackEventPayload
 
-/**
- * Renders the message family of [OutboundMessage]s into a transport payload at deliver time,
- * independent of the staged-event envelope. Modal and direct-message families are not renderer
- * concerns and fail loudly.
- */
 interface OutboundRenderer {
     fun render(message: OutboundMessage, basicInfo: CommandBasicInfo): SlackEventPayload
 }
 
-/**
- * Slack implementation that reuses [SlackApiEventConstructor] to build a message event, then
- * returns only its payload. It shares the constructor with [SlackOutboundStager] so both produce
- * byte-identical wire output; the stager keeps the staged-event envelope while the renderer drops it.
- */
 class SlackOutboundRenderer(
     private val slackEventBuilder: SlackApiEventConstructor,
 ) : OutboundRenderer {

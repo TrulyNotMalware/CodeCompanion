@@ -17,8 +17,6 @@ import dev.notypie.templates.ButtonType
 import dev.notypie.templates.DeclineReasonModalIds
 import java.util.UUID
 
-// ============ Action JSON Builders ============
-
 fun buttonActionJson(
     buttonType: ButtonType = ButtonType.PRIMARY,
     value: String = "",
@@ -44,12 +42,9 @@ fun multiUsersSelectActionJson(selectedUsers: List<String>, actionId: String = "
 fun unknownActionJson(type: String = "overflow", actionId: String = "overflow_1") =
     """[{"type":"$type","action_id":"$actionId"}]"""
 
-// ============ State Value JSON Builders ============
-
 fun stateValuesJson(blockId: String = "block_1", actionId: String = "action_1", stateEntry: String) =
     """{"$blockId":{"$actionId":$stateEntry}}"""
 
-/** Multi-block variant of [stateValuesJson]; action ids are derived from the block ids. */
 fun stateValuesJson(vararg blocks: Pair<String, String>): String =
     blocks.joinToString(separator = ",", prefix = "{", postfix = "}") { (blockId, stateEntry) ->
         """"$blockId":{"${blockId}_action":$stateEntry}"""
@@ -94,13 +89,6 @@ fun checkboxesStateJson(selectedOptions: List<Pair<String, String>>) =
 
 fun unknownStateJson(type: String = "some_unknown_type") = """{"type":"$type"}"""
 
-// ============ View Submission Payload Builder ============
-
-/**
- * Builds a minimal `view_submission` payload for the decline-reason modal. The block_id /
- * action_id constants match [dev.notypie.templates.ModalTemplateBuilder]'s companion object
- * so that the parser can locate the selected radio value.
- */
 fun createDeclineReasonViewSubmissionJson(
     meetingIdempotencyKey: UUID,
     participantUserId: String,
@@ -114,8 +102,6 @@ fun createDeclineReasonViewSubmissionJson(
     appId: String = TEST_APP_ID,
     token: String = TEST_TOKEN,
 ): String {
-    // Default to the legacy 3-token format so existing tests keep working; when the caller
-    // supplies channel/ts, emit the 5-token Wave 2 format.
     val privateMetadata =
         if (noticeChannel.isBlank() && noticeMessageTs.isBlank()) {
             "$meetingIdempotencyKey,MEETING_DECLINE_REASON,$participantUserId"
@@ -215,10 +201,6 @@ fun createStandupAnswerViewSubmissionJson(
         """.trimIndent()
 }
 
-/**
- * Builds a minimal `view_submission` payload carrying `private_metadata` routing (plus optional
- * form state), for asserting how the parser recovers the originating channel per flow.
- */
 fun createRoutingOnlyViewSubmissionJson(
     callbackId: String,
     privateMetadata: String,
@@ -248,8 +230,6 @@ fun createRoutingOnlyViewSubmissionJson(
         }
     }
     """.trimIndent()
-
-// ============ Full Payload Builder ============
 
 fun createBlockActionPayloadJson(
     idempotencyKey: UUID = UUID.randomUUID(),

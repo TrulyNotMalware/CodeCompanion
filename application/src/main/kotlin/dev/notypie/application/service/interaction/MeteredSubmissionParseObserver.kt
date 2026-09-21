@@ -7,11 +7,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Component
 
-/**
- * Binds the domain's [SubmissionParseObserver] port to Micrometer: one low-cardinality counter per
- * (detail type, reason) for submissions that fell open (success with no effects). Raw form values
- * never reach a tag or a log line.
- */
+// Raw form values never reach a tag or log line — keep tags low-cardinality and privacy-safe.
 @Component
 class MeteredSubmissionParseObserver(
     private val meterRegistry: MeterRegistry,

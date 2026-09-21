@@ -9,12 +9,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
 
-/**
- * Reports outbox-relay health: DOWN when any PENDING or IN_PROGRESS row is older than the configured
- * stuck threshold, else UP. PENDING-stuck points at the poller (lag/stall), IN_PROGRESS-stuck at a
- * dispatch that claimed a row and crashed. Detail keys are stable for dashboards; `stuckCount` is a
- * legacy alias of `stuckPendingCount`.
- */
 @Component
 class OutboxHealthIndicator(
     private val outboxRepository: MessageOutboxRepository,
@@ -47,7 +41,6 @@ class OutboxHealthIndicator(
         return builder
             .withDetail("pendingCount", pendingCount)
             .withDetail("stuckPendingCount", stuckPendingCount)
-            // alias preserved so existing dashboards keep working — drop in a follow-up PR
             .withDetail("stuckCount", stuckPendingCount)
             .withDetail("oldestPendingAgeSeconds", oldestPendingAgeSeconds)
             .withDetail("inFlightCount", inFlightCount)

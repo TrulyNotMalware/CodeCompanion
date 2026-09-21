@@ -10,13 +10,6 @@ import java.util.UUID
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Drives the summarize-once pipeline. Each tick first recovers rows a crashed worker abandoned
- * mid-flight ([CveEventRepository.resetStuck]), then claims un-summarized events one at a time via
- * claim-token CAS and produces exactly one [aiSummarizer] summary per event. A single event's
- * failure is isolated (recorded as FAILED with backoff) and never aborts the batch. Feature-gated
- * as a bean in CveConfiguration, so it does not exist unless the CVE feature is enabled.
- */
 class CveSummaryWorker(
     private val cveEventRepository: CveEventRepository,
     private val cveTopicRepository: CveTopicRepository,
@@ -38,8 +31,6 @@ class CveSummaryWorker(
         }
     }
 
-    // Any escape here (claim/release/markFailed throwing included) is caught so one event can
-    // never abort the rest of the batch.
     private fun summarizeOne(event: CveEvent) {
         runCatching { dispatchOne(event = event) }
             .onFailure { ex -> log.error(ex) { "CVE summary handling failed for event=${event.id}" } }
@@ -47,8 +38,6 @@ class CveSummaryWorker(
 
     private fun dispatchOne(event: CveEvent) {
         val token = UUID.randomUUID().toString()
-        // Someone else already claimed this row (or it dead-lettered since we read it) — skip
-        // without touching the summarizer.
         val claimed =
             cveEventRepository.claimForSummary(
                 id = event.id,
@@ -82,8 +71,6 @@ class CveSummaryWorker(
                 return
             }
 
-        // A lost claim here means the row was reset and re-owned; the summary is done, so marking
-        // it FAILED would burn the retry budget for nothing — log and leave the row to its owner.
         val doneAt = LocalDateTime.now()
         if (cveEventRepository.markDone(id = event.id, token = token, summary = summary, now = doneAt) == 0) {
             log.warn {
@@ -121,7 +108,6 @@ class CveSummaryWorker(
     }
 
     companion object {
-        // Busy is backpressure from the shared agent lane, not an error — retry soon, budget intact.
         private const val BUSY_RETRY_DELAY_MINUTES = 2L
     }
 }

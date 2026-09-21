@@ -111,7 +111,6 @@ internal class RequestMeetingContext(
     override fun runCommand(): CommandOutput = runCommand(commandDetailType = commandDetailType)
 
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
-        // Deny cancels outright — no validation, no meeting created.
         if (interaction.isCanceled()) {
             return interactionSuccessResponse(
                 replyHandle = interaction.reply.raw,
@@ -122,7 +121,6 @@ internal class RequestMeetingContext(
         val formInput = MeetingFormInput.from(interaction = interaction)
         validationErrorOrNull(formInput = formInput, interaction = interaction)?.let { return it }
 
-        // Surface Meeting's own invariant violations as an ephemeral instead of throwing silently.
         val meeting =
             try {
                 formInput.toMeeting()
@@ -151,10 +149,7 @@ internal class RequestMeetingContext(
         )
     }
 
-    /**
-     * Error CommandOutput when the form input is invalid, else null. The `isComplete` check stays on
-     * the raw interaction because it inspects whether every interactive element was answered.
-     */
+    // isComplete checks the raw interaction — formInput doesn't carry per-field completeness.
     private fun validationErrorOrNull(formInput: MeetingFormInput, interaction: InboundInteraction): CommandOutput? {
         val errorMessage =
             when {
@@ -173,7 +168,6 @@ internal class RequestMeetingContext(
         return createErrorResponse(errMessage = errorMessage)
     }
 
-    /** Renders a domain validation failure into user-facing lines, or a generic message when empty. */
     private fun meetingValidationMessage(exception: CodeCompanionRuntimeException): String =
         exception.details
             .takeIf { it.isNotEmpty() }

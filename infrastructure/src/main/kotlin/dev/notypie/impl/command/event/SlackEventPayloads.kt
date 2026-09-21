@@ -47,10 +47,6 @@ data class ActionEventPayloadContents(
         channel = channel,
     )
 
-/**
- * Payload for a synchronous `views.open` call. Unlike [PostEventPayloadContents] (outbox-relayed),
- * this must be dispatched inline on the request thread because `trigger_id` expires 3s after issuance.
- */
 data class OpenViewPayloadContents(
     override val eventId: UUID,
     override val apiAppId: String,
@@ -70,15 +66,10 @@ data class OpenViewPayloadContents(
         channel = channel,
     )
 
-// ACTION_RESPONSE is deliberately absent: an action response is its own payload type
-// (ActionEventPayloadContents), so the invalid Post/ACTION_RESPONSE combination is
-// unrepresentable instead of a dispatcher-time throw. No producer ever emitted it.
 enum class MessageType {
     CHANNEL_ALERT,
     EPHEMERAL_MESSAGE,
     DIRECT_MESSAGE,
-
-    /** `chat.update` — rewrites an existing message in place using `channel` + `ts`. */
     UPDATE_MESSAGE,
 }
 

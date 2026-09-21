@@ -33,12 +33,7 @@ class SlackEventController(
     ): ResponseEntity<*> {
         if (isChallengeRequest(payload = payload)) return ResponseEntity.ok().body(payload) // FIXME logging.
 
-        // Slack Events API delivers MANY event types to this single webhook (app_mention,
-        // message.im, message_changed, reaction_added, etc.). Some of them carry payloads
-        // with no `event.user` field (e.g. message subtypes like `message_deleted`), which
-        // would trip strict non-nullable Kotlin deserialization downstream. We only process
-        // `app_mention`; everything else gets acknowledged (200 OK) so Slack does not retry
-        // and our non-app_mention deserialization does not crash.
+        // Some event types lack event.user and would crash deserialization; only app_mention is processed.
         val eventType = extractEventType(payload = payload)
         if (eventType != APP_MENTION_EVENT_TYPE) {
             logger.debug { "Ignoring non-app_mention Slack event: type=$eventType" }
@@ -54,8 +49,6 @@ class SlackEventController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam payload: String,
     ): ResponseEntity<*> {
-        // A non-null body is a view_submission response_action (e.g. inline validation errors),
-        // which Slack reads as JSON; the normal ack is an empty 200.
         val ackBody = interactionHandler.handleInteraction(headers = headers, payload = payload)
         return if (ackBody != null) {
             ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(ackBody)

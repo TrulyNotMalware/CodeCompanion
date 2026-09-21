@@ -12,14 +12,6 @@ import java.time.temporal.ChronoUnit
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Polls each active topic on a fixed schedule and ingests new source events as PENDING; the M3
- * summary worker takes them from there. Per tick, each topic resolves its [SourceAdapter] by
- * source type, claims its collect window once ([CveCollectLedgerRepository] — a lost claim means
- * another instance owns the window, so the topic is skipped), fetches, and `insertIgnore`s every
- * raw event (idempotent on overlaps). Every topic runs under its own runCatching so one topic's
- * failure never aborts the rest. Feature-gated as a bean in CveConfiguration.
- */
 class CveCollector(
     private val cveTopicRepository: CveTopicRepository,
     private val cveEventRepository: CveEventRepository,
@@ -45,9 +37,7 @@ class CveCollector(
             log.warn { "No source adapter for topic=${topic.topicKey} sourceType=${topic.sourceType}; skipping" }
             return
         }
-        // Lost the claim: a concurrent instance owns this topic's window — skip without fetching.
-        // Claiming before the fetch means a failed fetch burns its window by design: retrying
-        // within the window would hammer rate-limited feeds, and dedup + source lookback self-heal.
+        // Claim-before-fetch is deliberate: a failed fetch burns the window rather than retry-hammer feeds.
         if (!cveCollectLedgerRepository.claimWindow(topicId = topic.id, windowStart = windowStart)) return
 
         val rawEvents = adapter.fetch(topic = topic)
@@ -64,8 +54,6 @@ class CveCollector(
         log.info { "CVE collect topic=${topic.topicKey} fetched=${rawEvents.size} inserted=$inserted" }
     }
 
-    // Tick time truncated to the collect-interval bucket, so every instance ticking in the same
-    // interval derives the same window and races for one claim row.
     internal fun windowStart(now: LocalDateTime): LocalDateTime {
         val truncated = now.truncatedTo(ChronoUnit.MINUTES)
         val bucketMinute = (truncated.minute / windowMinutes * windowMinutes).toInt()

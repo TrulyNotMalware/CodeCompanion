@@ -23,16 +23,6 @@ private val log = KotlinLogging.logger {}
 
 private const val APP_MENTION_EVENT_TYPE = "app_mention"
 
-/**
- * Local-only inbound transport: receives slash commands, interactivity, and Events API payloads over
- * a Socket Mode WebSocket and feeds them into the same handlers the HTTP controllers use — so no
- * public URL, tunnel, or signature verification is needed for local testing. Outbound calls still go
- * over the Web API unchanged.
- *
- * Gated to the `local` Spring profile, so the bean is never registered in any other environment. Run
- * locally with `--spring.profiles.active=local` and an app-level token
- * (`slack.app.api.app-token` / `SLACK_APP_TOKEN`, scope `connections:write`).
- */
 @Component
 @Profile("local")
 class SocketModeReceiver(
@@ -44,7 +34,6 @@ class SocketModeReceiver(
     private val interactionHandler: InteractionHandler,
     private val appMentionEventHandler: AppMentionEventHandler,
 ) : SmartLifecycle {
-    // Socket Mode carries no HTTP headers; downstream only wraps them for record-keeping.
     private val noHeaders: MultiValueMap<String, String> = LinkedMultiValueMap()
 
     @Volatile
@@ -63,8 +52,7 @@ class SocketModeReceiver(
                 handleSlash(payloadJson = envelope.payload.toString())
             }
             socketClient.addInteractiveEnvelopeListener { envelope ->
-                // Handle first: a view_submission may need its response_action (e.g. inline
-                // validation errors) carried in the ack itself.
+                // Handled first — a view_submission's response_action must ride the ack itself.
                 val ackBody = handleInteractive(payloadJson = envelope.payload.toString())
                 ackInteractive(socketClient = socketClient, envelopeId = envelope.envelopeId, ackBody = ackBody)
             }
@@ -94,9 +82,7 @@ class SocketModeReceiver(
             ack(socketClient = socketClient, envelopeId = envelopeId)
             return
         }
-        // AckResponse can't carry a payload, so emit the raw ack envelope. ackBody is already
-        // valid JSON (a response_action object) and envelopeId is a URL-safe Slack id, so
-        // embedding it directly yields a well-formed envelope.
+        // AckResponse can't carry a payload; ackBody is already valid JSON, so embed it in a raw envelope.
         socketClient.sendSocketModeResponse("""{"envelope_id":"$envelopeId","payload":$ackBody}""")
     }
 

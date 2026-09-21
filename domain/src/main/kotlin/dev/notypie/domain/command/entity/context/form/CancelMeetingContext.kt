@@ -25,12 +25,6 @@ internal class CancelMeetingContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.CANCEL_MEETING
 
-    /**
-     * Cancel button on `/meetup list` carries `<listIdempotencyKey>,CANCEL_MEETING,<meetingUid>`.
-     * The parser surfaces the meetingUid as the first routing extra. Missing/malformed extras
-     * fall through to a no-op response — the WHERE clause in the repository still defends
-     * against bogus uids, so we don't need to throw here.
-     */
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val meetingUid =
             interaction.routingExtras

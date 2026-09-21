@@ -104,10 +104,6 @@ class StandupAnswerServiceTest :
                 service.onStandupModalOpenFailed(event = event)
 
                 then("an ephemeral retry notice is published to the publisher") {
-                    // chat.postEphemeral expects channel = D-channel ID and user = recipient
-                    // user ID. Carrying both on CommandBasicInfo (channel + publisherId) and
-                    // leaving the recipient null keeps the two distinct on the wire instead of
-                    // collapsing the user ID into the channel slot.
                     verify(exactly = 1) {
                         stager.stage(
                             message =

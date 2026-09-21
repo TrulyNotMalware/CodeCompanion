@@ -11,15 +11,6 @@ import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDateTime
 
-/**
- * Maps a stable conversation key (`"<channel>:<thread_ts>"` for Slack threads) to the AI backend's
- * own session id. The backend only resumes conversational context when the previous turn's session
- * id is echoed back, so this row is what makes a Slack thread behave as one continuous conversation.
- *
- * The unique key on `session_key` enforces "one backend session per conversation" at the DB level;
- * concurrent turns for the same key are already rejected upstream by the sidecar's per-sessionKey
- * gate, so the plain read-modify-write in the repository is race-safe in practice.
- */
 @Entity(name = "agent_session")
 @Table(
     uniqueConstraints = [

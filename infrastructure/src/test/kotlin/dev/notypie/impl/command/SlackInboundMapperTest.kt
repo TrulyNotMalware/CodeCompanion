@@ -118,7 +118,6 @@ class SlackInboundMapperTest :
                             States(
                                 type = ActionElementTypes.MULTI_STATIC_SELECT,
                                 isSelected = true,
-                                // The parser joins selected option values with ", " — the mapper must split+trim.
                                 selectedValue = "kotlin, spring",
                                 blockId = InboundFieldKeys.CVE_SUBSCRIBE_TOPICS,
                             ),

@@ -11,12 +11,6 @@ import java.time.LocalDateTime
 
 @Repository
 interface JpaCveCollectLedgerRepository : JpaRepository<CveCollectLedgerSchema, Long> {
-    /**
-     * Atomically claims [topicId]'s window at [windowStart]. `INSERT IGNORE` swallows the
-     * duplicate-key error on unique(topic_id, window_start), so the affected-row count is the claim
-     * signal: `1` means *this* call owns the window, `0` means it was already claimed. Mirrors
-     * `JpaAgendaDispatchRepository.claimAgenda`.
-     */
     @Modifying
     @Transactional
     @Query(

@@ -6,12 +6,6 @@ import dev.notypie.domain.command.entity.context.SubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Executes the parsed `/standup setup` submission. Token parsing and defaults live in
- * [StandupSetupParsed]; validation of the assembled Routine (question count, weekday presence,
- * positive cutoff, …) stays deferred to the application-layer service whose entity `init` block
- * is the single source of truth.
- */
 internal class StandupSetupSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

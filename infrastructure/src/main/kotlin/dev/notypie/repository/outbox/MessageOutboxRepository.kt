@@ -25,17 +25,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("offset") offset: Int,
     ): List<OutboxMessage>
 
-    /**
-     * Atomic batch claim for PENDING rows whose `event_id` is in [eventIds]. The status check
-     * in the WHERE clause is the source of truth — only rows still PENDING transition to
-     * IN_PROGRESS, so a row claimed by a racing poller will not be re-claimed here. Returns
-     * the number of rows actually transitioned. Callers should treat the *intersection* of
-     * the claimed-row count and the candidate list as the work to dispatch; an unclaimed
-     * candidate was either racing or had already moved out of PENDING.
-     *
-     * `updated_at` is touched explicitly so health indicators can age IN_PROGRESS rows from
-     * the moment of claim, not from the row's original creation time.
-     */
+    // Atomic UPDATE guarded by status = 'PENDING' — a derived find-then-save here would race and double-dispatch.
     @Modifying
     @Transactional
     @Query(
@@ -51,13 +41,6 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("eventIds") eventIds: List<String>,
     ): Int
 
-    /**
-     * Returns rows currently IN_PROGRESS (claimed but not yet finalized). Used by the polling
-     * loop to recover crash-orphaned claims older than [olderThan]: a row stuck in this state
-     * means the dispatcher process died before publishing SUCCESS/FAILURE, and re-dispatching
-     * is safer than leaving it pinned. The dispatch path is idempotent at Slack's side because
-     * each row carries its own event_id.
-     */
     @Query(
         """
         SELECT * FROM outbox_message

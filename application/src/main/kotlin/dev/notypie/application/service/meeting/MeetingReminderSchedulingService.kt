@@ -47,17 +47,10 @@ class MeetingReminderSchedulingService(
 
     private val maxOffsetMinutes: Int = offsetsMinutes.maxOrNull() ?: 0
 
-    /**
-     * Phase A: ensures a `meeting_reminder` row exists per configured offset for every non-canceled
-     * meeting starting within the forward window. The unique constraint `(meeting_id, offset_minutes)`
-     * makes this idempotent across restarts and duplicate ticks.
-     */
     fun materializeReminders() {
         if (maxOffsetMinutes <= 0) return
         val now = clock.instant()
         val zone = clock.zone
-        // Window reaches the largest offset (so a 15-min reminder is created once the meeting is
-        // within 15 min of starting); the lookback absorbs a startAt that slipped behind a tick.
         val windowFrom = LocalDateTime.ofInstant(now.minus(Duration.ofMinutes(materializeLookbackMinutes)), zone)
         val windowTo = LocalDateTime.ofInstant(now.plus(Duration.ofMinutes(maxOffsetMinutes.toLong())), zone)
 
@@ -72,8 +65,6 @@ class MeetingReminderSchedulingService(
 
         offsetsMinutes.forEach { offsetMinutes ->
             val scheduledAt = startInstant.minus(Duration.ofMinutes(offsetMinutes.toLong()))
-            // Skip an offset whose fire time is already long past — a late-picked-up meeting still
-            // gets its nearer reminder but not a stale far one.
             if (scheduledAt.isBefore(now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes)))) return@forEach
 
             try {
@@ -88,8 +79,6 @@ class MeetingReminderSchedulingService(
                     }
                 }
             } catch (ex: DataIntegrityViolationException) {
-                // The unique constraint is the expected race outcome. Confirm the row exists before
-                // swallowing — any other violation must surface rather than masquerade as a race.
                 if (reminderRepository.reminderExists(meetingId = meeting.meetingId, offsetMinutes = offsetMinutes)) {
                     log.debug {
                         "Reminder race lost (concurrent tick): meetingId=${meeting.meetingId} offset=$offsetMinutes"
@@ -101,10 +90,6 @@ class MeetingReminderSchedulingService(
         }
     }
 
-    /**
-     * Phase B: sends DMs for reminders whose fire time has passed. Stuck SENDING rows from a prior
-     * crash are reset to PENDING first; each reminder is then claimed atomically before sending.
-     */
     fun sendDueReminders() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
@@ -119,13 +104,6 @@ class MeetingReminderSchedulingService(
         }
     }
 
-    /**
-     * Sends one reminder across three transaction boundaries so a partial failure can't leave
-     * inconsistent state: (1) claim commits PENDING→SENDING in its own tx; (2) build + outbox saves
-     * + markReminderSent run in one tx that rolls back if markReminderSent is a no-op (recovery
-     * raced us); (3) on failure, markReminderFailed records the audit in a fresh tx. The per-claim
-     * token gates every CAS so only our own claim's outcome can be acknowledged.
-     */
     private fun processReminder(item: ReadyReminder, sentAt: Instant) {
         val reminderId = item.reminder.id
         val claimToken = UUID.randomUUID().toString()
@@ -154,8 +132,7 @@ class MeetingReminderSchedulingService(
                         sentAt = sentAt,
                     )
                 ) {
-                    // Recovery flipped this row out of SENDING; roll back so we don't deliver DMs
-                    // the reminder row no longer accounts for.
+                    // Recovery already flipped this row out of SENDING — roll back or we'd double-deliver it.
                     error("markReminderSent had no effect for reminder $reminderId — rolling back.")
                 }
             }
@@ -177,10 +154,6 @@ class MeetingReminderSchedulingService(
     }
 }
 
-/**
- * Builds the pre-meeting reminder DM. A scheduler tick has no `trigger_id`, so this is a plain
- * `chat.postMessage` (the recipient's user_id rides as [CommandBasicInfo.channel]).
- */
 internal fun buildReminderDm(
     meetingTitle: String,
     offsetMinutes: Int,

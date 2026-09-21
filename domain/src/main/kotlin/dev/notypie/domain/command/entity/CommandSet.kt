@@ -5,7 +5,6 @@ import dev.notypie.domain.command.authorization.CommandPermission
 internal enum class CommandSet(
     val requiredPermission: CommandPermission,
 ) {
-    // Free text falls through to the AI assistant, so it is gated like `ask`.
     UNKNOWN(CommandPermission.AI),
     NOTICE(CommandPermission.OPERATIONS),
     APPROVAL(CommandPermission.BASIC),

@@ -14,12 +14,6 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Single choke point for every MCP tool dispatch. The caller's role is re-resolved from
- * DB/config on each call — never trusted from the token — so a mid-conversation revoke takes
- * effect immediately. Denials and failures are returned as tool error results (the model
- * relays them and the turn survives); only the transport filter may reject a request outright.
- */
 class McpToolGate(
     private val commandRoleResolver: CommandRoleResolver,
     private val mcpToolCallHistoryRepository: McpToolCallHistoryRepository,
@@ -31,8 +25,6 @@ class McpToolGate(
         argumentsSummary: String? = null,
         body: (ScopedTurnToken) -> String,
     ): CallToolResult {
-        // The filter already rejected unauthenticated requests; a missing token here means a
-        // wiring regression. No identity → nothing meaningful to audit, so log and fail closed.
         val token =
             transportContext.get(SCOPED_TURN_TOKEN_CONTEXT_KEY) as? ScopedTurnToken
                 ?: return errorResult(text = "Unauthenticated tool call.")
@@ -62,7 +54,6 @@ class McpToolGate(
             runCatching { commandRoleResolver.resolve(userId = token.userId) }
                 .getOrElse { failure ->
                     log.error(failure) { "MCP role resolution failed: tool=$toolName" }
-                    // The audit row needs a role; record the floor so the attempt stays attributable.
                     audit(
                         role = UserRole.USER,
                         outcome = McpToolCallOutcome.FAILED,

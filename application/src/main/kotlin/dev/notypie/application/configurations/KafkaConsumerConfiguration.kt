@@ -47,10 +47,7 @@ class KafkaConsumerConfiguration(
     private val convention: KafkaObservationConvention,
     private val kafkaProperties: KafkaProperties,
 ) {
-    // Wrap the configured key/value deserializers in ErrorHandlingDeserializer so a record that
-    // fails to deserialize (e.g. a stale CDC payload predating the current Envelope schema) is
-    // delivered to the listener as a null value instead of throwing inside poll() and wedging the
-    // consumer on that offset forever. KafkaErrorHandler.handleOne then skips the null record.
+    // Without this, a bad record throws inside poll() and wedges the consumer on that offset forever.
     @Bean
     @ConditionalOnMissingBean(ConsumerFactory::class)
     fun consumerFactory(): ConsumerFactory<String, Any> {

@@ -15,12 +15,6 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/**
- * Executes admin-only role management (`@bot grant|revoke|roles`). The parser has already
- * gated the actor as ADMIN and validated the mention shape, so this listener only applies
- * the change and confirms it on the originating channel. Bootstrap admins are config-managed
- * and therefore immutable from chat.
- */
 @Service
 class RoleManagementService(
     private val userCommandRoleRepository: UserCommandRoleRepository,
@@ -32,9 +26,6 @@ class RoleManagementService(
         private const val RESPONSE_HEADLINE = "CodeCompanion — role management"
     }
 
-    // The staged reply is persisted by a BEFORE_COMMIT listener, so the role write and the
-    // confirmation must share one transaction even when the event is published outside the
-    // mention handler's boundary.
     @Transactional
     @EventListener
     fun handleRoleManage(event: RoleManageRequestEvent) {
@@ -82,7 +73,6 @@ class RoleManagementService(
         }
     }
 
-    // Internal: the MCP `list_roles` tool renders the same listing so chat and tool output agree.
     internal fun renderGrants(): String {
         val bootstrapLines =
             commandRoleResolver.bootstrapAdmins

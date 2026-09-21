@@ -85,8 +85,6 @@ class OutboundMessageCodecTest :
         }
 
         "ChannelMessage with Schedule round-trips field-wise" {
-            // TimeScheduleInfo.timeFormatter has no equals(), so whole-envelope equality cannot hold;
-            // the mix-in drops it and the Kotlin default reconstructs it, compared field by field here.
             val original =
                 TimeScheduleInfo(
                     scheduleName = "Team sync",
@@ -259,9 +257,6 @@ class OutboundMessageCodecTest :
             )
         }
 
-        // Frozen wire fixtures: byte-for-byte what the pre-B1 codec (content: MessageContent) wrote
-        // for Text-valued rows. Decoding proves persisted rows survive the type narrowing; encoding
-        // back to the exact literal proves the shape did not drift for readers of new rows.
         "pre-narrowing update/replace rows decode, and the encoded wire shape is frozen" {
             val fixtureBasicInfo =
                 createCommandBasicInfo(idempotencyKey = UUID.fromString("00000000-0000-0000-0000-000000000001"))

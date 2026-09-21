@@ -26,9 +26,6 @@ internal class AppMentionContextParser(
     private val actorRole: UserRole,
 ) : ContextParser {
     companion object {
-        // Markdown body for `@bot help`. Listed once here so the parser test can pin the
-        // exact wording — drift between the docs and the runtime help message is the most
-        // common bug we see when help text gets edited in passing.
         internal val HELP_MESSAGE: String =
             """
             *CodeCompanion — quick reference*
@@ -121,20 +118,14 @@ internal class AppMentionContextParser(
 
             CommandSet.CVE -> cveOpsContext()
 
-            // Free-text fallback: any mention that doesn't match a command is a question for the
-            // AI assistant, keyword included ("what does status mean" must not lose "what").
             CommandSet.UNKNOWN -> agentChatContext(promptTokens = mention.commandTokens)
         }
     }
 
-    // `cve` sub-dispatch. The feature gate lives in the application listener (it owns cve.enabled),
-    // so an admin whose feature is off still routes here and gets a "disabled" reply, never silence.
     private fun cveOpsContext(): CommandContext<NoSubCommands> {
         val tokens = mention.commandTokens
         return when {
             tokens.size == 2 && tokens[1] == "topics" -> cveContext(intent = CommandIntent.CveListTopics)
-            // Topic keys are lowercase by convention; normalizing here makes the toggle forgiving of
-            // `cve topic activate Kotlin` without touching the stored keys.
             tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "activate" ->
                 cveContext(intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = true))
             tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "deactivate" ->
@@ -188,7 +179,6 @@ internal class AppMentionContextParser(
     private fun agentChatContext(promptTokens: List<String>): AgentChatContext =
         AgentChatContext(
             prompt = promptTokens.joinToString(separator = " "),
-            // A top-level mention anchors its own thread; a threaded mention continues that thread.
             threadId = (mention.thread ?: mention.message)?.raw,
             requesterName = commandData.actorName,
             channelName = commandData.channelName,

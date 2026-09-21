@@ -12,11 +12,6 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import java.util.UUID
 
-/**
- * A2: the slash commands recover their payload through `slashInvocation()`'s sealed `when`
- * instead of a cast. Pins both halves of that contract — a slash payload works, and a mis-built
- * command still fails inside `handleEvent()` as an ERROR_RESPONSE rather than escaping.
- */
 class SlashPayloadResolutionTest :
     BehaviorSpec({
         val topics = listOf(TopicOption(key = "spring", label = "Spring"))

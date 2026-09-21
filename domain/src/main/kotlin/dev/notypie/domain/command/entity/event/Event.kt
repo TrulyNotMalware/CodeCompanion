@@ -32,7 +32,6 @@ class GetMeetingEventPayload(
     val startDate: LocalDateTime = LocalDateTime.now(),
     val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
     publisherId: String,
-    /** Original command context; lets the async handler reply on the same channel/app. */
     val responseBasicInfo: CommandBasicInfo,
 ) : MeetingPayload(
         eventId = UUID.randomUUID(),
@@ -73,7 +72,6 @@ class CancelMeetingPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val meetingUid: UUID,
     val requesterId: String,
-    /** Originating interaction context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -92,7 +90,6 @@ class RescheduleMeetingPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val newStartAt: LocalDateTime,
-    /** Originating interaction context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -111,7 +108,6 @@ class AddParticipantPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val participantUserIds: List<String>,
-    /** Originating interaction context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -127,7 +123,6 @@ data class AddParticipantEvent(
 
 class StatusReportPayload(
     override val eventId: UUID = UUID.randomUUID(),
-    /** `@bot status` mention context; lets the listener post the report on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -150,11 +145,8 @@ enum class RoleManageAction {
 class RoleManagePayload(
     override val eventId: UUID = UUID.randomUUID(),
     val action: RoleManageAction,
-    /** Grant/revoke target; LIST has none. */
     val targetUserId: String? = null,
-    /** Role to assign; only GRANT carries one. */
     val role: UserRole? = null,
-    /** Originating mention context; lets the listener reply on the same channel. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -178,9 +170,7 @@ class CveSubscriptionPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val action: CveSubscriptionAction,
     val userId: String,
-    /** Selected topic keys; empty for LIST. */
     val topicKeys: List<String> = emptyList(),
-    /** Originating slash/interaction context; the listener DMs the confirmation to [userId]. */
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -194,11 +184,9 @@ data class CveSubscriptionRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<CveSubscriptionPayload>
 
-/** DB-only `/latest` read; the listener DMs [userId] the most recent DONE summaries. */
 class CveLatestPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val userId: String,
-    /** Single-topic scope; null reads across the caller's subscriptions. */
     val topicKey: String? = null,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
@@ -221,13 +209,10 @@ enum class CveOpsAction {
     RETRY_EVENT,
 }
 
-/** Admin-only CVE operations from `@bot cve ...` mentions; the listener replies on the same channel. */
 class CveOpsPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val action: CveOpsAction,
-    /** Topic key for ACTIVATE_TOPIC/DEACTIVATE_TOPIC; null otherwise. */
     val topicKey: String? = null,
-    /** Target cve_event id for RETRY_EVENT; null otherwise. */
     val targetEventId: Long? = null,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
@@ -242,12 +227,6 @@ data class CveOpsRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<CveOpsPayload>
 
-/**
- * One AI-agent conversation turn from an `@bot ask` (or free-text) mention. [threadId] is the
- * conversation anchor the async listener keys session continuity on and replies into;
- * [responseBasicInfo] lets it post that reply on the same channel/app. [requesterName] and
- * [channelName] are display names for the per-request agent context block.
- */
 class AgentConversePayload(
     override val eventId: UUID = UUID.randomUUID(),
     val prompt: String,
@@ -291,10 +270,6 @@ data class StandupCutoffEvent(
     val sessionDate: LocalDate,
 )
 
-/**
- * Parsed standup-setup modal submission; [responseBasicInfo] lets the listener post the
- * confirmation (or validation error) back to the invoking channel.
- */
 class CreateStandupRoutinePayload(
     override val eventId: UUID = UUID.randomUUID(),
     val name: String,
@@ -320,11 +295,6 @@ data class CreateStandupRoutineEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<CreateStandupRoutinePayload>
 
-/**
- * Published when `views.open` fails (expired trigger_id, Slack/network error). The listener
- * records the decline with [dev.notypie.domain.meet.entity.RejectReason.OTHER] and sends an
- * ephemeral notice so the user knows the decline was still accepted.
- */
 data class DeclineModalOpenFailedEvent(
     val meetingIdempotencyKey: UUID,
     val participantUserId: String,
@@ -334,11 +304,6 @@ data class DeclineModalOpenFailedEvent(
     val reason: String,
 )
 
-/**
- * Published when `views.open` for the standup answer modal fails. Unlike the decline-reason
- * flow nothing has been persisted yet — the answers exist only in the unopened modal — so the
- * listener sends an ephemeral notice prompting the user to retry from the original DM.
- */
 data class StandupModalOpenFailedEvent(
     val userId: String,
     val apiAppId: String,

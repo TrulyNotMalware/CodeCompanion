@@ -36,8 +36,6 @@ open class MeetingReminderRepositoryImpl(
         }
         val reminder =
             MeetingReminderSchema(
-                // getReferenceById yields a lazy FK proxy — no need to load the full meeting just
-                // to satisfy the meeting_id foreign key.
                 meeting = jpaMeetingRepository.getReferenceById(meetingId),
                 offsetMinutes = offsetMinutes,
                 scheduledAt = scheduledAt,

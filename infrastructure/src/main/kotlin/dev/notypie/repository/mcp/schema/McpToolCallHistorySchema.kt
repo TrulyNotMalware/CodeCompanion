@@ -13,18 +13,12 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import java.time.LocalDateTime
 
-/** Terminal outcome of one MCP tool dispatch. */
 enum class McpToolCallOutcome {
     COMPLETED,
     DENIED,
     FAILED,
 }
 
-/**
- * Audit row for one MCP tool call made by the agent lane's model. Identity comes from the
- * per-turn scoped token; `turnId` joins `agent_turn_history.idempotency_key` so tool calls
- * can be traced back to their agent turn. Append-only; rows are never updated.
- */
 @Entity(name = "mcp_tool_call_history")
 @Table(
     indexes = [

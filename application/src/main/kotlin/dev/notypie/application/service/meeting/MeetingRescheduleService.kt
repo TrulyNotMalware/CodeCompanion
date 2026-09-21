@@ -18,19 +18,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.format.DateTimeFormatter
 
-/**
- * Reschedules a meeting on behalf of a host who submitted the reschedule modal opened from
- * `/meetup list`. Authorization is enforced atomically by the repository's WHERE clause — the
- * UPDATE only matches when [RescheduleMeetingEvent.payload.requesterId] equals
- * `meetings.publisher_id` AND `is_canceled = false`. A `false` return collapses missing/non-host/
- * canceled into a single no-op branch that surfaces a friendly ephemeral instead of an error,
- * mirroring [MeetingServiceImpl.cancelMeeting].
- *
- * On success the meeting's existing `meeting_reminder` rows are deleted so the reminder scheduler
- * re-materializes them at the new start's offsets on its next tick (delete-and-recreate;
- * materialization already skips long-past offsets), and the participants are re-notified of the
- * new time.
- */
 @Service
 class MeetingRescheduleService(
     private val meetingRepository: MeetingRepository,
@@ -77,8 +64,6 @@ class MeetingRescheduleService(
 
         val meeting = meetingRepository.findMeetingByUid(meetingUid = payload.meetingUid)
         if (meeting != null) {
-            // Delete-and-let-materialize-recreate: the scheduler re-arms the reminders at the new
-            // start's offsets on its next tick. Skipping long-past offsets is handled there.
             reminderRepository.deleteByMeetingId(meetingId = meeting.meetingId)
             publishParticipantReNotification(
                 meetingTitle = meeting.title,

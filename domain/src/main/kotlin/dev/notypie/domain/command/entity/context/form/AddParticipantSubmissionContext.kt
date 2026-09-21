@@ -6,11 +6,6 @@ import dev.notypie.domain.command.entity.context.SubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Executes the parsed add-participant submission from the modal opened by [AddParticipantContext].
- * Parsing and rejection live at the routing seam (SubmissionRouter / [AddParticipantParsed]); the
- * repository still defends host-only + capacity invariants downstream.
- */
 internal class AddParticipantSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

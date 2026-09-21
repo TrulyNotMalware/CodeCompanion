@@ -47,7 +47,6 @@ class CveSubscriptionServiceTest :
             return service to publisher
         }
 
-        // The confirmation is a DM: a ChannelMessage whose channel/target is the user id itself.
         fun CapturingSlot<OutboundMessage>.dmMarkdown(): String =
             captured
                 .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()

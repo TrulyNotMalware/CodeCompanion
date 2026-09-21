@@ -19,14 +19,6 @@ import java.time.format.DateTimeFormatter
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Fetches recently modified CVEs from the NVD 2.0 API for a topic. `source_config` selects the
- * query: `{"cpe": "cpe:2.3:..."}` maps to `virtualMatchString`, `{"keyword": "..."}` to
- * `keywordSearch`. Every request bounds the scan to `[now - lookback, now]` via
- * `lastModStartDate`/`lastModEndDate`; the adapter is stateless, so overlapping windows are fine —
- * `insertIgnore` dedups them. The `apiKey` header is sent only when configured. A malformed config,
- * a non-2xx response (including rate limits), or a transport failure logs and returns an empty list.
- */
 class NvdCveSourceAdapter(
     private val apiKey: String,
     private val lookbackMinutes: Long,
@@ -45,9 +37,7 @@ class NvdCveSourceAdapter(
 
     override fun fetch(topic: CveTopic): List<RawSourceEvent> {
         val matchParam = parseMatchParam(topic = topic) ?: return emptyList()
-        // NVD reads offset-free timestamps as UTC, so the window is derived from the instant in
-        // UTC regardless of the clock's zone — a zoned wall clock would shift the window and
-        // silently empty every response.
+        // NVD treats offset-free timestamps as UTC; a zoned wall clock would shift the window and silently empty it.
         val now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)
         val query =
             listOf(
@@ -68,7 +58,6 @@ class NvdCveSourceAdapter(
         val response =
             runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
                 .getOrElse { ex ->
-                    // Never logs the api key: only the topic key and the exception surface here.
                     log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
                     return emptyList()
                 }
@@ -147,7 +136,6 @@ class NvdCveSourceAdapter(
             } ?: return ""
         val cvssData = metric["cvssData"]
         val baseScore = cvssData?.get("baseScore")?.stringOrNull()
-        // CVSS v2 carries severity on the metric node; v3 carries it inside cvssData.
         val baseSeverity = cvssData?.get("baseSeverity")?.stringOrNull() ?: metric["baseSeverity"]?.stringOrNull()
         if (baseScore == null && baseSeverity == null) return ""
         return buildString {

@@ -8,11 +8,6 @@ import dev.notypie.domain.command.entity.context.form.RequestCveLatestContext
 import dev.notypie.domain.command.inbound.InboundCommand
 import java.util.UUID
 
-/**
- * `/latest [topic-key]` slash command. No modal: emits the CveLatest intent directly so the listener
- * DMs the caller the most recent DONE summaries. [topicKey] is the resolved single-topic scope (null
- * for the no-argument form), extracted by the application service before this command is built.
- */
 class CveLatestSlashCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,

@@ -6,10 +6,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
-/**
- * Read-side projection of a [dev.notypie.domain.standup.entity.Routine]. Returned by the
- * repository; consumed by application services that don't need the entity's mutability.
- */
 data class RoutineDto(
     val routineId: Long,
     val routineUid: UUID,

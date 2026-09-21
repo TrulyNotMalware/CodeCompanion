@@ -211,7 +211,6 @@ class OpsStatusServiceTest :
                     body shouldContain "*CVE topics:* 3 active"
                     body shouldContain "*CVE events:* 4 pending, 1 summarizing, 2 failed (retryable), 1 dead-letter"
                     body shouldContain "*CVE last collect window:* 2026-07-14 09:30"
-                    // the outbox section is still present and unchanged
                     body shouldContain "*Pending:* 0"
                 }
             }

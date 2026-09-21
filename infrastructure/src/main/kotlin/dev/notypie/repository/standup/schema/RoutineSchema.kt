@@ -15,19 +15,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
-/**
- * JPA mapping for [Routine]. The standup config table.
- *
- * Persistence choices worth a comment:
- *  - **Questions:** stored as a TEXT column joined by `\n`. The domain layer rejects newline
- *    characters inside a question so the round-trip cannot ambiguate.
- *  - **Weekdays:** stored as a comma-joined `name()` list (e.g. "MONDAY,TUESDAY,..."). Native
- *    enum sets in JPA require either an extra join table or DB-specific bitmask types; the
- *    string form is the cheapest and reads fine in DB tools.
- *  - **Timezone:** the IANA id (`ZoneId.id`) is stored verbatim. `LocalTime` is stored via
- *    the JDBC TIME type which Hibernate handles natively.
- *  - **`cutoff_offset_seconds`:** stored as an integer to keep the column DB-portable.
- */
+// Questions are \n-joined in one TEXT column; the domain layer rejects newlines in a question to keep this unambiguous.
 @Entity(name = "standup_routine")
 class RoutineSchema(
     @field:Id
@@ -95,11 +83,6 @@ class RoutineMemberSchema(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 )
 
-/**
- * Builds a fully-populated [RoutineSchema] (with member rows) from a domain [Routine].
- * Members in the routine are converted into owned `RoutineMemberSchema` rows back-pointing
- * to the parent — the cascade on the owning side persists them in the same `save()` call.
- */
 fun Routine.toSchema(): RoutineSchema {
     val schema =
         RoutineSchema(

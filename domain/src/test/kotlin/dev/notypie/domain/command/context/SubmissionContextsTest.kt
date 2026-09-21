@@ -37,11 +37,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
-/**
- * Leaf-level specs: a submission context holds an already-parsed model and translates it into
- * effects on handleInteraction. Parse edges live in ParsedSubmissionsTest; the full path in
- * SubmissionPipelineCharacterizationTest.
- */
 class SubmissionContextsTest :
     BehaviorSpec({
         val interaction = createInboundInteraction()

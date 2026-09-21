@@ -162,7 +162,6 @@ class OutboundMessageTest :
                     ephemeral.recipient shouldBe recipient
                     ephemeral.content shouldBe content
 
-                    // A null recipient means "the command publisher", mirroring today's targetUserId = null.
                     val ephemeralToPublisher = OutboundMessage.Ephemeral(target = target, content = content)
                     ephemeralToPublisher.recipient shouldBe null
 

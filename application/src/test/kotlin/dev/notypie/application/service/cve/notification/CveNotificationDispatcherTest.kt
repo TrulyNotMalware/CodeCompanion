@@ -48,8 +48,6 @@ class CveNotificationDispatcherTest :
             return tm
         }
 
-        // save() is a generic JpaRepository method; a purely relaxed mock returns a bare Object that
-        // fails the covariant cast, so echo the persisted row back like the standup/agenda tests.
         fun stubOutbox(): MessageOutboxRepository {
             val repo = mockk<MessageOutboxRepository>(relaxed = true)
             every { repo.save(any()) } answers { firstArg() }
@@ -63,7 +61,6 @@ class CveNotificationDispatcherTest :
             clock: Clock = Clock.fixed(AFTER_SEND_AT, ZoneOffset.UTC),
             digestSummaryMaxLength: Int = 700,
         ): CveNotificationDispatcher {
-            // The created_at horizon reads the DB clock through the repository; pin it per test.
             every { deliveryRepository.dbNow() } returns DB_NOW
             return CveNotificationDispatcher(
                 cveDeliveryRepository = deliveryRepository,
@@ -192,7 +189,6 @@ class CveNotificationDispatcherTest :
 
                 then("the first pair's failure is isolated and the second pair is still claimed and enqueued") {
                     verify(exactly = 2) { outboxRepository.save(any()) }
-                    // claim and save run in the same runInTx per pair, so they interleave pair-by-pair.
                     verifyOrder {
                         deliveryRepository.claim(eventId = 1L, userId = "U1")
                         outboxRepository.save(any())

@@ -23,7 +23,6 @@ class InteractionCommand(
     val appName: String,
     idempotencyKey: UUID,
     commandData: InboundCommand,
-    /** Role of the actor issuing the command; mention routing denies commands it does not grant. */
     private val actorRole: UserRole,
     private val parseObserver: SubmissionParseObserver = SubmissionParseObserver.NONE,
 ) : Command<SubCommandDefinition>(
@@ -35,9 +34,7 @@ class InteractionCommand(
         val subCommandDefinition: SubCommandDefinition,
     )
 
-    // Lazy so that UnSupportedCommandException thrown here is captured by Command.handleEvent()
-    // rather than breaking Command construction. Resolving parser and sub-command together keeps
-    // the payload narrowed exactly once, in the exhaustive when below.
+    // Lazy so UnSupportedCommandException is caught by handleEvent(), not thrown during construction.
     private val route: Route by lazy { resolveRoute(commandData = commandData) }
 
     override fun parseContext(subCommand: SubCommand<SubCommandDefinition>): CommandContext<out SubCommandDefinition> =

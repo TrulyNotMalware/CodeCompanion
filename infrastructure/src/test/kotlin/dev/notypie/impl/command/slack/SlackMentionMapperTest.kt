@@ -7,12 +7,6 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 
-/**
- * Golden coverage for the app_mention rich_text flattening, ported verbatim from the old domain
- * `AppMentionContextParserTest`. Routing on the flattened result now lives in the domain parser
- * spec; this spec pins the boundary flattening: bot-id filtering, whitespace token splitting with
- * blanks dropped, and the two distinct "no command" shapes (no structure vs. structure-without-tokens).
- */
 class SlackMentionMapperTest :
     BehaviorSpec({
         val botId = "B_BOT"

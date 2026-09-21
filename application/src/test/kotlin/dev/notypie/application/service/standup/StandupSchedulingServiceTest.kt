@@ -44,7 +44,6 @@ class StandupSchedulingServiceTest :
         val seoul = ZoneId.of("Asia/Seoul")
         val la = ZoneId.of("America/Los_Angeles")
 
-        // 2026-05-04 Monday in Asia/Seoul (= 2026-05-03T15:00:00Z UTC).
         val nowInstant =
             LocalDate
                 .of(2026, 5, 4)
@@ -107,9 +106,6 @@ class StandupSchedulingServiceTest :
                     val session = createdSession.captured
                     session.routineUid shouldBe routine.routineUid
                     session.sessionDate shouldBe today
-                    // Latest member trigger = LA 10:00 (UTC 17:00 in DST). + 1h cutoff offset = LA 11:00.
-                    // Anchoring on max(member trigger) guarantees every member has at least
-                    // cutoffOffset to respond after their DM fires.
                     session.cutoffAt shouldBe
                         LocalDate
                             .of(2026, 5, 4)
@@ -202,7 +198,6 @@ class StandupSchedulingServiceTest :
                         routineTimezone = seoul,
                     )
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                // First lookup (pre-create check): null. Second lookup (post-DIE confirm): exists.
                 every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returnsMany
                     listOf(null, mockk(relaxed = true))
                 every { repo.createSession(session = any()) } throws
@@ -232,7 +227,6 @@ class StandupSchedulingServiceTest :
                         routineTimezone = seoul,
                     )
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                // Both lookups return null — the violation was NOT the expected unique-constraint race.
                 every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
                 every { repo.createSession(session = any()) } throws
                     DataIntegrityViolationException("UUID collision on session_uid")
@@ -341,9 +335,6 @@ class StandupSchedulingServiceTest :
                 }
 
                 then("the same claim token is threaded from claim through markDispatchSent") {
-                    // Without token threading, a stuck-row recovery + re-claim by another tick
-                    // would let our markDispatchSent silently flip B's claim to SENT. The token
-                    // CAS predicate is what makes that safe.
                     sentToken.captured shouldBe claimedToken.captured
                 }
 
@@ -472,7 +463,6 @@ class StandupSchedulingServiceTest :
 
                 every { repo.resetStuckDispatches(olderThan = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
-                // listActiveRoutines returns empty — the routine for this dispatch is missing
                 every { repo.listActiveRoutines() } returns emptyList()
 
                 service.sendPendingDispatches()
@@ -548,8 +538,6 @@ class StandupSchedulingServiceTest :
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
-                // U_A and U_C received the prompt (SENT); only U_C answered → U_A + a third sent
-                // member who never answered are the non-responders.
                 val candidate =
                     createNudgeCandidateSession(
                         sessionId = 7L,
@@ -570,7 +558,6 @@ class StandupSchedulingServiceTest :
 
                 then("the nudge is claimed once and one outbox row is saved per non-responder") {
                     verify(exactly = 1) { repo.claimNudge(sessionId = 7L) }
-                    // sent − answered = {U_A, U_B} → exactly two reminder DMs.
                     verify(exactly = 2) { outboxRepo.save(any()) }
                 }
 

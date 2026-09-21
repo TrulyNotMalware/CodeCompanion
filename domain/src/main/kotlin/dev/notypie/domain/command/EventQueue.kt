@@ -19,11 +19,9 @@ interface EventQueue<T : CommandEvent<EventPayload>> : Iterable<T> {
     val size: Int
 }
 
-// Thread Unsafe
 class DefaultEventQueue<T : CommandEvent<EventPayload>>(
     private val eventQueue: ArrayDeque<T> = ArrayDeque(),
 ) : EventQueue<T> {
-    // Cache
     private var externalEventCount: Int = 0
 
     override fun iterator(): Iterator<T> = eventQueue.iterator()

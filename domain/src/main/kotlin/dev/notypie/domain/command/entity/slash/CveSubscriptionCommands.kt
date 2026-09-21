@@ -11,12 +11,6 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.outbound.TopicOption
 import java.util.UUID
 
-/**
- * `/subscribe` slash command. Mirrors [SetupStandupCommand]: a slash invocation whose sole job is to
- * open a modal synchronously so the Slack `trigger_id` is consumed before it expires. [topics] are the
- * active topics the application service resolved before building this command (the domain never queries
- * persistence).
- */
 class CveSubscribeSlashCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
@@ -39,10 +33,6 @@ class CveSubscribeSlashCommand(
     override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
 }
 
-/**
- * `/unsubscribe` slash command. Opens a modal listing only [topics] — the user's current
- * subscriptions, resolved by the application service before this command is built.
- */
 class CveUnsubscribeSlashCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
@@ -65,10 +55,6 @@ class CveUnsubscribeSlashCommand(
     override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
 }
 
-/**
- * `/subscriptions` slash command. No modal: emits the LIST intent directly so the listener DMs the
- * user their current subscriptions.
- */
 class CveSubscriptionsSlashCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,

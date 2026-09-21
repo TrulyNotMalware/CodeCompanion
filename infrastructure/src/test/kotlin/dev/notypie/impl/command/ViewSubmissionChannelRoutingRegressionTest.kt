@@ -25,18 +25,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
-/**
- * Regression guard for commits 9963f80/2a5c006 (Slack `view_submission` channel routing).
- *
- * Every flow below drives the *real* [ModalTemplateBuilder] to render a modal, pulls the
- * `private_metadata` string out of that actual JSON output (never hand-built), and feeds it into a
- * `view_submission` payload run through the real [SlackInteractionRequestParser]. This couples the
- * writer's token order directly to [SlackInteractionRequestParser.recoverDeliveryChannel] and to the
- * domain contexts that read `routingExtras` positionally: a future token reorder on either side
- * breaks this test instead of silently misrouting a host-confirmation message in production.
- * The final `given` is the executable negative control: it reorders the writer's real tokens and
- * asserts the resulting misroute, proving the positive assertions are order-sensitive.
- */
 class ViewSubmissionChannelRoutingRegressionTest :
     BehaviorSpec({
         val templateBuilder =
@@ -47,15 +35,9 @@ class ViewSubmissionChannelRoutingRegressionTest :
             )
         val parser = SlackInteractionRequestParser()
 
-        // Decodes the writer's real output through the Slack SDK's View model (the same technique
-        // ModalTemplateBuilderTest uses to validate Block Kit shape) instead of re-deriving the
-        // tokenized string by hand -- that hand-building is exactly the gap this test closes.
         fun extractPrivateMetadata(modalViewJson: String): String =
             GsonFactory.createSnakeCase().fromJson(modalViewJson, View::class.java).privateMetadata
 
-        // Mirrors the production sequence in SlackInteractionHandlerImpl: parse the payload, build
-        // the transport-neutral InboundCommand, then drive the real domain Command entry point and
-        // drain whatever CommandIntent/OutboundMessage effects it emitted.
         fun runThroughDomain(viewSubmissionPayload: String): Pair<CommandOutput, List<CommandEffect>> {
             val interactionPayload = parser.parseStringPayload(payload = viewSubmissionPayload)
             val command =
@@ -165,8 +147,6 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     interactionPayload.type shouldBe CommandDetailType.STANDUP_SETUP_SUBMIT
                     interactionPayload.idempotencyKey shouldBe setupKey.toString()
                     interactionPayload.routingExtras shouldBe listOf(creatorId, commandChannel)
-                    // Unlike reschedule/add-participant, this flow's channel rides in routingExtras
-                    // and is read directly by the domain context, not by basicInfo.channel.
                     interactionPayload.channel.id shouldBe ""
                 }
             }
@@ -270,9 +250,6 @@ class ViewSubmissionChannelRoutingRegressionTest :
             }
         }
 
-        // Negative control: proves the positive assertions above genuinely depend on the writer's
-        // token order. If channel recovery were order-insensitive, this block would fail and the
-        // whole suite would be vacuous.
         given("a reschedule private_metadata whose routing tokens were reordered") {
             val meetingUid = UUID.randomUUID()
             val requesterId = "U_HOST_SWAPPED"
@@ -290,9 +267,6 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     .map { it.trim() }
                     .let { tokens -> tokens.take(2) + tokens.drop(2).reversed() }
                     .joinToString(separator = ",")
-            // Real date/time state so the submission takes the actual reschedule path (a stateless
-            // payload would fall through to the context's no-op success and prove nothing beyond
-            // the basicInfo copy).
             val submissionPayload =
                 createRoutingOnlyViewSubmissionJson(
                     callbackId = RescheduleMeetingModalIds.CALLBACK_ID,
@@ -321,7 +295,6 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     val reschedule = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
                     reschedule.meetingUid shouldBe meetingUid
                     reschedule.newStartAt shouldBe LocalDateTime.of(2026, 7, 10, 15, 45)
-                    // The channel token landed in the requester slot and vice versa.
                     reschedule.requesterId shouldBe originChannel
                     output.channel shouldNotBe originChannel
                     output.channel shouldBe requesterId

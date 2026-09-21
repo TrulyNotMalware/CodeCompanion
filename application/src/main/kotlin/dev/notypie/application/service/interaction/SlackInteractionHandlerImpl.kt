@@ -32,11 +32,7 @@ class SlackInteractionHandlerImpl(
     private val submissionParseObserver: SubmissionParseObserver,
 ) : InteractionHandler {
     companion object {
-        /**
-         * Legacy types whose REJECT button is handled by a global "Canceled." replace at the handler
-         * level, bypassing context routing. Do NOT add new types here — new contexts handle their own
-         * REJECT button inside their dedicated [dev.notypie.domain.command.entity.context.ReactionContext].
-         */
+        // Legacy only — new contexts handle their own REJECT button; do NOT add new types here.
         internal val LEGACY_AUTO_REJECT_TYPES: Set<CommandDetailType> =
             setOf(
                 CommandDetailType.APPLY_REQUEST,
@@ -72,10 +68,6 @@ class SlackInteractionHandlerImpl(
         return null
     }
 
-    /**
-     * When the decline-reason modal picks OTHER with a blank detail, returns a `response_action: errors`
-     * body so Slack shows an inline error and keeps the modal open; null otherwise.
-     */
     private fun declineDetailErrorOrNull(payload: InteractionPayload): String? {
         if (payload.type != CommandDetailType.MEETING_DECLINE_REASON) return null
         val selectedReason =
@@ -107,8 +99,6 @@ class SlackInteractionHandlerImpl(
     private fun shouldUseLegacyReject(payload: InteractionPayload): Boolean =
         payload.isCanceled() && payload.type in LEGACY_AUTO_REJECT_TYPES
 
-    // Interactions (modals, buttons, view submissions) are BASIC-permission flows open to every
-    // role, so the default USER role is sufficient here.
     private fun buildCommand(idempotencyKey: UUID, commandData: InboundCommand): InteractionCommand =
         InteractionCommand(
             appName = SLACK_APP_NAME,

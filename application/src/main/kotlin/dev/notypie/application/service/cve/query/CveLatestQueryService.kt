@@ -21,12 +21,6 @@ import org.springframework.transaction.annotation.Transactional
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Answers `/latest [topic-key]` with a DM of the most recent DONE-summarized events — a pure DB read,
- * zero AI calls (the summary was produced once at collection time). With no argument it reads across the
- * caller's subscriptions; with a topic key it scopes to that single active topic. Mirrors the
- * subscription listener's DM path (`chat.postMessage(channel=userId)` via `forOutbound`).
- */
 @Service
 class CveLatestQueryService(
     private val appConfig: AppConfig,
@@ -46,8 +40,6 @@ class CveLatestQueryService(
     @Transactional
     @EventListener
     fun handleCveLatest(event: CveLatestRequestEvent) {
-        // The slash layer already gates, but a request can be in flight across a runtime toggle-off —
-        // fail closed here too so a disabled feature never reads or DMs.
         if (!appConfig.cve.enabled) {
             log.warn { "CVE latest event ignored while the feature is disabled: userId=${event.payload.userId}" }
             return
@@ -98,8 +90,6 @@ class CveLatestQueryService(
         val recent = cveEventRepository.findRecentDoneEvents(topicIds = topicIds, limit = LATEST_LIMIT)
         if (recent.isEmpty()) return emptyMessage
         val body = recent.joinToString(separator = "\n\n") { render(event = it) }
-        // The whole body lands in ONE Slack section block, and Slack rejects mrkdwn over 3000 chars
-        // (invalid_blocks) — so the aggregate is capped, not just each summary, or the DM never posts.
         return if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
     }
 

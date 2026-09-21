@@ -11,11 +11,6 @@ import java.util.UUID
 
 internal fun String.toUuidOrNull(): UUID? = runCatching { UUID.fromString(this) }.getOrNull()
 
-/**
- * Optional original-message routing for a submission. Absence is a legitimate state (the modal was
- * opened without a notice message), not a parse failure, so it is modeled as a variant instead of
- * a nullable pair.
- */
 internal sealed interface NoticeTarget {
     data object None : NoticeTarget
 
@@ -34,14 +29,6 @@ internal sealed interface NoticeTarget {
     }
 }
 
-/**
- * Per-flow "parse, don't validate" projections of the raw [InboundSubmission] variants. Each
- * factory is the single seam where a submission may be rejected (`null`); the leaf contexts
- * receive an already-parsed model and never see the raw variant, a null, or a cast. The models
- * are parsed, not fully validated — aggregate invariants (host-only, capacity, routine `init`
- * rules, topic resolution) stay downstream, and the factories preserve the pre-Phase-11
- * interpretation contract pinned by SubmissionPipelineCharacterizationTest.
- */
 internal data class AddParticipantParsed(
     val meetingUid: UUID,
     val requesterId: String,
@@ -101,8 +88,6 @@ internal data class DeclineReasonParsed(
     val meetingIdempotencyKey: UUID,
     val participantUserId: String,
     val reason: RejectReason,
-    // Only meaningful for OTHER; the "required when Other" rule is enforced upstream, so a blank
-    // detail survives as an empty string to preserve the pre-Phase-11 intent payload.
     val reasonDetail: String?,
     val notice: NoticeTarget,
 ) {
@@ -135,7 +120,6 @@ internal data class DeclineReasonParsed(
 internal data class StandupAnswerParsed(
     val sessionUid: UUID,
     val userId: String,
-    // May be empty: an empty submission suppresses persistence but still updates the notice.
     val responses: List<String>,
     val notice: NoticeTarget,
 ) {
@@ -169,8 +153,6 @@ internal data class StandupSetupParsed(
         private val DEFAULT_TRIGGER_TIME: LocalTime = LocalTime.of(10, 0)
         private val DEFAULT_TIMEZONE: ZoneId = ZoneId.of("Asia/Seoul")
 
-        // Never rejects: unusable schedule tokens degrade to defaults, and the assembled Routine's
-        // `init` block downstream remains the single validation source.
         fun from(raw: InboundSubmission.StandupSetup, actorId: String): StandupSetupParsed =
             StandupSetupParsed(
                 name = raw.name.trim(),
@@ -204,7 +186,6 @@ internal data class CveSubscribeParsed(
     val topicKeys: List<String>,
 ) {
     companion object {
-        // Never rejects: an empty selection still becomes an intent; the service resolves the keys.
         fun from(raw: InboundSubmission.CveSubscribe, actorId: String): CveSubscribeParsed =
             CveSubscribeParsed(userId = actorId, topicKeys = raw.topicKeys)
     }

@@ -10,13 +10,6 @@ import jakarta.persistence.UniqueConstraint
 import org.hibernate.annotations.CreationTimestamp
 import java.time.LocalDateTime
 
-/**
- * Once-per-window claim ledger for the feed collector, one row per (topic, collect window).
- * unique(topic_id, window_start) makes claiming a window a single `INSERT IGNORE` whose
- * affected-row count tells the collector whether *this* instance owns that topic's window — the
- * only thing that keeps multiple instances from fetching the same topic in the same tick. There is
- * no mutable state and no claim token, mirroring `agenda_dispatch`.
- */
 @Entity(name = "cve_collect_ledger")
 @Table(
     uniqueConstraints = [

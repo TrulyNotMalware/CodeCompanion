@@ -52,7 +52,6 @@ class MeetingServiceImplTest :
                 eventPublisher = eventPublisher,
             )
 
-        // Passthrough: call the action directly so we can assert behavior without mocking retries.
         every { retryService.execute<Int>(action = any(), any(), any(), any(), any(), any(), any(), any()) } answers {
             firstArg<() -> Int>().invoke()
         }
@@ -249,9 +248,6 @@ class MeetingServiceImplTest :
                     val published = captured.captured.toList()
                     published.size shouldBe 1
                     published.single() shouldBe ephemeralEvent
-                    // Provisional OTHER was already emitted by handleDecline; re-publishing here
-                    // would trigger the MariaDB no-op race documented in
-                    // updateParticipantAttendance.
                     published.any { it is UpdateMeetingAttendanceEvent } shouldBe false
                 }
             }
@@ -342,8 +338,6 @@ class MeetingServiceImplTest :
             }
 
             `when`("the repository rejects a non-host requester") {
-                // The ADDED branch above already recorded stage calls on this shared mock; clear them
-                // so the exactly-0 verification below counts only this branch.
                 clearMocks(stager)
                 val capturedMessage = slot<OutboundMessage>()
                 every {

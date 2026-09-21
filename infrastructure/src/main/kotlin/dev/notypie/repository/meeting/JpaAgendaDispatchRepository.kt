@@ -11,12 +11,6 @@ import java.time.LocalDate
 
 @Repository
 interface JpaAgendaDispatchRepository : JpaRepository<AgendaDispatchSchema, LocalDate> {
-    /**
-     * Atomically claims the agenda for [date]. `INSERT IGNORE` swallows the duplicate-key error
-     * when another tick already inserted the row, so the affected-row count is the claim signal:
-     * `1` means *this* call owns today's agenda, `0` means it was already claimed. Mirrors the
-     * native `@Modifying @Transactional @Query` CAS style used by `JpaMeetingReminderRepository`.
-     */
     @Modifying
     @Transactional
     @Query(

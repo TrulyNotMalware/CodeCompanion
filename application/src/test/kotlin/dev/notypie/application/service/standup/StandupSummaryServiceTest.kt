@@ -187,7 +187,6 @@ class StandupSummaryServiceTest :
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every { port.toRow(message = any(), basicInfo = any()) } returns createOutboxRow(eventId = "EVT-9")
                 every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
-                // The transition lost — another tick already summarized this session.
                 every {
                     repo.markSessionSummarized(sessionId = 9L, messageTs = "outbox:EVT-9")
                 } returns false
@@ -203,9 +202,6 @@ class StandupSummaryServiceTest :
                 )
 
                 then("the txn rolls back so neither the outbox row nor the marker survives") {
-                    // outboxRepo.save is called inside the runCatching block; the rollback
-                    // is enforced via TransactionStatus.setRollbackOnly() (stubbed in
-                    // stubTransactionManager) so we only assert the CAS attempt itself.
                     verify(exactly = 1) {
                         repo.markSessionSummarized(sessionId = 9L, messageTs = "outbox:EVT-9")
                     }

@@ -12,10 +12,6 @@ import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import java.util.UUID
 
-/**
- * Test-only Command subclass for exercising CommandExecutor / integration tests.
- * Produces a single optional intent and always succeeds.
- */
 class TestCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,

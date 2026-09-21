@@ -1,23 +1,9 @@
 package dev.notypie.templates
 
-/**
- * Tiny type-safe builder for Slack `views.open` payloads — the JSON shape ModalTemplateBuilder
- * was assembling by hand with nested `mapOf("type" to "modal", "blocks" to buildList { ... })`
- * literals. The DSL preserves the exact key order of the previous hand-rolled maps (Jackson
- * serializes [LinkedHashMap] in insertion order, which several round-trip tests depend on)
- * while removing the visual noise that obscured the actual modal structure.
- *
- * Scoped to this module's modal needs only — extend with new helpers as templates are added
- * rather than trying to mirror the whole Slack Block Kit surface.
- */
+// Preserves insertion order (mutableMapOf → LinkedHashMap); round-trip tests depend on this exact key order.
 @DslMarker
 annotation class SlackViewDsl
 
-/**
- * Entry point: builds a `view` payload as a `Map<String, Any>` ready for [jsonMapper] to
- * serialize. Returning a Map (instead of a domain object) keeps the bridge to the Slack SDK
- * loose — callers can either re-serialize to JSON or pass it through Jackson directly.
- */
 fun modal(block: SlackViewBuilder.() -> Unit): Map<String, Any> = SlackViewBuilder().apply(block).build()
 
 @SlackViewDsl
@@ -91,8 +77,6 @@ class InputBuilder(
         input["label"] = plainText(text = text)
     }
 
-    // Slack input blocks are required by default; mark optional so the block can be left empty
-    // (e.g. the decline-reason detail, which is only required when the reason is "Other").
     fun optional(value: Boolean = true) {
         input["optional"] = value
     }

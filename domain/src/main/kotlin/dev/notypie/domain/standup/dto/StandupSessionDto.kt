@@ -6,11 +6,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/**
- * Read-side projection of a [dev.notypie.domain.standup.entity.StandupSession] including all
- * dispatches and answers. Used by the channel-summary renderer so a single round-trip pulls
- * everything needed to format the post.
- */
 data class StandupSessionDto(
     val sessionId: Long,
     val sessionUid: UUID,

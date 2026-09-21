@@ -7,21 +7,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
-/**
- * A recurring standup configuration. One [Routine] is bound to a single Slack channel
- * (the [commandChannel] where it was set up) and produces one
- * [dev.notypie.domain.standup.entity.StandupSession] per active weekday.
- *
- * Decisions reflected in this model:
- *   - **Per-user timezone (decision A):** the routine carries a [routineTimezone] used to
- *     define "what date is this session for" (the creator's calendar perspective), but the
- *     actual DM trigger time per member is computed from each [RoutineMember.userTimezone].
- *   - **Channel × day = 1 session (decision A):** [commandChannel] uniquely identifies the
- *     standup; sessions are bucketed per `(routineId, sessionDate)`.
- *   - **Configurable summary channel (decision 4):** [summaryChannel] is chosen at setup
- *     and may differ from [commandChannel] so heavy summary posts can land in an archive
- *     channel without spamming the working channel.
- */
 class Routine(
     val name: String,
     val creatorId: String,
@@ -85,7 +70,6 @@ class Routine(
         validate(className = this.javaClass.simpleName) {
             "members" of (members.size + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
         }
-        // Slack user_id is the natural key — duplicates are silently coalesced.
         members.removeIf { it.userId == member.userId }
         members.add(member)
     }

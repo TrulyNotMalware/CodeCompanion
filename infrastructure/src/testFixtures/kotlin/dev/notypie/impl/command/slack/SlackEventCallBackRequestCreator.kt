@@ -48,7 +48,6 @@ fun createAuthorization(
 fun createEventCallbackData(
     type: String = "app_mention",
     userId: String = TEST_USER_ID,
-    // Bot metadata only exists on app-posted mentions; the human-typed default carries none.
     appId: String? = null,
     botId: String? = null,
     channel: String = TEST_CHANNEL_ID,

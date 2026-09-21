@@ -282,7 +282,6 @@ class SlackApiEventConstructor(
                 channel = commandBasicInfo.channel,
                 triggerId = triggerId,
                 viewJson = viewJson,
-                // DM target user for any modal-open failure fallback (generalized field name).
                 participantUserId = requesterId,
             )
         return OpenViewEvent(
@@ -316,7 +315,6 @@ class SlackApiEventConstructor(
                 channel = commandBasicInfo.channel,
                 triggerId = triggerId,
                 viewJson = viewJson,
-                // DM target user for any modal-open failure fallback (generalized field name).
                 participantUserId = requesterId,
             )
         return OpenViewEvent(
@@ -358,9 +356,6 @@ class SlackApiEventConstructor(
                 channel = commandBasicInfo.channel,
                 triggerId = triggerId,
                 viewJson = viewJson,
-                // Surfacing the standup-filler so the dispatcher's failure branch can target the
-                // ephemeral fallback at the right user. The field is named for the decline flow
-                // but has been generalized to "DM target user" for any modal open failure.
                 participantUserId = userId,
             )
         return OpenViewEvent(
@@ -393,7 +388,6 @@ class SlackApiEventConstructor(
                 channel = commandBasicInfo.channel,
                 triggerId = triggerId,
                 viewJson = viewJson,
-                // DM target user for any modal-open failure fallback (generalized field name).
                 participantUserId = creatorId,
             )
         return OpenViewEvent(
@@ -453,7 +447,6 @@ class SlackApiEventConstructor(
                 channel = commandBasicInfo.channel,
                 triggerId = triggerId,
                 viewJson = viewJson,
-                // DM target user for any modal-open failure fallback (generalized field name).
                 participantUserId = commandBasicInfo.publisherId,
             )
         return OpenViewEvent(
@@ -487,12 +480,6 @@ class SlackApiEventConstructor(
         )
     }
 
-    /**
-     * Builds a `chat.update` request that rewrites the notice DM with a plain markdown body.
-     * Routed through the outbox like any other [PostEventPayloadContents] — not latency-bound
-     * (no trigger_id involved). The dispatcher branches on [MessageType.UPDATE_MESSAGE] to
-     * call `chat.update` instead of `chat.postMessage`.
-     */
     fun updateNoticeMessageRequest(
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
@@ -597,9 +584,7 @@ class SlackApiEventConstructor(
                     extractBodyData(
                         chatPostEphemeralRequest =
                             chatPostEphemeralBuilder(
-                                // chat.postEphemeral needs the *channel* the message lives in, with
-                                // `user` controlling who sees it. Putting a user id in `channel` makes
-                                // Slack route the ephemeral into that user's DM instead of the channel.
+                                // channel must be the channel id, not a user id, or Slack routes the ephemeral to a DM.
                                 channel = commandBasicInfo.channel,
                                 blocks = layout.template,
                                 idempotencyKey = commandBasicInfo.idempotencyKey,
@@ -704,7 +689,6 @@ class SlackApiEventConstructor(
             formBody.name(it) to formBody.value(it)
         }
 
-    // https://api.slack.com/methods/chat.postMessage
     private fun chatPostMessageBuilder(
         commandDetailType: CommandDetailType,
         idempotencyKey: UUID,
@@ -722,11 +706,7 @@ class SlackApiEventConstructor(
         .threadTs(threadTs)
         .build()
 
-    /**
-     * Builds the comma-separated routing text embedded in `message.text`. The parser mirrors
-     * this format by splitting on `,` — every extra must therefore be URL-encoded so that
-     * values with commas (meeting titles typed by users) don't collide with delimiters.
-     */
+    // Parser splits this text on ","; every extra must be URL-encoded or embedded commas break tokenizing.
     private fun buildRoutingText(
         idempotencyKey: UUID,
         commandDetailType: CommandDetailType,
@@ -757,7 +737,6 @@ class SlackApiEventConstructor(
         .user(userId)
         .build()
 
-    // https://api.slack.com/methods/chat.update — requires the original message's channel + ts.
     private fun chatUpdateBuilder(
         channel: String,
         ts: String,

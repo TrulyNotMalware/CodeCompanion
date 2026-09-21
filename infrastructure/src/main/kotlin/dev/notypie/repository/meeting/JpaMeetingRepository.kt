@@ -52,10 +52,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("endAt") endAt: LocalDateTime,
     ): List<MeetingSchema>
 
-    /**
-     * Non-canceled meetings in the forward window with participants eagerly fetched. Not user-scoped:
-     * the reminder scheduler sweeps all meetings, unlike [findMeetingsByUserIdAndDateRange].
-     */
+    // Not user-scoped, unlike findMeetingsByUserIdAndDateRange — the reminder scheduler sweeps all meetings.
     @Query(
         """
         SELECT DISTINCT m
@@ -92,10 +89,6 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("absentReasonDetail") absentReasonDetail: String?,
     ): Int
 
-    /**
-     * Disambiguates `updateParticipantAttendance` returning 0: a no-op UPDATE also returns 0 on
-     * MariaDB's default `CLIENT_FOUND_ROWS=false`, so only a missing row is a genuine routing failure.
-     */
     @Query(
         """
         SELECT CASE WHEN COUNT(p) > 0 THEN true ELSE false END

@@ -27,10 +27,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         }
     }
 
-    /**
-     * Peeks only the top-level `type` field — the full payload shape differs for block_actions
-     * vs view_submission, so deserializing optimistically would crash on the wrong branch.
-     */
     private fun peekPayloadType(payload: String): String? =
         runCatching {
             JsonParser
@@ -40,15 +36,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 ?.asString
         }.getOrNull()
 
-    /**
-     * Maps a Slack `view_submission` payload (fired when a user clicks Submit on a modal) into
-     * the common [InteractionPayload] shape. `currentAction` is synthesized as an
-     * [ActionElementTypes.APPLY_BUTTON] so the interaction handler treats the submission as a
-     * primary completion and routes it through the normal context pipeline.
-     *
-     * Routing tokens come from the modal's `private_metadata` (same comma-tokenized format
-     * as the embedded-text routing used for block_actions), not from a message body.
-     */
     private fun toInteractionPayloads(viewSubmission: ViewSubmissionPayload): InteractionPayload {
         val team = Team(domain = viewSubmission.team?.domain.orEmpty(), id = viewSubmission.team?.id.orEmpty())
         val user =
@@ -59,6 +46,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 userName = viewSubmission.user?.username.orEmpty(),
             )
         val privateMetadata = viewSubmission.view?.privateMetadata.orEmpty()
+        // private_metadata is comma-tokenized (idempotencyKey,type,...routingExtras), same as block_actions.
         val tokens = privateMetadata.split(",").map { it.trim() }
         val idempotencyKey = tokens.getOrNull(0)?.takeIf { it.isNotBlank() } ?: ""
         val type =
@@ -69,10 +57,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 ?: CommandDetailType.NOTHING
         val routingExtras =
             if (tokens.size > 2) tokens.subList(2, tokens.size).map(::decodeRoutingExtra) else emptyList()
-        // view_submission has no channel of its own; flows that post a host confirmation ferry the
-        // originating channel via private_metadata. Recover it here (type-aware, since routingExtras[1]
-        // means different things per flow) so basicInfo.channel is correct without the domain intent
-        // having to carry a delivery channel.
         val recoveredChannel = recoverDeliveryChannel(type = type, routingExtras = routingExtras)
 
         val parsedStates =
@@ -98,8 +82,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 .firstOrNull { it.type == ActionElementTypes.STATIC_SELECT }
                 ?.selectedValue
                 .orEmpty()
-        // Synthetic primary action — view_submission has no real "current action" but
-        // carries selection via view.state; downstream routing gates on isPrimary().
+        // Synthetic primary action; downstream routing gates on isPrimary() (no real action in view_submission).
         val currentAction =
             States(
                 type = ActionElementTypes.APPLY_BUTTON,
@@ -157,8 +140,8 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 messageTs = unixTimeStamp,
             )
 
-        // Ephemeral contents does not include message sections.
         val currentAction = parseCurrentAction(blockActionPayload.actions)
+        // Slack omits the message section from ephemeral block_actions payloads.
         val botId = if (container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
         val rawEmbeddedText: String =
             when {
@@ -195,11 +178,7 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         )
     }
 
-    /**
-     * Extracts the originating channel a view_submission should route its host confirmation back to.
-     * Only the reschedule/add-participant flows ferry a pure delivery channel at routingExtras[1];
-     * other flows either need no channel or carry business channels the domain reads itself.
-     */
+    // Only reschedule/add-participant flows carry routingExtras[1] as a delivery channel; others don't.
     private fun recoverDeliveryChannel(type: CommandDetailType, routingExtras: List<String>): String =
         when (type) {
             CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
@@ -316,12 +295,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             }
         } ?: States(type = ActionElementTypes.UNKNOWN)
 
-    /**
-     * URL-decodes an individual routing extra. The writer side (SlackApiEventConstructor)
-     * URL-encodes each extra before joining with `,` so arbitrary strings can ride along
-     * without colliding with the delimiter. Malformed input falls through to the raw token
-     * — safer than throwing because the field is at worst displayed to the user.
-     */
     private fun decodeRoutingExtra(raw: String): String =
         runCatching { URLDecoder.decode(raw, StandardCharsets.UTF_8) }.getOrDefault(raw)
 

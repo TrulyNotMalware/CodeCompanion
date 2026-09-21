@@ -9,12 +9,6 @@ import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 
-/**
- * Runs the admin-facing topic queries against a real database. Setup writes go through the
- * repository (self-transactional) because kotest container scopes run outside the test
- * transaction; rows persist across blocks and specs share one H2, so every topicKey is unique
- * and list/count assertions are scoped or delta-based rather than global exact matches.
- */
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
 class JpaCveTopicRepositoryTest

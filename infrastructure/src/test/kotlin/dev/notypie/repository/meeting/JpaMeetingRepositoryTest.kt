@@ -137,7 +137,6 @@ class JpaMeetingRepositoryTest
                 val participant = "U_RANGE_PART"
                 val now = LocalDateTime.now()
 
-                // Meeting 1: starts inside [now, now+7d) — owner is publisher
                 repository.save(
                     createMeetingSchemaWithParticipant(
                         publisherId = owner,
@@ -146,7 +145,6 @@ class JpaMeetingRepositoryTest
                         startAt = now.plusDays(1L),
                     ),
                 )
-                // Meeting 2: starts after the window — should be excluded
                 repository.save(
                     createMeetingSchemaWithParticipant(
                         publisherId = owner,
@@ -155,7 +153,6 @@ class JpaMeetingRepositoryTest
                         startAt = now.plusDays(10L),
                     ),
                 )
-                // Meeting 3: starts inside window, owner is participant only (not publisher)
                 repository.save(
                     createMeetingSchemaWithParticipant(
                         publisherId = outsider,
@@ -164,7 +161,6 @@ class JpaMeetingRepositoryTest
                         startAt = now.plusDays(2L),
                     ),
                 )
-                // Meeting 4: starts inside window but owner is unrelated — should be excluded
                 repository.save(
                     createMeetingSchemaWithParticipant(
                         publisherId = outsider,

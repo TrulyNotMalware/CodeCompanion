@@ -5,27 +5,12 @@ import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import java.io.File
 
-/**
- * Phase 11 cast guard: inside `domain/command`, type recovery happens once, at a routing seam,
- * through sealed exhaustive `when` — consumers never recover their expected variant from a broad
- * envelope with an explicit cast. Smart casts need no cast expression, so no file is exempted;
- * the baseline below is empty since A2 (slash commands now recover their payload via
- * `slashInvocation()`'s sealed `when`) and may only shrink if violations ever reappear. This is a regression brake, not a proof of envelope
- * consistency — routing correctness is pinned by SubmissionRouterTest and the characterization
- * suite.
- *
- * Known scanner limitation (documented, self-tested): a cast inside a string-template expression
- * (`"${'$'}{x as T}"`) is stripped together with the string text and not counted.
- */
 class EnvelopeCastGuardTest :
     StringSpec({
         val commandMain = File("src/main/kotlin/dev/notypie/domain/command")
 
         val baseline = emptyMap<String, Int>()
 
-        // Replaces comments and string/char literals with a single space so token boundaries
-        // survive (`as/* x */String` must not collapse into `asString`); newlines are preserved
-        // so import-line filtering still works.
         fun stripNonCode(source: String): String {
             val out = StringBuilder()
             var i = 0
@@ -102,7 +87,6 @@ class EnvelopeCastGuardTest :
             return out.toString()
         }
 
-        // Whole-text match so `\s` also covers a cast whose type sits on the next line.
         val castPattern = Regex("""\bas\??\s""")
 
         fun countCasts(source: String): Int {
@@ -128,7 +112,6 @@ class EnvelopeCastGuardTest :
             countCasts("val s = \"\"\"multiline as? Foo\"\"\"") shouldBe 0
             countCasts("import a.b.C as AliasedC") shouldBe 0
             countCasts("val escaped = \"quote \\\" as Foo\"") shouldBe 0
-            // Documented limitation: template expressions are stripped with the string.
             countCasts("val s = \"\${payload as String}\"") shouldBe 0
         }
 

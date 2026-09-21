@@ -44,8 +44,6 @@ class AbstractCommandContextTest :
             }
         }
 
-        // Contract Test: Ensures runCommand() remain overridable.
-        // Protects against accidental removal of 'open' keyword during refactoring.
         given("Override runCommand function") {
             val runCommandReturnValue = CommandOutput.empty()
             val overrideContext =

@@ -1,6 +1,5 @@
 package dev.notypie.dto
 
-// Reference from https://jsonplaceholder.typicode.com/posts
 data class PostDomainResponse(
     val userId: Int,
     val id: Int,

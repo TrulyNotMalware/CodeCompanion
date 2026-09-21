@@ -75,18 +75,6 @@ class StandupSummaryService(
             }
     }
 
-    /**
-     * Listens to every successful outbox publish and tries to swap the temporary
-     * `outbox:<eventId>` marker stored on the session row with the actual Slack `ts` returned
-     * by `chat.postMessage`. The UPDATE is keyed on `summary_message_ts = marker`, so it is a
-     * no-op for non-standup events and survives restarts: the marker is durable in the DB,
-     * not in JVM-local state, so a relay-after-restart will still find the row to update.
-     *
-     * The cost is one indexed UPDATE per published outbox row, accepted because (a) the
-     * keying column is the marker itself (no row scanned for non-matches) and (b) attaching
-     * `commandDetailType` to [MessagePublishSuccessEvent] just to short-circuit here would
-     * leak summary-flow concerns into the generic relay event.
-     */
     @EventListener
     fun replaceSummaryMarkerWithSlackTs(event: MessagePublishSuccessEvent) {
         if (event.messageTs.isBlank()) return

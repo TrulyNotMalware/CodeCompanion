@@ -12,6 +12,7 @@ import java.time.Instant
 
 @Repository
 interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Long> {
+    // Joins the session eagerly so the scheduler doesn't re-derive the date from routine tz for other-zone members.
     @Query(
         """
         SELECT d FROM standup_session_dispatch d
@@ -26,6 +27,7 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         pageable: Pageable,
     ): List<SessionDispatchSchema>
 
+    // Atomic UPDATE guarded by dm_status = 'PENDING' — a derived find-then-save here would race and double-DM.
     @Modifying
     @Transactional
     @Query(

@@ -43,12 +43,6 @@ private fun execute(
     return output to command.drainIntents()
 }
 
-/**
- * Characterization of the full submission path (`InteractionCommand.handleEvent()` down to the
- * effect queue) for every `view_submission` variant. Pins the per-flow interpretation rules that
- * the Phase 11 refactor must preserve; a deliberate behavior change must edit the matching case
- * here in the same commit.
- */
 class SubmissionPipelineCharacterizationTest :
     BehaviorSpec({
         given("MEETING_ADD_PARTICIPANT_SUBMIT") {
@@ -466,9 +460,6 @@ class SubmissionPipelineCharacterizationTest :
         }
 
         given("a SUBMIT detail type paired with a foreign submission variant") {
-            // Phase 11 policy change: the submission variant, not the envelope discriminator,
-            // decides the route. Before the SubmissionRouter this case was silently dropped by
-            // the detail-type-selected leaf's cast; a mapper never produces such a pair.
             `when`("CVE_SUBSCRIBE_SUBMIT carries an AddParticipant submission") {
                 val meetingUid = UUID.randomUUID()
                 val (output, effects) =

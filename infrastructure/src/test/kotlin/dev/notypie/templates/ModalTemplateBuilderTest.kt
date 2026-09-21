@@ -327,7 +327,6 @@ class ModalTemplateBuilderTest :
                     mrkdwn.text shouldContain "*Project sync*"
                     mrkdwn.text shouldContain "2026-04-20 10:00"
                     mrkdwn.text shouldContain "~ 2026-04-20 11:00"
-                    // host(1) + 3 attending invitees = 4/4
                     mrkdwn.text shouldContain "Participants: 4/4"
                     mrkdwn.text shouldContain "`$meetingUid`"
                 }
@@ -365,7 +364,6 @@ class ModalTemplateBuilderTest :
                 then("decliner is subtracted from accepted but stays in the denominator") {
                     val section = result.template[2] as SectionBlock
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
-                    // host(1) + 2 attending invitees = 3; total = host(1) + 3 invitees = 4
                     mrkdwn.text shouldContain "Participants: 3/4"
                 }
 
@@ -374,7 +372,6 @@ class ModalTemplateBuilderTest :
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
                     mrkdwn.text shouldContain "Declined:"
                     mrkdwn.text shouldContain "<@U2> — ${RejectReason.SCHEDULE_CONFLICT.showMessage}"
-                    // Only the decliner appears in the declined list.
                     mrkdwn.text.contains("<@U1>") shouldBe false
                 }
             }
@@ -470,7 +467,6 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("an inline host-actions block is appended right after the meeting section") {
-                    // header + divider + section + host-actions = 4 blocks (no inter-divider for single meeting)
                     result.template.size shouldBe 4
                     result.template[0].shouldBeInstanceOf<HeaderBlock>()
                     result.template[1].shouldBeInstanceOf<DividerBlock>()
@@ -481,8 +477,6 @@ class ModalTemplateBuilderTest :
                 then("the reschedule + add-participant + cancel buttons carry the routing values the parser expects") {
                     val actionsBlock =
                         result.template[3] as com.slack.api.model.block.ActionsBlock
-                    // block_id and action_id are suffixed with the meeting uid so multiple host rows
-                    // in one message don't collide (Slack rejects duplicate ids with invalid_blocks).
                     actionsBlock.blockId shouldBe "${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid"
                     val buttons =
                         actionsBlock.elements.map { it as com.slack.api.model.block.element.ButtonElement }
@@ -543,7 +537,6 @@ class ModalTemplateBuilderTest :
                         actionsBlocks
                             .flatMap { it.elements }
                             .map { (it as com.slack.api.model.block.element.ButtonElement).actionId }
-                    // 3 buttons (reschedule, add-participant, cancel) x 2 host rows
                     actionIds.size shouldBe 6
                     actionIds shouldBe actionIds.distinct()
                 }
@@ -631,7 +624,6 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("template has header + divider + (section+divider)*2 + section (7 blocks)") {
-                    // 1 header + 1 top divider + 3 sections + 2 inter-meeting dividers = 7
                     result.template.size shouldBe 7
                 }
 
@@ -659,7 +651,7 @@ class ModalTemplateBuilderTest :
 
                 then("renders only the first MAX meetings plus a truncation notice") {
                     val sectionCount = result.template.count { it is SectionBlock }
-                    sectionCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 1 // meetings + notice
+                    sectionCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 1
                     val lastBlock = result.template.last()
                     val lastSection = lastBlock.shouldBeInstanceOf<SectionBlock>()
                     val mrkdwn = lastSection.text.shouldBeInstanceOf<MarkdownTextObject>()
@@ -673,9 +665,6 @@ class ModalTemplateBuilderTest :
             }
 
             `when`("called with more meetings than MAX_MEETINGS_PER_LIST (viewer IS the host)") {
-                // Worst case for the 50-block budget: every row gets a Cancel actions block.
-                // Total = 1 header + 1 top-divider + N*(section+cancel) + (N-1) inter-dividers
-                //         + 1 overflow notice = 3N + 2.
                 val overflowSize = ModalTemplateBuilder.MAX_MEETINGS_PER_LIST + 3
                 val meetings = (1..overflowSize).map { createMeetingDto(title = "H$it") }
 
@@ -768,8 +757,6 @@ class ModalTemplateBuilderTest :
                 then("the view envelope carries modal metadata plus the tokenized private_metadata") {
                     json shouldContain "\"type\":\"modal\""
                     json shouldContain "\"callback_id\":\"decline_reason_modal\""
-                    // tokenized as meetingKey,MEETING_DECLINE_REASON,participantUserId,noticeChannel,noticeMessageTs
-                    // so DeclineReasonSubmissionContext can chat.update the notice DM.
                     json shouldContain
                         "\"private_metadata\":\"$meetingKey,MEETING_DECLINE_REASON," +
                         "$participantUserId,$noticeChannel,$noticeMessageTs\""
@@ -814,7 +801,6 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("the meeting-title section is omitted so the modal is dropdown-only") {
-                    // a blank title would otherwise render "**" which Slack renders as empty
                     (json.contains("\"type\":\"section\"")) shouldBe false
                     json shouldContain "\"type\":\"static_select\""
                 }
@@ -831,7 +817,6 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("private_metadata keeps all 5 positions so parser indices stay stable") {
-                    // trailing empty tokens are intentional — routingExtras[1..2] read as ""
                     json shouldContain
                         "\"private_metadata\":\"$meetingKey,MEETING_DECLINE_REASON," +
                         "$participantUserId,,\""
@@ -839,9 +824,6 @@ class ModalTemplateBuilderTest :
             }
 
             `when`("the emitted JSON is fed back through the Slack SDK's view deserializer") {
-                // Block Kit validator test: proves our hand-built JSON structurally matches
-                // Slack's official `View` schema. Guards against typos like missing "type",
-                // malformed element payloads, or option shapes Slack would reject at views.open.
                 val json =
                     templateBuilder.declineReasonModalViewJson(
                         meetingTitle = "Project sync",
@@ -874,7 +856,6 @@ class ModalTemplateBuilderTest :
                     val dropdown =
                         inputBlock.element as com.slack.api.model.block.element.StaticSelectElement
                     dropdown.actionId shouldBe DeclineReasonModalIds.ACTION_ID
-                    // All RejectReason entries except ATTENDING (8 options).
                     dropdown.options.size shouldBe 8
                 }
 

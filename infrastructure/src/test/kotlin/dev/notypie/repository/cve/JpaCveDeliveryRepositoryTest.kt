@@ -23,15 +23,6 @@ import java.time.Duration
 import java.time.LocalDateTime
 import javax.sql.DataSource
 
-/**
- * Exercises the [JpaCveDeliveryRepository.findUndelivered] entity-join JPQL against a real database.
- * Setup writes go through the self-transactional Jpa repositories because kotest container scopes run
- * outside the test transaction; rows therefore persist across blocks, so every topicKey/externalId/
- * userId is unique and each assertion filters the result to its own block's subscribers. The horizon
- * ([since]) and visibility cutoff ([doneBefore]) stay wide by default so every fixture is visible; the
- * two boundary blocks tighten them (aging created_at via raw SQL, since @CreationTimestamp ignores
- * supplied values on persist).
- */
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
 class JpaCveDeliveryRepositoryTest
@@ -48,9 +39,6 @@ class JpaCveDeliveryRepositoryTest
             val since = LocalDateTime.now().minusDays(7)
             val doneBefore = LocalDateTime.now().plusDays(1)
 
-            // @DataJpaTest specs share one cached context (and H2 db), and these rows are committed
-            // (not rolled back), so the claimable cve_event rows below would otherwise leak into
-            // JpaCveEventRepositoryTest's findClaimable assertion — clear them once this spec is done.
             afterSpec {
                 deliveryRepository.deleteAll()
                 subscriptionRepository.deleteAll()

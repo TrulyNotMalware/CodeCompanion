@@ -65,10 +65,7 @@ internal class ApprovalCallbackContext(
         )
     }
 
-    /**
-     * Routing type comes from [approvalContents.commandDetailType] (the single source of truth
-     * shared with the Slack button value); [commandDetailType] here is only [CommandOutput] metadata.
-     */
+    // approvalContents.commandDetailType drives routing; this param is only CommandOutput metadata.
     private fun sendNoticeToParticipants(
         commandDetailType: CommandDetailType = this.commandDetailType,
     ): List<CommandOutput> =

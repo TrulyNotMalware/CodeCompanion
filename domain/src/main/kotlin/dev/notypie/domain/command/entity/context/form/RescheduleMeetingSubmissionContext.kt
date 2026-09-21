@@ -6,11 +6,6 @@ import dev.notypie.domain.command.entity.context.SubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-/**
- * Executes the parsed reschedule submission from the modal opened by [RescheduleMeetingContext].
- * Date/time combining and rejection live in [RescheduleMeetingParsed]; the repository WHERE clause
- * still defends against a bogus uid downstream.
- */
 internal class RescheduleMeetingSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

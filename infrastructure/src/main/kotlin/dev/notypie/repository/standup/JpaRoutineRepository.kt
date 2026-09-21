@@ -43,12 +43,6 @@ interface JpaRoutineRepository : JpaRepository<RoutineSchema, Long> {
     )
     fun findAllActive(): List<RoutineSchema>
 
-    /**
-     * Soft-delete: flip `is_active` only when the row is currently active. Returning the row
-     * count lets callers distinguish "no such routine / already inactive" (0) from "OK" (1)
-     * with a single round-trip — same atomic-CAS pattern used elsewhere (see
-     * `markMeetingCanceled` in the meeting repository).
-     */
     @Modifying
     @Transactional
     @Query(
