@@ -28,9 +28,9 @@ extra["jacksonVersion"] = "3.2.2"
 extra["kotlinLoggingVersion"] = "8.0.4"
 extra["springAiVersion"] = "2.0.1"
 
-val kotestVersion: String by extra
-val mockkVersion: String by extra
-val kotlinLoggingVersion: String by extra
+val kotestVersion = extra["kotestVersion"] as String
+val mockkVersion = extra["mockkVersion"] as String
+val kotlinLoggingVersion = extra["kotlinLoggingVersion"] as String
 
 kotlin {
     jvmToolchain(25)

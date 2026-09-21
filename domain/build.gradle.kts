@@ -1,10 +1,12 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
-val jar: Jar by tasks
-val bootJar: BootJar by tasks
+tasks.named<BootJar>("bootJar") {
+    enabled = false
+}
 
-bootJar.enabled = false
-jar.enabled = true
+tasks.named<Jar>("jar") {
+    enabled = true
+}
 
 dependencies {
 }

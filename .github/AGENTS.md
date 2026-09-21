@@ -70,8 +70,9 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   references, but not an `ext { set(…) }` block, `by extra("…")` or `${rootProject.extra.get("…")}`
   (source: dependabot-core `gradle/lib/dependabot/gradle/file_parser.rb` `PROPERTY_REGEX` and
   `file_parser/property_value_finder.rb` declaration regexes).
-  The root build therefore declares `extra["name"] = "…"`, scripts read it as `val name: String by
-  extra` / `by rootProject.extra` and interpolate `$name`; keep new dependencies in that form or they
+  The root build therefore declares `extra["name"] = "…"`, scripts read it as `val name =
+  extra["name"] as String` / `rootProject.extra["name"] as String` (the `by extra` delegate is deprecated,
+  removal scheduled for Gradle 10) and interpolate `$name`; keep new dependencies in that form or they
   silently drop out of version updates. Version-less
   coordinates managed by the Spring Boot / Jackson / Spring AI / kotest BOMs move with the BOM
   version; the Boot BOM and Boot plugin share the `spring` group so they bump in one PR.

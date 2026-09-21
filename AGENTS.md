@@ -56,7 +56,8 @@ flow **application → infrastructure → domain** (and **application → domain
 - Dependency versions live in the root `extra["…"] = "…"` declarations (`kotestVersion`,
   `slackSdkVersion`, `mockkVersion`, `springBootVersion`, `jacksonVersion`, `kotlinLoggingVersion`,
   `springAiVersion`). Bump them there, not in module build files. Build scripts read them as
-  `val x: String by extra` (root) / `val x: String by rootProject.extra` (modules) and reference them
+  `val x = extra["x"] as String` (root) / `val x = rootProject.extra["x"] as String` (modules) — the
+  `by extra` delegate is deprecated (Gradle 9.7.1 warns; removal scheduled for Gradle 10) — and reference them
   as plain `$x` string templates — keep both forms: Dependabot's Gradle parser resolves `$x` against
   `extra["x"] = "…"` / `extra.set("x", "…")` declarations only; an `ext { set(…) }` block,
   `by extra("…")` initialisers and `${rootProject.extra.get("x")}` references are invisible to it.

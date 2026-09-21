@@ -1,13 +1,16 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
-val jar: Jar by tasks
-val bootJar: BootJar by tasks
-val springBootVersion: String by rootProject.extra
-val jacksonVersion: String by rootProject.extra
-val slackSdkVersion: String by rootProject.extra
+val springBootVersion = rootProject.extra["springBootVersion"] as String
+val jacksonVersion = rootProject.extra["jacksonVersion"] as String
+val slackSdkVersion = rootProject.extra["slackSdkVersion"] as String
 
-bootJar.enabled = false
-jar.enabled = true
+tasks.named<BootJar>("bootJar") {
+    enabled = false
+}
+
+tasks.named<Jar>("jar") {
+    enabled = true
+}
 
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))

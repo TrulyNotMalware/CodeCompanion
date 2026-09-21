@@ -1,10 +1,10 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 val jarName: String? = findProperty("jarName") as String?
-val springBootVersion: String by rootProject.extra
-val jacksonVersion: String by rootProject.extra
-val slackSdkVersion: String by rootProject.extra
-val springAiVersion: String by rootProject.extra
+val springBootVersion = rootProject.extra["springBootVersion"] as String
+val jacksonVersion = rootProject.extra["jacksonVersion"] as String
+val slackSdkVersion = rootProject.extra["slackSdkVersion"] as String
+val springAiVersion = rootProject.extra["springAiVersion"] as String
 
 tasks.named<BootJar>("bootJar") {
     if (!jarName.isNullOrBlank()) {
