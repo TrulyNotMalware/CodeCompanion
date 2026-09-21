@@ -1,13 +1,13 @@
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "4.1.0" apply false
+    id("org.springframework.boot") version "4.1.1" apply false
     id("java-library")
     id("java-test-fixtures")
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
-    kotlin("jvm") version "2.4.0"
-    kotlin("plugin.spring") version "2.4.0" apply false
-    kotlin("plugin.jpa") version "2.4.0" apply false
+    kotlin("jvm") version "2.4.20"
+    kotlin("plugin.spring") version "2.4.20" apply false
+    kotlin("plugin.jpa") version "2.4.20" apply false
 }
 
 java {
@@ -20,13 +20,13 @@ java {
 }
 
 // Dependabot's Gradle parser only reads `extra["x"] = "…"` / `extra.set` declarations, not an `ext {}` block.
-extra["kotestVersion"] = "6.2.0"
-extra["slackSdkVersion"] = "1.49.0"
+extra["kotestVersion"] = "6.2.5"
+extra["slackSdkVersion"] = "1.51.0"
 extra["mockkVersion"] = "1.14.11"
-extra["springBootVersion"] = "4.1.0"
-extra["jacksonVersion"] = "3.2.0"
+extra["springBootVersion"] = "4.1.1"
+extra["jacksonVersion"] = "3.2.2"
 extra["kotlinLoggingVersion"] = "8.0.4"
-extra["springAiVersion"] = "2.0.0"
+extra["springAiVersion"] = "2.0.1"
 
 val kotestVersion: String by extra
 val mockkVersion: String by extra

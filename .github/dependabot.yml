@@ -48,3 +48,13 @@ updates:
       timezone: "Asia/Seoul"
     commit-message:
       prefix: "chore :"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/application/src/main/resources/cdc/docker-compose"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    commit-message:
+      prefix: "chore :"

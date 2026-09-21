@@ -11,7 +11,7 @@ documented in `../AGENTS.md`; this file is the per-file index.
 | File | Description |
 |------|-------------|
 | `lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**`; source-path filtered, `!**/*.md` |
-| `simple_test_action.yaml` | Same triggers; runs `gradle-config/apply.sh`, then only the changed modules' tests via `dorny/paths-filter@v3` (full `test` when Gradle files change); uploads `build-reports.zip` on failure |
+| `simple_test_action.yaml` | Same triggers; runs `gradle-config/apply.sh`, then only the changed modules' tests via `dorny/paths-filter@v4` (full `test` when Gradle files change); uploads `build-reports.zip` on failure |
 | `security_check.yaml` | Push/PR to `main`, weekly, manual: `changes` gate (`dorny/paths-filter@v4`, `some-with-excludes`), CodeQL `java-kotlin` with a manual `./gradlew classes --no-daemon --no-build-cache` compile, Gradle dependency-graph submission + dependency review on PRs, gitleaks secret scan |
 | `deploy_action.yaml` | Merged PR to `main` only: build jar → multi-arch image → Harbor → `envsubst` apply to OKE → rollout + health check → rollback on failure |
 

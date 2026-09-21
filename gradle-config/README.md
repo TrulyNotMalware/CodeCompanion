@@ -1,7 +1,7 @@
 # OS-Specific Gradle Configuration
 
 This directory contains OS-optimized Gradle configuration files and automated setup scripts. Tuned for this
-repository's toolchain: Java 25 (Adoptium) + Kotlin 2.4.0 + Spring Boot 4.1.0 on Gradle 9.5.1.
+repository's toolchain: Java 25 (Adoptium) + Kotlin 2.4.20 + Spring Boot 4.1.1 on Gradle 9.7.1.
 
 The generated `gradle.properties` at the repository root is **git-ignored** — always edit the preset here
 and re-run `./apply.sh` rather than editing the generated file.
@@ -110,11 +110,11 @@ Fine-tune Kotlin compilation performance:
 ## Compatibility
 
 ### Supported Versions
-- **Gradle:** 9.5.1 (pinned by `gradle/wrapper/gradle-wrapper.properties`)
+- **Gradle:** 9.7.1 (pinned by `gradle/wrapper/gradle-wrapper.properties`)
 - **Java:** 25 — required, not just recommended. The root build pins an Adoptium toolchain and sets
   `sourceCompatibility`/`targetCompatibility` to 25, so an older JDK will not build this project.
-- **Kotlin:** 2.4.0 (declared by the Kotlin plugin in the root `build.gradle.kts`)
-- **Spring Boot:** 4.1.0
+- **Kotlin:** 2.4.20 (declared by the Kotlin plugin in the root `build.gradle.kts`)
+- **Spring Boot:** 4.1.1
 
 > The `kotlin.version` key inside the preset files is stale metadata; the Kotlin plugin version in the
 > root `build.gradle.kts` is what actually governs compilation.
@@ -131,7 +131,7 @@ Fine-tune Kotlin compilation performance:
 # OS별 Gradle 설정
 
 OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디렉토리입니다. 이 저장소의 툴체인 기준으로
-튜닝되어 있습니다: Java 25 (Adoptium) + Kotlin 2.4.0 + Spring Boot 4.1.0, Gradle 9.5.1.
+튜닝되어 있습니다: Java 25 (Adoptium) + Kotlin 2.4.20 + Spring Boot 4.1.1, Gradle 9.7.1.
 
 저장소 루트에 생성되는 `gradle.properties`는 **git-ignore 대상**입니다. 공유 설정을 바꿀 때는 생성된
 파일이 아니라 이 디렉토리의 프리셋을 수정하고 `./apply.sh`를 다시 실행하세요.
@@ -239,11 +239,11 @@ Kotlin 컴파일 성능 미세 조정:
 ## 호환성
 
 ### 지원 버전
-- **Gradle:** 9.5.1 (`gradle/wrapper/gradle-wrapper.properties`에 고정)
+- **Gradle:** 9.7.1 (`gradle/wrapper/gradle-wrapper.properties`에 고정)
 - **Java:** 25 — 권장이 아니라 필수입니다. 루트 빌드가 Adoptium 툴체인을 고정하고
   `sourceCompatibility`/`targetCompatibility`를 25로 설정하므로 하위 JDK로는 빌드되지 않습니다.
-- **Kotlin:** 2.4.0 (루트 `build.gradle.kts`의 Kotlin 플러그인이 선언)
-- **Spring Boot:** 4.1.0
+- **Kotlin:** 2.4.20 (루트 `build.gradle.kts`의 Kotlin 플러그인이 선언)
+- **Spring Boot:** 4.1.1
 
 > 프리셋 파일 안의 `kotlin.version` 값은 갱신되지 않은 메타데이터입니다. 실제 컴파일 버전은 루트
 > `build.gradle.kts`의 Kotlin 플러그인 버전이 결정합니다.

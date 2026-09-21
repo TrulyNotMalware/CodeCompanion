@@ -17,16 +17,16 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Security** — Slack request signature verification and retry de-duplication via a servlet filter.
 
 ## Tech Stack
-- **Language / Runtime**: Kotlin `2.4.0`, Java `25` (Adoptium toolchain)
-- **Framework**: Spring Boot `4.1.0` (Web on Jetty, Actuator, AOP/AspectJ, Data JPA)
-- **Build**: Gradle `9.5.1` (multi-module), ktlint `14.2.0`
+- **Language / Runtime**: Kotlin `2.4.20`, Java `25` (Adoptium toolchain)
+- **Framework**: Spring Boot `4.1.1` (Web on Jetty, Actuator, AOP/AspectJ, Data JPA)
+- **Build**: Gradle `9.7.1` (multi-module), ktlint `14.2.0`
 - **Messaging**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC outbox relay
 - **Persistence**: JPA / Hibernate — MariaDB (runtime, every profile), H2 (tests only)
-- **Slack**: Slack Java SDK `1.49.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
+- **Slack**: Slack Java SDK `1.51.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
 - **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
 - **Serialization**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
 - **Logging**: kotlin-logging `8.0.4`
-- **Testing**: Kotest `6.2.0` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
+- **Testing**: Kotest `6.2.5` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
 
 ## Architecture
 CodeCompanion follows a DDD-inspired, three-module layering. Dependencies flow **application → infrastructure → domain** (and **application → domain**). The `domain` module is framework-free Kotlin — no Spring, no Jakarta, no JPA. It is also **transport-agnostic**: `domain/command` carries zero Slack types. Inbound requests are normalized into a neutral model (`InboundCommand` / `InboundInteraction`) and outbound results are expressed as transport-neutral `OutboundMessage`s, so a future adapter (e.g. Discord) can be added without touching the domain.
@@ -165,16 +165,16 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **보안** — 서블릿 필터를 통한 슬랙 요청 서명 검증 및 재시도 중복 제거
 
 ## 기술 스택
-- **언어 / 런타임**: Kotlin `2.4.0`, Java `25` (Adoptium 툴체인)
-- **프레임워크**: Spring Boot `4.1.0` (Jetty 기반 Web, Actuator, AOP/AspectJ, Data JPA)
-- **빌드**: Gradle `9.5.1` (멀티 모듈), ktlint `14.2.0`
+- **언어 / 런타임**: Kotlin `2.4.20`, Java `25` (Adoptium 툴체인)
+- **프레임워크**: Spring Boot `4.1.1` (Jetty 기반 Web, Actuator, AOP/AspectJ, Data JPA)
+- **빌드**: Gradle `9.7.1` (멀티 모듈), ktlint `14.2.0`
 - **메시징**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC 아웃박스 릴레이
 - **영속성**: JPA / Hibernate — MariaDB(런타임, 모든 프로파일), H2(테스트 전용)
-- **슬랙**: Slack Java SDK `1.49.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
+- **슬랙**: Slack Java SDK `1.51.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
 - **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
 - **직렬화**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
 - **로깅**: kotlin-logging `8.0.4`
-- **테스트**: Kotest `6.2.0` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
+- **테스트**: Kotest `6.2.5` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
 
 ## 아키텍처
 CodeCompanion은 DDD 기반의 3개 모듈 계층 구조를 따릅니다. 의존성은 **application → infrastructure → domain** (및 **application → domain**) 방향으로만 흐릅니다. `domain` 모듈은 프레임워크에 의존하지 않는 순수 Kotlin입니다 — Spring·Jakarta·JPA 없음. 또한 **전송 계층에 비의존적(transport-agnostic)**입니다: `domain/command`에는 Slack 타입이 전혀 없습니다. 인바운드 요청은 중립 모델(`InboundCommand` / `InboundInteraction`)로 정규화되고, 아웃바운드 결과는 전송 중립적인 `OutboundMessage`로 표현되므로, 도메인을 건드리지 않고도 향후 어댑터(예: Discord)를 추가할 수 있습니다.

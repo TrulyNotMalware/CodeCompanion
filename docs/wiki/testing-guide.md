@@ -86,7 +86,7 @@ _type: guide · updated: 2026-08-28_
 
 - 루트 `build.gradle.kts`가 모든 `Test` 태스크에 `-Xmx4g`, `-XX:+EnableDynamicAgentLoading`,
   `--add-opens java.base/java.lang`·`java.base/java.util`(MockK 요구)을 건다. 모듈에서 덮어쓰지 않는다.
-  버전은 `extra["kotestVersion"] = "6.2.0"`, `extra["mockkVersion"] = "1.14.11"`.
+  버전은 `extra["kotestVersion"] = "6.2.5"`, `extra["mockkVersion"] = "1.14.11"`.
 - CI(`.github/workflows/simple_test_action.yaml`)는 `feature/*` 푸시에서 **바뀐 모듈만** `:module:test`로 돌리고,
   `*.gradle.kts`/`gradle/**`가 바뀌면 전체 `test`를 돈다. `**/*.md`는 트리거에서 제외된다.
 

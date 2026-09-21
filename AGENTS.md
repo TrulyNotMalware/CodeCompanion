@@ -16,8 +16,8 @@ flow **application → infrastructure → domain** (and **application → domain
 | File | Description |
 |------|-------------|
 | `settings.gradle.kts` | Declares root project `CodeCompanion` and the three modules |
-| `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.0, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
-| `gradlew` / `gradlew.bat` | Gradle 9.5.1 wrapper entry points |
+| `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.20, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
+| `gradlew` / `gradlew.bat` | Gradle 9.7.1 wrapper entry points |
 | `run` | Bash launcher for the built Spring Boot jar (`./run -e prod build/libs/app.jar`); handles profile, heap, GC, JMX, heap dump, GC log |
 | `.editorconfig` | Formatting contract enforced by ktlint (120 cols, LF, 4-space indent, wildcard imports allowed) |
 | `.gitmessage` | Korean commit-message template — `<타입> : <제목>`, types: `feat`, `fix`, `docs`, `test`, `refact`, `style`, `chore` |
@@ -93,15 +93,15 @@ Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.
 ## Dependencies
 
 ### External
-- Kotlin 2.4.0 / Java 25 (Adoptium toolchain) — language and runtime
-- Spring Boot 4.1.0 — Web on **Jetty** (Tomcat excluded; Undertow unsupported on Boot 4), Actuator,
+- Kotlin 2.4.20 / Java 25 (Adoptium toolchain) — language and runtime
+- Spring Boot 4.1.1 — Web on **Jetty** (Tomcat excluded; Undertow unsupported on Boot 4), Actuator,
   AOP/AspectJ, Data JPA
 - Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC — outbox relay
 - MariaDB (runtime) / H2 (local + tests) — persistence
-- Slack Java SDK 1.49.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
+- Slack Java SDK 1.51.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
 - Jackson 3 (`tools.jackson`, BOM 3.2.0) — serialization, application/infrastructure only
 - Spring AI 2.0.0 — MCP server starter (streamable HTTP on `/mcp`)
-- Kotest 6.2.0 + MockK 1.14.11 — testing
+- Kotest 6.2.5 + MockK 1.14.11 — testing
 - ktlint 14.2.0 — formatting/lint gate
 
 ### External Services

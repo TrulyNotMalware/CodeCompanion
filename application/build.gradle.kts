@@ -33,7 +33,7 @@ dependencies {
 
     implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("javax.websocket:javax.websocket-api:1.1")
-    runtimeOnly("org.glassfish.tyrus.bundles:tyrus-standalone-client:1.20")
+    runtimeOnly("org.glassfish.tyrus.bundles:tyrus-standalone-client:1.22")
 
     testImplementation(testFixtures(project(":domain")))
     testFixturesImplementation(testFixtures(project(":domain")))

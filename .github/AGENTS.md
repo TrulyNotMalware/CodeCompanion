@@ -15,7 +15,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 | `workflows/simple_test_action.yaml` | Path-filtered module tests on the same branches; applies `gradle-config/apply.sh` first; uploads `build-reports.zip` on failure |
 | `workflows/security_check.yaml` | On push/PR to `main`, weekly and on demand: CodeQL (`java-kotlin`, manual Gradle compile), Gradle dependency-graph submission + dependency review on PRs, gitleaks secret scan |
 | `workflows/deploy_action.yaml` | On merged PR to `main`: build jar → multi-arch Docker image → push to Harbor → apply k8s manifests to Oracle OKE → rollout + health check → auto-rollback on failure |
-| `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`) and `docker` (`/application`); commit prefix `chore :` to match `.gitmessage` |
+| `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage` |
 | `../.gitleaks.toml` | Repo-root gitleaks config (auto-loaded by the CLI): extends the default rules and allowlists the placeholder-valued sample Secret in `cdc/k8s/yamls/mariadb/mariadb-config.yaml` |
 
 ## Subdirectories

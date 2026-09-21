@@ -2,14 +2,14 @@
 
 _type: guide · updated: 2026-09-21_
 
-> JDK 25 · Gradle 9.5.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
+> JDK 25 · Gradle 9.7.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
 ## 툴체인과 Gradle 프리셋
 
 - **JDK 25 (Adoptium)는 필수다.** 루트 `build.gradle.kts`가 `toolchain { languageVersion = 25, vendor = ADOPTIUM }`과
   `sourceCompatibility`/`targetCompatibility = 25`를 고정하고, `settings.gradle.kts`의 foojay resolver가 없는 JDK를 받아
-  온다. Kotlin 2.4.0 · Spring Boot 4.1.0 · ktlint 14.2.0의 원본은 루트 빌드의 `plugins` 블록이다.
-- Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.5.1로 고정한다. 항상 `./gradlew`를 쓴다.
+  온다. Kotlin 2.4.20 · Spring Boot 4.1.1 · ktlint 14.2.0의 원본은 루트 빌드의 `plugins` 블록이다.
+- Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.7.1로 고정한다. 항상 `./gradlew`를 쓴다.
 - `gradle.properties`는 **생성물이며 git-ignored**다. `./gradle-config/apply.sh`가 `uname -s`로 OS를 판별해
   `gradle-config/gradle-{macos,linux}.properties` 중 하나를 루트로 복사하고, 프리셋이 없는 OS(Windows 등)와
   `apply.sh common`은 `gradle-common.properties`로 폴백한다. 공유 빌드 설정을 바꿀 때는 루트 파일이 아니라 프리셋을 고치고
@@ -125,7 +125,7 @@ _type: guide · updated: 2026-09-21_
 
 - 배포 빌드는 `:application:build -x test -PjarName=…`, 이미지는 QEMU/Buildx로 `linux/amd64,linux/arm64`. 배포 전에 현재 이미지를
   기록해 두고 실패하면 `kubectl set image`로 되돌린다 — `Backup current deployment` 단계를 지우면 롤백이 조용히 no-op이 된다.
-- Dependabot: gradle(`/`) · github-actions(`/`) · docker(`/application`) 세 생태계, 매주 월 09:00 KST, 커밋 프리픽스 `chore :`.
+- Dependabot: gradle(`/`) · github-actions(`/`) · docker(`/application`) · docker-compose(CDC compose 디렉터리) 네 생태계, 매주 월 09:00 KST, 커밋 프리픽스 `chore :`.
   Kotlin 플러그인 3종 · Spring · 테스트 라이브러리는 그룹으로 묶여 한 PR로 온다. 루트 빌드의 버전은 `extra["x"] = "…"` 형태여야
   Dependabot이 읽는다. `dependabot/**` 브랜치 패턴이 lint·test 워크플로에 있어야 그 PR이 검증된다.
 - 워크플로별 편집 체크리스트(actionlint, gitleaks 로컬 재현, `envsubst` 렌더 확인)는
@@ -155,7 +155,7 @@ _type: guide · updated: 2026-09-21_
   즉 `hotfix/*` 같은 이름의 브랜치는 테스트 없이 머지·배포될 수 있다.
 - `src/main/resources` 아래는 **전부 jar에 들어간다.** `processResources`에 exclude가 없어 `AGENTS.md`, `k8s/`·`cdc/` README와
   매니페스트, `application-local.yaml`까지 `BOOT-INF/classes/`에 포함된다(기존 빌드 산출물로 확인). 거기에 실제 값을 두지 않는 이유다.
-- `deploy_action.yaml`의 `dorny/paths-filter@v3` 블록에는 `!` 패턴을 넣지 않는다(무효). 마크다운 제외는 워크플로 레벨 `paths`에만.
+- `deploy_action.yaml`의 `dorny/paths-filter@v4` 블록에는 `!` 패턴을 넣지 않는다(무효). 마크다운 제외는 워크플로 레벨 `paths`에만.
 
 ## 근거
 
