@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
 
 # .github
 
@@ -11,8 +11,8 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 ## Key Files
 | File | Description |
 |------|-------------|
-| `workflows/lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**` |
-| `workflows/simple_test_action.yaml` | Path-filtered module tests on the same branches; applies `gradle-config/apply.sh` first; uploads `build-reports.zip` on failure |
+| `workflows/lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**` and on every PR into `main` |
+| `workflows/simple_test_action.yaml` | Dependency-aware module tests on the same triggers; applies `gradle-config/apply.sh` first; uploads `build-reports.zip` on failure |
 | `workflows/security_check.yaml` | On push/PR to `main`, weekly and on demand: CodeQL (`java-kotlin`, manual Gradle compile), Gradle dependency-graph submission + dependency review on PRs, gitleaks secret scan |
 | `workflows/deploy_action.yaml` | On merged PR to `main`: build jar → multi-arch Docker image → push to Harbor → apply k8s manifests to Oracle OKE → rollout + health check → auto-rollback on failure |
 | `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage` |
@@ -34,7 +34,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 - **Do not add `!` patterns to the `dorny/paths-filter` block** in `deploy_action.yaml`. Under the
   action's default `predicate-quantifier: 'some'` a negated pattern is a no-op (patterns are OR-ed),
   `'every'` would break the two-pattern `gradle` filter, and `'some-with-excludes'` — which has the
-  semantics we want — only exists in paths-filter **v4**, while the workflow pins `@v3`. The
+  semantics we want — is a paths-filter **v4** feature that this block does not need. The
   workflow-level `paths:` gate already makes the job unreachable for a docs-only merge, so the
   exclusion belongs there and only there.
 - `security_check.yaml` is the one place that uses `dorny/paths-filter@v4` with
@@ -85,9 +85,12 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 - Dependabot pushes to `dependabot/**`, which is why that pattern is in the lint and test branch
   lists — remove it and Dependabot PRs arrive unverified. Actions-only bumps touch nothing under the
   path filters and therefore trigger only `security_check.yaml`, which is the intended behaviour.
-- `simple_test_action.yaml` runs **only the changed modules'** tests via `dorny/paths-filter`, and falls
-  back to the full `test` task when Gradle files change. If you add a module, extend both the `filters`
-  block and the `Collect test modules` script.
+- `simple_test_action.yaml` selects test modules via `dorny/paths-filter` **following the dependency
+  direction** (application → infrastructure → domain): a `domain` or Gradle change runs the full `test`
+  task, `infrastructure` runs its own suite plus `:application:test`, `application` runs only itself. If
+  you add a module, extend both the `filters` block and the `Collect test modules` script. On
+  `pull_request` events the action lists files through the API, which is why the workflow grants
+  `pull-requests: read`; the same scope is granted in `deploy_action.yaml` for its `check-changes` job.
 - `deploy_action.yaml` triggers on `pull_request: closed` and gates every job on
   `github.event.pull_request.merged == true` — a *closed but unmerged* PR must not deploy. Preserve that
   guard.
@@ -96,9 +99,14 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 - **Rollback is real:** the deploy job records the previous image before applying and restores it via
   `kubectl set image` on any failure. Do not remove the `Backup current deployment` step — without it
   the rollback silently no-ops.
-- Health verification hits `https://api.notypie.dev/api/slack/actuator/health` with 10 retries. Changing
-  the actuator base path or the ingress host requires updating `HEALTH_CHECK_ENDPOINT` /
-  `K8S_APP_INGRESS_HOST` here.
+- Health verification hits `https://api.notypie.dev/api/slack/actuator/health` with 10 retries and
+  requires HTTP 200. `HEALTH_CHECK_ENDPOINT` carries **no leading slash** — the step joins it to the host
+  with `/`, and the ingress answers a doubled slash with 400. Changing the actuator base path or the
+  ingress host requires updating `HEALTH_CHECK_ENDPOINT` / `K8S_APP_INGRESS_HOST` here. Pod readiness is
+  counted from the `Ready` condition, not `phase == Running`.
+- The deploy build runs the full `./gradlew build` (all module tests + `ktlintCheck`) on purpose: a PR can
+  be merged while its checks are still pending, so this build is the last gate before an image is pushed.
+  Do not reintroduce `-x test`.
 - The image is built for `linux/amd64,linux/arm64` (the target cluster runs ARM instances) via QEMU +
   Buildx, with `provenance: false` and `sbom: false`. Dropping the ARM platform breaks the deployment.
 - Java 25 (temurin) with Gradle caching, plus `gradle/actions/wrapper-validation` in the deploy path.
@@ -106,7 +114,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 
 ### Testing Requirements
 Workflows are only exercised by pushing. Before changing one:
-- reproduce the command locally (`./gradlew ktlintCheck`, `./gradlew :application:build -x test -PjarName=...`,
+- reproduce the command locally (`./gradlew ktlintCheck`, `./gradlew build -PjarName=...`,
   `./gradlew classes --no-daemon --no-build-cache` for the CodeQL compile step);
 - lint the YAML with `actionlint` (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color`);
 - after touching `.gitleaks.toml`, replay the weekly scan locally:
@@ -117,11 +125,11 @@ Workflows are only exercised by pushing. Before changing one:
   `security_check.yaml` can be exercised without a merge via `workflow_dispatch` or a PR to `main`.
 
 ### Common Patterns
-- `dorny/paths-filter` for change detection, output-driven job gating (`@v3` in test/deploy, `@v4` in
-  security).
-- GitHub Deployments API (`actions/github-script@v8`) for `in_progress` / `success` / `failure` status.
+- `dorny/paths-filter@v4` for change detection, output-driven job gating.
+- GitHub Deployments API (`actions/github-script@v9`) for `in_progress` / `success` / `failure` status.
 - Environment configuration hoisted into the workflow-level `env:` block rather than repeated inline.
-- Least-privilege `permissions:` declared per job; the workflow default is `contents: read`.
+- Least-privilege `permissions:`: every workflow declares a `contents: read` baseline, and the jobs that run
+  paths-filter on `pull_request` events add `pull-requests: read` at job level so the other jobs never inherit it.
 
 ## Dependencies
 

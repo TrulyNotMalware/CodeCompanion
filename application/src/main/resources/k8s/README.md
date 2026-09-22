@@ -65,6 +65,9 @@ Configure:
 
 ## Deployment Steps
 
+Every command below targets the `api-service` namespace explicitly — the deploy workflow does the same, and
+none of the manifests set `metadata.namespace`.
+
 1. **Configure Secret**
    ```bash
    # Edit secret.yaml with your actual credentials
@@ -73,26 +76,26 @@ Configure:
 
 2. **Apply ConfigMap and Secret**
    ```bash
-   kubectl apply -f configmap.yaml
-   kubectl apply -f secret.yaml
+   kubectl apply -n api-service -f configmap.yaml
+   kubectl apply -n api-service -f secret.yaml
    ```
 
 3. **Deploy Application**
    ```bash
-   kubectl apply -f deployment.yaml
-   kubectl apply -f service.yaml
+   kubectl apply -n api-service -f deployment.yaml
+   kubectl apply -n api-service -f service.yaml
    ```
 
 4. **Set up Routing** (Choose one)
 
    For Gateway API:
    ```bash
-   kubectl apply -f route/httpRoute.yaml
+   kubectl apply -n api-service -f route/httpRoute.yaml
    ```
 
    For NGINX Ingress:
    ```bash
-   kubectl apply -f route/ingress.yaml
+   kubectl apply -n api-service -f route/ingress.yaml
    ```
 
 ## Prerequisites
@@ -220,26 +223,26 @@ k8s/
 
 2. **ConfigMap 및 Secret 적용**
    ```bash
-   kubectl apply -f configmap.yaml
-   kubectl apply -f secret.yaml
+   kubectl apply -n api-service -f configmap.yaml
+   kubectl apply -n api-service -f secret.yaml
    ```
 
 3. **애플리케이션 배포**
    ```bash
-   kubectl apply -f deployment.yaml
-   kubectl apply -f service.yaml
+   kubectl apply -n api-service -f deployment.yaml
+   kubectl apply -n api-service -f service.yaml
    ```
 
 4. **라우팅 설정** (하나를 선택)
 
    Gateway API의 경우:
    ```bash
-   kubectl apply -f route/httpRoute.yaml
+   kubectl apply -n api-service -f route/httpRoute.yaml
    ```
 
    NGINX Ingress의 경우:
    ```bash
-   kubectl apply -f route/ingress.yaml
+   kubectl apply -n api-service -f route/ingress.yaml
    ```
 
 ## 사전 요구사항

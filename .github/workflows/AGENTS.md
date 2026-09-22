@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # .github/workflows
 
@@ -10,10 +10,10 @@ documented in `../AGENTS.md`; this file is the per-file index.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**`; source-path filtered, `!**/*.md` |
-| `simple_test_action.yaml` | Same triggers; runs `gradle-config/apply.sh`, then only the changed modules' tests via `dorny/paths-filter@v4` (full `test` when Gradle files change); uploads `build-reports.zip` on failure |
+| `lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**` and on PRs into `main`; source-path filtered, `!**/*.md` |
+| `simple_test_action.yaml` | Same triggers; runs `gradle-config/apply.sh`, then the changed modules' tests **and their dependants'** via `dorny/paths-filter@v4` (full `test` when Gradle or `domain` files change); uploads `build-reports.zip` on failure |
 | `security_check.yaml` | Push/PR to `main`, weekly, manual: `changes` gate (`dorny/paths-filter@v4`, `some-with-excludes`), CodeQL `java-kotlin` with a manual `./gradlew classes --no-daemon --no-build-cache` compile, Gradle dependency-graph submission + dependency review on PRs, gitleaks secret scan |
-| `deploy_action.yaml` | Merged PR to `main` only: build jar → multi-arch image → Harbor → `envsubst` apply to OKE → rollout + health check → rollback on failure |
+| `deploy_action.yaml` | Merged PR to `main` only: full `build` (tests included) → multi-arch image → Harbor → `envsubst` apply to OKE (`-n api-service`) → rollout + Ready-pod count + health check → rollback on failure |
 
 ## For AI Agents
 

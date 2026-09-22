@@ -12,6 +12,8 @@ spec:
       labels:
         app: code-companion-deploy
     spec:
+      # Must exceed spring.lifecycle.timeout-per-shutdown-phase (10s) so graceful shutdown can finish.
+      terminationGracePeriodSeconds: 30
       imagePullSecrets:
         - name: dockercred
       containers:
@@ -20,6 +22,32 @@ spec:
           ports:
             - containerPort: 80
           imagePullPolicy: IfNotPresent
+          # Liveness/readiness groups come from management.endpoint.health.probes.enabled in application-prod.yaml.
+          # Without readiness the Service keeps routing to Pods that are still booting or already draining.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 80
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 80
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
           volumeMounts:
             - name: tz-seoul
               mountPath: /etc/localtime

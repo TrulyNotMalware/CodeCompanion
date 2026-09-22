@@ -5,6 +5,15 @@ on:
     # ktlint has nothing to say about markdown, so docs-only pushes should not burn a CI run.
     paths:
       ["application/**", "domain/**", "infrastructure/**", "*.gradle.kts", "!**/*.md"]
+  # Every PR into main gets linted regardless of the source branch name; the push trigger above
+  # only covers feature-style prefixes, so hotfix/, chore/, refactor/ branches used to reach main
+  # without a single ktlint run. No `paths` filter here on purpose: a branch-protection required
+  # check that never triggers (docs-only PR) stays pending forever and blocks the merge.
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
 
 jobs:
   lint:

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # k8s
 
@@ -13,9 +13,9 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 30`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1Gi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
-| `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `ACTUATOR_BASE_PATH` |
+| `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `ACTUATOR_BASE_PATH`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder) |
 | `secret.yaml` | Opaque Secret `code-companion-secret` with placeholder values for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN` (values must be base64) |
 
 ## Subdirectories
@@ -27,29 +27,37 @@ adds what an agent editing the manifests needs to know.
 
 ### Working In This Directory
 - **CI applies `deployment.yaml` only.** `.github/workflows/deploy_action.yaml` runs
-  `envsubst < application/src/main/resources/k8s/deployment.yaml | kubectl apply -f -` with
+  `envsubst < application/src/main/resources/k8s/deployment.yaml | kubectl apply -n api-service -f -` with
   `IMAGE_NAME=<registry>/bot/code-companion:<commit sha>`. ConfigMap, Secret, Service and route objects are
   never touched by CI — a new key in `configmap.yaml`/`secret.yaml` needs a manual `kubectl apply` before
   the next rollout, and the manifest in git is only a template of what the cluster holds.
 - **`envsubst` is called with no variable list**, so every `$NAME` / `${NAME}` in `deployment.yaml` is
   substituted (unset ones become empty). `$IMAGE_NAME` is the only intended placeholder; do not introduce a
   literal `$` anywhere else in that file.
-- **No manifest sets `metadata.namespace`.** The workflow's rollout, readiness and rollback steps target
-  `api-service`, but its apply step passes no `-n`, so the kubeconfig context namespace must already be
-  `api-service` for the two to agree.
+- **No manifest sets `metadata.namespace`.** Every workflow step, including the apply, passes
+  `-n api-service`, so the kubeconfig context namespace does not matter; a manual `kubectl apply` of the
+  other manifests must pass the same `-n`.
 - **Env-var coverage vs `application-prod.yaml`.** Keys without a default there must come from these two
-  manifests: the five `SQL_*` keys, `HIBERNATE_DEFAULT_BATCH_SIZE`, `ACTUATOR_BASE_PATH`, `SLACK_API_TOKEN`,
-  `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. The sample manifests omit `SLACK_SIGNING_SECRET` (belongs in
+  manifests: the five `SQL_*` keys, `HIBERNATE_DEFAULT_BATCH_SIZE`, `ACTUATOR_BASE_PATH`, `KAFKA_BOOTSTRAP_SERVERS`,
+  `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. The sample manifests omit `SLACK_SIGNING_SECRET` (belongs in
   `secret.yaml`) and `SLACK_CDC_TOPIC` (belongs in `configmap.yaml`); a Pod started from them as-is fails
   property binding. Everything else the profile reads (`MCP_ENABLED`, `MCP_SIGNING_SECRET`, `SIDECAR_*`,
   `AI_PROVIDER`, `GITHUB_TOKEN`, `GITHUB_RELEASES_PER_PAGE`, `NVD_*`, `CVE_COLLECTOR_*`) has a default and is
   opt-in. `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are baked in by `application/Dockerfile`.
-- `spring.kafka.bootstrap-servers` in `application-prod.yaml` is a literal placeholder, not an env
-  reference; it cannot be supplied from here and has to be edited in the profile file.
+- `spring.kafka.bootstrap-servers` in `application-prod.yaml` is `${KAFKA_BOOTSTRAP_SERVERS}` with no
+  default. Property binding only fails when the env var is *absent*; the `YOUR_KAFKA_HOST:9092` placeholder
+  in `configmap.yaml` binds fine and then fails at Kafka client construction, so replace it in-cluster
+  before the first rollout.
 - **Secret vs ConfigMap split:** anything credential-like goes in `secret.yaml`, everything else in
   `configmap.yaml`. Values in git stay placeholders; the deployed Secret is edited in-cluster. Note that
   `.gitleaks.toml` allowlists only the CDC MariaDB sample Secret, not this one — the `YOUR_*` placeholders
   pass today, but base64-looking sample values would trip the `secret-scan` job.
+- **Probes and the shutdown budget go together.** `spring.lifecycle.timeout-per-shutdown-phase` is 10s in
+  `application-prod.yaml`, so `terminationGracePeriodSeconds` must stay above it; the readiness probe is what
+  pulls a draining Pod out of the Service, and `management.endpoint.health.probes.enabled: true` in the prod
+  profile is what makes `/actuator/health/{liveness,readiness}` exist. The Dockerfile's `-XX:MaxRAMPercentage=50.0`
+  keeps the heap (1Gi) inside the 1Gi request so the Pod is not the first eviction candidate; raise the
+  request, the limit and the percentage together. The startup probe allows 36 × 5s = 3 minutes.
 - Port 80 is fixed in three places that must move together: `containerPort` here, `server.port` in
   `application-prod.yaml`, and `SERVER_PORT` in `application/Dockerfile`. `service.yaml` targets it by number.
 - `imagePullPolicy: IfNotPresent` is safe only because the workflow tags every image with the commit sha;

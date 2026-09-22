@@ -264,8 +264,8 @@ else
             # For local/dev, use smaller initial memory
             INITIAL_MEMORY="${MEMORY%g}g"
             if [[ "$MEMORY" =~ ^([0-9]+)g$ ]]; then
-                local mem_gb="${BASH_REMATCH[1]}"
-                local initial_gb=$((mem_gb / 4))
+                mem_gb="${BASH_REMATCH[1]}"
+                initial_gb=$((mem_gb / 4))
                 if [ $initial_gb -lt 1 ]; then
                     initial_gb=1
                 fi

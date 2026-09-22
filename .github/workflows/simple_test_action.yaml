@@ -14,8 +14,19 @@ on:
       - "gradle/**"
       # No test covers markdown; a docs-only push should not start a build.
       - "!**/*.md"
+  # Every PR into main runs the tests regardless of the source branch name; the push trigger above
+  # only covers feature-style prefixes, so hotfix/, chore/, refactor/ branches used to reach main
+  # without a single test run. No `paths` filter here on purpose: a branch-protection required check
+  # that never triggers (docs-only PR) stays pending forever and blocks the merge; the paths-filter
+  # step below still selects zero modules for such a PR, so the job finishes in seconds.
+  pull_request:
+    branches:
+      - "main"
 permissions:
   contents: read
+  # dorny/paths-filter lists the PR's files through the API on pull_request events and fails the
+  # step without this scope (on push events it diffs locally and does not need it).
+  pull-requests: read
 
 jobs:
   test:
@@ -51,23 +62,20 @@ jobs:
           chmod +x gradle-config/apply.sh
           ./gradle-config/apply.sh
 
+      # Dependencies flow application -> infrastructure -> domain, so a change must also run the
+      # tests of every module that depends on it: a domain contract change is only caught by the
+      # infrastructure/application suites that consume it.
       - name: Collect test modules
         id: collect
         run: |
-          if [ "${{ steps.changes.outputs.gradle }}" == "true" ]; then
+          if [ "${{ steps.changes.outputs.gradle }}" == "true" ] || [ "${{ steps.changes.outputs.domain }}" == "true" ]; then
             echo "modules=test" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.changes.outputs.infrastructure }}" == "true" ]; then
+            echo "modules=:infrastructure:test :application:test" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.changes.outputs.application }}" == "true" ]; then
+            echo "modules=:application:test" >> $GITHUB_OUTPUT
           else
-            modules=""
-            if [ "${{ steps.changes.outputs.application }}" == "true" ]; then
-              modules="$modules :application:test"
-            fi
-            if [ "${{ steps.changes.outputs.domain }}" == "true" ]; then
-              modules="$modules :domain:test"
-            fi
-            if [ "${{ steps.changes.outputs.infrastructure }}" == "true" ]; then
-              modules="$modules :infrastructure:test"
-            fi
-            echo "modules=$modules" >> $GITHUB_OUTPUT
+            echo "modules=" >> $GITHUB_OUTPUT
           fi
 
       - name: Run selected tests

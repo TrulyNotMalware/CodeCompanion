@@ -25,7 +25,9 @@ permissions:
 
 env:
   K8S_APP_INGRESS_HOST: https://api.notypie.dev
-  HEALTH_CHECK_ENDPOINT: /api/slack/actuator/health
+  # No leading slash: the health-check step joins host and path with "/", and a doubled slash
+  # is rejected by the ingress with HTTP 400.
+  HEALTH_CHECK_ENDPOINT: api/slack/actuator/health
 
   K8S_NAMESPACE: api-service
   K8S_DEPLOYMENT_NAME: code-companion-deploy
@@ -42,6 +44,11 @@ jobs:
   check-changes:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    # dorny/paths-filter lists the merged PR's files through the API on pull_request events and
+    # fails without this scope; granted here only so the build/deploy jobs do not inherit it.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       should-deploy: ${{ steps.determine.outputs.should-deploy }}
       modules-changed: ${{ steps.determine.outputs.modules }}
@@ -52,10 +59,9 @@ jobs:
         with:
           # No '!' patterns here on purpose. With the default predicate-quantifier ('some') a
           # negated pattern is a no-op, and 'every' would break the two-pattern gradle filter
-          # below; 'some-with-excludes' would do what we want but only exists in paths-filter v4.
-          # It is not needed: the workflow-level `paths:` gate above already guarantees this job
-          # only runs when a non-markdown file changed, so should-deploy cannot be true for a
-          # docs-only merge.
+          # below; 'some-with-excludes' would do what we want but is not needed: the
+          # workflow-level `paths:` gate above already guarantees this job only runs when a
+          # non-markdown file changed, so should-deploy cannot be true for a docs-only merge.
           filters: |
             app:
               - 'application/**'
@@ -125,8 +131,17 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
 
+      - name: Apply Gradle configuration for CI
+        run: |
+          chmod +x gradle-config/apply.sh
+          ./gradle-config/apply.sh
+
+      # Full `build` (every module's tests + ktlintCheck) on purpose: this is the artifact that
+      # reaches production, and a PR can be merged with the required checks still pending, so the
+      # deploy build is the last gate. `:application:build` alone would skip the domain and
+      # infrastructure suites.
       - name: Build application
-        run: ./gradlew :application:build -x test -PjarName=${{ env.JAR_FILE_NAME }} --parallel
+        run: ./gradlew build -PjarName=${{ env.JAR_FILE_NAME }} --parallel
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=4"
 
@@ -224,7 +239,7 @@ jobs:
       - name: Apply kubernetes manifests
         run: |
           export IMAGE_NAME="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.STATIC_DOCKER_TAG }}"
-          envsubst < application/src/main/resources/k8s/deployment.yaml | kubectl apply -f -
+          envsubst < application/src/main/resources/k8s/deployment.yaml | kubectl apply -n ${{ env.K8S_NAMESPACE }} -f -
 
       - name: Wait for deployment rollout
         run: |
@@ -232,11 +247,14 @@ jobs:
 
       - name: Verify deployment health
         run: |
-          READY_PODS=$(kubectl get pods -l app=${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | wc -w)
+          # Count Ready pods, not Running ones: a pod that is still booting (or crash-looping
+          # after a failed context load) is Running but never becomes Ready.
+          READY_PODS=$(kubectl get pods -l app=${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\n"}{end}{end}' | grep -c '^True$' || true)
           DESIRED_REPLICAS=$(kubectl get deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.spec.replicas}')
           echo "Ready pods: $READY_PODS, Desired: $DESIRED_REPLICAS"
 
-          if [ "$READY_PODS" -ne "$DESIRED_REPLICAS" ]; then
+          # -lt, not -ne: a terminating pod from the previous ReplicaSet can still count as Ready for a moment.
+          if [ "$READY_PODS" -lt "$DESIRED_REPLICAS" ]; then
             echo "Deployment verification failed."
             exit 1
           fi
@@ -247,14 +265,16 @@ jobs:
         run: |
           echo "Testing health endpoint"
           success=false
+          health_url="${{ env.K8S_APP_INGRESS_HOST }}/${{ env.HEALTH_CHECK_ENDPOINT }}"
           for i in {1..10}; do
-            if curl -f -s "${{ env.K8S_APP_INGRESS_HOST }}/${{ env.HEALTH_CHECK_ENDPOINT }}" > /dev/null; then
+            http_code=$(curl -o /dev/null -s -m 10 -w "%{http_code}" "$health_url" || true)
+            if [ "$http_code" = "200" ]; then
               echo "Health check successful"
               success=true
               break
             fi
-          echo "Attempt $i failed, HTTP code: $(curl -o /dev/null -s -w "%{http_code}" ...)"
-          sleep 5
+            echo "Attempt $i failed, HTTP code: $http_code"
+            sleep 5
           done
 
           if [ "$success" = false ]; then
