@@ -16,13 +16,12 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         SELECT * FROM outbox_message
         WHERE status = 'PENDING'
         ORDER BY created_at ASC
-        LIMIT :limit OFFSET :offset
+        LIMIT :limit
     """,
         nativeQuery = true,
     )
     fun findPendingMessages(
         @Param("limit") limit: Int,
-        @Param("offset") offset: Int,
     ): List<OutboxMessage>
 
     // Atomic UPDATE guarded by status = 'PENDING' — a derived find-then-save here would race and double-dispatch.
@@ -54,6 +53,72 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("olderThan") olderThan: LocalDateTime,
         @Param("limit") limit: Int,
     ): List<OutboxMessage>
+
+    @Query(
+        """
+        SELECT * FROM outbox_message
+        WHERE status = 'PENDING' AND created_at < :olderThan
+        ORDER BY created_at ASC
+        LIMIT :limit
+    """,
+        nativeQuery = true,
+    )
+    fun findStalePending(
+        @Param("olderThan") olderThan: LocalDateTime,
+        @Param("limit") limit: Int,
+    ): List<OutboxMessage>
+
+    // Same CAS idea for recovery: refreshing updated_at only succeeds for the poller that got there first,
+    // so two instances recovering the same stuck row cannot both re-dispatch it.
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE event_id = :eventId
+          AND status = 'IN_PROGRESS'
+          AND updated_at < :olderThan
+    """,
+        nativeQuery = true,
+    )
+    fun reclaimStuck(
+        @Param("eventId") eventId: String,
+        @Param("olderThan") olderThan: LocalDateTime,
+    ): Int
+
+    // Recovery gives up on a row whose first attempt is older than the give-up window; FAILURE ends the loop.
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
+        SET status = 'FAILURE', updated_at = CURRENT_TIMESTAMP
+        WHERE event_id = :eventId
+          AND status = 'IN_PROGRESS'
+    """,
+        nativeQuery = true,
+    )
+    fun abandonStuck(
+        @Param("eventId") eventId: String,
+    ): Int
+
+    // Retention: terminal rows only, and LIMIT keeps one purge from holding a long lock on a large backlog.
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        DELETE FROM outbox_message
+        WHERE status IN ('SUCCESS', 'FAILURE')
+          AND updated_at < :olderThan
+        LIMIT :limit
+    """,
+        nativeQuery = true,
+    )
+    fun deleteTerminalOlderThan(
+        @Param("olderThan") olderThan: LocalDateTime,
+        @Param("limit") limit: Int,
+    ): Int
 
     @Query(
         """

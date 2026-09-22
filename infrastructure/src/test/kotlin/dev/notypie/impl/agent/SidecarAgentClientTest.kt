@@ -10,6 +10,8 @@ import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetSocketAddress
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class SidecarAgentClientTest :
     BehaviorSpec({
@@ -247,6 +249,37 @@ class SidecarAgentClientTest :
                 then("returns Failed(incomplete_stream)") {
                     result.shouldBeInstanceOf<AgentTurnResult.Failed>().code shouldBe
                         SidecarAgentClient.ERROR_CODE_INCOMPLETE_STREAM
+                }
+            }
+        }
+
+        given("a sidecar that sends the session event and then stalls") {
+            val release = CountDownLatch(1)
+            respond = { exchange ->
+                exchange.responseHeaders.add("Content-Type", "text/event-stream")
+                exchange.sendResponseHeaders(200, 0)
+                exchange.responseBody.write("event: session\ndata: {\"sessionId\":\"sess-stall\"}\n\n".toByteArray())
+                exchange.responseBody.flush()
+                release.await(10L, TimeUnit.SECONDS)
+                exchange.close()
+            }
+            val impatientClient =
+                SidecarAgentClient(
+                    baseUrl = "http://127.0.0.1:${server.address.port}",
+                    bearerSecret = "test-secret",
+                    requestTimeout = Duration.ofSeconds(1L),
+                )
+
+            `when`("converse") {
+                val startedAt = System.nanoTime()
+                val result = impatientClient.converse(request = AgentTurnRequest(sessionKey = "C1:x", prompt = "hi"))
+                val elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
+                release.countDown()
+
+                then("the caller gets Failed(stream_timeout) within the budget instead of blocking forever") {
+                    result.shouldBeInstanceOf<AgentTurnResult.Failed>().code shouldBe
+                        SidecarAgentClient.ERROR_CODE_STREAM_TIMEOUT
+                    (elapsed < Duration.ofSeconds(5L)) shouldBe true
                 }
             }
         }

@@ -100,6 +100,19 @@ class JpaMeetingRepositoryTest
                     }
                 }
 
+                `when`("user is one of five participants") {
+                    val meeting = createMeetingSchema(member = 5, startIterator = 300)
+                    repository.save(meeting)
+                    val participantId = meeting.participants.last().userId
+
+                    val result = repository.findAllMeetingByUserId(userId = participantId)
+
+                    then("the fetched participant collection is complete, not filtered down to the caller") {
+                        result.size shouldBe 1
+                        result.first().participants.size shouldBe 5
+                    }
+                }
+
                 `when`("user has no meetings") {
                     val result = repository.findAllMeetingByUserId(userId = "U_NONEXISTENT_USER")
 
@@ -186,6 +199,31 @@ class JpaMeetingRepositoryTest
                     then("should be ordered by startAt ascending") {
                         val startTimes = result.map { it.startAt }
                         startTimes shouldBe startTimes.sorted()
+                    }
+                }
+
+                `when`("querying as a participant of a crowded meeting") {
+                    val meeting =
+                        createMeetingSchema(
+                            publisherId = outsider,
+                            name = "crowded",
+                            startAt = now.plusDays(4L),
+                        )
+                    listOf("U_RANGE_P1", "U_RANGE_P2", "U_RANGE_P3", owner).forEach { userId ->
+                        meeting.participants.add(createParticipants(meeting = meeting, userId = userId))
+                    }
+                    repository.save(meeting)
+
+                    val result =
+                        repository.findMeetingsByUserIdAndDateRange(
+                            userId = owner,
+                            startAt = now.plusDays(4L).minusHours(1L),
+                            endAt = now.plusDays(4L).plusHours(1L),
+                        )
+
+                    then("the crowded meeting carries all four participants, not only the caller") {
+                        result.map { it.name } shouldBe listOf("crowded")
+                        result.first().participants.size shouldBe 4
                     }
                 }
 
@@ -361,6 +399,7 @@ class JpaMeetingRepositoryTest
                             meetingUid = saved.meetingUid,
                             requesterId = "U_HOST",
                             newStartAt = newStartAt,
+                            newEndAt = newStartAt.plusHours(1L),
                         )
 
                     then("should report exactly one row updated") {
@@ -370,6 +409,32 @@ class JpaMeetingRepositoryTest
                     then("subsequent reads should reflect the new start time") {
                         val refreshed = repository.findMeetingByUidWithParticipants(meetingUid = saved.meetingUid)
                         refreshed!!.startAt shouldBe newStartAt
+                    }
+                }
+
+                `when`("the host moves the meeting later than its original end") {
+                    val originalStart = LocalDateTime.of(2026, 8, 1, 10, 0)
+                    val saved =
+                        repository.save(
+                            createMeetingSchema(
+                                publisherId = "U_HOST_LATER",
+                                startAt = originalStart,
+                                endAt = originalStart.plusHours(1L),
+                            ),
+                        )
+                    val laterStart = originalStart.plusHours(2L)
+
+                    repository.rescheduleMeeting(
+                        meetingUid = saved.meetingUid,
+                        requesterId = "U_HOST_LATER",
+                        newStartAt = laterStart,
+                        newEndAt = laterStart.plusHours(1L),
+                    )
+
+                    then("both columns are written atomically under the host/cancel guard") {
+                        val refreshed = repository.findMeetingByUidWithParticipants(meetingUid = saved.meetingUid)
+                        refreshed!!.startAt shouldBe laterStart
+                        refreshed.endAt shouldBe laterStart.plusHours(1L)
                     }
                 }
 
@@ -389,6 +454,7 @@ class JpaMeetingRepositoryTest
                             meetingUid = saved.meetingUid,
                             requesterId = "U_PARTICIPANT",
                             newStartAt = newStartAt,
+                            newEndAt = newStartAt.plusHours(1L),
                         )
 
                     then("should report 0 rows updated and leave the start time unchanged") {
@@ -416,6 +482,7 @@ class JpaMeetingRepositoryTest
                             meetingUid = saved.meetingUid,
                             requesterId = "U_HOST",
                             newStartAt = newStartAt,
+                            newEndAt = newStartAt.plusHours(1L),
                         )
 
                     then("the reschedule should be a no-op") {
@@ -429,6 +496,7 @@ class JpaMeetingRepositoryTest
                             meetingUid = UUID.randomUUID(),
                             requesterId = "U_HOST",
                             newStartAt = newStartAt,
+                            newEndAt = newStartAt.plusHours(1L),
                         )
 
                     then("should report 0 rows updated") {

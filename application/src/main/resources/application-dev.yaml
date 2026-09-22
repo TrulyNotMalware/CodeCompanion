@@ -37,7 +37,7 @@ spring:
       enabled: false
 
   kafka:
-    bootstrap-servers: ["kafka:port"]
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
@@ -46,8 +46,8 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       auto-offset-reset: earliest
-      enable-auto-commit: true
-      max-poll-records: 1000
+      enable-auto-commit: false # container commits per record (AckMode.RECORD); see application-prod.yaml
+      max-poll-records: 100
 
 server:
   port: 9000
@@ -69,7 +69,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
+        # No heapdump: it is unauthenticated here and a dump carries the Slack token and DB password.
+        include: health,loggers,metrics,mappings,threaddump,conditions,info
       base-path: /api/actuator
       path-mapping:
         loggers: logs
@@ -92,6 +93,9 @@ slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
+      # No default: dev is reachable over HTTP, so a missing secret must fail startup, not silently
+      # disable signature verification (the filter skips verification when the secret is blank).
+      signing-secret: ${SLACK_SIGNING_SECRET}
     mode:
       outbox-reading-strategy: cdc
       event-publisher: kafka

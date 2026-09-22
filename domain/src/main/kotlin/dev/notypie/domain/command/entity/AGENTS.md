@@ -64,7 +64,7 @@ is the mention vocabulary.
 ```
 Specs: `CommandTest` (queue draining, error wrapping), `InteractionCommandTest` (parser selection,
 unsupported payloads), `ReplaceTextResponseCommandTest`, `RequestMeetingCommandTest`, plus
-`slash/MeetingListRangeTest`. `CommandSetTest` and `CommandDomainTest` live one level up in
+`slash/MeetingListRangeTest`. `CommandSetTest` lives one level up in
 `domain/src/test/kotlin/dev/notypie/domain/command/`. Fixtures: `TestCommandFactory`,
 `CommandDomainInputCreator`, `UnknownSubCommandDefinition`, `createIntentQueue()`.
 

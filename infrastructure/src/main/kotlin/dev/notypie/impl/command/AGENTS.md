@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # infrastructure/impl/command
 
@@ -19,11 +19,11 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 | `SlackOutboundStager.kt` | `OutboundMessageStager` impl. `OpenModal` → `stageModal` (seven `ModalForm` variants; blank `trigger_id` → `null` + warn; `StandupFill` loads routine and session via `StandupRepository`); every other family → `OutboundMessageEnqueued`, unrendered |
 | `OutboundRenderer.kt` | `OutboundRenderer` port + `SlackOutboundRenderer`: `OutboundMessage` → `SlackEventPayload` via the constructor; `OpenModal` / `DirectMessage` and not-yet-migrated `MessageContent`s hit `error(...)` |
 | `SlackApiEventConstructor.kt` | Builds `SendSlackMessageEvent` (message/ephemeral/action-response/`chat.update`) and `OpenViewEvent` (seven `open*ModalRequest`s) from `SlackTemplateBuilder` layouts. SDK requests become form maps via `RequestFormBuilder.toForm`; `buildRoutingText` writes `"<idempotencyKey>,<CommandDetailType>[,urlencoded extras…]"` into `message.text` |
-| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl. `dispatch` (inside `RetryService.execute`) routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url`; `OpenViewPayloadContents` throws. `dispatchImmediate` = `views.open`, never throws, publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` on failure |
+| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl (constructor also takes `slack: Slack` and a `sleeper` so specs can point it at a local server). `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url` whose **body** decides success (`{"ok":false,...}` with HTTP 200 is a failure); `OpenViewPayloadContents` throws before any retry. Error classes: HTTP 429 → `SlackRateLimitedException` handled outside `RetryService` by one in-thread wait of `Retry-After` (1–30s), then `failOutput(RATE_LIMITED_REASON)` — callers test `CommandOutput.isRateLimited()` and leave the row IN_PROGRESS for the outbox recovery sweep rather than marking it FAILURE; `IOException`, other `SlackApiException` and `ok=false` with a transient code (`internal_error`, `service_unavailable`, `fatal_error`, `request_timeout`, `ratelimited` → `SlackTransientErrorException`) are retried by `RetryService`; any other `ok=false` (`invalid_auth`, `channel_not_found`, ...) fails once. `dispatchImmediate` = `views.open`, never throws, publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` on failure |
 | `SlackViewOpenDispatcher.kt` | Synchronous (non-`@Async`) `@EventListener` for `OpenViewEvent` → `dispatchImmediate` |
 | `KafkaEventPublisher.kt` | `EventPublisher`: `isInternal` → Spring bus, else `kafkaTemplate.send(destination, idempotencyKey, payload)` awaited `sendTimeoutMillis` (default 5000) — timeout / execution cause / interrupt are rethrown |
 | `AppEventPublisher.kt` | `EventPublisher` that publishes every event on the Spring bus (default `APPLICATION_EVENT` mode) |
-| `RestRequester.kt` / `RestClientRequester.kt` | Generic Spring `RestClient` wrapper: `safe*` verbs return `Result<ResponseEntity<T>>`, plain verbs `bodyOrThrow`; per-call bearer header; `SLACK_API_BASE_URL`. Only consumer: `templates/ModalTemplateBuilder` (`users.profile.get`) |
+| `RestRequester.kt` / `RestClientRequester.kt` | Generic Spring `RestClient` wrapper: `safe*` verbs return `Result<ResponseEntity<T>>`, plain verbs `bodyOrThrow`; per-call bearer header; `SLACK_API_BASE_URL`; explicit `JdkClientHttpRequestFactory` with `connectTimeout = 3s` / `readTimeout = 10s` (constructor params) because the static `RestClient.builder()` ignores `spring.http.client.*`. Only consumer: `templates/SlackUserProfileResolver` (`users.profile.get`) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -70,7 +70,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 Specs: `SlackInteractionRequestParserTest`, `SlackInboundMapperTest`, `SlackIntentResolverTest`,
 `SlackOutboundStagerTest`, `SlackOutboundRendererTest`, `SlackApiEventConstructorTest`,
 `ViewSubmissionChannelRoutingRegressionTest` (guards the `private_metadata` channel recovery — never
-delete), `KafkaEventPublisherTest` (`@SpringBootTest` + `EmbeddedKafka`), `RestClientRequesterTest`.
+delete), `KafkaEventPublisherTest` (`@SpringBootTest` + `EmbeddedKafka`), `RestClientRequesterTest`, `ApplicationMessageDispatcherTest` (a `com.sun.net.httpserver` fake Slack with `SlackConfig.methodsEndpointUrlPrefix` and `statsEnabled = false` — with stats on the SDK calls `auth.test` first and eats the queued response).
 Fixtures: `testFixtures/.../impl/command/BlockActionPayloadCreator`, `slack/InteractionPayloadCreator`,
 `slack/SlackEventCallBackRequestCreator`, `event/SlackEventTestFixtures`. There is no spec for
 `ApplicationMessageDispatcher`, `SlackViewOpenDispatcher`, or `AppEventPublisher`.

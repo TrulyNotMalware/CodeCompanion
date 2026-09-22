@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # test/kotlin/dev/notypie/application/security
 
@@ -12,8 +12,8 @@ bytes readable after form parsing, and (in `mcp/`) the scoped turn-token codec.
 | File | Description |
 |------|-------------|
 | `SlackSignatureVerifierTest.kt` | `SlackSignatureVerifier(clock).verify(signingSecret, requestTimestamp, requestSignature, body, toleranceSeconds)`: matching input → `valid`, `reason == null`; body changed after signing (`+` vs space) → `INVALID_SIGNATURE`; timestamp 301 s old with tolerance 300 → `EXPIRED_TIMESTAMP`; null timestamp → `MISSING_TIMESTAMP`; null signature → `MISSING_SIGNATURE`. The expected `v0=` value is minted with `createSignature`. |
-| `SlackRequestVerificationFilterTest.kt` | `SlackRequestVerificationFilter.doFilter` with a real verifier, `InMemorySlackRetryDeduplicator(clock)`, and `AppConfig.Api(signingSecret, requestTimestampToleranceSeconds = 300)`. Valid signed form POST → chain invoked once with a `CachedBodyHttpServletRequest` whose `command` param is `/meetup`; same fingerprint re-sent with `X-Slack-Retry-Num: 1` → 200 and chain not invoked; `v0=invalid` → 401, chain not invoked. Private `signedRequest(rawBody, timestamp, signature, retryNum)` builder and `CountingFilterChain` live in the file. |
-| `SlackRetryDeduplicatorTest.kt` | `InMemorySlackRetryDeduplicator.isDuplicateRetry(fingerprint, retryNum)`: original (`retryNum = null`) then retry `"1"` → only the retry is a duplicate; a retry with no prior original → allowed through. |
+| `SlackRequestVerificationFilterTest.kt` | `SlackRequestVerificationFilter.doFilter` with a real verifier, `InMemorySlackRetryDeduplicator(clock)`, and `AppConfig.Api(signingSecret, requestTimestampToleranceSeconds = 300)`. Valid signed form POST → chain invoked once with a `CachedBodyHttpServletRequest` whose `command` param is `/meetup`; same body re-sent with `X-Slack-Retry-Num: 1` → 200 and chain not invoked, also when the retry carries a fresh timestamp/signature; a first attempt whose chain sets 500 is retried through; `v0=invalid` → 401, chain not invoked. Private `signedRequest(rawBody, timestamp, signature, retryNum)` builder and `CountingFilterChain` live in the file. |
+| `SlackRetryDeduplicatorTest.kt` | `SlackRequestFingerprint.of` hashes the body only; `isDuplicateRetry`: original (`retryNum = null`) then retry `"1"` → duplicate, `markFailed` then retry → allowed, retry with no prior original → allowed, entry older than the TTL → evicted, more entries than `maxEntries` → capped (`trackedEntries()`). |
 | `CachedBodyHttpServletRequestTest.kt` | Wrapping a form-urlencoded `MockHttpServletRequest`: `inputStream` is re-readable (asserted twice), `hello+world` decodes to a space, repeated `payload` keys keep order, empty value → `""`, query-string params remain visible. |
 
 ## Subdirectories
@@ -28,7 +28,7 @@ bytes readable after form parsing, and (in `mcp/`) the scoped turn-token codec.
   the timestamp constant without moving the clock trips `EXPIRED_TIMESTAMP`.
 - `MockHttpServletRequest` needs `contentType` and `characterEncoding` set before `setContent(...)` or
   parameter parsing yields nothing, and its stream is one-shot — build a fresh request per `doFilter`.
-- Retry dedup fingerprints on method + URI + timestamp + signature. A retry that arrives first is allowed on
+- Retry dedup fingerprints on method + URI + SHA-256(body). A retry that arrives first is allowed on
   purpose (the original may have been lost); keep that case when touching the deduplicator.
 - These are plain Kotest specs that use `spring-test` mock servlet objects; no Spring context is started.
 

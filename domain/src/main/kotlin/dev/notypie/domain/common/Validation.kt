@@ -12,21 +12,27 @@ class ValidationBuilder {
     data class Field<T>(
         val name: String,
         val value: T,
-    )
+    ) {
+        // Index into `errors` when this field was created; lets `or` see what the left-hand rule added.
+        internal var errorMark: Int = 0
+    }
 
-    infix fun <T> String.of(value: T): Field<T> = Field(name = this, value = value)
+    infix fun <T> String.of(value: T): Field<T> = Field(name = this, value = value).also { it.errorMark = errors.size }
 
     infix fun <T> Field<T>.and(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
         block(this)
         return this
     }
 
+    // Passes when either side passes: a satisfied side clears everything the field added; when both fail
+    // only the left-hand errors are kept.
     infix fun <T> Field<T>.or(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
-        val before = errors.size
+        val leftFailed = errors.size > errorMark
+        val beforeRight = errors.size
         block(this)
-        if (before < errors.size) {
-            repeat(times = errors.size - before) { errors.removeLast() }
-        }
+        val rightFailed = errors.size > beforeRight
+        val keepUpTo = if (leftFailed && rightFailed) beforeRight else errorMark
+        while (errors.size > keepUpTo) errors.removeLast()
         return this
     }
 
@@ -63,7 +69,7 @@ class ValidationBuilder {
                     ExceptionArgument(
                         fieldName = field.name,
                         value = field.value,
-                        reason = "$field must not be blank",
+                        reason = "must not be blank",
                     ),
                 )
             }

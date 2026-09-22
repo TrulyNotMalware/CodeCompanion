@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # application/service/mention
 
@@ -27,8 +27,10 @@ domain context sees it.
   and `CommandExecutor` re-throws so a publish failure rolls the whole mention back.
 - **Idempotency** comes from `IdempotencyCreator.create(data = commandData)`; a Slack retry of the same
   event yields the same key, which is what the outbox and the domain contexts dedupe on.
-- `channel_name` / `user_name` are read from the raw payload with `.toString()` (marked `FIXME`) and
-  render as `"null"` when Slack omits them. Do not build behaviour on those two fields.
+- `channel_name` / `user_name` do not exist on an `app_mention` callback (they are slash-command form
+  fields), so the handler reads them as optional strings and passes `""` when absent — consumers such as
+  `AgentConverseService.contextPrompt` fall back to `<@id>` / `<#id>` mentions on blank. Never use
+  `.toString()` on a nullable payload lookup here; that once produced the literal `"null"`.
 - `resolveCommandType` only rejects unknown transport types; the resulting `SlackEventType` is discarded
   and `toMentionInboundCommand` does the actual mapping. The `FIXME Remove AppMention Events` note means
   this handler is slated to shrink — do not grow it with new parsing.

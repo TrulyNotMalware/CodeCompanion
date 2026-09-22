@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # application/service/relay
 
@@ -15,8 +15,10 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
 |------|-------------|
 | `MessageProcessor.kt` | Marker `interface MessageProcessor` (no method since A4): each impl exposes its own typed entry point, so no impl narrows a shared parameter at runtime. Exists for `@ConditionalOnMissingBean(MessageProcessor::class)` bean selection |
 | `MessageRelayService.kt` | `interface MessageRelayService { batchPendingMessages(List<OutboxMessage>) }` |
-| `PollingMessageProcessor.kt` | Not a `@Service` — bean from `configurations/ConsumerConfig.kt` `PoolingPublisherConfig` (`@Conditional(OnPollingConsumer)`). `@Scheduled(fixedRate = 5000) pollPending()` → `recoverStuckInProgress()` (`findStuckInProgress(olderThan = now - outbox.polling.stuckInProgressSeconds, limit = batchSize)` → re-dispatch) then `claimAndDispatch()` (`findPendingMessages(limit = batchSize, offset = 0)` → `claimPending(eventIds)` CAS → dispatch `candidates.take(claimedCount)`). Depends on the concrete `SlackMessageRelayServiceImpl` |
-| `DebeziumLogTailingProcessor.kt` | Bean from `CdcPublisherConfig` (`@Conditional(OnCdcConsumer)`). `@KafkaListener(topics = ["${slack.app.mode.cdc.topic}"], containerFactory = "concurrentKafkaListenerContainerFactory")` with `spring.json.value.default.type = ...relay.Envelope` on the typed `consume(envelope: Envelope)` — no parameter cast since A4. Reads `payload.after` → `toOutboxMessage()`, ignores non-`PENDING` rows and malformed `eventId`, then render + dispatch and publishes the `OutboxUpdateEvent` (or `MessagePublishFailedEvent` on exception) |
+| `OutboxRecoveryScheduler.kt` | `@Component`, mode-independent, `@Scheduled(fixedDelay = 60s, initialDelay = 60s) recover()` → `recoverOnce()`: `findStuckInProgress` → rows whose `created_at` is older than `outbox.polling.giveUpAfterHours` (24) are `abandonStuck` → FAILURE (bounded retry loop; `created_at` is the one timestamp the sweep never resets), the rest per-row `reclaimStuck` CAS; plus `findStalePending` (PENDING older than `outbox.polling.stuckInProgressSeconds`) → per-row `claimPending` CAS; then `MessageRelayService.batchPendingMessages` for the rows it won. A dispatch that ends in Slack's rate limit (`CommandOutput.isRateLimited()`) publishes no status update on purpose so this sweep retries it minutes later. Exists because CDC mode now claims rows (`IN_PROGRESS`) and never gets a second change event for a row whose status update failed or whose record went to the DLT |
+| `OutboxRetentionScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 1h, initialDelay = 5min) purge()` → `purgeOnce()` deletes SUCCESS/FAILURE rows older than `slack.app.outbox.retention.days` (default 14) in batches of `retention.batch-size` (default 1000), up to 20 batches per tick until one comes back short; never touches PENDING/IN_PROGRESS |
+| `PollingMessageProcessor.kt` | Not a `@Service` — bean from `configurations/ConsumerConfig.kt` `PoolingPublisherConfig` (`@Conditional(OnPollingConsumer)`). `@Scheduled(fixedRate = 5000) pollPending()` → `claimAndDispatch()` (`findPendingMessages(limit = batchSize)` → per-row `claimPending(listOf(id))` CAS → dispatch exactly the claimed rows). Stuck/stale recovery is not here any more — see `OutboxRecoveryScheduler`. Depends on the concrete `SlackMessageRelayServiceImpl` |
+| `DebeziumLogTailingProcessor.kt` | Bean from `CdcPublisherConfig` (`@Conditional(OnCdcConsumer)`). `@KafkaListener(topics = ["${slack.app.mode.cdc.topic}"], containerFactory = "concurrentKafkaListenerContainerFactory")` with `spring.json.value.default.type = ...relay.Envelope` on `consume(@Payload(required = false) envelope: Envelope?)` — typed, no parameter cast since A4; a null payload (tombstone) is skipped. Reads `payload.after` → `toOutboxMessage()`, ignores delete events and non-`PENDING` after-images, then **re-reads the row** (`MessageOutboxRepository.findById`): `PENDING` → `claimPending` CAS, `IN_PROGRESS` → re-dispatch, else skip as a redelivery. Render + dispatch, publish the `OutboxUpdateEvent` (or `MessagePublishFailedEvent` on exception). Unparseable after-image / malformed `eventId` throw `CdcRecordParseException` so the container's `DefaultErrorHandler` parks the record on the DLT |
 | `DebeziumOutboxMessage.kt` | Jackson model of the Debezium envelope: `Envelope(schema, payload)`, `Schema`, `Field`, `SubField`, `Parameters`, `Payload(before, after, source, transaction, op, ts_ms/ts_us/ts_ns)`, `Source`, `Transaction` |
 | `OutboxPayloadRenderer.kt` | `render(row: OutboxMessage): SlackEventPayload`. `require(row.schemaVersion in OutboxSchemaVersion.SUPPORTED)` *before* decode, `Transport.valueOf(row.transport)` → `renderers[transport]` (`OutboundRenderer`), `OutboundMessageCodec.decode(row.payload)`. Bean in `SlackRequestBuilderConfiguration.outboxPayloadRenderer` mapping `Transport.SLACK` |
 | `SlackMessageRelayServiceImpl.kt` | `@Service`. `batchPendingMessages` submits each row to `relayTaskExecutor: Executor` by hand (no `@Async` — self-invocation would bypass the proxy). `internal batchPendingMessagesAsync(row)`: parse the row `eventId`, render + dispatch inside one `try`, `catch (Exception)` → `MessagePublishFailedEvent`, publish the `OutboxUpdateEvent`. `@EventListener updateOutboxMessageStatus(OutboxUpdateEvent)` → `retryService.execute(maxAttempts = 5) { updateMessage }` relying on `OutboxMessage`'s `@Version`. `@TransactionalEventListener(BEFORE_COMMIT) saveOutboxMessage(OutboundMessageEnqueued)` → `outboundMessagePort.toRow` + `save`, `maxAttempts = 3` |
@@ -24,9 +26,9 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
 ## For AI Agents
 
 ### Working In This Directory
-- **Never dispatch a row you did not claim.** For the poller, `MessageOutboxRepository.claimPending` is the
-  single source of truth; `take(claimedCount)` assumes the CAS acted on the same ordered set that was
-  read. The CDC reader does not claim — it trusts the change record — so the two readers are exclusive
+- **Never dispatch a row you did not claim.** Both readers claim per row (`claimPending(listOf(id)) == 1`)
+  and dispatch only the winners; the CDC reader additionally re-reads the row's current status first
+  (see its row above). The two readers are exclusive
   by `OnPollingConsumer` / `OnCdcConsumer` (`configurations/conditions/Conditions.kt`, the configured
   publisher mode `POOLING` vs `CDC`). Running both would double-dispatch.
 - **The row `eventId` is the identity.** Both readers parse it up front and key every `OutboxUpdateEvent`
@@ -46,8 +48,9 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
 - **`MessagePublishSuccessEvent` has a downstream consumer:** `service/standup/StandupSummaryService`
   swaps its `outbox:<eventId>` marker for `messageTs`. Keep `messageTs` populated on success.
 - The `Envelope` FQN is hardcoded in the `@KafkaListener` properties; moving or renaming the class
-  breaks CDC deserialization at runtime with no compile error. `relayTaskExecutor` resolves to the
-  `Executor` bean in `configurations/AsyncConfig.kt`; `Error`s deliberately propagate to its uncaught
+  breaks CDC deserialization at runtime with no compile error. `relayTaskExecutor` is the dedicated bounded
+  `@Qualifier("relayTaskExecutor")` bean in `configurations/AsyncConfig.kt` (before 2026-09-22 the name matched
+  nothing and the `@Primary` global pool was injected); `Error`s deliberately propagate to its uncaught
   handler.
 
 ### Testing Requirements
@@ -59,7 +62,7 @@ Specs under `application/src/test/kotlin/dev/notypie/application/service/relay/`
 from `dev.notypie.application.outbox` (application testFixtures): `createPollingProcessorFixture(clock)`
 returning `(outboxRepository, relayService, processor)`, `createOutboxRow`, `createFixedUtcClock`; plus
 `createCommandBasicInfo`. Use a direct `Executor { it.run() }` when testing the relay service so the
-async branch runs inline. There is no application spec for `DebeziumLogTailingProcessor` (needs Kafka);
+async branch runs inline. `DebeziumLogTailingProcessorTest` drives `consume()` directly with `createCdcEnvelope` / `createOutboxAfterImage` from `dev.notypie.application.service.relay` (testFixtures) and a mocked `MessageOutboxRepository`;
 codec / schema behaviour is covered by `infrastructure/src/test/kotlin/dev/notypie/repository/outbox/`.
 
 ### Common Patterns

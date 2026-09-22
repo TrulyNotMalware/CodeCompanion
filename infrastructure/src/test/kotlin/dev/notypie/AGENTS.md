@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # infrastructure/src/test/kotlin/dev/notypie
 
@@ -18,7 +18,7 @@ spec in the subtree boots from it and inherits `src/main`'s component scan (`con
 | Directory | Purpose |
 |-----------|---------|
 | `common/` | `JPAJsonConverter`, `PartitionKeyUtil` unit specs (see `common/AGENTS.md`) |
-| `exception/` | `DatabaseExceptionTest` — an empty placeholder spec (see `exception/AGENTS.md`) |
+| `exception/` | `DatabaseExceptionTest` — `throwIfSchemaNotFound` / `schemaNotFound` build a `DatabaseException` with table, error code and details (see `exception/AGENTS.md`) |
 | `impl/` | Adapter specs: `agent/`, `command/` (+ `slack/`), `cve/`, `retry/` (see `impl/AGENTS.md`) |
 | `repository/` | Persistence specs: `cve/`, `meeting/`, `outbox/` (+ `schema/`) (see `repository/AGENTS.md`) |
 | `templates/` | `ModalBlockBuilder`, `ModalElementBuilder`, `ModalTemplateBuilder` specs (see `templates/AGENTS.md`) |

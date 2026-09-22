@@ -4,6 +4,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.mockk.every
 import io.mockk.mockk
@@ -17,9 +18,15 @@ val DEFAULT_TEST_NOW: LocalDateTime = LocalDateTime.of(2026, 4, 28, 12, 0, 0)
 fun createFixedUtcClock(now: LocalDateTime = DEFAULT_TEST_NOW): Clock =
     Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneId.of("UTC"))
 
-fun createOutboxRow(eventId: String): OutboxMessage =
+fun createOutboxRow(
+    eventId: String,
+    status: MessageStatus = MessageStatus.PENDING,
+    createdAt: LocalDateTime = DEFAULT_TEST_NOW,
+): OutboxMessage =
     mockk(relaxed = true) {
         every { this@mockk.eventId } returns eventId
+        every { this@mockk.status } returns status.name
+        every { this@mockk.createdAt } returns createdAt
     }
 
 data class PollingProcessorFixture(
@@ -29,7 +36,6 @@ data class PollingProcessorFixture(
 )
 
 fun createPollingProcessorFixture(
-    clock: Clock = createFixedUtcClock(),
     batchSize: Int = 100,
     stuckInProgressSeconds: Long = 300L,
     outboxRepository: MessageOutboxRepository = mockk(),
@@ -42,7 +48,6 @@ fun createPollingProcessorFixture(
             PollingMessageProcessor(
                 outboxRepository = outboxRepository,
                 messageRelayService = relayService,
-                clock = clock,
                 appConfig =
                     AppConfig(
                         outbox =

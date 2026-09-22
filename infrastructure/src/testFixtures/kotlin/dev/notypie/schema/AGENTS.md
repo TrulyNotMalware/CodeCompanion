@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/schema
 
@@ -12,6 +12,7 @@ return values. No standup or outbox builders exist here.
 | File | Description |
 |------|-------------|
 | `MeetingSchemaCreator.kt` | `createMeetingSchema(id = 0, meetingUid = random, idempotencyKey = random, name, startAt = now, endAt = null, isCanceled = false, publisherId = TEST_USER_ID, channel = TEST_CHANNEL_ID, participants = mutableListOf())`; `createParticipants(id = 0, meeting = createMeetingSchema(), userId = TEST_USER_ID, isAttending = true, absentReason = ATTENDING, createdAt, updatedAt)`; `createMeetingSchemaWithParticipant(publisherId, participantUserId, name, startAt)` — one participant row back-pointing to the meeting; overload `createMeetingSchema(member: Int, startIterator = 1)` — publisher `TEST_USER_ID + startIterator` and `member` participants `TEST_USER_ID + (startIterator + i)` |
+| `OutboxMessageCreator.kt` | `createOutboxMessage(eventId = random, idempotencyKey = random, publisherId = TEST_USER_ID, payload = "{}", createdAt = now, status = PENDING)` — a real `OutboxMessage` row (not a mock) for `@DataJpaTest` specs; `status` is applied through `updateMessageStatus` because the column is not a constructor parameter |
 | `CveTopicCreator.kt` | `createCveTopicSchema(id = 0, topicKey = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)`; `createCveTopicDefinition(...)` same fields minus `id`; `createCveTopic(id = 1, ...)` record; `createCveSubscriptionSchema(id = 0, userId = "U_SUBSCRIBER", topicId = 1)`; `createCveDeliverySchema(id = 0, eventId = 1, userId = "U_SUBSCRIBER", status = SENT)` |
 | `CveEventCreator.kt` | `createCveEvent(id = 1, topicId = 1, externalId = "CVE-2026-0001", title, rawContent, aiSummary = null, summaryStatus = PENDING, retryCount = 0)` record; `createCveEventSchema(id = 0, topicId, externalId, title, rawContent, aiSummary, summaryStatus, claimToken = null, retryCount = 0, nextAttemptAt = null, publishedAt = null)`; `createRawSourceEvent(externalId = "R-0001", title, rawContent, publishedAt = null)` (`impl/cve/RawSourceEvent`); `createCveRecentEvent(topicDisplayName = "Java CVE", title, aiSummary = "Sample summary")`; `createUndeliveredCveEvent(eventId = 1, userId = "U_SUBSCRIBER", topicKey = "cve-java", topicDisplayName, title, aiSummary)` |
 

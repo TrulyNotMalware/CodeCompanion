@@ -2,7 +2,9 @@ package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.repository.meeting.schema.MeetingSchema
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -24,23 +26,26 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingId") meetingId: Long,
     ): MeetingSchema?
 
+    // The user filter lives in a subquery, never on the fetch-join alias: filtering the alias makes Hibernate
+    // initialise `participants` with only the matching rows, so a participant would see themselves alone.
     @Query(
         """
-        SELECT DISTINCT m
+        SELECT m
         FROM meetings m
-        JOIN FETCH m.participants p
+        JOIN FETCH m.participants
         WHERE m.publisherId = :userId
-        OR p.userId = :userId
+           OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting = m AND p.userId = :userId)
     """,
     )
     fun findAllMeetingByUserId(userId: String): List<MeetingSchema>
 
     @Query(
         """
-        SELECT DISTINCT m
+        SELECT m
         FROM meetings m
-        JOIN FETCH m.participants p
-        WHERE (m.publisherId = :userId OR p.userId = :userId)
+        JOIN FETCH m.participants
+        WHERE (m.publisherId = :userId
+               OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting = m AND p.userId = :userId))
           AND m.startAt >= :startAt
           AND m.startAt < :endAt
         ORDER BY m.startAt ASC
@@ -118,12 +123,13 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("requesterId") requesterId: String,
     ): Int
 
-    @Modifying
+    // The caller reads the row before this UPDATE; clearing keeps a later read in the same tx from seeing the old times.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query(
         """
         UPDATE meetings m
-        SET m.startAt = :newStartAt
+        SET m.startAt = :newStartAt, m.endAt = :newEndAt
         WHERE m.meetingUid = :meetingUid
           AND m.publisherId = :requesterId
           AND m.isCanceled = false
@@ -133,7 +139,15 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingUid") meetingUid: UUID,
         @Param("requesterId") requesterId: String,
         @Param("newStartAt") newStartAt: LocalDateTime,
+        @Param("newEndAt") newEndAt: LocalDateTime?,
     ): Int
+
+    // Writes read through this lookup: the forced version bump makes two concurrent writers conflict at commit.
+    @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
+    @Query("SELECT m FROM meetings m WHERE m.meetingUid = :meetingUid")
+    fun findMeetingByUidForUpdate(
+        @Param("meetingUid") meetingUid: UUID,
+    ): MeetingSchema?
 
     @Query(
         """

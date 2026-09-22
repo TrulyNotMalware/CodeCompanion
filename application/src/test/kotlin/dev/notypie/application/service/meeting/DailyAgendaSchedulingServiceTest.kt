@@ -16,6 +16,7 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
@@ -47,9 +48,8 @@ class DailyAgendaSchedulingServiceTest :
             return port
         }
 
-        fun stubTransactionManager(): PlatformTransactionManager {
+        fun stubTransactionManager(status: TransactionStatus = mockk(relaxed = true)): PlatformTransactionManager {
             val tm = mockk<PlatformTransactionManager>()
-            val status = mockk<TransactionStatus>(relaxed = true)
             every { tm.getTransaction(any()) } returns status
             every { tm.commit(any()) } just Runs
             every { tm.rollback(any()) } just Runs
@@ -62,11 +62,12 @@ class DailyAgendaSchedulingServiceTest :
             clock: Clock,
             enabled: Boolean = true,
             port: OutboundMessagePort = stubPort(),
+            transactionManager: PlatformTransactionManager = stubTransactionManager(),
         ) = DailyAgendaSchedulingService(
             agendaDispatchRepository = repo,
             outboxRepository = outboxRepo,
             outboundMessagePort = port,
-            transactionManager = stubTransactionManager(),
+            transactionManager = transactionManager,
             clock = clock,
             appConfig =
                 AppConfig(
@@ -182,6 +183,46 @@ class DailyAgendaSchedulingServiceTest :
                         "• 10:00 — Sprint Planning\n• 14:00 — 1:1 with Lead"
                     (agendaByUser["U_B"]!!.content as MessageContent.Text).markdown shouldBe
                         "• 10:00 — Sprint Planning"
+                }
+            }
+        }
+
+        given("the outbox write fails after the claim succeeded") {
+            val repo = mockk<AgendaDispatchRepository>()
+            val outboxRepo = mockk<MessageOutboxRepository>()
+            val status = mockk<TransactionStatus>(relaxed = true)
+            val transactionManager = stubTransactionManager(status = status)
+            val service =
+                buildService(
+                    repo = repo,
+                    outboxRepo = outboxRepo,
+                    clock = Clock.fixed(afterSendInstant, seoul),
+                    transactionManager = transactionManager,
+                )
+            every { repo.claim(agendaDate = any()) } returns true
+            every { repo.findAttendingMeetingsForDay(from = any(), to = any()) } returns
+                listOf(
+                    createAgendaCandidateMeeting(
+                        meetingId = 1L,
+                        title = "Sprint Planning",
+                        startAt = LocalDateTime.of(2026, 5, 4, 10, 0),
+                        attendingUserIds = listOf("U_A"),
+                    ),
+                )
+            every { outboxRepo.save(any()) } throws IllegalStateException("db down")
+
+            `when`("the tick runs") {
+                service.sendDailyAgenda()
+
+                then(
+                    "the claim was taken inside the same transaction that is now rolled back, so the next tick retries",
+                ) {
+                    verifyOrder {
+                        transactionManager.getTransaction(any())
+                        repo.claim(agendaDate = any())
+                        outboxRepo.save(any())
+                        status.setRollbackOnly()
+                    }
                 }
             }
         }

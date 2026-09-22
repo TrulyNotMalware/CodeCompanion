@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-26 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
 
 # infrastructure/configurations
 
@@ -15,7 +15,7 @@ persistence and retry only.
 | File | Description |
 |------|-------------|
 | `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource`; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository`, `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository`, `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references |
-| `RetryConfiguration.kt` | `@EnableResilientMethods @Configuration`. `retryTemplate()` is `@ConditionalOnMissingBean(RetryTemplate::class)` and seeds a `RetryPolicy` from the `RetryOptions` defaults with `includes(listOf(Exception::class.java))`; `retryService(retryTemplate)` returns `RetryService(retryTemplate = ...)`. The same file defines `enum class RetryOptions(internal val default: Long)`: `MAX_ATTEMPTS = 3`, `INITIAL_DELAY = 100`, `MULTIPLIER = 2`, `MAX_DELAY = 10000`, `JITTER = 10` (milliseconds) |
+| `RetryConfiguration.kt` | `@EnableResilientMethods @Configuration`. `retryService()` returns a parameterless `RetryService` (it builds its own per-policy templates; there is no `RetryTemplate` bean any more). The same file defines `enum class RetryOptions(internal val default: Long)`: `MAX_ATTEMPTS = 3`, `INITIAL_DELAY = 100`, `MULTIPLIER = 2`, `MAX_DELAY = 10000`, `JITTER = 10` (milliseconds) |
 
 ## For AI Agents
 
@@ -38,10 +38,8 @@ persistence and retry only.
 - **There is no `@EnableJpaAuditing` and no `@EntityScan`.** Entity discovery relies on the
   `@SpringBootApplication` root package (`dev.notypie`) covering `dev.notypie.repository`; the explicit
   `@EnableJpaRepositories` makes Boot's `JpaRepositoriesAutoConfiguration` back off in the full context.
-- **`RetryService.execute` rebuilds a `RetryPolicy` per call and assigns it to the shared `RetryTemplate`**
-  (`retryTemplate.retryPolicy = policy`) before running. Consequences: the defaults configured in
-  `retryTemplate()` are overwritten on the first call, per-call overrides (`SlackMessageRelayServiceImpl`
-  passes `maxAttempts = 5`) are visible to concurrent callers of the singleton, and the
+- **`RetryService.execute` caches one `RetryTemplate` per distinct policy**, so per-call overrides
+  (`SlackMessageRelayServiceImpl` passes `maxAttempts = 5`) never leak to other callers; the
   `recoveryCallBack` runs only after a `RetryException`. `RetryOptions.default` is `internal`, so
   `:application` callers cannot read the defaults — they pass named overrides to `execute` instead.
 - **`@EnableResilientMethods` is on but unused.** No `@Retryable` / `@ConcurrencyLimit` method exists in

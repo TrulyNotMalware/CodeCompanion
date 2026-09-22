@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
 
 # domain/common
 
@@ -13,9 +13,9 @@ outside itself — only `java.time` and `java.io`.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Utils.kt` | `ValidationBuilder` plus two entrypoints: public `validate(className = "", block)` (throws) and `internal validateAndReturn(className = "", block)` (returns `List<ExceptionArgument>`). Full operator inventory under Common Patterns |
+| `Validation.kt` | (renamed from `Utils.kt` on 2026-09-22; `or` now clears the field's errors when either side passes) `ValidationBuilder` plus two entrypoints: public `validate(className = "", block)` (throws) and `internal validateAndReturn(className = "", block)` (returns `List<ExceptionArgument>`). Full operator inventory under Common Patterns |
 | `IdempotencyData.kt` | `IdempotencyData : java.io.Serializable` marker. Implemented by `command/inbound/InboundCommand`; `application/common/IdempotencyCreator` turns it into the idempotency `UUID` |
-| `error/Errors.kt` | `ErrorCode` (`statusCode`, `message`); `internal enum CommonErrorCode` (only `VALIDATION_FAILED` = 400); `ExceptionArgument(fieldName, value, reason = "")`; `exceptionDetails {}` with `ExceptionDetailsBuilder` / `ReasonBuilder`; `abstract CodeCompanionRuntimeException(errorCode, details)`; `internal ValidationException` and `internal ValidationExceptionWithName(className, ...)`; `internal sealed ErrorResponse` (unreferenced) |
+| `error/Errors.kt` | `ErrorCode` (`message` only — transport-neutral); `internal enum CommonErrorCode` (only `VALIDATION_FAILED`); `ExceptionArgument(fieldName, value, reason = "")`; `exceptionDetails {}` with `ExceptionDetailsBuilder` / `ReasonBuilder`; `abstract CodeCompanionRuntimeException(val errorCode, val details)`; `internal ValidationException` and `internal ValidationExceptionWithName(className, ...)`; `internal sealed ErrorResponse` (unreferenced) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -46,8 +46,6 @@ outside itself — only `java.time` and `java.io`.
 - Build `details` with `exceptionDetails { "field" value actual because "reason" }` rather than
   `ExceptionArgument(...)` literals. `ExceptionDetailsBuilder.details` is `internal`, so the DSL is the
   only way to populate it from another module.
-- `ErrorResponse` is `internal` to the domain module and referenced nowhere in the repo — infrastructure
-  cannot see it. Do not build on it; delete it or promote it deliberately if a response mapper needs it.
 - `IdempotencyCreator` derives the key by Jackson-serializing the `IdempotencyData` to JSON and hashing it
   (SHA-256), not by Java serialization — the `Serializable` bound is incidental. Keep implementors as
   plain `data class`es with deterministic, Jackson-friendly fields.

@@ -1,5 +1,6 @@
 package dev.notypie.templates
 
+import com.slack.api.model.block.ContextBlock
 import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
 import com.slack.api.model.block.SectionBlock
@@ -16,8 +17,8 @@ import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.RestRequester
-import dev.notypie.impl.command.dto.Profile
 import dev.notypie.impl.command.dto.SlackUserProfileDto
+import dev.notypie.impl.command.dto.createProfile
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
@@ -27,6 +28,8 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import org.springframework.http.ResponseEntity
+import org.springframework.web.client.RestClientException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
@@ -175,38 +178,14 @@ class ModalTemplateBuilderTest :
 
         given("approvalTemplate") {
             `when`("called with valid parameters") {
-                val mockProfile =
-                    Profile(
-                        title = "",
-                        phone = "",
-                        skype = "",
-                        realName = "Test User",
-                        realNameNormalized = "Test User",
-                        displayName = "testuser",
-                        displayNameNormalized = "testuser",
-                        fields = emptyMap(),
-                        statusText = "",
-                        statusEmoji = "",
-                        statusExpiration = 0,
-                        avatarHash = "abc123",
-                        email = "test@example.com",
-                        firstName = "Test",
-                        lastName = "User",
-                        imageSize24 = "https://example.com/img24.png",
-                        imageSize32 = "https://example.com/img32.png",
-                        imageSize48 = "https://example.com/img48.png",
-                        imageSize72 = "https://example.com/img72.png",
-                        imageSize192 = "https://example.com/img192.png",
-                        imageSize512 = "https://example.com/img512.png",
-                        statusTextCanonical = "",
-                    )
+                val mockProfile = createProfile()
                 every {
-                    restRequester.get(
+                    restRequester.safeGet(
                         uri = "users.profile.get?user=$TEST_USER_ID",
                         authorizationHeader = TEST_BOT_TOKEN,
                         responseType = SlackUserProfileDto::class.java,
                     )
-                } returns SlackUserProfileDto(ok = true, profile = mockProfile)
+                } returns Result.success(ResponseEntity.ok(SlackUserProfileDto(ok = true, profile = mockProfile)))
 
                 val result =
                     templateBuilder.approvalTemplate(
@@ -230,6 +209,41 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, userThumbnail, text, and approval blocks") {
                     result.template.size shouldBe 5
+                }
+            }
+
+            `when`("the profile lookup fails") {
+                val failingRequester = mockk<RestRequester>()
+                every {
+                    failingRequester.safeGet(
+                        uri = any(),
+                        authorizationHeader = any(),
+                        responseType = SlackUserProfileDto::class.java,
+                    )
+                } returns Result.failure(RestClientException("429 Too Many Requests"))
+                val degradedBuilder =
+                    ModalTemplateBuilder(
+                        modalBlockBuilder = ModalBlockBuilder(),
+                        restRequester = failingRequester,
+                        slackApiToken = TEST_BOT_TOKEN,
+                    )
+
+                val result =
+                    degradedBuilder.approvalTemplate(
+                        headLineText = "Approval Request",
+                        approvalContents = testApprovalContents,
+                        idempotencyKey = testIdempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+
+                then("the message still renders, naming the publisher by mention and without a thumbnail") {
+                    result.template.size shouldBe 5
+                    val publisherBlock = result.template[2].shouldBeInstanceOf<ContextBlock>()
+                    publisherBlock.elements.size shouldBe 2
+                    publisherBlock.elements
+                        .filterIsInstance<MarkdownTextObject>()
+                        .map { it.text }
+                        .contains("*<@$TEST_USER_ID>* ") shouldBe true
                 }
             }
         }

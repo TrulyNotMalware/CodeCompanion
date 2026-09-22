@@ -18,6 +18,8 @@ private val logger = KotlinLogging.logger { }
     name = "outbox_message",
     indexes = [
         Index(name = "idx_outbox_idempotency_key", columnList = "idempotency_key"),
+        Index(name = "idx_outbox_status_created_at", columnList = "status, created_at"),
+        Index(name = "idx_outbox_status_updated_at", columnList = "status, updated_at"),
     ],
 )
 class OutboxMessage(

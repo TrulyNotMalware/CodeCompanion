@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # infrastructure/repository/meeting/schema
 
@@ -11,7 +11,7 @@ change together.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MeetingSchema.kt` | `@Entity(name = "meetings")`: `meeting_uid` (UUID, unique, 36), `idempotency_key` (UUID, unique), `name`, `start_at`, `end_at?`, `is_canceled`, `publisher_id`, `channel`, `reason?`, `created_at`, `updated_at?`; `participants: MutableList<ParticipantsSchema>` `@OneToMany(mappedBy = "meeting", LAZY, orphanRemoval = false, cascade = [MERGE, PERSIST])`. `@Entity(name = "meeting_participants") ParticipantsSchema`: `@ManyToOne(LAZY) meeting`, `user_id`, `is_attending = true`, `absent_reason` `@Enumerated(STRING) = ATTENDING`, `absent_reason_detail?`, timestamps. Mappers `Meeting.toSchema(idempotencyKey, channel)`, `MeetingSchema.toDomainEntity()`, `MeetingSchema.toMeetingDto()` |
+| `MeetingSchema.kt` | `@Entity(name = "meetings")` with `@Table(indexes = [(is_canceled, start_at), (publisher_id, start_at)])`: `meeting_uid` (UUID, unique, 36), `idempotency_key` (UUID, unique), `name`, `start_at`, `end_at?`, `is_canceled`, `publisher_id`, `channel`, `reason?`, `created_at`, `updated_at?`, body property `@Version version: Long` (protected setter, bumped by the participant write path); `participants: MutableList<ParticipantsSchema>` `@OneToMany(mappedBy = "meeting", LAZY, orphanRemoval = false, cascade = [MERGE, PERSIST])`. `@Entity(name = "meeting_participants") ParticipantsSchema` with `@Table(uniqueConstraints = [(meeting_id, user_id)], indexes = [user_id])`: `@ManyToOne(LAZY) meeting`, `user_id`, `is_attending = true`, `absent_reason` `@Enumerated(STRING) = ATTENDING`, `absent_reason_detail?`, timestamps. Mappers `Meeting.toSchema(idempotencyKey, channel)`, `MeetingSchema.toDomainEntity()`, `MeetingSchema.toMeetingDto()` |
 | `MeetingReminderSchema.kt` | `@Entity(name = "meeting_reminder")`, `uk_meeting_reminder_meeting_offset` on `(meeting_id, offset_minutes)`, index `idx_meeting_reminder_scheduled_status` on `(status, scheduled_at)`. Columns: `@ManyToOne(LAZY) meeting`, `offset_minutes`, `scheduled_at: Instant`, `sent_at?: Instant`, `status` `@Enumerated(STRING)` (16, default `PENDING`), `failure_reason?` (`TEXT`), `claim_token?` (36), `created_at`, `updated_at?`. `MeetingReminderSchema.toMeetingReminderDto()` |
 | `AgendaDispatchSchema.kt` | `@Entity(name = "agenda_dispatch")`: `@Id agenda_date: LocalDate`, `created_at`. No other state |
 

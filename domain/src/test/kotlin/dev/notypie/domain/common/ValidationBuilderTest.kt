@@ -49,6 +49,16 @@ class ValidationBuilderTest :
                 }
             }
 
+            `when`("the left rule fails and the right rule passes") {
+                val validationResult =
+                    validateAndReturn {
+                        "long" of "12345678901" shouldBeShorterThan 5 or { it shouldBeLongerThan 10 }
+                    }
+                then("OR is satisfied and no error remains") {
+                    validationResult.size shouldBe 0
+                }
+            }
+
             `when`("assert OR operations with validate") {
                 then("should throw validationExceptions") {
                     shouldThrowExactly<ValidationException> {
@@ -77,6 +87,9 @@ class ValidationBuilderTest :
                     validationResult.size shouldBe 3
                     validationResult.first().fieldName shouldBe "emptyString"
                     validationResult.last().fieldName shouldBe "nullString"
+                }
+                then("the reason is a user-facing sentence, not the Field's toString()") {
+                    validationResult.first().reason shouldBe "must not be blank"
                 }
             }
 

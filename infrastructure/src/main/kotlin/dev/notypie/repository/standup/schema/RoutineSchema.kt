@@ -17,6 +17,11 @@ import java.util.UUID
 
 // Questions are \n-joined in one TEXT column; the domain layer rejects newlines in a question to keep this unambiguous.
 @Entity(name = "standup_routine")
+@Table(
+    indexes = [
+        Index(name = "idx_standup_routine_active_channel", columnList = "is_active, command_channel"),
+    ],
+)
 class RoutineSchema(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)

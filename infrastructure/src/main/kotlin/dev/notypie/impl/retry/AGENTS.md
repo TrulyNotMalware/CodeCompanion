@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # infrastructure/impl/retry
 
@@ -11,17 +11,16 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `RetryService.kt` | `class RetryService(retryTemplate: RetryTemplate)`. `fun <T> execute(action: () -> T, recoveryCallBack: (() -> T)? = null, maxAttempts = 3, initialDelay = 100, multiplier = 2.0, maxDelay = 10000, jitter = 10, exceptions = listOf(Exception::class.java)): T` builds a `RetryPolicy` and assigns it to the template before running; a `RetryException` invokes `recoveryCallBack` or is rethrown. `private fun createFixedBackOffPolicy` is unused |
+| `RetryService.kt` | `class RetryService()`. `fun <T> execute(action: () -> T, recoveryCallBack: (() -> T)? = null, maxAttempts = 3, initialDelay = 100, multiplier = 2.0, maxDelay = 10000, jitter = 10, exceptions = listOf(Exception::class.java)): T` looks up (or builds once) a `RetryTemplate` per distinct policy in a `ConcurrentHashMap<PolicyKey, RetryTemplate>` and runs on that; a `RetryException` invokes `recoveryCallBack` or is rethrown. `maxAttempts` is the total execution count (`maxRetries = maxAttempts - 1`) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **The policy is assigned to the shared singleton on every call** (`retryTemplate.retryPolicy = policy`).
-  Overrides such as `SlackMessageRelayServiceImpl`'s `maxAttempts = 5` are visible to any concurrent
-  caller of the same template until the next call replaces them. If two callers need different policies
-  under load, give them their own `RetryTemplate` instead of widening this class.
-- **`maxAttempts` feeds `RetryPolicy.Builder.maxRetries`,** which counts retries *after* the first attempt
-  — the default `3` allows up to four invocations. Name your override accordingly.
+- **One `RetryTemplate` per policy, never a shared mutable one.** Before 2026-09-22 every call assigned
+  its policy to a singleton template, so a caller asking for `maxAttempts = 5` could run with another
+  thread's `3`. `RetryServiceTest` races two policies to keep this from regressing.
+- **`maxAttempts` is the total number of executions.** The service converts it to Spring's `maxRetries`
+  (`maxAttempts - 1`), so the default `3` means three invocations, not four.
 - **Only `RetryException` triggers recovery.** Exceptions outside `exceptions` are not retried and
   propagate unchanged; `recoveryCallBack` returning `null` for a nullable `T` falls back to rethrowing.
 - **Retries only on exceptions.** `ApplicationMessageDispatcher.dispatch` returns a `CommandOutput` with

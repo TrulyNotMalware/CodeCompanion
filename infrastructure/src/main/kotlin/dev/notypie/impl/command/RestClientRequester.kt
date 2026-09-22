@@ -4,25 +4,37 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
+import java.net.http.HttpClient
+import java.time.Duration
 
 val logger = KotlinLogging.logger { }
 
 class RestClientRequester(
     val baseUrl: String,
     private val authorization: String? = null,
+    private val connectTimeout: Duration = DEFAULT_CONNECT_TIMEOUT,
+    private val readTimeout: Duration = DEFAULT_READ_TIMEOUT,
 ) : RestRequester {
     companion object {
         const val SLACK_API_BASE_URL = "https://slack.com/api/"
+        val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(3L)
+        val DEFAULT_READ_TIMEOUT: Duration = Duration.ofSeconds(10L)
         const val DEFAULT_CONTENT_TYPE = "application/json; charset=utf-8"
         const val BEARER_PREFIX = "Bearer "
     }
 
+    // RestClient.builder() is the static factory, so nothing from spring.http.client.* applies here — without an
+    // explicit request factory a stalled Slack call would hold the relay thread indefinitely.
     private val restClient: RestClient =
         RestClient
             .builder()
-            .baseUrl(baseUrl)
+            .requestFactory(
+                JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(connectTimeout).build())
+                    .apply { setReadTimeout(readTimeout) },
+            ).baseUrl(baseUrl)
             .defaultHeaders { headers ->
                 headers.add(HttpHeaders.CONTENT_TYPE, DEFAULT_CONTENT_TYPE)
                 if (!authorization.isNullOrBlank()) {

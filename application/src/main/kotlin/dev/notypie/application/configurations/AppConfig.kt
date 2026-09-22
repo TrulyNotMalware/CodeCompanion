@@ -82,14 +82,21 @@ data class AppConfig(
     data class Outbox(
         val health: Health = Health(),
         val polling: Polling = Polling(),
+        val retention: Retention = Retention(),
     ) {
         data class Health(
             val stuckThresholdSeconds: Long = 300L,
         )
 
+        data class Retention(
+            val days: Long = 14L,
+            val batchSize: Int = 1_000,
+        )
+
         data class Polling(
             val batchSize: Int = 100,
             val stuckInProgressSeconds: Long = 300L,
+            val giveUpAfterHours: Long = 24L,
         )
     }
 

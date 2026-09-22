@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldBe
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ServletRequest
 import jakarta.servlet.ServletResponse
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.MediaType
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
@@ -104,6 +105,78 @@ class SlackRequestVerificationFilterTest :
                 }
             }
 
+            `when`("a Slack retry carries a fresh timestamp and signature, as real retries do") {
+                val rawBody = "team_id=T123&command=%2Fmeetup&text=list"
+                val filter =
+                    SlackRequestVerificationFilter(
+                        appConfig = appConfig,
+                        signatureVerifier = signatureVerifier,
+                        retryDeduplicator = InMemorySlackRetryDeduplicator(clock = clock),
+                    )
+
+                fun signed(timestamp: String, retryNum: String? = null) =
+                    signedRequest(
+                        rawBody = rawBody,
+                        timestamp = timestamp,
+                        signature =
+                            signatureVerifier.createSignature(
+                                signingSecret = signingSecret,
+                                requestTimestamp = timestamp,
+                                body = rawBody.toByteArray(Charsets.UTF_8),
+                            ),
+                        retryNum = retryNum,
+                    )
+
+                val firstChain = CountingFilterChain()
+                filter.doFilter(signed(timestamp = timestamp), MockHttpServletResponse(), firstChain)
+
+                val retryResponse = MockHttpServletResponse()
+                val retryChain = CountingFilterChain()
+                val laterTimestamp = (timestamp.toLong() + 60L).toString()
+                filter.doFilter(signed(timestamp = laterTimestamp, retryNum = "1"), retryResponse, retryChain)
+
+                then("the retry is still recognised because the fingerprint keys on the body") {
+                    firstChain.invocationCount shouldBe 1
+                    retryResponse.status shouldBe 200
+                    retryChain.invocationCount shouldBe 0
+                }
+            }
+
+            `when`("the first attempt failed with a 5xx and Slack retries it") {
+                val rawBody = "team_id=T123&command=%2Fmeetup&text=list"
+                val signature =
+                    signatureVerifier.createSignature(
+                        signingSecret = signingSecret,
+                        requestTimestamp = timestamp,
+                        body = rawBody.toByteArray(Charsets.UTF_8),
+                    )
+                val filter =
+                    SlackRequestVerificationFilter(
+                        appConfig = appConfig,
+                        signatureVerifier = signatureVerifier,
+                        retryDeduplicator = InMemorySlackRetryDeduplicator(clock = clock),
+                    )
+
+                val failingResponse = MockHttpServletResponse()
+                filter.doFilter(
+                    signedRequest(rawBody = rawBody, timestamp = timestamp, signature = signature),
+                    failingResponse,
+                    CountingFilterChain(statusToSet = 500),
+                )
+
+                val retryChain = CountingFilterChain()
+                filter.doFilter(
+                    signedRequest(rawBody = rawBody, timestamp = timestamp, signature = signature, retryNum = "1"),
+                    MockHttpServletResponse(),
+                    retryChain,
+                )
+
+                then("the retry reaches the handlers instead of being acknowledged away") {
+                    failingResponse.status shouldBe 500
+                    retryChain.invocationCount shouldBe 1
+                }
+            }
+
             `when`("the Slack signature is invalid") {
                 val request =
                     signedRequest(
@@ -147,7 +220,9 @@ private fun signedRequest(
         setContent(rawBody.toByteArray(Charsets.UTF_8))
     }
 
-private class CountingFilterChain : FilterChain {
+private class CountingFilterChain(
+    private val statusToSet: Int? = null,
+) : FilterChain {
     var invocationCount = 0
         private set
     var lastRequest: ServletRequest? = null
@@ -156,5 +231,6 @@ private class CountingFilterChain : FilterChain {
     override fun doFilter(request: ServletRequest, response: ServletResponse) {
         invocationCount += 1
         lastRequest = request
+        statusToSet?.let { (response as HttpServletResponse).status = it }
     }
 }

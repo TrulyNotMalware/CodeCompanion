@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
 
 # infrastructure/templates
 
@@ -13,7 +13,8 @@ modal payloads — behind small type-safe DSLs.
 |------|-------------|
 | `SlackViewDsl.kt` | `modal { ... }` builder producing a `Map<String, Any>` view payload; preserves key order via `LinkedHashMap` |
 | `LayoutBlocksDsl.kt` | DSL for Block Kit layout blocks |
-| `ModalTemplateBuilder.kt` | Composes complete modals for each form (meeting request, reschedule, add participant, standup setup/fill, CVE subscription, decline reason) |
+| `ModalTemplateBuilder.kt` | Composes complete modals for each form (meeting request, reschedule, add participant, standup setup/fill, CVE subscription, decline reason); `approvalTemplate` names the publisher through `SlackUserProfileResolver` |
+| `SlackUserProfileResolver.kt` | `resolve(userId): PublisherView(displayName, thumbnailUrl?)` — `users.profile.get` via `RestRequester.safeGet`, cached per user (30 min TTL, 5 000 entries); any failure or `ok = false` degrades to `<@userId>` with no thumbnail and is not cached, so an approval message never fails on a decorative lookup |
 | `ModalBlockBuilder.kt` | Block-level assembly used by the template builder |
 | `ModalElementBuilder.kt` | Element-level widgets: text inputs, selects, date/time pickers, checkboxes |
 | `SlackTemplateBuilder.kt` | Non-modal message templates |

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # domain/command (test)
 
@@ -11,7 +11,6 @@ largest part of the domain test set (36 of 42 spec files).
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandDomainTest.kt` | Empty `BehaviorSpec` placeholder — declares no cases. Either fill it or delete it |
 | `CommandSetTest.kt` | `CommandSet.parseCommand`: unknown string → `UNKNOWN`, case-insensitive match (`NOtiCE` → `NOTICE`), `ask` → `ASK`. `BehaviorSpec`, no fixtures |
 | `EventQueueTest.kt` | `DefaultEventQueue` via `createDomainEventQueue()`: empty state, `offer` of internal/external events, `containsExternalEvent` flips back when the external event is polled, FIFO `poll`, ordered `snapshot`. `BehaviorSpec`; uses `createInternalTestEvent`, `createExternalTestEvent`, `INTERNAL_EVENT_NAME`, `EXTERNAL_EVENT_NAME`, `TestCommandEvent` |
 | `SubCommandDefinitionTest.kt` | `SubCommandDefinition.validateArguments` (`requiresArguments` / `minRequiredArgs`), `SubCommand.empty()` / `SubCommand.of(definition, options)` / `isValid()`, and `findSubCommandByIdentifier<MeetingSubCommandDefinition>` (match → `LIST`, `""` → `NONE`, unknown → `null`). `BehaviorSpec`; uses `NoSubCommands` from main, no fixtures |
@@ -35,8 +34,6 @@ indirectly by every context spec; the DTOs are exercised by `outbound/OutboundMe
 ### Working In This Directory
 - `EventQueueTest` shares one queue across its `when` blocks and is order-dependent (the `poll` cases
   assume the two earlier `offer`s). Add new cases at the end or give them their own queue.
-- `CommandDomainTest.kt` is dead weight; do not add cases to it by reflex — put them next to the
-  class under test.
 - Package here is `dev.notypie.domain.command`, the same as main, so `internal` symbols such as
   `NoSubCommands` and `findSubCommandByIdentifier` resolve without extra plumbing.
 

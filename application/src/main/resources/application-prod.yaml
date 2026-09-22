@@ -57,7 +57,9 @@ spring:
           disallow-delete: true
 
   kafka:
-    bootstrap-servers: [ "kafka:port" ]
+    # No default on purpose: an unset env var fails property binding at startup. The value comes from
+    # k8s/configmap.yaml, whose checked-in placeholder must be replaced in-cluster.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
@@ -66,9 +68,14 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       auto-offset-reset: earliest
-      enable-auto-commit: true
-      max-poll-records: 1000
+      # The listener container commits per record (AckMode.RECORD); client-side auto-commit would
+      # advance offsets past records that are still being dispatched.
+      enable-auto-commit: false
+      max-poll-records: 100
       isolation-level: read_committed
+      properties:
+        # A batch of rate-limited records waits up to 30s each in the listener thread; keep the group alive.
+        max.poll.interval.ms: 600000
 
 server:
   port: 80
@@ -83,6 +90,10 @@ management:
       external-file: ./logback.log
     health:
       show-details: when_authorized
+      # Explicit rather than relying on Boot's Kubernetes auto-detection: k8s/deployment.yaml probes
+      # /actuator/health/{liveness,readiness}.
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:
@@ -116,6 +127,11 @@ slack:
       event-publisher: kafka
       cdc:
         topic: ${SLACK_CDC_TOPIC}
+    outbox:
+      # SUCCESS/FAILURE rows older than this are purged hourly in batches; PENDING/IN_PROGRESS are kept.
+      retention:
+        days: 14
+        batch-size: 1000
     # AI agent backend — the claude-sidecar runs in the same Pod (k8s native sidecar), so the
     # base URL stays Pod-loopback. The bearer secret is shared with the sidecar via one Secret.
     agent:

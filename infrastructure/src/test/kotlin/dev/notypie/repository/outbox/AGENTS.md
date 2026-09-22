@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox
 
@@ -16,6 +16,8 @@ row builder). Plain Kotest, no Spring, no database.
 | Directory | Purpose |
 |-----------|---------|
 | `schema/` | `OutboxMessageTest` — `CodecOutboundMessagePort.toRow` and `updateMessageStatus` (see `schema/AGENTS.md`) |
+
+`MessageOutboxRepositoryTest.kt` (`@DataJpaTest`, H2) is the first DB-backed coverage of the native queries: `claimPending` loses the second call, `findPendingMessages` filters PENDING oldest-first with a limit, `reclaimStuck` wins once, `deleteTerminalOlderThan` purges aged SUCCESS/FAILURE only. Rows are aged with a `JdbcTemplate` UPDATE because `updated_at` is `@UpdateTimestamp`.
 
 ## For AI Agents
 

@@ -25,7 +25,6 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.core.retry.RetryTemplate
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.Executor
@@ -44,7 +43,7 @@ class SlackMessageRelayServiceImplTest :
                 outboundMessagePort = outboundMessagePort,
                 payloadRenderer = payloadRenderer,
                 messageDispatcher = messageDispatcher,
-                retryService = RetryService(retryTemplate = RetryTemplate()),
+                retryService = RetryService(),
                 applicationEventPublisher = applicationEventPublisher,
                 relayTaskExecutor = Executor { command -> command.run() },
             )

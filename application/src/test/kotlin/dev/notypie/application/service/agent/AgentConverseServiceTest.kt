@@ -25,6 +25,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.CapturingSlot
@@ -330,6 +331,39 @@ class AgentConverseServiceTest :
                     turnRequest.captured.sessionKey shouldBe "${basicInfo.channel}:${basicInfo.publisherId}"
                     val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
                     staged.threadId shouldBe null
+                }
+            }
+        }
+
+        given("an event whose app_mention carried no display names") {
+            val basicInfo = createCommandBasicInfo()
+            val gateway = mockk<AgentGateway>()
+            val turnRequest = slot<AgentTurnRequest>()
+            every { gateway.converse(request = capture(turnRequest)) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "hi")
+
+            val stagedMessage = slot<OutboundMessage>()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                )
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(
+                    event =
+                        createAgentConverseRequestEvent(
+                            requesterName = "",
+                            channelName = "",
+                            responseBasicInfo = basicInfo,
+                        ),
+                )
+
+                then("the context block degrades to bare Slack mentions instead of printing blanks or \"null\"") {
+                    val contextPrompt = turnRequest.captured.appendSystemPrompt.orEmpty()
+                    contextPrompt shouldContain "- Requester: <@${basicInfo.publisherId}>\n"
+                    contextPrompt shouldContain "- Channel: <#${basicInfo.channel}>\n"
+                    contextPrompt shouldNotContain "null"
                 }
             }
         }

@@ -1,15 +1,14 @@
 package dev.notypie.domain.common.error
 
+// Transport-neutral on purpose: HTTP status mapping belongs to the application layer's ControllerAdvice.
 interface ErrorCode {
-    val statusCode: Int
     val message: String
 }
 
 internal enum class CommonErrorCode(
-    override val statusCode: Int,
     override val message: String,
 ) : ErrorCode {
-    VALIDATION_FAILED(statusCode = 400, message = "Validation failed"),
+    VALIDATION_FAILED(message = "Validation failed"),
 }
 
 data class ExceptionArgument(
@@ -44,15 +43,8 @@ class ReasonBuilder(
     }
 }
 
-internal sealed class ErrorResponse(
-    errorCode: ErrorCode,
-    val code: Int = errorCode.statusCode,
-    val message: String = errorCode.message,
-    val detail: List<ExceptionArgument> = emptyList(),
-)
-
 abstract class CodeCompanionRuntimeException(
-    errorCode: ErrorCode,
+    val errorCode: ErrorCode,
     val details: List<ExceptionArgument> = emptyList(),
 ) : RuntimeException(errorCode.message)
 

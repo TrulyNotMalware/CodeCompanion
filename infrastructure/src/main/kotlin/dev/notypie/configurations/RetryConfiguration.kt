@@ -1,39 +1,15 @@
 package dev.notypie.configurations
 
 import dev.notypie.impl.retry.RetryService
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.core.retry.RetryPolicy
-import org.springframework.core.retry.RetryTemplate
 import org.springframework.resilience.annotation.EnableResilientMethods
-import java.time.Duration
 
 @EnableResilientMethods
 @Configuration
 class RetryConfiguration {
     @Bean
-    @ConditionalOnMissingBean(RetryTemplate::class)
-    fun retryTemplate(): RetryTemplate {
-        val exceptions = listOf(Exception::class.java)
-        val policy =
-            RetryPolicy
-                .builder()
-                .maxRetries(RetryOptions.MAX_ATTEMPTS.default)
-                .delay(Duration.ofMillis(RetryOptions.INITIAL_DELAY.default))
-                .multiplier(RetryOptions.MULTIPLIER.default.toDouble())
-                .maxDelay(Duration.ofMillis(RetryOptions.MAX_DELAY.default))
-                .jitter(Duration.ofMillis(RetryOptions.JITTER.default))
-                .includes(exceptions)
-                .build()
-        return RetryTemplate()
-            .apply {
-                retryPolicy = policy
-            }
-    }
-
-    @Bean
-    fun retryService(retryTemplate: RetryTemplate): RetryService = RetryService(retryTemplate = retryTemplate)
+    fun retryService(): RetryService = RetryService()
 }
 
 enum class RetryOptions(

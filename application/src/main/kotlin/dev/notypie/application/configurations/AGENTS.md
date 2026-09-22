@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
 
 # application/configurations
 
@@ -14,11 +14,11 @@ is the map of what actually exists at runtime in a given profile.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AppConfig.kt` | `@ConfigurationProperties(prefix = "slack.app")` root: `api`, `mode`, `meeting`, `standup`, `outbox`, `socket`, `agent`, `authorization`, `mcp`, `cve`, `ai`. Also declares `OutboxReaderStrategy` (`POLLING` / `CDC`) |
+| `AppConfig.kt` | `@ConfigurationProperties(prefix = "slack.app")` root: `api`, `mode`, `meeting`, `standup`, `outbox`, `socket`, `agent`, `authorization`, `mcp`, `cve`, `ai`. Also declares `OutboxReaderStrategy` (`POLLING` / `CDC`). `Outbox` nests `Health(stuckThresholdSeconds = 300)`, `Polling(batchSize = 100, stuckInProgressSeconds = 300, giveUpAfterHours = 24)` and `Retention(days = 14, batchSize = 1000)` (the outbox purge) |
 | `conditions/Conditions.kt` | `Environment.extractAppConfig()` + `OnPollingConsumer`, `OnCdcConsumer`, `OnKafkaEventPublisher`, `OnApplicationEventPublisher` — bind `slack.app` early and match on mode |
-| `ConsumerConfig.kt` | Picks the outbox reader (`PollingMessageProcessor` vs `DebeziumLogTailingProcessor`), the `EventPublisher` (`AppEventPublisher` vs `KafkaEventPublisher`), and the `ErrorBroadcaster` (stdout vs Kafka) |
-| `KafkaConsumerConfiguration.kt` | `@EnableKafka`, container factory, `ErrorHandlingDeserializer`, error handler, Micrometer observation conventions |
-| `AsyncConfig.kt` | `@EnableAsync` + `threadPoolTaskExecutor`; deliberately does **not** override the event multicaster |
+| `ConsumerConfig.kt` | Picks the outbox reader (`PollingMessageProcessor` vs `DebeziumLogTailingProcessor`), the `EventPublisher` (`AppEventPublisher` vs `KafkaEventPublisher`), and the mode-independent `ErrorBroadcaster` (`StdoutErrorBroadcaster`, `ErrorBroadcasterConfig`) |
+| `KafkaConsumerConfiguration.kt` | `@EnableKafka`, container factory (`AckMode.RECORD`), `ErrorHandlingDeserializer`, `DefaultErrorHandler` → `DeadLetterPublishingRecoverer` when a `KafkaTemplate` exists (log-only otherwise; `CdcRecordParseException` is not retried), Micrometer observation conventions |
+| `AsyncConfig.kt` | `@EnableAsync` + `@Primary threadPoolTaskExecutor` (10 threads, queue 10 000) and the dedicated `relayTaskExecutor` (4 threads, queue = `outbox.polling.batch-size`, `CallerRunsPolicy`) that `SlackMessageRelayServiceImpl` takes by `@Qualifier` — bounded so a claimed row cannot sit in a queue past the stuck threshold and get re-dispatched by `OutboxRecoveryScheduler`; deliberately does **not** override the event multicaster |
 | `SchedulingConfig.kt` | Enables scheduling for the meeting/standup/CVE/outbox jobs |
 | `AppConfig`-driven feature configs | `CveConfiguration.kt` (whole CVE lane), `AgentConfiguration.kt` (sidecar client + agent service), `McpServerConfiguration.kt` (MCP tools, gate, turn-token filter) |
 | `RestClientConfiguration.kt` | Shared `RestClient` used by Slack and source adapters |

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # db/migration
 
@@ -29,11 +29,13 @@ rolls out. The folder is therefore the production schema runbook and the audit t
 | `V15__add_cve_collect_ledger_table.sql` | `cve_collect_ledger`, unique `(topic_id, window_start)` multi-instance collector gate |
 | `V16__add_cve_event_status_created_at_index.sql` | `idx_cve_event_status_created_at` on `cve_event (summary_status, created_at)` |
 | `V17__add_cve_event_query_indexes.sql` | `idx_cve_event_topic_status_id` and `idx_cve_event_status_next_attempt` on `cve_event` |
+| `V18__add_meeting_version_and_indexes.sql` | `meetings.version` (optimistic lock), unique `(meeting_id, user_id)` on `meeting_participants` (check for duplicates first — see the script header), indexes on `meetings`, `meeting_participants`, `standup_routine` |
+| `V19__add_outbox_status_indexes.sql` | `idx_outbox_status_created_at` and `idx_outbox_status_updated_at` on `outbox_message` — the poller, CDC claim, retention purge and health scalars all filter on `status` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V18`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V20`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Every script is MariaDB dialect.** `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`,
   `DROP INDEX IF EXISTS … ON`, inline `INDEX` clauses inside `CREATE TABLE`, `ENUM`, `DATETIME(6)`,
   `ON UPDATE CURRENT_TIMESTAMP` and `INSERT IGNORE` semantics are all assumed. They will not run on H2 (the
@@ -55,7 +57,7 @@ rolls out. The folder is therefore the production schema runbook and the audit t
   for a change is recorded, since prod applies these outside any migration tool.
 - The profile YAML carries no `spring.flyway.*` keys (the inert `enabled: false` leftovers were removed
   2026-09-21). Do not add Flyway config — adopting the tool would also require a baseline for every
-  environment that already applied `V1`–`V17` by hand.
+  environment that already applied `V1`–`V19` by hand.
 - Files here are packaged into the boot jar by `processResources` although the app never reads them.
 
 ### Testing Requirements

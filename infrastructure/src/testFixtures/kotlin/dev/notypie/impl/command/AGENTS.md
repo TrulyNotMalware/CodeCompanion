@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/impl/command
 
@@ -17,6 +17,7 @@ fixture instead of silently drifting.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
+| `dto/` | `createProfile(displayName, realName, imageSize24)` — the 25-field `Profile` behind `SlackUserProfileDto` (see `dto/AGENTS.md`) |
 | `slack/` | Typed `InteractionPayload` and Events API request creators (see `slack/AGENTS.md`) |
 | `event/` | `SendSlackMessageEvent` / `OpenViewEvent` and payload-contents creators (see `event/AGENTS.md`) |
 

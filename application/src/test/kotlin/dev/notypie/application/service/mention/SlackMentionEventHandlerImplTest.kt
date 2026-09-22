@@ -105,6 +105,18 @@ class SlackMentionEventHandlerImplTest :
                 then("parsed values should reflect the custom parameters") {
                     result.channel shouldBe "C_CUSTOM"
                     result.actorId shouldBe "U_CUSTOM"
+                    result.actorName shouldBe "customuser"
+                }
+            }
+
+            `when`("payload carries no display names, as a real app_mention callback does") {
+                val payload = createAppMentionPayload()
+
+                val result = handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+
+                then("names are blank rather than the literal string \"null\"") {
+                    result.actorName shouldBe ""
+                    result.channelName shouldBe ""
                 }
             }
         }

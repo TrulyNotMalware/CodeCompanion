@@ -143,7 +143,31 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        else -> {
+        // Listed explicitly instead of `else`: a new CommandDetailType must choose a context here or fail to
+        // compile, rather than silently becoming a no-op interaction.
+        CommandDetailType.NOTHING,
+        CommandDetailType.SIMPLE_TEXT,
+        CommandDetailType.REPLACE_TEXT,
+        CommandDetailType.ERROR_RESPONSE,
+        CommandDetailType.APPLY_REQUEST,
+        CommandDetailType.GET_MEETING_LIST,
+        CommandDetailType.MEETING_DECLINE_REASON,
+        CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+        CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+        CommandDetailType.MEETING_REMINDER,
+        CommandDetailType.DAILY_AGENDA,
+        CommandDetailType.STATUS_REPORT,
+        CommandDetailType.AGENT_CONVERSE,
+        CommandDetailType.STANDUP_ANSWER_SUBMIT,
+        CommandDetailType.STANDUP_SETUP_SUBMIT,
+        CommandDetailType.STANDUP_SUMMARY,
+        CommandDetailType.CVE_SUBSCRIBE_REQUEST,
+        CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
+        CommandDetailType.CVE_UNSUBSCRIBE_REQUEST,
+        CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT,
+        CommandDetailType.CVE_SUBSCRIPTIONS_LIST,
+        CommandDetailType.CVE_LATEST,
+        -> {
             EmptyContext(
                 commandBasicInfo = commandBasicInfo,
                 intents = intents,

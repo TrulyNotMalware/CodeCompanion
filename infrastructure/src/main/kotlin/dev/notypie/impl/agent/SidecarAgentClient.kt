@@ -7,6 +7,10 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.stream.Stream
 
 private val log = KotlinLogging.logger {}
@@ -21,6 +25,14 @@ class SidecarAgentClient(
         internal const val ERROR_CODE_BUSY = "busy"
         internal const val ERROR_CODE_TRANSPORT = "transport_error"
         internal const val ERROR_CODE_INCOMPLETE_STREAM = "incomplete_stream"
+        internal const val ERROR_CODE_STREAM_TIMEOUT = "stream_timeout"
+        private const val MAX_ERROR_BODY_CHARS = 8_192
+
+        // Shared daemon watchdog: one thread is plenty, it only ever calls Stream.close().
+        private val watchdog: ScheduledExecutorService =
+            Executors.newSingleThreadScheduledExecutor { runnable ->
+                Thread(runnable, "sidecar-stream-watchdog").apply { isDaemon = true }
+            }
 
         private const val EVENT_SESSION = "session"
         private const val EVENT_TEXT = "text"
@@ -60,13 +72,45 @@ class SidecarAgentClient(
                 .POST(HttpRequest.BodyPublishers.ofString(toRequestBody(request = request)))
                 .build()
 
+        val startedAt = System.nanoTime()
         val response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofLines())
-        return response.body().use { lines ->
+        // HttpRequest.timeout() only covers the wait for response headers; the body is a stream the sidecar
+        // may stall indefinitely, so the same budget is enforced over the whole turn with a watchdog.
+        val remaining = requestTimeout.minusNanos(System.nanoTime() - startedAt)
+        return withStreamDeadline(stream = response.body(), deadline = remaining) { lines ->
             if (response.statusCode() != 200) {
                 toErrorResult(statusCode = response.statusCode(), body = lines)
             } else {
                 foldSseStream(lines = lines)
             }
+        }
+    }
+
+    private fun withStreamDeadline(
+        stream: Stream<String>,
+        deadline: Duration,
+        block: (Stream<String>) -> AgentTurnResult,
+    ): AgentTurnResult {
+        val timedOut = AtomicBoolean(false)
+        val task =
+            watchdog.schedule(
+                {
+                    timedOut.set(true)
+                    runCatching { stream.close() }
+                },
+                deadline.toNanos().coerceAtLeast(0L),
+                TimeUnit.NANOSECONDS,
+            )
+        try {
+            return stream.use(block)
+        } catch (exception: Exception) {
+            if (!timedOut.get()) throw exception
+            return AgentTurnResult.Failed(
+                code = ERROR_CODE_STREAM_TIMEOUT,
+                message = "SSE stream exceeded ${requestTimeout.toSeconds()}s without a terminal event",
+            )
+        } finally {
+            task.cancel(false)
         }
     }
 
@@ -79,10 +123,14 @@ class SidecarAgentClient(
     }
 
     private fun toErrorResult(statusCode: Int, body: Stream<String>): AgentTurnResult {
-        val raw = body.reduce("") { acc, line -> acc + line }
+        val raw = StringBuilder()
+        for (line in body.iterator()) {
+            raw.append(line)
+            if (raw.length >= MAX_ERROR_BODY_CHARS) break
+        }
         val error =
-            runCatching { jsonMapper.readValue(raw, SidecarError::class.java) }
-                .getOrElse { SidecarError(code = "http_$statusCode", message = raw.take(500)) }
+            runCatching { jsonMapper.readValue(raw.toString(), SidecarError::class.java) }
+                .getOrElse { SidecarError(code = "http_$statusCode", message = raw.take(500).toString()) }
         return if (statusCode == 429 || error.code == ERROR_CODE_BUSY) {
             AgentTurnResult.Busy
         } else {

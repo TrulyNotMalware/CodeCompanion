@@ -2,12 +2,12 @@ package dev.notypie.application.configurations
 
 import dev.notypie.application.configurations.conditions.OnCdcConsumer
 import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
+import dev.notypie.application.service.relay.CdcRecordParseException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
-import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.annotation.Bean
@@ -17,13 +17,15 @@ import org.springframework.context.annotation.Import
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.core.*
-import org.springframework.kafka.listener.CommonErrorHandler
-import org.springframework.kafka.listener.MessageListenerContainer
+import org.springframework.kafka.listener.ConsumerRecordRecoverer
+import org.springframework.kafka.listener.ContainerProperties
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
+import org.springframework.kafka.listener.DefaultErrorHandler
 import org.springframework.kafka.support.micrometer.KafkaListenerObservation
 import org.springframework.kafka.support.micrometer.KafkaListenerObservationConvention
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
-import java.lang.Exception
+import org.springframework.util.backoff.FixedBackOff
 
 private val logger = KotlinLogging.logger { }
 
@@ -46,6 +48,7 @@ class KafkaEventPublisherConfiguration
 class KafkaConsumerConfiguration(
     private val convention: KafkaObservationConvention,
     private val kafkaProperties: KafkaProperties,
+    private val kafkaTemplateProvider: ObjectProvider<KafkaTemplate<String, Any>>,
 ) {
     // Without this, a bad record throws inside poll() and wedges the consumer on that offset forever.
     @Bean
@@ -63,16 +66,41 @@ class KafkaConsumerConfiguration(
         return DefaultKafkaConsumerFactory(properties)
     }
 
+    // RECORD ack: the offset moves only after the listener returns for that record, so a crash mid-record
+    // redelivers it and the processor's current-status check decides whether to send again. This relies on
+    // `enable-auto-commit: false` in the profile; with auto-commit on, the client commits behind our back.
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)
     fun concurrentKafkaListenerContainerFactory() =
         ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
             containerProperties.isObservationEnabled = true
             containerProperties.isMicrometerEnabled = false
-            setCommonErrorHandler(KafkaErrorHandler())
+            containerProperties.ackMode = ContainerProperties.AckMode.RECORD
+            setCommonErrorHandler(cdcErrorHandler())
             setConsumerFactory(consumerFactory())
             containerProperties.setObservationConvention(convention)
         }
+
+    // Two quick retries for transient failures, then the record is parked on <topic>.DLT instead of being
+    // skipped; parse failures are deterministic and go straight there. Without a producer (CDC consumer
+    // with the application-event publisher) the recoverer degrades to an ERROR log.
+    private fun cdcErrorHandler(): DefaultErrorHandler {
+        val kafkaTemplate = kafkaTemplateProvider.ifAvailable
+        val recoverer =
+            if (kafkaTemplate != null) {
+                DeadLetterPublishingRecoverer(kafkaTemplate)
+            } else {
+                ConsumerRecordRecoverer { record, exception ->
+                    logger.error(exception) {
+                        "No KafkaTemplate for a dead-letter topic; dropping CDC record " +
+                            "topic=${record.topic()} partition=${record.partition()} offset=${record.offset()}"
+                    }
+                }
+            }
+        return DefaultErrorHandler(recoverer, FixedBackOff(1_000L, 2L)).apply {
+            addNotRetryableExceptions(CdcRecordParseException::class.java)
+        }
+    }
 }
 
 class KafkaProducerConfiguration(
@@ -105,30 +133,4 @@ class KafkaObservationConvention : KafkaListenerObservationConvention {
 
     override fun getLowCardinalityKeyValues(context: KafkaRecordReceiverContext): KeyValues =
         KeyValues.of(KafkaListenerObservation.ListenerLowCardinalityTags.LISTENER_ID.asString(), context.listenerId)
-}
-
-class KafkaErrorHandler : CommonErrorHandler {
-    override fun handleOtherException(
-        thrownException: Exception,
-        consumer: Consumer<*, *>,
-        container: MessageListenerContainer,
-        batchListener: Boolean,
-    ) = super.handleOtherException(thrownException, consumer, container, batchListener)
-
-    override fun handleOne(
-        thrownException: Exception,
-        record: ConsumerRecord<*, *>,
-        consumer: Consumer<*, *>,
-        container: MessageListenerContainer,
-    ): Boolean {
-        if (record.value() == null || record.value().toString().isBlank()) {
-            logger.warn {
-                "Received null or blank message. topic: ${record.topic()}, partition: ${record.partition()}, offset: ${record.offset()}"
-            }
-            return true
-        }
-        return super.handleOne(thrownException, record, consumer, container)
-    }
-
-    override fun seeksAfterHandling(): Boolean = super.seeksAfterHandling()
 }

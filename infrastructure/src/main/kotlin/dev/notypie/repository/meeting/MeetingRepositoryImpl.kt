@@ -2,7 +2,6 @@ package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
-import dev.notypie.domain.meet.entity.Member
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.meeting.schema.ParticipantsSchema
@@ -10,6 +9,7 @@ import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -79,12 +79,16 @@ open class MeetingRepositoryImpl(
         ) == 1
 
     @Transactional
-    override fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): Boolean =
-        jpaMeetingRepository.rescheduleMeeting(
+    override fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): Boolean {
+        val current = jpaMeetingRepository.findMeetingByUidForUpdate(meetingUid = meetingUid) ?: return false
+        val newEndAt = current.endAt?.let { newStartAt.plus(Duration.between(current.startAt, it)) }
+        return jpaMeetingRepository.rescheduleMeeting(
             meetingUid = meetingUid,
             requesterId = requesterId,
             newStartAt = newStartAt,
+            newEndAt = newEndAt,
         ) == 1
+    }
 
     override fun findMeetingByUid(meetingUid: UUID): MeetingDto? =
         jpaMeetingRepository
@@ -98,7 +102,7 @@ open class MeetingRepositoryImpl(
         participantUserIds: List<String>,
     ): AddParticipantResult {
         val schema =
-            jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid)
+            jpaMeetingRepository.findMeetingByUidForUpdate(meetingUid = meetingUid)
                 ?: return AddParticipantResult(outcome = AddParticipantResult.Outcome.MEETING_NOT_FOUND)
         if (schema.publisherId != requesterId || schema.isCanceled) {
             return AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
@@ -122,12 +126,7 @@ open class MeetingRepositoryImpl(
                 meeting = schema.toMeetingDto(),
             )
         }
-        val withinCapacity =
-            runCatching {
-                val meeting = schema.toDomainEntity()
-                newUserIds.forEach { meeting.addParticipant(user = Member(userId = it)) }
-            }.isSuccess
-        if (!withinCapacity) {
+        if (schema.participants.size + newUserIds.size > Meeting.MAX_PARTICIPANTS) {
             return AddParticipantResult(
                 outcome = AddParticipantResult.Outcome.OVER_CAPACITY,
                 meeting = schema.toMeetingDto(),

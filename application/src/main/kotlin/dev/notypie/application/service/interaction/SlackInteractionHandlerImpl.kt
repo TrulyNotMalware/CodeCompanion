@@ -2,9 +2,9 @@ package dev.notypie.application.service.interaction
 
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.common.jsonMapper
-import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
@@ -30,6 +30,7 @@ class SlackInteractionHandlerImpl(
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val commandExecutor: CommandExecutor,
     private val submissionParseObserver: SubmissionParseObserver,
+    private val commandRoleResolver: CommandRoleResolver,
 ) : InteractionHandler {
     companion object {
         // Legacy only — new contexts handle their own REJECT button; do NOT add new types here.
@@ -104,7 +105,7 @@ class SlackInteractionHandlerImpl(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
             commandData = commandData,
-            actorRole = UserRole.USER,
+            actorRole = commandRoleResolver.resolve(userId = commandData.actorId),
             parseObserver = submissionParseObserver,
         )
 

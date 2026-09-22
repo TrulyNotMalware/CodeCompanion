@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/service
 
@@ -13,6 +13,7 @@ has spec inputs worth sharing.
 | `cve/` | `ai/` — `createSummaryRequest` (see `cve/AGENTS.md`) |
 | `meeting/` | `createAgendaItem`, `createAgendaCandidateMeeting`, `createReminderCandidateMeeting` (see `meeting/AGENTS.md`) |
 | `mention/` | `createAppMentionPayload` — raw Slack `app_mention` event map (see `mention/AGENTS.md`) |
+| `relay/` | `createCdcEnvelope`, `createOutboxAfterImage` — Debezium `Envelope` for `DebeziumLogTailingProcessorTest` (see `relay/AGENTS.md`) |
 | `standup/` | `createNudgeCandidateSession` (see `standup/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

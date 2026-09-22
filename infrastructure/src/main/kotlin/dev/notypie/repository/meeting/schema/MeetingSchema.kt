@@ -12,6 +12,12 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 @Entity(name = "meetings")
+@Table(
+    indexes = [
+        Index(name = "idx_meetings_canceled_start_at", columnList = "is_canceled, start_at"),
+        Index(name = "idx_meetings_publisher_start_at", columnList = "publisher_id, start_at"),
+    ],
+)
 class MeetingSchema(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,7 +55,14 @@ class MeetingSchema(
     @field:UpdateTimestamp
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
-)
+) {
+    // Bumped with OPTIMISTIC_FORCE_INCREMENT on participant writes, since adding to the mappedBy
+    // collection alone leaves the parent row untouched and two concurrent adds would both pass the cap.
+    @field:Version
+    @field:Column(name = "version", nullable = false)
+    var version: Long = 0L
+        protected set
+}
 
 fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
     val meetingSchema =
@@ -111,6 +124,14 @@ fun MeetingSchema.toMeetingDto() =
     )
 
 @Entity(name = "meeting_participants")
+@Table(
+    uniqueConstraints = [
+        UniqueConstraint(name = "uk_meeting_participants_meeting_user", columnNames = ["meeting_id", "user_id"]),
+    ],
+    indexes = [
+        Index(name = "idx_meeting_participants_user_id", columnList = "user_id"),
+    ],
+)
 class ParticipantsSchema(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)

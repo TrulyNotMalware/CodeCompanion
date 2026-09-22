@@ -11,7 +11,6 @@ import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.RestClientRequester.Companion.SLACK_API_BASE_URL
 import dev.notypie.impl.command.RestRequester
-import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
@@ -29,6 +28,8 @@ class ModalTemplateBuilder(
             baseUrl = SLACK_API_BASE_URL,
         ),
     private val slackApiToken: String,
+    private val profileResolver: SlackUserProfileResolver =
+        SlackUserProfileResolver(restRequester = restRequester, slackApiToken = slackApiToken),
 ) : SlackTemplateBuilder {
     companion object {
         const val DEFAULT_PLACEHOLDER_TEXT = "SELECT"
@@ -95,20 +96,15 @@ class ModalTemplateBuilder(
         idempotencyKey: UUID,
         commandDetailType: CommandDetailType,
     ): LayoutBlocks {
-        val user =
-            restRequester.get(
-                uri = "users.profile.get?user=${approvalContents.publisherId}",
-                authorizationHeader = slackApiToken,
-                responseType = SlackUserProfileDto::class.java,
-            )
+        val publisher = profileResolver.resolve(userId = approvalContents.publisherId)
         return layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
             add(
                 block =
                     modalBlockBuilder.userNameWithThumbnailBlock(
-                        userName = user.profile.displayName,
-                        userThumbnailUrl = user.profile.imageSize24,
+                        userName = publisher.displayName,
+                        userThumbnailUrl = publisher.thumbnailUrl,
                         mkdIntroduceComment = "*Publisher* :",
                     ),
             )

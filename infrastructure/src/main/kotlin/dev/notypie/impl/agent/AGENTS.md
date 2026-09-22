@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # infrastructure/impl/agent
 
@@ -12,7 +12,7 @@ deliberately one blocking turn in, one terminal result out; `SidecarAgentClient`
 | File | Description |
 |------|-------------|
 | `AgentGateway.kt` | `interface AgentGateway { fun converse(request: AgentTurnRequest): AgentTurnResult }`; `AgentTurnRequest(sessionKey, prompt, sessionId?, userId?, appendSystemPrompt?, scopedToken?)`; `sealed interface AgentTurnResult` with `Completed(sessionId?, finalText, inputTokens?, outputTokens?)`, `data object Busy`, `Failed(code, message)` |
-| `SidecarAgentClient.kt` | `class SidecarAgentClient(baseUrl, bearerSecret, requestTimeout = 120s) : AgentGateway`. JDK `HttpClient` pinned to HTTP/1.1 with a 5 s connect timeout. Headers: `Authorization: Bearer`, `Accept: text/event-stream`, optional `X-User-Id`, `X-Turn-Token`. Private wire DTOs `SidecarSession`, `SidecarText`, `SidecarDone(finalText, usage)`, `SidecarUsage`, `SidecarError(code, message)`; error codes `busy`, `transport_error`, `incomplete_stream` |
+| `SidecarAgentClient.kt` | `class SidecarAgentClient(baseUrl, bearerSecret, requestTimeout = 120s) : AgentGateway`. JDK `HttpClient` pinned to HTTP/1.1 with a 5 s connect timeout. Headers: `Authorization: Bearer`, `Accept: text/event-stream`, optional `X-User-Id`, `X-Turn-Token`. `requestTimeout` bounds the **whole turn**: `HttpRequest.timeout` covers the headers and a shared daemon watchdog closes the body stream when the remaining budget runs out (`Failed(stream_timeout)`), so a sidecar that stalls mid-stream cannot pin the relay thread. Non-200 bodies are capped at 8 KiB. Private wire DTOs `SidecarSession`, `SidecarText`, `SidecarDone(finalText, usage)`, `SidecarUsage`, `SidecarError(code, message)`; error codes `busy`, `transport_error`, `incomplete_stream`, `stream_timeout` |
 
 ## For AI Agents
 

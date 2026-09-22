@@ -9,6 +9,8 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
+import java.time.LocalDateTime
 import java.util.UUID
 
 class MeetingRepositoryImplTest :
@@ -153,6 +155,74 @@ class MeetingRepositoryImplTest :
 
                 then("returns false so callers can distinguish a truly-missing row from a no-op UPDATE") {
                     repository.participantExists(meetingKey, "U_MISSING") shouldBe false
+                }
+            }
+        }
+
+        given("rescheduleMeeting") {
+            val meetingUid = UUID.randomUUID()
+            val originalStart = LocalDateTime.of(2026, 8, 1, 10, 0)
+
+            `when`("the meeting lasts 90 minutes and is moved two hours later") {
+                every { jpaMeetingRepository.findMeetingByUidForUpdate(meetingUid = meetingUid) } returns
+                    createMeetingSchema(
+                        meetingUid = meetingUid,
+                        startAt = originalStart,
+                        endAt = originalStart.plusMinutes(90L),
+                    )
+                val newEndAt = slot<LocalDateTime?>()
+                every {
+                    jpaMeetingRepository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                        newEndAt = captureNullable(newEndAt),
+                    )
+                } returns 1
+
+                val result =
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                    )
+
+                then("the duration is preserved so endAt stays after startAt") {
+                    result shouldBe true
+                    newEndAt.captured shouldBe originalStart.plusHours(2L).plusMinutes(90L)
+                }
+            }
+
+            `when`("the meeting has no explicit end") {
+                every { jpaMeetingRepository.findMeetingByUidForUpdate(meetingUid = meetingUid) } returns
+                    createMeetingSchema(meetingUid = meetingUid, startAt = originalStart, endAt = null)
+                every {
+                    jpaMeetingRepository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                        newEndAt = null,
+                    )
+                } returns 1
+
+                then("endAt stays null and the row still updates") {
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                    ) shouldBe true
+                }
+            }
+
+            `when`("the meeting does not exist") {
+                every { jpaMeetingRepository.findMeetingByUidForUpdate(meetingUid = meetingUid) } returns null
+
+                then("nothing is updated and the caller sees false") {
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                    ) shouldBe false
                 }
             }
         }

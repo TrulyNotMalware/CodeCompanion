@@ -41,8 +41,8 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       auto-offset-reset: earliest
-      enable-auto-commit: true
-      max-poll-records: 1000
+      enable-auto-commit: false # container commits per record (AckMode.RECORD); see application-prod.yaml
+      max-poll-records: 100
 
 server:
   port: 9000
@@ -64,7 +64,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,loggers,metrics,mappings,threaddump,conditions,info,heapdump
+        # No heapdump: it is unauthenticated here and a dump carries the Slack token and DB password.
+        include: health,loggers,metrics,mappings,threaddump,conditions,info
       base-path: /api/actuator
       path-mapping:
         loggers: logs

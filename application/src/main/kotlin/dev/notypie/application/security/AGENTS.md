@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
 
 # application/security
 
@@ -16,7 +16,7 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 |------|-------------|
 | `SlackRequestVerificationFilter.kt` | `OncePerRequestFilter` at `HIGHEST_PRECEDENCE + 10`; runs only for Slack paths, no-ops (with a one-shot warning) when the signing secret is blank |
 | `SlackSignatureVerifier.kt` | The `v0=` HMAC-SHA256 computation over `v0:timestamp:body` and its timestamp freshness window |
-| `SlackRetryDeduplicator.kt` | `SlackRequestFingerprint` (method, URI, timestamp, signature) + `InMemorySlackRetryDeduplicator` with a 10-minute TTL map; a duplicate only counts when Slack sent a retry number |
+| `SlackRetryDeduplicator.kt` | `SlackRequestFingerprint.of(method, requestUri, body)` (SHA-256 of the raw body — never the timestamp/signature, which Slack recomputes per retry) + `InMemorySlackRetryDeduplicator(clock, ttl = 10 min, maxEntries = 10_000)`; `isDuplicateRetry` records first attempts and flags a repeat only when `X-Slack-Retry-Num` is present, `markFailed` forgets an attempt so its retry is processed |
 | `CachedBodyHttpServletRequest.kt` | Wraps the request so the raw body can be read for signing *and* re-read by the controller; also rebuilds the form parameter map |
 | `SlackRequestVerificationConfiguration.kt` | Filter/bean registration for the Slack gate |
 | `mcp/ScopedTurnToken.kt` | Token claims: subject user, scope key, turn id, issued/expiry |
@@ -37,9 +37,11 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 - **A blank signing secret disables verification on purpose** (local/dev convenience) and logs one
   warning. Do not turn that into a hard failure without checking the local and test profiles.
 - **Dedup semantics:** a fingerprint seen before is only treated as a duplicate when
-  `X-Slack-Retry-Num` is present. A legitimate identical-looking first delivery is not dropped. The
-  store is in-memory with a TTL — it is per-instance, so it de-duplicates Slack's own retries, not
-  cross-instance replays.
+  `X-Slack-Retry-Num` is present. A legitimate identical-looking first delivery is not dropped. The filter
+  calls `markFailed` when the chain throws or leaves a 5xx, so Slack's retry after a failure is processed
+  rather than acknowledged away. The store is in-memory with a TTL and a size cap — it is per-instance, so
+  it de-duplicates Slack's own retries, not cross-instance replays. Before 2026-09-22 the key included the
+  timestamp and signature, which made the deduplicator dead code (every retry has fresh values).
 - **MCP filter rejects before `initialize` and `tools/list`**, so no anonymous request ever reaches the
   MCP server. It is registered through a `FilterRegistrationBean` scoped to the endpoint path and only
   when MCP is enabled. Keep it ahead of protocol handling.
@@ -62,7 +64,11 @@ End-to-end MCP auth can be probed against a running app with `./scripts/mcp-smok
 ### Common Patterns
 - `OncePerRequestFilter` with `shouldNotFilter` narrowing by path prefix, rather than a broad filter
   that inspects everything.
-- Constructor-injected `Clock` (`Clock.systemUTC()` default) for every expiry/TTL decision.
+- Constructor-injected `Clock` for every expiry/TTL decision. The context's single `Clock` bean
+  (`slackRequestVerificationClock`) is `Clock.systemDefaultZone()` on purpose: it is injected into every bean
+  that declares a `clock: Clock` parameter (a Kotlin default never applies when a bean exists), and the
+  outbox schedulers / health probe compare its `LocalDateTime` against DB timestamps written in the JVM
+  zone. Signature verification only reads epoch seconds, so the zone is irrelevant to it.
 - Interface + in-memory implementation (`SlackRetryDeduplicator` / `InMemorySlackRetryDeduplicator`)
   so a distributed implementation can be swapped in without touching the filter.
 - Fail closed and log the reason; never leak the expected signature or token into a response.

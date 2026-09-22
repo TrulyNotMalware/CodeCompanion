@@ -183,16 +183,15 @@ class ModalBlockBuilder(
             )
         }
 
-    fun userNameWithThumbnailBlock(userName: String, userThumbnailUrl: String, mkdIntroduceComment: String = "") =
+    fun userNameWithThumbnailBlock(userName: String, userThumbnailUrl: String?, mkdIntroduceComment: String = "") =
         context {
             it.elements(
-                listOf(
+                listOfNotNull(
                     modalElementBuilder.markdownTextObject(markdownText = mkdIntroduceComment),
                     modalElementBuilder.markdownTextObject(markdownText = "*$userName* "),
-                    modalElementBuilder.imageBlockElement(
-                        imageUrl = userThumbnailUrl,
-                        altText = "thumbnail",
-                    ),
+                    userThumbnailUrl?.let { url ->
+                        modalElementBuilder.imageBlockElement(imageUrl = url, altText = "thumbnail")
+                    },
                 ),
             )
         }

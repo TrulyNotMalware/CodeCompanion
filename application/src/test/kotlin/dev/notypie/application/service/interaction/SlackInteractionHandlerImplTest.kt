@@ -1,6 +1,8 @@
 package dev.notypie.application.service.interaction
 
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
@@ -32,12 +34,15 @@ class SlackInteractionHandlerImplTest :
         val payloadParser = mockk<InteractionPayloadParser>()
         val applicationEventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
         val commandExecutor = mockk<CommandExecutor>(relaxed = true)
+        val commandRoleResolver = mockk<CommandRoleResolver>()
+        every { commandRoleResolver.resolve(userId = any()) } returns UserRole.USER
         val handler =
             SlackInteractionHandlerImpl(
                 interactionPayloadParser = payloadParser,
                 applicationEventPublisher = applicationEventPublisher,
                 commandExecutor = commandExecutor,
                 submissionParseObserver = SubmissionParseObserver.NONE,
+                commandRoleResolver = commandRoleResolver,
             )
 
         given("legacy whitelist constant") {
@@ -94,6 +99,23 @@ class SlackInteractionHandlerImplTest :
                     verify(exactly = 0) {
                         commandExecutor.execute(command = match<Command<*>> { it is ReplaceTextResponseCommand })
                     }
+                }
+
+                then("the actor's role is resolved from the repository instead of being assumed USER") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher, commandRoleResolver)
+                    val payload =
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                            currentAction = selectedApplyButtonStates(),
+                            states = listOf(selectedApplyButtonStates()),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { payloadParser.parseStringPayload(payload = any()) } returns payload
+                    every { commandRoleResolver.resolve(userId = any()) } returns UserRole.ADMIN
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) { commandRoleResolver.resolve(userId = payload.user.id) }
                 }
             }
         }

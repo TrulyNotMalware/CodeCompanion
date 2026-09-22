@@ -56,11 +56,10 @@ class SlackRequestVerificationFilter(
         }
 
         val fingerprint =
-            SlackRequestFingerprint(
+            SlackRequestFingerprint.of(
                 method = cachedRequest.method,
                 requestUri = cachedRequest.requestURI,
-                timestamp = cachedRequest.getHeader(SlackHeaders.REQUEST_TIMESTAMP).orEmpty(),
-                signature = cachedRequest.getHeader(SlackHeaders.SIGNATURE).orEmpty(),
+                body = cachedRequest.body,
             )
         val retryNum = cachedRequest.getHeader(SlackHeaders.RETRY_NUM)
         if (retryDeduplicator.isDuplicateRetry(fingerprint = fingerprint, retryNum = retryNum)) {
@@ -69,7 +68,17 @@ class SlackRequestVerificationFilter(
             return
         }
 
-        filterChain.doFilter(cachedRequest, response)
+        // Only a completed attempt may absorb later retries; a 5xx or an exception is exactly the case
+        // where Slack's retry has to be processed.
+        try {
+            filterChain.doFilter(cachedRequest, response)
+        } catch (exception: Exception) {
+            retryDeduplicator.markFailed(fingerprint = fingerprint)
+            throw exception
+        }
+        if (response.status >= HttpServletResponse.SC_INTERNAL_SERVER_ERROR) {
+            retryDeduplicator.markFailed(fingerprint = fingerprint)
+        }
     }
 
     companion object {

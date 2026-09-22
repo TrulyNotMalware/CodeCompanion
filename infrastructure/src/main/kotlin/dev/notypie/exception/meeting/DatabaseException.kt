@@ -15,10 +15,9 @@ class DatabaseException(
     )
 
 enum class JpaErrorCode(
-    override val statusCode: Int,
     override val message: String,
 ) : ErrorCode {
-    TABLE_NOT_FOUND(statusCode = 404, message = "Table not found."),
+    TABLE_NOT_FOUND(message = "Table not found."),
 }
 
 class NotFoundExceptionBuilder {

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
 
 # application
 
@@ -17,7 +17,7 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 |------|-------------|
 | `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator, AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
 | `src/main/kotlin/dev/notypie/CodeCompanion.kt` | `@SpringBootApplication @ConfigurationPropertiesScan` entry point and `main()` |
-| `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs with `-Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul`. Build context for the deploy workflow |
+| `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs with `-XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul` (heap follows the k8s memory limit). Build context for the deploy workflow |
 
 ## Subdirectories
 | Directory | Purpose |

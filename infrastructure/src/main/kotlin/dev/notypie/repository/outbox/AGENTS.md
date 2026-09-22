@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
 
 # infrastructure/repository/outbox
 
@@ -13,7 +13,7 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MessageOutboxRepository.kt` | `JpaRepository<OutboxMessage, String>` (PK is `event_id`), all native SQL. `findPendingMessages(limit, offset)` (PENDING, oldest first); `claimPending(eventIds): Int` — `UPDATE ... SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP WHERE event_id IN (:eventIds) AND status = 'PENDING'`; `findStuckInProgress(olderThan, limit)`; health scalars `findOldestPendingCreatedAt()`, `countPending()`, `countPendingOlderThan(threshold)`, `countInProgress()`, `countInProgressOlderThan(threshold)`, `findOldestInProgressUpdatedAt()` |
+| `MessageOutboxRepository.kt` | `JpaRepository<OutboxMessage, String>` (PK is `event_id`), all native SQL. `findPendingMessages(limit)` (PENDING, oldest first); `claimPending(eventIds): Int` — `UPDATE ... SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP WHERE event_id IN (:eventIds) AND status = 'PENDING'`; `findStuckInProgress(olderThan, limit)`; `findStalePending(olderThan, limit)` (PENDING rows older than the threshold, for the CDC-mode safety net); `reclaimStuck(eventId, olderThan): Int` — refreshes `updated_at` only while the row is still stuck, so one recovering poller wins; `abandonStuck(eventId): Int` — IN_PROGRESS → FAILURE for rows past the give-up window; `deleteTerminalOlderThan(olderThan, limit): Int` — retention purge of SUCCESS/FAILURE rows (`DELETE ... LIMIT`, MariaDB and H2); health scalars `findOldestPendingCreatedAt()`, `countPending()`, `countPendingOlderThan(threshold)`, `countInProgress()`, `countInProgressOlderThan(threshold)`, `findOldestInProgressUpdatedAt()` |
 | `OutboundEnvelope.kt` | `data class OutboundEnvelope(message: OutboundMessage, basicInfo: CommandBasicInfo)` — the unit that is codec-encoded into the row |
 | `OutboundMessageCodec.kt` | `object OutboundMessageCodec { encode(envelope): String; decode(json): OutboundEnvelope }` over a private Jackson 3 `JsonMapper`; every `JacksonException` is wrapped in `OutboundMessageCodecException`. Three private mix-ins: `OutboundMessageMixin` / `MessageContentMixin` (`@JsonTypeInfo(NAME, property = "@type")` + `@JsonSubTypes`) and `TimeScheduleInfoMixin` (`@JsonIgnoreProperties("timeFormatter")`) |
 | `OutboundMessagePort.kt` | `interface OutboundMessagePort { toRow(message, basicInfo, transport = Transport.SLACK): OutboxMessage }` and `CodecOutboundMessagePort`, which mints a random `eventId`, copies `idempotencyKey` / `publisherId` from `basicInfo`, encodes the envelope and stamps `createdAt = now()` |
@@ -28,13 +28,10 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 ## For AI Agents
 
 ### Working In This Directory
-- **`claimPending` returns the count, not the rows.** The `status = 'PENDING'` predicate is the concurrency
-  guarantee at the row level, but the caller (`PollingMessageProcessor.claimAndDispatch`) only learns *how
-  many* transitioned and dispatches `candidates.take(claimedCount)` — it cannot tell *which* rows it won.
-  With two pollers racing over the same candidates, one may dispatch a row the other claimed while its own
-  claimed row sits `IN_PROGRESS` until stuck recovery resends it. This is accepted on the current
-  single-instance deployment; a multi-poller deployment needs a claim that returns the winning ids
-  (e.g. claim token + re-select) before it is safe.
+- **`claimPending` returns the count, not the rows**, so callers claim **one id at a time** and keep the
+  rows whose UPDATE returned 1 (`PollingMessageProcessor.claimAndDispatch`, `DebeziumLogTailingProcessor`).
+  A bulk `IN (:eventIds)` claim would only say how many rows were won, not which; that was the old
+  `candidates.take(claimedCount)` bug. Stuck recovery goes through `reclaimStuck` for the same reason.
 - **`updated_at` is touched inside `claimPending` on purpose.** `findStuckInProgress` and
   `countInProgressOlderThan` age IN_PROGRESS rows from claim time; a native bulk UPDATE bypasses Hibernate's
   `@UpdateTimestamp`, so removing the explicit `updated_at = CURRENT_TIMESTAMP` silently disables stuck-row
@@ -84,5 +81,7 @@ A `@DataJpaTest` that claims the same ids twice and asserts `1` then `0` is the 
 ### External
 Spring Data JPA, Jackson 3 (`tools.jackson.*`) plus `com.fasterxml.jackson.annotation` for the mix-in
 annotations.
+
+- Indexes on `outbox_message`: `idx_outbox_idempotency_key`, `idx_outbox_status_created_at`, `idx_outbox_status_updated_at` (V19) — every hot query filters on `status`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

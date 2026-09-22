@@ -112,8 +112,8 @@ class AgentConverseService(
         val now = clock.instant().atZone(clock.zone)
         return buildString {
             appendLine("## Conversation context")
-            appendLine("- Requester: <@${payload.responseBasicInfo.publisherId}> (${payload.requesterName})")
-            appendLine("- Channel: #${payload.channelName}")
+            appendLine("- Requester: ${requesterLine(payload = payload)}")
+            appendLine("- Channel: ${channelLine(payload = payload)}")
             appendLine("- Current time: ${CONTEXT_TIME_FORMAT.format(now)}")
             appendLine()
             appendLine("## Response format")
@@ -122,6 +122,15 @@ class AgentConverseService(
             append("Keep replies concise — this is a chat thread.")
         }
     }
+
+    // app_mention events carry no display names, so a blank name degrades to the bare Slack mention.
+    private fun requesterLine(payload: AgentConversePayload): String {
+        val mention = "<@${payload.responseBasicInfo.publisherId}>"
+        return if (payload.requesterName.isBlank()) mention else "$mention (${payload.requesterName})"
+    }
+
+    private fun channelLine(payload: AgentConversePayload): String =
+        if (payload.channelName.isBlank()) "<#${payload.responseBasicInfo.channel}>" else "#${payload.channelName}"
 
     private fun publishAnswer(
         event: AgentConverseRequestEvent,

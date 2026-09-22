@@ -2,6 +2,7 @@ package dev.notypie.application.service.relay
 
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
+import dev.notypie.impl.command.isRateLimited
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
@@ -11,6 +12,7 @@ import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -29,7 +31,7 @@ class SlackMessageRelayServiceImpl(
     private val messageDispatcher: MessageDispatcher,
     private val retryService: RetryService,
     private val applicationEventPublisher: ApplicationEventPublisher,
-    private val relayTaskExecutor: Executor,
+    @Qualifier("relayTaskExecutor") private val relayTaskExecutor: Executor,
 ) : MessageRelayService {
     // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
     override fun batchPendingMessages(pendingMessages: List<OutboxMessage>) {
@@ -54,6 +56,10 @@ class SlackMessageRelayServiceImpl(
             try {
                 val rendered = payloadRenderer.render(row = pendingMessage)
                 val result = messageDispatcher.dispatch(event = rendered)
+                if (result.isRateLimited()) {
+                    logger.warn { "Slack rate limit; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
+                    return
+                }
                 result.toOutboxUpdateEvent(eventId = eventId)
             } catch (exception: Exception) {
                 // Catches Exception, not Throwable, so fatal Errors (OOM, StackOverflow) still propagate.

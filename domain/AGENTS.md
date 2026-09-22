@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
 
 # domain
 
@@ -58,7 +58,7 @@ or entity invariant, add a matching `BehaviorSpec` under `src/test/kotlin/`. Reu
 belong in `src/testFixtures/kotlin/` so the other two modules can reuse them.
 
 ### Common Patterns
-- **Validation DSL** (`common/Utils.kt`): infix `ValidationBuilder` with `"field" of value and { ... }`,
+- **Validation DSL** (`common/Validation.kt`): infix `ValidationBuilder` with `"field" of value and { ... }`,
   `or`, and `shouldNotBeNullAnd` chaining; collects every failure and throws one `ValidationException`.
 - **Error details DSL** (`common/error/Errors.kt`): `exceptionDetails { "key" value v because "reason" }`.
 - Sealed hierarchies everywhere for exhaustive `when` routing — `CommandIntent`, `OutboundMessage`,

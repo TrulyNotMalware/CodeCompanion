@@ -11,7 +11,6 @@ import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.exception.ErrorBroadcaster
-import dev.notypie.exception.KafkaErrorBroadcaster
 import dev.notypie.exception.StdoutErrorBroadcaster
 import dev.notypie.impl.command.AppEventPublisher
 import dev.notypie.impl.command.KafkaEventPublisher
@@ -34,9 +33,11 @@ class PoolingPublisherConfig {
     fun poolingOutboxMessageProcessor(
         outboxRepository: MessageOutboxRepository,
         messageRelayService: SlackMessageRelayServiceImpl,
+        appConfig: AppConfig,
     ) = PollingMessageProcessor(
         outboxRepository = outboxRepository,
         messageRelayService = messageRelayService,
+        appConfig = appConfig,
     )
 }
 
@@ -48,10 +49,12 @@ class CdcPublisherConfig {
         applicationEventPublisher: ApplicationEventPublisher,
         messageDispatcher: MessageDispatcher,
         payloadRenderer: OutboxPayloadRenderer,
+        outboxRepository: MessageOutboxRepository,
     ) = DebeziumLogTailingProcessor(
         messageDispatcher = messageDispatcher,
         payloadRenderer = payloadRenderer,
         eventPublisher = applicationEventPublisher,
+        outboxRepository = outboxRepository,
     )
 }
 
@@ -67,10 +70,6 @@ class KafkaEventPublisherConfig {
             kafkaTemplate = kafkaTemplate,
             applicationEventPublisher = applicationEventPublisher,
         )
-
-    @Bean
-    fun kafkaErrorBroadcaster(kafkaTemplate: KafkaTemplate<String, Any>): ErrorBroadcaster =
-        KafkaErrorBroadcaster(kafkaTemplate = kafkaTemplate)
 }
 
 @Configuration
@@ -80,8 +79,12 @@ class ApplicationEventPublisherConfig {
     @ConditionalOnMissingBean(EventPublisher::class)
     fun eventPublisher(applicationEventPublisher: ApplicationEventPublisher): EventPublisher =
         AppEventPublisher(applicationEventPublisher = applicationEventPublisher)
+}
 
+// Mode-independent: the Kafka-backed broadcaster was a TODO() that would have thrown from an error path, so
+// the log-only implementation is the only one until a real error topic exists.
+@Configuration
+class ErrorBroadcasterConfig {
     @Bean
-    @ConditionalOnMissingBean(ErrorBroadcaster::class)
     fun stdoutErrorBroadcaster(): ErrorBroadcaster = StdoutErrorBroadcaster()
 }
