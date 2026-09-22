@@ -114,7 +114,7 @@ _type: pattern · updated: 2026-08-28_
 
 ## 근거
 
-- `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Utils.kt`, `AGENTS.md`)
+- `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Validation.kt`, `AGENTS.md`)
 - `domain/src/main/kotlin/dev/notypie/domain/command/exceptions/` (`CommandErrorCode.kt`, `CommandException.kt`)
 - `domain/src/main/kotlin/dev/notypie/domain/command/entity/Command.kt` (`handleEvent`),
   `.../entity/context/CommandContext.kt` (`createErrorResponse`, `errorEphemeral`),

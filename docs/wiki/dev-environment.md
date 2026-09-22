@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-09-21_
+_type: guide · updated: 2026-09-22_
 
 > JDK 25 · Gradle 9.7.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -48,7 +48,9 @@ _type: guide · updated: 2026-09-21_
   켜려면 env 또는 `--slack.app.cve.enabled=true` 인자가 필요하다. `spring.lifecycle.timeout-per-shutdown-phase` 10s,
   `spring.kafka.consumer.isolation-level: read_committed`도 `prod` 전용이다.
 - `spring.threads.virtual.enabled`는 네 프로파일 모두 on. `slack.app.api.signing-secret`이 비면
-  `SlackRequestVerificationFilter`가 경고만 남기고 서명 검증을 끈다 — `slack-live`는 의도적으로 선택, `dev`는 키가 아예 없다.
+  `SlackRequestVerificationFilter`가 경고만 남기고 서명 검증을 끈다 — `slack-live`는 의도적으로 선택. `dev`는 2026-09-22부터
+  `${SLACK_SIGNING_SECRET}`을 기본값 없이 요구하므로 미설정 시 기동 실패한다(이전엔 키 자체가 없어 검증이 조용히 꺼졌다).
+  `dev`/`local`의 actuator 노출에서 `heapdump`도 같은 날 제거했다(무인증 힙 덤프에 토큰이 실림).
 
 ## 로컬 실행 레시피
 
@@ -94,7 +96,7 @@ _type: guide · updated: 2026-09-21_
   (무효 키였던 `enabled: false`는 2026-09-21에 제거). `db/migration/V*.sql`은 **사람이 수동으로 적용**한다.
 - 스키마 기동 방식: `local`/`slack-live`/`dev`는 `ddl-auto: update`로 Hibernate가 베이스 테이블을 만들고 `V*` 스크립트는 그 위에 얹는
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
-- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V17**(로컬 트리와 `origin/main` 모두), 다음은 **V18**. 번호를 정하기
+- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V19**(로컬 트리; `origin/main`은 V17), 다음은 **V20**. 번호를 정하기
   전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
 - 새 엔티티는 JPA 스키마 클래스(`infrastructure/repository/*/schema/`)와 마이그레이션을 **둘 다** 추가한다. H2/`ddl-auto` 테스트는
   MariaDB 전용 문법 오류를 잡지 못하므로 `slack-live` DB에 한 번 적용해 본다.
@@ -151,8 +153,12 @@ _type: guide · updated: 2026-09-21_
 
 - **docs-only 머지는 배포되지 않는다.** lint/test/deploy 모두 `paths`에 `!**/*.md`가 있다. 반대로 새 최상위 소스 디렉터리는 모든
   필터(+ `security_check.yaml`의 `source`)에 추가하기 전까지 CI가 조용히 건너뛴다.
-- lint·test는 `feature/*` 계열 push에서만 돈다. `main`으로 가는 PR 자체는 `security_check`만 트리거하고 배포 빌드는 `-x test`다.
-  즉 `hotfix/*` 같은 이름의 브랜치는 테스트 없이 머지·배포될 수 있다.
+- lint·test는 `feature/*` 계열 push **와 `main`으로 가는 모든 PR**에서 돈다(2026-09-22부터). 배포 빌드도 `-x test` 없이
+  전체 `build`를 돌린다. 단 GitHub 브랜치 보호의 required check 등록은 레포 밖 설정이라, 체크가 pending인 채로 머지되면
+  배포 빌드가 마지막 게이트가 된다. `pull_request` 트리거에는 일부러 `paths` 필터가 없다 — required check가 트리거조차
+  안 되면(docs-only PR) 영원히 pending이라 머지가 막히기 때문. docs-only PR은 test 잡이 모듈 0개로 수 초 만에 끝난다.
+- test 워크플로는 변경 모듈에 **의존하는** 모듈까지 돌린다: `domain`·gradle 변경 → 전체, `infrastructure` → infrastructure + application,
+  `application` → application만.
 - `src/main/resources` 아래는 **전부 jar에 들어간다.** `processResources`에 exclude가 없어 `AGENTS.md`, `k8s/`·`cdc/` README와
   매니페스트, `application-local.yaml`까지 `BOOT-INF/classes/`에 포함된다(기존 빌드 산출물로 확인). 거기에 실제 값을 두지 않는 이유다.
 - `deploy_action.yaml`의 `dorny/paths-filter@v4` 블록에는 `!` 패턴을 넣지 않는다(무효). 마크다운 제외는 워크플로 레벨 `paths`에만.
@@ -162,7 +168,7 @@ _type: guide · updated: 2026-09-21_
 - `build.gradle.kts`, `settings.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`, `.editorconfig`, `.gitignore`, `run`
 - `gradle-config/apply.sh`, `gradle-config/gradle-{macos,linux,common}.properties`, `gradle-config/README.md`
 - `application/build.gradle.kts`, `infrastructure/build.gradle.kts`, `application/Dockerfile`
-- `application/src/main/resources/application.yaml`, `application-{local,real,dev,prod}.yaml`, `db/migration/V1__…`~`V17__…`,
+- `application/src/main/resources/application.yaml`, `application-{local,real,dev,prod}.yaml`, `db/migration/V1__…`~`V19__…`,
   `k8s/**`, `cdc/**`; `infrastructure/src/test/resources/application.yaml`
 - `application/src/main/kotlin/dev/notypie/application/configurations/AppConfig.kt`, `CveConfiguration.kt`,
   `conditions/Conditions.kt`, `socket/SocketModeReceiver.kt`, `security/SlackRequestVerificationFilter.kt`

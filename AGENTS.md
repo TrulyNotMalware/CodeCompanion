@@ -86,9 +86,12 @@ Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.
 - Each module publishes `src/testFixtures/kotlin/` factories via Gradle `java-test-fixtures`, consumed
   cross-module as `testImplementation(testFixtures(project(":domain")))`.
 - Logging is kotlin-logging: `private val log = KotlinLogging.logger {}`.
-- Kotlin compiler args are strict: `-Xjsr305=strict`, `-Xjvm-default=all`,
-  `-Xannotation-default-target=param-property`. Annotation targets on constructor properties resolve
-  to `param-property`, so `@field:` prefixes are usually unnecessary.
+- The root `build.gradle.kts` declares strict Kotlin compiler args (`-Xjsr305=strict`, `-Xjvm-default=all`,
+  `-Xannotation-default-target=param-property`) and an Adoptium 25 toolchain, **but only on the root project**:
+  the blocks sit outside `subprojects`, so none of the three modules gets them (measured 2026-09-22; a local
+  build uses the Gradle daemon's JDK). Moving them into `subprojects` is a standalone PR because enabling
+  `-Xjsr305=strict` will surface platform-type errors (`review.md` C6). Until then keep the explicit
+  `@field:` targets the code already uses.
 - Commit subjects follow `.gitmessage`: `feat : ...`, `fix : ...`, `refact : ...` (space before the colon).
 
 ## Dependencies

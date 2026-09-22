@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-09-21_
+_type: architecture · updated: 2026-09-22_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -93,9 +93,12 @@ _type: architecture · updated: 2026-09-21_
 - **CDC** — Debezium MariaDB 커넥터(`table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`;
   `cdc/docker-compose/debezium/connect_mariadb.sh`) → Kafka → `DebeziumLogTailingProcessor`. 리스너는
   `spring.json.use.type.headers:false` + 기본 타입 `Envelope`로 역직렬화하고, `payload.after.status == PENDING`인
-  레코드만 dispatch 한다(`IN_PROGRESS`/`SUCCESS` 갱신 레코드와 `after == null`인 삭제는 무시). claim 없이
-  리스너 스레드에서 동기 dispatch 한다. `KafkaConsumerConfiguration`은 역직렬화기를 `ErrorHandlingDeserializer`로
-  감싸 깨진 레코드(옛 `Envelope` shape 등)를 null로 넘기고 `KafkaErrorHandler.handleOne`이 건너뛴다(오프셋 wedging 방지).
+  레코드만 후보로 본다(`IN_PROGRESS`/`SUCCESS` 갱신 레코드와 `after == null`인 삭제, tombstone은 무시). 그 뒤
+  **DB의 현재 상태를 다시 읽어** `PENDING`이면 `claimPending` CAS로 `IN_PROGRESS`를 잡고 dispatch, `SUCCESS`/`FAILURE`면
+  재전달로 보고 건너뛰며, `IN_PROGRESS`(크래시 잔재)는 재발송한다 — 2026-09-22 재설계, `DebeziumLogTailingProcessorTest`.
+  파싱 실패·잘못된 `eventId`는 `CdcRecordParseException`으로 던져 `DefaultErrorHandler`가 재시도 없이 `<topic>.DLT`로
+  보낸다(`KafkaTemplate`이 없는 조합에서는 ERROR 로그로 강등). 예전의 `KafkaErrorHandler`(null 레코드 skip)는 제거됐다.
+  `ErrorHandlingDeserializer` 래핑은 그대로다.
 - `SchedulingConfig`가 `@EnableScheduling`을 무조건 켠다. 과거엔 `PoolingPublisherConfig`에만 있어 CDC 모드에서
   `StandupScheduler` 등 모든 `@Scheduled`가 조용히 no-op이었다.
 - `KafkaEventPublisher`는 `isInternal == false`인 이벤트만 Kafka(`event.destination` 토픽, key = `idempotencyKey`,
@@ -138,9 +141,9 @@ _type: architecture · updated: 2026-09-21_
   커맨드 단위 순서는 파티션 간에 보장되지 않는다. 토픽 파티션 수는 저장소에 없다(미확인).
 - 폴링은 `created_at ASC`로 읽지만 dispatch는 executor 병렬이라 배치 안에서도 순서가 없다.
   `PartitionKeyUtil`(6 버킷)은 테스트 외 호출자가 없다.
-- `spring.kafka.consumer.enable-auto-commit: true`(prod는 `isolation-level: read_committed` 추가)라 오프셋은
-  처리 결과와 무관하게 커밋된다. CDC 모드에는 폴링 같은 재구동이 없으므로 레코드를 놓친 행은 `PENDING`으로
-  남아 헬스 DOWN으로만 드러난다. 폴링 모드는 다음 tick이 자연 재구동한다.
+- `spring.kafka.consumer.enable-auto-commit: false` + 컨테이너 `AckMode.RECORD`(2026-09-22)라 오프셋은 리스너가
+  그 레코드를 반환한 뒤에만 커밋된다. 크래시 시 재전달되며, 위의 현재 상태 확인이 중복 발송을 막는다(claim과
+  상태 갱신 사이의 좁은 창은 at-least-once). `max-poll-records`는 100.
 - 정직한 보장: README의 "exactly-once-style"은 지향 표현이다. 실제는 **at-least-once**(폴링 stuck 재전송, Kafka
   재전달) + **멱등 소비자**(상태 필터, `event_id` 기준 상태 갱신)이며, Slack 채널에는 중복 게시가 가능하다.
 
@@ -162,10 +165,12 @@ _type: architecture · updated: 2026-09-21_
   `ChannelMessage`/`Approval` + `channel = userId`로 쓴다.
 - BEFORE_COMMIT 리스너는 트랜잭션 밖 publish를 조용히 버린다(위 1번 경로). `stage()`가 null을 돌려줄 수 있는
   계약이라 `AgentConverseService.stageReply`처럼 `checkNotNull`로 응답 유실을 트랜잭션 실패로 바꾼다.
-- `PollingMessageProcessor.claimAndDispatch`는 `candidates.take(claimedCount)`로 dispatch 대상을 고른다. 두
-  폴러가 같은 후보를 두고 경쟁하면 "내가 claim한 행"과 "앞에서 N개"가 어긋날 수 있다(내가 claim한 행이 dispatch
-  되지 않고 `IN_PROGRESS`로 남았다가 stuck 복구로 재전송). 단일 인스턴스에서는 발생하지 않는다.
-- CDC 모드는 `IN_PROGRESS`도 stuck 복구도 없다. `IN_PROGRESS` 관련 헬스 디테일은 폴링 모드에서만 의미가 있다.
+- `PollingMessageProcessor.claimAndDispatch`는 행마다 `claimPending(listOf(id)) == 1`로 claim해 이긴 행만 dispatch
+  한다(2026-09-22; 이전의 `candidates.take(claimedCount)`는 다중 폴러에서 남의 행을 보냈다). stuck 복구도
+  `reclaimStuck` CAS를 이긴 행만 재전송한다.
+- CDC 모드도 이제 `claimPending`으로 `IN_PROGRESS`를 잡는다. 상태 갱신 실패·DLT로 남은 `IN_PROGRESS`/오래된 `PENDING`은
+  모드와 무관한 `OutboxRecoveryScheduler`(60초, `reclaimStuck`/`claimPending` CAS)가 재발송한다 — CDC는 그런 행에
+  두 번째 변경 이벤트를 만들지 않기 때문. 헬스의 `IN_PROGRESS` 지표도 이제 두 모드 모두에서 의미가 있다.
 - 구 shape 로컬 행은 디코드에 실패하고 `ddl-auto: update`는 옛 컬럼을 안 지운다 → `outbox_message` DROP 후 재생성.
 - `RetryService.execute`는 호출마다 공유 `RetryTemplate`의 `retryPolicy`를 덮어쓴다. 릴레이 executor 10스레드가
   동시에 dispatch 하면 정책이 섞일 수 있다.

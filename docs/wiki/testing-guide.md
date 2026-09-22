@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-08-28_
+_type: guide · updated: 2026-09-22_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -32,8 +32,8 @@ _type: guide · updated: 2026-08-28_
 
 - 전 모듈 스펙 클래스 120개(파일 119개) 중 118개가 `BehaviorSpec`이다. `given` / `` `when` `` / `then`을 영어
   문장으로 쓰고, `` `when` ``은 Kotlin 키워드라 항상 백틱으로 감싼다.
-- `StringSpec`은 둘뿐이다: 파일 시스템을 스캔하는 `DomainLayeringGuardTest`, 코덱 라운드트립인
-  `OutboundMessageCodecTest`. "한 줄 이름 = 한 규칙"이 자연스러울 때만 쓴다.
+- `StringSpec`은 셋뿐이다: 파일 시스템을 스캔하는 `DomainLayeringGuardTest`와 `EnvelopeCastGuardTest`, 코덱
+  라운드트립인 `OutboundMessageCodecTest`. "한 줄 이름 = 한 규칙"이 자연스러울 때만 쓴다.
 - 공유 베이스는 상속이 아니라 **같은 파일의 두 번째 스펙**이다. `AbstractCommandContextTest.kt`는
   `AbstractCommandContextTest`와 `AbstractReactionCommandContextTest`를 한 파일에 두고 `object : CommandContext<NoSubCommands>`
   익명 서브클래스로 추상 계약을 검증한다. 새 컨텍스트 스펙은 이 파일을 흉내 내되 fixture는 재사용한다.
