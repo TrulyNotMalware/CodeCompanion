@@ -4,6 +4,8 @@ import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AddParticipantEvent
+import dev.notypie.domain.command.entity.event.AddParticipantPayload
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
@@ -69,6 +71,24 @@ fun createCancelMeetingEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.CANCEL_MEETING,
+)
+
+fun createAddParticipantEvent(
+    meetingUid: UUID = UUID.randomUUID(),
+    requesterId: String = TEST_USER_ID,
+    participantUserIds: List<String> = listOf("U_NEW_PARTICIPANT"),
+    idempotencyKey: UUID = UUID.randomUUID(),
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = AddParticipantEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        AddParticipantPayload(
+            meetingUid = meetingUid,
+            requesterId = requesterId,
+            participantUserIds = participantUserIds,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
 )
 
 fun createGetMeetingListEvent(

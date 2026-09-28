@@ -181,9 +181,10 @@ class ModalTemplateBuilderTest :
                 val mockProfile = createProfile()
                 every {
                     restRequester.safeGet(
-                        uri = "users.profile.get?user=$TEST_USER_ID",
+                        uri = "users.profile.get?user={user}",
                         authorizationHeader = TEST_BOT_TOKEN,
                         responseType = SlackUserProfileDto::class.java,
+                        uriVariables = mapOf("user" to TEST_USER_ID),
                     )
                 } returns Result.success(ResponseEntity.ok(SlackUserProfileDto(ok = true, profile = mockProfile)))
 
@@ -219,6 +220,7 @@ class ModalTemplateBuilderTest :
                         uri = any(),
                         authorizationHeader = any(),
                         responseType = SlackUserProfileDto::class.java,
+                        uriVariables = any(),
                     )
                 } returns Result.failure(RestClientException("429 Too Many Requests"))
                 val degradedBuilder =

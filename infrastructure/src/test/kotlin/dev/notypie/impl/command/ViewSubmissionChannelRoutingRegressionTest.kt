@@ -273,7 +273,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     privateMetadata = swappedMetadata,
                     stateValues =
                         stateValuesJson(
-                            "reschedule_date_block" to datepickerStateJson(selectedDate = "2026-07-10"),
+                            "reschedule_date_block" to datepickerStateJson(selectedDate = "2099-07-10"),
                             "reschedule_time_block" to timepickerStateJson(selectedTime = "15:45"),
                         ),
                 )
@@ -294,7 +294,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     output.ok shouldBe true
                     val reschedule = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
                     reschedule.meetingUid shouldBe meetingUid
-                    reschedule.newStartAt shouldBe LocalDateTime.of(2026, 7, 10, 15, 45)
+                    reschedule.newStartAt shouldBe LocalDateTime.of(2099, 7, 10, 15, 45)
                     reschedule.requesterId shouldBe originChannel
                     output.channel shouldNotBe originChannel
                     output.channel shouldBe requesterId

@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDateTime
 
 private val log = KotlinLogging.logger {}
 
@@ -14,7 +15,7 @@ private val log = KotlinLogging.logger {}
 class OutboxRetentionScheduler(
     private val outboxRepository: MessageOutboxRepository,
     appConfig: AppConfig,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock,
 ) {
     private val retention: Duration = Duration.ofDays(appConfig.outbox.retention.days)
     private val batchSize: Int = appConfig.outbox.retention.batchSize
@@ -27,12 +28,7 @@ class OutboxRetentionScheduler(
 
     // Several batches per tick so a backlog drains in hours, not weeks; still capped so one tick cannot run away.
     fun purgeOnce(): Int {
-        val cutoff =
-            clock
-                .instant()
-                .atZone(clock.zone)
-                .toLocalDateTime()
-                .minus(retention)
+        val cutoff = LocalDateTime.now(clock).minus(retention)
         var total = 0
         for (batch in 1..MAX_BATCHES_PER_TICK) {
             val deleted = outboxRepository.deleteTerminalOlderThan(olderThan = cutoff, limit = batchSize)

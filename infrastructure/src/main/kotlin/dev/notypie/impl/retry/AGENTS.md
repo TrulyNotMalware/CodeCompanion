@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # infrastructure/impl/retry
 
@@ -21,10 +21,14 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
   thread's `3`. `RetryServiceTest` races two policies to keep this from regressing.
 - **`maxAttempts` is the total number of executions.** The service converts it to Spring's `maxRetries`
   (`maxAttempts - 1`), so the default `3` means three invocations, not four.
-- **Only `RetryException` triggers recovery.** Exceptions outside `exceptions` are not retried and
-  propagate unchanged; `recoveryCallBack` returning `null` for a nullable `T` falls back to rethrowing.
-- **Retries only on exceptions.** `ApplicationMessageDispatcher.dispatch` returns a `CommandOutput` with
-  `ok = false` for Slack-side rejections, so those are not retried here — by design.
+- **Every failure surfaces as `RetryException` with the original exception as `cause`.** Spring 7 wraps
+  both an exhausted retry and an exception outside `exceptions` (not retried, one attempt). So
+  `recoveryCallBack` also runs for non-retryable exceptions, and `ApplicationMessageDispatcher` finds its
+  `SlackRateLimitedException` by walking the cause chain and turns a `RetryException` whose `cause` is one of
+  its transient types into the `transient_exhausted` outcome. `recoveryCallBack` returning `null` for a
+  nullable `T` falls back to rethrowing. `RetryServiceTest` pins this contract.
+- **Retries only on exceptions.** Callers decide what is retryable by throwing: the dispatcher throws for
+  transient Slack errors and returns an `ok = false` `CommandOutput` for permanent ones.
 - Callers: `impl/command/ApplicationMessageDispatcher`, `:application` `MeetingServiceImpl`,
   `SlackMessageRelayServiceImpl`. The bean comes from `configurations/RetryConfiguration.retryService`.
 
@@ -32,9 +36,10 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.impl.retry.RetryServiceTest'
 ```
-The spec uses a bare `RetryTemplate()` and a counting action; it asserts success-after-failures with
-`maxAttempts = maxFailures + 1` and the recovery path. Keep delays tiny (`initialDelay = 1`) so the suite
-stays fast.
+The spec builds `RetryService()` directly with counting actions; it pins the `RetryException` + `cause`
+contract, success-after-failures with `maxAttempts = maxFailures + 1`, the recovery path, `maxAttempts` as the
+total execution count, and per-policy isolation under concurrency. Keep delays tiny (`initialDelay = 1`) so
+the suite stays fast.
 
 ### Common Patterns
 - Named arguments for every override; never positional.
@@ -47,6 +52,6 @@ stays fast.
 
 ### External
 Spring Framework 7 core retry (`org.springframework.core.retry.RetryTemplate`, `RetryPolicy`,
-`RetryException`), `org.springframework.util.backoff.FixedBackOff` (imported, unused).
+`RetryException`).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

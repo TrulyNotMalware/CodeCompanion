@@ -5,49 +5,74 @@ import dev.notypie.domain.common.error.ExceptionArgument
 import dev.notypie.domain.common.error.ValidationException
 import dev.notypie.domain.common.error.ValidationExceptionWithName
 import java.time.LocalDateTime
+import java.util.Collections
+import java.util.IdentityHashMap
 
 class ValidationBuilder {
     private val errors = mutableListOf<ExceptionArgument>()
 
-    data class Field<T>(
+    class Field<T> internal constructor(
         val name: String,
         val value: T,
-    ) {
-        // Index into `errors` when this field was created; lets `or` see what the left-hand rule added.
-        internal var errorMark: Int = 0
+        internal val raisedErrors: MutableSet<ExceptionArgument>,
+    )
+
+    private fun <T> field(name: String, value: T): Field<T> =
+        Field(name = name, value = value, raisedErrors = identitySet())
+
+    private fun <T> Field<*>.nested(value: T): Field<T> = Field(name = name, value = value, raisedErrors = raisedErrors)
+
+    private fun identitySet(): MutableSet<ExceptionArgument> = Collections.newSetFromMap(IdentityHashMap())
+
+    private fun Field<*>.reject(error: ExceptionArgument) {
+        errors.add(error)
+        raisedErrors.add(error)
     }
 
-    infix fun <T> String.of(value: T): Field<T> = Field(name = this, value = value).also { it.errorMark = errors.size }
+    private fun errorsAddedBy(block: () -> Unit): List<ExceptionArgument> {
+        val before = identitySet().apply { addAll(errors) }
+        block()
+        return errors.filterNot { it in before }
+    }
+
+    private fun Field<*>.claimErrorsOf(block: () -> Unit) {
+        raisedErrors.addAll(errorsAddedBy(block = block))
+    }
+
+    private fun discard(discarded: Collection<ExceptionArgument>) {
+        val targets = identitySet().apply { addAll(discarded) }
+        errors.removeAll { it in targets }
+    }
+
+    infix fun <T> String.of(value: T): Field<T> = field(name = this, value = value)
 
     infix fun <T> Field<T>.and(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
-        block(this)
+        claimErrorsOf { block(this) }
         return this
     }
 
-    // Passes when either side passes: a satisfied side clears everything the field added; when both fail
-    // only the left-hand errors are kept.
     infix fun <T> Field<T>.or(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
-        val leftFailed = errors.size > errorMark
-        val beforeRight = errors.size
-        block(this)
-        val rightFailed = errors.size > beforeRight
-        val keepUpTo = if (leftFailed && rightFailed) beforeRight else errorMark
-        while (errors.size > keepUpTo) errors.removeLast()
+        val leftErrors = raisedErrors.toList()
+        val rightErrors = errorsAddedBy { block(this) }
+        val cleared = if (rightErrors.isEmpty()) leftErrors else rightErrors
+        discard(discarded = cleared)
+        cleared.forEach { raisedErrors.remove(it) }
         return this
     }
 
     infix fun <T> Field<T?>.shouldNotBeNullAnd(block: ValidationBuilder.(Field<T>) -> Unit): Field<T?> {
         if (value == null) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = "null",
-                    reason = "must not be null",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = "null",
+                        reason = "must not be null",
+                    ),
             )
         } else {
             @Suppress("UNCHECKED_CAST")
-            block(Field(name, value as T))
+            claimErrorsOf { block(nested(value = value as T)) }
         }
         return this
     }
@@ -55,7 +80,7 @@ class ValidationBuilder {
     infix fun <T> Field<T?>.ifNotNull(block: ValidationBuilder.(Field<T>) -> Unit): Field<T?> {
         if (value != null) {
             @Suppress("UNCHECKED_CAST")
-            block(Field(name, value as T))
+            claimErrorsOf { block(nested(value = value as T)) }
         }
         return this
     }
@@ -63,12 +88,12 @@ class ValidationBuilder {
     fun notBlank(block: StringFieldsBuilder.() -> Unit) {
         val builder = StringFieldsBuilder()
         builder.block()
-        builder.fields.forEach { field ->
-            if (field.value.isBlank()) {
+        builder.fields.forEach { (name, value) ->
+            if (value.isBlank()) {
                 errors.add(
                     ExceptionArgument(
-                        fieldName = field.name,
-                        value = field.value,
+                        fieldName = name,
+                        value = value,
                         reason = "must not be blank",
                     ),
                 )
@@ -77,21 +102,22 @@ class ValidationBuilder {
     }
 
     class StringFieldsBuilder {
-        val fields = mutableListOf<Field<String>>()
+        val fields = mutableListOf<Pair<String, String>>()
 
         infix fun String.of(value: String) {
-            fields.add(Field(this, value))
+            fields.add(this to value)
         }
     }
 
     infix fun Field<String>.shouldBeShorterThan(max: Int): Field<String> {
         if (value.length > max) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value,
-                    reason = "length must be less than $max (current: ${value.length})",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value,
+                        reason = "length must be less than $max (current: ${value.length})",
+                    ),
             )
         }
         return this
@@ -99,12 +125,13 @@ class ValidationBuilder {
 
     infix fun Field<String>.shouldBeLongerThan(min: Int): Field<String> {
         if (value.length < min) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value,
-                    reason = "length must be greater than $min (current: ${value.length})",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value,
+                        reason = "length must be greater than $min (current: ${value.length})",
+                    ),
             )
         }
         return this
@@ -112,12 +139,13 @@ class ValidationBuilder {
 
     infix fun Field<String>.shouldMatchPattern(pattern: Regex): Field<String> {
         if (!pattern.matches(input = value)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value,
-                    reason = "does not match required pattern: ${pattern.pattern}",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value,
+                        reason = "does not match required pattern: ${pattern.pattern}",
+                    ),
             )
         }
         return this
@@ -125,12 +153,13 @@ class ValidationBuilder {
 
     infix fun Field<String>.shouldMatchPattern(pattern: String): Field<String> {
         if (!pattern.toRegex().matches(input = value)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value,
-                    reason = "does not match required pattern: $pattern",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value,
+                        reason = "does not match required pattern: $pattern",
+                    ),
             )
         }
         return this
@@ -139,12 +168,13 @@ class ValidationBuilder {
     fun Field<String>.shouldBeEmail(): Field<String> {
         val emailPattern = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
         if (!emailPattern.matches(value)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value,
-                    reason = "must be a valid email address",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value,
+                        reason = "must be a valid email address",
+                    ),
             )
         }
         return this
@@ -152,12 +182,13 @@ class ValidationBuilder {
 
     fun Field<String?>.shouldNotBeNullOrBlank(): Field<String?> {
         if (value.isNullOrBlank()) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value ?: "null",
-                    reason = "must not be null or blank",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value ?: "null",
+                        reason = "must not be null or blank",
+                    ),
             )
         }
         return this
@@ -165,12 +196,13 @@ class ValidationBuilder {
 
     infix fun Field<Int>.shouldBeLessThan(max: Int): Field<Int> {
         if (value >= max) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be less than $max",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be less than $max",
+                    ),
             )
         }
         return this
@@ -178,12 +210,13 @@ class ValidationBuilder {
 
     infix fun Field<Int>.shouldBeLessThanOrEqualTo(max: Int): Field<Int> {
         if (value > max) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be less than or equal to $max",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be less than or equal to $max",
+                    ),
             )
         }
         return this
@@ -191,12 +224,13 @@ class ValidationBuilder {
 
     infix fun Field<Int>.shouldBeGreaterThan(min: Int): Field<Int> {
         if (value <= min) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be greater than $min",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be greater than $min",
+                    ),
             )
         }
         return this
@@ -204,12 +238,13 @@ class ValidationBuilder {
 
     infix fun Field<Int>.shouldBeGreaterThanOrEqualTo(min: Int): Field<Int> {
         if (value < min) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be greater than or equal to $min",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be greater than or equal to $min",
+                    ),
             )
         }
         return this
@@ -217,12 +252,13 @@ class ValidationBuilder {
 
     infix fun Field<Int>.shouldBeBetween(range: IntRange): Field<Int> {
         if (value !in range) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be between ${range.first} and ${range.last}",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be between ${range.first} and ${range.last}",
+                    ),
             )
         }
         return this
@@ -230,12 +266,13 @@ class ValidationBuilder {
 
     fun Field<Int>.shouldBePositive(): Field<Int> {
         if (value <= 0) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be positive",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be positive",
+                    ),
             )
         }
         return this
@@ -243,12 +280,13 @@ class ValidationBuilder {
 
     fun Field<Int>.shouldBeNegative(): Field<Int> {
         if (value >= 0) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be positive",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be positive",
+                    ),
             )
         }
         return this
@@ -256,12 +294,13 @@ class ValidationBuilder {
 
     fun Field<Int>.shouldBeNonNegative(): Field<Int> {
         if (value < 0) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be non-negative",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be non-negative",
+                    ),
             )
         }
         return this
@@ -269,12 +308,13 @@ class ValidationBuilder {
 
     infix fun Field<LocalDateTime>.shouldBeAfter(other: LocalDateTime): Field<LocalDateTime> {
         if (!value.isAfter(other)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be after $other",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be after $other",
+                    ),
             )
         }
         return this
@@ -282,12 +322,13 @@ class ValidationBuilder {
 
     infix fun Field<LocalDateTime>.shouldBeBefore(other: LocalDateTime): Field<LocalDateTime> {
         if (!value.isBefore(other)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be before $other",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be before $other",
+                    ),
             )
         }
         return this
@@ -296,12 +337,13 @@ class ValidationBuilder {
     fun Field<LocalDateTime>.shouldBeInFuture(): Field<LocalDateTime> {
         val now = LocalDateTime.now()
         if (!value.isAfter(now)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be in the future",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be in the future",
+                    ),
             )
         }
         return this
@@ -310,12 +352,13 @@ class ValidationBuilder {
     fun Field<LocalDateTime>.shouldBeInPast(): Field<LocalDateTime> {
         val now = LocalDateTime.now()
         if (!value.isBefore(now)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be in the past",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be in the past",
+                    ),
             )
         }
         return this
@@ -323,12 +366,13 @@ class ValidationBuilder {
 
     infix fun <T, C : Collection<T>> Field<C>.shouldHaveSize(size: Int): Field<C> {
         if (value.size != size) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must have exactly $size elements (current: ${value.size})",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must have exactly $size elements (current: ${value.size})",
+                    ),
             )
         }
         return this
@@ -336,12 +380,13 @@ class ValidationBuilder {
 
     infix fun <T, C : Collection<T>> Field<C>.shouldHaveMinSize(min: Int): Field<C> {
         if (value.size < min) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must have at least $min elements (current: ${value.size})",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must have at least $min elements (current: ${value.size})",
+                    ),
             )
         }
         return this
@@ -349,12 +394,13 @@ class ValidationBuilder {
 
     infix fun <T, C : Collection<T>> Field<C>.shouldHaveMaxSize(max: Int): Field<C> {
         if (value.size > max) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must have at most $max elements (current: ${value.size})",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must have at most $max elements (current: ${value.size})",
+                    ),
             )
         }
         return this
@@ -362,12 +408,13 @@ class ValidationBuilder {
 
     fun <T, C : Collection<T>> Field<C>.shouldNotBeEmpty(message: String = "must not be empty"): Field<C> {
         if (value.isEmpty()) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = "[]",
-                    reason = message,
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = "[]",
+                        reason = message,
+                    ),
             )
         }
         return this
@@ -375,12 +422,13 @@ class ValidationBuilder {
 
     infix fun <T> Field<T>.shouldBeOneOf(options: Collection<T>): Field<T> {
         if (value !in options) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "must be one of: ${options.joinToString(", ")}",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "must be one of: ${options.joinToString(", ")}",
+                    ),
             )
         }
         return this
@@ -388,12 +436,13 @@ class ValidationBuilder {
 
     infix fun <T> Field<T>.shouldSatisfy(predicate: (T) -> Boolean): Field<T> {
         if (!predicate(value)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = "does not satisfy the required condition",
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = "does not satisfy the required condition",
+                    ),
             )
         }
         return this
@@ -401,19 +450,20 @@ class ValidationBuilder {
 
     fun <T> Field<T>.shouldSatisfy(message: String, predicate: (T) -> Boolean): Field<T> {
         if (!predicate(value)) {
-            errors.add(
-                ExceptionArgument(
-                    fieldName = name,
-                    value = value.toString(),
-                    reason = message,
-                ),
+            reject(
+                error =
+                    ExceptionArgument(
+                        fieldName = name,
+                        value = value.toString(),
+                        reason = message,
+                    ),
             )
         }
         return this
     }
 
     fun addError(fieldName: String, value: String, reason: String) {
-        errors.add(ExceptionArgument(fieldName, value, reason))
+        errors.add(ExceptionArgument(fieldName = fieldName, value = value, reason = reason))
     }
 
     fun hasErrors(): Boolean = errors.isNotEmpty()

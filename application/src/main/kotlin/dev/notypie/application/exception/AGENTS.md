@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-09-28 -->
 
 # application/exception
 
@@ -13,8 +13,8 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
 ## Key Files
 | File | Description |
 |------|-------------|
-| `PayloadParseException.kt` | `enum class PayloadParseErrorCode : ErrorCode` — `APP_ID_NOT_FOUND` (400, "Application ID not found in payload.") and `UNSUPPORTED_SLACK_COMMAND_TYPE` (400, "Unsupported Slack command type in payload."). `AppIdNotFoundException(errorCode, details)` and `UnsupportedSlackCommandTypeException(rawCommandType: String, errorCode, details)`, both `: CodeCompanionRuntimeException` |
-| `ControllerAdvice.kt` | `@RestControllerAdvice class ControllerAdvice`. `handleDatabaseException` logs `ERROR` (with the table name) and returns `500` `{"error": "internal_error"}`; `handleUnsupportedSlackCommandType` logs `WARN` and returns `400` with body `{"error": "Unsupported Slack command type: <rawCommandType>"}`; `handleUnexpected(e: Exception)` logs `ERROR` and returns the same `500` body |
+| `PayloadParseException.kt` | `enum class PayloadParseErrorCode : ErrorCode` — `APP_ID_NOT_FOUND` ("Application ID not found in payload.") and `UNSUPPORTED_SLACK_COMMAND_TYPE` ("Unsupported Slack command type in payload."). `AppIdNotFoundException(errorCode, details)` and `UnsupportedSlackCommandTypeException(rawCommandType: String, errorCode, details)`, both `: CodeCompanionRuntimeException` |
+| `ControllerAdvice.kt` | `@RestControllerAdvice class ControllerAdvice`. `handleDatabaseException` logs `ERROR` (with the table name) and returns `500` `{"error": "internal_error"}`; `handleUnsupportedSlackCommandType` logs `WARN` (raw type with control characters replaced by `?`) and returns `400` `{"error": "unsupported_command_type"}` with `X-Slack-No-Retry: 1` — the user-controlled type is never echoed in the body; `handleUnexpected(e: Exception)` logs `ERROR` and returns the same `500` body |
 
 ## For AI Agents
 
@@ -32,8 +32,13 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
   `StandupRepositoryImpl` via `schemaNotFound { }` / `throwIfSchemaNotFound`. It answers 500 on purpose:
   Slack retries a 5xx, and the request's transaction has already rolled back. Note that the retry is
   **not** deduplicated by idempotency key — `IdempotencyCreator` folds a one-second time window into the
-  key, so a retry seconds later gets a fresh key; safety rests on the rollback alone. Never return 200
-  from an error handler — that is how a DB failure once became invisible.
+  key, so a retry seconds later gets a fresh key. The signature filter defers (503) any Slack retry that
+  arrives while the original is still running and forgets an attempt that ended in 5xx, so the retry after
+  this 500 is processed on the same replica (see `security/AGENTS.md` for the cross-replica limits). Never
+  return 200 from an error handler — that is how a DB failure once became invisible.
+- `X-Slack-No-Retry: 1` goes only on deterministic client errors (today: the unsupported-type 400, raised
+  only on `/api/slack/events`). Slack still counts the response as a failure but stops retrying a payload
+  that can never succeed. Never put it on a 5xx: those must be retried.
 - The advice extends `ResponseEntityExceptionHandler`, so Spring MVC's own exceptions (`NoResourceFoundException`
   → 404, `HttpMessageNotReadableException` → 400, `HttpRequestMethodNotSupportedException` → 405, ...) keep
   their status via the inherited `handleException`; only exceptions outside that list reach `handleUnexpected`.
@@ -49,8 +54,10 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
 ```
 `SlackMentionEventHandlerImplTest` asserts that a payload without `api_app_id` throws
 `AppIdNotFoundException` and an unknown event type throws `UnsupportedSlackCommandTypeException`.
-`ControllerAdviceTest` calls the three handlers directly and asserts status plus body; this module starts
-no Spring context, so a `@WebMvcTest` slice does not belong here.
+`ControllerAdviceTest` calls the three handlers directly and asserts status, body and headers, and proves
+handler selection with `ExceptionHandlerMethodResolver(ControllerAdvice::class.java).resolveMethod(...)`
+(framework 404 → inherited `handleException`, anything else → `handleUnexpected`); this module starts no
+Spring context, so a `@WebMvcTest` slice does not belong here.
 Build event payloads with `createAppMentionPayload(appId = null)` / `createAppMentionPayload(type = ...)`
 from `src/testFixtures/kotlin/dev/notypie/application/service/mention/AppMentionPayloadCreator.kt`.
 
@@ -59,8 +66,8 @@ from `src/testFixtures/kotlin/dev/notypie/application/service/mention/AppMention
 - Exceptions are plain `class`es with constructor-injected `errorCode` + `details`; extra context is a
   `val` property (`rawCommandType`) so handlers can log it.
 - `@ExceptionHandler(value = [X::class])` returning `ResponseEntity<Map<String, String>>` with a single
-  `"error"` key; log at `WARN` with the raw offending value for client errors, `ERROR` with the exception
-  for server-side failures.
+  `"error"` key holding a fixed code, never user input; log at `WARN` with the offending value (control
+  characters stripped) for client errors, `ERROR` with the exception for server-side failures.
 - English-only messages and identifiers; Kotlin named parameters when constructing exceptions.
 
 ## Dependencies
@@ -68,8 +75,9 @@ from `src/testFixtures/kotlin/dev/notypie/application/service/mention/AppMention
 ### Internal
 - `domain/common/error/Errors.kt` — `CodeCompanionRuntimeException`, `ErrorCode`, `ExceptionArgument`,
   `exceptionDetails { }`
-- `infrastructure/exception/meeting/DatabaseException` — handled (as a no-op) by `ControllerAdvice`
+- `infrastructure/exception/meeting/DatabaseException` — answered 500 by `ControllerAdvice`
 - `application/service/mention/SlackMentionEventHandlerImpl` — sole thrower of both exceptions
+- `application/security/SlackHeaders` — `NO_RETRY` header name
 
 ### External
 Spring Web (`@RestControllerAdvice`, `@ExceptionHandler`, `ResponseEntity`, `HttpStatus`), kotlin-logging.

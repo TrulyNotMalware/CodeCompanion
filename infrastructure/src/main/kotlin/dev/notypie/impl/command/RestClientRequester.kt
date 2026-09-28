@@ -26,11 +26,10 @@ class RestClientRequester(
         const val BEARER_PREFIX = "Bearer "
     }
 
-    // RestClient.builder() is the static factory, so nothing from spring.http.client.* applies here — without an
-    // explicit request factory a stalled Slack call would hold the relay thread indefinitely.
     private val restClient: RestClient =
         RestClient
             .builder()
+            // The static builder ignores spring.http.client.*, so without this factory a stalled call never times out.
             .requestFactory(
                 JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(connectTimeout).build())
                     .apply { setReadTimeout(readTimeout) },
@@ -45,13 +44,18 @@ class RestClientRequester(
                 }
             }.build()
 
-    override fun <T : Any> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>) =
-        performRequest(
-            method = restClient.get(),
-            uri = uri,
-            authorizationHeader = authorizationHeader,
-            responseType = responseType,
-        )
+    override fun <T : Any> safeGet(
+        uri: String,
+        authorizationHeader: String?,
+        responseType: Class<T>,
+        uriVariables: Map<String, Any>,
+    ) = performRequest(
+        method = restClient.get(),
+        uri = uri,
+        authorizationHeader = authorizationHeader,
+        responseType = responseType,
+        uriVariables = uriVariables,
+    )
 
     override fun <T : Any> safePost(
         uri: String,
@@ -74,6 +78,7 @@ class RestClientRequester(
             uri = uri,
             authorizationHeader = authorizationHeader,
             responseType = responseType,
+            uriVariables = emptyMap(),
         )
 
     override fun <T : Any> safePut(
@@ -161,11 +166,12 @@ class RestClientRequester(
         uri: String,
         authorizationHeader: String?,
         responseType: Class<T>,
+        uriVariables: Map<String, Any>,
     ) = runCatching {
         validateUri(uri)
         logger.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
         method
-            .uri(uri)
+            .uri(uri, uriVariables)
             .addAuthorizationIfPresent(authorizationHeader = authorizationHeader)
             .retrieve()
             .toEntity(responseType)

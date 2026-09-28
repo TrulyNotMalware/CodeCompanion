@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
 
 # infrastructure/templates
 
@@ -14,7 +14,7 @@ modal payloads — behind small type-safe DSLs.
 | `SlackViewDsl.kt` | `modal { ... }` builder producing a `Map<String, Any>` view payload; preserves key order via `LinkedHashMap` |
 | `LayoutBlocksDsl.kt` | DSL for Block Kit layout blocks |
 | `ModalTemplateBuilder.kt` | Composes complete modals for each form (meeting request, reschedule, add participant, standup setup/fill, CVE subscription, decline reason); `approvalTemplate` names the publisher through `SlackUserProfileResolver` |
-| `SlackUserProfileResolver.kt` | `resolve(userId): PublisherView(displayName, thumbnailUrl?)` — `users.profile.get` via `RestRequester.safeGet`, cached per user (30 min TTL, 5 000 entries); any failure or `ok = false` degrades to `<@userId>` with no thumbnail and is not cached, so an approval message never fails on a decorative lookup |
+| `SlackUserProfileResolver.kt` | `resolve(userId): PublisherView(displayName, thumbnailUrl?)` — `users.profile.get?user={user}` via `RestRequester.safeGet` with `userId` as a URI template variable (never interpolated), cached per user (30 min TTL); any failure or `ok = false` degrades to `<@userId>` with no thumbnail and is negative-cached for `failureTtl` (60 s), so a user whose lookup keeps failing costs one Tier 4 call per minute, not one per render. At `maxEntries` (5 000) a new user first drops expired entries, then the oldest tenth by insertion time — never the whole cache |
 | `ModalBlockBuilder.kt` | Block-level assembly used by the template builder |
 | `ModalElementBuilder.kt` | Element-level widgets: text inputs, selects, date/time pickers, checkboxes |
 | `SlackTemplateBuilder.kt` | Non-modal message templates |
@@ -48,7 +48,8 @@ modal payloads — behind small type-safe DSLs.
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.templates.*'
 ```
-Specs: `ModalTemplateBuilderTest`, `ModalBlockBuilderTest`, `ModalElementBuilderTest`. They assert the
+Specs: `ModalTemplateBuilderTest`, `ModalBlockBuilderTest`, `ModalElementBuilderTest`,
+`SlackUserProfileResolverTest` (cache, negative cache, eviction, URI variable). The builder specs assert the
 serialized shape, which is what makes key order and id constants regression-safe — when you add a
 template, add a spec that pins its JSON, not just its non-nullness. A modal change should usually be
 paired with a check on the matching context spec in `:domain` and mapper spec in `:infrastructure`.

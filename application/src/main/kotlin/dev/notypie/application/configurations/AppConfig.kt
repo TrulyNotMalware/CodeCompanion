@@ -86,7 +86,13 @@ data class AppConfig(
     ) {
         data class Health(
             val stuckThresholdSeconds: Long = 300L,
-        )
+            val retryingSendThreshold: Int = 3,
+        ) {
+            init {
+                require(stuckThresholdSeconds > 0L) { "outbox.health.stuck-threshold-seconds must be positive" }
+                require(retryingSendThreshold > 0) { "outbox.health.retrying-send-threshold must be positive" }
+            }
+        }
 
         data class Retention(
             val days: Long = 14L,
@@ -97,7 +103,15 @@ data class AppConfig(
             val batchSize: Int = 100,
             val stuckInProgressSeconds: Long = 300L,
             val giveUpAfterHours: Long = 24L,
-        )
+            val maxSends: Int = 10,
+        ) {
+            init {
+                require(batchSize > 0) { "outbox.polling.batch-size must be positive" }
+                require(stuckInProgressSeconds > 0L) { "outbox.polling.stuck-in-progress-seconds must be positive" }
+                require(giveUpAfterHours > 0L) { "outbox.polling.give-up-after-hours must be positive" }
+                require(maxSends > 0) { "outbox.polling.max-sends must be positive" }
+            }
+        }
     }
 
     data class Socket(

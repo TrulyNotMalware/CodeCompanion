@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
 
 # infrastructure/repository/outbox
 
@@ -13,7 +13,7 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MessageOutboxRepository.kt` | `JpaRepository<OutboxMessage, String>` (PK is `event_id`), all native SQL. `findPendingMessages(limit)` (PENDING, oldest first); `claimPending(eventIds): Int` — `UPDATE ... SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP WHERE event_id IN (:eventIds) AND status = 'PENDING'`; `findStuckInProgress(olderThan, limit)`; `findStalePending(olderThan, limit)` (PENDING rows older than the threshold, for the CDC-mode safety net); `reclaimStuck(eventId, olderThan): Int` — refreshes `updated_at` only while the row is still stuck, so one recovering poller wins; `abandonStuck(eventId): Int` — IN_PROGRESS → FAILURE for rows past the give-up window; `deleteTerminalOlderThan(olderThan, limit): Int` — retention purge of SUCCESS/FAILURE rows (`DELETE ... LIMIT`, MariaDB and H2); health scalars `findOldestPendingCreatedAt()`, `countPending()`, `countPendingOlderThan(threshold)`, `countInProgress()`, `countInProgressOlderThan(threshold)`, `findOldestInProgressUpdatedAt()` |
+| `MessageOutboxRepository.kt` | `JpaRepository<OutboxMessage, String>` (PK is `event_id`), all native SQL; every write binds `now` from the caller. `findPendingMessages(limit)` (PENDING, oldest `created_at` first); `claimPending(eventId, attemptCount, now): Int` — `PENDING` → `IN_PROGRESS`, `attempt_count + 1`, `updated_at = :now`, guarded by `status = 'PENDING' AND attempt_count = :attemptCount`; `findStuckInProgress(olderThan, limit)`; `findStalePending(olderThan, limit)`; `reclaimStuck(eventId, attemptCount, olderThan, now): Int` — `attempt_count + 1`, `updated_at = :now` while the row is still `IN_PROGRESS` on the observed attempt and older than the cutoff; `abandonStuck(eventId, attemptCount, olderThan, now): Int` — `IN_PROGRESS` → `FAILURE` under the same observed-state guard; `renewClaim(eventId, attemptCount, now): Int` — the owner's lease refresh right before sending, which also adds 1 to `send_count`; `deferClaim(eventId, attemptCount, updatedAt): Int` — the owner's rate-limit deferral: takes that send back (`GREATEST(send_count - 1, 0)`) and sets `updated_at` to the caller's value so the stuck guard waits for `Retry-After`; `completeClaim(eventId, attemptCount, status, now): Int` — the owner's terminal write, `IN_PROGRESS` → `status` only on its own attempt; `deleteTerminalOlderThan(olderThan, limit): Int` — retention purge of SUCCESS/FAILURE rows (`DELETE ... LIMIT`, MariaDB and H2); health scalars `findOldestPendingCreatedAt()`, `countPending()`, `countPendingOlderThan(threshold)`, `countInProgress()`, `countInProgressOlderThan(threshold)`, `findOldestInProgressUpdatedAt()`, `countInProgressWithSendsAtLeast(sends)` |
 | `OutboundEnvelope.kt` | `data class OutboundEnvelope(message: OutboundMessage, basicInfo: CommandBasicInfo)` — the unit that is codec-encoded into the row |
 | `OutboundMessageCodec.kt` | `object OutboundMessageCodec { encode(envelope): String; decode(json): OutboundEnvelope }` over a private Jackson 3 `JsonMapper`; every `JacksonException` is wrapped in `OutboundMessageCodecException`. Three private mix-ins: `OutboundMessageMixin` / `MessageContentMixin` (`@JsonTypeInfo(NAME, property = "@type")` + `@JsonSubTypes`) and `TimeScheduleInfoMixin` (`@JsonIgnoreProperties("timeFormatter")`) |
 | `OutboundMessagePort.kt` | `interface OutboundMessagePort { toRow(message, basicInfo, transport = Transport.SLACK): OutboxMessage }` and `CodecOutboundMessagePort`, which mints a random `eventId`, copies `idempotencyKey` / `publisherId` from `basicInfo`, encodes the envelope and stamps `createdAt = now()` |
@@ -28,14 +28,24 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 ## For AI Agents
 
 ### Working In This Directory
-- **`claimPending` returns the count, not the rows**, so callers claim **one id at a time** and keep the
-  rows whose UPDATE returned 1 (`PollingMessageProcessor.claimAndDispatch`, `DebeziumLogTailingProcessor`).
-  A bulk `IN (:eventIds)` claim would only say how many rows were won, not which; that was the old
-  `candidates.take(claimedCount)` bug. Stuck recovery goes through `reclaimStuck` for the same reason.
-- **`updated_at` is touched inside `claimPending` on purpose.** `findStuckInProgress` and
-  `countInProgressOlderThan` age IN_PROGRESS rows from claim time; a native bulk UPDATE bypasses Hibernate's
-  `@UpdateTimestamp`, so removing the explicit `updated_at = CURRENT_TIMESTAMP` silently disables stuck-row
-  recovery.
+- **`attempt_count` is the ownership token.** `claimPending` and `reclaimStuck` are the only statements
+  that raise it, each guarded by the value the caller read, so the winner knows its attempt is
+  `observed + 1` (the `claim` / `reclaim` helpers in `application/service/relay/MessageRelayService.kt`).
+  `renewClaim`, `deferClaim`, `completeClaim` and `abandonStuck` all require that exact attempt: a worker whose
+  row was reclaimed can neither send, defer nor overwrite the new owner's result, and the sweep cannot abandon
+  a row a fresh owner just renewed. Claims are single-id; a bulk claim could not say which rows were won.
+- **`send_count` is the retry budget, `attempt_count` is not.** Only `renewClaim` (the step right before a
+  send) raises it and only `deferClaim` (a rate limit) lowers it, so claims that were taken over in the
+  relay queue and sends Slack rate-limited never count. The recovery sweep abandons on `send_count`, and
+  the health probe's retrying count reads it (V22).
+- **`updated_at` is written from the caller's `now`, never `CURRENT_TIMESTAMP`.** The cutoffs the sweep,
+  the purge and the health probe compare against are computed from the application `Clock` (JVM zone), and
+  `@CreationTimestamp`/`@UpdateTimestamp` use the JVM clock too; `CURRENT_TIMESTAMP` is evaluated in the DB
+  session zone, which is UTC in the shipped MariaDB manifests while the app runs in Asia/Seoul. Mixing the
+  two made every fresh claim look nine hours stuck. The stamp still matters: stuck detection and the
+  health ages read it, and native UPDATEs bypass `@UpdateTimestamp`.
+- **`completeClaim` replaced the JPA read-modify-write status update.** Nothing saves an existing
+  `OutboxMessage` through JPA any more; `@Version` stays on the entity but no current writer relies on it.
 - **The subtype registries in `OutboundMessageCodec` are deliberately incomplete.** `OpenModal` and
   `DirectMessage` are not outbox-bound; leaving them unregistered makes a mis-staged message fail at
   `encode` with an unresolved type id instead of reaching the relay. Register a new outbox-bound
@@ -51,7 +61,7 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
   and the native statements; the literals in the SQL must equal `MessageStatus.name`.
 - Consumers in `:application`: `PollingMessageProcessor`, `SlackMessageRelayServiceImpl`,
   `OutboxPayloadRenderer` (codec + `OutboxSchemaVersion`), `DebeziumLogTailingProcessor`,
-  `OutboxHealthIndicator`, `OpsStatusService`, and every scheduler / dispatcher that enqueues through
+  `OutboxRecoveryScheduler`, `OutboxRetentionScheduler`, `OutboxHealthIndicator`, `OpsStatusService`, and every scheduler / dispatcher that enqueues through
   `OutboundMessagePort` (`StandupSchedulingService`, `StandupSummaryService`, `MeetingReminderSchedulingService`,
   `DailyAgendaSchedulingService`, `CveNotificationDispatcher`).
 
@@ -61,9 +71,10 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 ```
 `OutboundMessageCodecTest` (StringSpec) covers every registered subtype round-trip, the `Schedule`
 field-wise comparison (`DateTimeFormatter` has no `equals`) and the fail-fast cases; `schema/OutboxMessageTest`
-covers `toRow` and `updateMessageStatus`. **Nothing exercises `MessageOutboxRepository`'s SQL on H2** — the
-claim CAS, `findStuckInProgress` and the health counters are only covered indirectly from `:application`.
-A `@DataJpaTest` that claims the same ids twice and asserts `1` then `0` is the missing spec.
+covers `toRow` and `updateMessageStatus`; `MessageOutboxRepositoryTest` (`@DataJpaTest`, H2) covers the
+native statements, including that `updated_at` is the caller's `now` and not the database clock. H2 runs in
+the test JVM, so it cannot reproduce a DB session zone that differs from the JVM; the caller-`now` design is
+what removes that dependency.
 
 ### Common Patterns
 - Native queries with string status literals (`'PENDING'`, `'IN_PROGRESS'`).
@@ -82,6 +93,6 @@ A `@DataJpaTest` that claims the same ids twice and asserts `1` then `0` is the 
 Spring Data JPA, Jackson 3 (`tools.jackson.*`) plus `com.fasterxml.jackson.annotation` for the mix-in
 annotations.
 
-- Indexes on `outbox_message`: `idx_outbox_idempotency_key`, `idx_outbox_status_created_at`, `idx_outbox_status_updated_at` (V19) — every hot query filters on `status`.
+- Indexes on `outbox_message`: `idx_outbox_idempotency_key`, `idx_outbox_status_created_at`, `idx_outbox_status_updated_at` (V19) — every hot query filters on `status`. `attempt_count` (V20) and `send_count` (V22) are unindexed; the retrying health count filters on `status` first.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

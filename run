@@ -362,8 +362,8 @@ case "$ENVIRONMENT" in
             # Fast startup
             "-XX:TieredStopAtLevel=1"
 
-            # Remote debugging
-            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${DEBUG_PORT}"
+            # Unauthenticated debugger: loopback only, reach it through an SSH tunnel.
+            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:${DEBUG_PORT}"
 
             # Spring profile
             "-Dspring.profiles.active=local"
@@ -377,17 +377,14 @@ case "$ENVIRONMENT" in
 
     dev)
         JVM_OPTS+=(
-            # Remote debugging
-            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${DEBUG_PORT}"
+            # Unauthenticated debugger: loopback only, reach it through an SSH tunnel.
+            "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:${DEBUG_PORT}"
 
             # Spring profile
             "-Dspring.profiles.active=dev"
 
             # DevTools
             "-Dspring.devtools.restart.enabled=true"
-
-            # Actuator
-            "-Dmanagement.endpoints.web.exposure.include=*"
         )
         print_info "Development mode - with debugging and monitoring"
         ;;
@@ -403,9 +400,12 @@ case "$ENVIRONMENT" in
             # Native memory trimming
             "-XX:TrimNativeHeapInterval=30000"
 
-            # JMX monitoring
+            # JMX monitoring. Unauthenticated, so loopback only; RMI reuses the registry port so one SSH tunnel works.
             "-Dcom.sun.management.jmxremote"
             "-Dcom.sun.management.jmxremote.port=${JMX_PORT}"
+            "-Dcom.sun.management.jmxremote.rmi.port=${JMX_PORT}"
+            "-Dcom.sun.management.jmxremote.host=127.0.0.1"
+            "-Djava.rmi.server.hostname=127.0.0.1"
             "-Dcom.sun.management.jmxremote.authenticate=false"
             "-Dcom.sun.management.jmxremote.ssl=false"
 
@@ -414,7 +414,6 @@ case "$ENVIRONMENT" in
 
             # Production optimizations
             "-Dspring.jmx.enabled=true"
-            "-Dmanagement.endpoints.web.exposure.include=health,info,metrics,prometheus"
         )
         print_info "Production mode - optimized for performance and monitoring"
         ;;
@@ -459,11 +458,11 @@ print_info "Log Dir     : $LOG_DIR"
 print_info "Java Version: $(java -version 2>&1 | head -n 1)"
 
 if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
-    print_info "Debug Port  : $DEBUG_PORT"
+    print_info "Debug Port  : $DEBUG_PORT (127.0.0.1 only)"
 fi
 
 if [ "$ENVIRONMENT" = "prod" ]; then
-    print_info "JMX Port    : $JMX_PORT"
+    print_info "JMX Port    : $JMX_PORT (127.0.0.1 only)"
 fi
 
 print_info "Heap Dump   : $([ "$HEAP_DUMP" = true ] && echo "Enabled" || echo "Disabled")"
@@ -475,7 +474,7 @@ case "$ENVIRONMENT" in
         print_info "Features    : Fast startup, DevTools, LiveReload"
         ;;
     dev)
-        print_info "Features    : Remote debugging, Full actuator endpoints"
+        print_info "Features    : Remote debugging, actuator endpoints from application-dev.yaml"
         ;;
     prod)
         print_info "Features    : JMX monitoring, Production endpoints only"

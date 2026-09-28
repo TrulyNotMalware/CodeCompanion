@@ -21,6 +21,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 class RoleManagementServiceTest :
     BehaviorSpec({
@@ -31,6 +32,11 @@ class RoleManagementServiceTest :
             roleRepository: UserCommandRoleRepository,
             stagedMessage: CapturingSlot<OutboundMessage>,
             bootstrapAdmins: List<String> = emptyList(),
+            commandRoleResolver: CommandRoleResolver =
+                CommandRoleResolver(
+                    appConfig = AppConfig(authorization = AppConfig.Authorization(bootstrapAdmins = bootstrapAdmins)),
+                    userCommandRoleRepository = roleRepository,
+                ),
         ): Pair<RoleManagementService, EventPublisher> {
             val stager = mockk<OutboundMessageStager>()
             every { stager.stage(message = capture(stagedMessage), basicInfo = any()) } returns stubStagedEvent
@@ -38,14 +44,7 @@ class RoleManagementServiceTest :
             val service =
                 RoleManagementService(
                     userCommandRoleRepository = roleRepository,
-                    commandRoleResolver =
-                        CommandRoleResolver(
-                            appConfig =
-                                AppConfig(
-                                    authorization = AppConfig.Authorization(bootstrapAdmins = bootstrapAdmins),
-                                ),
-                            userCommandRoleRepository = roleRepository,
-                        ),
+                    commandRoleResolver = commandRoleResolver,
                     outboundStager = stager,
                     eventPublisher = publisher,
                 )
@@ -262,6 +261,76 @@ class RoleManagementServiceTest :
                     val markdown = stagedMessage.markdown()
                     markdown shouldContain "• <@$bootstrapAdminId> — `admin` (bootstrap, config-managed)"
                     markdown shouldContain "• <@U_DEV> — `developer`"
+                }
+            }
+        }
+
+        given("a cached role that a REVOKE changes") {
+            `when`("the revoke runs inside a transaction") {
+                val roleRepository = mockk<UserCommandRoleRepository>()
+                every { roleRepository.findRole(userId = targetUserId) } returnsMany
+                    listOf(UserRole.ADMIN, UserRole.USER)
+                every { roleRepository.deleteRole(userId = targetUserId) } returns true
+                val resolver =
+                    CommandRoleResolver(appConfig = AppConfig(), userCommandRoleRepository = roleRepository)
+                val (service, _) =
+                    serviceWith(
+                        roleRepository = roleRepository,
+                        stagedMessage = slot(),
+                        commandRoleResolver = resolver,
+                    )
+                resolver.resolve(userId = targetUserId)
+
+                TransactionSynchronizationManager.initSynchronization()
+                val beforeCommit =
+                    try {
+                        service.handleRoleManage(
+                            event =
+                                createRoleManageRequestEvent(
+                                    action = RoleManageAction.REVOKE,
+                                    targetUserId = targetUserId,
+                                    role = null,
+                                ),
+                        )
+                        resolver.resolve(userId = targetUserId).also {
+                            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+                        }
+                    } finally {
+                        TransactionSynchronizationManager.clearSynchronization()
+                    }
+                val afterCommit = resolver.resolve(userId = targetUserId)
+
+                then("the cache is evicted only once the transaction has committed") {
+                    beforeCommit shouldBe UserRole.ADMIN
+                    afterCommit shouldBe UserRole.USER
+                }
+            }
+
+            `when`("the grant runs without a transaction") {
+                val roleRepository = mockk<UserCommandRoleRepository>(relaxed = true)
+                every { roleRepository.findRole(userId = targetUserId) } returnsMany
+                    listOf(UserRole.USER, UserRole.DEVELOPER)
+                val resolver =
+                    CommandRoleResolver(appConfig = AppConfig(), userCommandRoleRepository = roleRepository)
+                val (service, _) =
+                    serviceWith(
+                        roleRepository = roleRepository,
+                        stagedMessage = slot(),
+                        commandRoleResolver = resolver,
+                    )
+                resolver.resolve(userId = targetUserId)
+
+                service.handleRoleManage(
+                    event =
+                        createRoleManageRequestEvent(
+                            action = RoleManageAction.GRANT,
+                            targetUserId = targetUserId,
+                            role = UserRole.DEVELOPER,
+                        ),
+                )
+
+                then("the cache is evicted right after the write") {
+                    resolver.resolve(userId = targetUserId) shouldBe UserRole.DEVELOPER
                 }
             }
         }

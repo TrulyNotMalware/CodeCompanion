@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # db/migration
 
@@ -31,11 +31,14 @@ rolls out. The folder is therefore the production schema runbook and the audit t
 | `V17__add_cve_event_query_indexes.sql` | `idx_cve_event_topic_status_id` and `idx_cve_event_status_next_attempt` on `cve_event` |
 | `V18__add_meeting_version_and_indexes.sql` | `meetings.version` (optimistic lock), unique `(meeting_id, user_id)` on `meeting_participants` (check for duplicates first — see the script header), indexes on `meetings`, `meeting_participants`, `standup_routine` |
 | `V19__add_outbox_status_indexes.sql` | `idx_outbox_status_created_at` and `idx_outbox_status_updated_at` on `outbox_message` — the poller, CDC claim, retention purge and health scalars all filter on `status` |
+| `V20__add_outbox_attempt_count.sql` | `outbox_message.attempt_count INT NOT NULL DEFAULT 0` — incremented by every claim/reclaim; the ownership token for the relay's lease renewal, rate-limit deferral and terminal status write. Its header carries the rollout constraint: this release must not run beside a pre-V20 release (stop the old pods first) |
+| `V21__fix_inverted_meeting_end_at.sql` | Data fix, no DDL: `end_at = NULL` (V3's "start + 1h" marker) where `end_at <= start_at`, rows left by reschedules that moved only `start_at`, with `version = version + 1` so a meeting write that read the row earlier fails its optimistic-lock check instead of restoring the inverted value. Idempotent; the header carries the inspection query and the rollout constraint (after V18, once every replica writes through the `@Version` entity) |
+| `V22__add_outbox_send_count.sql` | `outbox_message.send_count INT NOT NULL DEFAULT 0` — raised by `renewClaim` right before a send, taken back by the rate-limit deferral; the recovery sweep's abandon budget (`outbox.polling.max-sends`) and the health probe's retrying-row counter. Ships with V20 under the same rollout constraint |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V20`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V23`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Every script is MariaDB dialect.** `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`,
   `DROP INDEX IF EXISTS … ON`, inline `INDEX` clauses inside `CREATE TABLE`, `ENUM`, `DATETIME(6)`,
   `ON UPDATE CURRENT_TIMESTAMP` and `INSERT IGNORE` semantics are all assumed. They will not run on H2 (the
@@ -57,7 +60,7 @@ rolls out. The folder is therefore the production schema runbook and the audit t
   for a change is recorded, since prod applies these outside any migration tool.
 - The profile YAML carries no `spring.flyway.*` keys (the inert `enabled: false` leftovers were removed
   2026-09-21). Do not add Flyway config — adopting the tool would also require a baseline for every
-  environment that already applied `V1`–`V19` by hand.
+  environment that already applied `V1`–`V22` by hand.
 - Files here are packaged into the boot jar by `processResources` although the app never reads them.
 
 ### Testing Requirements
@@ -80,7 +83,7 @@ rolls out. The folder is therefore the production schema runbook and the audit t
 ## Dependencies
 
 ### Internal
-- `infrastructure/repository/outbox/schema/` — `V1`, `V11`
+- `infrastructure/repository/outbox/schema/` — `V1`, `V11`, `V19`, `V20`, `V22`
 - `infrastructure/repository/meeting/schema/` — `V2`, `V3`, `V5`, `V7`, `V8`
 - `infrastructure/repository/standup/schema/` — `V4`, `V6`
 - `infrastructure/repository/agent/schema/` — `V9`, `V10`

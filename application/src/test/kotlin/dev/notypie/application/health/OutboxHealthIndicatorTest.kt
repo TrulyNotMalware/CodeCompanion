@@ -8,6 +8,7 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import io.mockk.verify
 import org.springframework.boot.health.contributor.Status
 
 class OutboxHealthIndicatorTest :
@@ -22,7 +23,14 @@ class OutboxHealthIndicatorTest :
                     clock = clock,
                     appConfig =
                         AppConfig(
-                            outbox = AppConfig.Outbox(health = AppConfig.Outbox.Health(stuckThresholdSeconds = 300L)),
+                            outbox =
+                                AppConfig.Outbox(
+                                    health =
+                                        AppConfig.Outbox.Health(
+                                            stuckThresholdSeconds = 300L,
+                                            retryingSendThreshold = 3,
+                                        ),
+                                ),
                         ),
                 )
 
@@ -41,6 +49,8 @@ class OutboxHealthIndicatorTest :
                     result.details["stuckInFlightCount"] shouldBe 0L
                     result.details["oldestInFlightAgeSeconds"] shouldBe 0L
                     result.details["stuckThresholdSeconds"] shouldBe 300L
+                    result.details["retryingCount"] shouldBe 0L
+                    result.details["retryingSendThreshold"] shouldBe 3
                 }
             }
 
@@ -128,6 +138,36 @@ class OutboxHealthIndicatorTest :
                     result.details["inFlightCount"] shouldBe 4L
                     result.details["stuckInFlightCount"] shouldBe 0L
                     result.details["oldestInFlightAgeSeconds"] shouldBe 15L
+                }
+            }
+
+            `when`("a rate-limited row was deferred and waits for the recovery sweep") {
+                repository.stubOutboxStatus(inProgressCount = 1L, oldestInProgressUpdatedAt = now.minusSeconds(320L))
+
+                val result = indicator.health()
+
+                then("a row the sweep may still pick up within one period is not stuck, and sends are the budget") {
+                    result.status shouldBe Status.UP
+                    verify { repository.countInProgressOlderThan(threshold = now.minusSeconds(360L)) }
+                    verify { repository.countInProgressWithSendsAtLeast(sends = 3) }
+                }
+            }
+
+            `when`("a row keeps being reclaimed and was just re-claimed, so its age looks fresh") {
+                val freshReclaim = now.minusSeconds(5L)
+                repository.stubOutboxStatus(
+                    inProgressCount = 1L,
+                    oldestInProgressUpdatedAt = freshReclaim,
+                    retryingCount = 1L,
+                )
+
+                val result = indicator.health()
+
+                then("status stays DOWN on the send count instead of flapping back to UP") {
+                    result.status shouldBe Status.DOWN
+                    result.details["stuckInFlightCount"] shouldBe 0L
+                    result.details["retryingCount"] shouldBe 1L
+                    verify(atLeast = 1) { repository.countInProgressWithSendsAtLeast(sends = 3) }
                 }
             }
         }

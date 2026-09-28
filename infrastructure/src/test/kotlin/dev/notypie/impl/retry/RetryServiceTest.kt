@@ -3,6 +3,9 @@ package dev.notypie.impl.retry
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
+import org.springframework.core.retry.RetryException
+import java.io.IOException
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -27,12 +30,32 @@ class RetryServiceTest :
             }
 
             `when`("run exception action") {
-                then("without any recovery, should throw exception") {
-                    shouldThrow<Exception> {
-                        retryService.execute(
-                            action = exceptionAction,
-                        )
-                    }
+                then("without any recovery, it throws RetryException carrying the original exception as cause") {
+                    val original = IllegalStateException("original")
+                    val thrown =
+                        shouldThrow<RetryException> {
+                            retryService.execute(
+                                action = { throw original },
+                                initialDelay = 1L,
+                            )
+                        }
+                    thrown.cause shouldBeSameInstanceAs original
+                }
+                then("a non-retryable exception is still wrapped with the original as cause") {
+                    val original = IllegalStateException("not retryable")
+                    var attempts = 0
+                    val thrown =
+                        shouldThrow<RetryException> {
+                            retryService.execute(
+                                action = {
+                                    attempts++
+                                    throw original
+                                },
+                                exceptions = listOf(IOException::class.java),
+                            )
+                        }
+                    thrown.cause shouldBeSameInstanceAs original
+                    attempts shouldBe 1
                 }
                 then("with recovery action, should return recovery response") {
                     val result =

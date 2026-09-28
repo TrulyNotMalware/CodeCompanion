@@ -3,12 +3,15 @@ package dev.notypie.application.service.relay
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import org.springframework.scheduling.annotation.Scheduled
+import java.time.Clock
+import java.time.LocalDateTime
 
 // Stuck/stale recovery lives in OutboxRecoveryScheduler, shared with CDC mode.
 class PollingMessageProcessor(
     private val outboxRepository: MessageOutboxRepository,
     private val messageRelayService: SlackMessageRelayServiceImpl,
     appConfig: AppConfig,
+    private val clock: Clock,
 ) : MessageProcessor {
     private val batchSize: Int = appConfig.outbox.polling.batchSize
 
@@ -17,14 +20,14 @@ class PollingMessageProcessor(
         claimAndDispatch()
     }
 
-    // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work. Rows are claimed
-    // one by one: a bulk UPDATE only reports how many rows it won, not which.
+    // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work.
     private fun claimAndDispatch() {
-        val claimed =
+        val now = LocalDateTime.now(clock)
+        val claims =
             outboxRepository
                 .findPendingMessages(limit = batchSize)
-                .filter { outboxRepository.claimPending(eventIds = listOf(it.eventId)) == 1 }
-        if (claimed.isEmpty()) return
-        messageRelayService.batchPendingMessages(pendingMessages = claimed)
+                .mapNotNull { outboxRepository.claim(row = it, now = now) }
+        if (claims.isEmpty()) return
+        messageRelayService.batchPendingMessages(claims = claims)
     }
 }

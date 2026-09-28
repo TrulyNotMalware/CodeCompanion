@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-09-21_
+_type: decision · updated: 2026-09-28_
 
 > 근거가 있는 결정만 남긴다. 결정이 뒤집히면 항목을 지우지 말고 상태를 바꾸고 이력을 덧붙인다.
 
@@ -93,10 +93,11 @@ _type: decision · updated: 2026-09-21_
 
 ## CI/CD와 공급망
 
-27. **문서만 바뀐 변경은 lint·test·deploy를 태우지 않고, 프로덕션에 절대 배포되지 않는다.** 그 세 워크플로우는
-    `!**/*.md`로 경로 필터링한다. 예외는 `security_check.yaml`: 시크릿은 `.md`에도 숨을 수 있으므로 gitleaks는
-    `main` 대상 모든 push/PR에서 돌고, CodeQL·의존성 그래프만 소스 변경에 게이트된다. 상태: 유지(2026-08-26).
-    근거: `.github/workflows/*.yaml`, `.github/AGENTS.md`.
+27. **문서만 바뀐 변경은 프로덕션에 절대 배포되지 않는다.** deploy 트리거와 lint·test의 push 트리거는 `!**/*.md`로 경로
+    필터링한다. 예외는 `security_check.yaml`: 시크릿은 `.md`에도 숨을 수 있으므로 gitleaks는 `main` 대상 모든 push/PR에서
+    돌고, CodeQL·의존성 그래프만 소스 변경에 게이트된다. 상태: 유지(2026-08-26). 정정(2026-09-28 기록, 2026-09-22 변경분): lint·test의
+    `pull_request` 트리거는 required check가 pending으로 남지 않도록 일부러 `paths` 필터가 없다 — 문서만 바뀐 PR도 lint는 전체
+    `ktlintCheck`를 돌고 test는 모듈 0개로 끝난다. 근거: `.github/workflows/*.yaml`, `.github/AGENTS.md`.
 28. **보안 워크플로우 — CodeQL은 `build-mode: manual`.** 이유: `none` 모드는 Kotlin을 분석하지 않는다. 컴파일은
     `--no-daemon --no-build-cache`로 추적 가능한 JVM에서. 상태: 유지(2026-08-26).
 29. **gitleaks 허용목록은 템플릿 파일 경로에만.** 실제 유출은 rotate + 히스토리 정리로 대응한다. 상태: 유지.
@@ -116,6 +117,43 @@ _type: decision · updated: 2026-09-21_
     `EnvelopeCastGuardTest`가 축소 전용 baseline으로 금지한다(가드는 회귀 억제 장치이지 정합성 증명이 아니다).
     상태: 유지. 근거: `domain/.../entity/SubmissionRouting.kt`, `form/ParsedSubmissions.kt`,
     `SubmissionPipelineCharacterizationTest`, Codex 리뷰 2건(`.omc/artifacts/ask/`), `Refactor.md` Phase 11.
+33. **배포 검증은 클러스터 내부 readiness로, 롤백은 리비전 단위로 (2026-09-28).** 공개 호스트 앞에는 이 저장소 밖의
+    bearer 인증 계층이 있다(2026-09-28 실측: 존재하지 않는 경로를 포함해 조사한 모든 경로가 `401` +
+    `WWW-Authenticate: Bearer`, `GET /actuator/health`만 이 앱 형식이 아닌 JSON `404`). 헬스에 200을 준 공개 URL이 없으므로
+    공개 URL 게이트는 정상 배포도 실패로 판정하고, 그 계층이 무엇을 앱으로 넘기는지는 밖에서 알 수 없다(게이트웨이 운영자 확인
+    사항). 배포 잡은 `/actuator/health/readiness`를 API 서버 service proxy로, 실패하면 `kubectl exec … wget`으로 확인하고
+    `jq`로 `status == "UP"`을 판정한다. 집계 `/actuator/health`는 아웃박스 인디케이터가 릴리스와 무관하게 DOWN일 수 있어(커넥터
+    지연, 반복 실패 메시지, 롤아웃 자체가 남긴 행) 로그로만 남긴다 — 게이트로 쓰면 아웃박스를 고치는 릴리스조차 롤백된다.
+    readiness 그룹에 `db`를 넣는 안은 채택하지 않았다: DB 장애는 두 레플리카에 동시에 닿으므로 30초(readiness 10s × 3)를 넘는
+    장애면 Service 엔드포인트가 모두 빠져 서비스 전체가 사라진다. 롤백은 apply·rollout·verify·health 단계가 실패했을 때만,
+    배포 전 백업보다 파드 템플릿 해시나 리비전이 달라졌을 때 `kubectl rollout undo --to-revision`으로 되돌린다(리비전 주석은
+    컨트롤러가 비동기로 쓰므로 판단 근거가 템플릿이고, 조회 실패는 '변경 없음'이 아니라 비교 없는 undo로 처리한다). 배포 워크플로는 머지된 PR만 `deploy-production`
+    그룹으로 직렬화한다(머지 안 된 close는 별도 그룹). 대안이던 `management.server.port` 분리는 프로브·헬스 체크·configmap을 함께
+    바꿔야 해 보류하고, 샘플 라우트를 `/api/slack`·`/api/slash` 두 접두로 좁혔다(`/api` 전체는 dev·local·slack-live의 `/api/actuator`를 연다). prod의 actuator base path는 env 대신 `/actuator`로 고정했다.
+    상태: 유지. 근거: `.github/workflows/deploy_action.yaml`, `.github/AGENTS.md`, `application/src/main/resources/k8s/AGENTS.md`,
+    review.md 13장.
+34. **미결 — 레플리카 간 Slack 재시도 중복 제거 (2026-09-28 기록).** `SlackRetryDeduplicator`의 상태는 JVM 하나에만 있는데
+    Deployment는 레플리카 2개(롤아웃 중 3개)라, 원본이 파드 A에서 처리된 뒤 Slack 재시도가 파드 B로 가면 다시 처리된다.
+    선택지: (1) 공유 `event_id` 저장소 — DB 테이블 + 유니크 키 + 원자적 상태 전이. 레플리카 수와 무관하게 맞지만 마이그레이션,
+    3초 ack 예산 안의 요청당 DB 왕복, 보존 기간 정리 작업이 든다. (2) 단일 레플리카 — 코드 변경이 없지만 이중화가 사라지고,
+    전략이 `Recreate`가 아니면 롤아웃 중에는 여전히 파드 두 개가 겹치며(`Recreate`면 매 배포 중단), `replicas: 1`에서는 PDB
+    `minAvailable: 1`이 노드 drain을 막는다. 결정 전까지 `replicas`는 바꾸지 않는다. 상태: 미결.
+    **2026-09-28 검토 메모(결정 아님).** Slack이 재시도하는 것은 Events API뿐이다(3초 안에 2xx가 없으면 즉시·1분·5분,
+    최대 3회. 본문은 같고 타임스탬프·서명은 새로 계산). 슬래시 커맨드와 interaction은 재시도하지 않으므로 대상이 아니다.
+    `/api/slack/events`의 요청 경로는 파싱·역할 조회·커맨드 실행·outbox 저장을 한 트랜잭션에서 동기로 돌리고, AI 턴은
+    `AgentConverseService`(`@Async` 리스너)가 요청 스레드 밖에서 실행한다. 따라서 재시도는 DB가 느리거나 장애일 때의 드문
+    경우로 추정한다(응답 시간 미측정). 현재 구현이 못 막는 것: 다른 파드로 간 재시도, 파드 재시작 직후의 재시도, 마지막
+    재시도(5분) 뒤에 실패한 원본, 그리고 `IdempotencyCreator`가 1초 시간 창을 키에 섞어 DB 쪽에서도 중복이 안 잡히는 점.
+    outbox는 나가는 메시지의 유실을 막을 뿐 들어오는 이벤트의 중복은 막지 않는다(같은 이벤트가 두 번 오면 답장이 두 줄
+    쌓여 둘 다 발송된다). 선택지 (3) 수신함(inbox) 패턴 — 이벤트를 저장하고 즉시 200, 처리는 비동기. 3초 제약과 in-flight
+    재시도 문제가 함께 사라지고 파드가 죽어도 턴을 복구할 수 있지만 이벤트 처리 흐름 전체를 바꿔야 한다. 그 이점의 절반
+    (무거운 작업을 응답 뒤로)은 비동기 AI 턴으로 이미 확보돼 있다. **권고: 선택지 (1)**, 단 이벤트 ID 기록을 핸들러의 DB
+    변경과 **같은 트랜잭션**에 넣는다 — 처리 결과와 처리 표시가 함께 커밋·롤백되므로 실패한 원본은 표시가 남지 않아
+    재시도가 정상 처리된다. 메모리 맵은 같은 파드 안의 1차 필터로 남긴다. 착수 전 조사할 것: 이벤트 핸들러가 트랜잭션
+    밖에서 하는 일(비동기 AI 턴은 메모리 이벤트라 파드가 죽으면 사라짐 — dedup과는 별개 문제), Slack `event_id` 추출 위치,
+    다음 마이그레이션 번호 V23, 보존 기간 정리 작업.
+    근거: `application/.../security/SlackRetryDeduplicator.kt`, `application/src/main/resources/k8s/deployment.yaml`,
+    `application/src/main/resources/k8s/AGENTS.md`.
 
 ## 근거
 

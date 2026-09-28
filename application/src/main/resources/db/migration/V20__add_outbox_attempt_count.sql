@@ -1,0 +1,31 @@
+-- -----------------------------------------------------------------------------
+-- Outbox: attempt_count, the claim counter and ownership token
+-- -----------------------------------------------------------------------------
+-- Rationale:
+--   Every claim (claimPending) and every recovery reclaim (reclaimStuck)
+--   increments attempt_count, and every later write by the claimer (lease
+--   renewal, rate-limit deferral, SUCCESS/FAILURE) is guarded by the value it
+--   won. A worker whose row was reclaimed while it waited in the relay queue
+--   therefore neither sends nor overwrites the new owner's result. The retry
+--   budget is counted separately, in real sends (send_count, V22).
+--
+-- Behaviour:
+--   - attempt_count INT NOT NULL DEFAULT 0; existing rows start at 0.
+--   - Rows already IN_PROGRESS when this is applied keep 0 and are reclaimed
+--     by the recovery sweep once they are older than the stuck threshold.
+--
+-- Rollout constraint:
+--   The release that uses this column must not run side by side with a release
+--   that predates it. Older pods stamp updated_at with the database's
+--   CURRENT_TIMESTAMP (UTC) while this release compares against the JVM clock,
+--   re-dispatch IN_PROGRESS rows from CDC, and overwrite status through JPA
+--   without the attempt guard, so a mixed fleet double-sends and can turn a
+--   SUCCESS into FAILURE. Stop every old pod (scale to 0 or use the Recreate
+--   strategy), apply V20 and V22, then start the new release.
+--
+-- Apply this script BEFORE rolling out application code that expects the
+-- column. For dev/local with auto-ddl enabled, Hibernate applies it
+-- automatically. In prod, execute manually — schema auto-migration is disabled.
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE outbox_message ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT 0;

@@ -1,8 +1,11 @@
 package dev.notypie.application.service.relay
 
+import dev.notypie.application.configurations.AppConfig
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.isRateLimited
+import dev.notypie.impl.command.isTransientExhausted
+import dev.notypie.impl.command.retryAfter
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
@@ -10,18 +13,22 @@ import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
-import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import java.time.Clock
+import java.time.Duration
+import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.Executor
 
 private val logger = KotlinLogging.logger {}
+
+private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
+private val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
 
 @Service
 class SlackMessageRelayServiceImpl(
@@ -32,64 +39,149 @@ class SlackMessageRelayServiceImpl(
     private val retryService: RetryService,
     private val applicationEventPublisher: ApplicationEventPublisher,
     @Qualifier("relayTaskExecutor") private val relayTaskExecutor: Executor,
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) : MessageRelayService {
+    private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
+    private val giveUpAfter: Duration = Duration.ofHours(appConfig.outbox.polling.giveUpAfterHours)
+
     // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
-    override fun batchPendingMessages(pendingMessages: List<OutboxMessage>) {
-        pendingMessages.forEach { message ->
-            relayTaskExecutor.execute { batchPendingMessagesAsync(pendingMessage = message) }
+    override fun batchPendingMessages(claims: List<OutboxClaim>) {
+        claims.forEach { claim ->
+            relayTaskExecutor.execute { dispatchClaimed(claim = claim) }
         }
     }
 
     // Keyed on the row's eventId, not the renderer's payload eventId, which is throwaway.
-    internal fun batchPendingMessagesAsync(pendingMessage: OutboxMessage) {
+    override fun dispatchClaimed(claim: OutboxClaim) {
+        val row = claim.row
         val eventId =
-            runCatching { UUID.fromString(pendingMessage.eventId) }
+            runCatching { UUID.fromString(row.eventId) }
                 .getOrElse { parseFailure ->
                     logger.error(parseFailure) {
-                        "Skipping outbox row with malformed eventId='${pendingMessage.eventId}' " +
-                            "idempotencyKey=${pendingMessage.idempotencyKey}"
+                        "Failing outbox row with malformed eventId='${row.eventId}' idempotencyKey=${row.idempotencyKey}"
                     }
+                    writeTerminal(claim = claim, status = MessageStatus.FAILURE)
                     return
                 }
+        if (!renew(claim = claim)) return
 
-        val updateEvent: OutboxUpdateEvent =
+        val rendered =
             try {
-                val rendered = payloadRenderer.render(row = pendingMessage)
-                val result = messageDispatcher.dispatch(event = rendered)
-                if (result.isRateLimited()) {
-                    logger.warn { "Slack rate limit; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
-                    return
-                }
-                result.toOutboxUpdateEvent(eventId = eventId)
+                payloadRenderer.render(row = row)
             } catch (exception: Exception) {
-                // Catches Exception, not Throwable, so fatal Errors (OOM, StackOverflow) still propagate.
-                logger.error(exception) {
-                    "Dispatch failed for eventId=$eventId idempotencyKey=${pendingMessage.idempotencyKey}"
-                }
-                MessagePublishFailedEvent(
-                    eventId = eventId,
-                    reason = exception.toString(),
+                logger.error(exception) { "Render failed for eventId=$eventId idempotencyKey=${row.idempotencyKey}" }
+                complete(
+                    claim = claim,
+                    updateEvent = MessagePublishFailedEvent(eventId = eventId, reason = exception.toString()),
                 )
+                return
             }
-        // Publishing is required so the row leaves PENDING; skipping it makes polling re-read it forever.
-        applicationEventPublisher.publishEvent(updateEvent)
+        val result =
+            try {
+                messageDispatcher.dispatch(event = rendered)
+            } catch (exception: Exception) {
+                logger.error(exception) {
+                    "Dispatch threw for eventId=$eventId idempotencyKey=${row.idempotencyKey}; " +
+                        "leaving it IN_PROGRESS for the recovery sweep"
+                }
+                return
+            }
+        when {
+            result.isRateLimited() -> defer(claim = claim, retryAfter = result.retryAfter())
+            result.isTransientExhausted() ->
+                logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
+            else -> complete(claim = claim, updateEvent = result.toOutboxUpdateEvent(eventId = eventId))
+        }
     }
 
-    @EventListener
-    fun updateOutboxMessageStatus(event: OutboxUpdateEvent) =
-        retryService.execute(
-            action = { updateMessage(status = event.status, eventId = event.eventId) },
-            maxAttempts = 5,
-        )
-
-    fun updateMessage(status: MessageStatus, eventId: UUID): OutboxMessage {
-        val message =
-            outboxRepository
-                .findById(eventId.toString())
-                .orElseThrow { throw RuntimeException("Message Not Found.") }
-        message.updateMessageStatus(status = status)
-        return outboxRepository.save(message)
+    private fun renew(claim: OutboxClaim): Boolean {
+        val renewed =
+            runCatching {
+                outboxRepository.renewClaim(eventId = claim.row.eventId, attemptCount = claim.attempt, now = now())
+            }.getOrElse { exception ->
+                logger.error(exception) {
+                    "Claim renewal failed for eventId=${claim.row.eventId}; leaving it to the recovery sweep"
+                }
+                return false
+            }
+        if (renewed != 1) {
+            logger.warn {
+                "Claim attempt=${claim.attempt} on eventId=${claim.row.eventId} was taken over; not dispatching"
+            }
+        }
+        return renewed == 1
     }
+
+    private fun defer(claim: OutboxClaim, retryAfter: Duration?) {
+        val wait = (retryAfter ?: DEFAULT_RATE_LIMIT_WAIT) + spreadOf(claim = claim)
+        val eligibleAt = minOf(now().plus(wait), claim.row.createdAt.plus(giveUpAfter))
+        val deferred =
+            runCatching {
+                outboxRepository.deferClaim(
+                    eventId = claim.row.eventId,
+                    attemptCount = claim.attempt,
+                    updatedAt = eligibleAt.minus(stuckThreshold),
+                )
+            }.getOrElse { exception ->
+                logger.error(exception) {
+                    "Deferring rate-limited eventId=${claim.row.eventId} failed; the sweep retries it on its own clock"
+                }
+                return
+            }
+        logger.warn {
+            "Slack rate limit (Retry-After=${retryAfter?.toSeconds()}s); eventId=${claim.row.eventId} " +
+                (if (deferred == 1) "deferred until $eligibleAt" else "was taken over while deferring")
+        }
+    }
+
+    private fun spreadOf(claim: OutboxClaim): Duration {
+        val hash = claim.row.eventId.hashCode()
+        return Duration.ofMillis(Math.floorMod(hash.toLong(), RATE_LIMIT_SPREAD.toMillis()))
+    }
+
+    private fun complete(claim: OutboxClaim, updateEvent: OutboxUpdateEvent) {
+        if (!writeTerminal(claim = claim, status = updateEvent.status)) return
+        try {
+            applicationEventPublisher.publishEvent(updateEvent)
+        } catch (exception: Exception) {
+            logger.error(exception) {
+                "Listener of ${updateEvent.status} failed for eventId=${updateEvent.eventId}; the row is already " +
+                    "${updateEvent.status}"
+            }
+        }
+    }
+
+    private fun writeTerminal(claim: OutboxClaim, status: MessageStatus): Boolean {
+        val completed =
+            try {
+                retryService.execute(
+                    action = {
+                        outboxRepository.completeClaim(
+                            eventId = claim.row.eventId,
+                            attemptCount = claim.attempt,
+                            status = status.name,
+                            now = now(),
+                        )
+                    },
+                    maxAttempts = 5,
+                )
+            } catch (exception: Exception) {
+                logger.error(exception) {
+                    "Recording $status failed for eventId=${claim.row.eventId} " +
+                        "idempotencyKey=${claim.row.idempotencyKey}; row stays IN_PROGRESS for the recovery sweep"
+                }
+                return false
+            }
+        if (completed != 1) {
+            logger.warn {
+                "Claim attempt=${claim.attempt} on eventId=${claim.row.eventId} was taken over; $status not recorded"
+            }
+        }
+        return completed == 1
+    }
+
+    private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
     // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)

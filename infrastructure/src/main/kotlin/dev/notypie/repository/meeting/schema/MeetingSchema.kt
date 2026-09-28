@@ -7,7 +7,9 @@ import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.domain.meet.entity.RejectReason
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.OptimisticLock
 import org.hibernate.annotations.UpdateTimestamp
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -29,12 +31,10 @@ class MeetingSchema(
     val idempotencyKey: UUID,
     @field:Column(name = "name", nullable = false)
     val name: String,
-    @field:Column(name = "start_at", nullable = false)
-    val startAt: LocalDateTime,
-    @field:Column(name = "end_at")
-    val endAt: LocalDateTime? = null,
-    @field:Column(name = "is_canceled", nullable = false)
-    val isCanceled: Boolean = false,
+    startAt: LocalDateTime,
+    endAt: LocalDateTime? = null,
+    isCanceled: Boolean = false,
+    @field:OptimisticLock(excluded = false)
     @field:OneToMany(
         mappedBy = "meeting",
         fetch = FetchType.LAZY,
@@ -56,12 +56,31 @@ class MeetingSchema(
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
 ) {
-    // Bumped with OPTIMISTIC_FORCE_INCREMENT on participant writes, since adding to the mappedBy
-    // collection alone leaves the parent row untouched and two concurrent adds would both pass the cap.
+    @field:Column(name = "start_at", nullable = false)
+    var startAt: LocalDateTime = startAt
+        protected set
+
+    @field:Column(name = "end_at")
+    var endAt: LocalDateTime? = endAt
+        protected set
+
+    @field:Column(name = "is_canceled", nullable = false)
+    var isCanceled: Boolean = isCanceled
+        protected set
+
     @field:Version
     @field:Column(name = "version", nullable = false)
     var version: Long = 0L
         protected set
+
+    fun reschedule(newStartAt: LocalDateTime) {
+        endAt = endAt?.takeIf { it.isAfter(startAt) }?.let { newStartAt.plus(Duration.between(startAt, it)) }
+        startAt = newStartAt
+    }
+
+    fun cancel() {
+        isCanceled = true
+    }
 }
 
 fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
@@ -123,10 +142,12 @@ fun MeetingSchema.toMeetingDto() =
             },
     )
 
+const val PARTICIPANT_UNIQUE_KEY = "uk_meeting_participants_meeting_user"
+
 @Entity(name = "meeting_participants")
 @Table(
     uniqueConstraints = [
-        UniqueConstraint(name = "uk_meeting_participants_meeting_user", columnNames = ["meeting_id", "user_id"]),
+        UniqueConstraint(name = PARTICIPANT_UNIQUE_KEY, columnNames = ["meeting_id", "user_id"]),
     ],
     indexes = [
         Index(name = "idx_meeting_participants_user_id", columnList = "user_id"),

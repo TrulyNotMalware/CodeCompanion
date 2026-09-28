@@ -2,9 +2,7 @@ package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.repository.meeting.schema.MeetingSchema
-import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -18,7 +16,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
     @Query(
         """
             SELECT m FROM meetings m
-            JOIN FETCH m.participants
+            LEFT JOIN FETCH m.participants
             WHERE m.id = :meetingId
         """,
     )
@@ -32,7 +30,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         """
         SELECT m
         FROM meetings m
-        JOIN FETCH m.participants
+        LEFT JOIN FETCH m.participants
         WHERE m.publisherId = :userId
            OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting = m AND p.userId = :userId)
     """,
@@ -43,7 +41,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         """
         SELECT m
         FROM meetings m
-        JOIN FETCH m.participants
+        LEFT JOIN FETCH m.participants
         WHERE (m.publisherId = :userId
                OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting = m AND p.userId = :userId))
           AND m.startAt >= :startAt
@@ -57,12 +55,11 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("endAt") endAt: LocalDateTime,
     ): List<MeetingSchema>
 
-    // Not user-scoped, unlike findMeetingsByUserIdAndDateRange — the reminder scheduler sweeps all meetings.
     @Query(
         """
-        SELECT DISTINCT m
+        SELECT m
         FROM meetings m
-        JOIN FETCH m.participants
+        LEFT JOIN FETCH m.participants
         WHERE m.isCanceled = false
           AND m.startAt >= :startAt
           AND m.startAt < :endAt
@@ -106,48 +103,6 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingIdempotencyKey") meetingIdempotencyKey: UUID,
         @Param("userId") userId: String,
     ): Boolean
-
-    @Modifying
-    @Transactional
-    @Query(
-        """
-        UPDATE meetings m
-        SET m.isCanceled = true
-        WHERE m.meetingUid = :meetingUid
-          AND m.publisherId = :requesterId
-          AND m.isCanceled = false
-    """,
-    )
-    fun markMeetingCanceled(
-        @Param("meetingUid") meetingUid: UUID,
-        @Param("requesterId") requesterId: String,
-    ): Int
-
-    // The caller reads the row before this UPDATE; clearing keeps a later read in the same tx from seeing the old times.
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Transactional
-    @Query(
-        """
-        UPDATE meetings m
-        SET m.startAt = :newStartAt, m.endAt = :newEndAt
-        WHERE m.meetingUid = :meetingUid
-          AND m.publisherId = :requesterId
-          AND m.isCanceled = false
-    """,
-    )
-    fun rescheduleMeeting(
-        @Param("meetingUid") meetingUid: UUID,
-        @Param("requesterId") requesterId: String,
-        @Param("newStartAt") newStartAt: LocalDateTime,
-        @Param("newEndAt") newEndAt: LocalDateTime?,
-    ): Int
-
-    // Writes read through this lookup: the forced version bump makes two concurrent writers conflict at commit.
-    @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
-    @Query("SELECT m FROM meetings m WHERE m.meetingUid = :meetingUid")
-    fun findMeetingByUidForUpdate(
-        @Param("meetingUid") meetingUid: UUID,
-    ): MeetingSchema?
 
     @Query(
         """

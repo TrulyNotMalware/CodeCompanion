@@ -13,7 +13,8 @@ spring:
   datasource:
     hikari:
       transaction-isolation: ${SQL_PROD_ISOLATION_LEVEL}
-      maximum-pool-size: 10
+      # Meeting writes hold two connections (outer tx + REQUIRES_NEW); sizing rule in resources/AGENTS.md.
+      maximum-pool-size: 20
 #      minimum-idle: 10
       connection-timeout: ${SQL_PROD_CONNECTION_TIMEOUT}
       validation-timeout: ${SQL_PROD_VALIDATION_TIMEOUT}
@@ -57,8 +58,8 @@ spring:
           disallow-delete: true
 
   kafka:
-    # No default on purpose: an unset env var fails property binding at startup. The value comes from
-    # k8s/configmap.yaml, whose checked-in placeholder must be replaced in-cluster.
+    # No default on purpose: the value comes from k8s/configmap.yaml, whose checked-in placeholder must be
+    # replaced in-cluster. An unset variable does not fail binding: the literal `${...}` is bound instead.
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -71,11 +72,10 @@ spring:
       # The listener container commits per record (AckMode.RECORD); client-side auto-commit would
       # advance offsets past records that are still being dispatched.
       enable-auto-commit: false
-      max-poll-records: 100
+      max-poll-records: 5
       isolation-level: read_committed
       properties:
-        # A batch of rate-limited records waits up to 30s each in the listener thread; keep the group alive.
-        max.poll.interval.ms: 600000
+        max.poll.interval.ms: 300000
 
 server:
   port: 80
@@ -98,7 +98,8 @@ management:
     web:
       exposure:
         include: health,info,metrics
-      base-path: ${ACTUATOR_BASE_PATH}
+      # Fixed: k8s/deployment.yaml probes and the deploy workflow health check hard-code /actuator.
+      base-path: /actuator
       path-mapping:
         loggers: logs
         httptrace: trace

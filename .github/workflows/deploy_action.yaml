@@ -21,18 +21,20 @@ on:
 permissions:
   contents: read
   deployments: write
-  statuses: write
+
+# Serialise production deploys: overlapping runs would interleave backup, apply and rollback.
+# An unmerged close gets its own group, or it would replace a merge's pending run in the deploy queue.
+concurrency:
+  group: ${{ github.event.pull_request.merged && 'deploy-production' || format('deploy-skip-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 env:
-  K8S_APP_INGRESS_HOST: https://api.notypie.dev
-  # No leading slash: the health-check step joins host and path with "/", and a doubled slash
-  # is rejected by the ingress with HTTP 400.
-  HEALTH_CHECK_ENDPOINT: api/slack/actuator/health
+  ENVIRONMENT_URL: https://api.notypie.dev
 
   K8S_NAMESPACE: api-service
   K8S_DEPLOYMENT_NAME: code-companion-deploy
-  K8S_DEPLOY_APP_CONTAINER_NAME: code-companion-deploy
   K8S_SERVICE_NAME: code-companion-svc
+  K8S_CONTAINER_NAME: code-companion-deploy
   DEPLOYMENT_ROLLOUT_TIMEOUT: 300s
 
   JAR_FILE_NAME: code-companion-prod
@@ -87,7 +89,7 @@ jobs:
     needs: check-changes
     if: needs.check-changes.outputs.should-deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Create deployment
         uses: actions/github-script@v9
@@ -134,7 +136,7 @@ jobs:
       - name: Apply Gradle configuration for CI
         run: |
           chmod +x gradle-config/apply.sh
-          ./gradle-config/apply.sh
+          ./gradle-config/apply.sh ci
 
       # Full `build` (every module's tests + ktlintCheck) on purpose: this is the artifact that
       # reaches production, and a PR can be merged with the required checks still pending, so the
@@ -142,8 +144,6 @@ jobs:
       # infrastructure suites.
       - name: Build application
         run: ./gradlew build -PjarName=${{ env.JAR_FILE_NAME }} --parallel
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=4"
 
       # Support ARM. in my case, I'm using Oracle Cloud Infrastructure with Arm64 instances
       ######################################################
@@ -209,11 +209,14 @@ jobs:
     needs: [ check-changes, build ]
     if: needs.check-changes.outputs.should-deploy == 'true' && success()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Rollout (300s) + health check (~2 min) + rollback rollout (300s) must fit.
+    timeout-minutes: 20
     name: Deploy to Production OKE
     env:
       DEPLOYMENT_ID: ${{ needs.build.outputs.deployment-id }}
 
+      # Job-wide, not step-scoped: the kubeconfig written by configure-kubectl-oke runs
+      # `oci ce cluster generate-token` on every kubectl call, which reads these variables.
       OCI_CLI_USER: ${{ secrets.PROD_OCI_CLI_USER }}
       OCI_CLI_TENANCY: ${{ secrets.PROD_OCI_CLI_TENANCY }}
       OCI_CLI_FINGERPRINT: ${{ secrets.PROD_OCI_CLI_FINGERPRINT }}
@@ -229,23 +232,43 @@ jobs:
         with:
           cluster: ${{ secrets.PROD_OKE_CLUSTER_OCID }}
 
+      # A lookup error other than NotFound fails here, before anything is applied, rather than recording
+      # "no previous deployment" and disabling the rollback.
       - name: Backup current deployment
         id: backup
         run: |
-          PREVIOUS_IMAGE=$(kubectl get deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+          err_file=$(mktemp)
+          if current=$(kubectl get deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o json 2> "$err_file"); then
+            PREVIOUS_REVISION=$(jq -r '.metadata.annotations["deployment.kubernetes.io/revision"] // "none"' <<< "$current")
+            PREVIOUS_TEMPLATE=$(jq -cS '.spec.template' <<< "$current" | sha256sum | cut -d' ' -f1)
+            PREVIOUS_IMAGE=$(jq -r '.spec.template.spec.containers[0].image // "none"' <<< "$current")
+          elif grep -q 'NotFound' "$err_file"; then
+            PREVIOUS_REVISION=none
+            PREVIOUS_TEMPLATE=none
+            PREVIOUS_IMAGE=none
+          else
+            echo "::error::Could not read the current Deployment: $(cat "$err_file")"
+            exit 1
+          fi
+          echo "previous-revision=$PREVIOUS_REVISION" >> $GITHUB_OUTPUT
+          echo "previous-template=$PREVIOUS_TEMPLATE" >> $GITHUB_OUTPUT
           echo "previous-image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
-          echo "Previous image: $PREVIOUS_IMAGE"
+          echo "Previous revision: $PREVIOUS_REVISION, template sha256: $PREVIOUS_TEMPLATE, image: $PREVIOUS_IMAGE"
 
       - name: Apply kubernetes manifests
+        id: apply
         run: |
           export IMAGE_NAME="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.STATIC_DOCKER_TAG }}"
-          envsubst < application/src/main/resources/k8s/deployment.yaml | kubectl apply -n ${{ env.K8S_NAMESPACE }} -f -
+          # Only $IMAGE_NAME is substituted; the job env holds the OCI private key.
+          envsubst '${IMAGE_NAME}' < application/src/main/resources/k8s/deployment.yaml | kubectl apply -n ${{ env.K8S_NAMESPACE }} -f -
 
       - name: Wait for deployment rollout
+        id: rollout
         run: |
           kubectl rollout status deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} --timeout=${{ env.DEPLOYMENT_ROLLOUT_TIMEOUT }}
 
       - name: Verify deployment health
+        id: verify
         run: |
           # Count Ready pods, not Running ones: a pod that is still booting (or crash-looping
           # after a failed context load) is Running but never becomes Ready.
@@ -261,26 +284,61 @@ jobs:
 
           echo "Deployment success!"
 
+      # In-cluster only: the public host sits behind an edge that is not part of this repository.
+      # Readiness, not the aggregate: OutboxHealthIndicator can be DOWN for reasons unrelated to the release.
+      # The service proxy needs `get` on services/proxy and the API server reaching pod IPs; exec needs pods/exec.
       - name: Run Health check
+        id: health
         run: |
-          echo "Testing health endpoint"
-          success=false
-          health_url="${{ env.K8S_APP_INGRESS_HOST }}/${{ env.HEALTH_CHECK_ENDPOINT }}"
-          for i in {1..10}; do
-            http_code=$(curl -o /dev/null -s -m 10 -w "%{http_code}" "$health_url" || true)
-            if [ "$http_code" = "200" ]; then
-              echo "Health check successful"
-              success=true
+          if ! command -v jq > /dev/null; then
+            echo "::error::jq is not installed on this runner; cannot parse the health response."
+            exit 1
+          fi
+          proxy_base="/api/v1/namespaces/${{ env.K8S_NAMESPACE }}/services/${{ env.K8S_SERVICE_NAME }}:80/proxy"
+          err_file=$(mktemp)
+
+          # Sets $method and $body on success; logs each method's error otherwise. stderr stays out of $body
+          # so a kubectl warning cannot break the JSON parse.
+          fetch() {
+            if body=$(kubectl get --raw "${proxy_base}$1" --request-timeout=10s 2> "$err_file"); then
+              method="service proxy"
+              return 0
+            fi
+            echo "  service proxy failed: $(cat "$err_file")"
+            if body=$(kubectl exec "deploy/${{ env.K8S_DEPLOYMENT_NAME }}" -n ${{ env.K8S_NAMESPACE }} -c ${{ env.K8S_CONTAINER_NAME }} --request-timeout=20s -- wget -qO- -T 10 "http://localhost:80$1" 2> "$err_file"); then
+              method="pod exec"
+              return 0
+            fi
+            echo "  pod exec failed: $(cat "$err_file")"
+            return 1
+          }
+
+          deadline=$((SECONDS + 120))
+          attempt=0
+          while :; do
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt: GET /actuator/health/readiness"
+            if fetch /actuator/health/readiness; then
+              if jq -e '.status == "UP"' > /dev/null 2>&1 <<< "$body"; then
+                echo "Readiness UP via $method: $body"
+                echo "Aggregate /actuator/health (informational, does not gate the deploy):"
+                if fetch /actuator/health; then
+                  echo "  via $method: $body"
+                else
+                  echo "  aggregate not UP or unreachable (HTTP 503 hides the body); ignored."
+                fi
+                exit 0
+              fi
+              echo "  readiness via $method is not UP: $body"
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
               break
             fi
-            echo "Attempt $i failed, HTTP code: $http_code"
             sleep 5
           done
 
-          if [ "$success" = false ]; then
-            echo "Health check failed"
-            exit 1
-          fi
+          echo "::error::Readiness was not UP after $attempt attempts (120s)."
+          exit 1
 
       - name: Update deployment status to success
         uses: actions/github-script@v9
@@ -291,23 +349,55 @@ jobs:
               repo: context.repo.repo,
               deployment_id: ${{ env.DEPLOYMENT_ID }},
               state: 'success',
-              environment_url: 'https://your-app.notypie.dev',
+              environment_url: '${{ env.ENVIRONMENT_URL }}',
               description: 'Deployment completed successfully'
             });
 
+      # `rollout undo` restores the whole previous pod template (image, probes, resources), not just the image.
+      # "Changed" compares the pod template itself: the revision annotation is written later by the controller.
+      # An unreadable Deployment still gets the undo; kubectl skips it when the template already matches.
       - name: Rollback on failure
-        if: failure()
+        id: rollback
+        if: failure() && (steps.apply.outcome == 'failure' || steps.rollout.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.health.outcome == 'failure')
         run: |
-          echo "Rolling back to previous version..."
-          PREVIOUS_IMAGE="${{ steps.backup.outputs.previous-image }}"
+          PREVIOUS_REVISION="${{ steps.backup.outputs.previous-revision }}"
+          PREVIOUS_TEMPLATE="${{ steps.backup.outputs.previous-template }}"
 
-          if [ "$PREVIOUS_IMAGE" != "none" ] && [ ! -z "$PREVIOUS_IMAGE" ]; then
-            kubectl set image deployment/${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} ${{ env.K8S_DEPLOY_APP_CONTAINER_NAME }}="$PREVIOUS_IMAGE"
-            kubectl rollout status deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} --timeout=${{ env.DEPLOYMENT_ROLLOUT_TIMEOUT }}
-            echo "Rollback completed to: $PREVIOUS_IMAGE"
-          else
-            echo "No previous image found for rollback"
+          if [ -z "$PREVIOUS_REVISION" ] || [ "$PREVIOUS_REVISION" = "none" ]; then
+            echo "No previous revision recorded (first deploy); nothing to roll back."
+            echo "result=not rolled back" >> $GITHUB_OUTPUT
+            exit 0
           fi
+
+          err_file=$(mktemp)
+          current=""
+          for lookup in 1 2 3; do
+            if current=$(kubectl get deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o json 2> "$err_file"); then
+              break
+            fi
+            current=""
+            echo "Deployment lookup $lookup/3 failed: $(cat "$err_file")"
+            sleep 5
+          done
+
+          if [ -z "$current" ]; then
+            echo "::error::Could not read the Deployment; undoing to revision $PREVIOUS_REVISION without a change check."
+          else
+            CURRENT_REVISION=$(jq -r '.metadata.annotations["deployment.kubernetes.io/revision"] // ""' <<< "$current")
+            CURRENT_TEMPLATE=$(jq -cS '.spec.template' <<< "$current" | sha256sum | cut -d' ' -f1)
+            echo "Revision $PREVIOUS_REVISION -> ${CURRENT_REVISION:-unknown}, template $PREVIOUS_TEMPLATE -> $CURRENT_TEMPLATE"
+            if [ "$CURRENT_TEMPLATE" = "$PREVIOUS_TEMPLATE" ] && [ "$CURRENT_REVISION" = "$PREVIOUS_REVISION" ]; then
+              echo "This run left the pod template unchanged; nothing to roll back."
+              echo "result=not rolled back" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+
+          echo "result=rollback failed" >> $GITHUB_OUTPUT
+          kubectl rollout undo deployment/${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} --to-revision="$PREVIOUS_REVISION"
+          kubectl rollout status deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} --timeout=${{ env.DEPLOYMENT_ROLLOUT_TIMEOUT }}
+          echo "Rolled back to the template of revision $PREVIOUS_REVISION (image: ${{ steps.backup.outputs.previous-image }})."
+          echo "result=rolled back" >> $GITHUB_OUTPUT
 
       - name: Update deployment status on failure
         if: failure()
@@ -319,5 +409,5 @@ jobs:
               repo: context.repo.repo,
               deployment_id: ${{ env.DEPLOYMENT_ID }},
               state: 'failure',
-              description: 'Deployment failed - rolled back'
+              description: 'Deployment failed - ${{ steps.rollback.outputs.result || 'rollback not attempted' }}'
             });

@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-09-22_
+_type: guide · updated: 2026-09-28_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -13,8 +13,8 @@ _type: guide · updated: 2026-09-22_
   함수로 뽑는다(§6) — 생성자가 바뀌어도 고치는 곳이 한 군데다. 루트 빌드가 모든 서브프로젝트에 `java-test-fixtures`를
   적용하고, `:infrastructure`는 `testFixtures(project(":domain"))`, `:application`은 domain + infrastructure fixture를
   모두 소비한다.
-- **도메인 테스트는 순수 JVM.** `:domain`에는 Spring도 DB도 없다. 느린 테스트는 `:infrastructure`의 H2/EmbeddedKafka
-  슬라이스뿐이다.
+- **도메인 테스트는 순수 JVM.** `:domain`에는 Spring도 DB도 없다. DB를 쓰는 테스트는 `:infrastructure`의 H2/EmbeddedKafka
+  슬라이스와, 아래에 적은 `:application`의 H2 + 실제 트랜잭션 매니저 스펙이다.
 - **아키텍처는 가드 테스트로 강제한다.** 문서로 "하지 말라"고 쓰는 대신 소스를 스캔하는 스펙이 빌드를 깨뜨린다.
 
 ## fixture 팩토리 목록
@@ -57,7 +57,7 @@ _type: guide · updated: 2026-09-22_
 - 서비스 스펙은 Slack 페이로드가 아니라 **효과**를 단언한다: `verify(exactly = 1) { repo.markDispatchSent(...) }`,
   `effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()`.
 
-## 통합 슬라이스 구성(`:infrastructure`에만 있다)
+## 통합 슬라이스 구성
 
 - `infrastructure/src/test/kotlin/dev/notypie/TestApplication.kt`는 빈 `@SpringBootApplication`이고,
   `src/test/resources/application.yaml`은 Kafka 직렬화기와 로깅만 정한다. 데이터소스 설정이 없으므로 Boot가 H2를
@@ -72,8 +72,11 @@ _type: guide · updated: 2026-09-22_
   스펙이 있어야 한다.
 - `@SpringBootTest` + `@EmbeddedKafka`(KRaft)는 `impl/command/KafkaEventPublisherTest` 하나뿐이다. `configurations/`
   패키지의 `@Bean`이 잘못 엮이면 깨지는 유일한 스펙이 이것이다.
-- `:application`에는 Spring 컨텍스트를 띄우는 스펙이 **없다**(`src/test/resources`도 없다). `application/AGENTS.md`의
-  "outbox and Kafka paths use EmbeddedKafka and H2"는 현재 소스와 맞지 않는다 — 아웃박스 스펙은 전부 MockK 단위 스펙이다.
+- `:application`에는 `@SpringBootTest`도 `src/test/resources`도 없다. 대신 testFixtures가 인메모리 H2와 실제 트랜잭션 매니저를
+  만든다: `outbox/OutboxJpaTestContext.kt`의 `createOutboxJpaContext()`(작은 `AnnotationConfigApplicationContext` +
+  `JpaTransactionManager`, 아웃박스 복구 시나리오 스펙이 사용)와 `service/meeting/MeetingTransactionFixtures.kt`의
+  `createH2DataSource`·`createH2TransactionManager`·`createBoundedH2DataSource`(회의 스펙이 `REQUIRES_NEW` 경계와 커넥션
+  한도를 실제로 확인할 때 사용). 나머지 `:application` 스펙은 MockK 단위 스펙이다.
 
 ## 실행 명령
 
@@ -87,8 +90,10 @@ _type: guide · updated: 2026-09-22_
 - 루트 `build.gradle.kts`가 모든 `Test` 태스크에 `-Xmx4g`, `-XX:+EnableDynamicAgentLoading`,
   `--add-opens java.base/java.lang`·`java.base/java.util`(MockK 요구)을 건다. 모듈에서 덮어쓰지 않는다.
   버전은 `extra["kotestVersion"] = "6.2.5"`, `extra["mockkVersion"] = "1.14.11"`.
-- CI(`.github/workflows/simple_test_action.yaml`)는 `feature/*` 푸시에서 **바뀐 모듈만** `:module:test`로 돌리고,
-  `*.gradle.kts`/`gradle/**`가 바뀌면 전체 `test`를 돈다. `**/*.md`는 트리거에서 제외된다.
+- CI(`.github/workflows/simple_test_action.yaml`)는 `feature/*` 계열 푸시와 `main` 대상 모든 PR에서 **바뀐 모듈과 그 의존
+  모듈**을 돌린다(`infrastructure` → infrastructure + application, `domain`·`*.gradle.kts`·`gradle/**`·`gradle-config/**` → 전체 `test`). `**/*.md`는
+  push 트리거에서만 제외된다(PR 트리거는 필터 없음, 문서만 바뀐 PR은 모듈 0개로 끝남). 테스트 전에 `./gradle-config/apply.sh ci`로
+  16GB 러너용 데몬 힙을 깔고, 잡 타임아웃은 30분이다.
 
 ## 지워서는 안 되는 스펙(가드·회귀)
 
@@ -105,14 +110,12 @@ _type: guide · updated: 2026-09-22_
 
 ## 채워야 할 빈 스펙과 빠진 스펙
 
-- `infrastructure/.../exception/DatabaseExceptionTest`: `given` 하나에 `when`/`then`이 없어 공허하게 통과한다.
-  `throwIfSchemaNotFound`의 non-null 반환과 null → `DatabaseException`(`details`의 `fieldName`/`value`, `tableName`이
-  수신자 타입 simple name)을 여기에 채운다.
-- `domain/.../command/CommandDomainTest`: 본문이 빈 `BehaviorSpec`이다.
-- 컨트롤러·`ControllerAdvice` 스펙이 없다. `spring-boot-starter-test`와 `spring-restdocs-mockmvc`는 클래스패스에
+- (2026-09-28 해소) `DatabaseExceptionTest`는 `throwIfSchemaNotFound`와 `schemaNotFound` DSL을 실제로 검증하고, 빈
+  `CommandDomainTest`는 삭제됐으며, `application/.../exception/ControllerAdviceTest`가 생겼다.
+- 컨트롤러 스펙과 `@WebMvcTest` 슬라이스는 없다. `spring-boot-starter-test`와 `spring-restdocs-mockmvc`는 클래스패스에
   있고 `application/src/testFixtures/kotlin/dev/notypie/docs/DSL.kt`(`"field" type STRING means "..."` 형태의
   REST Docs 필드 DSL)와 `Utils.kt`도 준비돼 있지만 **소비자가 없다**. 첫 `@WebMvcTest` 슬라이스가 이 DSL의 자리다.
-- `ErrorBroadcaster` 두 구현 모두 스펙이 없다(호출자도 없다).
+- `ErrorBroadcaster`의 구현은 `StdoutErrorBroadcaster` 하나(`ConsumerConfig`가 빈으로 등록)이고, 스펙도 주입받아 쓰는 곳도 없다.
 
 ## 무엇을 추가할 때 무엇을 테스트하는가
 

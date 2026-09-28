@@ -5,68 +5,147 @@ import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
 
-// Keyed by the body, never by X-Slack-Request-Timestamp / X-Slack-Signature: Slack signs every retry afresh,
-// so those headers differ per attempt while the payload (and its event_id) stays byte-identical.
 data class SlackRequestFingerprint(
     val method: String,
-    val requestUri: String,
+    val requestPath: String,
     val bodyHash: String,
 ) {
     companion object {
-        fun of(method: String, requestUri: String, body: ByteArray): SlackRequestFingerprint =
+        fun of(method: String, requestPath: String, body: ByteArray): SlackRequestFingerprint =
             SlackRequestFingerprint(
                 method = method,
-                requestUri = requestUri,
+                requestPath = requestPath,
                 bodyHash = MessageDigest.getInstance("SHA-256").digest(body).toHexString(),
             )
     }
 }
 
-interface SlackRetryDeduplicator {
-    // True when the request is a Slack retry of one already accepted (completed or still running), so the
-    // filter answers 200 without dispatching again. A first attempt is always admitted and recorded.
-    fun isDuplicateRetry(fingerprint: SlackRequestFingerprint, retryNum: String?): Boolean
+data class SlackRetryTicket(
+    val fingerprint: SlackRequestFingerprint,
+    val generation: Long,
+)
 
-    // A failed attempt is forgotten so the retry Slack sends after a 5xx is processed, not acknowledged away.
-    fun markFailed(fingerprint: SlackRequestFingerprint)
+sealed interface SlackRetryAdmission {
+    data class FirstAttempt(
+        val ticket: SlackRetryTicket,
+    ) : SlackRetryAdmission
+
+    data object Untracked : SlackRetryAdmission
+
+    data object RetryOfInFlight : SlackRetryAdmission
+
+    data object RetryOfCompleted : SlackRetryAdmission
 }
 
-// Single-replica only: the map lives in this JVM, so a retry routed to another Pod is not recognised.
+interface SlackRetryDeduplicator {
+    fun admit(fingerprint: SlackRequestFingerprint, retryNum: String?): SlackRetryAdmission
+
+    fun markCompleted(ticket: SlackRetryTicket)
+
+    fun markFailed(ticket: SlackRetryTicket)
+}
+
 class InMemorySlackRetryDeduplicator(
     private val clock: Clock = Clock.systemUTC(),
     private val ttl: Duration = Duration.ofMinutes(10),
     private val maxEntries: Int = 10_000,
 ) : SlackRetryDeduplicator {
-    private val seen = ConcurrentHashMap<SlackRequestFingerprint, Long>()
-    private val lastSweepAt = AtomicLong(0L)
+    private enum class State { IN_FLIGHT, COMPLETED }
 
-    override fun isDuplicateRetry(fingerprint: SlackRequestFingerprint, retryNum: String?): Boolean {
+    private data class Entry(
+        val state: State,
+        val recordedAt: Long,
+        val generation: Long,
+    )
+
+    private val entries = ConcurrentHashMap<SlackRequestFingerprint, Entry>()
+    private val generations = AtomicLong(0L)
+    private val lastSweepAt = AtomicLong(0L)
+    private val trimLock = ReentrantLock()
+    private val trimTarget: Int
+
+    init {
+        require(maxEntries > 0) { "maxEntries must be positive: $maxEntries" }
+        trimTarget = maxEntries * 9 / 10
+    }
+
+    override fun admit(fingerprint: SlackRequestFingerprint, retryNum: String?): SlackRetryAdmission {
         val now = clock.millis()
         sweepIfDue(now = now)
-        val previous = seen.putIfAbsent(fingerprint, now)
-        if (seen.size > maxEntries) trimToCap()
-        return previous != null && retryNum != null
+        if (entries.size >= maxEntries) trimCompleted()
+        var admission: SlackRetryAdmission = SlackRetryAdmission.Untracked
+        entries.compute(fingerprint) { _, existing ->
+            when {
+                existing == null && entries.size >= maxEntries -> {
+                    admission = SlackRetryAdmission.Untracked
+                    null
+                }
+
+                existing == null || isExpired(entry = existing, now = now) -> {
+                    val ticket = SlackRetryTicket(fingerprint = fingerprint, generation = generations.incrementAndGet())
+                    admission = SlackRetryAdmission.FirstAttempt(ticket = ticket)
+                    Entry(state = State.IN_FLIGHT, recordedAt = now, generation = ticket.generation)
+                }
+
+                retryNum == null -> {
+                    admission = SlackRetryAdmission.Untracked
+                    existing
+                }
+
+                existing.state == State.IN_FLIGHT -> {
+                    admission = SlackRetryAdmission.RetryOfInFlight
+                    existing
+                }
+
+                else -> {
+                    admission = SlackRetryAdmission.RetryOfCompleted
+                    existing
+                }
+            }
+        }
+        return admission
     }
 
-    internal fun trackedEntries(): Int = seen.size
-
-    override fun markFailed(fingerprint: SlackRequestFingerprint) {
-        seen.remove(fingerprint)
+    override fun markCompleted(ticket: SlackRetryTicket) {
+        entries.computeIfPresent(ticket.fingerprint) { _, entry ->
+            if (entry.generation == ticket.generation) {
+                entry.copy(state = State.COMPLETED, recordedAt = clock.millis())
+            } else {
+                entry
+            }
+        }
     }
 
-    // Sweeping is O(n); amortise it to once per half TTL.
+    override fun markFailed(ticket: SlackRetryTicket) {
+        entries.computeIfPresent(ticket.fingerprint) { _, entry ->
+            if (entry.generation == ticket.generation) null else entry
+        }
+    }
+
+    internal fun trackedEntries(): Int = entries.size
+
+    private fun isExpired(entry: Entry, now: Long): Boolean = entry.recordedAt < now - ttl.toMillis()
+
     private fun sweepIfDue(now: Long) {
         val last = lastSweepAt.get()
         if (now - last < ttl.toMillis() / 2 || !lastSweepAt.compareAndSet(last, now)) return
-        val cutoff = now - ttl.toMillis()
-        seen.entries.removeIf { (_, seenAt) -> seenAt < cutoff }
+        entries.entries.removeIf { (_, entry) -> isExpired(entry = entry, now = now) }
     }
 
-    private fun trimToCap() {
-        val snapshot = seen.entries.sortedBy { (_, seenAt) -> seenAt }
-        snapshot
-            .take((snapshot.size - maxEntries).coerceAtLeast(0))
-            .forEach { (key, _) -> seen.remove(key) }
+    private fun trimCompleted() {
+        if (!trimLock.tryLock()) return
+        try {
+            val excess = entries.size - trimTarget
+            if (excess <= 0) return
+            entries.entries
+                .filter { (_, entry) -> entry.state == State.COMPLETED }
+                .sortedBy { (_, entry) -> entry.recordedAt }
+                .take(excess)
+                .forEach { (fingerprint, entry) -> entries.remove(fingerprint, entry) }
+        } finally {
+            trimLock.unlock()
+        }
     }
 }

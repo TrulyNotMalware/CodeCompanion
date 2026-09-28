@@ -15,7 +15,7 @@ spring:
 
     hikari:
       transaction-isolation: TRANSACTION_REPEATABLE_READ
-      maximum-pool-size: 10
+      maximum-pool-size: 20
       #      minimum-idle: 10
       connection-timeout: 5000
       validation-timeout: 3000
@@ -47,7 +47,9 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       auto-offset-reset: earliest
       enable-auto-commit: false # container commits per record (AckMode.RECORD); see application-prod.yaml
-      max-poll-records: 100
+      max-poll-records: 5
+      properties:
+        max.poll.interval.ms: 300000
 
 server:
   port: 9000
@@ -65,12 +67,12 @@ management:
     logfile:
       external-file: ~/logback.log
     health:
-      show-details: always
+      show-details: when_authorized
   endpoints:
     web:
       exposure:
-        # No heapdump: it is unauthenticated here and a dump carries the Slack token and DB password.
-        include: health,loggers,metrics,mappings,threaddump,conditions,info
+        # dev is reachable over HTTP without authentication: no heapdump, loggers (writable), threaddump.
+        include: health,info,metrics
       base-path: /api/actuator
       path-mapping:
         loggers: logs

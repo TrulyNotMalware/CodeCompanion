@@ -77,7 +77,7 @@ class ParsedSubmissionsTest :
                     time = time,
                 )
 
-            `when`("date and time parse") {
+            `when`("date and time parse to a start") {
                 val parsed = RescheduleMeetingParsed.from(raw = raw(), actorId = ACTOR)
 
                 then("they combine into the new start and the actor fills the blank requester") {
@@ -92,6 +92,16 @@ class ParsedSubmissionsTest :
                     RescheduleMeetingParsed.from(raw = raw(uidRaw = "nope"), actorId = ACTOR).shouldBeNull()
                     RescheduleMeetingParsed.from(raw = raw(date = ""), actorId = ACTOR).shouldBeNull()
                     RescheduleMeetingParsed.from(raw = raw(time = "25:99"), actorId = ACTOR).shouldBeNull()
+                }
+            }
+
+            `when`("the new start is in the past") {
+                val parsed =
+                    RescheduleMeetingParsed.from(raw = raw(date = "2000-01-01", time = "09:00"), actorId = ACTOR)
+
+                then("parsing keeps it so the reschedule service can tell the host to pick a future time") {
+                    parsed.shouldNotBeNull()
+                    parsed.newStartAt shouldBe LocalDateTime.of(2000, 1, 1, 9, 0)
                 }
             }
         }

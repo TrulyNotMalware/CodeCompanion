@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
 
 # infrastructure/repository/outbox/schema
 
@@ -11,7 +11,7 @@ decoding.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`TEXT`, codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.CURRENT`). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue` |
+| `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`TEXT`, codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.CURRENT`), `attempt_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised only by the native claim statements, V20), `send_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised by `renewClaim`, lowered by `deferClaim`, V22). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue` |
 | `MessageStatus.kt` | `enum MessageStatus { INIT, FAILURE, SUCCESS, PENDING, IN_PROGRESS }` |
 | `OutboxSchemaVersion.kt` | `object OutboxSchemaVersion { const V2 = 2; const CURRENT = V2; val SUPPORTED: Set<Int> = setOf(V2) }` |
 
@@ -24,14 +24,18 @@ decoding.
 - **The `@JsonProperty("event_id")`-style annotations exist for the Debezium path**: `toOutboxMessage()`
   maps a CDC row (snake_case keys, micro-epoch `Long` dates) with `dev.notypie.common.jsonMapper`. Keep the
   JSON property names aligned with the column names or log tailing breaks while the JPA path keeps working.
-- **`version` is a JPA optimistic lock**, unrelated to `schemaVersion`. The native CAS statements bypass it;
-  it only guards entity-level `save` paths.
+- **`version` is a JPA optimistic lock**, unrelated to `schemaVersion`. The native CAS statements bypass it,
+  and since status writes moved to `completeClaim` no code saves an existing row through JPA.
+- **`attemptCount` and `sendCount` are read-only to JPA** (`updatable = false`): only `claimPending` /
+  `reclaimStuck` change the first, only `renewClaim` / `deferClaim` the second. A Debezium after-image without
+  either column (written before V20 / V22) maps to the default `0`.
 - **Bumping the payload shape**: add `V3`, set `CURRENT = V3`, and add `V3` to `SUPPORTED` in the same
   change; remove `V2` from `SUPPORTED` only after the outbox is guaranteed drained. The relay refuses to
   decode a row whose version is outside `SUPPORTED`, leaving it stuck (visible to the health indicator)
   rather than sending a malformed request. V1 (pre-rendered Slack body across payload / metadata / type
   columns) is unsupported; see `V11__outbox_transport_neutral_envelope.sql`.
-- Migrations: `V1__outbox_pk_event_id.sql`, `V11__outbox_transport_neutral_envelope.sql`.
+- Migrations: `V1__outbox_pk_event_id.sql`, `V11__outbox_transport_neutral_envelope.sql`,
+  `V19__add_outbox_status_indexes.sql`, `V20__add_outbox_attempt_count.sql`, `V22__add_outbox_send_count.sql`.
 
 ### Testing Requirements
 ```bash
@@ -39,7 +43,8 @@ decoding.
 ```
 `OutboxMessageTest` (BehaviorSpec, no Spring) checks `CodecOutboundMessagePort.toRow` output (identity
 columns, `schemaVersion == CURRENT`, `status == PENDING`, fresh `eventId` per call, payload round-trip) and
-`updateMessageStatus`. `toOutboxMessage()` and the H2 mapping of this entity are not covered anywhere.
+`updateMessageStatus`. The H2 mapping is exercised by `../MessageOutboxRepositoryTest`; `toOutboxMessage()` is
+exercised only from `:application` (`DebeziumLogTailingProcessorTest`, with and without `attempt_count`).
 
 ### Common Patterns
 - `@field:` targeted annotations on constructor `val`s; mutable state in the class body with `protected set`.
@@ -49,7 +54,7 @@ columns, `schemaVersion == CURRENT`, `status == PENDING`, fresh `eventId` per ca
 
 ### Internal
 - `repository/outbox/Transport`, `common/JsonMapper.kt` (`jsonMapper`)
-- `application/src/main/resources/db/migration/V1__*`, `V11__*`
+- `application/src/main/resources/db/migration/V1__*`, `V11__*`, `V19__*`, `V20__*`
 
 ### External
 Jakarta Persistence, Hibernate `@CreationTimestamp` / `@UpdateTimestamp`, Jackson annotations, `kotlin-logging`.

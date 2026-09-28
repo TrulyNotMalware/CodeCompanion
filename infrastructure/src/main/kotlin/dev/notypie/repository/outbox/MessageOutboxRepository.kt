@@ -30,14 +30,17 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     @Query(
         """
         UPDATE outbox_message
-        SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP
-        WHERE event_id IN (:eventIds)
+        SET status = 'IN_PROGRESS', attempt_count = attempt_count + 1, updated_at = :now
+        WHERE event_id = :eventId
           AND status = 'PENDING'
+          AND attempt_count = :attemptCount
     """,
         nativeQuery = true,
     )
     fun claimPending(
-        @Param("eventIds") eventIds: List<String>,
+        @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("now") now: LocalDateTime,
     ): Int
 
     @Query(
@@ -68,39 +71,99 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("limit") limit: Int,
     ): List<OutboxMessage>
 
-    // Same CAS idea for recovery: refreshing updated_at only succeeds for the poller that got there first,
-    // so two instances recovering the same stuck row cannot both re-dispatch it.
     @Modifying
     @Transactional
     @Query(
         """
         UPDATE outbox_message
-        SET updated_at = CURRENT_TIMESTAMP
+        SET attempt_count = attempt_count + 1, updated_at = :now
         WHERE event_id = :eventId
           AND status = 'IN_PROGRESS'
+          AND attempt_count = :attemptCount
           AND updated_at < :olderThan
     """,
         nativeQuery = true,
     )
     fun reclaimStuck(
         @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
         @Param("olderThan") olderThan: LocalDateTime,
+        @Param("now") now: LocalDateTime,
     ): Int
 
-    // Recovery gives up on a row whose first attempt is older than the give-up window; FAILURE ends the loop.
     @Modifying
     @Transactional
     @Query(
         """
         UPDATE outbox_message
-        SET status = 'FAILURE', updated_at = CURRENT_TIMESTAMP
+        SET status = 'FAILURE', updated_at = :now
         WHERE event_id = :eventId
           AND status = 'IN_PROGRESS'
+          AND attempt_count = :attemptCount
+          AND updated_at < :olderThan
     """,
         nativeQuery = true,
     )
     fun abandonStuck(
         @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("olderThan") olderThan: LocalDateTime,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
+        SET send_count = send_count + 1, updated_at = :now
+        WHERE event_id = :eventId
+          AND status = 'IN_PROGRESS'
+          AND attempt_count = :attemptCount
+    """,
+        nativeQuery = true,
+    )
+    fun renewClaim(
+        @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
+        SET send_count = GREATEST(send_count - 1, 0), updated_at = :updatedAt
+        WHERE event_id = :eventId
+          AND status = 'IN_PROGRESS'
+          AND attempt_count = :attemptCount
+    """,
+        nativeQuery = true,
+    )
+    fun deferClaim(
+        @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("updatedAt") updatedAt: LocalDateTime,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
+        SET status = :status, updated_at = :now
+        WHERE event_id = :eventId
+          AND status = 'IN_PROGRESS'
+          AND attempt_count = :attemptCount
+    """,
+        nativeQuery = true,
+    )
+    fun completeClaim(
+        @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("status") status: String,
+        @Param("now") now: LocalDateTime,
     ): Int
 
     // Retention: terminal rows only, and LIMIT keeps one purge from holding a long lock on a large backlog.
@@ -177,4 +240,15 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         nativeQuery = true,
     )
     fun findOldestInProgressUpdatedAt(): LocalDateTime?
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM outbox_message
+        WHERE status = 'IN_PROGRESS' AND send_count >= :sends
+    """,
+        nativeQuery = true,
+    )
+    fun countInProgressWithSendsAtLeast(
+        @Param("sends") sends: Int,
+    ): Long
 }

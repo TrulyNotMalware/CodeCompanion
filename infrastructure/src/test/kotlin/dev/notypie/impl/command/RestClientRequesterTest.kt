@@ -1,5 +1,6 @@
 package dev.notypie.impl.command
 
+import com.sun.net.httpserver.HttpServer
 import dev.notypie.dto.PostDomainCreateRequestBody
 import dev.notypie.dto.PostDomainResponse
 import dev.notypie.dto.PostDomainUpdateRequestBody
@@ -10,6 +11,7 @@ import io.kotest.matchers.shouldNotBe
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.client.RestClientException
+import java.net.InetSocketAddress
 
 class RestClientRequesterTest :
     BehaviorSpec({
@@ -185,6 +187,36 @@ class RestClientRequesterTest :
                             responseType = Void::class.java,
                         )
                     }
+                }
+            }
+        }
+
+        given("a GET with a URI template variable carrying query metacharacters") {
+            var rawQuery: String? = null
+            val server =
+                HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+                    createContext("/") { exchange ->
+                        rawQuery = exchange.requestURI.rawQuery
+                        val bytes = "{}".toByteArray()
+                        exchange.responseHeaders.add("Content-Type", "application/json")
+                        exchange.sendResponseHeaders(200, bytes.size.toLong())
+                        exchange.responseBody.use { it.write(bytes) }
+                    }
+                    start()
+                }
+            val loopbackRequester = RestClientRequester(baseUrl = "http://127.0.0.1:${server.address.port}/api/")
+
+            `when`("the variable is expanded") {
+                loopbackRequester.safeGet(
+                    uri = "users.profile.get?user={user}",
+                    authorizationHeader = null,
+                    responseType = String::class.java,
+                    uriVariables = mapOf("user" to "U1&extra=1#frag"),
+                )
+                server.stop(0)
+
+                then("the value is encoded and cannot add parameters or a fragment") {
+                    rawQuery shouldBe "user=U1%26extra%3D1%23frag"
                 }
             }
         }

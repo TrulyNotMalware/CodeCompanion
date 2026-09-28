@@ -7,7 +7,6 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.createMeetingReminderDto
-import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -342,31 +341,6 @@ class MeetingReminderSchedulingServiceTest :
 
                 then("the stuck rows are reset to PENDING before the due sweep runs") {
                     verify(exactly = 1) { repo.resetStuckReminders(olderThan = any()) }
-                }
-            }
-        }
-
-        given("a canceled meeting") {
-            `when`("materialize sweeps the window") {
-                val repo = mockk<MeetingReminderRepository>()
-                val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
-                every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns emptyList()
-
-                service.materializeReminders()
-
-                then("no reminder rows are materialized") {
-                    verify(exactly = 0) {
-                        repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any())
-                    }
-                }
-            }
-        }
-
-        given("a reminder DTO domain invariant") {
-            `when`("a SENT reminder is built without a sentAt") {
-                then("the DTO factory still produces a PENDING-style row (no entity invariant triggered)") {
-                    val dto = createMeetingReminderDto(status = MeetingReminderStatus.PENDING)
-                    dto.status shouldBe MeetingReminderStatus.PENDING
                 }
             }
         }

@@ -1,0 +1,27 @@
+-- -----------------------------------------------------------------------------
+-- Outbox: send_count, the retry budget counted in real sends
+-- -----------------------------------------------------------------------------
+-- Rationale:
+--   attempt_count (V20) is the ownership token and moves on every claim and
+--   reclaim, including claims that never reach Slack: rate-limited sends and
+--   tasks taken over while they waited in the relay queue. Abandoning on it
+--   gave up healthy messages after about 50 minutes of 429s. send_count counts
+--   only claims that went on to send, so the recovery sweep abandons a row
+--   after slack.app.outbox.polling.max-sends real sends (default 10) and the
+--   health probe reports rows at slack.app.outbox.health.retrying-send-threshold.
+--
+-- Behaviour:
+--   - send_count INT NOT NULL DEFAULT 0; existing rows start at 0.
+--   - renewClaim (the guarded write right before a send) adds 1; the guarded
+--     rate-limit deferral takes that 1 back and moves updated_at so the sweep
+--     waits for Retry-After. Neither write changes attempt_count.
+--   - The 24 h created_at bound still abandons every row, whatever its count.
+--
+-- Apply this script BEFORE rolling out application code that expects the
+-- column, and together with V20: the release that reads it must not run side
+-- by side with a release that predates V20 (see the V20 header).
+-- For dev/local with auto-ddl enabled, Hibernate applies it automatically. In
+-- prod, execute manually — schema auto-migration is disabled.
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE outbox_message ADD COLUMN IF NOT EXISTS send_count INT NOT NULL DEFAULT 0;

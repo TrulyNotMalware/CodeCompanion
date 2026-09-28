@@ -69,6 +69,32 @@ class SlackSignatureVerifierTest :
                 }
             }
 
+            `when`("the signature is not v0= followed by 64 lower-case hex digits") {
+                val result =
+                    verifier.checkHeaders(
+                        requestTimestamp = timestamp,
+                        requestSignature = validSignature.uppercase(),
+                        toleranceSeconds = 300,
+                    )
+
+                then("the headers are rejected as malformed") {
+                    result.reason shouldBe SlackSignatureVerificationFailureReason.MALFORMED_SIGNATURE
+                }
+            }
+
+            `when`("only the headers of a valid request are checked") {
+                val result =
+                    verifier.checkHeaders(
+                        requestTimestamp = timestamp,
+                        requestSignature = validSignature,
+                        toleranceSeconds = 300,
+                    )
+
+                then("they pass") {
+                    result.valid shouldBe true
+                }
+            }
+
             `when`("required headers are missing") {
                 then("missing timestamp should be rejected") {
                     val result =

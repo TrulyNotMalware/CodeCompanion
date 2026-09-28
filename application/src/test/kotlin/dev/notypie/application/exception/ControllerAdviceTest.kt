@@ -1,5 +1,6 @@
 package dev.notypie.application.exception
 
+import dev.notypie.application.security.SlackHeaders
 import dev.notypie.domain.common.error.ExceptionArgument
 import dev.notypie.exception.meeting.DatabaseException
 import dev.notypie.exception.meeting.JpaErrorCode
@@ -10,6 +11,7 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.context.request.ServletWebRequest
+import org.springframework.web.method.annotation.ExceptionHandlerMethodResolver
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
 class ControllerAdviceTest :
@@ -75,9 +77,48 @@ class ControllerAdviceTest :
             `when`("the advice handles it") {
                 val response = advice.handleUnsupportedSlackCommandType(e = exception)
 
-                then("it responds 400 naming the command type") {
+                then("it responds 400 without echoing the raw type and tells Slack not to retry") {
                     response.statusCode shouldBe HttpStatus.BAD_REQUEST
-                    response.body shouldBe mapOf("error" to "Unsupported Slack command type: bogus")
+                    response.body shouldBe mapOf("error" to "unsupported_command_type")
+                    response.headers.getFirst(SlackHeaders.NO_RETRY) shouldBe "1"
+                }
+            }
+        }
+
+        given("the exception handler resolver built from the advice") {
+            val resolver = ExceptionHandlerMethodResolver(ControllerAdvice::class.java)
+
+            `when`("a framework exception that carries its own status is raised") {
+                val method =
+                    resolver.resolveMethod(
+                        NoResourceFoundException(HttpMethod.GET, "/does-not-exist", "does-not-exist"),
+                    )
+
+                then("the inherited framework handler wins over the catch-all") {
+                    method.shouldNotBeNull().name shouldBe "handleException"
+                }
+            }
+
+            `when`("an unexpected exception is raised") {
+                val method = resolver.resolveMethod(IllegalStateException("boom"))
+
+                then("the catch-all handles it") {
+                    method.shouldNotBeNull().name shouldBe "handleUnexpected"
+                }
+            }
+
+            `when`("an application exception with a dedicated handler is raised") {
+                val method =
+                    resolver.resolveMethod(
+                        UnsupportedSlackCommandTypeException(
+                            rawCommandType = "bogus",
+                            errorCode = PayloadParseErrorCode.UNSUPPORTED_SLACK_COMMAND_TYPE,
+                            details = emptyList(),
+                        ),
+                    )
+
+                then("the dedicated handler is chosen") {
+                    method.shouldNotBeNull().name shouldBe "handleUnsupportedSlackCommandType"
                 }
             }
         }

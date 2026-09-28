@@ -139,10 +139,16 @@ are the KRaft controller ports.
 
 The relay reads the CDC topic named by `slack.app.mode.cdc.topic`. The connector registered by
 `debezium/connect_mariadb.sh` uses `topic.prefix: cdc` on `code_companion.outbox_message`, producing
-`cdc.code_companion.outbox_message` — which is exactly what the `local`, `dev`, and `prod` profiles
-already configure. Those profiles also already set `slack.app.mode.outbox-reading-strategy: cdc`;
+`cdc.code_companion.outbox_message` — which is what the `local` and `dev` profiles configure and what
+`prod` reads from `SLACK_CDC_TOPIC` (`k8s/configmap.yaml`). Those profiles also already set `slack.app.mode.outbox-reading-strategy: cdc`;
 the code default is `POLLING`, so a profile that omits the key (like `slack-live`) polls the outbox instead
 and never reads this topic.
+
+### Time zone
+
+This stack sets no `TZ` or `default_time_zone`, so MariaDB runs in UTC, while the application usually runs in the
+host's zone (the k8s Pod runs Asia/Seoul). Outbox timestamps are written from the application clock, so never
+compare them against the DB session clock (`NOW()`, `CURRENT_TIMESTAMP`) in queries or manual checks.
 
 ## Monitoring CDC Events
 
@@ -347,9 +353,16 @@ spring:
 
 릴레이는 `slack.app.mode.cdc.topic`에 지정된 CDC 토픽을 구독합니다. `debezium/connect_mariadb.sh`가
 등록하는 커넥터는 `code_companion.outbox_message`에 `topic.prefix: cdc`를 붙이므로 토픽명은
-`cdc.code_companion.outbox_message`이며, `local`·`dev`·`prod` 프로필에 이미 그대로 설정되어 있습니다.
+`cdc.code_companion.outbox_message`이며, `local`·`dev` 프로필에 그대로 설정되어 있고 `prod`는
+`SLACK_CDC_TOPIC`(`k8s/configmap.yaml`)에서 읽습니다.
 이 프로필들은 `slack.app.mode.outbox-reading-strategy: cdc`도 이미 지정합니다. 코드 기본값은
 `POLLING`이므로, 이 키를 생략한 프로필(예: `slack-live`)은 이 토픽을 읽지 않고 아웃박스를 폴링합니다.
+
+### 시간대
+
+이 스택은 `TZ`·`default_time_zone`을 지정하지 않아 MariaDB가 UTC로 돌고, 애플리케이션은 보통 호스트 시간대(k8s 파드는
+Asia/Seoul)로 돕니다. 아웃박스 시각은 애플리케이션 시계로 기록되므로 쿼리나 수동 점검에서 DB 세션 시계(`NOW()`,
+`CURRENT_TIMESTAMP`)와 비교하지 마세요.
 
 ## CDC 이벤트 모니터링
 

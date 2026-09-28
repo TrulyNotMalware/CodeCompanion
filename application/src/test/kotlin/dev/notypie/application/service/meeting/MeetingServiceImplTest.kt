@@ -16,11 +16,13 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createGetMeetingListEvent
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.impl.retry.RetryService
@@ -34,6 +36,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.dao.CannotAcquireLockException
+import org.springframework.transaction.support.TransactionTemplate
 import java.util.UUID
 
 class MeetingServiceImplTest :
@@ -43,6 +47,8 @@ class MeetingServiceImplTest :
         val commandExecutor = mockk<CommandExecutor>()
         val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
+        val twoConnectionPool = createBoundedH2DataSource(maxConnections = 2)
+        afterSpec { twoConnectionPool.close() }
         val service =
             MeetingServiceImpl(
                 meetingRepository = meetingRepository,
@@ -50,6 +56,7 @@ class MeetingServiceImplTest :
                 commandExecutor = commandExecutor,
                 outboundStager = stager,
                 eventPublisher = eventPublisher,
+                transactionManager = createH2TransactionManager(),
             )
 
         every { retryService.execute<Int>(action = any(), any(), any(), any(), any(), any(), any(), any()) } answers {
@@ -358,6 +365,240 @@ class MeetingServiceImplTest :
                     val ephemeral = capturedMessage.captured as OutboundMessage.Ephemeral
                     val body = (ephemeral.content as MessageContent.Text).markdown
                     body shouldBe "Meeting was canceled, or you are not the host."
+                }
+            }
+        }
+
+        given("a meeting write loses an optimistic-lock race inside the interaction transaction") {
+            val transactionManager = createH2TransactionManager()
+            val outerTransaction = TransactionTemplate(transactionManager)
+            val recordingPublisher = CommitRecordingEventPublisher()
+            val conflictedRepository = mockk<MeetingRepository>()
+            val conflictedService =
+                MeetingServiceImpl(
+                    meetingRepository = conflictedRepository,
+                    retryService = retryService,
+                    commandExecutor = commandExecutor,
+                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    eventPublisher = recordingPublisher,
+                    transactionManager = transactionManager,
+                )
+            val meetingUid = UUID.randomUUID()
+            val requesterId = "U_HOST_RACE"
+            val basic = createCommandBasicInfo()
+            val addEvent =
+                AddParticipantEvent(
+                    idempotencyKey = basic.idempotencyKey,
+                    payload =
+                        AddParticipantPayload(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            participantUserIds = listOf("U_A"),
+                            responseBasicInfo = basic,
+                        ),
+                    type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+                )
+
+            `when`("the add conflicts once and the retry wins") {
+                recordingPublisher.committedMessages.clear()
+                every {
+                    conflictedRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A"),
+                    )
+                } answers {
+                    transactionManager.failInsideParticipatingTx(exception = createMeetingVersionConflict())
+                } andThenAnswer {
+                    AddParticipantResult(
+                        outcome = AddParticipantResult.Outcome.ADDED,
+                        addedUserIds = listOf("U_A"),
+                        meeting = createMeetingDto(creator = requesterId, title = "Team Sync"),
+                    )
+                }
+
+                outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+
+                then("only the retry's approval notice and confirmation are committed") {
+                    verify(exactly = 2) {
+                        conflictedRepository.addParticipants(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            participantUserIds = listOf("U_A"),
+                        )
+                    }
+                    recordingPublisher.committedMessages.filterIsInstance<OutboundMessage.Approval>().size shouldBe 1
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe listOf("Added <@U_A> to the meeting.")
+                }
+            }
+
+            `when`("the add conflicts on the retry as well") {
+                recordingPublisher.committedMessages.clear()
+                every {
+                    conflictedRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A"),
+                    )
+                } answers { transactionManager.failInsideParticipatingTx(exception = createMeetingVersionConflict()) }
+
+                val escaped =
+                    runCatching {
+                        outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+                    }.exceptionOrNull()
+
+                then("nothing escapes the interaction commit and the host gets the try-again reply") {
+                    escaped shouldBe null
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe
+                        listOf("Failed to add participants. Please try again later.")
+                }
+            }
+
+            `when`("a cancel conflicts on both attempts") {
+                recordingPublisher.committedMessages.clear()
+                val cancelEvent =
+                    createCancelMeetingEvent(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        responseBasicInfo = basic,
+                    )
+                every {
+                    conflictedRepository.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId)
+                } answers { transactionManager.failInsideParticipatingTx(exception = createMeetingVersionConflict()) }
+
+                val escaped =
+                    runCatching {
+                        outerTransaction.executeWithoutResult { conflictedService.cancelMeeting(event = cancelEvent) }
+                    }.exceptionOrNull()
+
+                then("nothing escapes and the host gets the try-again reply") {
+                    escaped shouldBe null
+                    verify(exactly = 2) {
+                        conflictedRepository.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId)
+                    }
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe
+                        listOf("Failed to cancel the meeting. Please try again later.")
+                }
+            }
+
+            fun stubAdd(first: () -> AddParticipantResult, then: AddParticipantResult) {
+                clearMocks(conflictedRepository)
+                recordingPublisher.committedMessages.clear()
+                every {
+                    conflictedRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A"),
+                    )
+                } answers { first() } andThen then
+            }
+
+            fun verifyAddAttempts(count: Int) =
+                verify(exactly = count) {
+                    conflictedRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A"),
+                    )
+                }
+
+            val added =
+                AddParticipantResult(
+                    outcome = AddParticipantResult.Outcome.ADDED,
+                    addedUserIds = listOf("U_A"),
+                    meeting = createMeetingDto(creator = requesterId, title = "Team Sync"),
+                )
+
+            `when`("the add hits a lock-acquisition failure once") {
+                stubAdd(first = { throw CannotAcquireLockException("lock wait timeout") }, then = added)
+
+                outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+
+                then("it is retried like a version conflict and the retry's reply is committed") {
+                    verifyAddAttempts(count = 2)
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe listOf("Added <@U_A> to the meeting.")
+                }
+            }
+
+            `when`("a concurrent add of the same user wins and the first attempt trips the participant unique key") {
+                stubAdd(
+                    first = { throw createParticipantDuplicateKeyViolation() },
+                    then = AddParticipantResult(outcome = AddParticipantResult.Outcome.NO_NEW_PARTICIPANTS),
+                )
+
+                outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+
+                then("the retry re-reads the meeting and the host hears nobody new was added") {
+                    verifyAddAttempts(count = 2)
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe
+                        listOf("Those people are already on this meeting.")
+                }
+            }
+
+            `when`("the add fails on any other integrity violation") {
+                stubAdd(first = { throw createNotNullViolation() }, then = added)
+
+                outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+
+                then("it is not retried and the host gets the try-again reply") {
+                    verifyAddAttempts(count = 1)
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe
+                        listOf("Failed to add participants. Please try again later.")
+                }
+            }
+
+            `when`("the add throws an Error") {
+                stubAdd(first = { throw OutOfMemoryError("simulated") }, then = added)
+
+                val escaped =
+                    runCatching {
+                        outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+                    }.exceptionOrNull()
+
+                then("it propagates instead of turning into a reply, and nothing is committed") {
+                    (escaped is OutOfMemoryError) shouldBe true
+                    verifyAddAttempts(count = 1)
+                    recordingPublisher.committedMessages.size shouldBe 0
+                }
+            }
+        }
+
+        given("the interaction transaction already holds a connection from a pool of two") {
+            val transactionManager = createH2TransactionManager(dataSource = twoConnectionPool)
+            val recordingPublisher = CommitRecordingEventPublisher()
+            val boundedRepository = mockk<MeetingRepository>()
+            val boundedService =
+                MeetingServiceImpl(
+                    meetingRepository = boundedRepository,
+                    retryService = retryService,
+                    commandExecutor = commandExecutor,
+                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    eventPublisher = recordingPublisher,
+                    transactionManager = transactionManager,
+                )
+            val event = createAddParticipantEvent(requesterId = "U_HOST_POOL", participantUserIds = listOf("U_A"))
+            every {
+                boundedRepository.addParticipants(
+                    meetingUid = event.payload.meetingUid,
+                    requesterId = "U_HOST_POOL",
+                    participantUserIds = listOf("U_A"),
+                )
+            } answers {
+                transactionManager.failInsideParticipatingTx(exception = createMeetingVersionConflict())
+            } andThen
+                AddParticipantResult(
+                    outcome = AddParticipantResult.Outcome.ADDED,
+                    addedUserIds = listOf("U_A"),
+                    meeting = createMeetingDto(creator = "U_HOST_POOL"),
+                )
+
+            `when`("the isolated write conflicts once and is retried") {
+                TransactionTemplate(transactionManager).executeWithoutResult {
+                    boundedService.addParticipants(event = event)
+                }
+
+                then("the retry never needs a third connection: the first attempt released its own before it ran") {
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe listOf("Added <@U_A> to the meeting.")
                 }
             }
         }

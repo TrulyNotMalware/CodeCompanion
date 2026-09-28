@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # infrastructure/impl/command
 
@@ -19,11 +19,11 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 | `SlackOutboundStager.kt` | `OutboundMessageStager` impl. `OpenModal` → `stageModal` (seven `ModalForm` variants; blank `trigger_id` → `null` + warn; `StandupFill` loads routine and session via `StandupRepository`); every other family → `OutboundMessageEnqueued`, unrendered |
 | `OutboundRenderer.kt` | `OutboundRenderer` port + `SlackOutboundRenderer`: `OutboundMessage` → `SlackEventPayload` via the constructor; `OpenModal` / `DirectMessage` and not-yet-migrated `MessageContent`s hit `error(...)` |
 | `SlackApiEventConstructor.kt` | Builds `SendSlackMessageEvent` (message/ephemeral/action-response/`chat.update`) and `OpenViewEvent` (seven `open*ModalRequest`s) from `SlackTemplateBuilder` layouts. SDK requests become form maps via `RequestFormBuilder.toForm`; `buildRoutingText` writes `"<idempotencyKey>,<CommandDetailType>[,urlencoded extras…]"` into `message.text` |
-| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl (constructor also takes `slack: Slack` and a `sleeper` so specs can point it at a local server). `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url` whose **body** decides success (`{"ok":false,...}` with HTTP 200 is a failure); `OpenViewPayloadContents` throws before any retry. Error classes: HTTP 429 → `SlackRateLimitedException` handled outside `RetryService` by one in-thread wait of `Retry-After` (1–30s), then `failOutput(RATE_LIMITED_REASON)` — callers test `CommandOutput.isRateLimited()` and leave the row IN_PROGRESS for the outbox recovery sweep rather than marking it FAILURE; `IOException`, other `SlackApiException` and `ok=false` with a transient code (`internal_error`, `service_unavailable`, `fatal_error`, `request_timeout`, `ratelimited` → `SlackTransientErrorException`) are retried by `RetryService`; any other `ok=false` (`invalid_auth`, `channel_not_found`, ...) fails once. `dispatchImmediate` = `views.open`, never throws, publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` on failure |
+| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl. Constructor defaults are the production clients: `slack = slackClient()` (`SlackConfig` with `statsEnabled = false` and `httpClientCallTimeoutMillis = SLACK_CALL_TIMEOUT` = 6 s) and `okHttpClient = responseUrlClient(slack)` (the SDK's OkHttp builder with the same call timeout, `followRedirects(false)`, `followSslRedirects(false)`); specs pass their own `slack`, `okHttpClient` and `sleeper`. `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url`; `OpenViewPayloadContents` throws before any retry. `dispatchImmediate` runs `views.open` on the caller's thread and never throws: a rejection or exception publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` when the detail type has one, and returns `failOutput`. Also declares `RATE_LIMITED_REASON` / `isRateLimited()`, `TRANSIENT_EXHAUSTED_REASON` / `isTransientExhausted()`, `RateLimitedOutput(event, retryAfter)` and `retryAfter()`. Decision table below |
 | `SlackViewOpenDispatcher.kt` | Synchronous (non-`@Async`) `@EventListener` for `OpenViewEvent` → `dispatchImmediate` |
 | `KafkaEventPublisher.kt` | `EventPublisher`: `isInternal` → Spring bus, else `kafkaTemplate.send(destination, idempotencyKey, payload)` awaited `sendTimeoutMillis` (default 5000) — timeout / execution cause / interrupt are rethrown |
 | `AppEventPublisher.kt` | `EventPublisher` that publishes every event on the Spring bus (default `APPLICATION_EVENT` mode) |
-| `RestRequester.kt` / `RestClientRequester.kt` | Generic Spring `RestClient` wrapper: `safe*` verbs return `Result<ResponseEntity<T>>`, plain verbs `bodyOrThrow`; per-call bearer header; `SLACK_API_BASE_URL`; explicit `JdkClientHttpRequestFactory` with `connectTimeout = 3s` / `readTimeout = 10s` (constructor params) because the static `RestClient.builder()` ignores `spring.http.client.*`. Only consumer: `templates/SlackUserProfileResolver` (`users.profile.get`) |
+| `RestRequester.kt` / `RestClientRequester.kt` | Generic Spring `RestClient` wrapper: `safe*` verbs return `Result<ResponseEntity<T>>`, plain verbs `bodyOrThrow`; per-call bearer header; `SLACK_API_BASE_URL`; explicit `JdkClientHttpRequestFactory` with `connectTimeout = 3s` / `readTimeout = 10s` (constructor params) because the static `RestClient.builder()` ignores `spring.http.client.*`. `safeGet` takes `uriVariables`, expanded and encoded by Spring's URI template (never interpolate caller values into `uri`). Only consumer: `templates/SlackUserProfileResolver` (`users.profile.get?user={user}`), fed through `ModalTemplateBuilder` with the `restRequester` bean from `application/configurations/RestClientConfiguration` (default timeouts) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -48,9 +48,46 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 - **`chat.postEphemeral` needs `channel` = the channel and `user` = the viewer.** A user id in `channel`
   routes the ephemeral into that user's DM. For DMs, `chatPostMessageBuilder` sets `channel = targetUserId`
   and the dispatcher treats `DIRECT_MESSAGE` exactly like `CHANNEL_ALERT` (`chat.postMessage`).
-- **Retry covers exceptions only.** `dispatch` runs in `RetryService.execute` with the defaults; a Slack
-  `ok = false` becomes `failOutput` (logged with `error` / `warning`) and is *not* retried. A
-  the invalid `PostEventPayloadContents`/action-response pairing is unrepresentable since B1 — `MessageType` no longer carries `ACTION_RESPONSE`.
+- **Dispatch decision table** (`dispatch` returns one of three outcomes; the outbox relay relies on it). A
+  Slack `error` code is classified once, by `raiseIfRetryable`, for both `chat.*` and `response_url` bodies:
+  `ratelimited` → rate limited, `TRANSIENT_SLACK_ERRORS` → transient, anything else → permanent.
+  - Rate limited — `chat.*` HTTP 429, `chat.*` `ok=false error=ratelimited`, `response_url` HTTP 429 or JSON
+    `{"ok":false,"error":"ratelimited"}` → `SlackRateLimitedException`, handled outside `RetryService`. If
+    `Retry-After` (seconds or HTTP-date) is ≤ `MAX_INLINE_RETRY_AFTER` (3s) the thread waits once and calls
+    again; a larger or missing `Retry-After`, a second rate limit, or an interrupt during the wait (flag
+    restored) returns `RateLimitedOutput(retryAfter)` at once (`isRateLimited()`, `retryAfter()`). The relay
+    defers the row past `Retry-After`. The CDC listener thread must never sleep long.
+  - Transient — `IOException` (including the call timeout), `chat.*` HTTP 5xx, `response_url` 5xx, `ok=false`
+    with `internal_error` / `service_unavailable` → `RetryService` (3 attempts, the `TRANSIENT_EXCEPTIONS`
+    list); when they are spent, `failOutput(TRANSIENT_EXHAUSTED_REASON)` (`isTransientExhausted()`). The relay
+    leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to `outbox.polling.max-sends` sends.
+  - Permanent — any other `ok=false` (including `fatal_error`, which may have partly succeeded, and
+    `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
+    and `response_url` 3xx / 4xx / JSON `ok=false` → `failOutput(<error>)`, once. The relay writes `FAILURE`.
+  - Anything else (a non-transient exception inside the retry, or thrown outside it) propagates as-is; the
+    relay treats it like a transient outcome.
+- **`Retry-After` parsing is complete in production** because `slackClient()` turns SDK stats off: with stats on
+  the SDK's own catch block runs `Long.valueOf(Retry-After)` before rethrowing (an HTTP-date would escape as
+  `NumberFormatException`), and it resolves the team id with an extra `auth.test` call, which is retried on
+  every call while Slack is down. Nothing here reads the SDK metrics, which only feed the async rate limiter.
+- **A whole dispatch is time-bounded**, so it always ends before the Kafka per-record budget and long before
+  `outbox.polling.stuck-in-progress-seconds` (300 s) lets the sweep reclaim the row mid-send. Worst case:
+  each HTTP call ≤ `SLACK_CALL_TIMEOUT` 6 s (OkHttp `callTimeout` spans DNS, connect, write, server time and
+  the whole body); one `RetryService` run is 3 calls + backoff ≤ 0.1 + 0.2 s + 2 × 10 ms jitter = 18.32 s; with
+  the single inline rate-limit wait (≤ 3 s) and the second run, `dispatch` ≤ 18.32 + 3 + 18.32 = 39.64 s.
+  Render adds at most one `users.profile.get` (`RestClientRequester` connect timeout 3 s + read timeout 10 s,
+  which Spring's JDK factory applies to the whole exchange including the body): ≤ 52.64 s of HTTP per record. The CDC consumer
+  runs `max-poll-records: 5` under `max.poll.interval.ms: 300000`, i.e. 60 s per record, which leaves ≥ 7 s
+  for the claim, renew and completion SQL. Raising `SLACK_CALL_TIMEOUT`, the retry attempts, the inline wait
+  or `max-poll-records` must keep this sum below 60 s.
+- **`response_url` is validated before any request**: `https`, port 443 and a host in `SLACK_RESPONSE_URL_HOSTS`
+  (`hooks.slack.com`, GovSlack `hooks.slack-gov.com`), checked on the parsed `HttpUrl` that is then sent, so
+  userinfo (`https://hooks.slack.com@evil.example/…`) and a trailing dot are rejected and upper case is
+  canonicalised; anything else is `failOutput("response_url_rejected: …")`. The client never follows
+  redirects, so the allowlist is final and a 3xx is a permanent failure. Only the first 4 KiB of the response
+  are read (`peekBody`); success is plain-text `ok` or JSON `ok=true`.
+- The invalid `PostEventPayloadContents`/action-response pairing is unrepresentable — `MessageType` has no
+  `ACTION_RESPONSE`.
 - **`dispatchImmediate` fallbacks need `participantUserId`.** Every `open*ModalRequest` sets it (requester,
   creator, or publisher); blank means no failure event is published. Only `MEETING_DECLINE_REASON` and
   `STANDUP_PROMPT` have a fallback event — other modal failures are logged and returned as `failOutput`.
@@ -70,10 +107,14 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 Specs: `SlackInteractionRequestParserTest`, `SlackInboundMapperTest`, `SlackIntentResolverTest`,
 `SlackOutboundStagerTest`, `SlackOutboundRendererTest`, `SlackApiEventConstructorTest`,
 `ViewSubmissionChannelRoutingRegressionTest` (guards the `private_metadata` channel recovery — never
-delete), `KafkaEventPublisherTest` (`@SpringBootTest` + `EmbeddedKafka`), `RestClientRequesterTest`, `ApplicationMessageDispatcherTest` (a `com.sun.net.httpserver` fake Slack with `SlackConfig.methodsEndpointUrlPrefix` and `statsEnabled = false` — with stats on the SDK calls `auth.test` first and eats the queued response).
+delete), `KafkaEventPublisherTest` (`@SpringBootTest` + `EmbeddedKafka`), `RestClientRequesterTest`,
+`ApplicationMessageDispatcherTest` (a `com.sun.net.httpserver` fake Slack with `SlackConfig.methodsEndpointUrlPrefix`
+and `statsEnabled = false` — with stats on the SDK calls `auth.test` first and eats the queued response — plus
+`responseUrlClient(...)` with an OkHttp interceptor that redirects `https://hooks.slack.com` to the fake; covers
+the whole decision table, the call timeout, the production client settings and the redirect / allowlist cases).
 Fixtures: `testFixtures/.../impl/command/BlockActionPayloadCreator`, `slack/InteractionPayloadCreator`,
 `slack/SlackEventCallBackRequestCreator`, `event/SlackEventTestFixtures`. There is no spec for
-`ApplicationMessageDispatcher`, `SlackViewOpenDispatcher`, or `AppEventPublisher`.
+`SlackViewOpenDispatcher` or `AppEventPublisher`.
 
 ### Common Patterns
 - Exhaustive `when` over domain sealed types (`CommandIntent`, `OutboundMessage`, `ModalForm`) — no

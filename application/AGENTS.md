@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
 
 # application
 
@@ -17,7 +17,7 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 |------|-------------|
 | `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator, AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
 | `src/main/kotlin/dev/notypie/CodeCompanion.kt` | `@SpringBootApplication @ConfigurationPropertiesScan` entry point and `main()` |
-| `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs with `-XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul` (heap follows the k8s memory limit). Build context for the deploy workflow |
+| `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs `java -XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul -jar /app.jar` (heap = 50% of the k8s memory limit; the Pod's memory request covers heap plus non-heap). Runs as root because it binds port 80 (open item in `src/main/resources/k8s/AGENTS.md`). Build context for the deploy workflow |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -55,9 +55,12 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ```bash
 ./gradlew :application:test
 ```
-Specs mirror the package layout under `src/test/kotlin/`. All of them are plain Kotest + MockK unit specs —
-this module starts no Spring context and has no `src/test/resources`; the H2 / `EmbeddedKafka` slices live in
-`:infrastructure`. Shared builders live in
+Specs mirror the package layout under `src/test/kotlin/`. Most are plain Kotest + MockK unit specs. There is
+no `@SpringBootTest` and no `src/test/resources`, but some specs run against an in-memory H2 with a real
+transaction manager, built from testFixtures: `outbox/OutboxJpaTestContext.kt` (`createOutboxJpaContext()`, a
+small `AnnotationConfigApplicationContext` with `JpaTransactionManager`) and
+`service/meeting/MeetingTransactionFixtures.kt` (`createH2DataSource`, `createH2TransactionManager`,
+`createBoundedH2DataSource`). The `@DataJpaTest` / `EmbeddedKafka` slices live in `:infrastructure`. Shared builders live in
 `src/testFixtures/kotlin/` (`OutboxTestFixtures`, `AppMentionPayloadCreator`, `AgendaItemCreator`,
 `ScopedTurnTokenCreator`, `CveTopicConfigCreator`, ...) and `dev/notypie/docs/` holds the REST Docs DSL.
 This module also consumes `testFixtures(project(":domain"))` and `testFixtures(project(":infrastructure"))`.

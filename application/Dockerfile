@@ -16,5 +16,5 @@ ENV GIT_REF=${GIT_REF}
 COPY ./build/libs/$JAR_FILE_NAME.jar /app.jar
 
 EXPOSE $SERVER_PORT
-# 50% of the 2Gi limit in k8s/deployment.yaml keeps the heap inside the 1Gi request, so the Pod is not the first eviction candidate.
-ENTRYPOINT exec java -XX:MaxRAMPercentage=50.0 -jar -Dspring.profiles.active=${PROFILE} -Duser.timezone=Asia/Seoul /app.jar
+# Heap = 50% of the 2Gi limit in k8s/deployment.yaml (1Gi); the 1536Mi request there covers heap plus non-heap memory.
+ENTRYPOINT exec java -XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=${PROFILE} -Duser.timezone=Asia/Seoul -jar /app.jar

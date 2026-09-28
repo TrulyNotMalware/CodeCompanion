@@ -1,5 +1,6 @@
 package dev.notypie.application.exception
 
+import dev.notypie.application.security.SlackHeaders
 import dev.notypie.exception.meeting.DatabaseException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpStatus
@@ -10,8 +11,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 private val log = KotlinLogging.logger {}
 
-// Extends ResponseEntityExceptionHandler so Spring MVC's own exceptions (404 static resource, 400 unreadable
-// body, 405 method) keep their status; the Exception catch-all below would otherwise turn them into 500s.
+private val CONTROL_CHARACTERS = Regex("\\p{Cntrl}")
+
 @RestControllerAdvice
 class ControllerAdvice : ResponseEntityExceptionHandler() {
     @ExceptionHandler(value = [DatabaseException::class])
@@ -26,10 +27,12 @@ class ControllerAdvice : ResponseEntityExceptionHandler() {
     fun handleUnsupportedSlackCommandType(
         e: UnsupportedSlackCommandTypeException,
     ): ResponseEntity<Map<String, String>> {
-        log.warn { "Received unsupported Slack command type '${e.rawCommandType}': ${e.message}" }
+        val commandType = e.rawCommandType.replace(regex = CONTROL_CHARACTERS, replacement = "?")
+        log.warn { "Received unsupported Slack command type '$commandType'" }
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
-            .body(mapOf("error" to "Unsupported Slack command type: ${e.rawCommandType}"))
+            .header(SlackHeaders.NO_RETRY, "1")
+            .body(mapOf("error" to "unsupported_command_type"))
     }
 
     @ExceptionHandler(value = [Exception::class])

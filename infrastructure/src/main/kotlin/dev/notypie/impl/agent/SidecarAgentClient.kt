@@ -2,6 +2,8 @@ package dev.notypie.impl.agent
 
 import dev.notypie.common.jsonMapper
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.io.BufferedReader
+import java.io.InputStream
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -11,7 +13,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.stream.Stream
 
 private val log = KotlinLogging.logger {}
 
@@ -19,6 +20,8 @@ class SidecarAgentClient(
     private val baseUrl: String,
     private val bearerSecret: String,
     private val requestTimeout: Duration = Duration.ofSeconds(120L),
+    private val maxFrameChars: Int = DEFAULT_MAX_FRAME_CHARS,
+    private val maxTextChars: Int = DEFAULT_MAX_TEXT_CHARS,
 ) : AgentGateway {
     companion object {
         const val CONVERSE_PATH = "/v1/converse"
@@ -26,9 +29,11 @@ class SidecarAgentClient(
         internal const val ERROR_CODE_TRANSPORT = "transport_error"
         internal const val ERROR_CODE_INCOMPLETE_STREAM = "incomplete_stream"
         internal const val ERROR_CODE_STREAM_TIMEOUT = "stream_timeout"
+        internal const val ERROR_CODE_STREAM_TOO_LARGE = "stream_too_large"
+        const val DEFAULT_MAX_FRAME_CHARS = 512 * 1024
+        const val DEFAULT_MAX_TEXT_CHARS = 256 * 1024
         private const val MAX_ERROR_BODY_CHARS = 8_192
 
-        // Shared daemon watchdog: one thread is plenty, it only ever calls Stream.close().
         private val watchdog: ScheduledExecutorService =
             Executors.newSingleThreadScheduledExecutor { runnable ->
                 Thread(runnable, "sidecar-stream-watchdog").apply { isDaemon = true }
@@ -73,23 +78,30 @@ class SidecarAgentClient(
                 .build()
 
         val startedAt = System.nanoTime()
-        val response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofLines())
+        val response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream())
         // HttpRequest.timeout() only covers the wait for response headers; the body is a stream the sidecar
         // may stall indefinitely, so the same budget is enforced over the whole turn with a watchdog.
         val remaining = requestTimeout.minusNanos(System.nanoTime() - startedAt)
-        return withStreamDeadline(stream = response.body(), deadline = remaining) { lines ->
-            if (response.statusCode() != 200) {
-                toErrorResult(statusCode = response.statusCode(), body = lines)
-            } else {
-                foldSseStream(lines = lines)
+        return withStreamDeadline(stream = response.body(), deadline = remaining) { reader ->
+            try {
+                if (response.statusCode() != 200) {
+                    toErrorResult(statusCode = response.statusCode(), body = reader)
+                } else {
+                    foldSseStream(reader = reader)
+                }
+            } catch (exception: SseLimitExceededException) {
+                log.warn {
+                    "Sidecar stream exceeded a size bound sessionKey=${request.sessionKey}: ${exception.message}"
+                }
+                AgentTurnResult.Failed(code = ERROR_CODE_STREAM_TOO_LARGE, message = exception.message.orEmpty())
             }
         }
     }
 
     private fun withStreamDeadline(
-        stream: Stream<String>,
+        stream: InputStream,
         deadline: Duration,
-        block: (Stream<String>) -> AgentTurnResult,
+        block: (BufferedReader) -> AgentTurnResult,
     ): AgentTurnResult {
         val timedOut = AtomicBoolean(false)
         val task =
@@ -102,7 +114,7 @@ class SidecarAgentClient(
                 TimeUnit.NANOSECONDS,
             )
         try {
-            return stream.use(block)
+            return stream.bufferedReader(charset = Charsets.UTF_8).use(block)
         } catch (exception: Exception) {
             if (!timedOut.get()) throw exception
             return AgentTurnResult.Failed(
@@ -122,15 +134,18 @@ class SidecarAgentClient(
         return jsonMapper.writeValueAsString(body)
     }
 
-    private fun toErrorResult(statusCode: Int, body: Stream<String>): AgentTurnResult {
-        val raw = StringBuilder()
-        for (line in body.iterator()) {
-            raw.append(line)
-            if (raw.length >= MAX_ERROR_BODY_CHARS) break
+    private fun toErrorResult(statusCode: Int, body: BufferedReader): AgentTurnResult {
+        val buffer = CharArray(MAX_ERROR_BODY_CHARS)
+        var length = 0
+        while (length < buffer.size) {
+            val read = body.read(buffer, length, buffer.size - length)
+            if (read < 0) break
+            length += read
         }
+        val raw = String(buffer, 0, length)
         val error =
-            runCatching { jsonMapper.readValue(raw.toString(), SidecarError::class.java) }
-                .getOrElse { SidecarError(code = "http_$statusCode", message = raw.take(500).toString()) }
+            runCatching { jsonMapper.readValue(raw, SidecarError::class.java) }
+                .getOrElse { SidecarError(code = "http_$statusCode", message = raw.take(500)) }
         return if (statusCode == 429 || error.code == ERROR_CODE_BUSY) {
             AgentTurnResult.Busy
         } else {
@@ -138,9 +153,10 @@ class SidecarAgentClient(
         }
     }
 
-    private fun foldSseStream(lines: Stream<String>): AgentTurnResult {
+    private fun foldSseStream(reader: BufferedReader): AgentTurnResult {
         var eventName = ""
         val dataLines = mutableListOf<String>()
+        var frameChars = 0
         var sessionId: String? = null
         val accumulatedText = StringBuilder()
 
@@ -156,18 +172,24 @@ class SidecarAgentClient(
                 )
             eventName = ""
             dataLines.clear()
+            frameChars = 0
             return terminal
         }
 
-        for (line in lines.iterator()) {
+        val lines = SseLineReader(reader = reader)
+        while (true) {
+            val line = lines.next(maxChars = maxFrameChars - frameChars) ?: break
             when {
                 line.isEmpty() -> flushFrame()?.let { return it }
 
-                line.startsWith(":") -> Unit // keep-alive comment
+                line.startsWith(":") -> Unit
 
                 line.startsWith("event:") -> eventName = line.removePrefix("event:").trim()
 
-                line.startsWith("data:") -> dataLines.add(line.removePrefix("data:").trimStart())
+                line.startsWith("data:") -> {
+                    dataLines.add(line.removePrefix("data:").trimStart())
+                    frameChars += line.length
+                }
             }
         }
         // Stream may end without a trailing blank line after the terminal frame; flush once more before failing.
@@ -188,7 +210,13 @@ class SidecarAgentClient(
         when (eventName) {
             EVENT_SESSION -> onSession(jsonMapper.readValue(data, SidecarSession::class.java).sessionId)
 
-            EVENT_TEXT -> accumulatedText.append(jsonMapper.readValue(data, SidecarText::class.java).delta)
+            EVENT_TEXT -> {
+                val delta = jsonMapper.readValue(data, SidecarText::class.java).delta
+                if (accumulatedText.length + delta.length > maxTextChars) {
+                    throw SseLimitExceededException(message = "accumulated text exceeds $maxTextChars chars")
+                }
+                accumulatedText.append(delta)
+            }
 
             EVENT_DONE -> {
                 val done = jsonMapper.readValue(data, SidecarDone::class.java)
@@ -213,7 +241,42 @@ class SidecarAgentClient(
         }
         return null
     }
+
+    private inner class SseLineReader(
+        private val reader: BufferedReader,
+    ) {
+        private var skipLineFeed = false
+
+        fun next(maxChars: Int): String? {
+            val line = StringBuilder()
+            while (true) {
+                val char = reader.read()
+                if (skipLineFeed) {
+                    skipLineFeed = false
+                    if (char == '\n'.code) continue
+                }
+                when (char) {
+                    -1 -> return if (line.isEmpty()) null else line.toString()
+
+                    '\n'.code -> return line.toString()
+
+                    '\r'.code -> {
+                        skipLineFeed = true
+                        return line.toString()
+                    }
+                }
+                if (line.length >= maxChars) {
+                    throw SseLimitExceededException(message = "SSE frame exceeds $maxFrameChars chars")
+                }
+                line.append(char.toChar())
+            }
+        }
+    }
 }
+
+private class SseLimitExceededException(
+    message: String,
+) : RuntimeException(message)
 
 private data class SidecarSession(
     val sessionId: String? = null,

@@ -22,6 +22,7 @@
 10. [Codex 독립 리뷰](#10-codex-독립-리뷰)
 11. [실행 우선순위](#11-실행-우선순위) — **12장으로 대체됨**
 12. [교차 검증 종합 · 최종 우선순위 (2026-09-22)](#12-교차-검증-종합--최종-우선순위-2026-09-22)
+13. [2차 교차 검증 — 브랜치 반영 결과 재검수 (2026-09-24)](#13-2차-교차-검증--브랜치-반영-결과-재검수-2026-09-24)
 - [부록 A: 재현용 확인 명령](#부록-재현용-확인-명령)
 - [부록 B: 레인별 기여 요약](#부록-b-레인별-기여-요약)
 
@@ -1574,6 +1575,7 @@ V1__outbox_pk_event_id.sql:35:CREATE INDEX IF NOT EXISTS idx_outbox_idempotency_
 세 레인(11장 / Codex top-15 / Claude 검증)을 합쳐 **"지금 깨져 있는 것 → 데이터·메시지 정합성 → 잠복 결함·운영 안정성 → 정리"** 순입니다.
 
 > **진행 현황 (2026-09-22, 브랜치 `feature/review-critical-fixes`, 미커밋)**
+> ⚠️ **2026-09-24 재검수(13장)로 아래 "완료" 중 M15 NOT RESOLVED · C8 REGRESSED · 14건 PARTIAL로 정정됨. 실제 남은 작업은 [13.3](#133-다음-반영-우선순위)을 따르세요.**
 > - Tier 0 (1–7) **완료**. 헬스체크 URL은 서비스가 내려가 있어 미검증 — `main` 머지 전 확인.
 > - Tier 1 (8–15) **완료**: N1 원자화, N2 `endAt` 보정, C5 EXISTS 서브쿼리, H16/H15 `@Version` + UNIQUE + 인덱스 + `V18`, H3 CDC 재설계(현재 상태 재확인·`claimPending` CAS·`AckMode.RECORD`·DLT), M18/N6 본문 해시 dedup + 실패 시 망각 + 상한, H12/H13 `SlackUserProfileResolver` + `RestClient` 타임아웃, H14 스트림 워치독.
 > - Tier 1 리뷰 반영: CDC 모드용 stuck/stale 복구가 없던 blocker → 모드 독립 `OutboxRecoveryScheduler`(60초, CAS) 신설, reschedule `clearAutomatically`, `V18` 완전 멱등, dedup 캡 음수 방어, 레이스 테스트 결정성, 사이드카 본문 상한을 글자 수로, `DISTINCT` 제거.
@@ -1632,6 +1634,126 @@ C8(`or`만 수정/삭제) · H7(`reason = "must not be blank"`) · H10(`val erro
 - **내린 것**: C3(2 → 21), H7(6 → Tier 3), C8(13 → Tier 3), C2(7 → 17).
 - **H8을 H4·H15 선행조건에서 분리** — Flyway는 문서화된 결정의 번복이라 별도 판단.
 - **수정 스니펫을 그대로 적용하면 안 되는 항목**: C3, H3, H4(UNIQUE), H14, H18.
+
+---
+
+## 13. 2차 교차 검증 — 브랜치 반영 결과 재검수 (2026-09-24)
+
+> **방법**: `feature/review-critical-fixes`(3커밋, 125파일)를 대상으로 ① 영역별 Claude 리뷰 레인 5개(outbox·relay / Slack dispatch·retry / meeting·JPA·migration / web·security·domain / CI·k8s·ops) + 보안 전용 레인 1개(각각 소스 직접 열람, 관련 테스트 실행), ② Codex(gpt-6-astra)가 독립적으로 전 항목 재판정(테스트 3모듈 재실행, Hibernate·Boot 바인딩 재현 포함), ③ 메인 세션이 상위 주장을 직접 재현(Jetty 12.1.12 임베디드 프로브, 프로덕션 호스트 GET/POST 프로브, `spring-kafka-4.1.1.jar` 바이트코드 확인).
+> 산출물: `.omc/artifacts/review-2026-09-24/` (`lane-*.md` 6개, `codex-final.md`), Codex 전문 `.omc/artifacts/ask/codex-you-are-a-senior-reviewer-doing-an-independent-second-pass-a-2026-09-24T04-47-24-049Z.md`.
+> 빌드: `./gradlew build` 통과(2026-09-24).
+>
+> **결론**: 12.3의 "완료" 주장 중 **NOT RESOLVED 1(M15) · REGRESSED 1(C8) · PARTIAL 14**. 브랜치가 새로 만든 결함 중 High 이상이 6건이며, 그중 4건은 같은 뿌리(outbox 소유권·시계·재전달)에서 나온다. 머지 전 필수 항목은 13.3 Tier A.
+
+### 13.1 12.3 판정 정정표
+
+| 항목 | 12.3 주장 | 재판정 | 근거 |
+|---|---|---|---|
+| **H21** 헬스체크 URL | 완료(미검증) | **NOT RESOLVED** | `deploy_action.yaml:30` `api/slack/actuator/health` 그대로. 실측: `https://api.notypie.dev/actuator/health` → **404**, `/api/slack/actuator/health` → **401**. **두 URL 모두 200이 나오지 않으므로** 정상 배포가 매번 헬스체크 실패로 롤백된다. *(2026-09-28 정정: 이 401을 "앱의 서명 필터"로, 라우팅을 "`/api/slack/*`만 전달"로 적었던 것은 잘못된 추론이다. 재측정 결과 존재하지 않는 경로를 포함한 모든 경로가 `WWW-Authenticate: Bearer`·`server: istio-envoy`의 401을 돌려준다. 공개 호스트 앞단은 이 저장소 밖의 Bearer 인증 계층이고, 어떤 경로가 앱에 도달하는지는 밖에서 알 수 없다.)* `k8s/AGENTS.md:70-72`·`docs/wiki/dev-environment.md:146-147`의 "게이트웨이가 접두를 벗긴다" 가설은 Slack 이벤트 수신과 양립 불가(벗기면 `/api/slack/events`도 `/events`가 됨) |
+| **M15** dev 서명 시크릿 필수 | 완료 | **NOT RESOLVED** | `${SLACK_SIGNING_SECRET}` 기본값 제거는 fail-fast가 아니다. `@ConfigurationProperties` 바인더는 미해결 플레이스홀더를 **리터럴 문자열로 보존**(Codex가 Boot 4.1.1로 재현) → `isBlank()` false → 공개 문자열 `${SLACK_SIGNING_SECRET}`로 HMAC 검증. 정상 Slack 요청은 401, 그 문자열로 서명한 요청은 통과. 빈 문자열이면 검증 통째로 비활성(`Filter:34`, WARN 1회) |
+| **M19** heapdump 제거 | 완료 | PARTIAL | yaml은 제거됐으나 `run:390`이 dev 모드에 `-Dmanagement.endpoints.web.exposure.include=*`를 넘겨 시스템 프로퍼티가 yaml을 덮는다. dev/local의 `loggers`(POST 쓰기)·`threaddump`·`mappings`·`conditions`도 같은 논리로 남음 |
+| **C8** `or` 진리표 | 완료 | **REGRESSED** | 진리표는 맞으나 `Field.errorMark` 기본값 0 때문에 `shouldNotBeNullAnd`/`ifNotNull`이 만든 파생 Field에 `or`를 쓰면 `keepUpTo=0` → **앞선 다른 필드의 에러까지 전부 삭제**(Codex 실행 재현: `BEFORE=[invalidA]`, `AFTER=[]`). 수정 전 `or`는 지역 `before` 로 우변 에러만 지웠으므로 폭발 반경이 넓어진 회귀. 현재 `or` 사용처 0건이라 잠복 |
+| **H3** CDC 재설계 | 완료 | PARTIAL | 현재 상태 재확인·CAS·`AckMode.RECORD`·DLT는 들어갔으나 (a) `IN_PROGRESS → 무조건 재발송` 분기에 CAS 없음, (b) 상태 갱신 실패 → `DefaultErrorHandler` 재전달 → 같은 분기로 재발송, (c) DLT 배선 결함. 13.2 S3·S4·S9 |
+| **H2 + M22** 429/transient/response_url | 완료 | PARTIAL | `ok=false error=ratelimited`가 transient 집합에 있어 `SlackRateLimitedException`이 아닌 `SlackTransientErrorException` → 3회 즉시 재시도 소진 → **FAILURE(영구 유실)**. HTTP 429와 정반대 결과. `Retry-After > 30s`는 30s로 잘라 헛호출 1회. `InterruptedException`은 FAILURE로 분류. response_url 경로에서는 `isRateLimited()`가 구조상 절대 참이 안 됨 |
+| **H12** 프로필 조회 렌더 밖으로 | 완료 | PARTIAL | TTL 캐시·`<@id>` fallback은 구현. 그러나 `OutboundRenderer:97-107 → SlackApiEventConstructor:128 → ModalTemplateBuilder:99`로 **여전히 렌더 경로 안**이고 dispatch 직전에 실행됨. 캐시 미스면 릴레이·Kafka 스레드에서 동기 Slack 호출(3s+10s 상한만 생김). 실패 결과는 캐시 안 됨 |
+| **H13** RestClient 타임아웃 | 완료 | RESOLVED(수단 상이) | 타임아웃은 적용됨. 권고였던 Boot `RestClient.Builder` 빈 대신 정적 builder + `JdkClientHttpRequestFactory` 하드코딩 — `spring.http.client.*`로 운영 조정 불가 |
+| **H14** SSE 워치독·상한 | 완료 | PARTIAL | 워치독·`reduce` 제거는 됨. 8,192자 상한은 **에러 본문에만**, 그것도 한 줄을 다 만든 뒤 검사. 성공 경로 `accumulatedText`·`dataLines` 무제한 |
+| **C5** JOIN FETCH 절단 | 완료 | PARTIAL | 두 쿼리의 EXISTS는 정확(생성 SQL 확인). `findActiveByStartAtBetween:61-75`에 `SELECT DISTINCT`가 남아 불일치. 네 쿼리 모두 INNER `JOIN FETCH`라 참가자 0명 회의가 사라짐(S10) |
+| **H16** `@Version`·UNIQUE | 완료 | PARTIAL | `addParticipants`에서는 실동작(생성 SQL에 `version=? ... and version=?` 6회). **reschedule 경로는 무력화**(S8). 락 패자는 500(S8b) |
+| **M18 + N6** dedup | 완료 | PARTIAL | 본문 해시·`putIfAbsent`·실패 시 망각·상한 모두 구현. 그러나 in-flight 재시도를 200으로 흡수 → 원본이 뒤늦게 5xx면 이벤트 유실(S5). 코드 주석 "Single-replica only" vs `deployment.yaml:6` `replicas: 2` |
+| **C4** Kafka 주소 외부화 | 완료 | PARTIAL | `KAFKA_BOOTSTRAP_SERVERS`만 추가. 같은 부류 `SLACK_CDC_TOPIC`(`prod.yaml:129`)·`SLACK_SIGNING_SECRET`(`:123`)은 configmap/secret 샘플에 없어 `@KafkaListener` 토픽 플레이스홀더 해석 실패 → **샘플 매니페스트로는 prod 기동 불가** 상태 유지 |
+| **Clock** `systemDefaultZone` | 완료 | PARTIAL | UTC 주입 문제는 해결. 그러나 DB `CURRENT_TIMESTAMP`와 JVM 시계의 분리는 남음(S2) |
+| **M21** bounded executor | 완료 | PARTIAL | `@Qualifier` 매칭·`@Primary` 유지 정상. 그러나 100건을 먼저 전부 claim하고 worker 4개에 제출 → 429 대기 시 뒤쪽 작업이 5분 stuck 임계를 넘겨 recovery가 reclaim → 원래 Runnable도 실행 → 중복 발송(Codex #3) |
+| **M25** 문서 드리프트 | 완료 | PARTIAL | 지정 4곳은 수정. 브랜치가 새로 만든 드리프트 다수: `impl/command/AGENTS.md:75`(스펙 없음 vs 73행에 추가), `impl/retry/AGENTS.md:35,50`(삭제된 `FixedBackOff` 서술), `domain/common/AGENTS.md:23`(`Utils.kt`), `k8s/AGENTS.md:58-60,70-72`(힙 근거·게이트웨이 가설), `AsyncConfig` "poller/listener thread" 주석(CDC 리스너는 executor 미경유), `lane-ops.md` C절 14건 |
+| 24h give-up | 완료 | PARTIAL | `abandonStuck`에 관측 시각/토큰 조건이 없어 새 소유권과 경쟁 가능. 그 전까지 300초마다 재발송 ≈ **288회**, reclaim이 `updated_at`을 리셋해 헬스 지표는 플랩만 함 |
+
+**RESOLVED로 확정**(레인·Codex 일치): C1/X3/X4/H20, N4, H17, H5, H6, X2, N1(propagation·self-invocation·rollbackOnly 전부 확인), N2(도메인에 reschedule 메서드가 없어 "양쪽" 요구는 공허), H15/V18/V19(컬럼명·멱등성·번호), H1(PENDING 단건 CAS), H4, H9(when 식, 31개 정확), N5, C2(spring-core 7.0.9 `RetryPolicy` 의미 일치), C3, C7/N7, H7, H10, H19, H18 되돌림, R3, 레이스 테스트 결정성, purge 다중 배치.
+
+### 13.2 신규 결함 (레인·Codex 통합, 심각도순)
+
+| ID | 심각도 | 결함 | 도입 | 근거 | 합의 |
+|---|---|---|---|---|---|
+| **S1** | **Critical**(코드) / prod 노출 미확인 | **Slack 서명 필터 우회**: `shouldNotFilter`가 raw `requestURI`를 `startsWith`로 비교하는데 Spring MVC는 디코딩·정규화된 경로로 라우팅. **Jetty 12.1.12 실측**: `/api/sla%63k/events`·`/api/x/../slack/events`·`/api/slack/./events`의 `requestURI`는 원문 그대로, `pathInfo`는 `/api/slack/events`. 즉 서명 없이 컨트롤러 도달. 이 브랜치의 N5(`actorRole = commandRoleResolver.resolve(actorId)`)가 위조 페이로드의 admin ID로 **ADMIN 권한 획득** 경로를 열어 증폭. *(2026-09-28 정정: "프로덕션 프로브가 401이므로 게이트웨이가 정규화해 막고 있다"는 서술은 근거가 없었다. 그 401은 앞단 Bearer 인증 계층의 응답이며 앱 도달 여부와 무관하다. 프로덕션 노출 여부는 미확인)* | 필터 기존 / 증폭 브랜치 | `SlackRequestVerificationFilter.kt:25-26`, 스크래치 `jettyprobe/Probe.java` | security C1, 메인 실측 |
+| **S2** | **High** | **outbox `updated_at` 필자 분리 + 실제 9시간 어긋남**: `claimPending`/`reclaimStuck`/`abandonStuck`은 DB `CURRENT_TIMESTAMP`(세션 존), `@CreationTimestamp`/`@UpdateTimestamp`·모든 컷오프·헬스는 JVM 시계. 앱은 `Dockerfile:20` `-Duser.timezone=Asia/Seoul`, MariaDB StatefulSet(`cdc/k8s/yamls/mariadb/mariadb-sts.yaml`)은 `TZ`·localtime·`default_time_zone` 없음 → UTC. JDBC URL/`hibernate.jdbc.time_zone` 미설정. 결과: claim 직후 행이 즉시 stuck → **60초 스윕이 발송 중인 행을 재발송(상시 중복)**, `reclaimStuck` 가드 무력화, 헬스 상시 DOWN. H2 테스트는 같은 JVM이라 못 잡음. 남은 확인: prod Secret `SQL_DATABASE_URL`에 `connectionTimeZone` 파라미터 유무 | 구조 기존 / 위험화 브랜치 | `MessageOutboxRepository.kt:33,78,96`, `OutboxRecoveryScheduler.kt:37`, `OutboxHealthIndicator.kt:21` | outbox B3, Codex #7 |
+| **S3** | **High** | **CDC `IN_PROGRESS` 분기 무조건 재발송**: 복구 스윕이 claim해 발송 중인 행에 지연·재전달된 CDC 레코드가 도착하면 CAS 없이 다시 발송. `DebeziumLogTailingProcessorTest:112-125`가 이 동작을 정답으로 고정 | 브랜치 | `DebeziumLogTailingProcessor.kt:95-98` | outbox B1, Codex #2 |
+| **S4** | **High** | **상태 갱신 실패 → 레코드 재전달 → S3 분기로 재발송**: `publishEvent`가 동기라 `SlackMessageRelayServiceImpl:78-83`의 5회 재시도 소진 예외가 `consume()` 밖으로 → `DefaultErrorHandler` 2회 재전달 → 매번 IN_PROGRESS 재발송. 일시적 DB 장애 1회에 Slack 게시 최대 3회. auto-commit 시절엔 재전달 자체가 없던 경로 | 브랜치 | `DebeziumLogTailingProcessor.kt:83`, `KafkaConsumerConfiguration.kt:100` | outbox B2, Codex #2 |
+| **S5** | **High** | **dedup이 in-flight 재시도를 200으로 흡수 → 원본이 뒤늦게 5xx면 이벤트 무음 유실**: 원본 3초 초과 → Slack retry#1 → `previous != null`로 200 → 원본 500·`markFailed` → Slack은 이미 200 받아 재시도 안 함. H5로 DB 예외가 500이 되면서 비로소 도달 가능해진 창. 게다가 `replicas: 2`인데 맵은 JVM 로컬 | 브랜치 | `SlackRequestVerificationFilter.kt:65-81`, `SlackRetryDeduplicator.kt:44-50`, `deployment.yaml:6` | web B-1, Codex #6, security M4 |
+| **S6** | **High** | **429 대기(≤30s)가 CDC 리스너 스레드를 점유**: `max-poll-records: 100` × 31s ≈ 52분 ≫ `max.poll.interval.ms: 600000` → 약 19번째 레코드에서 컨슈머 축출·리밸런스 → 미커밋 레코드 재전달 → 그 행들은 이미 IN_PROGRESS → S3로 재발송 → 또 429 → **라이브락**. dev/local은 override가 없어 기본 5분. `ApplicationMessageDispatcher.kt:43-44` 주석은 레코드 단위로만 참. 폴링 경로도 100건 선claim + worker 4 → 뒤쪽 작업이 5분 임계 초과 → reclaim → 중복 | 브랜치 | `DebeziumLogTailingProcessor.kt:40,71`, `application-prod.yaml:74-78`, `AsyncConfig.kt:32-43` | dispatch B-1, outbox B5, Codex #3·#5 |
+| **S7** | **High** | **서명 시크릿 바인딩 3중 결함**: (a) 미설정 시 플레이스홀더 리터럴 보존(13.1 M15), (b) 빈 문자열 시 검증 비활성 + WARN 1회, (c) `application-slack-live.yaml:66` `${SLACK_SIGNING_SECRET:}` 기본 공백 + 헤더가 ngrok 터널로 실제 Slack 앱 연결 안내 → 인터넷 노출 인스턴스가 무검증으로 기동 | (a)(b) 브랜치 미완 / (c) 기존 | `AppConfig.kt:39`, `Filter:33-40`, `application-slack-live.yaml:64-66` | Codex #1, web B-5, security H3 |
+| **S8** | **High** | **reschedule 낙관 락 무력화**: `OPTIMISTIC_FORCE_INCREMENT`의 버전 증가는 커밋 직전 콜백(`EntityIncrementVersionProcess`)인데 `clearAutomatically=true`가 UPDATE 직후 `em.clear()` → 엔트리 없음 → 증가 건너뜀(Hibernate 7.4 소스 + Codex H2 재현 `UPDATED=1, VERSION=0`). `markMeetingCanceled`와 `addParticipants` 경합 시 취소된 회의에 참가자 추가 가능. `JpaMeetingRepository.kt:145-146` 주석·`repository/meeting/AGENTS.md` 서술이 허위. **S8b**: `addParticipants`는 `handleInteraction`의 바깥 tx(REQUIRED)에 참여해 강제 증가 UPDATE가 `MeetingServiceImpl.addParticipants`의 `runCatching` **밖**(바깥 커밋)에서 실행 → `ObjectOptimisticLockingFailureException`을 못 잡고 500 + 아웃박스 행 롤백 → **사용자 피드백 0**, 재시도 0건. `AddParticipantRepositoryTest:37-46` 주석이 존재하지 않는 tx 경계를 모델링 | S8 브랜치 / S8b 기존(H16이 의존) | `MeetingRepositoryImpl.kt:83-89`, `JpaMeetingRepository.kt:126-150`, `MeetingServiceImpl.kt:178-198`, `SlackInteractionHandlerImpl.kt:44` | meeting B-1·B-1b, Codex #11 |
+| **S9** | Medium~High | **DLT 배선 3중 결함**: (a) `DeadLetterPublishingRecoverer(kafkaTemplate)`의 템플릿이 `JacksonJsonSerializer` → 역직렬화 실패 레코드의 원본 `byte[]`가 **Base64 JSON 문자열**로 DLT에 실려 replay 불가(Spring Kafka 문서는 `ByteArraySerializer` 분기 요구), (b) 기본 접미사는 **`-dlt`**(spring-kafka-4.1.1.jar 바이트코드 확인)인데 주석·위키는 `.DLT`, (c) `NewTopic`/`KafkaAdmin` 0건·매니페스트 언급 0건 → auto-create 꺼진 브로커에서 전송 실패 → `failIfSendResultIsError=true` → 파티션 무한 재전달 | 브랜치 | `KafkaConsumerConfiguration.kt:84-101`, `docs/wiki/events-and-outbox.md:99-100` | outbox B4, Codex #10 |
+| **S10** | Medium~High | **참가자 0명 회의가 모든 조회에서 사라짐**: 네 쿼리 전부 INNER `JOIN FETCH m.participants`. `MeetingFormInput.parseParticipants`가 publisher를 제거하므로 본인만 고른 회의는 `emptySet()` → `getMeeting` 500, `/meetup list` 주최자에게도 비노출, 리마인더·아젠다 대상 제외. `findMeetingByUidWithParticipants:152-161`만 LEFT | 기존(C5가 못 닿음) | `JpaMeetingRepository.kt:21,34,46,65`, `Meeting.kt:27`(하한 없음) | meeting B-4, Codex #13 |
+| **S11** | Medium | **`ratelimited`·`fatal_error` 분류 오류**: `ok=false ratelimited` → FAILURE 영구 유실(13.1 H2). `fatal_error`는 Slack 문서상 "일부 작업이 이미 성공했을 수 있음" → `chat.postMessage` 재시도 시 중복. `request_timeout`은 잘린 POST라 재시도 무의미 | 브랜치 | `ApplicationMessageDispatcher.kt:41,133-134,174-180,255-285` | dispatch B-2~B-5·B-9, outbox B7, Codex #4 |
+| **S12** | Medium | **`errorMark` 회귀**(13.1 C8) + `Field`가 `data class`인데 `errorMark`가 생성자 밖 `var`라 `copy()` 시 0 리셋 | 브랜치 | `Validation.kt:17,20,29-37,50,58` | web B-2, Codex #15 |
+| **S13** | Medium | **본문 크기 상한 없음**: `CachedBodyHttpServletRequest:17` `readAllBytes()`가 **서명 검증 전**에 실행, `server.*max*` 설정 0건 → 무인증 대용량 POST로 힙 1Gi 고갈(replicas 2 모두). **response_url SSRF**: 호스트 검증 없음(`hooks.slack.com` 강제 0건) + 이 브랜치가 `response.body?.string()` 전체 적재 후 `.take(200)` (main은 `close()`만). S1·S7(c)와 체이닝 | 상한 기존 / 본문 적재 브랜치 | `SlackRequestVerificationFilter.kt:42`, `ApplicationMessageDispatcher.kt:247-266` | security H1·H2, web B-6 |
+| **S14** | Medium | **actuator 노출**: prod `health,info,metrics`가 `ingress.yaml` `path: /`로 공개 설계(실제 앞단 라우팅은 저장소 밖이라 미확인). dev/local `loggers`(POST 쓰기)·`threaddump`·`mappings`·`conditions` + `show-details: always`. `run:390` `include=*`(13.1 M19). `run:406-410` JMX 무인증·바인드 제한 없음 | 기존 | `application-dev.yaml:73`, `application-local.yaml:68`, `run:390,406-410` | security M1·M2, web B-8, ops B9, Codex #9 |
+| **S15** | Medium | **버튼마다 DB 역할 조회, 캐시·실패 처리 없음**: `findRole`에 `runCatching` 없음 → DB 장애 시 모든 버튼 500 → S5 유실 창 직행. USER 하드코딩 시절엔 DB가 죽어도 버튼은 동작 | 브랜치(N5 부수) | `SlackInteractionHandlerImpl.kt:108`, `CommandRoleResolver.kt:18` | web B-3 |
+| **S16** | Medium | **ops/k8s**: (a) `MaxRAMPercentage=50` × 2Gi = 힙 1Gi = request 1Gi → RSS 1.4~1.6Gi가 request 초과 → 축출 1순위(주석과 정반대), (b) 롤백이 `kubectl set image`라 probe/resources 변경은 안 되돌리고 같은 SHA 재배포 시 no-op 거짓 성공, (c) 워크플로 전부 `concurrency` 없음 → 연속 머지 시 backup/apply/rollback 교차, (d) configmap/secret에 `SLACK_CDC_TOPIC`·`SLACK_SIGNING_SECRET` 없음(13.1 C4), (e) `preStop` 없음, (f) grace 30s vs 429 대기 30s 충돌, (g) 컨테이너 root·securityContext 없음, (h) `secret.yaml` `data:`가 base64 아님 → apply 실패(`stringData:`로), (i) `envsubst` 무제한 치환 + job env에 OCI 개인키 5종, (j) CI `gradle-linux.properties` 8g+6g 데몬 on 16GB 러너(리스크), (k) `environment_url` 플레이스홀더, (l) `-jar`가 `-D` 앞(동작은 함) | (a)(f)(j) 브랜치 / 나머지 기존 | `Dockerfile:19-20`, `deployment.yaml:16,48-50`, `deploy_action.yaml:134-146,240-242,298-310`, `secret.yaml:6-10` | ops B2~B15, security L2, Codex #14 |
+| **S17** | Medium | **reclaim이 `updated_at`을 리셋해 poison 행이 24h 동안 ≈288회 재발송되며 헬스는 플랩만** — `attempt_count` 컬럼(V20) + 낮은 상한 필요 | 브랜치 | `OutboxRecoveryScheduler.kt:33-35,49`, `OutboxHealthIndicator.kt:30` | outbox B6 |
+| **S18** | Medium | **reschedule 미래 시각 검증 없음**(생성 경로는 2겹) → 과거로 옮기면 리마인더 삭제 후 미재생성·목록 소실인데 성공 ephemeral 발송. **V18에 기존 `end_at < start_at` 행 보정 없음** → 새 코드가 음수 duration을 그대로 유지, `toDomainEntity()`가 계속 던짐 | 기존 | `ParsedSubmissions.kt:74-83`, `MeetingRescheduleService.kt:36-54`, `MeetingRepositoryImpl.kt:84` | meeting B-2·B-3 |
+| **S19** | Medium | **프롬프트 인젝션 표면**: `requesterName`/`channelName`이 이스케이프·길이 제한 없이 system prompt에 이어 붙음. 현재 app_mention은 `""`라 미발현, 다른 호출자가 채우면 열림. MCP 도구 게이트는 서버 발급 토큰 기반이라 독립 보호됨 | 기존 | `AgentConverseService.kt:111-133` | security M3 |
+| **S20** | Low | dedup: 캡 도달 후 매 요청 O(n log n) 정렬(N6가 고치려던 전수 스캔의 귀환), `trimToCap` 비원자, 실행 중 엔트리 축출 가능, `require(maxEntries > 0)` 없음, `catch (Exception)`이 `Error` 놓침, 슬래시 경로(`retryNum` 항상 null)가 캡만 잠식, 영구 실패 페이로드에 `X-Slack-No-Retry: 1` 미사용 | 브랜치 | `SlackRetryDeduplicator.kt:48,66-71`, `Filter:75` | web B-7·B-9~B-11 |
+| **S21** | Low | 프로필 리졸버: 실패 결과 negative cache 없음(Tier 4 API를 렌더마다 호출), `cache.size >= max`면 `clear()` 전체 삭제, `users.profile.get?user=$userId` 미인코딩 보간 | 브랜치 | `SlackUserProfileResolver.kt:37-49` | dispatch B-6·B-10, security L4 |
+| **S22** | Low | 테스트 품질: `MessageOutboxRepositoryTest:44-45` `createdAt`이 `@CreationTimestamp`에 덮여 정렬 미검증; `DailyAgendaSchedulingServiceTest:266-281` 취소 회의 케이스가 공허(위 케이스와 동일); `:190-228` 목 tx 매니저라 N1 회귀 못 잡음; `ControllerAdviceTest:53-65`가 resolver 선택을 안 증명(`ExceptionHandlerMethodResolver`로 컨텍스트 없이 가능); `RetryServiceTest` `shouldThrow<Exception>` 동어반복, `RetryException.cause` 계약 미고정; `OutboxTestFixtures:40,57` 죽은 `stuckInProgressSeconds`; `PollingMessageProcessorTest:17` 죽은 문구; transient/permanent 표·폴링 위임·`ok=false` 프로필 케이스 미커버 | 브랜치 | — | outbox B9·B10, meeting B-7·B-8, web B-4, dispatch 테스트 관찰 |
+| **S23** | Low | 스타일·문서: `ApplicationMessageDispatcher.kt:144,147` 위치 인자(같은 파일 138-142는 named); `ConsumerConfig.kt:84` 서술형 주석("was a TODO() that would have thrown…"); `KafkaConsumerConfiguration`이 lite 설정이라 `consumerFactory()` 호출이 빈이 아닌 새 인스턴스; hex 변환 2벌; `lint.yaml` paths에 `gradle/**` 없음·`timeout-minutes` 없음; 13.1 M25의 드리프트 목록 | 브랜치 | — | dispatch B-11·B-12, outbox B11, web B-12·B-13, ops B14·C절 |
+
+### 13.3 다음 반영 우선순위
+
+**Tier A — 머지·배포 전 필수** (없으면 배포가 롤백되거나 상시 중복 발송)
+
+| # | 항목 | 비고 |
+|---|---|---|
+| A1 | **H21 재수정** — 공개 호스트에서는 헬스 200을 받을 수 없으므로 URL만 바꿔서는 안 된다. 배포 잡에서 `kubectl get --raw "/api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/actuator/health"` 또는 `kubectl port-forward` 로 **클러스터 내부 검증**으로 전환. `k8s/AGENTS.md:70-72`·`dev-environment.md:146-147`·`.github/AGENTS.md:102-104`의 게이트웨이 가설 삭제 | S2 실측 |
+| A2 | **S2 시계 통일** — 네이티브 3문장의 `CURRENT_TIMESTAMP`를 `:now` 바인딩(스케줄러와 같은 `Clock`)으로. `MessageOutboxRepositoryTest`에 세션 존을 `SET TIME ZONE`으로 어긋나게 한 케이스 추가. 배포 전 prod `SELECT @@session.time_zone, NOW()` 대조 | outbox `AGENTS.md:35-38` 의도 유지 |
+| A3 | **S3+S4+S6 CDC 소유권** — `IN_PROGRESS` 분기를 **제거**(stuck은 `OutboxRecoveryScheduler` 전담), 상태 갱신 실패는 리스너 안에서 로그 후 스윕에 위임(DLT 대상 아님), 429는 리스너에서 자지 않고 즉시 IN_PROGRESS 위임 또는 `max-poll-records` ≤ 10 + 세 프로파일 `max.poll.interval.ms` 명시. `DebeziumLogTailingProcessorTest:112-125` 기대값 반전. 폴링은 실행 시점 claim 또는 실행 직전 소유권 재확인 | 한 PR |
+| A4 | **S7 시크릿 fail-fast** — `local` 외 프로파일에서 blank·미해결 플레이스홀더(`startsWith("${")`) 거부하는 `@PostConstruct`/`ApplicationRunner`, `slack-live` 기본값 제거 | dev·prod·slack-live |
+| A5 | **S5 dedup 상태 머신** — `IN_FLIGHT`/`DONE` 2상태, `IN_FLIGHT` 재시도는 503(Slack이 재시도 계속), `DONE`만 200. 2 replicas 해소는 `event_id`/`trigger_id` DB 유니크 또는 `replicas: 1` 명시 결정 | 12.3 #13이 요구한 그 설계 |
+| A6 | **S1 필터 등록 방식** — `FilterRegistrationBean` + `urlPatterns`(컨테이너가 정규화 경로로 매칭, `McpTurnTokenFilter`와 동일) 또는 `ServletRequestPathUtils` 디코딩 경로 allowlist. `%63`·`..` 회귀 테스트 | 게이트웨이 의존 제거 |
+| A7 | **S16(d)/C4 완결** — configmap에 `SLACK_CDC_TOPIC`, secret에 `SLACK_SIGNING_SECRET`, `secret.yaml` `stringData:` | 샘플로 기동 가능해야 함 |
+
+**Tier B — 데이터·메시지 정합성**: S8(+S8b: `REQUIRES_NEW`로 커밋을 `runCatching` 안으로 + 1회 재시도, 또는 managed entity dirty checking으로 통일·`clearAutomatically` 제거; B-9 소유자 조건 동반) · S9(`ByteArraySerializer` 템플릿 분기, `-dlt` 문서 정정, `NewTopic` 빈 또는 `setFailIfSendResultIsError(false)`) · S10(`LEFT JOIN FETCH` 통일, DISTINCT 제거) · S11(`ratelimited`→`SlackRateLimitedException`, transient 집합을 `internal_error`/`service_unavailable`로 축소, `Retry-After > 30s`면 대기 없이 위임, `InterruptedException` 분리) · S12(파생 Field에 mark 상속 또는 (mark, field) 쌍 전달; 회귀 테스트) · S13(`contentLengthLong` 상한 + `readNBytes(limit+1)`, `response_url` 호스트 allowlist + `peekBody`) · S17(V20 `attempt_count`) · S18(`RescheduleMeetingParsed.from` 미래 검증, V20 보정 쿼리) · S15(역할 캐시 + 실패 시 USER 강등).
+
+**Tier C — 운영·정리**: S14 · S16(a)(b)(c)(e)(f)(g)(i) · S19 · S20 · S21 · S22 · S23 · 13.1 M25 드리프트. **여전히 의도적 미착수**: C6, N3, `SlashCommandGate`, detekt/JaCoCo, R2→R1, Spring 배선 스모크 테스트(S8b·N1 회귀·S2 존 문제 모두 이 테스트 부재가 원인 — 우선순위 상향 권고).
+
+### 13.4 이번 검증에서 확인한 방법론 교훈
+
+- **완료 판정은 실행으로만 확정된다.** H21은 "서비스가 내려가 있어 미검증"으로 남긴 채 완료로 기록됐고, 실제 프로브 한 번으로 두 URL 모두 불가임이 드러났다. 12.3의 미검증 표기는 "미완료"로 읽어야 한다.
+- **테스트 환경이 결함을 가리는 세 축**: H2 = 같은 JVM 시계(S2), 목 tx 매니저(N1 회귀), Spring 컨텍스트 부재(S8b·`Clock`). 세 번째 Spring 배선 스모크 테스트는 더 이상 "미착수 항목"이 아니라 선행 조건이다.
+- **리뷰 레인이 정답으로 고정한 테스트**: `DebeziumLogTailingProcessorTest:112-125`처럼 브랜치가 결함 동작을 `verify(exactly = 1)`로 못 박은 경우, 재검수 레인은 테스트 기대값 자체를 의심해야 한다.
+- 위키 `ai-review-remediation-pitfalls` 체크리스트에 위 세 항목을 추가할 것(Codify).
+
+---
+
+### 13.5 반영 현황 (2026-09-28, 작업 트리 미커밋)
+
+> **방법**: 영역별 구현 워커(1차 5레인 → 재검수 → 2차 4레인), 재검수 레인 4개(코드 리뷰 3 + 보안 1), Codex 교차 검증 1회, 메인 세션의 최종 코드 품질 검수. 산출물: `.omc/artifacts/review-2026-09-28/` (`fix-*.md`, `fix2-*.md`, `rev2-*.md`, `codex-final2.md`).
+> **검증**: `./gradlew build --rerun-tasks` 통과 — domain 358 · infrastructure 539 · application 426 테스트, 실패 0, 건너뜀 0, ktlint 통과. **실행하지 못한 것**: 실제 MariaDB(V20·V21·V22, REPEATABLE_READ, 중복 키 메시지), 실제 Kafka 브로커의 DLT 왕복, 부팅된 Spring 컨텍스트(새 생성자 파라미터 `Environment`·`MeterRegistry`·`PlatformTransactionManager`·`Clock` 배선), 클러스터에서의 배포 워크플로, actionlint·gitleaks.
+
+| 13.3 항목 | 상태 | 구현 요지 |
+|---|---|---|
+| A1 헬스체크 | 반영 | 배포 게이트를 `/actuator/health/readiness` + `jq`로, service proxy 우선·`kubectl exec wget` 차선. 롤백은 `rollout undo`, 파드 템플릿 해시로 변경 여부 판정. **클러스터 RBAC(`services/proxy` get 또는 `pods/exec` create) 확인 필요** |
+| A2 시계 통일 | 반영 | outbox 네이티브 쓰기 전부 `:now` 바인딩(주입된 `Clock`), `CURRENT_TIMESTAMP` 제거 |
+| A3 CDC 소유권 | 반영 | `attempt_count`(V20) 소유권 토큰, CDC는 PENDING만 claim, 발송 직전 `renewClaim`, 완료·포기 쓰기 모두 토큰 조건부, 상태 기록 실패는 리스너 밖으로 나가지 않음. `send_count`(V22)로 실제 발송만 포기 예산에 계산, rate-limit은 `Retry-After`를 보존해 보류. 모든 Slack 호출에 6초 호출 타임아웃, 레코드당 최악 약 53초 < 60초(`max-poll-records: 5`) |
+| A4 시크릿 fail-fast | 반영 | 필터 생성 시 검증: 미해결 플레이스홀더는 항상 거부, 공백은 활성 프로파일이 `local` 하나뿐일 때만 허용 |
+| A5 dedup 상태 머신 | **부분** | in-flight 재시도 503·완료 200·실패 망각, 세대 토큰, 용량 상한. **복제본 간 공유는 미구현** — 열린 결정 `docs/wiki/decisions.md` #34 |
+| A6 필터 경로 | 반영 | raw·컨테이너 디코딩·Spring 뷰 세 경로를 정규화해 default-deny. 본문 1 MiB 상한, 헤더 선검사, 쿼리 문자열 파라미터 무시 |
+| A7 매니페스트 키 | 반영 | `SLACK_CDC_TOPIC`, `SLACK_SIGNING_SECRET`, `stringData` |
+| Tier B | 반영 | S8(관리 엔티티 변경으로 `@Version` 증가)·S8b(회의 쓰기를 상호작용 트랜잭션 커밋 뒤 실행, 충돌 1회 재시도, 사용자 회신)·S9(DLT 원본 바이트·`-dlt`·`NewTopic`)·S10(`LEFT JOIN FETCH`)·S11(오류 코드 분류 공유)·S12(`or`가 자기 피연산자 오류만 제거)·S13(`response_url` 호스트 허용 목록·리다이렉트 금지·본문 상한)·S15(역할 캐시 60초·커밋 후 축출)·S17·S18(과거 시각 거부 회신, V21) |
+| Tier C | 대부분 반영 | S14·S16·S19·S20·S21·S22·S23, 문서 드리프트. 미반영은 아래 |
+
+**의도적으로 하지 않은 것**
+- 복제본 간 dedup 공유 저장소(A5) — 설계 결정 필요. 검토 메모와 권고(이벤트 ID 유니크 테이블을 핸들러 트랜잭션에 포함)는 `docs/wiki/decisions.md` #34.
+- 컨테이너 non-root 실행 — 80번 포트 바인딩 때문에 포트·Service·probe를 함께 바꿔야 함.
+- `management.server.port` 분리 — 대신 샘플 라우트를 `/api/slack`·`/api/slash`로 좁힘.
+- 롤아웃 전략 변경 — 메모리 요청 1536Mi로 rollout 시 3 × 1536Mi 필요. 노드 여유 확인은 사람 몫.
+- `StandupSummaryService` 리스너의 마커 갱신 실패 재시도 — 이번 담당 범위 밖, `fix2-relay.md`에 수정안 3개.
+- 12.3의 기존 미착수(C6, N3, `SlashCommandGate`, detekt/JaCoCo, R2→R1, Spring 배선 스모크 테스트).
+
+**배포 전 사람이 해야 할 일**
+1. 이 릴리스는 이전 릴리스와 **동시에 떠 있으면 안 된다**(이전 파드는 DB 시계로 outbox 시각을 쓰고 IN_PROGRESS를 재발송). 첫 배포는 기존 파드를 먼저 내린 뒤 진행(`k8s/README.md` 절차).
+2. `V20` → `V22` → `V21` 수동 적용(V21은 V18 이후, 모든 복제본이 새 바이너리일 때).
+3. 배포 계정 RBAC 확인, configmap/secret 새 키 적용, 노드 메모리 여유 확인, Kafka `<topic>-dlt` 생성 권한.
+4. 공개 호스트 앞단이 앱으로 넘기는 경로 확인(밖에서는 측정 불가).
 
 ---
 

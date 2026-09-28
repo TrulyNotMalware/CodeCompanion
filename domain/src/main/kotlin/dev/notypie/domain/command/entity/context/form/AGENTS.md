@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
 
 # domain/command/entity/context/form
 
@@ -16,7 +16,7 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
 |------|-------------|
 | `RequestMeetingContext.kt` | `/meetup` and the meeting modal (`MEETING_CREATE_REQUEST`). `runCommand`: `LIST` → `MeetingListRange` parse → `CommandIntent.MeetingListRequest`, else `MessageContent.MeetingRequest`. `handleInteraction`: Deny → "Meeting request canceled."; else `MeetingFormInput.from(...)`, four form checks, `toMeeting()` (domain validation rendered as `field: reason` lines), optional notice fan-out via `ApprovalCallbackContext`, returns `RequestMeetingContextResult` |
 | `MeetingFormInput.kt` | `internal data class` decoded from the meeting modal: participants = `USERS` field minus publisher; `startAt` = `DATE` + first `TIME` (must be in the future); `endAt` = second `TIME`; title / reason = first two `TEXT` fields with defaults "New Meeting" / "request meeting"; `noticeRequired` = `TOGGLE`; `toMeeting()` |
-| `ParsedSubmissions.kt` | The Phase 11 parse seam: `toUuidOrNull()`, `sealed NoticeTarget` (`None`/`Update`), and one `*Parsed` model per submission variant with a `from(raw, actorId)` factory — the only place a submission may be rejected (`null`). Standup-setup and the CVE parsers never reject; blank routing tokens fall back to the actor; the blank-OTHER decline detail survives as `""` on purpose |
+| `ParsedSubmissions.kt` | The Phase 11 parse seam: `toUuidOrNull()`, `sealed NoticeTarget` (`None`/`Update`), and one `*Parsed` model per submission variant with a `from(raw, actorId)` factory — the only place a submission may be rejected (`null`). Standup-setup and the CVE parsers never reject; blank routing tokens fall back to the actor; the blank-OTHER decline detail survives as `""` on purpose. `RescheduleMeetingParsed.from(raw, actorId)` rejects only an unusable uid/date/time: a past start parses on purpose, because a parse rejection closes the modal with no reply. `MeetingRescheduleService` (application) rejects a start that is not after the current minute with a "Pick a future time." ephemeral |
 | `ApprovalCallbackContext.kt` | Fans out one `OutboundMessage.Approval` per participant (`APPROVAL_CALLBACK`); aggregates a `CommandOutput` from the per-participant results |
 | `MeetingApprovalResponseContext.kt` | Accept / Deny buttons on the notice (`MEETING_APPROVAL_REQUEST`). `APPROVE` → `MeetingAttendanceUpdate(isAttending = true)` + "You accepted" reply; `REJECT` → `OpenModal(DeclineReason)` first, then a provisional `MeetingAttendanceUpdate(OTHER)`, no reply |
 | `DeclineReasonSubmissionContext.kt` | Decline modal submit (`MEETING_DECLINE_REASON`): parses `RejectReason` (unknown / `ATTENDING` → `OTHER`), detail kept only for `OTHER`, queues the final `MeetingAttendanceUpdate` and an `UpdateMessage` on the original notice |

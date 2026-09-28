@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # application/security/mcp
 
@@ -37,7 +37,9 @@ token before the MCP protocol sees the request, and the transport provider's con
 - Expiry uses `exp + clockSkew` on the verifier's clock only; `iat` is informational. TTL and skew come
   from `slack.app.mcp.token-ttl-seconds` / `clock-skew-seconds`, the secret from
   `slack.app.mcp.signing-secret` (boot fails when MCP is enabled with a blank secret).
-- Role decisions never belong here — `mcp/McpToolGate` resolves the role from DB/config per call.
+- Role decisions never belong here — `mcp/McpToolGate` resolves the role from DB/config per call. A token
+  outlives a revoke: the next call is denied at once on the replica that committed it, and within the
+  resolver's 60 s cache TTL on the other replica.
 
 ### Testing Requirements
 ```bash

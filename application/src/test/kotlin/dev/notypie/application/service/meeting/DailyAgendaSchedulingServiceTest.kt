@@ -17,9 +17,11 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import io.mockk.verifyOrder
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -263,19 +265,54 @@ class DailyAgendaSchedulingServiceTest :
             }
         }
 
-        given("a canceled meeting falls on today") {
-            `when`("the scheduler loads the day's meetings") {
+        given("the claim and the outbox writes run against a real transaction manager") {
+            val dataSource = createH2DataSource()
+            val jdbc = JdbcTemplate(dataSource)
+            jdbc.execute("CREATE TABLE agenda_claim (agenda_date DATE PRIMARY KEY)")
+            val transactionManager = createH2TransactionManager(dataSource = dataSource)
+
+            fun claimRows(): Int = jdbc.queryForObject("SELECT COUNT(*) FROM agenda_claim", Int::class.java)!!
+
+            fun claimingRepo(): AgendaDispatchRepository {
                 val repo = mockk<AgendaDispatchRepository>()
-                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
-                val service =
-                    buildService(repo = repo, outboxRepo = outboxRepo, clock = Clock.fixed(afterSendInstant, seoul))
-                every { repo.claim(agendaDate = any()) } returns true
-                every { repo.findAttendingMeetingsForDay(from = any(), to = any()) } returns emptyList()
+                every { repo.claim(agendaDate = any()) } answers {
+                    jdbc.update("INSERT INTO agenda_claim (agenda_date) VALUES (?)", firstArg<LocalDate>()) == 1
+                }
+                every { repo.findAttendingMeetingsForDay(from = any(), to = any()) } returns
+                    listOf(createAgendaCandidateMeeting(attendingUserIds = listOf("U_A")))
+                return repo
+            }
 
-                service.sendDailyAgenda()
+            `when`("the outbox write fails after the claim row was inserted") {
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                every { outboxRepo.save(any()) } throws IllegalStateException("db down")
 
-                then("the canceled meeting is excluded and produces no DM") {
-                    verify(exactly = 0) { outboxRepo.save(any()) }
+                buildService(
+                    repo = claimingRepo(),
+                    outboxRepo = outboxRepo,
+                    clock = Clock.fixed(afterSendInstant, seoul),
+                    transactionManager = transactionManager,
+                ).sendDailyAgenda()
+
+                then("the claim row rolls back with the failed write, so the next tick can claim the date") {
+                    claimRows() shouldBe 0
+                }
+            }
+
+            `when`("the outbox write succeeds") {
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                buildService(
+                    repo = claimingRepo(),
+                    outboxRepo = outboxRepo,
+                    clock = Clock.fixed(afterSendInstant, seoul),
+                    transactionManager = transactionManager,
+                ).sendDailyAgenda()
+
+                then("the claim row commits together with the enqueued DM") {
+                    claimRows() shouldBe 1
+                    verify(exactly = 1) { outboxRepo.save(any()) }
                 }
             }
         }

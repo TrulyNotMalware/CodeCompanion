@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox
 
 ## Purpose
-Specs for the outbox codec in main `repository/outbox/`. One file here (the codec) and one in `schema/` (the
-row builder). Plain Kotest, no Spring, no database.
+Specs for main `repository/outbox/`: the codec (plain Kotest), the repository's native SQL
+(`@DataJpaTest` on H2), and in `schema/` the row builder.
 
 ## Key Files
 | File | Description |
@@ -17,7 +17,7 @@ row builder). Plain Kotest, no Spring, no database.
 |-----------|---------|
 | `schema/` | `OutboxMessageTest` — `CodecOutboundMessagePort.toRow` and `updateMessageStatus` (see `schema/AGENTS.md`) |
 
-`MessageOutboxRepositoryTest.kt` (`@DataJpaTest`, H2) is the first DB-backed coverage of the native queries: `claimPending` loses the second call, `findPendingMessages` filters PENDING oldest-first with a limit, `reclaimStuck` wins once, `deleteTerminalOlderThan` purges aged SUCCESS/FAILURE only. Rows are aged with a `JdbcTemplate` UPDATE because `updated_at` is `@UpdateTimestamp`.
+`MessageOutboxRepositoryTest.kt` (`@DataJpaTest`, H2) covers the native statements: `findPendingMessages` orders by `created_at`, not insertion (the older row is inserted second and aged with SQL, because `@CreationTimestamp` overwrites a constructor value); `claimPending` loses the second call, moves `attempt_count` to 1 and stores the caller's `now` — a claim stamped far in the future is not reclaimable against real time, which a `CURRENT_TIMESTAMP` write would be; `reclaimStuck` wins once, raises the attempt and loses on a stale attempt; a late worker on attempt 1 can neither `renewClaim` nor `completeClaim` over the attempt-2 owner's `SUCCESS`, and only the owner's renewal counts in `send_count`; `deferClaim` refunds the send, stores the caller's `updatedAt`, loses on a stale attempt and never takes `send_count` below 0; `abandonStuck` leaves a fresh claim alone and affects 0 rows with a token another sweep already moved past; `countInProgressWithSendsAtLeast` counts sends, not claims; `deleteTerminalOlderThan` purges aged SUCCESS/FAILURE only. Rows are aged and read back with `JdbcTemplate`.
 
 ## For AI Agents
 
@@ -29,14 +29,15 @@ row builder). Plain Kotest, no Spring, no database.
   or `DirectMessage` to make it pass.
 - Whole-envelope `shouldBe` equality is the default assertion; drop to field-wise only for types whose
   `equals` is unreliable (today only `TimeScheduleInfo`) and say why in the case name.
-- **Coverage gap**: `MessageOutboxRepository` (claim CAS, `findStuckInProgress`, health counters) has no H2
-  spec anywhere in the module. A `@DataJpaTest` here is the missing `Jpa*RepositoryTest` half of the lane.
+- `MessageOutboxRepositoryTest` rows persist across `given` blocks (no per-block rollback): keep
+  `findPendingMessages` first, and never stamp a terminal row old enough for the purge case to count it.
 
 ### Testing Requirements
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.outbox.*'
 ```
-No Spring context; runs in milliseconds.
+The codec and schema specs need no Spring context; `MessageOutboxRepositoryTest` shares the module's
+`@DataJpaTest` H2 context.
 
 ### Common Patterns
 - `StringSpec` with a `roundTrip(message)` helper and an `assertRoundTrips(message)` wrapper.

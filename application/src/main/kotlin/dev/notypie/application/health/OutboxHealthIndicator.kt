@@ -1,6 +1,7 @@
 package dev.notypie.application.health
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.relay.RECOVERY_SWEEP_PERIOD_MILLIS
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import org.springframework.boot.health.contributor.Health
 import org.springframework.boot.health.contributor.HealthIndicator
@@ -16,6 +17,8 @@ class OutboxHealthIndicator(
     appConfig: AppConfig = AppConfig(),
 ) : HealthIndicator {
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.health.stuckThresholdSeconds)
+    private val retryingSendThreshold: Int = appConfig.outbox.health.retryingSendThreshold
+    private val sweepPeriod: Duration = Duration.ofMillis(RECOVERY_SWEEP_PERIOD_MILLIS)
 
     override fun health(): Health {
         val now = clock.instant().atZone(clock.zone).toLocalDateTime()
@@ -27,12 +30,13 @@ class OutboxHealthIndicator(
         val oldestPendingAgeSeconds = ageSeconds(at = oldestPending, now = now)
 
         val inFlightCount = outboxRepository.countInProgress()
-        val stuckInFlightCount = outboxRepository.countInProgressOlderThan(threshold = cutoff)
+        val stuckInFlightCount = outboxRepository.countInProgressOlderThan(threshold = cutoff.minus(sweepPeriod))
         val oldestInFlight = outboxRepository.findOldestInProgressUpdatedAt()
         val oldestInFlightAgeSeconds = ageSeconds(at = oldestInFlight, now = now)
+        val retryingCount = outboxRepository.countInProgressWithSendsAtLeast(sends = retryingSendThreshold)
 
         val builder =
-            if (stuckPendingCount > 0L || stuckInFlightCount > 0L) {
+            if (stuckPendingCount > 0L || stuckInFlightCount > 0L || retryingCount > 0L) {
                 Health.down()
             } else {
                 Health.up()
@@ -47,6 +51,8 @@ class OutboxHealthIndicator(
             .withDetail("stuckInFlightCount", stuckInFlightCount)
             .withDetail("oldestInFlightAgeSeconds", oldestInFlightAgeSeconds)
             .withDetail("stuckThresholdSeconds", stuckThreshold.seconds)
+            .withDetail("retryingCount", retryingCount)
+            .withDetail("retryingSendThreshold", retryingSendThreshold)
             .build()
     }
 

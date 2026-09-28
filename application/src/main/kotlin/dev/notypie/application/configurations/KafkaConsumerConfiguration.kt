@@ -5,8 +5,12 @@ import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import dev.notypie.application.service.relay.CdcRecordParseException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
+import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.ByteArraySerializer
+import org.springframework.beans.factory.DisposableBean
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
@@ -16,6 +20,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
+import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.*
 import org.springframework.kafka.listener.ConsumerRecordRecoverer
 import org.springframework.kafka.listener.ContainerProperties
@@ -29,11 +34,61 @@ import org.springframework.util.backoff.FixedBackOff
 
 private val logger = KotlinLogging.logger { }
 
+private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
+
+internal fun deadLetterTopic(topic: String): String = "$topic$DEAD_LETTER_TOPIC_SUFFIX"
+
+internal fun cdcDeadLetterRecoverer(
+    jsonTemplate: KafkaOperations<*, *>,
+    bytesTemplate: KafkaOperations<*, *>,
+): DeadLetterPublishingRecoverer =
+    DeadLetterPublishingRecoverer(
+        linkedMapOf<Class<*>, KafkaOperations<*, *>>(
+            ByteArray::class.java to bytesTemplate,
+            Any::class.java to jsonTemplate,
+        ),
+    ) { record, _ -> TopicPartition(deadLetterTopic(topic = record.topic()), -1) }
+        .apply { setFailIfSendResultIsError(false) }
+
+internal fun deadLetterBytesProducerFactory(
+    jsonTemplate: KafkaTemplate<String, Any>,
+): DefaultKafkaProducerFactory<Any, ByteArray> =
+    DefaultKafkaProducerFactory(
+        jsonTemplate.producerFactory.configurationProperties +
+            (ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to ByteArraySerializer::class.java),
+    )
+
+class CdcDeadLetterRecovery(
+    jsonTemplate: KafkaTemplate<String, Any>?,
+    private val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray>? =
+        jsonTemplate?.let { deadLetterBytesProducerFactory(jsonTemplate = it) },
+) : DisposableBean {
+    val recoverer: ConsumerRecordRecoverer =
+        if (jsonTemplate == null || bytesProducerFactory == null) {
+            ConsumerRecordRecoverer { record, exception ->
+                logger.error(exception) {
+                    "No KafkaTemplate for a dead-letter topic; dropping CDC record " +
+                        "topic=${record.topic()} partition=${record.partition()} offset=${record.offset()}"
+                }
+            }
+        } else {
+            cdcDeadLetterRecoverer(jsonTemplate = jsonTemplate, bytesTemplate = KafkaTemplate(bytesProducerFactory))
+        }
+
+    override fun destroy() {
+        bytesProducerFactory?.destroy()
+    }
+}
+
 @Configuration
 @Conditional(OnCdcConsumer::class)
 @EnableKafka
 @Import(KafkaConsumerConfiguration::class, KafkaObservationConvention::class)
-class CdcConsumerConfiguration
+class CdcConsumerConfiguration {
+    @Bean
+    fun cdcDeadLetterTopic(appConfig: AppConfig): NewTopic =
+        TopicBuilder.name(deadLetterTopic(topic = appConfig.mode.cdc.topic)).build()
+}
 
 @Configuration
 @Conditional(OnKafkaEventPublisher::class)
@@ -66,40 +121,27 @@ class KafkaConsumerConfiguration(
         return DefaultKafkaConsumerFactory(properties)
     }
 
-    // RECORD ack: the offset moves only after the listener returns for that record, so a crash mid-record
-    // redelivers it and the processor's current-status check decides whether to send again. This relies on
-    // `enable-auto-commit: false` in the profile; with auto-commit on, the client commits behind our back.
+    @Bean
+    fun cdcDeadLetterRecovery(): CdcDeadLetterRecovery =
+        CdcDeadLetterRecovery(jsonTemplate = kafkaTemplateProvider.ifAvailable)
+
+    // RECORD ack assumes `enable-auto-commit: false` in every CDC profile; auto-commit would commit in-flight records.
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)
-    fun concurrentKafkaListenerContainerFactory() =
-        ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
-            containerProperties.isObservationEnabled = true
-            containerProperties.isMicrometerEnabled = false
-            containerProperties.ackMode = ContainerProperties.AckMode.RECORD
-            setCommonErrorHandler(cdcErrorHandler())
-            setConsumerFactory(consumerFactory())
-            containerProperties.setObservationConvention(convention)
-        }
-
-    // Two quick retries for transient failures, then the record is parked on <topic>.DLT instead of being
-    // skipped; parse failures are deterministic and go straight there. Without a producer (CDC consumer
-    // with the application-event publisher) the recoverer degrades to an ERROR log.
-    private fun cdcErrorHandler(): DefaultErrorHandler {
-        val kafkaTemplate = kafkaTemplateProvider.ifAvailable
-        val recoverer =
-            if (kafkaTemplate != null) {
-                DeadLetterPublishingRecoverer(kafkaTemplate)
-            } else {
-                ConsumerRecordRecoverer { record, exception ->
-                    logger.error(exception) {
-                        "No KafkaTemplate for a dead-letter topic; dropping CDC record " +
-                            "topic=${record.topic()} partition=${record.partition()} offset=${record.offset()}"
-                    }
-                }
-            }
-        return DefaultErrorHandler(recoverer, FixedBackOff(1_000L, 2L)).apply {
-            addNotRetryableExceptions(CdcRecordParseException::class.java)
-        }
+    fun concurrentKafkaListenerContainerFactory(
+        consumerFactory: ConsumerFactory<String, Any>,
+        cdcDeadLetterRecovery: CdcDeadLetterRecovery,
+    ) = ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
+        containerProperties.isObservationEnabled = true
+        containerProperties.isMicrometerEnabled = false
+        containerProperties.ackMode = ContainerProperties.AckMode.RECORD
+        setCommonErrorHandler(
+            DefaultErrorHandler(cdcDeadLetterRecovery.recoverer, FixedBackOff(1_000L, 2L)).apply {
+                addNotRetryableExceptions(CdcRecordParseException::class.java)
+            },
+        )
+        setConsumerFactory(consumerFactory)
+        containerProperties.setObservationConvention(convention)
     }
 }
 

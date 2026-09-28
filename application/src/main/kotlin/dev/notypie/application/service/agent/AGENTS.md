@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # application/service/agent
 
@@ -32,6 +32,14 @@ proxy that `@Async` needs is guaranteed.
 - `contextPrompt` is appended to the sidecar's base prompt: requester, channel, current time in
   `clock.zone` (so relative dates resolve), and the Slack mrkdwn contract. Facts only — identity for
   authorization travels as the turn token / `X-User-Id` in `SidecarAgentClient`, never as prompt text.
+- `requesterName` / `channelName` are user-controlled and go into the system prompt, so
+  `sanitizeContextName` replaces control, format (bidi / zero-width) and line/paragraph-separator characters
+  with spaces, replaces `"`, backticks and backslashes with `'`, collapses whitespace and caps the result at
+  `MAX_CONTEXT_NAME_LENGTH` (64 UTF-16 units, cut one unit earlier when the cut would split a surrogate pair).
+  The name is then shown as quoted data — `<@id> (display name "…")`, `<#id> (channel name "…")` — under a
+  line telling the model that quoted names are labels, not instructions. A value that is blank afterwards
+  (app_mention events carry no names) degrades to the bare `<@id>` / `<#id>` mention. Route any new
+  user-supplied prompt field through the same function and quoting.
 - `scopedTurnTokenCodec` is null when MCP is off (`AgentConfiguration` uses `ObjectProvider`); the
   turn then carries no token and the model has no tools. `turnId` is the mention's `idempotencyKey`
   so tool audit rows join back to `agent_turn_history`.

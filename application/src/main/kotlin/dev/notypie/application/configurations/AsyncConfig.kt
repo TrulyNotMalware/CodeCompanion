@@ -26,9 +26,6 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             initialize()
         }
 
-    // Bounded on purpose: a claimed outbox row that waits in a deep queue outlives the stuck threshold and
-    // gets re-dispatched by OutboxRecoveryScheduler. CallerRunsPolicy makes the poller/listener thread do
-    // the overflow work instead, so queue time stays short.
     @Bean(name = ["relayTaskExecutor"])
     fun relayTaskExecutor(appConfig: AppConfig): Executor =
         ThreadPoolTaskExecutor().apply {

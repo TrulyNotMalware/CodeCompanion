@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # k8s
 
@@ -13,10 +13,10 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 30`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1Gi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 45`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
-| `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `ACTUATOR_BASE_PATH`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder) |
-| `secret.yaml` | Opaque Secret `code-companion-secret` with placeholder values for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN` (values must be base64) |
+| `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
+| `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -31,33 +31,65 @@ adds what an agent editing the manifests needs to know.
   `IMAGE_NAME=<registry>/bot/code-companion:<commit sha>`. ConfigMap, Secret, Service and route objects are
   never touched by CI — a new key in `configmap.yaml`/`secret.yaml` needs a manual `kubectl apply` before
   the next rollout, and the manifest in git is only a template of what the cluster holds.
-- **`envsubst` is called with no variable list**, so every `$NAME` / `${NAME}` in `deployment.yaml` is
-  substituted (unset ones become empty). `$IMAGE_NAME` is the only intended placeholder; do not introduce a
-  literal `$` anywhere else in that file.
+- **`envsubst` is restricted to `'${IMAGE_NAME}'`**, so any other `$NAME` in `deployment.yaml` survives
+  verbatim (the job env holds the OCI private key, which is why the list is explicit). Still keep `$IMAGE_NAME`
+  the only `$` in that file: a new placeholder needs the workflow's variable list extended too.
 - **No manifest sets `metadata.namespace`.** Every workflow step, including the apply, passes
   `-n api-service`, so the kubeconfig context namespace does not matter; a manual `kubectl apply` of the
   other manifests must pass the same `-n`.
 - **Env-var coverage vs `application-prod.yaml`.** Keys without a default there must come from these two
-  manifests: the five `SQL_*` keys, `HIBERNATE_DEFAULT_BATCH_SIZE`, `ACTUATOR_BASE_PATH`, `KAFKA_BOOTSTRAP_SERVERS`,
-  `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. The sample manifests omit `SLACK_SIGNING_SECRET` (belongs in
-  `secret.yaml`) and `SLACK_CDC_TOPIC` (belongs in `configmap.yaml`); a Pod started from them as-is fails
-  property binding. Everything else the profile reads (`MCP_ENABLED`, `MCP_SIGNING_SECRET`, `SIDECAR_*`,
+  manifests: the five `SQL_*` keys, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS`,
+  `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. All of them are present in the samples
+  (credentials in `secret.yaml`, the rest in `configmap.yaml`). Everything else the profile reads (`MCP_ENABLED`, `MCP_SIGNING_SECRET`, `SIDECAR_*`,
   `AI_PROVIDER`, `GITHUB_TOKEN`, `GITHUB_RELEASES_PER_PAGE`, `NVD_*`, `CVE_COLLECTOR_*`) has a default and is
   opt-in. `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are baked in by `application/Dockerfile`.
-- `spring.kafka.bootstrap-servers` in `application-prod.yaml` is `${KAFKA_BOOTSTRAP_SERVERS}` with no
-  default. Property binding only fails when the env var is *absent*; the `YOUR_KAFKA_HOST:9092` placeholder
-  in `configmap.yaml` binds fine and then fails at Kafka client construction, so replace it in-cluster
-  before the first rollout.
+  The management base path is no longer an env var: it is fixed at `/actuator` in `application-prod.yaml`. A
+  cluster ConfigMap that still carries `ACTUATOR_BASE_PATH` is harmless; nothing reads it.
+- **A missing env var is not a binding error for String properties.** Spring Boot keeps an unresolvable
+  `${X}` literally, so an absent `KAFKA_BOOTSTRAP_SERVERS`, `SLACK_CDC_TOPIC` or `SQL_DATABASE_URL` starts the
+  context with the literal text and fails later, when the Kafka client, the listener/`NewTopic` or the datasource
+  uses it. Keys bound to a non-String type (the Hikari timeouts) do fail binding.
+  `SLACK_SIGNING_SECRET` is the exception by design: `SlackRequestVerificationFilter` rejects an unresolved or
+  blank value outside `local`. The `YOUR_KAFKA_HOST:9092` placeholder likewise binds and fails only when used, so
+  replace it in-cluster before the first rollout.
+- `SLACK_CDC_TOPIC` must equal the Debezium topic (`topic.prefix` + `.` + `<db>.<table>`, see `../cdc/`). Records the
+  CDC listener cannot process go to `<SLACK_CDC_TOPIC>-dlt`: the suffix is a constant in
+  `KafkaConsumerConfiguration`, and the app declares that topic as a `NewTopic` bean, which `KafkaAdmin` creates at
+  startup. Pre-create it only if the app's Kafka principal lacks topic-create permission.
 - **Secret vs ConfigMap split:** anything credential-like goes in `secret.yaml`, everything else in
   `configmap.yaml`. Values in git stay placeholders; the deployed Secret is edited in-cluster. Note that
   `.gitleaks.toml` allowlists only the CDC MariaDB sample Secret, not this one — the `YOUR_*` placeholders
-  pass today, but base64-looking sample values would trip the `secret-scan` job.
-- **Probes and the shutdown budget go together.** `spring.lifecycle.timeout-per-shutdown-phase` is 10s in
-  `application-prod.yaml`, so `terminationGracePeriodSeconds` must stay above it; the readiness probe is what
-  pulls a draining Pod out of the Service, and `management.endpoint.health.probes.enabled: true` in the prod
-  profile is what makes `/actuator/health/{liveness,readiness}` exist. The Dockerfile's `-XX:MaxRAMPercentage=50.0`
-  keeps the heap (1Gi) inside the 1Gi request so the Pod is not the first eviction candidate; raise the
-  request, the limit and the percentage together. The startup probe allows 36 × 5s = 3 minutes.
+  pass, but realistic-looking sample values would trip the `secret-scan` job.
+- **Probes and the shutdown budget go together.** On deletion the `preStop` hook sleeps 5s (endpoint removal
+  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown, bounded by
+  `spring.lifecycle.timeout-per-shutdown-phase` (10s) in `application-prod.yaml`; `terminationGracePeriodSeconds`
+  (45) must exceed the sum. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
+  `/actuator/health/{liveness,readiness}` exist. The startup probe allows 36 × 5s = 3 minutes.
+- **Memory:** the Dockerfile's `-XX:MaxRAMPercentage=50.0` makes the heap 1Gi of the 2Gi limit. Metaspace, code
+  cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is
+  sized for heap + non-heap; a request equal to the heap would leave the Pod above its request and first in line
+  for node-pressure eviction. Change the request, the limit and the percentage together.
+- **Rollout capacity:** the Deployment uses the default RollingUpdate (`maxSurge` 25% → 1 Pod, `maxUnavailable`
+  25% → 0 with 2 replicas), so a rollout briefly runs 3 Pods and needs 3 × 1536Mi = 4.5Gi of *requested* memory
+  schedulable at once (was 3Gi at the old 1Gi request). If the surge Pod cannot be scheduled it stays `Pending`,
+  `rollout status` times out and the workflow rolls back. Check before a rollout with
+  `kubectl describe nodes | grep -A8 'Allocated resources'` (requests vs allocatable per node). The strategy is
+  deliberately unchanged; if capacity is short, `maxSurge: 0` / `maxUnavailable: 1` keeps the PDB satisfied.
+- **Releases that must not overlap their predecessor** (first rollout of the outbox claim-token release, V20) are
+  handled by a one-time `kubectl patch` of the live strategy to `Recreate` (or a scale to 0) before the merge, and a
+  patch back afterwards, as `README.md` describes. Keep `deployment.yaml` on the rolling update: the manifest does
+  not set `spec.strategy`, which is what lets the live patch survive the workflow's `kubectl apply`.
+- **Open decision — Slack retry dedup across replicas.** `SlackRetryDeduplicator` keeps its state in one JVM,
+  while this Deployment runs 2 replicas (3 during a rollout), so a Slack retry routed to the other Pod is processed
+  again. Two options, not yet chosen (`docs/wiki/decisions.md` #34):
+  1. Shared `event_id` store (a DB table with a unique key and an atomic state transition): works with any replica
+     count, costs a migration, one DB round-trip per Slack request inside the 3s ack budget, and a retention job.
+  2. A single replica: no new code, but no redundancy, and a rollout still overlaps two Pods unless the strategy
+     is `Recreate` (downtime on every deploy); `replicas: 1` also makes the PDB `minAvailable: 1` block node drains.
+  Do not change `replicas` until the decision is made.
+- **Open item — the container runs as root.** It binds port 80 and the image has no `USER`; only
+  `allowPrivilegeEscalation: false` is set. Moving to non-root needs a port change (or `NET_BIND_SERVICE`) across
+  the Dockerfile, `server.port`, the probes and `service.yaml`, so it was deferred.
 - Port 80 is fixed in three places that must move together: `containerPort` here, `server.port` in
   `application-prod.yaml`, and `SERVER_PORT` in `application/Dockerfile`. `service.yaml` targets it by number.
 - `imagePullPolicy: IfNotPresent` is safe only because the workflow tags every image with the commit sha;
@@ -67,21 +99,34 @@ adds what an agent editing the manifests needs to know.
   Dockerfile, so both must agree.
 - The agent sidecar (`@bot ask`) is intentionally absent from `deployment.yaml`; README describes how to add
   it as a native sidecar `initContainer` and which Secret keys it needs.
-- The workflow's post-deploy probe hits `<ingress host>/api/slack/actuator/health` while
-  `ACTUATOR_BASE_PATH` is `/actuator` and no `context-path` is set, so the production gateway strips an
-  `/api/slack` prefix that the sample routes in `route/` do not model.
+- **The deploy health check is in-cluster and gates on readiness.** The workflow polls
+  `/actuator/health/readiness` through the API server's service proxy
+  (`/api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/...`, RBAC `get` on `services/proxy`,
+  resource name `code-companion-svc:80` if the Role uses `resourceNames`) and falls back to
+  `kubectl exec deploy/code-companion-deploy -c code-companion-deploy -- wget -qO- http://localhost:80/...`
+  (RBAC `create` on `pods/exec`). The aggregate `/actuator/health` is logged but does not gate. Renaming the
+  Service, its port, the Deployment or the container, or moving the management base path, needs the same change
+  in `deploy_action.yaml`. It never uses the public host: that host is fronted by a bearer-authenticating layer
+  outside this repository (every probed path answered `401` on 2026-09-28), and what it forwards to the app has
+  to be confirmed by whoever operates it.
+- **`/actuator` must never be routed publicly** (unauthenticated `metrics`/`info`, and `health` reports outbox
+  state). The samples in `route/` therefore forward only `/api/slack` and `/api/slash`; `/api` as a whole would
+  expose `/api/actuator` if a sample were reused with the dev, local or slack-live profile.
 - **CI path filters treat these YAML files as source.** Only `**/*.md` is excluded, so a manifest-only push
   runs lint + `:application:test`, and a manifest-only PR merged to `main` builds and deploys a new image.
 - Everything here is packaged into the boot jar by `processResources` even though the app never reads it.
 
 ### Testing Requirements
 - There is no unit or integration test for manifests. Validate locally with
-  `IMAGE_NAME=example envsubst < deployment.yaml | kubectl apply --dry-run=server -f -` and
+  `IMAGE_NAME=example envsubst '${IMAGE_NAME}' < deployment.yaml | kubectl apply --dry-run=server -f -` and
   `kubectl apply --dry-run=client -f <file>` for the rest.
-- The deploy workflow is the real check: rollout status (300s), ready-pod count equals `spec.replicas`, then
-  ten attempts at the health endpoint; any failure triggers `kubectl set image` back to the previous image.
+- The deploy workflow is the real check: rollout status (300s), ready-pod count at least `spec.replicas`, then
+  up to ~2 minutes of in-cluster readiness checks; a failure of one of those steps (or of the apply) that left the
+  pod template or the revision different from the pre-apply backup triggers
+  `kubectl rollout undo --to-revision=<previous>`, which restores the whole previous pod template.
 - After changing `configmap.yaml`/`secret.yaml` keys, confirm `application-prod.yaml` resolves every
-  `${KEY}` without a default, or the container exits during property binding.
+  `${KEY}` without a default. A missing String key does not stop startup (see above), so the gap shows up only
+  at runtime.
 
 ### Common Patterns
 - One object per file, all named `code-companion-*`, all selected by the label `app: code-companion-deploy`.
@@ -94,7 +139,7 @@ adds what an agent editing the manifests needs to know.
 ### Internal
 - `../application-prod.yaml` — the profile these env vars feed; `server.port: 80`
 - `application/Dockerfile` — image entrypoint, `PROFILE=prod`, build-info env vars, `EXPOSE 80`
-- `.github/workflows/deploy_action.yaml` — builds the image, applies `deployment.yaml`, verifies, rolls back
+- `.github/workflows/deploy_action.yaml` — builds the image, applies `deployment.yaml`, verifies in-cluster, rolls back
 - `.gitleaks.toml` — secret-scan allowlist (does not cover `secret.yaml`)
 
 ### External

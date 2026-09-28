@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
 
 # application/configurations
 
@@ -14,11 +14,11 @@ is the map of what actually exists at runtime in a given profile.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AppConfig.kt` | `@ConfigurationProperties(prefix = "slack.app")` root: `api`, `mode`, `meeting`, `standup`, `outbox`, `socket`, `agent`, `authorization`, `mcp`, `cve`, `ai`. Also declares `OutboxReaderStrategy` (`POLLING` / `CDC`). `Outbox` nests `Health(stuckThresholdSeconds = 300)`, `Polling(batchSize = 100, stuckInProgressSeconds = 300, giveUpAfterHours = 24)` and `Retention(days = 14, batchSize = 1000)` (the outbox purge) |
+| `AppConfig.kt` | `@ConfigurationProperties(prefix = "slack.app")` root: `api`, `mode`, `meeting`, `standup`, `outbox`, `socket`, `agent`, `authorization`, `mcp`, `cve`, `ai`. Also declares `OutboxReaderStrategy` (`POLLING` / `CDC`). `Outbox` nests `Health(stuckThresholdSeconds = 300, retryingSendThreshold = 3)`, `Polling(batchSize = 100, stuckInProgressSeconds = 300, giveUpAfterHours = 24, maxSends = 10)` and `Retention(days = 14, batchSize = 1000)` (the outbox purge). `Health` and `Polling` `require` every value to be positive in `init`, so a bad binding fails startup. `retryingSendThreshold` and `maxSends` count real sends (`send_count`), not claims; they have no profile YAML line and run on these defaults |
 | `conditions/Conditions.kt` | `Environment.extractAppConfig()` + `OnPollingConsumer`, `OnCdcConsumer`, `OnKafkaEventPublisher`, `OnApplicationEventPublisher` — bind `slack.app` early and match on mode |
-| `ConsumerConfig.kt` | Picks the outbox reader (`PollingMessageProcessor` vs `DebeziumLogTailingProcessor`), the `EventPublisher` (`AppEventPublisher` vs `KafkaEventPublisher`), and the mode-independent `ErrorBroadcaster` (`StdoutErrorBroadcaster`, `ErrorBroadcasterConfig`) |
-| `KafkaConsumerConfiguration.kt` | `@EnableKafka`, container factory (`AckMode.RECORD`), `ErrorHandlingDeserializer`, `DefaultErrorHandler` → `DeadLetterPublishingRecoverer` when a `KafkaTemplate` exists (log-only otherwise; `CdcRecordParseException` is not retried), Micrometer observation conventions |
-| `AsyncConfig.kt` | `@EnableAsync` + `@Primary threadPoolTaskExecutor` (10 threads, queue 10 000) and the dedicated `relayTaskExecutor` (4 threads, queue = `outbox.polling.batch-size`, `CallerRunsPolicy`) that `SlackMessageRelayServiceImpl` takes by `@Qualifier` — bounded so a claimed row cannot sit in a queue past the stuck threshold and get re-dispatched by `OutboxRecoveryScheduler`; deliberately does **not** override the event multicaster |
+| `ConsumerConfig.kt` | Picks the outbox reader (`PollingMessageProcessor` vs `DebeziumLogTailingProcessor`), the `EventPublisher` (`AppEventPublisher` vs `KafkaEventPublisher`), and the mode-independent `ErrorBroadcaster` (`StdoutErrorBroadcaster`, `ErrorBroadcasterConfig`). Both readers take the context's single `Clock` bean, the same one the outbox schedulers use, and hand the CDC reader the `MessageRelayService` bean |
+| `KafkaConsumerConfiguration.kt` | `@EnableKafka`, container factory (`AckMode.RECORD`, takes the `consumerFactory` bean as a parameter because `KafkaConsumerConfiguration` is a lite `@Import`ed class and calling `consumerFactory()` would build a second instance), `ErrorHandlingDeserializer`, `DefaultErrorHandler(FixedBackOff(1s, 2))` → the `cdcDeadLetterRecovery` bean's recoverer (`CdcDeadLetterRecovery`: `cdcDeadLetterRecoverer` over the JSON template plus a bytes template on its own `deadLetterBytesProducerFactory`, which the bean closes in `destroy()`; log-only when no `KafkaTemplate` exists; `CdcRecordParseException` is not retried), Micrometer observation conventions. The recovery bean is deliberately not typed `ProducerFactory` / `KafkaTemplate`: a bean of either type would make Boot's `@ConditionalOnMissingBean` producer factory and template back off. `CdcConsumerConfiguration` also declares the `cdcDeadLetterTopic` `NewTopic` |
+| `AsyncConfig.kt` | `@EnableAsync` + `@Primary threadPoolTaskExecutor` (10 threads, queue 10 000) and the dedicated `relayTaskExecutor` (4 threads, queue = `outbox.polling.batch-size`, `CallerRunsPolicy`) that `SlackMessageRelayServiceImpl` takes by `@Qualifier`. Only the poller and `OutboxRecoveryScheduler` submit to it (the CDC listener dispatches on its own thread), so overflow runs on those scheduler threads. The bound keeps queue time short, but correctness no longer depends on it: a task that outlives the stuck threshold loses its claim to the recovery sweep and its `renewClaim` fails, so it never sends. Deliberately does **not** override the event multicaster |
 | `SchedulingConfig.kt` | Enables scheduling for the meeting/standup/CVE/outbox jobs |
 | `AppConfig`-driven feature configs | `CveConfiguration.kt` (whole CVE lane), `AgentConfiguration.kt` (sidecar client + agent service), `McpServerConfiguration.kt` (MCP tools, gate, turn-token filter) |
 | `RestClientConfiguration.kt` | Shared `RestClient` used by Slack and source adapters |
@@ -52,6 +52,20 @@ is the map of what actually exists at runtime in a given profile.
   `@Value` inside a service.
 - New properties need a default in `AppConfig` **and** a line in the relevant profile YAML under
   `application/src/main/resources/`.
+- **CDC dead-letter wiring** (`cdcDeadLetterRecoverer`): the destination is explicit, `<cdc topic>-dlt`
+  (`deadLetterTopic`), with partition `-1`, so the dead-letter topic needs neither spring-kafka's implicit
+  default suffix nor as many partitions as the source. Two templates, keyed by value class in order:
+  `ByteArray` → a template over the JSON template's producer properties with `ByteArraySerializer` (its
+  producer factory belongs to the `cdcDeadLetterRecovery` bean and is flushed and closed on shutdown), so a record
+  whose value failed deserialization is parked as the original bytes (replayable), and `Any` → the JSON
+  `KafkaTemplate` for a deserialized `Envelope` that failed to parse. `setFailIfSendResultIsError(false)`:
+  a dead-letter send that fails (topic missing with broker auto-create off, ACL denied) is logged by the
+  recoverer and the record still counts as recovered, so one poison record cannot make the partition
+  redeliver forever. That is safe because the outbox row, not the Kafka record, is the source of truth: a
+  row whose record is lost stays `PENDING` and `OutboxRecoveryScheduler` claims it after the stuck
+  threshold. The topic itself is declared as a `NewTopic` (broker-default partitions and replication) so
+  Boot's `KafkaAdmin` creates it at startup when the principal may create topics; where it may not, create
+  `<cdc topic>-dlt` by hand.
 
 ### Testing Requirements
 ```bash

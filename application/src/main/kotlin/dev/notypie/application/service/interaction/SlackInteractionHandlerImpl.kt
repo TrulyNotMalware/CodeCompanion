@@ -3,6 +3,7 @@ package dev.notypie.application.service.interaction
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.meeting.MeetingWriteDeferral
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -20,7 +21,9 @@ import dev.notypie.impl.command.toInboundCommand
 import dev.notypie.templates.DeclineReasonModalIds
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.interceptor.DefaultTransactionAttribute
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.MultiValueMap
 import java.util.UUID
 
@@ -31,6 +34,7 @@ class SlackInteractionHandlerImpl(
     private val commandExecutor: CommandExecutor,
     private val submissionParseObserver: SubmissionParseObserver,
     private val commandRoleResolver: CommandRoleResolver,
+    private val transactionManager: PlatformTransactionManager,
 ) : InteractionHandler {
     companion object {
         // Legacy only — new contexts handle their own REJECT button; do NOT add new types here.
@@ -39,10 +43,39 @@ class SlackInteractionHandlerImpl(
                 CommandDetailType.APPLY_REQUEST,
                 CommandDetailType.APPROVAL_REQUEST,
             )
+
+        private val INTERACTION_TRANSACTION =
+            DefaultTransactionAttribute().apply { setName("SlackInteractionHandlerImpl.handleInteraction") }
     }
 
-    @Transactional
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String): String? {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            return inInteractionTransaction { handle(payload = payload) }
+        }
+        val (ack, meetingWrites) =
+            MeetingWriteDeferral.collecting { inInteractionTransaction { handle(payload = payload) } }
+        meetingWrites.forEach { it() }
+        return ack
+    }
+
+    private fun <T> inInteractionTransaction(block: () -> T): T {
+        val status = transactionManager.getTransaction(INTERACTION_TRANSACTION)
+        val result =
+            try {
+                block()
+            } catch (failure: Throwable) {
+                if (INTERACTION_TRANSACTION.rollbackOn(failure)) {
+                    transactionManager.rollback(status)
+                } else {
+                    transactionManager.commit(status)
+                }
+                throw failure
+            }
+        transactionManager.commit(status)
+        return result
+    }
+
+    private fun handle(payload: String): String? {
         val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
 
         // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.

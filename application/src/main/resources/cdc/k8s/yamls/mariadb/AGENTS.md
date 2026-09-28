@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # cdc/k8s/yamls/mariadb
 
@@ -12,7 +12,7 @@ manifest declares and the mismatches an agent must know before editing.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `README.md` | Pre-deployment edits (storage class, Secret values, resources, Service type), apply order `config → sts → svc → job`, connection endpoints, verification commands |
+| `README.md` | Pre-deployment edits (storage class, Secret values, resources, Service type), apply order `config → sts → svc → job`, connection endpoints, time-zone caveat (no `TZ`/`default_time_zone`, so UTC), verification commands |
 | `mariadb-config.yaml` | Namespace `database`; ConfigMap `mariadb-config` with `master.cnf` and `slave.cnf` (binlog `ROW`/`FULL`, `expire_logs_days=7`, `gtid_strict_mode=1`, `log_slave_updates=1`, InnoDB and slow-log tuning; `slave.cnf` adds `read_only=1`, relay log, parallel replication); Secret `mariadb-secret` with placeholder `root-password` and `replication-password`; a standalone PVC `logs-mariadb-pvc` (20Gi) |
 | `mariadb-sts.yaml` | StatefulSet `mariadb` (`serviceName: mariadb-headless`, 3 replicas, `mariadb:12.0.2`, preferred anti-affinity by hostname). Init container picks `master.cnf` + `server-id=1` for ordinal 0, else `slave.cnf` + `server-id=<ordinal+1000>`. Liveness/readiness/preStop via `mariadb-admin`/`mariadb`; requests 8Gi/500m, limits 16Gi/1000m; claim templates `data` 50Gi and `logs` 5Gi. PodDisruptionBudget `mariadb-pdb` (`minAvailable: 2`) |
 | `mariadb-svc.yaml` | Services `mariadb-master` (selector `role: master`), `mariadb-slave` (selector `role: slave`), and headless `mariadb-headless` (`clusterIP: None`, selector `app: mariadb`), all port 3306 |

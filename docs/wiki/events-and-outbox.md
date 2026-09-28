@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-09-22_
+_type: architecture · updated: 2026-09-28_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -48,7 +48,22 @@ _type: architecture · updated: 2026-09-22_
   `DeclineModalOpenFailedEvent`/`StandupModalOpenFailedEvent`를 발행해 폴백 안내를 보낸다.
   `ApplicationMessageDispatcher.dispatch`는 `OpenViewPayloadContents`를 받으면 `UnsupportedOperationException`.
 - 렌더 실패(코덱/스키마)는 재시도하지 않고 `MessagePublishFailedEvent`로 바로 `FAILURE` 처리한다. 재시도는
-  dispatch(Slack HTTP)에만, `ApplicationMessageDispatcher` 안의 `RetryService`가 담당한다.
+  dispatch(Slack HTTP)에만 있다: 짧은 재시도는 `ApplicationMessageDispatcher` 안의 `RetryService`(3회, 약 0.3초),
+  긴 재시도는 복구 스윕이다.
+- dispatcher는 릴레이에 **세 가지 결과**를 돌려준다. ① 완료(성공 또는 영구 실패: `fatal_error`, `ok=false` 오류,
+  3xx/4xx, 거부된 `response_url`) → `completeClaim`으로 `SUCCESS`/`FAILURE`. ② rate limit(`RateLimitedOutput`,
+  `retryAfter()`) → 행을 `IN_PROGRESS`로 두고 `deferClaim`으로 `Retry-After` 이후까지 미룬다. ③ 일시 오류
+  소진(`TRANSIENT_EXHAUSTED_REASON`: 5xx, `IOException`·call timeout, `internal_error`/`service_unavailable`가 짧은
+  재시도를 다 쓴 경우) → 아무것도 쓰지 않고 `IN_PROGRESS`로 둬 stuck 임계 뒤 스윕이 재발송한다. 예전에는 ③이
+  예외로 올라가 `FAILURE`가 되어 1초짜리 Slack 장애에도 메시지를 잃었다. dispatcher가 예상 밖 예외를 던져도 ③과
+  같이 다룬다.
+- **한 번의 dispatch는 시간 상한이 있다.** Slack SDK 클라이언트와 `response_url` 클라이언트 모두 OkHttp
+  `callTimeout` 6초(`SLACK_CALL_TIMEOUT`), SDK stats는 끈다(stats가 켜져 있으면 SDK가 `Retry-After`를
+  `Long.valueOf`로 먼저 읽어 HTTP-date에서 예외가 나고, 팀 ID 해석용 `auth.test`를 호출마다 추가로 부른다).
+  최악은 (3회 × 6초 + 백오프) × 2 + 인라인 대기 3초 ≈ 39.6초, 렌더의 프로필 조회 10초를 더해 ≈ 49.6초로, CDC의
+  레코드당 예산(`max.poll.interval.ms` 300초 / `max-poll-records` 5 = 60초)과 stuck 임계 300초 안에 든다.
+  산식과 전제는 `infrastructure/.../impl/command/AGENTS.md`에 있다. `response_url` 클라이언트는 리다이렉트를
+  따라가지 않으므로 호스트 허용 목록(`https`, 443, `hooks.slack.com`/`hooks.slack-gov.com`)이 최종이다.
 
 ## 아웃박스 행(`outbox_message`)
 
@@ -64,16 +79,35 @@ _type: architecture · updated: 2026-09-22_
   (`OutboxPayloadRenderer.render`의 `require`). V1(렌더된 Slack 페이로드 + `metadata`/`type` 컬럼)은 big-bang
   drain으로 폐기했다(V11 마이그레이션, 데이터 이전 없음). 새 shape 도입 시 `CURRENT` 범프와 `SUPPORTED` 확장을
   같이 하고, drain 창이 보장된 뒤에만 옛 버전을 뺀다.
-- `@Version version`(낙관적 락)이 상태 갱신의 read-modify-write를 보호한다(`updateMessage`, 최대 5회 재시도).
-- 상태(`MessageStatus`): 새 행은 `PENDING`. 폴링은 `claimPending`으로 `IN_PROGRESS`, dispatch 결과 이벤트
-  (`OutboxUpdateEvent`)로 `SUCCESS`/`FAILURE`. **CDC 경로는 claim 없이 `PENDING` → `SUCCESS`/`FAILURE`로 바로
-  간다.** `INIT`은 어디서도 쓰이지 않는다. `FAILURE` 행을 다시 읽는 코드는 없다(재구동은 수동).
-- `claimPending` CAS 계약: `UPDATE ... SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP
-  WHERE event_id IN (:eventIds) AND status = 'PENDING'`. `WHERE status = 'PENDING'`이 진실의 원천이고, 실제로
-  전이된 건수만 dispatch 한다. `updated_at`을 명시로 찍는 이유는 헬스가 `IN_PROGRESS`를 claim 시점부터 aging
-  하기 위해서다.
-- stuck 복구: `findStuckInProgress(updated_at < now - slack.app.outbox.polling.stuck-in-progress-seconds)`
-  (기본 300초)를 tick마다 먼저 재전송한다. 재전송은 중복 게시를 감수한 선택이다(아래 보장 절).
+- 상태(`MessageStatus`): 새 행은 `PENDING`. 폴링·CDC·복구 스윕 모두 `claimPending`/`reclaimStuck`으로
+  `IN_PROGRESS`를 잡고, dispatch 결과를 `completeClaim`으로 `SUCCESS`/`FAILURE`에 기록한다. `INIT`은 어디서도
+  쓰이지 않는다. `FAILURE` 행을 다시 읽는 코드는 없다(재구동은 수동).
+- `attempt_count`(V20)가 **소유권 토큰**이다. claim(`PENDING` → `IN_PROGRESS`)과 reclaim(stuck 행 회수)만
+  `attempt_count + 1`을 하며, 둘 다 호출자가 읽은 값을 `WHERE attempt_count = :attemptCount`로 검사하므로
+  이긴 쪽은 자기 차례가 `읽은 값 + 1`임을 안다(`OutboxClaim.attempt`). 그 뒤의 모든 쓰기 —
+  발송 직전 lease 갱신 `renewClaim`, rate limit 유예 `deferClaim`, 종결 기록 `completeClaim`, 스윕의
+  `abandonStuck` — 가 같은 attempt를 조건으로 건다. 그래서 executor 큐에서 stuck 임계를 넘겨 기다린 작업은 이미 회수된 행을 보내지도, 새 소유자가
+  쓴 `SUCCESS`를 `FAILURE`로 덮지도 못한다. `@Version`은 엔티티에 남아 있지만 JPA로 기존 행을 저장하는 경로가
+  없어져(구 `updateMessage` 제거) 쓰이지 않는다.
+- **`updated_at`은 호출자가 넘긴 `now`로만 쓴다(`CURRENT_TIMESTAMP` 금지).** 스윕·보존·헬스의 컷오프는 앱의
+  `Clock` 빈(JVM 존, `Asia/Seoul`)으로 계산하고 `@CreationTimestamp`/`@UpdateTimestamp`도 JVM 시계인데,
+  `CURRENT_TIMESTAMP`는 DB 세션 존(배포 매니페스트상 UTC)으로 평가된다. 섞으면 방금 claim한 행이 9시간
+  묵은 것으로 보여 발송 중에 회수·재발송됐다(review 13장 S2). H2 테스트는 같은 JVM이라 이 차이를 못 본다.
+- **재시도 예산은 `send_count`(V22)로 센다, `attempt_count`가 아니다.** `renewClaim`(발송 직전)만 `+1`하고
+  `deferClaim`(rate limit)이 그 1을 되돌린다. 그래서 429를 맞은 발송과 executor 큐에서 기다리다 회수된 claim은
+  예산을 쓰지 않는다. 예전 규칙(`attempt_count >= max-attempts`)은 50분 남짓의 연속 429나 느린 executor만으로
+  멀쩡한 메시지를 `FAILURE`로 버렸다(review 13장 재검수 M1).
+- stuck 복구(`OutboxRecoveryScheduler`, 60초, 두 모드 공통): `updated_at < now - stuck-in-progress-seconds`
+  (기본 300초)인 `IN_PROGRESS`를 회수해 재전송하고, 같은 임계보다 오래된 `PENDING`도 claim한다. 재전송은 중복
+  게시를 감수한 선택이다(아래 보장 절). 단 `send_count >= slack.app.outbox.polling.max-sends`(기본 10)이거나
+  `created_at`이 `give-up-after-hours`(24)를 넘긴 행은 `FAILURE`로 포기한다 — 예전엔 reclaim이 `updated_at`을
+  리셋해 poison 행이 300초마다 24시간(≈288회) 재발송됐다. 24시간 상한은 rate limit 행에도 걸리는 최종 정지선이다.
+- rate limit 유예는 `updated_at = now + 대기 - stuck 임계`로 쓴다. 스윕의 나이 조건이 그대로 `Retry-After`를
+  기다리게 하는 셈이다. 대기 = `Retry-After`(없으면 60초) + 분산값(`eventId` 해시를 2분으로 나눈 나머지)이라,
+  한꺼번에 429를 맞은 CVE 알림·standup 팬아웃이 같은 스윕에 몰려 다시 429를 맞지 않는다. 몇 시간짜리
+  `Retry-After`도 그대로 지키되, 재개 시각은 `created_at + give-up-after-hours`를 넘지 않게 자른다.
+- Slack `error` 코드 분류는 `chat.*`와 `response_url` 응답이 하나의 함수(`raiseIfRetryable`)를 공유한다:
+  `ratelimited` → rate limit, `internal_error`/`service_unavailable` → 일시 오류, 그 밖 → 영구 실패.
 
 ## 릴레이 모드와 이벤트 퍼블리셔
 
@@ -85,34 +119,46 @@ _type: architecture · updated: 2026-09-22_
 
 - 프로파일: `local`/`dev`/`prod`는 `cdc` + `kafka`, 토픽 `cdc.code_companion.outbox_message`(prod는
   `${SLACK_CDC_TOPIC}`). `slack-live`는 `polling` + `application_event`로 Kafka/Debezium 없이 전체 릴레이가 in-process다.
-- **POLLING** — `PollingMessageProcessor`, `@Scheduled(fixedRate = 5000)`(하드코딩). tick당 복구 → `PENDING`
-  `batch-size`(기본 100)건 읽기 → `claimPending` → claim된 건수만 dispatch, 내부 루프 없음(스케줄러 스레드 독점
-  방지). `SlackMessageRelayServiceImpl.batchPendingMessages`는 `@Async` 대신 `Executor`에 직접 submit 한다
-  (같은 빈 내부 self-invocation은 AOP 프록시를 타지 않음). 이 `Executor`는 `AsyncConfig`의 `@Primary`
-  `threadPoolTaskExecutor`(core 10)로 해소된다.
+- **POLLING** — `PollingMessageProcessor`, `@Scheduled(fixedRate = 5000)`(하드코딩). tick당 `PENDING`
+  `batch-size`(기본 100)건 읽기 → 행마다 `claimPending` → 이긴 claim만 `batchPendingMessages`, 내부 루프 없음(스케줄러
+  스레드 독점 방지). 복구는 여기 없고 `OutboxRecoveryScheduler`가 한다. `SlackMessageRelayServiceImpl.batchPendingMessages`는
+  `@Async` 대신 `@Qualifier("relayTaskExecutor")`(4스레드, 큐 = batch-size, `CallerRunsPolicy`)에 직접 submit 한다
+  (같은 빈 내부 self-invocation은 AOP 프록시를 타지 않음). 큐에서 오래 기다린 작업의 안전은 큐 크기가 아니라 위의
+  `renewClaim` 검사가 보장한다.
 - **CDC** — Debezium MariaDB 커넥터(`table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`;
   `cdc/docker-compose/debezium/connect_mariadb.sh`) → Kafka → `DebeziumLogTailingProcessor`. 리스너는
   `spring.json.use.type.headers:false` + 기본 타입 `Envelope`로 역직렬화하고, `payload.after.status == PENDING`인
   레코드만 후보로 본다(`IN_PROGRESS`/`SUCCESS` 갱신 레코드와 `after == null`인 삭제, tombstone은 무시). 그 뒤
-  **DB의 현재 상태를 다시 읽어** `PENDING`이면 `claimPending` CAS로 `IN_PROGRESS`를 잡고 dispatch, `SUCCESS`/`FAILURE`면
-  재전달로 보고 건너뛰며, `IN_PROGRESS`(크래시 잔재)는 재발송한다 — 2026-09-22 재설계, `DebeziumLogTailingProcessorTest`.
-  파싱 실패·잘못된 `eventId`는 `CdcRecordParseException`으로 던져 `DefaultErrorHandler`가 재시도 없이 `<topic>.DLT`로
-  보낸다(`KafkaTemplate`이 없는 조합에서는 ERROR 로그로 강등). 예전의 `KafkaErrorHandler`(null 레코드 skip)는 제거됐다.
-  `ErrorHandlingDeserializer` 래핑은 그대로다.
+  **DB의 현재 상태를 다시 읽어** `PENDING`일 때만 `claimPending`으로 잡고 리스너 스레드에서 `dispatchClaimed`를
+  호출한다. `IN_PROGRESS`는 **건너뛴다** — 다른 소유자가 발송 중이거나 복구 스윕이 맡은 stuck 행이기 때문이다
+  (2026-09-22 재설계의 "IN_PROGRESS면 재발송" 분기는 스윕과 경합해 중복 발송해서 2026-09-28 제거, review 13장 S3).
+  `SUCCESS`/`FAILURE`는 재전달로 보고 건너뛴다. 상태 기록(`completeClaim`)이 재시도 끝에 실패해도 예외는 리스너 밖으로
+  나가지 않는다: ERROR 로그를 남기고 행을 `IN_PROGRESS`로 둬 스윕에 맡긴다. 예외가 나가면 `DefaultErrorHandler`가
+  이미 보낸 레코드를 재전달하기 때문이다(S4).
+  파싱 실패·잘못된 `eventId`는 `CdcRecordParseException`으로 던져 재시도 없이 dead-letter 토픽으로 보낸다. 토픽
+  이름은 코드에서 명시한 **`<cdc topic>-dlt`**(spring-kafka 4.1.1의 기본 접미사와 같지만 기본값에 기대지 않는다;
+  예전 문서의 `.DLT`는 틀렸다), 파티션은 지정하지 않는다. 역직렬화에 실패한 레코드는 `ByteArraySerializer` 템플릿으로
+  **원본 바이트 그대로** 실리고(JSON 템플릿으로 보내면 Base64 문자열이 되어 replay 불가), 역직렬화된 `Envelope`는 JSON
+  템플릿으로 간다. `NewTopic` 빈이 기동 시 `<cdc topic>-dlt`를 만들되(브로커 기본 파티션·복제), 생성 권한이 없는
+  환경에서는 수동으로 만들어야 한다. dead-letter 전송이 실패해도(토픽 없음 등) `failIfSendResultIsError = false`라
+  레코드는 복구된 것으로 처리되어 파티션이 막히지 않는다 — 행은 `PENDING`으로 남아 스윕이 구한다.
+  `KafkaTemplate`이 없는 조합에서는 ERROR 로그로 강등. `ErrorHandlingDeserializer` 래핑은 그대로다.
 - `SchedulingConfig`가 `@EnableScheduling`을 무조건 켠다. 과거엔 `PoolingPublisherConfig`에만 있어 CDC 모드에서
   `StandupScheduler` 등 모든 `@Scheduled`가 조용히 no-op이었다.
 - `KafkaEventPublisher`는 `isInternal == false`인 이벤트만 Kafka(`event.destination` 토픽, key = `idempotencyKey`,
-  5초 동기 대기)로 보내는데, 현재 모든 `CommandEvent`가 `isInternal = true`라 이 경로는 휴면이다. `kafka` 모드의
-  실질 차이는 `KafkaErrorBroadcaster` 빈 등록뿐이고, 그 `broadcastError`는 `TODO()`이며 호출자도 없다.
+  5초 동기 대기)로 보내는데, 현재 모든 `CommandEvent`가 `isInternal = true`라 이 경로는 휴면이다. `ErrorBroadcaster`는
+  모드와 무관하게 `StdoutErrorBroadcaster` 하나뿐이다(구 `KafkaErrorBroadcaster`는 삭제됨).
 
 ## 멱등성
 
 - **인바운드 키**: `IdempotencyCreator.create(data, now)` = `UUID.nameUUIDFromBytes("$data|${now / 1000}")`.
   같은 입력이 같은 **1초 창** 안에 오면 같은 키가 된다(`IdempotencyData`는 SHA-256으로 직렬화). 창을 넘긴
   재시도는 다른 키이며, `idempotency_key`가 유니크가 아니므로 아웃박스가 중복을 막아 주지도 않는다.
-- **Slack 재시도**: `SlackRequestVerificationFilter`가 `InMemorySlackRetryDeduplicator`로 (method, uri,
-  timestamp, signature) fingerprint를 기억하고, `X-Slack-Retry-Num`이 붙은 재시도가 이미 본 fingerprint면
-  본문 처리 없이 200을 돌려준다. TTL 10분, in-memory이므로 **인스턴스별**이다.
+- **Slack 재시도**: `SlackRequestVerificationFilter`는 `/api/slack/events` 경로에만 `InMemorySlackRetryDeduplicator`를
+  적용한다. fingerprint는 (method, 요청 경로, 본문 SHA-256 해시)이고, 항목은 in-flight → completed 상태를 가진다.
+  `X-Slack-Retry-Num`이 붙은 재시도가 처리 중인 원본과 같으면 503(Slack이 다시 시도하게), 이미 완료된 원본과 같으면
+  본문 처리 없이 200을 돌려준다. 원본 처리가 실패하면 항목을 지워(forget) 다음 재시도가 새로 처리된다.
+  TTL 10분, in-memory이므로 **인스턴스별**이다.
 - **소비자 측**: CDC는 상태 필터(`PENDING`만), 폴링은 `claimPending` CAS. 상태 갱신 이벤트는 항상 **row의**
   `event_id`로 키를 잡는다 — 렌더러가 새로 발급하는 payload `eventId`는 버린다. Slack API에는 멱등 키가 없으므로
   재전송은 그대로 중복 게시가 된다.
@@ -133,7 +179,12 @@ _type: architecture · updated: 2026-09-22_
   복구가 먼저 리셋한 경우) → 실패 시 `markDispatchFailed`는 새 트랜잭션. `CveNotificationDispatcher`는 claim과
   outbox save를 한 트랜잭션에 넣는다(claim 쪽 `@Transactional`이 REQUIRED라 join) — "저장 안 된 배송을 ledger가
   기록"하는 일을 막는다.
-- 아웃박스 자체의 다중 폴러 안전은 `claimPending`의 `WHERE status = 'PENDING'` + `@Version`이 담당한다.
+- 아웃박스 자체의 다중 인스턴스 안전은 같은 claim-token 패턴이다. 토큰이 별도 컬럼 대신 `attempt_count`이고,
+  claim·reclaim·renew·defer·complete·abandon이 모두 그 값을 검사한다(위 "아웃박스 행" 절).
+- **배포 제약: V20/V22를 쓰는 릴리스는 그 이전 릴리스와 나란히 돌리면 안 된다.** 구 파드는 `updated_at`을
+  `CURRENT_TIMESTAMP`(UTC)로 쓰고, CDC로 `IN_PROGRESS` 행을 재발송하며, JPA로 attempt 조건 없이 상태를 덮는다.
+  섞이면 새 파드의 스윕이 구 파드가 발송 중인 행을 9시간 묵은 행으로 보고 다시 보내고, `SUCCESS`가 `FAILURE`로
+  바뀔 수 있다. 구 파드를 모두 내리고(0으로 스케일 또는 `Recreate`) V20·V22를 적용한 뒤 새 릴리스를 올린다.
 
 ## 순서·파티션·보장
 
@@ -143,18 +194,22 @@ _type: architecture · updated: 2026-09-22_
   `PartitionKeyUtil`(6 버킷)은 테스트 외 호출자가 없다.
 - `spring.kafka.consumer.enable-auto-commit: false` + 컨테이너 `AckMode.RECORD`(2026-09-22)라 오프셋은 리스너가
   그 레코드를 반환한 뒤에만 커밋된다. 크래시 시 재전달되며, 위의 현재 상태 확인이 중복 발송을 막는다(claim과
-  상태 갱신 사이의 좁은 창은 at-least-once). `max-poll-records`는 100.
+  상태 기록 사이에 크래시하면 행은 `IN_PROGRESS`로 남고 스윕이 재발송 — at-least-once). CDC 프로파일의
+  `max-poll-records`·`max.poll.interval.ms`는 프로파일 YAML이 정한다.
 - 정직한 보장: README의 "exactly-once-style"은 지향 표현이다. 실제는 **at-least-once**(폴링 stuck 재전송, Kafka
   재전달) + **멱등 소비자**(상태 필터, `event_id` 기준 상태 갱신)이며, Slack 채널에는 중복 게시가 가능하다.
 
 ## 헬스와 `@bot status`
 
 - `OutboxHealthIndicator`: `slack.app.outbox.health.stuck-threshold-seconds`(기본 300)보다 오래된 `PENDING`
-  (`created_at` 기준) 또는 `IN_PROGRESS`(`updated_at` 기준)가 하나라도 있으면 DOWN. `PENDING`-stuck은 폴러
-  지연/정지, `IN_PROGRESS`-stuck은 claim 뒤 크래시를 가리킨다. 디테일 키는 대시보드용으로 고정:
-  `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`, `inFlightCount`,
-  `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`.
-- `OpsStatusService.renderReport`가 **같은 카운터**를 읽어 `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP
+  (`created_at` 기준), 그 임계에 스윕 주기(60초)를 더한 것보다 오래된 `IN_PROGRESS`(`updated_at` 기준), 또는
+  `send_count`가 `slack.app.outbox.health.retrying-send-threshold`(기본 3) 이상인 `IN_PROGRESS`가 있으면 DOWN.
+  `PENDING`-stuck은 폴러 지연/정지, `IN_PROGRESS`-stuck은 스윕이 한 주기 안에 가져가지 못한 행, retrying은 실제
+  발송이 거듭 실패하는 행을 가리킨다. rate limit만 맞은 행은 유예 중이고 `send_count`도 돌려받으므로 DOWN을 만들지
+  않는다. 디테일 키: `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`,
+  `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`,
+  `retryingSendThreshold`.
+- `OpsStatusService.renderReport`가 **같은 카운터**(retrying 제외)를 읽어 `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP
   `get_status`를 만든다. 채팅과 actuator가 다른 숫자를 말하지 않게 하려는 의도다.
 - `OutboxSchemaVersion` KDoc은 미지원 버전 행이 "stuck으로 드러난다"고 하지만 실제 경로는 렌더 실패 →
   `MessagePublishFailedEvent` → `FAILURE`다. 헬스에는 잡히지 않고 로그에만 남는다.
@@ -165,22 +220,27 @@ _type: architecture · updated: 2026-09-22_
   `ChannelMessage`/`Approval` + `channel = userId`로 쓴다.
 - BEFORE_COMMIT 리스너는 트랜잭션 밖 publish를 조용히 버린다(위 1번 경로). `stage()`가 null을 돌려줄 수 있는
   계약이라 `AgentConverseService.stageReply`처럼 `checkNotNull`로 응답 유실을 트랜잭션 실패로 바꾼다.
-- `PollingMessageProcessor.claimAndDispatch`는 행마다 `claimPending(listOf(id)) == 1`로 claim해 이긴 행만 dispatch
-  한다(2026-09-22; 이전의 `candidates.take(claimedCount)`는 다중 폴러에서 남의 행을 보냈다). stuck 복구도
-  `reclaimStuck` CAS를 이긴 행만 재전송한다.
-- CDC 모드도 이제 `claimPending`으로 `IN_PROGRESS`를 잡는다. 상태 갱신 실패·DLT로 남은 `IN_PROGRESS`/오래된 `PENDING`은
-  모드와 무관한 `OutboxRecoveryScheduler`(60초, `reclaimStuck`/`claimPending` CAS)가 재발송한다 — CDC는 그런 행에
-  두 번째 변경 이벤트를 만들지 않기 때문. 헬스의 `IN_PROGRESS` 지표도 이제 두 모드 모두에서 의미가 있다.
+- `PollingMessageProcessor.claimAndDispatch`는 행마다 claim해 이긴 행만 dispatch 한다(2026-09-22; 이전의
+  `candidates.take(claimedCount)`는 다중 폴러에서 남의 행을 보냈다). 그러나 행 단위 claim만으로는 부족했다:
+  100건을 먼저 claim하고 4스레드 executor에 넣으면 뒤쪽 작업이 stuck 임계를 넘겨 스윕에 회수되고 원래 작업도
+  실행돼 두 번 나갔다(review 13장 Codex #3). 그래서 실행 직전 `renewClaim`이 attempt로 소유권을 확인한다.
+- 상태 기록 실패·429·일시 오류·DLT로 남은 `IN_PROGRESS`/오래된 `PENDING`은 모드와 무관한
+  `OutboxRecoveryScheduler`가 재발송한다 — CDC는 그런 행에 두 번째 변경 이벤트를 만들지 않기 때문.
+  `renewClaim`/`deferClaim`/`completeClaim`도 CDC UPDATE 이벤트를 만들지만 `PENDING`이 아니라서 리스너가 무시한다
+  (CDC 경로는 claim 직후 `renewClaim`을 한 번 더 써서 메시지당 UPDATE 레코드가 하나 더 생긴다. 이 갱신이
+  `send_count`를 세므로 남겨 둔다).
+- 결과 이벤트(`OutboxUpdateEvent`)는 `completeClaim`이 1을 돌려준 소유자만 발행한다. 0이면 다른 소유자가 행을
+  가져간 것이고 그쪽이 자기 결과를 발행한다. 유일한 리스너는 `StandupSummaryService`(성공 시 `messageTs` 기록)다.
+  리스너 예외는 상태 기록 실패와 별도로 로그한다 — 행은 이미 종결 상태다.
+- 잘못된 `eventId`는 결정적 오류라 폴링·스윕 경로에서 곧바로 `completeClaim(FAILURE)`한다(CDC는 DLT).
 - 구 shape 로컬 행은 디코드에 실패하고 `ddl-auto: update`는 옛 컬럼을 안 지운다 → `outbox_message` DROP 후 재생성.
-- `RetryService.execute`는 호출마다 공유 `RetryTemplate`의 `retryPolicy`를 덮어쓴다. 릴레이 executor 10스레드가
-  동시에 dispatch 하면 정책이 섞일 수 있다.
 
 ## 근거
 
 - `infrastructure/src/main/kotlin/dev/notypie/repository/outbox/` 전체 (repository, codec, port, `schema/*`)
 - `infrastructure/src/main/kotlin/dev/notypie/impl/command/` (`SlackOutboundStager`, `OutboundRenderer`,
   `SlackViewOpenDispatcher`, `ApplicationMessageDispatcher`, `KafkaEventPublisher`, `AppEventPublisher`, `event/*`),
-  `impl/retry/RetryService.kt`, `exception/KafkaErrorBroadcaster.kt`
+  `impl/retry/RetryService.kt`, `exception/StdoutErrorBroadcaster.kt`
 - `infrastructure/src/main/kotlin/dev/notypie/repository/{standup,meeting,cve}/Jpa*Repository.kt` (CAS·ledger·stamp)
 - `domain/src/main/kotlin/dev/notypie/domain/command/` — `outbound/{OutboundMessage,OutboundMessageStager}.kt`,
   `entity/event/{EventPublisher,Event}.kt`, `dto/CommandBasicInfo.kt`
@@ -191,7 +251,11 @@ _type: architecture · updated: 2026-09-22_
   SlackRequestVerificationFilter}.kt`, `service/command/{CommandExecutor,RoleManagementService}.kt`,
   `service/{standup/StandupSchedulingService,cve/notification/CveNotificationDispatcher,agent/AgentConverseService}.kt`
 - `application/src/main/resources/application*.yaml`, `resources/cdc/docker-compose/` (README, `connect_mariadb.sh`),
-  `resources/db/migration/V1__outbox_pk_event_id.sql`, `V11__outbox_transport_neutral_envelope.sql`
+  `resources/db/migration/V1__outbox_pk_event_id.sql`, `V11__outbox_transport_neutral_envelope.sql`,
+  `V20__add_outbox_attempt_count.sql`, `V22__add_outbox_send_count.sql`; `review.md` 13장(S2·S3·S4·S9·S17, Codex #3);
+  `infrastructure/src/main/kotlin/dev/notypie/impl/command/AGENTS.md`(dispatch 시간 상한 산식);
+  Slack SDK 1.51.0 소스 `SlackHttpClient.buildOkHttpClient`, `MethodsClientImpl`(stats 경로의 `Long.valueOf`,
+  `TeamIdCache`); spring-web 7.0.9 `JdkClientHttpRequest`(read timeout이 본문까지 적용)
 - `README.md`(Event-Driven Architecture), `infrastructure/AGENTS.md`, `application/AGENTS.md`,
   `application/src/main/resources/AGENTS.md`; git 미추적 근거 문서 `Handoff.md`(Phase 2, Codex 리뷰 표), `Refactor.md`(8b·9)
 

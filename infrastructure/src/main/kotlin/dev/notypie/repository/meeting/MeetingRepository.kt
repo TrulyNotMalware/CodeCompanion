@@ -29,9 +29,7 @@ interface MeetingRepository {
 
     fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean
 
-    fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): Boolean
-
-    fun findMeetingByUid(meetingUid: UUID): MeetingDto?
+    fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): RescheduleResult
 
     fun addParticipants(meetingUid: UUID, requesterId: String, participantUserIds: List<String>): AddParticipantResult
 }

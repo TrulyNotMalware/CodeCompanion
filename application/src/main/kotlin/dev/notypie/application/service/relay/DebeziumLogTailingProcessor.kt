@@ -1,18 +1,14 @@
 package dev.notypie.application.service.relay
 
-import dev.notypie.impl.command.event.MessageDispatcher
-import dev.notypie.impl.command.isRateLimited
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
-import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
-import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.messaging.handler.annotation.Payload
+import java.time.Clock
+import java.time.LocalDateTime
 import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
@@ -24,10 +20,9 @@ class CdcRecordParseException(
 ) : RuntimeException(message, cause)
 
 class DebeziumLogTailingProcessor(
-    private val messageDispatcher: MessageDispatcher,
-    private val payloadRenderer: OutboxPayloadRenderer,
-    private val eventPublisher: ApplicationEventPublisher,
     private val outboxRepository: MessageOutboxRepository,
+    private val relayService: MessageRelayService,
+    private val clock: Clock,
 ) : MessageProcessor {
     @KafkaListener(
         topics = ["\${slack.app.mode.cdc.topic}"],
@@ -63,43 +58,16 @@ class DebeziumLogTailingProcessor(
                     )
                 }
 
-        if (!claimForDispatch(eventId = eventId, idempotencyKey = snapshot.idempotencyKey)) return
-
-        val updateEvent: OutboxUpdateEvent =
-            try {
-                val rendered = payloadRenderer.render(row = snapshot)
-                val dispatchResult = messageDispatcher.dispatch(event = rendered)
-                if (dispatchResult.isRateLimited()) {
-                    logger.warn { "Slack rate limit; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
-                    return
-                }
-                dispatchResult.toOutboxUpdateEvent(eventId = eventId)
-            } catch (exception: Exception) {
-                logger.error(exception) {
-                    "CDC dispatch failed for eventId=$eventId idempotencyKey=${snapshot.idempotencyKey}"
-                }
-                MessagePublishFailedEvent(eventId = eventId, reason = exception.toString())
-            }
-        eventPublisher.publishEvent(updateEvent)
-    }
-
-    // The after-image is a log snapshot; a redelivery may arrive after the row already moved on.
-    private fun claimForDispatch(eventId: UUID, idempotencyKey: String): Boolean {
         val current = outboxRepository.findById(eventId.toString()).orElse(null)
         if (current == null) {
-            logger.warn { "Outbox row missing for eventId=$eventId idempotencyKey=$idempotencyKey; skipping." }
-            return false
+            logger.warn { "Outbox row missing for eventId=$eventId idempotencyKey=${snapshot.idempotencyKey}" }
+            return
         }
-        return when (current.status) {
-            MessageStatus.PENDING.name -> outboxRepository.claimPending(eventIds = listOf(eventId.toString())) == 1
-            MessageStatus.IN_PROGRESS.name -> {
-                logger.warn { "Re-dispatching eventId=$eventId left IN_PROGRESS by an interrupted consumer." }
-                true
-            }
-            else -> {
-                logger.info { "Skipping redelivered eventId=$eventId already ${current.status}." }
-                false
-            }
+        if (current.status != MessageStatus.PENDING.name) {
+            logger.info { "Skipping eventId=$eventId already ${current.status}; only a PENDING row is claimed here" }
+            return
         }
+        val claim = outboxRepository.claim(row = current, now = LocalDateTime.now(clock)) ?: return
+        relayService.dispatchClaimed(claim = claim)
     }
 }

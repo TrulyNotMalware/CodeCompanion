@@ -141,7 +141,7 @@ class SubmissionPipelineCharacterizationTest :
                             InboundSubmission.RescheduleMeeting(
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
-                                date = "2026-10-01",
+                                date = "2099-10-01",
                                 time = "14:30",
                             ),
                     )
@@ -151,7 +151,29 @@ class SubmissionPipelineCharacterizationTest :
                     val intent = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
                     intent.meetingUid shouldBe meetingUid
                     intent.requesterId shouldBe "U_HOST"
-                    intent.newStartAt shouldBe LocalDateTime.of(2026, 10, 1, 14, 30)
+                    intent.newStartAt shouldBe LocalDateTime.of(2099, 10, 1, 14, 30)
+                }
+            }
+
+            `when`("the submission carries a start in the past") {
+                val meetingUid = UUID.randomUUID()
+                val (output, effects) =
+                    execute(
+                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                        submission =
+                            InboundSubmission.RescheduleMeeting(
+                                meetingUidRaw = meetingUid.toString(),
+                                requesterId = "U_HOST",
+                                date = "2000-01-01",
+                                time = "09:00",
+                            ),
+                    )
+
+                then("it is not dropped: the intent reaches the reschedule service, which answers the host") {
+                    output.ok shouldBe true
+                    val intent = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
+                    intent.meetingUid shouldBe meetingUid
+                    intent.newStartAt shouldBe LocalDateTime.of(2000, 1, 1, 9, 0)
                 }
             }
 
@@ -161,7 +183,7 @@ class SubmissionPipelineCharacterizationTest :
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = "broken",
                             requesterId = "U_HOST",
-                            date = "2026-10-01",
+                            date = "2099-10-01",
                             time = "14:30",
                         ),
                         InboundSubmission.RescheduleMeeting(
@@ -173,7 +195,7 @@ class SubmissionPipelineCharacterizationTest :
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = UUID.randomUUID().toString(),
                             requesterId = "U_HOST",
-                            date = "2026-10-01",
+                            date = "2099-10-01",
                             time = "25:99",
                         ),
                     )

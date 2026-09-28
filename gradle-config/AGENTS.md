@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-25 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
 
 # gradle-config
 
@@ -11,13 +11,14 @@ settings stay shared without committing a machine-specific file.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `apply.sh` | Detects the OS (`Darwin` → macos, `Linux` → linux, `MINGW`/`CYGWIN`/`MSYS` → windows), prints system info, and writes `gradle.properties` at the repo root. Accepts `force` or `common` |
+| `apply.sh` | Detects the OS (`Darwin` → macos, `Linux` → linux, `MINGW`/`CYGWIN`/`MSYS` → windows), prints system info, and writes `gradle.properties` at the repo root. Accepts `force`, `common`, `ci` or `--help`/`-h`; any other or extra argument prints usage and exits 2. Verification runs `./gradlew help` and prints its output when it fails |
 | `gradle-macos.properties` | 6 GB heap, ZGC, no Linux-only flags, `apple.awt.UIElement=true`; 4 GB Kotlin daemon. For 16 GB+ machines |
 | `gradle-linux.properties` | 8 GB heap, ZGC + large pages + transparent huge pages, string dedup, `workers.max=16`; 6 GB Kotlin daemon. For 16 GB+ servers |
+| `gradle-ci.properties` | CI runner preset, installed only by an explicit `./apply.sh ci` (never by OS detection): 3 GB heap, JVM default GC, `workers.max=4`, 3 GB Kotlin daemon, Kotlin daemon fallback enabled. Sized for 4 vCPU / 16 GB GitHub runners, where forked test JVMs (`-Xmx4g` each, root `build.gradle.kts`) run beside both daemons |
 | `gradle-common.properties` | Portable fallback for `./apply.sh common` and unknown hosts: 4 GB heap, no GC selection, no experimental VM options, default worker count, Kotlin daemon fallback enabled |
 | `README.md` | Human-facing guide, including the documented `gradle-common.properties` cross-platform preset |
 
-Both presets share: parallel + caching + configuration cache (`problems=warn`), incremental Kotlin,
+All presets share: parallel + caching + configuration cache (`problems=warn`), incremental Kotlin,
 `kotlin.code.style=official`, VFS watching, verbose console, `warning.mode=all`.
 
 ## For AI Agents
@@ -37,6 +38,12 @@ Both presets share: parallel + caching + configuration cache (`problems=warn`), 
   `apply_common_config` when `gradle-<os>.properties` is absent, so Windows and any future platform
   land on the portable preset instead of exiting 1. Adding `gradle-windows.properties` overrides it
   with no code change — that is the intended way to tune a new platform.
+- **Unknown options fail, OS detection does not.** A typo such as `apply.sh cii` must not fall through to OS
+  detection and install the 8g + 6g Linux preset on a CI runner, so the option is validated before anything is
+  written. Keep new options in both the `case` whitelist in `main` and `show_usage`.
+- A change here is exercised by `simple_test_action.yaml` (its push paths and `gradle` filter include
+  `gradle-config/**`, which selects the full `test` task) before it reaches `main`. `lint.yaml` does not run
+  `apply.sh`, so it does not watch this directory.
 - `force` is threaded through both paths: `apply_os_config "$os" "$force"` passes it to
   `apply_common_config`, which skips `backup_existing_config` when set. Keep them consistent, or
   `--force` starts meaning different things depending on which preset was chosen.
@@ -44,14 +51,17 @@ Both presets share: parallel + caching + configuration cache (`problems=warn`), 
   `build.gradle.kts`. The property is inert — no build script reads it — but keep the three files
   agreeing with the plugin so it does not drift back into a misleading second source of truth.
   `README.md` states the real toolchain (Gradle 9.7.1 / Java 25 / Kotlin 2.4.10 / Boot 4.1.1).
-- CI runs `./gradle-config/apply.sh` in the test workflow, so a change here affects CI build behaviour.
-  A syntax error in `apply.sh` breaks every test run.
+- CI runs `./gradle-config/apply.sh ci` in the test workflow and in the deploy build, so a change to `apply.sh`
+  or `gradle-ci.properties` changes CI build behaviour; a syntax error in `apply.sh` breaks every test run and
+  every deploy. Keep the CI preset's daemon heaps small: the Linux preset (8 GB + 6 GB daemons) plus forked
+  4 GB test JVMs overcommits a 16 GB runner. `ci` backs up an existing `gradle.properties` like the default path.
 
 ### Testing Requirements
 There is no automated test. Verify manually:
 ```bash
 ./gradle-config/apply.sh          # regenerates gradle.properties for this OS
 ./gradle-config/apply.sh common   # exercises the portable preset
+./gradle-config/apply.sh ci       # exercises the CI preset
 ./gradlew --stop && ./gradlew build
 ```
 To exercise a platform you are not on, shim `uname` onto `PATH` (it must answer both `-s` and `-m`)
@@ -71,7 +81,7 @@ new problems.
 
 ### Internal
 - Root `build.gradle.kts` and `gradlew` — the consumers of the generated `gradle.properties`
-- `.github/workflows/simple_test_action.yaml` — runs `apply.sh` before tests
+- `.github/workflows/simple_test_action.yaml` and `deploy_action.yaml` — run `apply.sh ci` before Gradle
 
 ### External
 Bash, Gradle 9.7.1, a JDK 25 toolchain.

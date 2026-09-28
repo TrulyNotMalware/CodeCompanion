@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
 
 # test/kotlin/dev/notypie/application/service/interaction
 
@@ -11,7 +11,7 @@ APPLY and REJECT, and covers the decline-reason modal validation that returns a 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackInteractionHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. `LEGACY_AUTO_REJECT_TYPES` equals `{APPLY_REQUEST, APPROVAL_REQUEST}` and excludes `MEETING_APPROVAL_REQUEST`, `MEETING_CREATE_REQUEST`, `APPROVAL_CALLBACK`, `NOTHING`; constructor case asserts `handler != null` (placeholder). APPLY on `MEETING_CREATE_REQUEST` → `execute(InteractionCommand)` once, `ReplaceTextResponseCommand` never; REJECT on `APPROVAL_REQUEST` → `ReplaceTextResponseCommand` once (legacy "Canceled." path); `MEETING_DECLINE_REASON` with `RejectReason.OTHER` and blank `PLAIN_TEXT_INPUT` → returns an ack body containing `"response_action":"errors"` and `DeclineReasonModalIds.DETAIL_BLOCK_ID`, no execute; OTHER with `Visiting family abroad` → returns null, `InteractionCommand` executed; APPLY and REJECT on `MEETING_APPROVAL_REQUEST` and REJECT on `MEETING_CREATE_REQUEST` → `InteractionCommand`, never the legacy command. |
+| `SlackInteractionHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK; the handler gets a real H2 `DataSourceTransactionManager`. Deferral: a command that queues a meeting write runs in the interaction transaction, the write runs only after that transaction completed and outside any transaction; if the command throws after queueing, the request fails and the write never runs. Pool scenario (pool of 3, 3 concurrent interactions that all hold their connection on a barrier): the old shape — `addParticipants` inside each interaction transaction — commits 3× "Failed to add participants. Please try again later." (every isolated write times out); through `handleInteraction` it commits 3× "Added <@U_A> to the meeting.". Existing cases: `LEGACY_AUTO_REJECT_TYPES` equals `{APPLY_REQUEST, APPROVAL_REQUEST}` and excludes `MEETING_APPROVAL_REQUEST`, `MEETING_CREATE_REQUEST`, `APPROVAL_CALLBACK`, `NOTHING`; constructor case asserts `handler != null` (placeholder). APPLY on `MEETING_CREATE_REQUEST` → `execute(InteractionCommand)` once, `ReplaceTextResponseCommand` never; REJECT on `APPROVAL_REQUEST` → `ReplaceTextResponseCommand` once (legacy "Canceled." path); `MEETING_DECLINE_REASON` with `RejectReason.OTHER` and blank `PLAIN_TEXT_INPUT` → returns an ack body containing `"response_action":"errors"` and `DeclineReasonModalIds.DETAIL_BLOCK_ID`, no execute; OTHER with `Visiting family abroad` → returns null, `InteractionCommand` executed; APPLY and REJECT on `MEETING_APPROVAL_REQUEST` and REJECT on `MEETING_CREATE_REQUEST` → `InteractionCommand`, never the legacy command. |
 
 ## For AI Agents
 

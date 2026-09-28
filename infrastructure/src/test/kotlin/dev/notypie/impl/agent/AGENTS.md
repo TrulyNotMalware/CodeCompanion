@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/impl/agent
 
@@ -11,7 +11,7 @@ event-stream state machine are all exercised for real without Spring or MockK.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SidecarAgentClientTest.kt` | `SidecarAgentClient.converse(request: AgentTurnRequest): AgentTurnResult`. Server stub handles `/v1/converse`, captures body and the `Authorization`, `X-User-Id`, `X-Turn-Token` headers, then replies via a spec-level `respond` lambda reassigned per `given`. Cases: full `session → text → tool_use → tool_result → text → done` stream (with a `: keep-alive` comment) → `Completed(finalText, sessionId, inputTokens, outputTokens)`; `Bearer <secret>` + `X-User-Id` sent; no `X-Turn-Token` without a `scopedToken`; a `scopedToken` travels only as `X-Turn-Token` and never in the body; `sessionId` / `appendSystemPrompt` are omitted entirely (not `null`) on a first turn; HTTP 429 before streaming → `Busy`; terminal `error` frame → `Failed(code, message)`; `error` with `code = busy` → `Busy`; stream ending with no terminal frame → `Failed(ERROR_CODE_INCOMPLETE_STREAM)`; connection refused (`127.0.0.1:1`) → `Failed(ERROR_CODE_TRANSPORT)` instead of throwing. Plain `BehaviorSpec`; server stopped in `afterSpec`. |
+| `SidecarAgentClientTest.kt` | `SidecarAgentClient.converse(request: AgentTurnRequest): AgentTurnResult`. Server stub handles `/v1/converse`, captures body and the `Authorization`, `X-User-Id`, `X-Turn-Token` headers, then replies via a spec-level `respond` lambda reassigned per `given`. Cases: full `session → text → tool_use → tool_result → text → done` stream (with a `: keep-alive` comment) → `Completed(finalText, sessionId, inputTokens, outputTokens)`; `Bearer <secret>` + `X-User-Id` sent; no `X-Turn-Token` without a `scopedToken`; a `scopedToken` travels only as `X-Turn-Token` and never in the body; `sessionId` / `appendSystemPrompt` are omitted entirely (not `null`) on a first turn; HTTP 429 before streaming → `Busy`; terminal `error` frame → `Failed(code, message)`; `error` with `code = busy` → `Busy`; stream ending with no terminal frame → `Failed(ERROR_CODE_INCOMPLETE_STREAM)`; a data line longer than `maxFrameChars` and `text` deltas adding up past `maxTextChars` → `Failed(ERROR_CODE_STREAM_TOO_LARGE)`; a CRLF stream within the bounds still completes; a bare-CR stream whose server keeps the connection open after `done` completes instead of timing out (2 s budget); a 100 KB non-200 body keeps only a 500-char message; a sidecar that stalls after `session` → `Failed(ERROR_CODE_STREAM_TIMEOUT)` within the budget; connection refused (`127.0.0.1:1`) → `Failed(ERROR_CODE_TRANSPORT)` instead of throwing. Plain `BehaviorSpec`; server stopped in `afterSpec`. |
 
 ## For AI Agents
 
