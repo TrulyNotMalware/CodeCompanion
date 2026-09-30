@@ -115,22 +115,32 @@ class AgentConverseService(
             )
         val durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000L
 
-        when (result) {
-            is AgentTurnResult.Completed ->
-                publishAnswer(event = event, sessionKey = sessionKey, result = result, durationMs = durationMs)
+        // An interrupted sidecar call comes back as Failed("interrupted") with the thread's interrupt flag restored.
+        // This pool lets running tasks finish on shutdown, so an interrupt means a cancellation or a hard stop. The
+        // reply is still written — one short transaction that leaves the requester a failure notice the outbox
+        // delivers even after a restart, instead of silence — but with the flag cleared, since a set flag can abort
+        // blocking calls inside it (Hikari's connection wait throws). The flag is restored for the executor after.
+        val interrupted = Thread.interrupted()
+        try {
+            when (result) {
+                is AgentTurnResult.Completed ->
+                    publishAnswer(event = event, sessionKey = sessionKey, result = result, durationMs = durationMs)
 
-            is AgentTurnResult.Busy ->
-                publishBusy(event = event, sessionKey = sessionKey, durationMs = durationMs)
+                is AgentTurnResult.Busy ->
+                    publishBusy(event = event, sessionKey = sessionKey, durationMs = durationMs)
 
-            is AgentTurnResult.Failed -> {
-                log.error {
-                    "Agent turn failed sessionKey=$sessionKey code=${result.code} " +
-                        "message=${result.message} idempotencyKey=${event.idempotencyKey}"
+                is AgentTurnResult.Failed -> {
+                    val failure =
+                        "Agent turn failed sessionKey=$sessionKey code=${result.code} " +
+                            "message=${result.message} idempotencyKey=${event.idempotencyKey}"
+                    if (interrupted) log.warn { failure } else log.error { failure }
+                    publishFailure(event = event, sessionKey = sessionKey, result = result, durationMs = durationMs)
                 }
-                publishFailure(event = event, sessionKey = sessionKey, result = result, durationMs = durationMs)
             }
+            recordMetrics(result = result, durationMs = durationMs)
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt()
         }
-        recordMetrics(result = result, durationMs = durationMs)
     }
 
     private fun contextPrompt(payload: AgentConversePayload): String {

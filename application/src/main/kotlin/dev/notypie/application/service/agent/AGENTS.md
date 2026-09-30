@@ -51,6 +51,13 @@ proxy that `@Async` needs is guaranteed.
 - `scopedTurnTokenCodec` is null when MCP is off (`AgentConfiguration` uses `ObjectProvider`); the
   turn then carries no token and the model has no tools. `turnId` is the mention's `idempotencyKey`
   so tool audit rows join back to `agent_turn_history`.
+- **An interrupted turn still replies.** `SidecarAgentClient` turns an interrupt into
+  `Failed("interrupted")` and restores the flag. `threadPoolTaskExecutor` waits for running tasks on shutdown, so
+  an interrupt means a cancellation or a hard stop; `handleAgentConverse` clears the flag (`Thread.interrupted()`)
+  before the outcome transaction — a set flag can abort blocking calls in it, e.g. Hikari's connection wait — and
+  restores it in `finally`. The result is a `FAILED` / `interrupted` history row and the `FAILURE_MESSAGE` reply in
+  the outbox (delivered even if the process then exits), logged at WARN rather than ERROR. Keep the restore: the
+  executor relies on the flag to stop the worker.
 - A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds`; ten concurrent turns
   saturate the async pool shared with every other `@Async` listener.
 - **The answer is model output and may echo user text** (a meeting title, a tool result), so `publishAnswer` runs

@@ -376,6 +376,62 @@ class AgentConverseServiceTest :
             }
         }
 
+        // D6 follow-up: SidecarAgentClient returns Failed("interrupted") with the interrupt flag restored.
+        given("a turn interrupted while waiting on the sidecar") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } answers {
+                Thread.currentThread().interrupt()
+                AgentTurnResult.Failed(code = "interrupted", message = "interrupted before the turn completed")
+            }
+            val flagSeenByTransaction = mutableListOf<Boolean>()
+            val transactionManager = mockk<PlatformTransactionManager>()
+            every { transactionManager.getTransaction(any()) } answers {
+                flagSeenByTransaction += Thread.currentThread().isInterrupted
+                mockk<TransactionStatus>(relaxed = true)
+            }
+            every { transactionManager.commit(any()) } just Runs
+            every { transactionManager.rollback(any()) } just Runs
+
+            val stagedMessage = slot<OutboundMessage>()
+            val historyRepository = mockk<AgentTurnHistoryRepository>(relaxed = true)
+            val recordedTurn = slot<AgentTurnRecord>()
+            every { historyRepository.record(turn = capture(recordedTurn)) } just Runs
+            val service =
+                AgentConverseService(
+                    agentGateway = gateway,
+                    agentSessionRepository = mockk(relaxed = true),
+                    agentTurnHistoryRepository = historyRepository,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    eventPublisher = mockk(relaxed = true),
+                    meterRegistry = SimpleMeterRegistry(),
+                    transactionManager = transactionManager,
+                    clock = createFixedUtcClock(now = fixedNow),
+                )
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent())
+                // Read (and clear) here so the flag cannot leak into later specs on this thread.
+                val flagAfterReturn = Thread.interrupted()
+
+                then("the failure reply transaction runs with the interrupt flag cleared") {
+                    flagSeenByTransaction shouldBe listOf(false)
+                }
+                then("the flag is restored before the listener returns, for the executor to see") {
+                    flagAfterReturn shouldBe true
+                }
+                then("the requester still gets the failure notice and the turn is audited as interrupted") {
+                    val content =
+                        stagedMessage.captured
+                            .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe AgentConverseService.FAILURE_MESSAGE
+                    recordedTurn.captured.outcome shouldBe AgentTurnOutcome.FAILED
+                    recordedTurn.captured.errorCode shouldBe "interrupted"
+                }
+            }
+        }
+
         given("an event without a thread anchor") {
             val basicInfo = createCommandBasicInfo()
             val gateway = mockk<AgentGateway>()
