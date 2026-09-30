@@ -10,6 +10,7 @@ import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.transaction.PlatformTransactionManager
@@ -133,10 +134,12 @@ class CveNotificationDispatcher(
         outboxRepository.save(outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo))
     }
 
+    // Titles, summaries (the prod Noop summarizer passes GitHub release notes through) and topic names are
+    // upstream text: escaped before interpolation, and every length check below runs on the escaped string.
     private fun immediateMarkdown(pair: UndeliveredCveEvent): String {
-        val head = "*${pair.topicDisplayName}* — ${pair.title}"
+        val head = "*${pair.topicDisplayName.escapeMrkdwn()}* — ${pair.title.escapeMrkdwn()}"
         val summary = pair.aiSummary
-        return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n$summary")
+        return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n${summary.escapeMrkdwn()}")
     }
 
     // Every claimed pair already has its ledger row, so an event cut off a capped body would never be re-sent.
@@ -147,7 +150,7 @@ class CveNotificationDispatcher(
         val current = StringBuilder()
         var currentTopic: String? = null
         events.groupBy { it.topicDisplayName }.forEach { (topicDisplayName, topicEvents) ->
-            val header = "*$topicDisplayName*"
+            val header = "*${topicDisplayName.escapeMrkdwn()}*"
             topicEvents.forEach { event ->
                 val line = digestEventLine(event = event)
                 val separator = if (currentTopic == topicDisplayName) "\n" else "\n\n$header\n"
@@ -168,13 +171,12 @@ class CveNotificationDispatcher(
     private fun capBody(body: String): String =
         if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
 
+    // digestSummaryMaxLength trims the raw text (a readability knob, and never splits an entity); the section
+    // limit is enforced on the escaped line by digestParts.
     private fun digestEventLine(event: UndeliveredCveEvent): String {
         val summary = event.aiSummary
-        return if (summary.isNullOrBlank()) {
-            "• *${event.title}*"
-        } else {
-            "• *${event.title}*\n${summary.take(digestSummaryMaxLength)}"
-        }
+        val title = "• *${event.title.escapeMrkdwn()}*"
+        return if (summary.isNullOrBlank()) title else "$title\n${summary.take(digestSummaryMaxLength).escapeMrkdwn()}"
     }
 
     companion object {

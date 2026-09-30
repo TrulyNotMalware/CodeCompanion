@@ -33,6 +33,10 @@ events do not fit one Slack section. Feature-gated `@Bean` from
   user's day in one tick. The exception is a page held by a single user (more pairs than `batchSize`):
   they are served in slices, one tick each, or they would starve. The immediate path keeps the event-major
   `findUndelivered` so the oldest events go first across users.
+- **Escape upstream text, then measure.** Topic names, titles and summaries (the prod `NoopAiSummarizer`
+  passes GitHub release bodies straight through) go through `templates/escapeMrkdwn()` (T21) before
+  interpolation. `digestSummaryMaxLength` trims the raw summary; `digestParts` packing and `capBody` measure
+  the escaped strings, because `&` / `<` / `>` expand up to 5× and only the escaped length reaches Slack.
 - **Every claimed event must reach a sent body.** A claimed pair already has its `cve_delivery` row, so an
   event cut off the end of a capped digest would never be sent again. The digest is therefore split into
   parts rather than truncated; only one event line longer than a part is capped (its title still leads

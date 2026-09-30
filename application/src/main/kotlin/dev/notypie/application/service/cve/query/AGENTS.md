@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # application/service/cve/query
 
@@ -14,11 +14,15 @@ pure DB read — the AI summary was produced once by `../ai/CveSummaryWorker`, n
 |------|-------------|
 | `CveQuerySlashService.kt` | Interface: `handleLatest(headers, payload: SlashCommandRequestBody, commandData: InboundCommand)`. Called from `controllers/SlashCommandController` and `socket/SocketModeReceiver` |
 | `CveQuerySlashServiceImpl.kt` | `@Transactional handleLatest`: feature off → `log.warn` and return; else `CveLatestSlashCommand(idempotencyKey, commandData, topicKey = extractTopicKey(commandData.subCommands))`. `internal fun extractTopicKey(subCommands)` in the companion: first non-blank argument, lower-cased; `null` when there is none |
-| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently. No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey == key }` or "Topic `key` is not available.". `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700); the joined body is cut at `BODY_MAX_LENGTH` (2 900) with `…(truncated)`. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` |
+| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently. No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey == key }` or "Topic `key` is not available." (key escaped). `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700), every piece passed through `escapeMrkdwn()`; the joined (escaped) body is cut at `BODY_MAX_LENGTH` (2 900) with `…(truncated)`. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` |
 
 ## For AI Agents
 
 ### Working In This Directory
+- **Escape upstream text, then measure.** Topic names, titles, summaries and the echoed key go through
+  `templates/escapeMrkdwn()` (T21) so `<!channel>` or `<https://evil|label>` in a feed stays literal; the
+  700-char trim runs on the raw summary (never splits an entity) and the 2 900 cap on the escaped body,
+  since `&` / `<` / `>` expand up to 5× and only the escaped length reaches Slack.
 - Cap the aggregate, not just each summary. The whole body lands in one Slack `section` block and Slack
   rejects mrkdwn over 3 000 characters (`invalid_blocks`); 5 × 700 already exceeds that, so
   `BODY_MAX_LENGTH` is what makes the DM postable. The same rule lives in

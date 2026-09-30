@@ -695,6 +695,141 @@ class CveNotificationDispatcherTest :
             }
         }
 
+        given("an immediate pair whose feed text carries Slack control sequences") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.IMMEDIATE,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(
+                        eventId = 1L,
+                        userId = "U1",
+                        topicDisplayName = "R&D <team>",
+                        title = "<!channel> v2.3.1",
+                        aiSummary = "Fix for < 2.3.1: <https://evil.example|Patch here>",
+                    ),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                )
+
+            `when`("the immediate tick runs") {
+                dispatcher.immediateTick()
+
+                then("topic, title and summary are escaped so no mention or disguised link reaches Slack") {
+                    messages.single().channelText().markdown shouldBe
+                        "*R&amp;D &lt;team&gt;* — &lt;!channel&gt; v2.3.1\n\n" +
+                        "Fix for &lt; 2.3.1: &lt;https://evil.example|Patch here&gt;"
+                }
+            }
+        }
+
+        given("an immediate pair whose summary only overflows the section limit once escaped") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.IMMEDIATE,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(
+                        eventId = 1L,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t",
+                        aiSummary = "<".repeat(1000),
+                    ),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                )
+
+            `when`("the immediate tick runs") {
+                dispatcher.immediateTick()
+
+                then("the cap is measured on the escaped body") {
+                    val markdown = messages.single().channelText().markdown
+                    markdown.length shouldBe 2900 + "\n…(truncated)".length
+                    markdown shouldNotContain "<"
+                }
+            }
+        }
+
+        given("digest events whose summaries only overflow a section once escaped") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                (1L..2L).map { eventId ->
+                    createUndeliveredCveEvent(
+                        eventId = eventId,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t$eventId",
+                        aiSummary = "<".repeat(700),
+                    )
+                }
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("parts are packed by escaped length, so each event gets its own part within the limit") {
+                    messages.size shouldBe 2
+                    messages.forEach { message ->
+                        message.channelText().markdown.length shouldBeLessThanOrEqual 2900
+                        message.channelText().markdown shouldNotContain "<"
+                        message.channelText().markdown shouldNotContain "(truncated)"
+                    }
+                }
+            }
+        }
+
         given("the delivery horizon bound") {
             val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
             val since = slot<LocalDateTime>()

@@ -14,6 +14,7 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveRecentEvent
 import dev.notypie.repository.cve.CveSubscriptionRepository
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -82,17 +83,25 @@ class CveLatestQueryService(
         } else {
             val topic =
                 cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey == topicKey }
-                    ?: return "Topic `$topicKey` is not available."
+                    ?: return "Topic `${topicKey.escapeMrkdwn()}` is not available."
             topicIds = listOf(topic.id)
-            emptyMessage = "No recent CVE updates for *${topic.displayName}* yet."
+            emptyMessage = "No recent CVE updates for *${topic.displayName.escapeMrkdwn()}* yet."
         }
 
         val recent = cveEventRepository.findRecentDoneEvents(topicIds = topicIds, limit = LATEST_LIMIT)
         if (recent.isEmpty()) return emptyMessage
+        // render() escapes, so this cap measures the body Slack will actually receive.
         val body = recent.joinToString(separator = "\n\n") { render(event = it) }
         return if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
     }
 
-    private fun render(event: CveRecentEvent): String =
-        "*${event.topicDisplayName}* — *${event.title}*\n${event.aiSummary.orEmpty().take(SUMMARY_MAX_LENGTH)}"
+    // Feed titles and summaries are upstream text; escape them so `<!channel>` or `<url|label>` stays literal.
+    private fun render(event: CveRecentEvent): String {
+        val summary =
+            event.aiSummary
+                .orEmpty()
+                .take(SUMMARY_MAX_LENGTH)
+                .escapeMrkdwn()
+        return "*${event.topicDisplayName.escapeMrkdwn()}* — *${event.title.escapeMrkdwn()}*\n$summary"
+    }
 }
