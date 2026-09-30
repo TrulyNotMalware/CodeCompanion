@@ -17,6 +17,9 @@ class OutboxRecoverySchedulerTest :
     BehaviorSpec({
         val cutoff = DEFAULT_TEST_NOW.minusSeconds(300L)
 
+        fun relayWithSlots(slots: Int = Int.MAX_VALUE): MessageRelayService =
+            mockk { every { freeDispatchSlots() } returns slots }
+
         fun scheduler(repository: MessageOutboxRepository, relay: MessageRelayService) =
             OutboxRecoveryScheduler(
                 outboxRepository = repository,
@@ -27,7 +30,7 @@ class OutboxRecoverySchedulerTest :
 
         given("stuck IN_PROGRESS rows and stale PENDING rows older than the threshold") {
             val repository = mockk<MessageOutboxRepository>()
-            val relay = mockk<MessageRelayService>()
+            val relay = relayWithSlots()
             every { repository.findStuckInProgress(olderThan = cutoff, limit = 100) } returns
                 listOf(
                     createOutboxRow(
@@ -77,7 +80,7 @@ class OutboxRecoverySchedulerTest :
 
         given("a row that has been IN_PROGRESS longer than the give-up window") {
             val repository = mockk<MessageOutboxRepository>()
-            val relay = mockk<MessageRelayService>()
+            val relay = relayWithSlots()
             every { repository.findStuckInProgress(olderThan = cutoff, limit = 100) } returns
                 listOf(createOutboxRow(eventId = "old", createdAt = DEFAULT_TEST_NOW.minusHours(25L), attemptCount = 4))
             every {
@@ -108,7 +111,7 @@ class OutboxRecoverySchedulerTest :
 
         given("a poison row that spent its send budget well inside the give-up window") {
             val repository = mockk<MessageOutboxRepository>()
-            val relay = mockk<MessageRelayService>()
+            val relay = relayWithSlots()
             every { repository.findStuckInProgress(olderThan = cutoff, limit = 100) } returns
                 listOf(
                     createOutboxRow(
@@ -163,7 +166,7 @@ class OutboxRecoverySchedulerTest :
 
         given("a stuck row that a fresh owner renewed between the read and the abandon") {
             val repository = mockk<MessageOutboxRepository>()
-            val relay = mockk<MessageRelayService>()
+            val relay = relayWithSlots()
             every { repository.findStuckInProgress(olderThan = cutoff, limit = 100) } returns
                 listOf(
                     createOutboxRow(eventId = "raced", createdAt = DEFAULT_TEST_NOW.minusHours(25L), attemptCount = 2),
@@ -183,6 +186,80 @@ class OutboxRecoverySchedulerTest :
             }
         }
 
+        given("more recoverable rows than the relay executor can queue") {
+            val repository = mockk<MessageOutboxRepository>()
+            val relay = relayWithSlots(slots = 1)
+            every { repository.findStuckInProgress(olderThan = cutoff, limit = 100) } returns
+                listOf(
+                    createOutboxRow(
+                        eventId = "expired",
+                        createdAt = DEFAULT_TEST_NOW.minusHours(25L),
+                        attemptCount = 1,
+                    ),
+                    createOutboxRow(eventId = "first", createdAt = DEFAULT_TEST_NOW.minusHours(1L), attemptCount = 1),
+                    createOutboxRow(eventId = "second", createdAt = DEFAULT_TEST_NOW.minusHours(1L), attemptCount = 1),
+                )
+            every {
+                repository.abandonStuck(
+                    eventId = "expired",
+                    attemptCount = 1,
+                    olderThan = cutoff,
+                    now = DEFAULT_TEST_NOW,
+                )
+            } returns 1
+            every {
+                repository.reclaimStuck(eventId = any(), attemptCount = 1, olderThan = cutoff, now = DEFAULT_TEST_NOW)
+            } returns 1
+            val dispatched = slot<List<OutboxClaim>>()
+            every { relay.batchPendingMessages(claims = capture(dispatched)) } returns Unit
+
+            `when`("the sweep runs with room for one claim") {
+                val count = scheduler(repository = repository, relay = relay).recoverOnce()
+
+                then("it claims only that one, leaves the rest unclaimed for the next sweep, and still abandons") {
+                    count shouldBe 1
+                    dispatched.captured.map { it.row.eventId } shouldBe listOf("first")
+                    verify(exactly = 0) {
+                        repository.reclaimStuck(
+                            eventId = "second",
+                            attemptCount = any(),
+                            olderThan = any(),
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { repository.findStalePending(olderThan = any(), limit = any()) }
+                    verify(exactly = 1) {
+                        repository.abandonStuck(
+                            eventId = "expired",
+                            attemptCount = 1,
+                            olderThan = cutoff,
+                            now = DEFAULT_TEST_NOW,
+                        )
+                    }
+                }
+            }
+        }
+
+        given("a relay executor with a few free slots and more stale PENDING rows than that") {
+            val repository = mockk<MessageOutboxRepository>()
+            val relay = relayWithSlots(slots = 2)
+            every { repository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
+            every { repository.findStalePending(olderThan = cutoff, limit = 2) } returns
+                listOf(createOutboxRow(eventId = "a"), createOutboxRow(eventId = "b"))
+            every { repository.claimPending(eventId = any(), attemptCount = 0, now = DEFAULT_TEST_NOW) } returns 1
+            val dispatched = slot<List<OutboxClaim>>()
+            every { relay.batchPendingMessages(claims = capture(dispatched)) } returns Unit
+
+            `when`("the sweep runs") {
+                scheduler(repository = repository, relay = relay).recoverOnce()
+
+                then("the stale read is capped at the free slots") {
+                    dispatched.captured.map { it.row.eventId } shouldBe listOf("a", "b")
+                    verify(exactly = 1) { repository.findStalePending(olderThan = cutoff, limit = 2) }
+                }
+            }
+        }
+
         given("outbox budgets and thresholds") {
             then("zero or negative values are rejected when the configuration binds") {
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Polling(maxSends = 0) }
@@ -196,7 +273,7 @@ class OutboxRecoverySchedulerTest :
 
         given("nothing to recover") {
             val repository = mockk<MessageOutboxRepository>()
-            val relay = mockk<MessageRelayService>()
+            val relay = relayWithSlots()
             every { repository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
             every { repository.findStalePending(olderThan = any(), limit = any()) } returns emptyList()
 

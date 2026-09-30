@@ -25,7 +25,8 @@ _type: guide · updated: 2026-09-30_
 ## 프로파일 매트릭스
 
 `application.yaml`은 안전 기본값만 갖는다 — `spring.ai.mcp.server.enabled`와 `slack.app.mcp.enabled`를 끄고
-`spring.task.scheduling.pool.size`를 4로 둔다. 환경별 배선은 각 `application-<profile>.yaml`이 소유한다.
+`spring.task.scheduling.pool.size`를 4로 둔다(가상 스레드 설정에서도 이 값이 먹도록 `SchedulingConfig`가 `taskScheduler`를
+`ThreadPoolTaskScheduler`로 직접 등록한다). 환경별 배선은 각 `application-<profile>.yaml`이 소유한다.
 
 | 프로파일 | DB / `spring.jpa.hibernate.ddl-auto` | `outbox-reading-strategy` / `event-publisher` | 인바운드 |
 |---|---|---|---|
@@ -69,7 +70,7 @@ _type: guide · updated: 2026-09-30_
   그룹에서 빠졌다가 재전달받는데, 이미 claim된 행은 PENDING이 아니므로 CDC 프로세서가 건너뛴다.
 - Hikari 풀: 모든 프로파일 `maximum-pool-size: 20`. 회의 cancel/reschedule/참가자 추가는 바깥 interaction 트랜잭션과
   `isolatedWriteTemplate`의 `REQUIRES_NEW` 쓰기로 커넥션 두 개를 동시에 잡고, 릴레이 executor·스케줄러·CDC 리스너가 같은 풀을 쓴다.
-  산정식: 동시 회의 interaction 수 × 2 + 릴레이 워커(`relayTaskExecutor` 4, `CallerRunsPolicy`면 제출 스레드 1 추가) + 스케줄러
+  산정식: 동시 회의 interaction 수 × 2 + 릴레이 워커(`relayTaskExecutor` 4, 넘친 작업은 거절되고 제출 스레드에서 돌지 않음) + 스케줄러
   스레드(4) + CDC 리스너(1) + DB를 쓰는 async 작업(`threadPoolTaskExecutor` 최대 10). 요청 스레드는 가상 스레드라 동시 interaction을
   막는 것은 스레드 수가 아니라 풀이며, 커넥션을 못 얻은 요청은 `connection-timeout` 뒤 실패한다. MariaDB `max_connections`는
   풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40, 롤링 업데이트 surge 중 60, 여기에 Debezium과 운영자 세션을 더한다.

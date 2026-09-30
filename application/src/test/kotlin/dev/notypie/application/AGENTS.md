@@ -12,6 +12,7 @@ package with `./gradlew :application:test --tests 'dev.notypie.application.<pack
 | Directory | Purpose |
 |-----------|---------|
 | `common/` | `IdempotencyCreator` / `DefaultIdempotencyDataSerializer` (see `common/AGENTS.md`) |
+| `configurations/` | Spring wiring smoke tests: which scheduler and relay executor Boot really registers (see `configurations/AGENTS.md`) |
 | `exception/` | `ControllerAdvice` handler responses (see `exception/AGENTS.md`) |
 | `health/` | `OutboxHealthIndicator` actuator contributor (see `health/AGENTS.md`) |
 | `mcp/` | `McpToolGate` and `DomainReadTools` MCP tools (see `mcp/AGENTS.md`) |

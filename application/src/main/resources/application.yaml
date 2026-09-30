@@ -10,8 +10,10 @@ spring:
   task:
     scheduling:
       pool:
-        # Spring's default scheduler pool is a single thread shared by every @Scheduled job; one
-        # slow job (e.g. the CVE collector's outbound HTTP) would starve all the others.
+        # Read by the explicit `taskScheduler` ThreadPoolTaskScheduler in SchedulingConfig. Without that
+        # bean, spring.threads.virtual.enabled makes Boot pick a SimpleAsyncTaskScheduler that ignores
+        # this value and runs every fixed-delay job on one thread, so one slow job (the CVE workers'
+        # outbound HTTP, a recovery sweep) starves all the others. SchedulingWiringSmokeTest pins both.
         size: 4
 
 slack:

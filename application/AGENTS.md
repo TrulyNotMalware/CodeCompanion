@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # application
 
@@ -71,8 +71,10 @@ This module also consumes `testFixtures(project(":domain"))` and `testFixtures(p
   The interface is what other services and the socket receiver depend on.
 - `@Scheduled` jobs are split into a thin `*Scheduler` (cron/fixed-rate trigger) and a `*SchedulingService`
   (the actual logic) so the logic is unit-testable without a scheduler.
-- The scheduler pool is sized to 4 in `application.yaml` — Spring's single-thread default would let one
-  slow job (e.g. the CVE collector's outbound HTTP) starve every other job.
+- The scheduler pool is sized to 4 in `application.yaml` and applied by the explicit `taskScheduler`
+  (`ThreadPoolTaskScheduler`) in `configurations/SchedulingConfig.kt` — with virtual threads on, Boot's default
+  is a `SimpleAsyncTaskScheduler` that runs every fixed-delay job on one thread, so one slow job (e.g. the CVE
+  collector's outbound HTTP) would starve every other job.
 - `Clock` is injected into time-dependent services (default `Clock.systemDefaultZone()`) so specs can
   pin time.
 - Config binding via `@ConfigurationProperties` classes under `configurations/`, scanned by

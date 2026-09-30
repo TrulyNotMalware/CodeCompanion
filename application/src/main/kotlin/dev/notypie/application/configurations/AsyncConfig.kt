@@ -26,6 +26,7 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             initialize()
         }
 
+    // Overflow is rejected, never run by the caller: the callers are scheduler threads shared by every @Scheduled job.
     @Bean(name = ["relayTaskExecutor"])
     fun relayTaskExecutor(appConfig: AppConfig): Executor =
         ThreadPoolTaskExecutor().apply {
@@ -33,7 +34,7 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             maxPoolSize = 4
             queueCapacity = appConfig.outbox.polling.batchSize
             setThreadNamePrefix("relay-")
-            setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
+            setRejectedExecutionHandler(ThreadPoolExecutor.AbortPolicy())
             setWaitForTasksToCompleteOnShutdown(true)
             setAwaitTerminationSeconds(30)
             initialize()

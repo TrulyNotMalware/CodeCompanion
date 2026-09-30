@@ -18,6 +18,7 @@ import dev.notypie.repository.outbox.schema.MessageStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -26,6 +27,7 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 
 private val logger = KotlinLogging.logger {}
 
@@ -47,10 +49,26 @@ class SlackMessageRelayServiceImpl(
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
     private val giveUpAfter: Duration = Duration.ofHours(appConfig.outbox.polling.giveUpAfterHours)
 
+    // An executor that is not a bounded pool (inline, test queue) never rejects.
+    override fun freeDispatchSlots(): Int =
+        (relayTaskExecutor as? ThreadPoolTaskExecutor)?.threadPoolExecutor?.let { pool ->
+            pool.queue.remainingCapacity() + (pool.maximumPoolSize - pool.activeCount).coerceAtLeast(0)
+        } ?: Int.MAX_VALUE
+
     // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
+    // A rejected claim is left IN_PROGRESS without a send, so the recovery sweep reclaims it after the stuck threshold.
     override fun batchPendingMessages(claims: List<OutboxClaim>) {
-        claims.forEach { claim ->
-            relayTaskExecutor.execute { dispatchClaimed(claim = claim) }
+        claims.forEachIndexed { index, claim ->
+            try {
+                relayTaskExecutor.execute { dispatchClaimed(claim = claim) }
+            } catch (rejected: RejectedExecutionException) {
+                val left = claims.drop(index)
+                logger.warn(rejected) {
+                    "Relay executor rejected ${left.size} of ${claims.size} claims; leaving eventIds=" +
+                        "${left.map { it.row.eventId }} IN_PROGRESS for the recovery sweep"
+                }
+                return
+            }
         }
     }
 

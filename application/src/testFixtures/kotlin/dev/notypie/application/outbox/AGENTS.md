@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/outbox
 
@@ -13,7 +13,7 @@ H2-backed Spring Data context for scenario specs that drive the real repository.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxTestFixtures.kt` | `DEFAULT_TEST_NOW` (2026-04-28T12:00), `createFixedUtcClock(now)`, `createOutboxRow(eventId, status = PENDING, createdAt = DEFAULT_TEST_NOW, attemptCount = 0, sendCount = 0)`, `PollingProcessorFixture` + `createPollingProcessorFixture(batchSize = 100, outboxRepository, relayService, clock = createFixedUtcClock())`, `createRelayService(outboxRepository, outboundMessagePort, payloadRenderer, messageDispatcher, applicationEventPublisher, clock, relayTaskExecutor = inline, appConfig = AppConfig())` (real service, real `RetryService`), `MessageOutboxRepository.stubClaimLifecycle(renewed = 1, completed = 1, deferred = 1)` (`renewClaim` / `completeClaim` / `deferClaim` for any arguments), `MessageOutboxRepository.stubOutboxStatus(pendingCount, stuckPendingCount, oldestPendingCreatedAt, inProgressCount, stuckInProgressCount, oldestInProgressUpdatedAt, retryingCount)` |
+| `OutboxTestFixtures.kt` | `DEFAULT_TEST_NOW` (2026-04-28T12:00), `createFixedUtcClock(now)`, `createOutboxRow(eventId, status = PENDING, createdAt = DEFAULT_TEST_NOW, attemptCount = 0, sendCount = 0)`, `PollingProcessorFixture` + `createPollingProcessorFixture(batchSize = 100, outboxRepository, relayService, clock = createFixedUtcClock())` (the default `relayService` is a relaxed mock whose `freeDispatchSlots()` is `Int.MAX_VALUE`, since a relaxed `Int` of 0 would make every tick skip), `createRelayService(outboxRepository, outboundMessagePort, payloadRenderer, messageDispatcher, applicationEventPublisher, clock, relayTaskExecutor = inline, appConfig = AppConfig())` (real service, real `RetryService`), `MessageOutboxRepository.stubClaimLifecycle(renewed = 1, completed = 1, deferred = 1)` (`renewClaim` / `completeClaim` / `deferClaim` for any arguments), `MessageOutboxRepository.stubOutboxStatus(pendingCount, stuckPendingCount, oldestPendingCreatedAt, inProgressCount, stuckInProgressCount, oldestInProgressUpdatedAt, retryingCount)` |
 | `OutboxJpaTestContext.kt` | `OutboxJpaTestConfiguration` (`@EnableJpaRepositories(basePackageClasses = [MessageOutboxRepository::class])`, uniquely named embedded H2, Hibernate `generateDdl` over the `outbox/schema` package only, `JpaTransactionManager`, `JdbcTemplate`) and `createOutboxJpaContext()`; `MutableClock(current = Instant.now(), zoneId = systemDefault)` with `now` and `advance(by)`; `ScriptedMessageDispatcher(outcomes, fallback)` answering the n-th `dispatch` with `outcomes[n]` or `fallback` and counting `calls`; `QueuedExecutor` (`execute` queues, `runAll()` drains in order, `size`); `JdbcTemplate.outboxColumn(eventId, column)` |
 
 ## For AI Agents

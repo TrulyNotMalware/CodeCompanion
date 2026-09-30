@@ -11,7 +11,7 @@ stand up change-data-capture locally and in-cluster.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; scheduler pool sized to 4; `server.forward-headers-strategy: none` |
+| `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; scheduler pool sized to 4 (read by the `taskScheduler` bean in `configurations/SchedulingConfig.kt`); `server.forward-headers-strategy: none` |
 | `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true`; HTTP bound to `server.address: 127.0.0.1` (the only profile allowed a blank signing secret, with unauthenticated actuator endpoints) |
 | `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
 | `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
@@ -63,8 +63,8 @@ stand up change-data-capture locally and in-cluster.
 - **Hikari pool** (`maximum-pool-size: 20` in every profile). A meeting cancel/reschedule/add-participant holds
   two connections at once (the outer interaction transaction plus the `REQUIRES_NEW` write from
   `isolatedWriteTemplate`), and the relay executor, the schedulers and the CDC listener share the same pool. Size
-  it as: concurrent meeting interactions x 2 + relay workers (`relayTaskExecutor`, 4, plus the submitting thread
-  under `CallerRunsPolicy`) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
+  it as: concurrent meeting interactions x 2 + relay workers (`relayTaskExecutor`, 4; overflow is rejected, never run
+  on the submitting thread) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + async-executor tasks that use the DB (`threadPoolTaskExecutor`, up to 10). Request threads are virtual,
   so the pool, not a thread limit, is what bounds concurrent interactions; a request that cannot get a connection
   fails after `connection-timeout`. MariaDB must allow pool size x Pods: 2 replicas x 20 = 40, and 60 during a

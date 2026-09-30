@@ -53,11 +53,26 @@ class OutboxRecoveryScheduler(
                 }
             }
         }
-        val reclaimed = stuck.mapNotNull { outboxRepository.reclaim(row = it, olderThan = cutoff, now = now) }
+        // Only as many claims as the relay can queue; the rest stay eligible for the next sweep, unclaimed.
+        val slots = messageRelayService.freeDispatchSlots().coerceAtLeast(0)
+        val reclaimed =
+            stuck
+                .asSequence()
+                .mapNotNull { outboxRepository.reclaim(row = it, olderThan = cutoff, now = now) }
+                .take(slots)
+                .toList()
+        val staleSlots = slots - reclaimed.size
         val stale =
-            outboxRepository
-                .findStalePending(olderThan = cutoff, limit = batchSize)
-                .mapNotNull { outboxRepository.claim(row = it, now = now) }
+            if (staleSlots == 0) {
+                emptyList()
+            } else {
+                outboxRepository
+                    .findStalePending(olderThan = cutoff, limit = minOf(batchSize, staleSlots))
+                    .asSequence()
+                    .mapNotNull { outboxRepository.claim(row = it, now = now) }
+                    .take(staleSlots)
+                    .toList()
+            }
         val claims = reclaimed + stale
         if (claims.isNotEmpty()) {
             log.warn { "Outbox recovery re-dispatching ${reclaimed.size} stuck and ${stale.size} stale rows" }

@@ -5,6 +5,9 @@ import dev.notypie.repository.outbox.schema.OutboxMessage
 import java.time.LocalDateTime
 
 interface MessageRelayService {
+    // Claims batchPendingMessages can take right now; callers claim no more, so a claimed row is rarely left waiting.
+    fun freeDispatchSlots(): Int
+
     fun batchPendingMessages(claims: List<OutboxClaim>)
 
     fun dispatchClaimed(claim: OutboxClaim)

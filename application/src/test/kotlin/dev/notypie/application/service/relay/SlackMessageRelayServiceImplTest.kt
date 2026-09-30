@@ -40,9 +40,14 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 class SlackMessageRelayServiceImplTest :
     BehaviorSpec({
@@ -529,6 +534,75 @@ class SlackMessageRelayServiceImplTest :
                             outboxRepository.renewClaim(eventId = eventId, attemptCount = 2, now = any())
                         }
                     }
+                }
+            }
+
+            `when`("the bounded relay pool is full when the claims arrive") {
+                val release = CountDownLatch(1)
+                val firstStarted = CountDownLatch(1)
+                val dispatchThreads = ConcurrentLinkedQueue<String>()
+                val messageDispatcher = mockk<MessageDispatcher>()
+                every { messageDispatcher.dispatch(event = any()) } answers {
+                    dispatchThreads.add(Thread.currentThread().name)
+                    firstStarted.countDown()
+                    release.await(5L, TimeUnit.SECONDS)
+                    delivered()
+                }
+                val pool =
+                    ThreadPoolTaskExecutor().apply {
+                        corePoolSize = 1
+                        maxPoolSize = 1
+                        queueCapacity = 1
+                        setThreadNamePrefix("relay-test-")
+                        setRejectedExecutionHandler(ThreadPoolExecutor.AbortPolicy())
+                        initialize()
+                    }
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = messageDispatcher,
+                        relayTaskExecutor = pool,
+                    )
+                val eventIds = List(size = 3) { UUID.randomUUID().toString() }
+                val slotsBefore = service.freeDispatchSlots()
+
+                shouldNotThrowAny {
+                    service.batchPendingMessages(
+                        claims = eventIds.map { OutboxClaim(row = createOutboxRow(eventId = it), attempt = 1) },
+                    )
+                }
+                firstStarted.await(5L, TimeUnit.SECONDS)
+                val slotsWhileFull = service.freeDispatchSlots()
+                release.countDown()
+                pool.threadPoolExecutor.shutdown()
+                pool.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
+
+                then("the overflow claim is left for the recovery sweep instead of running on the caller's thread") {
+                    slotsBefore shouldBe 2
+                    slotsWhileFull shouldBe 0
+                    dispatchThreads.toList() shouldHaveSize 2
+                    dispatchThreads.forEach { it.startsWith("relay-test-") shouldBe true }
+                    verify(exactly = 0) {
+                        outboxRepository.renewClaim(eventId = eventIds[2], attemptCount = any(), now = any())
+                    }
+                    verify(exactly = 0) {
+                        outboxRepository.completeClaim(
+                            eventId = eventIds[2],
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
+                    }
+                }
+            }
+
+            `when`("the executor is not a bounded pool") {
+                val service = createRelayService(outboxRepository = mockk())
+
+                then("it reports unlimited room, since an inline executor never rejects") {
+                    service.freeDispatchSlots() shouldBe Int.MAX_VALUE
                 }
             }
         }

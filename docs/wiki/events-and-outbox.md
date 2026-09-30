@@ -130,9 +130,15 @@ _type: architecture · updated: 2026-09-30_
 - **POLLING** — `PollingMessageProcessor`, `@Scheduled(fixedRate = 5000)`(하드코딩). tick당 `PENDING`
   `batch-size`(기본 100)건 읽기 → 행마다 `claimPending` → 이긴 claim만 `batchPendingMessages`, 내부 루프 없음(스케줄러
   스레드 독점 방지). 복구는 여기 없고 `OutboxRecoveryScheduler`가 한다. `SlackMessageRelayServiceImpl.batchPendingMessages`는
-  `@Async` 대신 `@Qualifier("relayTaskExecutor")`(4스레드, 큐 = batch-size, `CallerRunsPolicy`)에 직접 submit 한다
+  `@Async` 대신 `@Qualifier("relayTaskExecutor")`(4스레드, 큐 = batch-size, `AbortPolicy`)에 직접 submit 한다
   (같은 빈 내부 self-invocation은 AOP 프록시를 타지 않음). 큐에서 오래 기다린 작업의 안전은 큐 크기가 아니라 위의
   `renewClaim` 검사가 보장한다.
+- **스케줄러 스레드에서 발송하지 않는다.** 폴러와 복구 스윕은 모든 `@Scheduled` 작업이 공유하는 `taskScheduler`
+  (`SchedulingConfig`의 `ThreadPoolTaskScheduler`, `spring.task.scheduling.pool.size` 4) 위에서 돈다. 예전에는
+  가상 스레드 설정 때문에 Boot가 `SimpleAsyncTaskScheduler`를 골라 fixed-delay 작업 전부가 스레드 하나에서 직렬로
+  돌았고, 넘친 relay 작업이 `CallerRunsPolicy`로 그 스레드에서 발송되어 리마인더·스탠드업이 수십 분 멈출 수
+  있었다(review 14장 T1). 지금은 두 리더가 `freeDispatchSlots()`(relay 풀의 남은 큐 + 쉬는 스레드)만큼만
+  claim하고, 그래도 거절된 claim은 발송 없이 `IN_PROGRESS`로 남겨 stuck 임계 뒤 스윕이 회수한다.
 - **CDC** — Debezium MariaDB 커넥터(`table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`;
   `cdc/docker-compose/debezium/connect_mariadb.sh`) → Kafka → `DebeziumLogTailingProcessor`. 리스너는
   `spring.json.use.type.headers:false` + 기본 타입 `Envelope`로 역직렬화하고, `payload.after.status == PENDING`인

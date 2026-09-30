@@ -7,6 +7,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.mockk.every
+import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 
@@ -76,6 +77,37 @@ class PollingMessageProcessorTest :
 
                 then("exactly the rows this poller won are dispatched, not a prefix of the candidate list") {
                     captured.captured.map { it.row.eventId } shouldBe listOf("a", "c")
+                }
+            }
+
+            `when`("the relay executor has room for only two claims") {
+                val relay = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
+                every { relay.freeDispatchSlots() } returns 2
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(relayService = relay)
+                every { outboxRepository.findPendingMessages(limit = 2) } returns
+                    listOf(createOutboxRow(eventId = "p"), createOutboxRow(eventId = "q"))
+                every { outboxRepository.claimPending(eventId = any(), attemptCount = 0, now = any()) } returns 1
+                val captured = slot<List<OutboxClaim>>()
+                every { relayService.batchPendingMessages(claims = capture(captured)) } returns Unit
+
+                processor.pollPending()
+
+                then("the PENDING read is capped at the free slots, so nothing is claimed that cannot be queued") {
+                    verify(exactly = 1) { outboxRepository.findPendingMessages(limit = 2) }
+                    captured.captured.map { it.row.eventId } shouldBe listOf("p", "q")
+                }
+            }
+
+            `when`("the relay executor is full") {
+                val relay = mockk<SlackMessageRelayServiceImpl>(relaxed = true)
+                every { relay.freeDispatchSlots() } returns 0
+                val (outboxRepository, relayService, processor) = createPollingProcessorFixture(relayService = relay)
+
+                processor.pollPending()
+
+                then("the tick neither reads nor claims, leaving every row PENDING for a later tick") {
+                    verify(exactly = 0) { outboxRepository.findPendingMessages(limit = any()) }
+                    verify(exactly = 0) { relayService.batchPendingMessages(claims = any()) }
                 }
             }
 
