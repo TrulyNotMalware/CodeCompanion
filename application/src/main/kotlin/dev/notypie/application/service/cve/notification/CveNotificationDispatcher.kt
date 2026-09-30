@@ -74,7 +74,7 @@ class CveNotificationDispatcher(
                 .withZoneSameInstant(ZoneId.systemDefault())
                 .toLocalDateTime()
         val pairs =
-            cveDeliveryRepository.findUndelivered(
+            cveDeliveryRepository.findUndeliveredByUser(
                 deliveryMode = CveDeliveryMode.DIGEST,
                 since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays),
                 doneBefore = doneBefore,
@@ -82,9 +82,15 @@ class CveNotificationDispatcher(
             )
         if (pairs.isEmpty()) return
 
+        val byUser = pairs.groupBy { it.userId }
+        // A full page may have cut its last user short; that user waits for the next tick so their day still goes
+        // out in one tick — unless they fill the page alone, or they would never be served.
+        val users = byUser.keys.toList().let { if (pairs.size >= batchSize && it.size > 1) it.dropLast(1) else it }
+
         var dispatchedUsers = 0
         var dispatchedEvents = 0
-        pairs.groupBy { it.userId }.forEach { (userId, userPairs) ->
+        users.forEach { userId ->
+            val userPairs = byUser.getValue(userId)
             transactionTemplate
                 .runInTx { dispatchDigest(userId = userId, userPairs = userPairs) }
                 .onFailure { ex -> log.error(ex) { "CVE digest dispatch failed for user=$userId" } }
@@ -109,7 +115,11 @@ class CveNotificationDispatcher(
     private fun dispatchDigest(userId: String, userPairs: List<UndeliveredCveEvent>): Int {
         val claimed = userPairs.filter { cveDeliveryRepository.claim(eventId = it.eventId, userId = it.userId) }
         if (claimed.isEmpty()) return 0
-        enqueue(userId = userId, headline = DIGEST_HEADLINE, markdown = digestMarkdown(events = claimed))
+        val parts = digestParts(events = claimed)
+        parts.forEachIndexed { index, markdown ->
+            val headline = if (parts.size == 1) DIGEST_HEADLINE else "$DIGEST_HEADLINE (${index + 1}/${parts.size})"
+            enqueue(userId = userId, headline = headline, markdown = markdown)
+        }
         return claimed.size
     }
 
@@ -129,14 +139,30 @@ class CveNotificationDispatcher(
         return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n$summary")
     }
 
-    private fun digestMarkdown(events: List<UndeliveredCveEvent>): String =
-        events
-            .groupBy { it.topicDisplayName }
-            .entries
-            .joinToString(separator = "\n\n") { (topicDisplayName, topicEvents) ->
-                val lines = topicEvents.joinToString(separator = "\n") { digestEventLine(event = it) }
-                "*$topicDisplayName*\n$lines"
-            }.let { capBody(body = it) }
+    // Every claimed pair already has its ledger row, so an event cut off a capped body would never be re-sent.
+    // The digest is packed into as many section-sized parts as it needs instead, repeating the topic header
+    // when a topic spills over; only a single event line too long for a part of its own is capped.
+    private fun digestParts(events: List<UndeliveredCveEvent>): List<String> {
+        val parts = mutableListOf<String>()
+        val current = StringBuilder()
+        var currentTopic: String? = null
+        events.groupBy { it.topicDisplayName }.forEach { (topicDisplayName, topicEvents) ->
+            val header = "*$topicDisplayName*"
+            topicEvents.forEach { event ->
+                val line = digestEventLine(event = event)
+                val separator = if (currentTopic == topicDisplayName) "\n" else "\n\n$header\n"
+                if (current.isNotEmpty() && current.length + separator.length + line.length <= BODY_MAX_LENGTH) {
+                    current.append(separator).append(line)
+                } else {
+                    if (current.isNotEmpty()) parts += current.toString()
+                    current.clear().append(capBody(body = "$header\n$line"))
+                }
+                currentTopic = topicDisplayName
+            }
+        }
+        if (current.isNotEmpty()) parts += current.toString()
+        return parts
+    }
 
     // Oversized body would be rejected by Slack post-claim and retry forever — capping prevents that.
     private fun capBody(body: String): String =

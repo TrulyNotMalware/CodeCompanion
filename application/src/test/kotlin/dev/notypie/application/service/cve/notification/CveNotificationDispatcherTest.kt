@@ -9,8 +9,12 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.schema.createUndeliveredCveEvent
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -60,6 +64,7 @@ class CveNotificationDispatcherTest :
             outboxRepository: MessageOutboxRepository = mockk(relaxed = true),
             clock: Clock = Clock.fixed(AFTER_SEND_AT, ZoneOffset.UTC),
             digestSummaryMaxLength: Int = 700,
+            batchSize: Int = 50,
         ): CveNotificationDispatcher {
             every { deliveryRepository.dbNow() } returns DB_NOW
             return CveNotificationDispatcher(
@@ -67,7 +72,7 @@ class CveNotificationDispatcherTest :
                 outboxRepository = outboxRepository,
                 outboundMessagePort = outboundMessagePort,
                 transactionManager = stubTransactionManager(),
-                batchSize = 50,
+                batchSize = batchSize,
                 digestSendAt = LocalTime.of(9, 0),
                 digestZone = ZoneOffset.UTC,
                 digestSummaryMaxLength = digestSummaryMaxLength,
@@ -216,7 +221,7 @@ class CveNotificationDispatcherTest :
 
                 then("the delivery repository is never queried and nothing is enqueued") {
                     verify(exactly = 0) {
-                        deliveryRepository.findUndelivered(
+                        deliveryRepository.findUndeliveredByUser(
                             deliveryMode = any(),
                             since = any(),
                             doneBefore = any(),
@@ -234,7 +239,7 @@ class CveNotificationDispatcherTest :
             val outboxRepository = stubOutbox()
             val doneBefore = slot<LocalDateTime>()
             every {
-                deliveryRepository.findUndelivered(
+                deliveryRepository.findUndeliveredByUser(
                     deliveryMode = CveDeliveryMode.DIGEST,
                     since = any(),
                     doneBefore = capture(doneBefore),
@@ -264,7 +269,7 @@ class CveNotificationDispatcherTest :
             val outboxRepository = stubOutbox()
             val messages = mutableListOf<OutboundMessage>()
             every {
-                deliveryRepository.findUndelivered(
+                deliveryRepository.findUndeliveredByUser(
                     deliveryMode = CveDeliveryMode.DIGEST,
                     since = any(),
                     doneBefore = any(),
@@ -325,7 +330,7 @@ class CveNotificationDispatcherTest :
             val outboxRepository = stubOutbox()
             val messages = mutableListOf<OutboundMessage>()
             every {
-                deliveryRepository.findUndelivered(
+                deliveryRepository.findUndeliveredByUser(
                     deliveryMode = CveDeliveryMode.DIGEST,
                     since = any(),
                     doneBefore = any(),
@@ -376,7 +381,7 @@ class CveNotificationDispatcherTest :
             val outboxRepository = stubOutbox()
             val messages = mutableListOf<OutboundMessage>()
             every {
-                deliveryRepository.findUndelivered(
+                deliveryRepository.findUndeliveredByUser(
                     deliveryMode = CveDeliveryMode.DIGEST,
                     since = any(),
                     doneBefore = any(),
@@ -499,29 +504,164 @@ class CveNotificationDispatcherTest :
             }
         }
 
-        given("a digest bundle whose aggregate body exceeds the Slack section limit") {
+        given("a digest event whose single line alone exceeds the Slack section limit") {
             val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
             val outboundMessagePort = mockk<OutboundMessagePort>()
             val outboxRepository = stubOutbox()
             val messages = mutableListOf<OutboundMessage>()
             every {
-                deliveryRepository.findUndelivered(
+                deliveryRepository.findUndeliveredByUser(
                     deliveryMode = CveDeliveryMode.DIGEST,
                     since = any(),
                     doneBefore = any(),
                     limit = 50,
                 )
             } returns
-                (1L..5L).map { eventId ->
+                listOf(
+                    createUndeliveredCveEvent(
+                        eventId = 1L,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t1",
+                        aiSummary = "x".repeat(3500),
+                    ),
+                    createUndeliveredCveEvent(
+                        eventId = 2L,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t2",
+                        aiSummary = "s2",
+                    ),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                    digestSummaryMaxLength = 5000,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("only that line is capped with a marker and the next event starts a fresh part") {
+                    messages.size shouldBe 2
+                    val first = messages[0].channelText().markdown
+                    first.length shouldBe 2900 + "\n…(truncated)".length
+                    first shouldStartWith "*Alpha*\n• *t1*\n"
+                    first shouldEndWith "…(truncated)"
+                    messages[1].channelText().markdown shouldBe "*Alpha*\n• *t2*\ns2"
+                }
+            }
+        }
+
+        given("a full digest page whose last user may have been cut short") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 3,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(eventId = 1L, userId = "U1", topicDisplayName = "Alpha", title = "t1"),
+                    createUndeliveredCveEvent(eventId = 2L, userId = "U1", topicDisplayName = "Alpha", title = "t2"),
+                    createUndeliveredCveEvent(eventId = 1L, userId = "U2", topicDisplayName = "Alpha", title = "t1"),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                    batchSize = 3,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("the complete user gets one digest and the trailing user is left untouched for the next tick") {
+                    messages.map { it.channelId() } shouldBe listOf("U1")
+                    verify(exactly = 0) { deliveryRepository.claim(eventId = any(), userId = "U2") }
+                }
+            }
+        }
+
+        given("a full digest page held by a single user") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 2,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(eventId = 1L, userId = "U1", topicDisplayName = "Alpha", title = "t1"),
+                    createUndeliveredCveEvent(eventId = 2L, userId = "U1", topicDisplayName = "Alpha", title = "t2"),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                    batchSize = 2,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("the user is still served, or a heavy subscriber would starve") {
+                    messages.map { it.channelId() } shouldBe listOf("U1")
+                    verify(exactly = 2) { deliveryRepository.claim(eventId = any(), userId = "U1") }
+                }
+            }
+        }
+
+        given("a digest bundle of six events whose 700-char summaries overflow one Slack section") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            val claimed = mutableListOf<Long>()
+            every {
+                deliveryRepository.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                (1L..6L).map { eventId ->
                     createUndeliveredCveEvent(
                         eventId = eventId,
                         userId = "U1",
                         topicDisplayName = "Alpha",
-                        title = "t$eventId",
+                        title = "CVE-2026-000$eventId",
                         aiSummary = "x".repeat(700),
                     )
                 }
-            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { deliveryRepository.claim(eventId = capture(claimed), userId = "U1") } returns true
             every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
                 createOutboxRow(eventId = UUID.randomUUID().toString())
             }
@@ -535,10 +675,22 @@ class CveNotificationDispatcherTest :
             `when`("the digest tick runs") {
                 dispatcher.digestTick()
 
-                then("the bundled body is capped under the section limit with a truncation marker") {
-                    val markdown = messages.single().channelText().markdown
-                    markdown.length shouldBe 2900 + "\n…(truncated)".length
-                    markdown shouldEndWith "…(truncated)"
+                then("every claimed event's identifier reaches a sent body") {
+                    claimed shouldBe (1L..6L).toList()
+                    val sent = messages.joinToString(separator = "\n") { it.channelText().markdown }
+                    claimed.forEach { eventId -> sent shouldContain "CVE-2026-000$eventId" }
+                }
+
+                then("the digest is split into numbered parts, each within the Slack section limit") {
+                    messages.size shouldBe 2
+                    messages.map { it.channelId() }.toSet() shouldBe setOf("U1")
+                    messages.map { it.channelText().headline } shouldBe
+                        listOf("CodeCompanion — CVE digest (1/2)", "CodeCompanion — CVE digest (2/2)")
+                    messages.forEach { message ->
+                        message.channelText().markdown.length shouldBeLessThanOrEqual 2900
+                        message.channelText().markdown shouldStartWith "*Alpha*\n"
+                        message.channelText().markdown shouldNotContain "(truncated)"
+                    }
                 }
             }
         }

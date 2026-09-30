@@ -22,5 +22,13 @@ interface CveDeliveryRepository {
         limit: Int,
     ): List<UndeliveredCveEvent>
 
+    // Same filter as findUndelivered, ordered by user then event so one user's pairs are never interleaved.
+    fun findUndeliveredByUser(
+        deliveryMode: CveDeliveryMode,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent>
+
     fun dbNow(): LocalDateTime
 }

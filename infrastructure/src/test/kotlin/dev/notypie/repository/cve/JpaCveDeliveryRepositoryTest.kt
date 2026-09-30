@@ -231,6 +231,48 @@ class JpaCveDeliveryRepositoryTest
                 }
             }
 
+            given("two DIGEST events on a topic with two subscribers") {
+                val topicId = saveTopic(topicKey = "by-user", deliveryMode = CveDeliveryMode.DIGEST)
+                val first = saveEvent(topicId = topicId, externalId = "by-user-1")
+                val second = saveEvent(topicId = topicId, externalId = "by-user-2")
+                subscribe(userId = "U_BYUSER_A", topicId = topicId)
+                subscribe(userId = "U_BYUSER_B", topicId = topicId)
+
+                `when`("findUndelivered and findUndeliveredByUser run for DIGEST") {
+                    fun List<UndeliveredCveEvent>.scoped() =
+                        filter { it.userId.startsWith("U_BYUSER_") }.map { it.userId to it.eventId }
+                    val eventMajor = undelivered(mode = CveDeliveryMode.DIGEST).scoped()
+                    val userMajor =
+                        deliveryRepository
+                            .findUndeliveredByUser(
+                                deliveryMode = CveDeliveryMode.DIGEST,
+                                since = since,
+                                doneBefore = doneBefore,
+                                pageable = page,
+                            ).scoped()
+
+                    then("the event-major order interleaves users, so a page cut can split every user's digest") {
+                        eventMajor shouldContainExactly
+                            listOf(
+                                "U_BYUSER_A" to first,
+                                "U_BYUSER_B" to first,
+                                "U_BYUSER_A" to second,
+                                "U_BYUSER_B" to second,
+                            )
+                    }
+
+                    then("the user-major order keeps each user's pairs contiguous, events in id order") {
+                        userMajor shouldContainExactly
+                            listOf(
+                                "U_BYUSER_A" to first,
+                                "U_BYUSER_A" to second,
+                                "U_BYUSER_B" to first,
+                                "U_BYUSER_B" to second,
+                            )
+                    }
+                }
+            }
+
             given("the database clock read that anchors the delivery horizon") {
                 `when`("dbNow runs") {
                     val dbNow = deliveryRepository.dbNow()

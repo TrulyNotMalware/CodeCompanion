@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # application/service/cve
 
@@ -42,7 +42,8 @@ Each stage owns a distinct exactly-once mechanism. Preserve them:
 - **Deliver** — `CveDeliveryRepository.findUndelivered` yields `(event, user)` pairs; each unit of work
   runs in its own transaction and writes an **outbox row**, so delivery inherits the outbox's
   exactly-once-style semantics. Per-topic mode decides timing: `IMMEDIATE` on a frequent tick,
-  `DIGEST` bundled into one daily DM per user after a configured local time.
+  `DIGEST` bundled per user once a day after a configured local time (split into numbered parts when
+  it overflows one Slack section — every claimed event must reach a sent body).
 
 Other rules:
 - `CveTopicBootstrap` deliberately **does not** re-sync the `active` flag for existing rows. After the

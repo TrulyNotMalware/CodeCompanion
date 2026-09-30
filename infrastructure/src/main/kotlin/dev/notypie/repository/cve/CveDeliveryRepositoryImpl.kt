@@ -25,5 +25,18 @@ open class CveDeliveryRepositoryImpl(
             pageable = PageRequest.of(0, limit),
         )
 
+    override fun findUndeliveredByUser(
+        deliveryMode: CveDeliveryMode,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent> =
+        jpaCveDeliveryRepository.findUndeliveredByUser(
+            deliveryMode = deliveryMode,
+            since = since,
+            doneBefore = doneBefore,
+            pageable = PageRequest.of(0, limit),
+        )
+
     override fun dbNow(): LocalDateTime = jpaCveDeliveryRepository.dbNow()
 }
