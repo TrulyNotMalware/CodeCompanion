@@ -1,5 +1,7 @@
 package dev.notypie.repository.cve
 
+import dev.notypie.repository.cve.schema.CveTopicSchema
+import dev.notypie.schema.createCveTopicDefinition
 import dev.notypie.schema.createCveTopicSchema
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
@@ -43,6 +45,32 @@ class JpaCveTopicRepositoryTest
                 `when`("countActive runs") {
                     then("only the active rows raise the count") {
                         repository.countActive() shouldBe baseline + 2
+                    }
+                }
+            }
+
+            given("a replica whose topic insert loses the topic_key race to another replica") {
+                repository.saveAndFlush(createCveTopicSchema(topicKey = "race-topic", displayName = "Winner"))
+                // Simulates the interleaving: this replica's lookup ran before the other replica's insert committed.
+                var staleLookups = 1
+                val racingRepository =
+                    object : JpaCveTopicRepository by repository {
+                        override fun findByTopicKey(topicKey: String): CveTopicSchema? =
+                            if (staleLookups-- > 0) null else repository.findByTopicKey(topicKey = topicKey)
+                    }
+                val topicRepository = CveTopicRepositoryImpl(jpaCveTopicRepository = racingRepository)
+
+                `when`("its boot upsert runs") {
+                    val written =
+                        topicRepository.upsert(
+                            definition = createCveTopicDefinition(topicKey = "race-topic", displayName = "Loser"),
+                        )
+
+                    then("the unique violation is absorbed, the winner's row is synced and no duplicate exists") {
+                        written shouldBe true
+                        val rows = repository.findAllOrderByTopicKey().filter { it.topicKey == "race-topic" }
+                        rows.size shouldBe 1
+                        rows.single().displayName shouldBe "Loser"
                     }
                 }
             }

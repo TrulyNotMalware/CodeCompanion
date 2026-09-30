@@ -14,7 +14,7 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 | File | Description |
 |------|-------------|
 | `CveTopicRepository.kt` | `data class CveTopic(id, topicKey, displayName, category, sourceType, sourceConfig?, deliveryMode, active)`, `data class CveTopicDefinition(...)` (the yaml shape, `active = true` default); port `upsert(definition): Boolean`, `findActiveTopics()`, `findAllTopics()`, `findById(id)`, `countActive()`, `setActive(topicKey, active): Int` |
-| `CveTopicRepositoryImpl.kt` | `upsert` inserts when `findByTopicKey` is null, otherwise syncs every field **except `active`** onto the managed row and returns `false` on a no-op match (`matches()` ignores `active` too) |
+| `CveTopicRepositoryImpl.kt` | `upsert` (not `@Transactional`) inserts when `findByTopicKey` is null, otherwise `sync`s every field **except `active`** onto the row and returns `false` on a no-op match (`matches()` ignores `active` too). An insert that loses the `uk_cve_topic_topic_key` race (`DataIntegrityViolationException`) re-reads the winner's row and syncs it; a violation with no row behind it rethrows |
 | `JpaCveTopicRepository.kt` | Derived `findByTopicKey`, `findByActiveTrueOrderByTopicKey`; JPQL `findAllOrderByTopicKey`, `countActive`, `@Modifying setActive`. Not `@Repository`-annotated (still registered by `@EnableJpaRepositories`) |
 | `CveEventRepository.kt` | Records `CveEvent(id, topicId, externalId, title, rawContent, aiSummary?, summaryStatus, retryCount)`, `TopicEventCount(topicId, count)`, `CveRecentEvent(topicDisplayName, title, aiSummary?)`; port `insertIgnore(topicId, externalId, title, rawContent, publishedAt?): Int`, `findClaimable(now, maxRetries, limit)`, `claimForSummary(id, token, now, maxRetries): Int`, `markDone(id, token, summary, now)`, `markFailed(id, token, nextAttemptAt, now)`, `releaseClaim(id, token, nextAttemptAt, now)`, `resetStuck(olderThan, now)`, `countByStatus`, `countFailedRetryable(maxRetries)`, `countDeadLetter(maxRetries)`, `countEventsByTopic(topicIds)`, `findRecentDoneEvents(topicIds, limit)`, `resetDeadLetters(maxRetries)`, `resetDeadLetter(id, maxRetries)` |
 | `CveEventRepositoryImpl.kt` | Truncates `title` to `TITLE_MAX_LENGTH = 512` and `rawContent` to `RAW_CONTENT_MAX_LENGTH = 60_000` before `insertIgnore`; cuts the `markDone` summary to `AI_SUMMARY_MAX_BYTES = 65_535` UTF-8 bytes on a code-point boundary (private `takeUtf8Bytes`); `limit` → `PageRequest.of(0, limit)`; empty `topicIds` short-circuits to `emptyList()`, otherwise `distinct()` |
@@ -56,6 +56,11 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
   values — a DB stamp in a UTC session would look nine hours stale to a KST cutoff and be reset at once;
   `created_at` is DB-stamped (`CURRENT_TIMESTAMP(6)`), so `findUndelivered`'s `since` horizon must be derived
   from `dbNow()`, never from `LocalDateTime.now()` — the DB (UTC) and JVM (KST) zones can differ by hours.
+- **`upsert` must survive two replicas booting together (V10).** It runs outside a transaction on
+  purpose: each JPA call commits or rolls back on its own, so a lost insert does not poison a surrounding
+  transaction and the re-read sees the winner's committed row. Re-adding `@Transactional` would turn the
+  caught violation back into an `UnexpectedRollbackException` at commit and fail the pod's
+  `ApplicationReadyEvent`.
 - **`upsert` never syncs `active` after the first insert.** Chat toggles (`setActive`) own that flag; a yaml
   reboot must not reactivate what an admin deactivated, and a row differing only in `active` is a no-op.
 - **Native bulk updates bypass `@UpdateTimestamp`**, so every CAS sets `updated_at` explicitly. The
@@ -84,7 +89,8 @@ mapping. `JpaCveSubscriptionRepository` has no H2 spec. A change to any WHERE gu
 in the `Jpa*` spec, not only the winning one.
 
 ### Common Patterns
-- Port interface + `open class *Impl` with `@Transactional` on every write + `Jpa*Repository`.
+- Port interface + `open class *Impl` with `@Transactional` on every write + `Jpa*Repository` (the
+  exception is `CveTopicRepositoryImpl.upsert`, above).
 - Ports expose records (`CveTopic`, `CveEvent`, ...) built by a private `toRecord(schema)`; entities never
   leave the package.
 - `limit: Int` on the port, `Pageable` on the JPA interface, `PageRequest.of(0, limit)` in the impl.

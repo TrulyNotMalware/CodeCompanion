@@ -4,12 +4,14 @@ import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.cve.schema.CveTopicSchema
 import dev.notypie.schema.createCveTopicDefinition
 import dev.notypie.schema.createCveTopicSchema
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.dao.DataIntegrityViolationException
 
 class CveTopicRepositoryImplTest :
     BehaviorSpec({
@@ -34,6 +36,43 @@ class CveTopicRepositoryImplTest :
                     saved.captured.sourceConfig shouldBe definition.sourceConfig
                     saved.captured.deliveryMode shouldBe definition.deliveryMode
                     saved.captured.active shouldBe definition.active
+                }
+            }
+        }
+
+        given("upsert whose insert loses a concurrent race on topic_key") {
+            val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
+            val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+            val definition = createCveTopicDefinition(deliveryMode = CveDeliveryMode.IMMEDIATE)
+            val raced = createCveTopicSchema(id = 7L, deliveryMode = CveDeliveryMode.DIGEST, active = false)
+            every { jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey) } returnsMany
+                listOf(null, raced)
+            every { jpaCveTopicRepository.save(match { it.id == 0L }) } throws
+                DataIntegrityViolationException("uk_cve_topic_topic_key")
+            every { jpaCveTopicRepository.save(raced) } returns raced
+
+            `when`("upserted") {
+                val written = repository.upsert(definition = definition)
+
+                then("the winner's row is re-read and synced like any existing row, active untouched") {
+                    written shouldBe true
+                    verify(exactly = 1) { jpaCveTopicRepository.save(raced) }
+                    raced.deliveryMode shouldBe CveDeliveryMode.IMMEDIATE
+                    raced.active shouldBe false
+                }
+            }
+        }
+
+        given("upsert whose insert violates a constraint while no row exists afterwards") {
+            val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
+            val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+            val definition = createCveTopicDefinition()
+            every { jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey) } returns null
+            every { jpaCveTopicRepository.save(any()) } throws DataIntegrityViolationException("not null")
+
+            `when`("upserted") {
+                then("the violation is not a race and still fails the boot") {
+                    shouldThrow<DataIntegrityViolationException> { repository.upsert(definition = definition) }
                 }
             }
         }

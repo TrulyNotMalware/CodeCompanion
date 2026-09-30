@@ -1,15 +1,20 @@
 package dev.notypie.repository.cve
 
 import dev.notypie.repository.cve.schema.CveTopicSchema
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.annotation.Transactional
 
 open class CveTopicRepositoryImpl(
     private val jpaCveTopicRepository: JpaCveTopicRepository,
 ) : CveTopicRepository {
-    @Transactional
+    // Deliberately not @Transactional. Two replicas booting together both find no row and both insert; the
+    // loser's uk_cve_topic_topic_key violation used to escape the ApplicationReadyEvent listener and fail the
+    // pod. With each JPA call in its own transaction the lost insert rolls back alone, and the winner's row is
+    // re-read and synced like any existing row (a violation with no row behind it is not a race and rethrows).
     override fun upsert(definition: CveTopicDefinition): Boolean {
         val existing = jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey)
-        if (existing == null) {
+        if (existing != null) return sync(existing = existing, definition = definition)
+        try {
             jpaCveTopicRepository.save(
                 CveTopicSchema(
                     topicKey = definition.topicKey,
@@ -22,7 +27,13 @@ open class CveTopicRepositoryImpl(
                 ),
             )
             return true
+        } catch (ex: DataIntegrityViolationException) {
+            val raced = jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey) ?: throw ex
+            return sync(existing = raced, definition = definition)
         }
+    }
+
+    private fun sync(existing: CveTopicSchema, definition: CveTopicDefinition): Boolean {
         if (matches(schema = existing, definition = definition)) return false
         // active is never overwritten here — a yaml reboot must not undo a chat activate|deactivate toggle.
         existing.displayName = definition.displayName
