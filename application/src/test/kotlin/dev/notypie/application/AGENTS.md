@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # test/kotlin/dev/notypie/application
 
@@ -17,5 +17,6 @@ package with `./gradlew :application:test --tests 'dev.notypie.application.<pack
 | `mcp/` | `McpToolGate` and `DomainReadTools` MCP tools (see `mcp/AGENTS.md`) |
 | `security/` | Slack signature filter, retry dedup, cached body wrapper, MCP token codec (see `security/AGENTS.md`) |
 | `service/` | One spec directory per use-case lane (see `service/AGENTS.md`) |
+| `socket/` | Socket Mode receiver's interactive ack seam (see `socket/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
