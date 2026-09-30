@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # test/kotlin/dev/notypie/application/service/mention
 
@@ -11,7 +11,7 @@ is not exercised here.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, `appToken == TEST_BOT_TOKEN`; `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`. |
+| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, `appToken == TEST_BOT_TOKEN`; `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`/`actorName`; default payload without display names (as a real `app_mention` callback arrives) → `actorName` and `channelName` are `""`, not the string `"null"` (regression). |
 
 ## For AI Agents
 

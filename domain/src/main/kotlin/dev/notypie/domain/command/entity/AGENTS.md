@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/command/entity
 
@@ -14,7 +14,7 @@ is the mention vocabulary.
 |------|-------------|
 | `Command.kt` | `abstract class Command<T : SubCommandDefinition>(idempotencyKey, commandData)`: `internal intents`, `commandId`, `drainIntents()`, `internal abstract parseContext(subCommand)` / `findSubCommandDefinition()`, `handleEvent()` (any throw → `CommandOutput.fail(ERROR_RESPONSE)`), interaction payloads dispatched to `ReactionContext.handleInteraction`, `createSubCommand()` (`options = subCommands.drop(1)`, invalid → `SubCommandParseException`) |
 | `CommandSet.kt` | `internal enum CommandSet(requiredPermission)`: `UNKNOWN` (AI), `NOTICE`, `STATUS` (OPERATIONS), `APPROVAL`, `HELP` (BASIC), `ASK` (AI), `GRANT`, `REVOKE`, `ROLES`, `CVE` (ADMINISTRATION); `parseCommand` uppercases and falls back to `UNKNOWN` |
-| `CommandType.kt` | `CommandType` (`SIMPLE`, `PIPELINE`, `RESPONSE`, `EXTERNAL_API`); `CommandDetailType` — the routing token serialized by name into the outbox column and Slack `private_metadata` / button values; `internal fun CommandDetailType.createContext(basicInfo, subCommand, intents)` maps the nine non-submission interaction types to contexts, everything else to `EmptyContext`; the seven `view_submission` routes are intercepted before it by `SubmissionRouting.kt` |
+| `CommandType.kt` | `CommandType` (`SIMPLE`, `PIPELINE`, `RESPONSE`, `EXTERNAL_API`); `CommandDetailType` — the routing token serialized by name into the outbox column and Slack `private_metadata` / button values; `internal fun CommandDetailType.createContext(basicInfo, subCommand, intents)` maps the nine non-submission interaction types to contexts and lists every other constant explicitly in one `EmptyContext` branch (no `else`); the seven `view_submission` routes are intercepted before it by `SubmissionRouting.kt` |
 | `InteractionCommand.kt` | `InteractionCommand(appName, idempotencyKey, commandData, actorRole[, parseObserver])` — mentions and interactions; resolves a private `Route(parser, subCommandDefinition)` lazily in one exhaustive `when` over the sealed payload, so the payload is narrowed exactly once (`SlashInvocation` → `UnSupportedCommandException`); `MeetingSubCommandDefinition.NONE` for `MEETING_APPROVAL_REQUEST` / `MEETING_CREATE_REQUEST`, else `NoSubCommands` |
 | `SubmissionRouting.kt` | Phase 11 routing seam: `isSubmissionRoute`, `InboundSubmission.detailType()` (the variant derives the discriminator — the envelope's own never decides a submission route), and `SubmissionRouter` — parses the variant via its `*Parsed.from` factory, builds the leaf with the non-null model, routes rejection/missing payload to `IgnoredSubmissionContext` and reports it through `SubmissionParseObserver` |
 | `ReplaceTextResponseCommand.kt` | Wraps `ReplaceMessageContext(markdownMessage, replyHandle)`; built by `SlackInteractionHandlerImpl` to overwrite an already-posted message |
@@ -31,9 +31,10 @@ is the mention vocabulary.
 
 ### Working In This Directory
 - Routing a new interaction: add a `CommandDetailType` constant **and** a `createContext` branch. The
-  `else -> EmptyContext` arm means a forgotten branch still compiles — the interaction then fails at
-  runtime with `ERROR_RESPONSE`, because `EmptyContext` is not a `ReactionContext`; add a case to
-  `InteractionContextParserTest` so it cannot. A new modal submission instead means: `InboundSubmission`
+  `when` has no `else`: every constant that needs no context is listed in the `EmptyContext` branch, so a new
+  constant does not compile until you pick one. Listing it there is still a runtime failure for an
+  interaction (`EmptyContext` is not a `ReactionContext`, so it answers `ERROR_RESPONSE`); add a case to
+  `InteractionContextParserTest` for every constant that must reach a real context. A new modal submission instead means: `InboundSubmission`
   variant + `*Parsed` model + leaf + `SubmissionRouter` branch — the exhaustive `when`s in
   `SubmissionRouting.kt` refuse to compile until the wiring is complete (the mapper's `when` still
   needs its branch, pinned by the writer→parser regression test).

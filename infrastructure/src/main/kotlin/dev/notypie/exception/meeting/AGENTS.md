@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # infrastructure/exception/meeting
 
@@ -11,7 +11,7 @@ a structured exception. Despite the package name it is used by the meeting *and*
 ## Key Files
 | File | Description |
 |------|-------------|
-| `DatabaseException.kt` | `class DatabaseException(val tableName: String, errorCode: ErrorCode, details: List<ExceptionArgument>) : CodeCompanionRuntimeException`; `enum JpaErrorCode { TABLE_NOT_FOUND(404, "Table not found.") }`; `NotFoundExceptionBuilder` with `table(KClass<*>)` / `table(String)`, `field(name) withValue value`, `reason(message)` and an `internal build()`; `fun schemaNotFound(init: NotFoundExceptionBuilder.() -> Unit): Nothing`; `inline fun <reified T : Any> T?.throwIfSchemaNotFound(fieldName: String, fieldValue: Any, reason: String? = null): T` |
+| `DatabaseException.kt` | `class DatabaseException(val tableName: String, errorCode: ErrorCode, details: List<ExceptionArgument>) : CodeCompanionRuntimeException`; `enum JpaErrorCode(message) { TABLE_NOT_FOUND("Table not found.") }` (no HTTP status: `ErrorCode` is transport-neutral); `NotFoundExceptionBuilder` with `table(KClass<*>)` / `table(String)`, `field(name) withValue value`, `reason(message)` and an `internal build()`; `fun schemaNotFound(init: NotFoundExceptionBuilder.() -> Unit): Nothing`; `inline fun <reified T : Any> T?.throwIfSchemaNotFound(fieldName: String, fieldValue: Any, reason: String? = null): T` |
 
 ## For AI Agents
 
@@ -22,19 +22,21 @@ a structured exception. Despite the package name it is used by the meeting *and*
   extension on the schema object if the entity name matters.
 - **The default `reason`** is `"<T> with <fieldName>=<fieldValue> not found."`; pass `reason` only to
   override it. `fieldValue` is stored via `toString()`, so UUIDs and Longs are fine.
-- **`schemaNotFound { }` has no callers** and `build()` is `internal`, so the DSL cannot be used from
-  `:application`. Prefer the extension; add new helpers as top-level extensions in this file.
-- `errorCode` is not retained as a property on `CodeCompanionRuntimeException`, so the `404` in
-  `JpaErrorCode` never reaches an HTTP response (see `../AGENTS.md`).
+- **`schemaNotFound { }` has no production callers** (only `DatabaseExceptionTest`) and `build()` is `internal`,
+  so the DSL cannot be used from `:application`. Prefer the extension; add new helpers as top-level extensions in this file.
+- `JpaErrorCode` carries only a message; the HTTP status belongs to `:application`. `errorCode` is a property
+  of `CodeCompanionRuntimeException`, and `ControllerAdvice.handleDatabaseException` logs the table and message
+  and answers `500 {"error":"internal_error"}`, never a 404 (see `../AGENTS.md`).
 
 ### Testing Requirements
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.meeting.MeetingRepositoryImplTest' \
   --tests 'dev.notypie.exception.DatabaseExceptionTest'
 ```
-`DatabaseExceptionTest` is an empty placeholder `BehaviorSpec`; the real assertion is the
-`shouldThrow<DatabaseException>` in `MeetingRepositoryImplTest`. When you touch this file, fill the
-placeholder with the null and non-null paths of `throwIfSchemaNotFound`.
+`DatabaseExceptionTest` (in `infrastructure/src/test/kotlin/dev/notypie/exception/`) covers both paths of
+`throwIfSchemaNotFound` (`tableName`, `errorCode`, message, the single `ExceptionArgument` and its default
+reason) and the `schemaNotFound { }` builder; `MeetingRepositoryImplTest` covers the repository-side throw.
+Change the spec together with this file.
 
 ### Common Patterns
 - `inline reified` extension on `T?` returning `T` so call sites stay non-null.

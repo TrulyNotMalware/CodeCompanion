@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # docs/wiki
 

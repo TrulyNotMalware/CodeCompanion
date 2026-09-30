@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-09-30 -->
 
 # infrastructure/exception
 
@@ -17,7 +17,7 @@ because it is a JPA concern; `:application`'s `ControllerAdvice` imports it from
 |------|-------------|
 | `ErrorBroadcaster.kt` | `interface ErrorBroadcaster { fun broadcastError(message: String) }` |
 | `StdoutErrorBroadcaster.kt` | `logger.error { message }` through a file-level `KotlinLogging.logger { }` |
-| `meeting/DatabaseException.kt` | `DatabaseException(val tableName: String, errorCode: ErrorCode, details: List<ExceptionArgument>)`; `enum JpaErrorCode { TABLE_NOT_FOUND(404, "Table not found.") }`; `NotFoundExceptionBuilder` (`table(KClass)` / `table(String)`, `field(name) withValue value`, `reason(message)`, `internal build()`); `schemaNotFound(init): Nothing`; `inline fun <reified T : Any> T?.throwIfSchemaNotFound(fieldName: String, fieldValue: Any, reason: String? = null): T` |
+| `meeting/DatabaseException.kt` | `DatabaseException(val tableName: String, errorCode: ErrorCode, details: List<ExceptionArgument>)`; `enum JpaErrorCode(message) { TABLE_NOT_FOUND("Table not found.") }`; `NotFoundExceptionBuilder` (`table(KClass)` / `table(String)`, `field(name) withValue value`, `reason(message)`, `internal build()`); `schemaNotFound(init): Nothing`; `inline fun <reified T : Any> T?.throwIfSchemaNotFound(fieldName: String, fieldValue: Any, reason: String? = null): T` |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -37,11 +37,11 @@ because it is a JPA concern; `:application`'s `ControllerAdvice` imports it from
   (`?.toMeetingDto().throwIfSchemaNotFound(fieldName = "id", ...)`) reports `MeetingDto`, and
   `StandupRepositoryImpl.getRoutine` (`fieldName = "routineUid"`) reports `RoutineDto`. Call it on the
   schema object if you want the entity name in the error.
-- **The HTTP status in `JpaErrorCode` never reaches a response.** `CodeCompanionRuntimeException` keeps
-  only `details` and the message (`"Table not found."`); `errorCode` is not retained as a property. The
-  application `ControllerAdvice.handleDatabaseException` body is empty, so a `DatabaseException` escaping a
-  controller yields an empty 200, not a 404.
-- **`schemaNotFound { }` has no callers.** The DSL and `throwIfSchemaNotFound` build the same exception
+- **`JpaErrorCode` carries no HTTP status.** `ErrorCode` is transport-neutral (message only), and
+  `CodeCompanionRuntimeException` keeps `errorCode` and `details` as properties. The application
+  `ControllerAdvice.handleDatabaseException` logs the table and message and answers
+  `500 {"error":"internal_error"}`, so a `DatabaseException` escaping a controller is a 500, not a 404.
+- **`schemaNotFound { }` has no production callers** (only `DatabaseExceptionTest`). The DSL and `throwIfSchemaNotFound` build the same exception
   (`TABLE_NOT_FOUND`, one `ExceptionArgument`); prefer the extension for the null-to-exception case and
   reserve the DSL for a custom `reason` on a known table. Add new not-found helpers as top-level extensions
   in `meeting/`, not as methods on entity classes.
@@ -52,13 +52,11 @@ because it is a JPA concern; `:application`'s `ControllerAdvice` imports it from
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.exception.*' --tests 'dev.notypie.repository.meeting.*'
 ```
-`exception/DatabaseExceptionTest` exists but is an empty `BehaviorSpec` (a single `given` with no
-`when`/`then`) and passes vacuously — it is a placeholder, not coverage. The real assertions live in
-`repository/meeting/MeetingRepositoryImplTest`, which does `shouldThrow<DatabaseException>` for a missing
-meeting. When touching `throwIfSchemaNotFound`, fill the placeholder: assert the non-null path returns the
-receiver, and the null path throws a `DatabaseException` whose `details` carry the `fieldName` /
-`fieldValue.toString()` and whose `tableName` is the receiver type's simple name. There is no spec for
-either broadcaster.
+`exception/DatabaseExceptionTest` asserts the helper contract: the non-null path returns the receiver, the
+null path throws a `DatabaseException` with `tableName` = the receiver type's simple name,
+`errorCode = TABLE_NOT_FOUND`, and one `ExceptionArgument` carrying `fieldName`, `fieldValue.toString()` and the
+default reason; the `schemaNotFound { }` builder is covered too. `repository/meeting/MeetingRepositoryImplTest`
+still asserts the repository-side throw for a missing meeting. There is no spec for either broadcaster.
 
 ### Common Patterns
 - Kotlin call sites use named parameters (`throwIfSchemaNotFound(fieldName = ..., fieldValue = ...)`).

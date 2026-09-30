@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # domain/command/parsers (test)
 
@@ -29,6 +29,10 @@ Both specs are Kotest `BehaviorSpec`s.
   effect assertions stay isolated.
 - When a new `CommandDetailType` gets a branch in `InteractionContextParser`, add its `when` to
   `InteractionContextParserTest` — the parser spec is the cheapest place to catch a mis-wired enum.
+- Submission fixtures that carry a calendar date use a far-future one (`SubmissionRouterTest`'s reschedule is
+  `2099-10-01`, moved from `2026-10-01`). `RescheduleMeetingParsed` accepts past starts on purpose (the "future
+  time" check is `MeetingRescheduleService`'s), but a hard-coded date that will pass turns into a failing spec as
+  soon as anything on the path starts comparing against the clock.
 
 ### Testing Requirements
 ```bash
