@@ -14,12 +14,15 @@ import java.time.Instant
 interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Long> {
     fun findByMeetingIdAndOffsetMinutes(meetingId: Long, offsetMinutes: Int): MeetingReminderSchema?
 
-    // DISTINCT avoids the JOIN FETCH cartesian on participants — duplicates would also eat into the page limit.
+    // A collection fetch plus a Pageable does not page in memory here: Hibernate 7.4 applies the LIMIT to the reminder
+    // rows in a derived table and joins the participants outside it (MeetingReminderRepositoryTest runs with
+    // fail_on_pagination_over_collection_fetch on), so neither DISTINCT nor an ids-first query is needed. LEFT like
+    // every other meeting read; a meeting without participant rows never gets a reminder materialized anyway.
     @Query(
         """
-        SELECT DISTINCT r FROM meeting_reminder r
+        SELECT r FROM meeting_reminder r
         JOIN FETCH r.meeting m
-        JOIN FETCH m.participants
+        LEFT JOIN FETCH m.participants
         WHERE r.status = dev.notypie.domain.meet.entity.enums.MeetingReminderStatus.PENDING
           AND r.scheduledAt <= :before
           AND m.isCanceled = false

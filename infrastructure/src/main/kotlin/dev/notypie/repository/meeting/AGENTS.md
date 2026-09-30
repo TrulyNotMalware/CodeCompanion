@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # infrastructure/repository/meeting
 
@@ -21,7 +21,7 @@ retry uses.
 | `AddParticipantResult.kt` | `data class AddParticipantResult(outcome, addedUserIds = [], meeting: MeetingDto? = null)`; `enum Outcome { ADDED, NO_NEW_PARTICIPANTS, OVER_CAPACITY, MEETING_STARTED, NOT_AUTHORIZED, MEETING_NOT_FOUND }`. `addedUserIds` is non-empty only for `ADDED` |
 | `MeetingReminderRepository.kt` | `data class ReadyReminder(reminder: MeetingReminderDto, meetingId, meetingTitle, startAt, isCanceled, attendingUserIds)`, `data class ReminderCandidateMeeting(meetingId, startAt, attendingUserIds)`; port `findActiveMeetingsInWindow(from, to)`, `ensureReminder(meetingId, offsetMinutes, scheduledAt: Instant): Boolean`, `reminderExists(meetingId, offsetMinutes)`, `claimReminder(reminderId, claimToken): Boolean`, `markReminderSent(reminderId, claimToken, sentAt)`, `markReminderFailed(reminderId, claimToken, reason)`, `resetStuckReminders(olderThan: Instant): Int`, `findDueBefore(before: Instant, limit): List<ReadyReminder>`, `deleteByMeetingId(meetingId): Int` |
 | `MeetingReminderRepositoryImpl.kt` | `ensureReminder` is find-then-save using `getReferenceById(meetingId)` for the FK proxy; CAS methods map affected rows `== 1`; `findDueBefore` projects `ReadyReminder` from the fetched meeting graph, keeping only `isAttending` participants |
-| `JpaMeetingReminderRepository.kt` | Derived `findByMeetingIdAndOffsetMinutes`; JPQL `findPendingBefore(before, pageable)` (`DISTINCT`, `JOIN FETCH` meeting + participants, `PENDING`, `scheduledAt <= :before`, meeting not canceled); native CAS `claimReminder(id, token)` (PENDING→SENDING), `markSent(id, token, sentAt)`, `markFailed(id, token, reason)` (both `WHERE status = 'SENDING' AND claim_token = :token`), `resetStuckSending(olderThan)`; native `deleteByMeetingId` |
+| `JpaMeetingReminderRepository.kt` | Derived `findByMeetingIdAndOffsetMinutes`; JPQL `findPendingBefore(before, pageable)` (`JOIN FETCH` meeting, `LEFT JOIN FETCH` participants, no `DISTINCT`, `PENDING`, `scheduledAt <= :before`, meeting not canceled, `scheduledAt` ascending — the `LIMIT` stays in SQL, see Common Patterns); native CAS `claimReminder(id, token)` (PENDING→SENDING), `markSent(id, token, sentAt)`, `markFailed(id, token, reason)` (both `WHERE status = 'SENDING' AND claim_token = :token`), `resetStuckSending(olderThan)`; native `deleteByMeetingId` |
 | `AgendaDispatchRepository.kt` | `data class AgendaCandidateMeeting(meetingId, title, startAt, attendingUserIds)`; port `claim(agendaDate: LocalDate): Boolean`, `findAttendingMeetingsForDay(from, to)` |
 | `AgendaDispatchRepositoryImpl.kt` | `claim` = `claimAgenda == 1`; the day read reuses `JpaMeetingRepository.findActiveByStartAtBetween` |
 | `JpaAgendaDispatchRepository.kt` | `JpaRepository<AgendaDispatchSchema, LocalDate>`; native `INSERT IGNORE INTO agenda_dispatch (agenda_date, created_at)` as `claimAgenda(date): Int` |
@@ -90,16 +90,23 @@ a zero-participant meeting through every read, and the `isCanceled = false` swee
 on a rejected non-host write, and three read-before-write races (add vs add, reschedule vs reschedule,
 cancel vs add), the same-user add race that loses on the unique key and is classified as a conflict, and
 resubmits of all three writes leaving the version alone; `MeetingWriteConflictTest` is the classifier's unit
-spec; `MeetingRepositoryImplTest` is the MockK mapping spec. **`MeetingReminderRepository`
-and `AgendaDispatchRepository` have no spec in this module** — the reminder CAS (claim race, foreign token,
-`resetStuckSending`) and `claimAgenda` are covered only through `:application` scheduler specs with mocked
-ports.
+spec; `MeetingRepositoryImplTest` is the MockK mapping spec; `MeetingReminderRepositoryTest` (`@DataJpaTest`
+with in-memory collection paging turned into an error) covers `findDueBefore` — SQL-paged batch in `scheduledAt`
+order with full attending lists, canceled and not-yet-due rows excluded, a participant-less meeting included.
+**`AgendaDispatchRepository` has no spec in this module**, and the reminder claim race, foreign token and
+`resetStuckSending` are covered only through `:application` scheduler specs with mocked ports.
 
 ### Common Patterns
 - Port + `open class *Impl` + `Jpa*Repository`; `@Transactional` on writes; boolean = `rowCount == 1`.
 - `LEFT JOIN FETCH` on every read that maps participants, so mapping runs outside the persistence context
   without `LazyInitializationException`. No `DISTINCT`: Hibernate 6+ de-duplicates fetch-join roots in
   memory, and SQL `DISTINCT` only adds a sort.
+- A `Pageable` on a collection fetch (`findPendingBefore`) is still paged in SQL: Hibernate 7.4.5 selects the
+  page of reminder rows in a derived table (`… limit ?,?) r left join meeting_participants …` with the MariaDB
+  dialect, `offset … fetch first` on H2) and joins participants outside it, so no HHH90003004 in-memory paging
+  and no need for an ids-first query (checked 2026-09-30; review M5 assumed the older in-memory behaviour).
+  `MeetingReminderRepositoryTest` runs with `hibernate.query.fail_on_pagination_over_collection_fetch=true`,
+  so a Hibernate upgrade that falls back to in-memory paging fails the build instead of loading the backlog.
 - `Instant` for reminder timestamps, `LocalDateTime` for meeting `startAt` — never mix them in one query.
 - Native SQL for CAS transitions; JPQL for reads; managed-entity dirty checking for meeting writes.
 
