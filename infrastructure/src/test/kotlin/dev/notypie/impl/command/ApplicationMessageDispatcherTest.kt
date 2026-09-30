@@ -277,6 +277,36 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
+        given("chat.postMessage answers 200 ok=false internal_error, which may have partly succeeded") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+            responses.add(jsonOk())
+
+            `when`("a channel message is dispatched") {
+                val output = defaultDispatcher.dispatch(event = channelMessage())
+
+                then("it is not resent and ends as outcome_unknown") {
+                    output.isOutcomeUnknown() shouldBe true
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update answers 200 ok=false internal_error and then succeeds") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+            responses.add(jsonOk())
+
+            `when`("a message update is dispatched") {
+                val output = defaultDispatcher.dispatch(event = updateMessage())
+
+                then("an idempotent update is retried through RetryService") {
+                    output.ok shouldBe true
+                    calls.get() shouldBe 2
+                }
+            }
+        }
+
         given("chat.* answers HTTP 503 once and then succeeds") {
             reset()
             responses.add(status(code = 503, body = "unavailable"))
@@ -574,9 +604,24 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("a response_url that answers 200 with a transient Slack error and then ok") {
+        given("a response_url that answers 200 with internal_error, which may have partly succeeded") {
             reset()
             responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+            responses.add(status(code = 200, body = "ok"))
+
+            `when`("an action response is dispatched") {
+                val output = defaultDispatcher.dispatch(event = actionResponse())
+
+                then("the error code is classified like chat.postMessage: not resent, outcome_unknown") {
+                    output.isOutcomeUnknown() shouldBe true
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("a response_url that answers 200 with service_unavailable and then ok") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"service_unavailable"}"""))
             responses.add(status(code = 200, body = "ok"))
 
             `when`("an action response is dispatched") {

@@ -49,9 +49,11 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 - **`chat.postEphemeral` needs `channel` = the channel and `user` = the viewer.** A user id in `channel`
   routes the ephemeral into that user's DM. For DMs, `chatPostMessageBuilder` sets `channel = targetUserId`
   and the dispatcher treats `DIRECT_MESSAGE` exactly like `CHANNEL_ALERT` (`chat.postMessage`).
-- **Dispatch decision table** (`dispatch` returns one of three outcomes; the outbox relay relies on it). A
+- **Dispatch decision table** (`dispatch` returns one of the outcomes below; the outbox relay relies on it). A
   Slack `error` code is classified once, by `raiseIfRetryable`, for both `chat.*` and `response_url` bodies:
-  `ratelimited` → rate limited, `TRANSIENT_SLACK_ERRORS` → transient, anything else → permanent.
+  `ratelimited` → rate limited, `service_unavailable` → transient, `internal_error` → transient for the idempotent
+  `chat.update` and outcome unknown otherwise (Slack documents that it "may have partly succeeded", the same
+  warning `fatal_error` carries), anything else → permanent.
   - Rate limited — `chat.*` HTTP 429, `chat.*` `ok=false error=ratelimited`, `response_url` HTTP 429 or JSON
     `{"ok":false,"error":"ratelimited"}` → `SlackRateLimitedException`, handled outside `RetryService`. If
     `Retry-After` (seconds or HTTP-date) is ≤ `MAX_INLINE_RETRY_AFTER` (3s) the thread waits once and calls
@@ -59,14 +61,14 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     restored) returns `RateLimitedOutput(retryAfter)` at once (`isRateLimited()`, `retryAfter()`). The relay
     defers the row past `Retry-After`. The CDC listener thread must never sleep long.
   - Transient — an `IOException` (including the call timeout) raised before the request body was written
-    (connect, DNS, TLS, a timeout while connecting), HTTP 503, `ok=false` with `internal_error` /
-    `service_unavailable`; and for the idempotent `chat.update` also an `IOException` after the body and any other
-    HTTP 5xx → `RetryService` (3 attempts, the `TRANSIENT_EXCEPTIONS` list); when they are spent,
+    (connect, DNS, TLS, a timeout while connecting), HTTP 503, `ok=false service_unavailable`; and for the
+    idempotent `chat.update` also an `IOException` after the body, any other HTTP 5xx and `internal_error` → `RetryService` (3 attempts, the `TRANSIENT_EXCEPTIONS` list); when they are spent,
     `failOutput(TRANSIENT_EXHAUSTED_REASON)` (`isTransientExhausted()`). The relay leaves the row `IN_PROGRESS`
     and the recovery sweep re-sends it, up to `outbox.polling.max-sends` sends.
   - Outcome unknown — a non-idempotent call (`chat.postMessage`, `chat.postEphemeral`, every `response_url`
     POST) that fails after its whole request body was written: an `IOException` (a call timeout while Slack is
-    still answering, a reset while reading the response) or HTTP 5xx other than 503 → `failOutput(
+    still answering, a reset while reading the response), HTTP 5xx other than 503, or `ok=false internal_error`
+    → `failOutput(
     OUTCOME_UNKNOWN_REASON)` (`isOutcomeUnknown()`) at once, with an ERROR log carrying the call, detail type and
     `idempotencyKey`. Nothing retries it here, and the relay writes `FAILURE`, so the sweep never resends it.
     "Written" comes from `RequestSendTracker` (`requestBodyEnd`), not from the exception type, because a call

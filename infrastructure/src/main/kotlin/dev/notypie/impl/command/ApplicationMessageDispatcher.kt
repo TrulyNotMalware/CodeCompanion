@@ -43,7 +43,10 @@ import java.time.format.DateTimeFormatter
 
 private val dispatcherLog = KotlinLogging.logger {}
 
-private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "service_unavailable")
+// Slack answers service_unavailable before acting; internal_error "may have partly succeeded" (Slack docs), so it is
+// retried only for an idempotent call.
+private const val SLACK_UNAVAILABLE_ERROR = "service_unavailable"
+private const val SLACK_INTERNAL_ERROR = "internal_error"
 private val SLACK_RESPONSE_URL_HOSTS = setOf("hooks.slack.com", "hooks.slack-gov.com")
 private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR = 500
@@ -267,7 +270,12 @@ class ApplicationMessageDispatcher(
                 if (idempotent || !probe.mayHaveBeenSent) throw exception
                 return outcomeUnknownOutput(event = event, call = apiMethod, detail = "$exception", cause = exception)
             }
-        return buildCommandOutputFromResponse(result = result, event = event)
+        return buildCommandOutputFromResponse(
+            result = result,
+            event = event,
+            apiMethod = apiMethod,
+            idempotent = idempotent,
+        )
     }
 
     private fun outcomeUnknownOutput(
@@ -381,8 +389,12 @@ class ApplicationMessageDispatcher(
                 if (response.code == HTTP_TOO_MANY_REQUESTS) {
                     throw SlackRateLimitedException(retryAfter = parseRetryAfter(value = retryAfterHeader))
                 }
-                slackError?.let { raiseIfRetryable(error = it, retryAfterHeader = retryAfterHeader) }
+                slackError?.let {
+                    raiseIfRetryable(error = it, retryAfterHeader = retryAfterHeader, idempotent = false)
+                }
                 when {
+                    slackError == SLACK_INTERNAL_ERROR ->
+                        outcomeUnknownOutput(event = event, call = RESPONSE_URL_CALL, detail = slackError)
                     response.code == HTTP_SERVICE_UNAVAILABLE ->
                         throw SlackTransientErrorException(error = "http_${response.code}")
                     response.code >= HTTP_SERVER_ERROR ->
@@ -402,11 +414,13 @@ class ApplicationMessageDispatcher(
         }
     }
 
-    private fun raiseIfRetryable(error: String, retryAfterHeader: String?) {
+    private fun raiseIfRetryable(error: String, retryAfterHeader: String?, idempotent: Boolean) {
         if (error == RATE_LIMITED_REASON) {
             throw SlackRateLimitedException(retryAfter = parseRetryAfter(value = retryAfterHeader))
         }
-        if (error in TRANSIENT_SLACK_ERRORS) throw SlackTransientErrorException(error = error)
+        if (error == SLACK_UNAVAILABLE_ERROR || (idempotent && error == SLACK_INTERNAL_ERROR)) {
+            throw SlackTransientErrorException(error = error)
+        }
     }
 
     private fun slackErrorOf(body: String): String? {
@@ -420,21 +434,27 @@ class ApplicationMessageDispatcher(
     private fun buildCommandOutputFromResponse(
         result: SlackApiTextResponse,
         event: SlackEventPayload,
+        apiMethod: String,
+        idempotent: Boolean,
         commandType: CommandType = CommandType.EXTERNAL_API,
-    ) = if (result.isOk) {
-        successOutput(
-            payload = event,
-            commandType = commandType,
-            messageTs = (result as? ChatPostMessageResponse)?.ts.orEmpty(),
-        )
-    } else {
+    ): CommandOutput {
+        if (result.isOk) {
+            return successOutput(
+                payload = event,
+                commandType = commandType,
+                messageTs = (result as? ChatPostMessageResponse)?.ts.orEmpty(),
+            )
+        }
+        val error = result.error.orEmpty()
         raiseIfRetryable(
-            error = result.error.orEmpty(),
+            error = error,
             retryAfterHeader = result.httpResponseHeaders?.get("retry-after")?.firstOrNull(),
+            idempotent = idempotent,
         )
+        if (error == SLACK_INTERNAL_ERROR) return outcomeUnknownOutput(event = event, call = apiMethod, detail = error)
         dispatcherLog.warn {
             "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
         }
-        failOutput(event = event, reason = result.error)
+        return failOutput(event = event, reason = result.error)
     }
 }
