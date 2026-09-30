@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # infrastructure/templates
 
@@ -17,6 +17,7 @@ modal payloads — behind small type-safe DSLs.
 | `SlackUserProfileResolver.kt` | `resolve(userId): PublisherView(displayName, thumbnailUrl?)` — `users.profile.get?user={user}` via `RestRequester.safeGet` with `userId` as a URI template variable (never interpolated), cached per user (30 min TTL); any failure or `ok = false` degrades to `<@userId>` with no thumbnail and is negative-cached for `failureTtl` (60 s), so a user whose lookup keeps failing costs one Tier 4 call per minute, not one per render. At `maxEntries` (5 000) a new user first drops expired entries, then the oldest tenth by insertion time — never the whole cache |
 | `ModalBlockBuilder.kt` | Block-level assembly used by the template builder |
 | `ModalElementBuilder.kt` | Element-level widgets: text inputs, selects, date/time pickers, checkboxes |
+| `SlackMrkdwn.kt` | `String.escapeMrkdwn()`: escapes `&`, `<`, `>` so user- or externally-supplied text interpolated into mrkdwn cannot become `<!channel>` or a disguised `<url\|label>` link — `verbatim` does not stop explicit `<…>` markup. Apply it at the interpolation site, not to whole template strings |
 | `SlackTemplateBuilder.kt` | Non-modal message templates |
 | `InteractiveIds.kt` | Canonical `action_id` / `block_id` / `callback_id` constants |
 | `dto/LayoutBlocks.kt` | Layout block DTOs |
