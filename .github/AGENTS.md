@@ -42,8 +42,9 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   running deploy can be superseded by a later merge (whose image contains it), but no longer by an unmerged close
   whose jobs all skip.
 - **CI Gradle memory:** the test and deploy workflows run `./gradle-config/apply.sh ci`, which installs
-  `gradle-config/gradle-ci.properties` (3g Gradle daemon, 3g Kotlin daemon, `workers.max=4`) sized for a
-  16 GB runner; the Linux preset (8g + 6g) is for developer servers. Lint runs without `apply.sh`. The daemon
+  `gradle-config/gradle-ci.properties` (3g Gradle daemon, 3g Kotlin daemon, `workers.max=2`) sized for a
+  16 GB runner: at most two Test tasks fork their `-Xmx4g` JVM at once, 14g of heap ceilings in all (18g with
+  `workers.max=4`, when all three suites could fork together); the Linux preset (8g + 6g) is for developer servers. Lint runs without `apply.sh`. The daemon
   that `apply.sh` starts for its `./gradlew help` check is reused by the deploy build (no `org.gradle.daemon=false`).
 - **Do not add `!` patterns to the `dorny/paths-filter` block** in `deploy_action.yaml`. Under the
   action's default `predicate-quantifier: 'some'` a negated pattern is a no-op (patterns are OR-ed),

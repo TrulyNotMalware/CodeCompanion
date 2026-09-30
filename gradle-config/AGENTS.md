@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # gradle-config
 
@@ -14,7 +14,7 @@ settings stay shared without committing a machine-specific file.
 | `apply.sh` | Detects the OS (`Darwin` → macos, `Linux` → linux, `MINGW`/`CYGWIN`/`MSYS` → windows), prints system info, and writes `gradle.properties` at the repo root. Accepts `force`, `common`, `ci` or `--help`/`-h`; any other or extra argument prints usage and exits 2. Verification runs `./gradlew help` and prints its output when it fails |
 | `gradle-macos.properties` | 6 GB heap, ZGC, no Linux-only flags, `apple.awt.UIElement=true`; 4 GB Kotlin daemon. For 16 GB+ machines |
 | `gradle-linux.properties` | 8 GB heap, ZGC + large pages + transparent huge pages, string dedup, `workers.max=16`; 6 GB Kotlin daemon. For 16 GB+ servers |
-| `gradle-ci.properties` | CI runner preset, installed only by an explicit `./apply.sh ci` (never by OS detection): 3 GB heap, JVM default GC, `workers.max=4`, 3 GB Kotlin daemon, Kotlin daemon fallback enabled. Sized for 4 vCPU / 16 GB GitHub runners, where forked test JVMs (`-Xmx4g` each, root `build.gradle.kts`) run beside both daemons |
+| `gradle-ci.properties` | CI runner preset, installed only by an explicit `./apply.sh ci` (never by OS detection): 3 GB heap, JVM default GC, `workers.max=2`, 3 GB Kotlin daemon, Kotlin daemon fallback enabled. Sized for 4 vCPU / 16 GB GitHub runners, where forked test JVMs (`-Xmx4g` each, root `build.gradle.kts`) run beside both daemons: `workers.max` caps them at two at once, 3 + 3 + 2 × 4 = 14 GB of heap ceilings instead of 18 GB with all three Test tasks forked |
 | `gradle-common.properties` | Portable fallback for `./apply.sh common` and unknown hosts: 4 GB heap, no GC selection, no experimental VM options, default worker count, Kotlin daemon fallback enabled |
 | `README.md` | Human-facing guide, including the documented `gradle-common.properties` cross-platform preset |
 
@@ -54,7 +54,10 @@ All presets share: parallel + caching + configuration cache (`problems=warn`), i
 - CI runs `./gradle-config/apply.sh ci` in the test workflow and in the deploy build, so a change to `apply.sh`
   or `gradle-ci.properties` changes CI build behaviour; a syntax error in `apply.sh` breaks every test run and
   every deploy. Keep the CI preset's daemon heaps small: the Linux preset (8 GB + 6 GB daemons) plus forked
-  4 GB test JVMs overcommits a 16 GB runner. `ci` backs up an existing `gradle.properties` like the default path.
+  4 GB test JVMs overcommits a 16 GB runner. Keep `workers.max` at 2 as well: it is what bounds the number of
+  Test tasks forking a 4 GB JVM at the same time under `org.gradle.parallel`, and raising it (or a Test heap, or
+  a daemon heap) needs the arithmetic in the preset's comment redone. `ci` backs up an existing
+  `gradle.properties` like the default path.
 
 ### Testing Requirements
 There is no automated test. Verify manually:
