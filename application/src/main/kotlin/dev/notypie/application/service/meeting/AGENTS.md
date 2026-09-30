@@ -46,23 +46,35 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
   `cancelMeeting`, `addParticipants` and `rescheduleMeeting` hand their work to
   `MeetingWriteDeferral.runOrDefer`. Under `SlackInteractionHandlerImpl.handleInteraction` the work is queued
   and runs only after the interaction transaction has committed and released its connection; if that
-  transaction fails, the write never happens. `executeRetryingOnConflict` then runs the write, its effects
+  transaction fails, the write never happens. That release, and the write's own persistence context, hold only
+  because `spring.jpa.open-in-view` is `false` (`application.yaml`, review T25): with Boot's default the HTTP
+  request keeps one `EntityManager` (and its connection) from start to end, the interaction commit does not clear
+  it, and the write's first attempt would answer from whatever the interaction loaded — a no-write outcome
+  (`AlreadyAtRequestedTime`, `NO_NEW_PARTICIPANTS`, `OVER_CAPACITY`, `MEETING_STARTED`) has no version check to
+  catch that. `executeRetryingOnConflict` then runs the write, its effects
   (reminder delete, notices, approvals) and the host reply in one `REQUIRES_NEW` transaction, so the
-  `BEFORE_COMMIT` outbox listener binds to it and the reply commits atomically with the write; the retry opens
+  `BEFORE_COMMIT` outbox listener binds to it and the reply commits atomically with the write; each attempt opens
   a fresh transaction (new persistence context, new REPEATABLE_READ snapshot) and re-reads the row. Only when
   both attempts fail is "Please try again later" staged, through a `REQUIRED` template (its own transaction
   after the interaction, the caller's when run inline). The "Pick a future time" reply is staged at event
   time, inside the interaction transaction, and needs no connection of its own. Pinned by
-  `MeetingWriteJpaTransactionTest` (real `JpaTransactionManager`: distinct `EntityManager` per attempt, the
-  retry applies on top of a concurrent commit) and `SlackInteractionHandlerImplTest` (ordering, discard on
-  failure, pool scenario).
+  `MeetingWriteJpaTransactionTest` (real `JpaTransactionManager`: through `handleInteraction` the write gets its
+  own `EntityManager` and sees a move committed after the interaction's read, while an open-in-view
+  `EntityManager` bound to the request makes it reuse the interaction's and answer stale; every profile resolves
+  `open-in-view` to `false`; inline, the retry applies on top of a concurrent commit) and
+  `SlackInteractionHandlerImplTest` (ordering, discard on failure, pool scenario).
 - **One pooled connection at a time on the interaction path.** Deferred, a request thread never holds the
   interaction's connection while it waits for the write's, so N concurrent meeting interactions work on a
   pool of N (`SlackInteractionHandlerImplTest`); the retry starts only after the first attempt returned its
   connection (`MeetingServiceImplTest` runs conflict-then-retry on a two-connection pool). The inline path
   (`runOrDefer` with no scope: anything not called through the handler) still takes a second connection
   while its caller holds one; keep such callers out of transactions or size the pool as 2 × their
-  concurrency. Keep the write block short: repository read and write, reminder delete, in-memory staging and
+  concurrency. `handleInteraction`'s own `isActualTransactionActive()` branch is such a caller: called inside a
+  transaction it opens no deferral scope, so each write commits in its own `REQUIRES_NEW` transaction on a second
+  connection even if the caller later rolls back. No production caller does that (the controllers and
+  `SocketModeReceiver` carry no `@Transactional`), and it stays documented rather than blocked with a `check`
+  because the meeting specs use exactly this inline shape as their harness — do not wrap the handler in a
+  transaction. Keep the write block short: repository read and write, reminder delete, in-memory staging and
   (at its `BEFORE_COMMIT`) the outbox inserts — no Slack or HTTP call, no rendering, no profile lookup, no
   extra read (the reschedule takes its participants from the `RescheduleResult`). An `AFTER_COMMIT`
   listener was not an option: Spring runs `afterCommit` callbacks before it releases the committed
@@ -100,8 +112,9 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
 Specs under `application/src/test/kotlin/dev/notypie/application/service/meeting/`:
 `MeetingServiceImplTest`, `MeetingRescheduleServiceTest`, `MeetingReminderSchedulingServiceTest`,
 `DailyAgendaSchedulingServiceTest`, `DailyAgendaMessageBuilderTest` (`buildAgendaDm`), and
-`MeetingWriteJpaTransactionTest` (real `MeetingRepositoryImpl` / `MeetingReminderRepositoryImpl` and both
-services on `JpaTransactionManager` over H2, no Spring context). Otherwise MockK the
+`MeetingWriteJpaTransactionTest` (real `MeetingRepositoryImpl` / `MeetingReminderRepositoryImpl`, both
+services and, for the deferred path, `SlackInteractionHandlerImpl` on `JpaTransactionManager` over H2, no Spring
+context). Otherwise MockK the
 repositories, `OutboundMessagePort`, `OutboundMessageStager`, `EventPublisher`; a fixed `Clock`; assert on
 CAS calls, captured outbox rows and staged messages. Fixtures: `createAgendaItem` /
 `createAgendaCandidateMeeting` / `createReminderCandidateMeeting` (application testFixtures, same

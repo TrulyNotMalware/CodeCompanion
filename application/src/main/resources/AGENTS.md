@@ -11,7 +11,7 @@ stand up change-data-capture locally and in-cluster.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `application.yaml` | Base defaults only — kept deliberately minimal. `spring.lifecycle.timeout-per-shutdown-phase: 60s` for every profile (one CDC record in flight must finish before the DataSource closes; `k8s/deployment.yaml` grace is sized on it); MCP server off by default; scheduler pool sized to 4 (read by the `taskScheduler` bean in `configurations/SchedulingConfig.kt`); `server.forward-headers-strategy: none` |
+| `application.yaml` | Base defaults only — kept deliberately minimal. `spring.lifecycle.timeout-per-shutdown-phase: 60s` for every profile (one CDC record in flight must finish before the DataSource closes; `k8s/deployment.yaml` grace is sized on it); `spring.jpa.open-in-view: false` (see "Open-in-view" below); MCP server off by default; scheduler pool sized to 4 (read by the `taskScheduler` bean in `configurations/SchedulingConfig.kt`); `server.forward-headers-strategy: none` |
 | `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true`; HTTP bound to `server.address: 127.0.0.1` (the only profile allowed a blank signing secret, with unauthenticated actuator endpoints) |
 | `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
 | `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
@@ -60,10 +60,20 @@ stand up change-data-capture locally and in-cluster.
   for the claim, renew and completion SQL. Redo this arithmetic whenever that timeout, the retry policy or these two values change,
   and before adding any wait inside the listener. If a batch does overrun, the consumer leaves the group and the
   records are redelivered; an already-claimed row is no longer PENDING, so the CDC processor skips it.
-- **Hikari pool** (`maximum-pool-size: 20` in every profile). A meeting cancel/reschedule/add-participant holds
-  two connections at once (the outer interaction transaction plus the `REQUIRES_NEW` write from
-  `isolatedWriteTemplate`), and the relay executor, the schedulers and the CDC listener share the same pool. Size
-  it as: concurrent meeting interactions x 2 + relay workers (`relayTaskExecutor`, 4; overflow is rejected, never run
+- **Open-in-view is off on purpose** (`application.yaml`, review T25). Boot's default binds one `EntityManager` to
+  each HTTP request; the meeting write that `MeetingWriteDeferral` runs after the interaction transaction commits
+  would then open its first attempt on the interaction's persistence context and could answer from entities that
+  transaction loaded. No code path needs it: every LAZY association (meeting participants, standup members,
+  dispatches and answers, the reminder's and dispatch's parent) is fetch-joined by its read query or touched inside
+  a `@Transactional` repository method, and repositories hand out DTOs only. Keep it that way — a new lazy access
+  outside a transaction now fails with `LazyInitializationException` instead of quietly holding a connection.
+  `MeetingWriteJpaTransactionTest` fails if a profile turns it back on.
+- **Hikari pool** (`maximum-pool-size: 20` in every profile). An HTTP request holds at most one connection at a
+  time: with open-in-view off each transaction returns its connection at commit, and a meeting
+  cancel/reschedule/add-participant runs its `REQUIRES_NEW` write only after the interaction transaction has
+  committed. (A caller that runs such a write inline inside its own transaction takes a second connection; no
+  production caller does — see `service/meeting/AGENTS.md`.) The relay executor, the schedulers and the CDC
+  listener share the same pool. Size it as: concurrent interactions + relay workers (`relayTaskExecutor`, 4; overflow is rejected, never run
   on the submitting thread) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + async-executor tasks that use the DB (`threadPoolTaskExecutor`, up to 10). Request threads are virtual,
   so the pool, not a thread limit, is what bounds concurrent interactions; a request that cannot get a connection

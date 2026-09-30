@@ -7,6 +7,15 @@ spring:
     # another pod's sweep re-sends a message that was already posted. k8s/deployment.yaml's grace period is sized
     # on top of this; ShutdownBudgetTest checks every profile and the manifest.
     timeout-per-shutdown-phase: 60s
+  jpa:
+    # Explicitly off (Boot defaults to true and warns at startup). With it on, every HTTP request binds one
+    # EntityManager for its whole duration, so the meeting write MeetingWriteDeferral runs after the interaction
+    # transaction commits would open its first attempt on the interaction's persistence context and answer from
+    # entities that transaction loaded, with no version check on a no-write outcome. Nothing depends on lazy
+    # loading outside a transaction: every LAZY association is fetch-joined by its read query or touched inside a
+    # @Transactional repository method, and only DTOs leave the repositories. MeetingWriteJpaTransactionTest pins
+    # both the setting in every profile and what the deferred write sees with and without it.
+    open-in-view: false
   ai:
     mcp:
       server:

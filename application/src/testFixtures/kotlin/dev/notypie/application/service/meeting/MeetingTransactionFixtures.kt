@@ -23,6 +23,7 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.orm.jpa.EntityManagerFactoryUtils
+import org.springframework.orm.jpa.EntityManagerHolder
 import org.springframework.orm.jpa.JpaTransactionManager
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean
 import org.springframework.orm.jpa.SharedEntityManagerCreator
@@ -121,6 +122,19 @@ class MeetingJpaStore(
         checkNotNull(EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagerFactory)) {
             "no transaction-bound EntityManager"
         }
+
+    // What spring.jpa.open-in-view=true does around each HTTP request (OpenEntityManagerInViewInterceptor): one
+    // EntityManager bound to the thread outside any transaction, which every transaction on that thread reuses.
+    fun <T> withOpenEntityManagerInView(action: () -> T): T {
+        val entityManager = entityManagerFactory.createEntityManager()
+        TransactionSynchronizationManager.bindResource(entityManagerFactory, EntityManagerHolder(entityManager))
+        try {
+            return action()
+        } finally {
+            TransactionSynchronizationManager.unbindResource(entityManagerFactory)
+            EntityManagerFactoryUtils.closeEntityManager(entityManager)
+        }
+    }
 
     override fun close() = entityManagerFactory.close()
 }

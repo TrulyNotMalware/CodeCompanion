@@ -10,7 +10,8 @@ spring:
   datasource:
     hikari:
       transaction-isolation: ${SQL_PROD_ISOLATION_LEVEL}
-      # Meeting writes hold two connections (outer tx + REQUIRES_NEW); sizing rule in resources/AGENTS.md.
+      # One connection per request at a time: open-in-view is off and a meeting write runs after the interaction
+      # transaction has committed, never beside it. Sizing rule in resources/AGENTS.md.
       maximum-pool-size: 20
 #      minimum-idle: 10
       connection-timeout: ${SQL_PROD_CONNECTION_TIMEOUT}
