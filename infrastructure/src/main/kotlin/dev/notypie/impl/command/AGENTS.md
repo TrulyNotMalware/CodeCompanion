@@ -92,7 +92,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     bot token and the URL expires after 30 minutes.
   - Permanent — any other `ok=false` (including `fatal_error`, which may have partly succeeded, and
     `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
-    and `response_url` 3xx / 4xx / JSON `ok=false` → `failOutput(<error>)`, once. The relay writes `FAILURE`.
+    and `response_url` 3xx / 4xx / JSON `ok=false` / a 2xx body that is neither `ok` nor JSON `ok=true` →
+    `failOutput(<error>)`, once. The relay writes `FAILURE`.
   - Anything else (a non-transient exception inside the retry, or thrown outside it) propagates as-is; the
     relay treats it like a transient outcome. A 2xx body the SDK cannot parse is such an exception, so a
     non-idempotent call hit by it can still be resent by the sweep.
@@ -115,7 +116,9 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   userinfo (`https://hooks.slack.com@evil.example/…`) and a trailing dot are rejected and upper case is
   canonicalised; anything else is `failOutput("response_url_rejected: …")`. The client never follows
   redirects, so the allowlist is final and a 3xx is a permanent failure. Only the first 4 KiB of the response
-  are read (`peekBody`); success is plain-text `ok` or JSON `ok=true`.
+  are read (`peekBody`); success is a 2xx with plain-text `ok` (the body Slack documents for a successful
+  `hooks.slack.com` POST in "Sending messages using incoming webhooks") or JSON `ok=true`. Any other 2xx body is a
+  permanent `unexpected_body: http_<code>: <prefix>` failure, never a silent success.
 - The invalid `PostEventPayloadContents`/action-response pairing is unrepresentable — `MessageType` has no
   `ACTION_RESPONSE`.
 - **`dispatchImmediate` fallbacks need `participantUserId`.** Every `open*ModalRequest` sets it (requester,

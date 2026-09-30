@@ -440,6 +440,11 @@ class ApplicationMessageDispatcher(
                             reason = "http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}",
                         )
                     slackError != null -> failOutput(event = event, reason = slackError.take(MAX_FAILURE_REASON_CHARS))
+                    !isAcknowledgement(body = body) ->
+                        failOutput(
+                            event = event,
+                            reason = "unexpected_body: http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}",
+                        )
                     else -> successOutput(payload = event, commandType = CommandType.RESPONSE)
                 }
             }
@@ -456,6 +461,14 @@ class ApplicationMessageDispatcher(
         if (error == SLACK_UNAVAILABLE_ERROR || (idempotent && error == SLACK_INTERNAL_ERROR)) {
             throw SlackTransientErrorException(error = error)
         }
+    }
+
+    // Slack documents a hooks.slack.com success as HTTP 200 with plain-text "ok"; JSON ok=true is accepted too.
+    private fun isAcknowledgement(body: String): Boolean {
+        val trimmed = body.trim()
+        if (trimmed == "ok") return true
+        if (!trimmed.startsWith("{")) return false
+        return runCatching { jsonMapper.readTree(trimmed).path("ok").asBoolean(false) }.getOrDefault(false)
     }
 
     private fun slackErrorOf(body: String): String? {
