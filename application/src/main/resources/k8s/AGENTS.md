@@ -112,10 +112,11 @@ adds what an agent editing the manifests needs to know.
   `/actuator/health/readiness` through the API server's service proxy
   (`/api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/...`, RBAC `get` on `services/proxy`,
   resource name `code-companion-svc:80` if the Role uses `resourceNames`) and falls back to
-  `kubectl exec deploy/code-companion-deploy -c code-companion-deploy -- wget -qO- http://localhost:80/...`
-  (RBAC `create` on `pods/exec`). The aggregate `/actuator/health` is logged but does not gate. Renaming the
-  Service, its port, the Deployment or the container, or moving the management base path, needs the same change
-  in `deploy_action.yaml`. It never uses the public host: that host is fronted by a bearer-authenticating layer
+  `kubectl exec <pod> -c code-companion-deploy -- wget -qO- http://localhost:80/...` on every non-terminating
+  Pod of the current revision, found through the ReplicaSet's `pod-template-hash` label (RBAC `create` on
+  `pods/exec`, `list` on `replicasets` and `pods`). The aggregate `/actuator/health` is logged but does not gate.
+  Renaming the Service, its port, the Deployment or the container, changing the `app` label, or moving the
+  management base path, needs the same change in `deploy_action.yaml`. It never uses the public host: that host is fronted by a bearer-authenticating layer
   outside this repository (every probed path answered `401` on 2026-09-28), and what it forwards to the app has
   to be confirmed by whoever operates it.
 - **`/actuator` must never be routed publicly** (unauthenticated `metrics`/`info`, and `health` reports outbox

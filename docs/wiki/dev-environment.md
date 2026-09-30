@@ -187,9 +187,11 @@ _type: guide · updated: 2026-09-30_
   앱으로 넘기는지는 밖에서 알 수 없다(게이트웨이 운영자가 확인할 일). 401은 이 앱의 Slack 서명 필터가 응답했다는 증거가 아니다.
   그래서 배포 잡은 클러스터 안에서 `/actuator/health/readiness`를 약 2분간 폴링해 `jq -e '.status == "UP"'`을 요구한다. 매 시도마다
   API 서버 service proxy(`kubectl get --raw /api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/...`, `services/proxy`
-  `get` 권한, `resourceNames`를 쓰면 이름은 `code-companion-svc:80`)를 먼저, 실패하면 `kubectl exec deploy/code-companion-deploy
-  -c code-companion-deploy -- wget -qO- http://localhost:80/...`(`pods/exec` `create` 권한)를 시도하고 어느 쪽이 응답했는지 로그에
-  남긴다. 집계 `/actuator/health`는 로그용으로 한 번만 읽는다 — 아웃박스 헬스 인디케이터가 릴리스와 무관하게 DOWN일 수 있어서다.
+  `get` 권한, `resourceNames`를 쓰면 이름은 `code-companion-svc:80`)를 먼저, 실패하면 현재 리비전 ReplicaSet의
+  `pod-template-hash`로 고른 파드 중 `deletionTimestamp`가 없는 **모든** 파드에 `kubectl exec <pod> -c code-companion-deploy --
+  wget -qO- http://localhost:80/...`(`pods/exec` `create`, `replicasets`·`pods` `list` 권한)를 시도하고 어느 쪽이 응답했는지 로그에
+  남긴다. 예전의 `kubectl exec deploy/<name>`은 종료 중인 파드를 거르지 않아, `rollout status` 직후 `preStop` 5초 동안 UP을
+  답하는 이전 파드로 게이트가 통과할 수 있었다. 집계 `/actuator/health`는 로그용으로 한 번만 읽는다 — 아웃박스 헬스 인디케이터가 릴리스와 무관하게 DOWN일 수 있어서다.
   롤백은 apply·rollout·verify·health 단계가 실패했을 때만 돌고, 배포 전 백업과 비교해 파드 템플릿 해시나 리비전이 달라졌으면
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.

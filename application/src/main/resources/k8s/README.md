@@ -194,8 +194,9 @@ workflow's apply sets `replicas: 2` again. The outage then lasts until the build
     `kubectl get --raw /api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/actuator/health/readiness`.
     If the Role lists `resourceNames`, the name checked is `code-companion-svc:80`, not `code-companion-svc`.
     This path also needs the API server to reach pod IPs, which some cluster networks do not allow.
-  - `create` on `pods/exec`, for
-    `kubectl exec deploy/code-companion-deploy -c code-companion-deploy -- wget -qO- http://localhost:80/actuator/health/readiness`.
+  - `create` on `pods/exec` (plus `list` on `replicasets` and `pods`, which the rollback and the Ready-pod count
+    already use), for `kubectl exec <pod> -c code-companion-deploy -- wget -qO- http://localhost:80/actuator/health/readiness`
+    on every Pod of the new ReplicaSet that is not terminating.
   Run the first command once from the deploy identity before relying on it; the workflow log says which method answered.
 - Rollout capacity: under the rolling update (once the `Recreate` block is removed, see Deployment), 3 × 1536Mi
   of memory requests must fit during a rollout; under `Recreate`, 2 × 1536Mi. Check with
@@ -425,8 +426,8 @@ Ready가 될 때까지 이어집니다.
     `kubectl get --raw /api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/actuator/health/readiness`.
     Role이 `resourceNames`를 쓰면 검사되는 이름은 `code-companion-svc`가 아니라 `code-companion-svc:80`입니다.
     이 경로는 API 서버가 파드 IP에 도달할 수 있어야 하며, 클러스터 네트워크에 따라 불가능할 수 있습니다.
-  - `pods/exec` `create`:
-    `kubectl exec deploy/code-companion-deploy -c code-companion-deploy -- wget -qO- http://localhost:80/actuator/health/readiness`.
+  - `pods/exec` `create`(롤백과 Ready 파드 수 확인이 이미 쓰는 `replicasets`·`pods` `list` 포함): 종료 중이 아닌 새 ReplicaSet의
+    모든 파드에 대해 `kubectl exec <pod> -c code-companion-deploy -- wget -qO- http://localhost:80/actuator/health/readiness`.
   첫 번째 명령을 배포 계정으로 한 번 실행해 확인하세요. 워크플로 로그에 어느 방식이 응답했는지 남습니다.
 - 롤아웃 용량: 롤링 업데이트(`Recreate` 블록을 지운 뒤, Deployment 참고)에서는 롤아웃 중 메모리 요청 3 × 1536Mi가
   동시에 들어가야 하고, `Recreate`에서는 2 × 1536Mi입니다.
