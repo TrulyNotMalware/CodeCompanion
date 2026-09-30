@@ -92,7 +92,12 @@ class InputBuilder(
         input["element"] = element
     }
 
-    fun plainTextInput(actionId: String, multiline: Boolean = false, initialValue: String? = null) {
+    fun plainTextInput(
+        actionId: String,
+        multiline: Boolean = false,
+        initialValue: String? = null,
+        maxLength: Int? = null,
+    ) {
         val element =
             mutableMapOf<String, Any>(
                 "type" to "plain_text_input",
@@ -100,6 +105,7 @@ class InputBuilder(
                 "multiline" to multiline,
             )
         if (initialValue != null) element["initial_value"] = initialValue
+        if (maxLength != null) element["max_length"] = maxLength
         input["element"] = element
     }
 

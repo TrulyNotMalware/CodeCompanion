@@ -16,6 +16,8 @@ import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.domain.standup.createRoutineMemberDto
+import dev.notypie.domain.standup.createStandupAnswerDto
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createProfile
@@ -28,6 +30,8 @@ import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
@@ -1058,6 +1062,144 @@ class ModalTemplateBuilderTest :
                     view.callbackId shouldBe StandupModalIds.CALLBACK_ID
                     inputs.size shouldBe 2
                 }
+
+                // T4: without a cap one long answer could push the member's summary section past Slack's limit.
+                then("each answer input carries a max_length sized so the member's summary section fits") {
+                    val maxLengths = standupAnswerMaxLengths(json = json)
+                    maxLengths.distinct().size shouldBe 1
+                    val fixed =
+                        32 + listOf("What did you do yesterday?", "What are you doing today?").sumOf { it.length + 6 }
+                    (fixed + maxLengths.sum()) shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    maxLengths.first() shouldBeLessThanOrEqual SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH
+                }
+            }
+        }
+
+        given("standupSummaryTemplate") {
+            val sessionDate = LocalDate.of(2026, 5, 4)
+
+            // T4 as reproduced in review: five members answering three questions with 700 characters each came to
+            // 3,620 characters in the old single section, which Slack rejects.
+            `when`("five members each answer three questions at length") {
+                val questions = listOf("Yesterday?", "Today?", "Blockers?")
+                val members = (1..5).map { createRoutineMemberDto(userId = "U_MEMBER_$it") }
+                val answers =
+                    members.map { member ->
+                        createStandupAnswerDto(
+                            userId = member.userId,
+                            responses = questions.map { "a".repeat(n = 700) },
+                        )
+                    }
+                val result =
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = members,
+                        answers = answers,
+                        questions = questions,
+                    )
+                val texts =
+                    result.template.map {
+                        (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject)
+                            .text
+                    }
+
+                then("the title and each member get their own section, all within the section budget") {
+                    texts.size shouldBe 6
+                    texts.first() shouldBe "*Daily — 2026-05-04*"
+                    texts.forEach { it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                }
+                then("every member's answers are rendered in full, nothing truncated") {
+                    members.forEachIndexed { index, member ->
+                        texts[index + 1] shouldStartWith "<@${member.userId}>"
+                        texts[index + 1] shouldNotContain SlackBlockLimits.TRUNCATION_MARKER
+                    }
+                }
+            }
+
+            `when`("a full routine answers the longest questions at the modal's answer cap") {
+                val questions = (1..8).map { index -> "Q$index " + "q".repeat(n = 196) }
+                val answerCap =
+                    standupAnswerMaxLengths(
+                        json =
+                            templateBuilder.standupModalViewJson(
+                                routineName = "Daily",
+                                sessionDate = sessionDate,
+                                sessionUid = UUID.randomUUID(),
+                                userId = "U_ANY",
+                                noticeChannel = "D_NOTICE",
+                                noticeMessageTs = "1700000000.000400",
+                                questions = questions,
+                            ),
+                    ).first()
+                val members = (1..30).map { createRoutineMemberDto(userId = "U0123456789$it") }
+                val answers =
+                    members.map { member ->
+                        createStandupAnswerDto(
+                            userId = member.userId,
+                            responses = questions.map { "b".repeat(n = answerCap) },
+                        )
+                    }
+                val result =
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = "R".repeat(n = 59),
+                        sessionDate = sessionDate,
+                        members = members,
+                        answers = answers,
+                        questions = questions,
+                    )
+                val texts =
+                    result.template.map {
+                        (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject)
+                            .text
+                    }
+
+                then("30 members plus the title stay within the 50-block message limit") {
+                    result.template.size shouldBe 31
+                }
+                then("each member section fits the budget without being cut") {
+                    texts.forEach {
+                        it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                        it shouldNotContain SlackBlockLimits.TRUNCATION_MARKER
+                    }
+                }
+            }
+
+            `when`("a stored answer is longer than a section (written before the modal capped it)") {
+                val member = createRoutineMemberDto(userId = "U_LONG")
+                val result =
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = listOf(member),
+                        answers =
+                            listOf(
+                                createStandupAnswerDto(userId = "U_LONG", responses = listOf("c".repeat(n = 5_000))),
+                            ),
+                        questions = listOf("Yesterday?"),
+                    )
+                val memberText = (result.template[1].shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text
+
+                then("that member's section is cut to the budget and marked") {
+                    memberText.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    memberText shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+
+            `when`("a member did not answer") {
+                val result =
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = listOf(createRoutineMemberDto(userId = "U_SILENT")),
+                        answers = emptyList(),
+                        questions = listOf("Yesterday?"),
+                    )
+
+                then("the member's section says so") {
+                    (result.template[1].shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text shouldBe
+                        "<@U_SILENT> _(no response)_"
+                }
             }
         }
 
@@ -1187,3 +1329,11 @@ class ModalTemplateBuilderTest :
             }
         }
     })
+
+private fun standupAnswerMaxLengths(json: String): List<Int> =
+    com.slack.api.util.json.GsonFactory
+        .createSnakeCase()
+        .fromJson(json, com.slack.api.model.view.View::class.java)
+        .blocks
+        .filterIsInstance<com.slack.api.model.block.InputBlock>()
+        .map { (it.element as com.slack.api.model.block.element.PlainTextInputElement).maxLength }

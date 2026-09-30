@@ -69,6 +69,12 @@ class ModalTemplateBuilder(
 
         private const val DEFAULT_TRIGGER_TIME: String = "10:00"
         private const val DEFAULT_CUTOFF_MINUTES: String = "120"
+
+        // Standup summary layout: one section per member ("<@id>", then "\n• *question* answer" per question).
+        // The member line is reserved generously (Slack ids are 9–11 characters today) so the answer cap below
+        // never lets one member's section outgrow the section budget.
+        private const val STANDUP_MEMBER_LINE_RESERVE: Int = 32
+        private const val STANDUP_QUESTION_LINE_OVERHEAD: Int = 6 // "\n• *" + "* "
     }
 
     // Every MessageContent.Text reply renders through these two, so a long body (an AI answer, a digest) is
@@ -462,18 +468,30 @@ class ModalTemplateBuilder(
                     section {
                         mrkdwn(text = "*$routineName* — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}")
                     }
+                    val answerMaxLength = standupAnswerMaxLength(questions = questions)
                     questions.forEachIndexed { index, question ->
                         input(blockId = "${StandupModalIds.BLOCK_ID_PREFIX}$index") {
                             label(text = question)
                             plainTextInput(
                                 actionId = "${StandupModalIds.ACTION_ID_PREFIX}$index",
                                 multiline = true,
+                                maxLength = answerMaxLength,
                             )
                         }
                     }
                 }
             }
         return jsonMapper.writeValueAsString(view)
+    }
+
+    // Sized so a member's whole summary section (see standupSummaryTemplate) fits the section budget even when every
+    // answer is at the cap: the budget minus the member line and every question line, split across the answers.
+    // Routine's worst case (8 questions × 200 characters) still leaves about 150 characters per answer; answers
+    // heavy in `&<>` grow when escaped, and the summary's per-section cut covers that remainder.
+    private fun standupAnswerMaxLength(questions: List<String>): Int {
+        val fixed = STANDUP_MEMBER_LINE_RESERVE + questions.sumOf { it.length + STANDUP_QUESTION_LINE_OVERHEAD }
+        return ((SlackBlockLimits.SECTION_TEXT_BUDGET - fixed) / questions.size.coerceAtLeast(minimumValue = 1))
+            .coerceIn(minimumValue = 1, maximumValue = SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH)
     }
 
     override fun standupSetupModalViewJson(idempotencyKey: UUID, creatorId: String, commandChannel: String): String {
@@ -624,28 +642,64 @@ class ModalTemplateBuilder(
         questions: List<String>,
     ): LayoutBlocks {
         val answersByUser = answers.associateBy { it.userId }
-        val body =
-            buildString {
-                append("*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*")
-                members.forEach { member ->
-                    append("\n\n<@${member.userId}>")
-                    val answer = answersByUser[member.userId]
-                    if (answer == null) {
-                        append(" _(no response)_")
-                    } else {
-                        questions.forEachIndexed { index, question ->
-                            val response =
-                                answer.responses
-                                    .getOrNull(index)
-                                    .orEmpty()
-                                    .ifBlank { "(blank)" }
-                            append("\n• *$question* $response")
-                        }
-                    }
-                }
+        val memberSections =
+            members.map { member ->
+                renderStandupMember(
+                    userId = member.userId,
+                    answer = answersByUser[member.userId],
+                    questions = questions,
+                )
             }
-        return onlyTextTemplate(message = body, isMarkDown = true)
+        // The whole summary used to be one section and an ordinary team passed 3,000 characters, losing the day's
+        // summary for good. A title plus one section per member (Routine caps members at 30, so 31 blocks) keeps
+        // it under 50 blocks, and each member section is cut to the section budget.
+        val maxMemberSections = SlackBlockLimits.MESSAGE_MAX_BLOCKS - 1
+        val shown = if (memberSections.size > maxMemberSections) maxMemberSections - 1 else memberSections.size
+        return layoutBlocks {
+            add(
+                block =
+                    modalBlockBuilder.simpleText(
+                        text = "*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*",
+                        isMarkDown = true,
+                    ),
+            )
+            memberSections.take(n = shown).forEach { section ->
+                add(
+                    block =
+                        modalBlockBuilder.simpleText(
+                            text = section.truncateSectionText(limit = SlackBlockLimits.SECTION_TEXT_BUDGET),
+                            isMarkDown = true,
+                        ),
+                )
+            }
+            if (shown < memberSections.size) {
+                add(
+                    block =
+                        modalBlockBuilder.simpleText(
+                            text = "_${memberSections.size - shown} more members omitted._",
+                            isMarkDown = true,
+                        ),
+                )
+            }
+        }
     }
+
+    private fun renderStandupMember(userId: String, answer: StandupAnswerDto?, questions: List<String>): String =
+        buildString {
+            append("<@$userId>")
+            if (answer == null) {
+                append(" _(no response)_")
+                return@buildString
+            }
+            questions.forEachIndexed { index, question ->
+                val response =
+                    answer.responses
+                        .getOrNull(index)
+                        .orEmpty()
+                        .ifBlank { "(blank)" }
+                append("\n• *$question* $response")
+            }
+        }
 
     override fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,
