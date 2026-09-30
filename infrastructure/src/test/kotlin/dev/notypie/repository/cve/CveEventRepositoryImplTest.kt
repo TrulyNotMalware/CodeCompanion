@@ -138,6 +138,40 @@ class CveEventRepositoryImplTest :
             }
         }
 
+        given("markDone with a summary larger than the ai_summary TEXT column (65,535 bytes)") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            // 3-byte Hangul up to 65,534 bytes, then a 4-byte emoji that would cross the limit.
+            val oversized = "가".repeat(21_844) + "😀" + "tail"
+            val summary = slot<String>()
+            every { jpa.markDone(id = 7L, token = "tok", summary = capture(summary), now = now) } returns 1
+
+            `when`("marking done") {
+                repository.markDone(id = 7L, token = "tok", summary = oversized, now = now)
+
+                then("the stored summary is cut on a character boundary to fit the column in UTF-8") {
+                    summary.captured shouldBe "가".repeat(21_844)
+                    summary.captured.toByteArray(Charsets.UTF_8).size shouldBe 65_532
+                }
+            }
+        }
+
+        given("markDone with a summary exactly at the column limit") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            val atLimit = "가".repeat(21_845)
+            val summary = slot<String>()
+            every { jpa.markDone(id = 7L, token = "tok", summary = capture(summary), now = now) } returns 1
+
+            `when`("marking done") {
+                repository.markDone(id = 7L, token = "tok", summary = atLimit, now = now)
+
+                then("it is stored unchanged") {
+                    summary.captured shouldBe atLimit
+                }
+            }
+        }
+
         given("markFailed") {
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)

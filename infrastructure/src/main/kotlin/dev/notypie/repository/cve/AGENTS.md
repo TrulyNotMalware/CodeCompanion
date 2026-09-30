@@ -17,7 +17,7 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 | `CveTopicRepositoryImpl.kt` | `upsert` inserts when `findByTopicKey` is null, otherwise syncs every field **except `active`** onto the managed row and returns `false` on a no-op match (`matches()` ignores `active` too) |
 | `JpaCveTopicRepository.kt` | Derived `findByTopicKey`, `findByActiveTrueOrderByTopicKey`; JPQL `findAllOrderByTopicKey`, `countActive`, `@Modifying setActive`. Not `@Repository`-annotated (still registered by `@EnableJpaRepositories`) |
 | `CveEventRepository.kt` | Records `CveEvent(id, topicId, externalId, title, rawContent, aiSummary?, summaryStatus, retryCount)`, `TopicEventCount(topicId, count)`, `CveRecentEvent(topicDisplayName, title, aiSummary?)`; port `insertIgnore(topicId, externalId, title, rawContent, publishedAt?): Int`, `findClaimable(now, maxRetries, limit)`, `claimForSummary(id, token, now, maxRetries): Int`, `markDone(id, token, summary, now)`, `markFailed(id, token, nextAttemptAt, now)`, `releaseClaim(id, token, nextAttemptAt, now)`, `resetStuck(olderThan, now)`, `countByStatus`, `countFailedRetryable(maxRetries)`, `countDeadLetter(maxRetries)`, `countEventsByTopic(topicIds)`, `findRecentDoneEvents(topicIds, limit)`, `resetDeadLetters(maxRetries)`, `resetDeadLetter(id, maxRetries)` |
-| `CveEventRepositoryImpl.kt` | Truncates `title` to `TITLE_MAX_LENGTH = 512` and `rawContent` to `RAW_CONTENT_MAX_LENGTH = 60_000` before `insertIgnore`; `limit` → `PageRequest.of(0, limit)`; empty `topicIds` short-circuits to `emptyList()`, otherwise `distinct()` |
+| `CveEventRepositoryImpl.kt` | Truncates `title` to `TITLE_MAX_LENGTH = 512` and `rawContent` to `RAW_CONTENT_MAX_LENGTH = 60_000` before `insertIgnore`; cuts the `markDone` summary to `AI_SUMMARY_MAX_BYTES = 65_535` UTF-8 bytes on a code-point boundary (private `takeUtf8Bytes`); `limit` → `PageRequest.of(0, limit)`; empty `topicIds` short-circuits to `emptyList()`, otherwise `distinct()` |
 | `JpaCveEventRepository.kt` | Native `INSERT IGNORE` ingestion; JPQL `findClaimable` (PENDING / FAILED, `retryCount < :maxRetries`, backoff elapsed, id ASC); native CAS `claimForSummary` / `releaseClaim` / `markDone` / `markFailed` / `resetStuck`; JPQL counters, `countEventsByTopic` (constructor projection), `findRecentDoneEvents` (entity join to `cve_topic`), `resetDeadLetters` / `resetDeadLetter` (JPQL bulk update) |
 | `CveSubscriptionRepository.kt` | Port `subscribe(userId, topicIds): Int`, `unsubscribe(userId, topicIds): Int`, `findSubscribedTopics(userId): List<CveTopic>` |
 | `CveSubscriptionRepositoryImpl.kt` | `subscribe` loops `insertIgnore` per distinct topic and sums the inserted count; `unsubscribe` → `deleteByUserIdAndTopicIdIn`; `findSubscribedTopics` reads ids then `findAllById` on the topic repo, sorted by `topicKey` |
@@ -45,7 +45,11 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 - **The summary worker's safety is `claimForSummary` plus token-guarded `markDone` / `markFailed` /
   `releaseClaim`.** The claim re-checks `retry_count < :maxRetries` so a stale candidate cannot revive a
   dead-letter row; `releaseClaim` returns the row to PENDING **without** consuming the retry budget
-  (sidecar backpressure is not a failure). Never replace a guarded UPDATE with load-modify-save.
+  (sidecar backpressure is not a failure). `resetStuck` is a failure: a SUMMARIZING row older than the
+  cutoff goes to FAILED with `retry_count + 1`, so a row whose `markDone` fails every time (or whose worker
+  keeps dying) reaches the dead-letter ceiling instead of being re-summarized every `stuckMinutes` forever
+  (T26). Sending it back to PENDING would also hide an exhausted row from `countDeadLetter` /
+  `resetDeadLetters`, which only look at FAILED. Never replace a guarded UPDATE with load-modify-save.
 - **Two clocks.** Every `cve_event.updated_at` write (`claimForSummary`, `markDone`, `markFailed`,
   `releaseClaim`, `resetStuck`) is bound from the caller's app clock (`:now`), never `CURRENT_TIMESTAMP`,
   because `resetStuck` and the notification dispatcher's `doneBefore` cutoff compare against app-clock

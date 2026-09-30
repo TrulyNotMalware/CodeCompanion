@@ -44,7 +44,13 @@ open class CveEventRepositoryImpl(
         token: String,
         summary: String,
         now: LocalDateTime,
-    ): Int = jpaCveEventRepository.markDone(id = id, token = token, summary = summary, now = now)
+    ): Int =
+        jpaCveEventRepository.markDone(
+            id = id,
+            token = token,
+            summary = summary.takeUtf8Bytes(maxBytes = AI_SUMMARY_MAX_BYTES),
+            now = now,
+        )
 
     @Transactional
     override fun markFailed(
@@ -110,5 +116,29 @@ open class CveEventRepositoryImpl(
         // Match the cve_event column limits so an over-long feed payload never overflows the insert.
         const val TITLE_MAX_LENGTH = 512
         const val RAW_CONTENT_MAX_LENGTH = 60_000
+
+        // ai_summary is TEXT, which MariaDB caps at 65,535 bytes, not characters: ~21.8K Hangul characters
+        // already fill it, and a strict-mode "Data too long" would fail markDone on every retry.
+        const val AI_SUMMARY_MAX_BYTES = 65_535
+
+        // Cuts on a code point boundary so a surrogate pair or multi-byte character is never split.
+        private fun String.takeUtf8Bytes(maxBytes: Int): String {
+            var bytes = 0
+            var end = 0
+            while (end < length) {
+                val codePoint = codePointAt(end)
+                val size =
+                    when {
+                        codePoint < 0x80 -> 1
+                        codePoint < 0x800 -> 2
+                        codePoint < 0x10000 -> 3
+                        else -> 4
+                    }
+                if (bytes + size > maxBytes) return substring(0, end)
+                bytes += size
+                end += Character.charCount(codePoint)
+            }
+            return this
+        }
     }
 }

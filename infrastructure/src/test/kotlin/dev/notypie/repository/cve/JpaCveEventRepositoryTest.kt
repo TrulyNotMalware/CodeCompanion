@@ -7,6 +7,7 @@ import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -180,15 +181,38 @@ class JpaCveEventRepositoryTest
                 `when`("resetStuck runs with a 15-minute threshold") {
                     val reset = repository.resetStuck(olderThan = now.minusMinutes(15), now = now)
 
-                    then("only the stale row returns to PENDING, stamped from :now; the live claim keeps its token") {
+                    then("only the stale row is failed with one retry spent, stamped from :now; the live claim stays") {
                         reset shouldBe 1
                         val staleRow = repository.findById(stale).orElseThrow()
-                        staleRow.summaryStatus shouldBe CveSummaryStatus.PENDING
+                        staleRow.summaryStatus shouldBe CveSummaryStatus.FAILED
+                        staleRow.retryCount shouldBe 1
+                        staleRow.claimToken.shouldBeNull()
                         staleRow.updatedAt shouldBe now
                         val liveRow = repository.findById(live).orElseThrow()
                         liveRow.summaryStatus shouldBe CveSummaryStatus.SUMMARIZING
                         liveRow.claimToken.shouldNotBeNull()
                         liveRow.updatedAt shouldBe now.minusMinutes(1)
+                    }
+                }
+            }
+
+            given("a SUMMARIZING row stuck on its last retry") {
+                val lastTry =
+                    repository
+                        .saveAndFlush(createCveEventSchema(externalId = "stuck-last-try", retryCount = 19))
+                        .id
+                repository.claimForSummary(id = lastTry, token = "crash", now = now.minusMinutes(30), maxRetries = 20)
+                val baseDeadLetter = repository.countDeadLetter(maxRetries = 20)
+
+                `when`("resetStuck reclaims it") {
+                    repository.resetStuck(olderThan = now.minusMinutes(15), now = now)
+                    val claimable =
+                        repository.findClaimable(now = now, maxRetries = 20, pageable = PageRequest.of(0, 500))
+
+                    then("it lands in the dead-letter count instead of looping back to the summarizer forever") {
+                        repository.findById(lastTry).orElseThrow().retryCount shouldBe 20
+                        repository.countDeadLetter(maxRetries = 20) shouldBe baseDeadLetter + 1
+                        claimable.map { it.id } shouldNotContain lastTry
                     }
                 }
             }

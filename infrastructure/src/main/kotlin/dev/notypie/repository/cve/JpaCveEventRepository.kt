@@ -130,12 +130,15 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         @Param("now") now: LocalDateTime,
     ): Int
 
+    // A stuck claim is a failed attempt: it spends one retry and lands in FAILED so the retry ceiling (and the
+    // dead-letter view) applies. Returning it to PENDING with the budget intact re-summarized a row whose
+    // markDone kept failing every stuckMinutes, forever.
     @Modifying
     @Transactional
     @Query(
         value = """
             UPDATE cve_event
-            SET summary_status = 'PENDING', claim_token = NULL, updated_at = :now
+            SET summary_status = 'FAILED', retry_count = retry_count + 1, claim_token = NULL, updated_at = :now
             WHERE summary_status = 'SUMMARIZING' AND updated_at < :olderThan
         """,
         nativeQuery = true,
