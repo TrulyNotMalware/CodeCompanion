@@ -29,6 +29,13 @@ data class NudgeCandidateSession(
     val answeredUserIds: Set<String>,
 )
 
+// A closed session (summarized, skipped, or past cutoff) no longer accepts answers: the summary is already built.
+enum class AnswerRecordResult {
+    RECORDED,
+    SESSION_CLOSED,
+    SESSION_NOT_FOUND,
+}
+
 interface StandupRepository {
     fun createRoutine(routine: Routine): Routine
 
@@ -51,13 +58,15 @@ interface StandupRepository {
         userId: String,
         responses: List<String>,
         submittedAt: Instant,
-    ): Boolean
+    ): AnswerRecordResult
 
     fun claimDispatch(dispatchId: Long, claimToken: String): Boolean
 
     fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean
 
     fun markDispatchFailed(dispatchId: Long, claimToken: String, reason: String): Boolean
+
+    fun markDispatchSkipped(dispatchId: Long, reason: String): Boolean
 
     fun resetStuckDispatches(olderThan: Instant): Int
 

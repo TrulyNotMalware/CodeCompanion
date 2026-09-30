@@ -35,6 +35,8 @@ emission order until the application layer drains the command.
 - `CreateStandupRoutine` is the v1 shape: every member gets the single `timezone`, and `cutoffMinutes`
   is a `Long?` that the application converts to the entity's `Duration` — `null` means the typed cutoff was
   not a whole number within `Routine`'s bounds and the application rejects the setup.
+- `RecordStandupAnswer.notice` ferries the DM prompt's `MessageRef`: only the application knows whether the
+  session still accepted the answer, so the notice update moved out of the domain context (review T19).
 - `DefaultIntentQueue.drainSnapshot()` copies then clears — that is what `Command.drainIntents()` exposes
   and why a retry after a publish failure does not re-deliver stale effects. `Nothing` is the explicit
   no-op variant for paths that must emit something.

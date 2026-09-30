@@ -11,9 +11,11 @@ import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.event.SendSlackMessageEvent
+import dev.notypie.repository.standup.AnswerRecordResult
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -30,28 +32,43 @@ import java.util.UUID
 class StandupAnswerServiceTest :
     BehaviorSpec({
         given("recordAnswer") {
-            `when`("a RecordStandupAnswerEvent is received") {
+            val now = Instant.parse("2026-05-01T02:00:00Z")
+            val notice = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1700000000.000500")
+
+            fun eventOf(sessionUid: UUID, notice: MessageRef?) =
+                RecordStandupAnswerEvent(
+                    idempotencyKey = UUID.randomUUID(),
+                    payload =
+                        RecordStandupAnswerPayload(
+                            sessionUid = sessionUid,
+                            userId = "U_STANDUP",
+                            responses = listOf("Done", "Next"),
+                            notice = notice,
+                        ),
+                    type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                )
+
+            fun serviceOf(repo: StandupRepository, stager: OutboundMessageStager, eventPublisher: EventPublisher) =
+                StandupAnswerService(
+                    standupRepository = repo,
+                    outboundStager = stager,
+                    eventPublisher = eventPublisher,
+                    clock = Clock.fixed(now, ZoneOffset.UTC),
+                )
+
+            fun updateTo(text: String): OutboundMessage.UpdateMessage =
+                OutboundMessage.UpdateMessage(
+                    ref = notice,
+                    content = MessageContent.Text(headline = null, markdown = text),
+                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                )
+
+            `when`("the session is still collecting") {
                 val repo = mockk<StandupRepository>()
-                val now = Instant.parse("2026-05-01T02:00:00Z")
-                val service =
-                    StandupAnswerService(
-                        standupRepository = repo,
-                        outboundStager = mockk(),
-                        eventPublisher = mockk(),
-                        clock = Clock.fixed(now, ZoneOffset.UTC),
-                    )
+                val stager = mockk<OutboundMessageStager>()
+                val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val sessionUid = UUID.randomUUID()
-                val event =
-                    RecordStandupAnswerEvent(
-                        idempotencyKey = UUID.randomUUID(),
-                        payload =
-                            RecordStandupAnswerPayload(
-                                sessionUid = sessionUid,
-                                userId = "U_STANDUP",
-                                responses = listOf("Done", "Next"),
-                            ),
-                        type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                    )
+                val event = eventOf(sessionUid = sessionUid, notice = notice)
                 every {
                     repo.recordAnswer(
                         sessionUid = sessionUid,
@@ -59,9 +76,11 @@ class StandupAnswerServiceTest :
                         responses = listOf("Done", "Next"),
                         submittedAt = now,
                     )
-                } returns true
+                } returns AnswerRecordResult.RECORDED
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
 
-                service.recordAnswer(event = event)
+                serviceOf(repo = repo, stager = stager, eventPublisher = eventPublisher).recordAnswer(event = event)
 
                 then("the repository receives the submitted responses with the service clock timestamp") {
                     verify(exactly = 1) {
@@ -72,6 +91,88 @@ class StandupAnswerServiceTest :
                             submittedAt = now,
                         )
                     }
+                }
+
+                then("the DM notice is collapsed to \"Standup submitted.\" only after the answer was stored") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message = updateTo(text = SUBMITTED_NOTICE),
+                            basicInfo =
+                                CommandBasicInfo.forOutbound(
+                                    publisherId = "U_STANDUP",
+                                    channel = "D_NOTICE",
+                                    idempotencyKey = event.idempotencyKey,
+                                ),
+                        )
+                    }
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            `when`("the session already closed (T19)") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                val eventPublisher = mockk<EventPublisher>(relaxed = true)
+                every {
+                    repo.recordAnswer(
+                        sessionUid = any(),
+                        userId = any(),
+                        responses = any(),
+                        submittedAt = any(),
+                    )
+                } returns
+                    AnswerRecordResult.SESSION_CLOSED
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+
+                serviceOf(repo = repo, stager = stager, eventPublisher = eventPublisher)
+                    .recordAnswer(event = eventOf(sessionUid = UUID.randomUUID(), notice = notice))
+
+                then("the notice says the standup closed and never claims the answer was submitted") {
+                    verify(exactly = 1) { stager.stage(message = updateTo(text = CLOSED_NOTICE), basicInfo = any()) }
+                    verify(exactly = 0) { stager.stage(message = updateTo(text = SUBMITTED_NOTICE), basicInfo = any()) }
+                }
+            }
+
+            `when`("the session does not exist") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                every {
+                    repo.recordAnswer(
+                        sessionUid = any(),
+                        userId = any(),
+                        responses = any(),
+                        submittedAt = any(),
+                    )
+                } returns
+                    AnswerRecordResult.SESSION_NOT_FOUND
+
+                serviceOf(repo = repo, stager = stager, eventPublisher = mockk(relaxed = true))
+                    .recordAnswer(event = eventOf(sessionUid = UUID.randomUUID(), notice = notice))
+
+                then("nothing is staged — no false \"submitted\" confirmation") {
+                    verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
+                }
+            }
+
+            `when`("no notice was ferried with the submission") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                every {
+                    repo.recordAnswer(
+                        sessionUid = any(),
+                        userId = any(),
+                        responses = any(),
+                        submittedAt = any(),
+                    )
+                } returns
+                    AnswerRecordResult.RECORDED
+
+                serviceOf(repo = repo, stager = stager, eventPublisher = mockk(relaxed = true))
+                    .recordAnswer(event = eventOf(sessionUid = UUID.randomUUID(), notice = null))
+
+                then("the answer is stored and there is no message to update") {
+                    verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
                 }
             }
         }

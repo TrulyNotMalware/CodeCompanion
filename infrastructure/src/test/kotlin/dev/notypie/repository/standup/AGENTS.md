@@ -11,7 +11,7 @@ SQL ordering (IDENTITY inserts vs. orphan deletes) and the native CAS statements
 ## Key Files
 | File | Description |
 |------|-------------|
-| `StandupRepositoryImplJpaTest.kt` | `@DataJpaTest` + Kotest `SpringExtension`; builds `StandupRepositoryImpl` by hand and wraps each call in a `TransactionTemplate` (the impl is not a Spring proxy here, so its `@Transactional` would not apply). `recordAnswer` resubmitted by the same member in a later transaction replaces the row — one answer, the second responses and `submittedAt` — instead of throwing on `uk_standup_answer_session_user` (review T9; fails on the old remove + add). `afterSpec` deletes the sessions it wrote |
+| `StandupRepositoryImplJpaTest.kt` | `@DataJpaTest` + Kotest `SpringExtension`; builds `StandupRepositoryImpl` by hand and wraps each call in a `TransactionTemplate` (the impl is not a Spring proxy here, so its `@Transactional` would not apply). `recordAnswer` resubmitted by the same member in a later transaction replaces the row — one answer, the second responses and `submittedAt` — instead of throwing on `uk_standup_answer_session_user` (review T9; fails on the old remove + add). `recordAnswer` on a `SUMMARIZED` session, or at/after `cutoffAt` on a `COLLECTING` one, returns `SESSION_CLOSED` and writes nothing; an unknown uid returns `SESSION_NOT_FOUND` (T19). `markDispatchSkipped` turns a `PENDING` row `SKIPPED` once (second call `false`, first reason kept) and drops it from `findPendingDispatchesBefore`. `afterSpec` deletes the sessions it wrote |
 
 ## For AI Agents
 

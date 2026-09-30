@@ -76,6 +76,22 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         @Param("reason") reason: String,
     ): Int
 
+    // Guarded by dm_status = 'PENDING' so a row another tick already claimed or sent is never overwritten.
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            UPDATE standup_session_dispatch
+            SET dm_status = 'SKIPPED', failure_reason = :reason, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND dm_status = 'PENDING'
+        """,
+        nativeQuery = true,
+    )
+    fun markSkipped(
+        @Param("id") id: Long,
+        @Param("reason") reason: String,
+    ): Int
+
     @Modifying
     @Transactional
     @Query(

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/command/entity/event
 
@@ -24,8 +24,9 @@ implements to deliver them.
   an event `data class`, and the resolver branch; keep the naming pair `XxxPayload` / `XxxRequestEvent`
   (or `XxxEvent` for state changes).
 - Every payload that expects an asynchronous reply carries `responseBasicInfo: CommandBasicInfo` — the
-  channel/app the listener answers on. `RecordStandupAnswerPayload` and `UpdateMeetingAttendancePayload`
-  omit it because their listeners do not post.
+  channel/app the listener answers on. `UpdateMeetingAttendancePayload` omits it because its listener does
+  not post; `RecordStandupAnswerPayload` omits it too but carries `notice: MessageRef?`, the DM prompt the
+  answer service updates to "submitted" or "closed" (review T19).
 - `type: CommandDetailType` on the event is the routing token that later interactions use to find
   their context again; it must match what the emitting context declared.
 - `name` defaults to the event's simple class name and `timestamp` to `System.currentTimeMillis()` at

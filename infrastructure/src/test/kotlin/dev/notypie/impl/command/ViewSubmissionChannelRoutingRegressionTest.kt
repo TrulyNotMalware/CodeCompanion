@@ -19,6 +19,7 @@ import dev.notypie.templates.RescheduleMeetingModalIds
 import dev.notypie.templates.StandupModalIds
 import dev.notypie.templates.StandupSetupModalIds
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.mockk
@@ -228,6 +229,33 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     update.ref.conversation.id shouldBe noticeChannel
                     update.ref.messageId shouldBe noticeMessageTs
                     update.detailType shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                }
+            }
+
+            `when`("the same submission carries an answer and runs through the real domain command pipeline") {
+                val (output, effects) =
+                    runThroughDomain(
+                        viewSubmissionPayload =
+                            createRoutingOnlyViewSubmissionJson(
+                                callbackId = StandupModalIds.CALLBACK_ID,
+                                privateMetadata = extractPrivateMetadata(modalViewJson = modalJson),
+                                stateValues =
+                                    stateValuesJson(
+                                        "${StandupModalIds.BLOCK_ID_PREFIX}0" to
+                                            plainTextInputStateJson(value = "did X"),
+                                    ),
+                            ),
+                    )
+
+                then(
+                    "RecordStandupAnswer carries the recovered notice; the outcome update is left to the service (T19)",
+                ) {
+                    output.ok shouldBe true
+                    val record = effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single()
+                    record.responses shouldBe listOf("did X")
+                    record.notice?.conversation?.id shouldBe noticeChannel
+                    record.notice?.messageId shouldBe noticeMessageTs
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
         }

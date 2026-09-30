@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.intent
 
 import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
@@ -60,10 +61,13 @@ sealed class CommandIntent : CommandEffect {
         val channelName: String,
     ) : CommandIntent()
 
+    // notice = the DM prompt to collapse; the application updates it only after it knows whether the session
+    // still accepted the answer ("submitted" vs. "closed"), so the domain no longer claims success up front.
     data class RecordStandupAnswer(
         val sessionUid: UUID,
         val userId: String,
         val responses: List<String>,
+        val notice: MessageRef? = null,
     ) : CommandIntent()
 
     data class CreateStandupRoutine(

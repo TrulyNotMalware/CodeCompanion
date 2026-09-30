@@ -10,6 +10,8 @@ import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
@@ -172,6 +174,7 @@ class SlackIntentResolverTest :
                     sessionUid = sessionUid,
                     userId = "U_STANDUP",
                     responses = listOf("Finished #12", "Working on #13"),
+                    notice = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1.2"),
                 )
 
             `when`("resolveAll is called") {
@@ -185,6 +188,7 @@ class SlackIntentResolverTest :
                     record.payload.sessionUid shouldBe sessionUid
                     record.payload.userId shouldBe "U_STANDUP"
                     record.payload.responses shouldBe listOf("Finished #12", "Working on #13")
+                    record.payload.notice shouldBe intent.notice
                     record.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
                 }
             }

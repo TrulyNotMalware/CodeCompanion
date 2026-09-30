@@ -8,6 +8,8 @@ import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
@@ -335,13 +337,15 @@ class SubmissionPipelineCharacterizationTest :
             `when`("answers are present with notice routing") {
                 val (output, effects) = answer(answers = listOf("did X", "will do Y"))
 
-                then("the record intent and the notice update are both emitted") {
+                then("only the record intent is emitted; it carries the notice ref for the outcome update (T19)") {
                     output.ok shouldBe true
                     val intent = effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single()
                     intent.sessionUid shouldBe sessionUid
                     intent.userId shouldBe "U_MEMBER"
                     intent.responses shouldContainExactly listOf("did X", "will do Y")
-                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    intent.notice shouldBe
+                        MessageRef(conversation = ConversationTarget(id = "C_STANDUP"), messageId = "777.888")
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
 

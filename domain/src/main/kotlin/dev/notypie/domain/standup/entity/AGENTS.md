@@ -20,7 +20,7 @@ itself in `init`, and the same constructors are used when `infrastructure` rehyd
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `enums/` | `SessionStatus` (`COLLECTING → SUMMARIZED | SKIPPED`) and `DispatchStatus` (`PENDING → SENDING → SENT | FAILED`) (see `enums/AGENTS.md`) |
+| `enums/` | `SessionStatus` (`COLLECTING → SUMMARIZED | SKIPPED`) and `DispatchStatus` (`PENDING → SENDING → SENT | FAILED`, `PENDING → SKIPPED`) (see `enums/AGENTS.md`) |
 
 ## For AI Agents
 

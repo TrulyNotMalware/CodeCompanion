@@ -506,6 +506,58 @@ class StandupSchedulingServiceTest :
             }
         }
 
+        given("sendPendingDispatches for a session that no longer collects answers (T19)") {
+            val routineUid = UUID.randomUUID()
+            val routine =
+                createRoutineDto(
+                    routineUid = routineUid,
+                    weekdays = setOf(DayOfWeek.MONDAY),
+                    routineTimezone = seoul,
+                )
+
+            fun readyOf(dispatchId: Long, sessionStatus: SessionStatus, cutoffAt: java.time.Instant) =
+                ReadyDispatch(
+                    dispatch = createSessionDispatchDto(id = dispatchId, userId = "U_A", dmTriggerAt = nowInstant),
+                    sessionUid = UUID.randomUUID(),
+                    sessionDate = today,
+                    cutoffAt = cutoffAt,
+                    sessionStatus = sessionStatus,
+                    summaryMessageTs = null,
+                    routineUid = routineUid,
+                )
+
+            listOf(
+                Triple("the session is already SUMMARIZED", SessionStatus.SUMMARIZED, nowInstant.plusSeconds(3600L)),
+                Triple("the session is COLLECTING but its cutoff has passed", SessionStatus.COLLECTING, nowInstant),
+            ).forEach { (label, status, cutoff) ->
+                `when`(label) {
+                    val repo = mockk<StandupRepository>()
+                    val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                    val service =
+                        StandupSchedulingService(
+                            standupRepository = repo,
+                            outboxRepository = outboxRepo,
+                            outboundMessagePort = stubPort(),
+                            transactionManager = stubTransactionManager(),
+                            clock = clock,
+                        )
+                    every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                    every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns
+                        listOf(readyOf(dispatchId = 77L, sessionStatus = status, cutoffAt = cutoff))
+                    every { repo.listActiveRoutines() } returns listOf(routine)
+                    every { repo.markDispatchSkipped(dispatchId = 77L, reason = any()) } returns true
+
+                    service.sendPendingDispatches()
+
+                    then("no \"Fill in\" DM is enqueued and the dispatch is marked SKIPPED (terminal)") {
+                        verify(exactly = 1) { repo.markDispatchSkipped(dispatchId = 77L, reason = any()) }
+                        verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                        verify(exactly = 0) { outboxRepo.save(any()) }
+                    }
+                }
+            }
+        }
+
         given("detectCutoffs") {
             `when`("a COLLECTING session is past its cutoff") {
                 val repo = mockk<StandupRepository>()

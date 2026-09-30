@@ -6,6 +6,7 @@ import dev.notypie.domain.standup.dto.StandupSessionDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.standup.schema.SessionDispatchSchema
 import dev.notypie.repository.standup.schema.StandupAnswerSchema
@@ -83,10 +84,15 @@ open class StandupRepositoryImpl(
         userId: String,
         responses: List<String>,
         submittedAt: Instant,
-    ): Boolean {
+    ): AnswerRecordResult {
         val session =
             jpaStandupSessionRepository.findBySessionUid(sessionUid = sessionUid)
-                ?: return false
+                ?: return AnswerRecordResult.SESSION_NOT_FOUND
+        // Past cutoff counts as closed even before detectCutoffs flips the status: the summary may already be
+        // reading the answers, and a late answer would be acknowledged but never shown (review T19).
+        if (session.status != SessionStatus.COLLECTING || !submittedAt.isBefore(session.cutoffAt)) {
+            return AnswerRecordResult.SESSION_CLOSED
+        }
         val responsesRaw = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER)
         // Update in place: an IDENTITY insert runs at merge time, ahead of the orphan delete, so remove + add
         // always hit uk_standup_answer_session_user on a resubmission (T9).
@@ -105,7 +111,7 @@ open class StandupRepositoryImpl(
             )
         }
         jpaStandupSessionRepository.save(session)
-        return true
+        return AnswerRecordResult.RECORDED
     }
 
     override fun claimDispatch(dispatchId: Long, claimToken: String): Boolean =
@@ -118,6 +124,10 @@ open class StandupRepositoryImpl(
     @Transactional
     override fun markDispatchFailed(dispatchId: Long, claimToken: String, reason: String): Boolean =
         jpaSessionDispatchRepository.markFailed(id = dispatchId, token = claimToken, reason = reason) == 1
+
+    @Transactional
+    override fun markDispatchSkipped(dispatchId: Long, reason: String): Boolean =
+        jpaSessionDispatchRepository.markSkipped(id = dispatchId, reason = reason) == 1
 
     override fun resetStuckDispatches(olderThan: Instant): Int =
         jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan)
