@@ -50,11 +50,21 @@ interface CveEventRepository {
         now: LocalDateTime,
     ): Int
 
-    fun markFailed(id: Long, token: String, nextAttemptAt: LocalDateTime): Int
+    fun markFailed(
+        id: Long,
+        token: String,
+        nextAttemptAt: LocalDateTime,
+        now: LocalDateTime,
+    ): Int
 
-    fun releaseClaim(id: Long, token: String, nextAttemptAt: LocalDateTime): Int
+    fun releaseClaim(
+        id: Long,
+        token: String,
+        nextAttemptAt: LocalDateTime,
+        now: LocalDateTime,
+    ): Int
 
-    fun resetStuck(olderThan: LocalDateTime): Int
+    fun resetStuck(olderThan: LocalDateTime, now: LocalDateTime): Int
 
     fun countByStatus(status: CveSummaryStatus): Long
 

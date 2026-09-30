@@ -51,7 +51,9 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         pageable: Pageable,
     ): List<CveEventSchema>
 
-    // Native bulk updates bypass Hibernate's @UpdateTimestamp — updated_at is stamped explicitly in every CAS below.
+    // Native bulk updates bypass Hibernate's @UpdateTimestamp — updated_at is stamped explicitly in every CAS below,
+    // always from the caller's app-clock :now. A DB CURRENT_TIMESTAMP runs in the session zone, not the JVM's, so
+    // mixing the two would skew resetStuck's app-clock cutoff by the zone offset.
     // Re-checks retry_count here (not just in findClaimable) so a stale candidate can't revive a dead-lettered row.
     @Modifying
     @Transactional
@@ -79,7 +81,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         value = """
             UPDATE cve_event
             SET summary_status = 'PENDING', claim_token = NULL, next_attempt_at = :nextAttemptAt,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = :now
             WHERE id = :id AND summary_status = 'SUMMARIZING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -88,6 +90,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         @Param("id") id: Long,
         @Param("token") token: String,
         @Param("nextAttemptAt") nextAttemptAt: LocalDateTime,
+        @Param("now") now: LocalDateTime,
     ): Int
 
     // updated_at is stamped from :now (app clock) because the notification dispatcher's digest cutoff compares it.
@@ -115,7 +118,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         value = """
             UPDATE cve_event
             SET summary_status = 'FAILED', retry_count = retry_count + 1, next_attempt_at = :nextAttemptAt,
-                claim_token = NULL, updated_at = CURRENT_TIMESTAMP
+                claim_token = NULL, updated_at = :now
             WHERE id = :id AND summary_status = 'SUMMARIZING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -124,6 +127,7 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         @Param("id") id: Long,
         @Param("token") token: String,
         @Param("nextAttemptAt") nextAttemptAt: LocalDateTime,
+        @Param("now") now: LocalDateTime,
     ): Int
 
     @Modifying
@@ -131,13 +135,14 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
     @Query(
         value = """
             UPDATE cve_event
-            SET summary_status = 'PENDING', claim_token = NULL, updated_at = CURRENT_TIMESTAMP
+            SET summary_status = 'PENDING', claim_token = NULL, updated_at = :now
             WHERE summary_status = 'SUMMARIZING' AND updated_at < :olderThan
         """,
         nativeQuery = true,
     )
     fun resetStuck(
         @Param("olderThan") olderThan: LocalDateTime,
+        @Param("now") now: LocalDateTime,
     ): Int
 
     @Query("SELECT COUNT(e) FROM cve_event e WHERE e.summaryStatus = :status")

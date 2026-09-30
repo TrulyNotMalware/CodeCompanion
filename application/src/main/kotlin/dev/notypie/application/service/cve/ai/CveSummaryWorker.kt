@@ -5,6 +5,7 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
+import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -18,13 +19,17 @@ class CveSummaryWorker(
     private val maxRetries: Int,
     private val backoffMinutes: Long,
     private val stuckMinutes: Long,
+    // Every updated_at this worker writes and every cutoff it compares against comes from this one clock, so a
+    // DB session zone that differs from the JVM zone cannot make a fresh claim look stuck.
+    private val clock: Clock = Clock.systemDefaultZone(),
 ) {
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
         runCatching {
-            cveEventRepository.resetStuck(olderThan = LocalDateTime.now().minusMinutes(stuckMinutes))
+            val now = now()
+            cveEventRepository.resetStuck(olderThan = now.minusMinutes(stuckMinutes), now = now)
             cveEventRepository
-                .findClaimable(now = LocalDateTime.now(), maxRetries = maxRetries, limit = batchSize)
+                .findClaimable(now = now, maxRetries = maxRetries, limit = batchSize)
                 .forEach { event -> summarizeOne(event = event) }
         }.onFailure { ex ->
             log.error(ex) { "CVE summary worker tick failed" }
@@ -42,7 +47,7 @@ class CveSummaryWorker(
             cveEventRepository.claimForSummary(
                 id = event.id,
                 token = token,
-                now = LocalDateTime.now(),
+                now = now(),
                 maxRetries = maxRetries,
             )
         if (claimed == 0) return
@@ -71,7 +76,7 @@ class CveSummaryWorker(
                 return
             }
 
-        val doneAt = LocalDateTime.now()
+        val doneAt = now()
         if (cveEventRepository.markDone(id = event.id, token = token, summary = summary, now = doneAt) == 0) {
             log.warn {
                 "CVE summary for event=${event.id} completed but the claim was lost; leaving row to its new owner"
@@ -80,8 +85,10 @@ class CveSummaryWorker(
     }
 
     private fun releaseForBackpressure(event: CveEvent, token: String, cause: AiSummarizerBusyException) {
-        val nextAttemptAt = LocalDateTime.now().plusMinutes(BUSY_RETRY_DELAY_MINUTES)
-        val released = cveEventRepository.releaseClaim(id = event.id, token = token, nextAttemptAt = nextAttemptAt)
+        val now = now()
+        val nextAttemptAt = now.plusMinutes(BUSY_RETRY_DELAY_MINUTES)
+        val released =
+            cveEventRepository.releaseClaim(id = event.id, token = token, nextAttemptAt = nextAttemptAt, now = now)
         if (released == 0) {
             log.warn { "Busy release for event=${event.id} lost its claim; leaving row to its new owner" }
             return
@@ -91,8 +98,11 @@ class CveSummaryWorker(
 
     private fun recordFailure(event: CveEvent, token: String, cause: Exception) {
         val attempt = event.retryCount + 1
-        val nextAttemptAt = LocalDateTime.now().plusMinutes(backoffMinutes * attempt)
-        if (cveEventRepository.markFailed(id = event.id, token = token, nextAttemptAt = nextAttemptAt) == 0) {
+        val now = now()
+        val nextAttemptAt = now.plusMinutes(backoffMinutes * attempt)
+        val marked =
+            cveEventRepository.markFailed(id = event.id, token = token, nextAttemptAt = nextAttemptAt, now = now)
+        if (marked == 0) {
             log.warn { "Failure mark for event=${event.id} lost its claim; leaving row to its new owner" }
             return
         }
@@ -106,6 +116,8 @@ class CveSummaryWorker(
             }
         }
     }
+
+    private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
     companion object {
         private const val BUSY_RETRY_DELAY_MINUTES = 2L

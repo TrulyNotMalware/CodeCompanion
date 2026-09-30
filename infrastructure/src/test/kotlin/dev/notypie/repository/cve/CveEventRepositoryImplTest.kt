@@ -142,14 +142,16 @@ class CveEventRepositoryImplTest :
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
             val nextAttemptAt = now.plusMinutes(20)
-            every { jpa.markFailed(id = 7L, token = "tok", nextAttemptAt = nextAttemptAt) } returns 1
+            every { jpa.markFailed(id = 7L, token = "tok", nextAttemptAt = nextAttemptAt, now = now) } returns 1
 
             `when`("marking failed") {
-                val updated = repository.markFailed(id = 7L, token = "tok", nextAttemptAt = nextAttemptAt)
+                val updated = repository.markFailed(id = 7L, token = "tok", nextAttemptAt = nextAttemptAt, now = now)
 
-                then("it delegates the next-attempt schedule and owning token") {
+                then("it delegates the next-attempt schedule, owning token and app-clock stamp") {
                     updated shouldBe 1
-                    verify(exactly = 1) { jpa.markFailed(id = 7L, token = "tok", nextAttemptAt = nextAttemptAt) }
+                    verify(exactly = 1) {
+                        jpa.markFailed(id = 7L, token = "tok", nextAttemptAt = nextAttemptAt, now = now)
+                    }
                 }
             }
         }
@@ -158,14 +160,14 @@ class CveEventRepositoryImplTest :
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
             val olderThan = now.minusMinutes(15)
-            every { jpa.resetStuck(olderThan = olderThan) } returns 3
+            every { jpa.resetStuck(olderThan = olderThan, now = now) } returns 3
 
             `when`("resetting stuck rows") {
-                val reset = repository.resetStuck(olderThan = olderThan)
+                val reset = repository.resetStuck(olderThan = olderThan, now = now)
 
                 then("it delegates and returns the reset count") {
                     reset shouldBe 3
-                    verify(exactly = 1) { jpa.resetStuck(olderThan = olderThan) }
+                    verify(exactly = 1) { jpa.resetStuck(olderThan = olderThan, now = now) }
                 }
             }
         }
@@ -174,11 +176,12 @@ class CveEventRepositoryImplTest :
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpaCveEventRepository)
             val nextAttemptAt = LocalDateTime.of(2026, 7, 13, 12, 0)
             every {
-                jpaCveEventRepository.releaseClaim(id = 1L, token = "tok", nextAttemptAt = nextAttemptAt)
+                jpaCveEventRepository.releaseClaim(id = 1L, token = "tok", nextAttemptAt = nextAttemptAt, now = now)
             } returns 1
 
             `when`("delegated") {
-                val released = repository.releaseClaim(id = 1L, token = "tok", nextAttemptAt = nextAttemptAt)
+                val released =
+                    repository.releaseClaim(id = 1L, token = "tok", nextAttemptAt = nextAttemptAt, now = now)
 
                 then("the row count from the CAS comes back unchanged") {
                     released shouldBe 1

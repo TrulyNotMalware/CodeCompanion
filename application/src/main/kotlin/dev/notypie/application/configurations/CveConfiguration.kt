@@ -69,6 +69,7 @@ class CveConfiguration {
         cveEventRepository: CveEventRepository,
         cveTopicRepository: CveTopicRepository,
         aiSummarizer: AiSummarizer,
+        clock: Clock,
     ): CveSummaryWorker =
         CveSummaryWorker(
             cveEventRepository = cveEventRepository,
@@ -78,6 +79,7 @@ class CveConfiguration {
             maxRetries = appConfig.ai.maxRetries,
             backoffMinutes = appConfig.ai.backoffMinutes,
             stuckMinutes = appConfig.ai.stuckMinutes,
+            clock = clock,
         )
 
     @Bean
