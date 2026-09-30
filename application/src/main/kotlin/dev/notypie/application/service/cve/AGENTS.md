@@ -15,7 +15,7 @@ The whole lane is **feature-gated**: every bean here is declared conditionally i
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, validates every YAML-declared topic (non-blank key and display name, keys unique ignoring case), then upserts them into `cve_topic` (keyed by topic key) |
+| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, validates every YAML-declared topic (non-blank key ≤ `KEY_MAX_LENGTH` 64 — the `topic_key` column, tighter than Slack's 150-char option value; non-blank display name ≤ `DISPLAY_NAME_MAX_LENGTH` 75 — Slack option text; keys unique ignoring case; at most `MAX_ACTIVE_TOPICS` 100 declared active — Slack select options), then upserts them into `cve_topic` (keyed by topic key). After the upsert it logs ERROR when `countActive()` exceeds 100 (chat toggles and rows absent from yaml are runtime state, so that is not a boot failure) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -50,7 +50,8 @@ Other rules:
   first insert, `active` is owned by the `cve topic activate|deactivate` chat command, so a topic an
   admin disabled in chat is not silently re-enabled on reboot. YAML `active` seeds new inserts only.
   Invalid topic definitions fail the boot on purpose — a silently dropped topic just looks like a
-  missing modal option.
+  missing modal option, and one over-long display name (or a 101st active topic) makes `views.open` fail
+  for every user (V6). Truncating the options inside the modal is the templates' job, not this class's.
 - Adding a new source means a new `SourceAdapter` in `infrastructure/impl/cve/` (adapters are resolved
   by `supports(sourceType)`), not a change to `CveCollector`.
 - `AiSummarizer` is a port. `NoopAiSummarizer` is the wiring used when no sidecar is configured —
