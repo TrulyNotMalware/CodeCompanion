@@ -16,8 +16,11 @@ import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.CheckBoxOptions
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.LocalDateTime
 
@@ -63,6 +66,36 @@ class ModalBlockBuilderTest :
                 then("returns SectionBlock with markdown text") {
                     result.shouldBeInstanceOf<SectionBlock>()
                     result.text.text shouldBe "*bold*"
+                }
+            }
+
+            `when`("called with text over Slack's 3,000-character section cap") {
+                val result = builder.simpleText(text = "q".repeat(n = 4_000), isMarkDown = true)
+
+                then("the text is cut to the cap and marked instead of failing the whole message") {
+                    result.text.text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_MAX_LENGTH
+                    result.text.text shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+        }
+
+        given("textSections") {
+            `when`("the text fits one section") {
+                val result = builder.textSections(text = "short", isMarkDown = true, maxSections = 50)
+
+                then("a single section carries it unchanged") {
+                    result.map { it.text.text } shouldBe listOf("short")
+                }
+            }
+
+            `when`("the text is longer than one section") {
+                val text = (1..500).joinToString(separator = "\n") { "row $it" + "-".repeat(n = 20) }
+                val result = builder.textSections(text = text, isMarkDown = false, maxSections = 50)
+
+                then("it becomes several plain-text sections within the budget") {
+                    result.size shouldBeGreaterThan 1
+                    result.forEach { it.text.text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                    result.map { it.text.text }.joinToString(separator = "\n") shouldBe text
                 }
             }
         }

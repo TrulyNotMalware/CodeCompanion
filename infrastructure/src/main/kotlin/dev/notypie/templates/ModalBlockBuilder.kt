@@ -114,14 +114,21 @@ class ModalBlockBuilder(
         )
     }
 
+    // A single section: text over Slack's 3,000-character cap is cut rather than rejecting the whole message.
     fun simpleText(text: String, isMarkDown: Boolean = false): SectionBlock =
         section {
+            val safeText = text.truncateSectionText()
             if (isMarkDown) {
-                it.text(modalElementBuilder.markdownTextObject(markdownText = text))
+                it.text(modalElementBuilder.markdownTextObject(markdownText = safeText))
             } else {
-                it.text(modalElementBuilder.plainTextObject(text = text))
+                it.text(modalElementBuilder.plainTextObject(text = safeText))
             }
         }
+
+    // Free text of any length as consecutive sections (see splitSectionText); at most maxSections blocks.
+    fun textSections(text: String, isMarkDown: Boolean, maxSections: Int): List<SectionBlock> =
+        splitSectionText(text = text, maxSections = maxSections, balanceCodeFences = isMarkDown)
+            .map { chunk -> simpleText(text = chunk, isMarkDown = isMarkDown) }
 
     fun textBlock(vararg texts: String, isMarkDown: Boolean = false): SectionBlock =
         section {

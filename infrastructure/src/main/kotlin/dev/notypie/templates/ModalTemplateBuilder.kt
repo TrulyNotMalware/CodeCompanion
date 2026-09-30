@@ -71,16 +71,28 @@ class ModalTemplateBuilder(
         private const val DEFAULT_CUTOFF_MINUTES: String = "120"
     }
 
+    // Every MessageContent.Text reply renders through these two, so a long body (an AI answer, a digest) is
+    // split into sections instead of one section over Slack's 3,000-character cap failing the whole post.
     override fun onlyTextTemplate(message: String, isMarkDown: Boolean): LayoutBlocks =
         layoutBlocks {
-            add(block = modalBlockBuilder.simpleText(text = message, isMarkDown = isMarkDown))
+            modalBlockBuilder
+                .textSections(
+                    text = message,
+                    isMarkDown = isMarkDown,
+                    maxSections = SlackBlockLimits.MESSAGE_MAX_BLOCKS,
+                ).forEach { add(block = it) }
         }
 
     override fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks =
         layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
-            add(block = modalBlockBuilder.simpleText(text = body, isMarkDown = isMarkDown))
+            modalBlockBuilder
+                .textSections(
+                    text = body,
+                    isMarkDown = isMarkDown,
+                    maxSections = SlackBlockLimits.MESSAGE_MAX_BLOCKS - 2,
+                ).forEach { add(block = it) }
         }
 
     override fun simpleScheduleNoticeTemplate(headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks =
@@ -130,7 +142,11 @@ class ModalTemplateBuilder(
                         "reason = $errorMessage",
                     ),
             )
-            details?.let { add(block = modalBlockBuilder.simpleText(text = it, isMarkDown = false)) }
+            details?.let {
+                modalBlockBuilder
+                    .textSections(text = it, isMarkDown = false, maxSections = SlackBlockLimits.MESSAGE_MAX_BLOCKS - 3)
+                    .forEach { section -> add(block = section) }
+            }
         }
 
     override fun requestApprovalFormTemplate(

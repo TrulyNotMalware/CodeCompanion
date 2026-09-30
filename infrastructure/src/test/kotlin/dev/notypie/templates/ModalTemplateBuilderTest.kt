@@ -23,8 +23,11 @@ import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
@@ -279,6 +282,67 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, and text blocks") {
                     result.template.size shouldBe 3
+                }
+            }
+
+            // T3: an AI answer used to go into one section; over 3,000 characters Slack rejected the post.
+            `when`("the body is an AI answer longer than one section") {
+                val answer =
+                    (1..200).joinToString(separator = "\n") { index ->
+                        "- step $index: explain the ${"detail ".repeat(n = 5)}"
+                    }
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(
+                        headLineText = "CodeCompanion — AI assistant",
+                        body = answer,
+                        isMarkDown = true,
+                    )
+                val sectionTexts =
+                    result.template.drop(n = 2).map {
+                        (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text
+                    }
+
+                then("the body is split into several sections under the 3,000-character cap") {
+                    sectionTexts.size shouldBeGreaterThan 1
+                    sectionTexts.forEach { it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                }
+                then("the sections keep the answer's lines in order with nothing dropped") {
+                    sectionTexts.joinToString(separator = "\n") shouldBe answer
+                }
+            }
+
+            `when`("the body would need more than the 50-block message limit") {
+                val answer = (1..6_000).joinToString(separator = "\n") { "log line $it ${"x".repeat(n = 40)}" }
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(
+                        headLineText = "Title",
+                        body = answer,
+                        isMarkDown = true,
+                    )
+
+                then("the message stops at 50 blocks and says it was truncated") {
+                    result.template.size shouldBe SlackBlockLimits.MESSAGE_MAX_BLOCKS
+                    val last =
+                        result.template
+                            .last()
+                            .shouldBeInstanceOf<SectionBlock>()
+                            .text as MarkdownTextObject
+                    last.text shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+        }
+
+        given("onlyTextTemplate with a long body") {
+            `when`("the message is longer than one section") {
+                val message = (1..300).joinToString(separator = "\n") { "entry $it ${"z".repeat(n = 30)}" }
+                val result = templateBuilder.onlyTextTemplate(message = message, isMarkDown = true)
+
+                then("it renders as several sections, each within the cap, and no other blocks") {
+                    result.template.size shouldBeGreaterThan 1
+                    result.template.forEach { block ->
+                        val text = (block.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text
+                        text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    }
                 }
             }
         }
