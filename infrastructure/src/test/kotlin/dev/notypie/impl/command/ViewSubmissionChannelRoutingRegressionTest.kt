@@ -7,6 +7,7 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
+import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -159,6 +160,30 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     val create = effects.filterIsInstance<CommandIntent.CreateStandupRoutine>().single()
                     create.creatorId shouldBe creatorId
                     create.commandChannel shouldBe commandChannel
+                }
+            }
+
+            `when`("the intent is resolved into the event the setup service consumes") {
+                val commandData = parser.parseStringPayload(payload = submissionPayload).toInboundCommand()
+                val command =
+                    InteractionCommand(
+                        appName = "routing-regression-test",
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = commandData,
+                        actorRole = UserRole.USER,
+                    )
+                command.handleEvent()
+                val event =
+                    SlackIntentResolver()
+                        .resolveAll(
+                            intents = command.drainIntents().filterIsInstance<CommandIntent>(),
+                            basicInfo = commandData.extractBasicInfo(idempotencyKey = command.idempotencyKey),
+                        ).filterIsInstance<CreateStandupRoutineEvent>()
+                        .single()
+
+                then("responseBasicInfo.channel is blank; only payload.commandChannel names the reply channel (T5)") {
+                    event.payload.responseBasicInfo.channel shouldBe ""
+                    event.payload.commandChannel shouldBe commandChannel
                 }
             }
         }

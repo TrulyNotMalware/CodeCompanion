@@ -42,16 +42,19 @@ class StandupRoutineSetupService(
                             "_Please run /standup setup again and review your inputs._"
                     },
                 )
+        // A view_submission carries no channel (responseBasicInfo.channel is ""), so reply where /standup setup
+        // was typed; the renderer takes the ephemeral's channel from basicInfo, hence the copy (review T5).
+        val replyInfo = payload.responseBasicInfo.copy(channel = payload.commandChannel)
         outboundStager
             .stage(
                 message =
                     OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                        target = ConversationTarget(id = replyInfo.channel),
                         recipient = null,
                         content = MessageContent.Text(headline = null, markdown = message),
                         detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
                     ),
-                basicInfo = payload.responseBasicInfo,
+                basicInfo = replyInfo,
             )?.let { eventPublisher.publishOne(event = it) }
     }
 

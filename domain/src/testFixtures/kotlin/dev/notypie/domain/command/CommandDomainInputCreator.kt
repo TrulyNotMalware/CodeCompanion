@@ -57,8 +57,8 @@ fun createCreateStandupRoutineEvent(
     triggerLocalTime: LocalTime = LocalTime.of(10, 0),
     cutoffMinutes: Long? = 120L,
     timezone: ZoneId = ZoneId.of("Asia/Seoul"),
-    responseBasicInfo: dev.notypie.domain.command.dto.CommandBasicInfo =
-        createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = commandChannel),
+    // Mirrors production: a view_submission's basicInfo has no channel; only commandChannel names it.
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = ""),
 ) = CreateStandupRoutineEvent(
     idempotencyKey = idempotencyKey,
     payload =
