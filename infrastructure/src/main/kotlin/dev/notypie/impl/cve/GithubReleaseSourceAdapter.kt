@@ -10,6 +10,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.time.Instant
 
 private val log = KotlinLogging.logger {}
 
@@ -27,6 +28,17 @@ class GithubReleaseSourceAdapter(
             .build()
 
     override fun supports(sourceType: CveSourceType): Boolean = sourceType == CveSourceType.GITHUB_RELEASE
+
+    // Without a token GitHub serves 60 requests per hour per source IP; the caller supplies the polling load.
+    // Returns the boot warning to log, or null when a token is set or the load fits the anonymous limit.
+    fun anonymousLimitWarning(topicCount: Int, requestsPerTopicPerHour: Long): String? {
+        if (token.isNotBlank()) return null
+        val hourly = topicCount * requestsPerTopicPerHour
+        if (hourly < ANONYMOUS_HOURLY_LIMIT) return null
+        return "slack.app.cve.github.token is blank: $topicCount GitHub topic(s) need ~$hourly requests/hour " +
+            "against GitHub's anonymous limit of $ANONYMOUS_HOURLY_LIMIT; set GITHUB_TOKEN or collection will be " +
+            "rate limited (403) and those windows come back empty"
+    }
 
     override fun fetch(topic: CveTopic): List<RawSourceEvent> {
         val repo = parseRepo(topic = topic) ?: return emptyList()
@@ -46,10 +58,33 @@ class GithubReleaseSourceAdapter(
                     return emptyList()
                 }
         if (response.statusCode() !in 200..299) {
-            log.warn { "GitHub releases returned ${response.statusCode()} for topic=${topic.topicKey}" }
+            logFailure(response = response, topic = topic)
             return emptyList()
         }
         return parseReleases(body = response.body(), topic = topic)
+    }
+
+    // A rate-limited window returns the same empty list as a quiet repo; the log line is what tells them apart.
+    private fun logFailure(response: HttpResponse<String>, topic: CveTopic) {
+        val status = response.statusCode()
+        val headers = response.headers()
+        val remaining = headers.firstValue("x-ratelimit-remaining").orElse(null)
+        val retryAfter = headers.firstValue("retry-after").orElse(null)
+        if (status !in RATE_LIMIT_STATUSES || (remaining != "0" && retryAfter == null)) {
+            log.warn { "GitHub releases returned $status for topic=${topic.topicKey}" }
+            return
+        }
+        val resetAt =
+            headers
+                .firstValue("x-ratelimit-reset")
+                .orElse(null)
+                ?.toLongOrNull()
+                ?.let { Instant.ofEpochSecond(it) }
+        val auth = if (token.isBlank()) "anonymous, $ANONYMOUS_HOURLY_LIMIT requests/hour" else "token"
+        log.warn {
+            "GitHub rate limit exhausted for topic=${topic.topicKey} (status=$status, $auth, " +
+                "resets at ${resetAt ?: "unknown"}, retry-after=${retryAfter ?: "-"}); this window is skipped"
+        }
     }
 
     private fun parseRepo(topic: CveTopic): String? {
@@ -103,6 +138,10 @@ class GithubReleaseSourceAdapter(
 
     companion object {
         const val DEFAULT_API_BASE_URL = "https://api.github.com"
+        const val ANONYMOUS_HOURLY_LIMIT = 60L
+
+        // GitHub signals both the primary and the secondary rate limit with 403 or 429.
+        private val RATE_LIMIT_STATUSES = setOf(403, 429)
 
         private val REPO_PATTERN = Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     }

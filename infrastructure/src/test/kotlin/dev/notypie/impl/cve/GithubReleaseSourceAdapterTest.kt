@@ -1,5 +1,9 @@
 package dev.notypie.impl.cve
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.repository.cve.schema.CveSourceType
@@ -7,8 +11,11 @@ import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.LocalDateTime
@@ -39,6 +46,18 @@ class GithubReleaseSourceAdapterTest :
                 requestTimeout = Duration.ofSeconds(5L),
                 apiBaseUrl = "http://127.0.0.1:${server.address.port}",
             )
+
+        fun warningsDuring(block: () -> Unit): List<String> {
+            val logger = LoggerFactory.getLogger(GithubReleaseSourceAdapter::class.java) as Logger
+            val appender = ListAppender<ILoggingEvent>().apply { start() }
+            logger.addAppender(appender)
+            try {
+                block()
+            } finally {
+                logger.detachAppender(appender)
+            }
+            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+        }
 
         fun githubTopic(sourceConfig: String? = """{"repo":"owner/name"}""") =
             createCveTopic(sourceType = CveSourceType.GITHUB_RELEASE, sourceConfig = sourceConfig)
@@ -193,6 +212,71 @@ class GithubReleaseSourceAdapterTest :
 
                 then("it returns an empty list") {
                     events shouldBe emptyList()
+                }
+            }
+        }
+
+        given("an anonymous call answered 403 with the rate limit exhausted") {
+            respond = { exchange ->
+                val bytes = """{"message":"API rate limit exceeded"}""".toByteArray()
+                exchange.responseHeaders.add("X-RateLimit-Remaining", "0")
+                exchange.responseHeaders.add("X-RateLimit-Reset", "1790000000")
+                exchange.sendResponseHeaders(403, bytes.size.toLong())
+                exchange.responseBody.use { it.write(bytes) }
+            }
+
+            `when`("fetch") {
+                var events: List<RawSourceEvent>? = null
+                val warnings = warningsDuring { events = adapter(token = "").fetch(topic = githubTopic()) }
+
+                then("it still returns an empty list, but the log names the rate limit and its reset") {
+                    events shouldBe emptyList()
+                    val warning = warnings.singleOrNull { it.contains("rate limit exhausted") }
+                    warning.shouldNotBeNull()
+                    warning shouldContain "topic=cve-java"
+                    warning shouldContain "anonymous, 60 requests/hour"
+                    warning shouldContain "resets at 2026-09-21T14:13:20Z"
+                }
+            }
+        }
+
+        given("a plain 403 without rate-limit headers") {
+            respond = jsonResponse(status = 403, body = """{"message":"Forbidden"}""")
+
+            `when`("fetch") {
+                val warnings = warningsDuring { adapter(token = "gh-token").fetch(topic = githubTopic()) }
+
+                then("it is logged as an ordinary non-2xx, not as a rate limit") {
+                    warnings shouldBe listOf("GitHub releases returned 403 for topic=cve-java")
+                    warnings.single() shouldNotContain "rate limit"
+                }
+            }
+        }
+
+        given("the anonymous-limit boot check") {
+            `when`("no token is set and five topics poll twelve times an hour") {
+                val warning = adapter(token = "").anonymousLimitWarning(topicCount = 5, requestsPerTopicPerHour = 12)
+
+                then("it warns that the load reaches GitHub's anonymous limit") {
+                    warning.shouldNotBeNull()
+                    warning shouldContain "~60 requests/hour"
+                    warning shouldContain "GITHUB_TOKEN"
+                }
+            }
+
+            `when`("no token is set and the load stays under the limit") {
+                then("there is nothing to warn about") {
+                    adapter(token = "")
+                        .anonymousLimitWarning(topicCount = 4, requestsPerTopicPerHour = 12)
+                        .shouldBeNull()
+                }
+            }
+
+            `when`("a token is set") {
+                then("the anonymous limit does not apply") {
+                    adapter(token = "gh-token")
+                        .anonymousLimitWarning(topicCount = 50, requestsPerTopicPerHour = 12)
+                        .shouldBeNull()
                 }
             }
         }

@@ -16,8 +16,10 @@ import dev.notypie.repository.cve.CveCollectLedgerRepository
 import dev.notypie.repository.cve.CveDeliveryRepository
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -26,6 +28,8 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZoneId
+
+private val log = KotlinLogging.logger {}
 
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
@@ -83,12 +87,21 @@ class CveConfiguration {
         )
 
     @Bean
-    fun githubReleaseSourceAdapter(appConfig: AppConfig): SourceAdapter =
-        GithubReleaseSourceAdapter(
-            token = appConfig.cve.github.token,
-            perPage = appConfig.cve.github.perPage,
-            requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
-        )
+    fun githubReleaseSourceAdapter(appConfig: AppConfig): SourceAdapter {
+        val adapter =
+            GithubReleaseSourceAdapter(
+                token = appConfig.cve.github.token,
+                perPage = appConfig.cve.github.perPage,
+                requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
+            )
+        // The collector polls each topic once per window, and at most once per 5-minute tick.
+        val githubTopics = appConfig.cve.topics.count { it.active && it.sourceType == CveSourceType.GITHUB_RELEASE }
+        val perTopicPerHour = 60L / maxOf(appConfig.cve.collector.windowMinutes, COLLECTOR_TICK_MINUTES)
+        adapter
+            .anonymousLimitWarning(topicCount = githubTopics, requestsPerTopicPerHour = perTopicPerHour)
+            ?.let { warning -> log.warn { warning } }
+        return adapter
+    }
 
     @Bean
     fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter {
@@ -173,5 +186,10 @@ class CveConfiguration {
             deliveryHorizonDays = notification.deliveryHorizonDays,
             clock = clock,
         )
+    }
+
+    companion object {
+        // Mirrors CveCollector's @Scheduled(fixedDelay = 300_000).
+        private const val COLLECTOR_TICK_MINUTES = 5L
     }
 }

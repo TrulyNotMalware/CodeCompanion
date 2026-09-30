@@ -12,7 +12,7 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 | File | Description |
 |------|-------------|
 | `SourceAdapter.kt` | `data class RawSourceEvent(externalId, title, rawContent, publishedAt: LocalDateTime?)`; `interface SourceAdapter { supports(CveSourceType): Boolean; fetch(CveTopic): List<RawSourceEvent> }`; `internal fun JsonNode.stringOrNull()` (blank folds to null); `internal fun parseSourceTimestamp(String?)` (offset or offset-free ISO, null on failure) |
-| `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com")`. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` |
+| `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com")`. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. A 403/429 carrying `X-RateLimit-Remaining: 0` or `Retry-After` is logged as `GitHub rate limit exhausted …` with the reset instant and auth mode, any other non-2xx as `GitHub releases returned <status>`; both still return an empty list. `anonymousLimitWarning(topicCount, requestsPerTopicPerHour)` returns a boot warning when `token` is blank and the load reaches `ANONYMOUS_HOURLY_LIMIT` (60), else null; `CveConfiguration.githubReleaseSourceAdapter` logs it. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` |
 | `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC, sleeper = Thread.sleep)`. Pages with `startIndex` until `totalResults` (or an empty page), at most `MAX_PAGES` (5) requests, pausing 6 s between pages without a key and 0.6 s with one; `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
 
 ## For AI Agents
@@ -26,6 +26,10 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
   later page (transport, non-2xx, bad JSON) or an interrupted pause keeps the events already read — the
   next window's 120-minute lookback re-covers the rest — and an interrupt restores the thread's flag
   rather than throwing. Pacing *between topics* is still the collector's open item (review M23).
+- **A rate-limited window must be tellable from a quiet repo in the logs** (V8, M23 family). Both return
+  `emptyList()` by contract; only `logFailure`'s distinct `rate limit exhausted` line separates them. The
+  prod default `GITHUB_TOKEN` is blank, and 5 topics polled every 5 minutes already reach the anonymous
+  60/hour, which is why the boot check exists.
 - **Never log credentials.** Log lines carry only `topic.topicKey`, the status code, and the exception.
 - **The NVD window is derived in UTC from `clock.instant()`.** NVD reads offset-free timestamps as UTC; a
   zoned wall clock would shift the window and silently empty every response. Inject a fixed `Clock` in

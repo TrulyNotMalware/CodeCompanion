@@ -48,6 +48,9 @@ is the map of what actually exists at runtime in a given profile.
 - **Feature lanes are all-or-nothing.** `CveConfiguration` declares every CVE bean including the
   `@Scheduled` workers, so when the feature is off the schedulers do not exist at all. Follow that shape
   for new optional lanes rather than adding `if (enabled) return` guards inside a tick.
+- `CveConfiguration.githubReleaseSourceAdapter` WARNs at boot when `slack.app.cve.github.token` is blank
+  and the declared active GitHub topics × `60 / max(window-minutes, 5)` reach GitHub's anonymous 60
+  requests/hour (the 5 mirrors `CveCollector`'s 5-minute tick, `COLLECTOR_TICK_MINUTES`).
 - Tunables belong in `AppConfig` and are passed as constructor parameters to the bean. Do not read
   `@Value` inside a service.
 - New properties need a default in `AppConfig` **and** a line in the relevant profile YAML under
