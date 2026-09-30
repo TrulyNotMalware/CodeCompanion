@@ -634,7 +634,15 @@ class ModalTemplateBuilder(
                             actionId = actionId,
                             placeholder = "Select topics",
                         ) {
-                            topics.forEach { topic -> option(text = topic.label, value = topic.key) }
+                            // Option text over 75 characters made views.open reject the modal for every user; the
+                            // label is display-only (the key is the value), so cutting it is safe.
+                            topics.forEach { topic ->
+                                val label =
+                                    topic.label.truncatePlainText(
+                                        limit = SlackBlockLimits.OPTION_TEXT_MAX_LENGTH,
+                                    )
+                                option(text = label, value = topic.key)
+                            }
                         }
                     }
                 }

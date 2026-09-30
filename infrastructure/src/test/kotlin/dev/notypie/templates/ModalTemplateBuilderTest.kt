@@ -1305,6 +1305,33 @@ class ModalTemplateBuilderTest :
                     select.options.map { it.value } shouldBe listOf("kotlin", "spring")
                 }
             }
+
+            // V6: one display name over Slack's 75-character option text limit broke the modal for every user.
+            `when`("a topic's display name is longer than an option label may be") {
+                val longLabel = "Very long upstream project display name ".repeat(n = 3)
+                val json =
+                    templateBuilder.cveSubscribeModalViewJson(
+                        idempotencyKey = subscribeKey,
+                        topics = listOf(TopicOption(key = "long-topic", label = longLabel)),
+                    )
+                val option =
+                    (
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                            .blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single()
+                            .element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    ).options
+                        .single()
+
+                then("the option text is cut to 75 characters and the value keeps the full topic key") {
+                    option.text.text.length shouldBe SlackBlockLimits.OPTION_TEXT_MAX_LENGTH
+                    option.text.text shouldEndWith "…"
+                    option.value shouldBe "long-topic"
+                }
+            }
         }
 
         given("cveUnsubscribeModalViewJson") {
