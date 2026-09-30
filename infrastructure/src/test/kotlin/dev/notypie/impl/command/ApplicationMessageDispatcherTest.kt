@@ -9,6 +9,7 @@ import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createActionEventPayloadContents
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.retry.RetryService
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.shouldBe
@@ -19,6 +20,7 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.time.Duration
+import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -176,10 +178,31 @@ class ApplicationMessageDispatcherTest :
             `when`("a channel message is dispatched") {
                 val output = defaultDispatcher.dispatch(event = channelMessage())
 
-                then("the date is honoured instead of degrading to an immediate retry") {
+                then("the date is honoured instead of degrading to an immediate retry, capped at the outbox bound") {
                     output.isRateLimited() shouldBe true
+                    output.retryAfter() shouldBe MAX_RETRY_AFTER
                     sleeps shouldBe emptyList()
                     calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.* answers HTTP 429 with an absurd Retry-After in seconds") {
+            reset()
+            listOf("99999999999999999", "999999999999999999999999").forEach { value ->
+                responses.add(status(code = 429, body = RATE_LIMITED_JSON, headers = arrayOf("Retry-After" to value)))
+            }
+
+            `when`("a channel message is dispatched for each value") {
+                val outputs = List(2) { defaultDispatcher.dispatch(event = channelMessage()) }
+
+                then("the wait is clamped when parsed, so the relay's LocalDateTime arithmetic cannot overflow") {
+                    outputs.forEach { output ->
+                        output.isRateLimited() shouldBe true
+                        output.retryAfter() shouldBe MAX_RETRY_AFTER
+                        shouldNotThrowAny { LocalDateTime.now().plus(output.retryAfter()) }
+                    }
+                    calls.get() shouldBe 2
                 }
             }
         }

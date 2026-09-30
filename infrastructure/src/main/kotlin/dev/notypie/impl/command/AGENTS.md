@@ -55,8 +55,10 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   `chat.update` and outcome unknown otherwise (Slack documents that it "may have partly succeeded", the same
   warning `fatal_error` carries), `SLACK_ACCESS_ERRORS` on `chat.*` → access blocked, anything else → permanent.
   - Rate limited — `chat.*` HTTP 429, `chat.*` `ok=false error=ratelimited`, `response_url` HTTP 429 or JSON
-    `{"ok":false,"error":"ratelimited"}` → `SlackRateLimitedException`, handled outside `RetryService`. If
-    `Retry-After` (seconds or HTTP-date) is ≤ `MAX_INLINE_RETRY_AFTER` (3s) the thread waits once and calls
+    `{"ok":false,"error":"ratelimited"}` → `SlackRateLimitedException`, handled outside `RetryService`.
+    `Retry-After` (seconds or HTTP-date) is clamped to `[0, MAX_RETRY_AFTER]` (24 h, the outbox give-up bound) when
+    parsed, including digit strings beyond `Long`, so the relay's `LocalDateTime` arithmetic cannot overflow. If
+    it is ≤ `MAX_INLINE_RETRY_AFTER` (3s) the thread waits once and calls
     again; a larger or missing `Retry-After`, a second rate limit, or an interrupt during the wait (flag
     restored) returns `RateLimitedOutput(retryAfter)` at once (`isRateLimited()`, `retryAfter()`). The relay
     defers the row past `Retry-After`. The CDC listener thread must never sleep long.

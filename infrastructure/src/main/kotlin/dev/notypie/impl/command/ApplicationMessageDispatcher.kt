@@ -36,6 +36,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.retry.RetryException
 import java.io.IOException
+import java.math.BigInteger
 import java.time.Duration
 import java.time.Instant
 import java.time.ZonedDateTime
@@ -75,6 +76,10 @@ private const val MAX_RESPONSE_BODY_BYTES = 4_096L
 private const val MAX_FAILURE_REASON_CHARS = 200
 private const val RESPONSE_URL_CALL = "response_url POST"
 private val MAX_INLINE_RETRY_AFTER: Duration = Duration.ofSeconds(3L)
+
+// No outbox row outlives outbox.polling.give-up-after-hours (24 h) anyway; the bound keeps an absurd Retry-After from
+// overflowing the relay's LocalDateTime arithmetic.
+internal val MAX_RETRY_AFTER: Duration = Duration.ofHours(24L)
 private val TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(IOException::class.java, SlackApiException::class.java, SlackTransientErrorException::class.java)
 val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
@@ -320,9 +325,12 @@ class ApplicationMessageDispatcher(
 
     private fun parseRetryAfter(value: String?): Duration? {
         val trimmed = value?.trim() ?: return null
-        trimmed.toLongOrNull()?.let { return Duration.ofSeconds(it.coerceAtLeast(0L)) }
+        trimmed.toBigIntegerOrNull()?.let { seconds ->
+            val bounded = seconds.coerceIn(BigInteger.ZERO, MAX_RETRY_AFTER.seconds.toBigInteger())
+            return Duration.ofSeconds(bounded.toLong())
+        }
         return runCatching { ZonedDateTime.parse(trimmed, DateTimeFormatter.RFC_1123_DATE_TIME) }
-            .map { Duration.between(Instant.now(), it.toInstant()).coerceAtLeast(Duration.ZERO) }
+            .map { Duration.between(Instant.now(), it.toInstant()).coerceIn(Duration.ZERO, MAX_RETRY_AFTER) }
             .getOrNull()
     }
 
