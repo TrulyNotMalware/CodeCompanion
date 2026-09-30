@@ -18,3 +18,10 @@ slack:
   app:
     mcp:
       enabled: false
+
+server:
+  # Never derive the client address from X-Forwarded-*. Boot enables forward headers by itself when it
+  # detects Kubernetes (KUBERNETES_SERVICE_HOST/PORT), and Jetty would then set remoteAddr from a
+  # client-supplied X-Forwarded-For — any pod could pass McpTurnTokenFilter's loopback check by sending
+  # `X-Forwarded-For: 127.0.0.1`. Nothing in the app builds URLs or decisions from forwarded headers.
+  forward-headers-strategy: none

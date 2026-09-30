@@ -21,7 +21,7 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 | `SlackRequestVerificationConfiguration.kt` | `Clock`, `SlackSignatureVerifier` and `SlackRetryDeduplicator` beans for the Slack gate (the filter itself is a `@Component`) |
 | `mcp/ScopedTurnToken.kt` | Token claims: subject user, scope key, turn id, issued/expiry |
 | `mcp/ScopedTurnTokenCodec.kt` | Mint/verify `v1.<b64url(payload)>.<b64url(hmac-sha256)>` |
-| `mcp/McpTurnTokenFilter.kt` | Rejects unauthenticated MCP requests before any protocol handling; loopback-only unless `allowRemote` |
+| `mcp/McpTurnTokenFilter.kt` | Rejects unauthenticated MCP requests before any protocol handling; loopback-only unless `allowRemote` (judged on the socket peer — the base `application.yaml` pins `server.forward-headers-strategy: none`) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -104,7 +104,7 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 ./gradlew :application:test --tests '*Slack*Verif*' --tests '*Retry*' --tests '*ScopedTurnToken*'
 ```
 Specs: `SlackSignatureVerifierTest`, `SlackRequestVerificationFilterTest`, `SlackRetryDeduplicatorTest`,
-`CachedBodyHttpServletRequestTest`, `mcp/ScopedTurnTokenCodecTest`. Deduplicator and codec specs pin a
+`CachedBodyHttpServletRequestTest`, `mcp/ScopedTurnTokenCodecTest`, `mcp/McpTurnTokenFilterTest`. Deduplicator and codec specs pin a
 `Clock` — do so for any new time-bounded behaviour (freshness window, TTL, token expiry) and add a
 negative case (expired / tampered signature), not just the happy path.
 End-to-end MCP auth can be probed against a running app with `./scripts/mcp-smoke.sh`.

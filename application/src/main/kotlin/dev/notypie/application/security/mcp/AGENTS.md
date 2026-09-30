@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # application/security/mcp
 
@@ -32,8 +32,13 @@ token before the MCP protocol sees the request, and the transport provider's con
   production caller; the codec bean exists only when MCP is enabled, so the service receives it as a
   nullable and simply sends no token (and the model gets no tools) otherwise.
 - `allowRemote=false` (default) means `InetAddress.getByName(remoteAddr).isLoopbackAddress` must be
-  true. Behind a reverse proxy `remoteAddr` is the proxy, so remote sidecars need
-  `slack.app.mcp.allow-remote=true` plus a network policy — the token alone is not the perimeter.
+  true. `remoteAddr` is the socket peer only because the base `application.yaml` pins
+  `server.forward-headers-strategy: none`: Boot otherwise enables forward headers on its own in Kubernetes
+  (`CloudPlatform.KUBERNETES`), Jetty replaces `remoteAddr` with `X-Forwarded-For`, and any pod could pass
+  the check by sending `X-Forwarded-For: 127.0.0.1` (before 2026-09-30 that was the case). Behind a reverse
+  proxy or a mesh sidecar `remoteAddr` is the proxy (Istio's inbound redirect arrives from `127.0.0.6`, which
+  *is* loopback), so remote sidecars need `slack.app.mcp.allow-remote=true` plus a network policy — the token,
+  not the address, is the perimeter.
 - Expiry uses `exp + clockSkew` on the verifier's clock only; `iat` is informational. TTL and skew come
   from `slack.app.mcp.token-ttl-seconds` / `clock-skew-seconds`, the secret from
   `slack.app.mcp.signing-secret` (boot fails when MCP is enabled with a blank secret).
@@ -46,11 +51,12 @@ token before the MCP protocol sees the request, and the transport provider's con
 ./gradlew :application:test --tests '*ScopedTurnTokenCodecTest*'
 ```
 `ScopedTurnTokenCodecTest` (Kotest `BehaviorSpec`) pins a fixed `Clock` and covers round-trip, expiry
-inside/outside the skew window, tampered signature, wrong version, and blank secret. The filter has no
-spec; when adding one, drive `doFilterInternal` with `MockHttpServletRequest` (set `remoteAddr` to
-`127.0.0.1` vs a public IP and the `Authorization` header) and assert status, body, and whether the
-`FilterChain` was invoked. Build tokens with `createScopedTurnToken()` from
-`src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt`.
+inside/outside the skew window, tampered signature, wrong version, and blank secret.
+`McpTurnTokenFilterTest` drives the filter with `MockHttpServletRequest` (a pod address with
+`X-Forwarded-For: 127.0.0.1` is rejected `loopback-only`; loopback + valid token reaches the chain) and runs
+Boot's `JettyWebServerFactoryCustomizer` with `spring.main.cloud-platform=kubernetes` over the real
+`application*.yaml` files to assert forward headers stay off. Build token claims with
+`createScopedTurnToken()` from `src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt`.
 
 ### Common Patterns
 - Constructor-injected `Clock` (`Clock.systemUTC()` default) for every time decision.

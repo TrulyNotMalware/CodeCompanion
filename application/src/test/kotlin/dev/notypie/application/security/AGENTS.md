@@ -6,7 +6,7 @@
 ## Purpose
 Specs for the inbound Slack request boundary: HMAC signature verification with a replay window, the servlet
 filter that applies it and short-circuits Slack retries, the body-caching request wrapper that keeps the raw
-bytes readable after form parsing, and (in `mcp/`) the scoped turn-token codec.
+bytes readable after form parsing, and (in `mcp/`) the scoped turn-token codec and the MCP loopback filter.
 
 ## Key Files
 | File | Description |
@@ -19,7 +19,7 @@ bytes readable after form parsing, and (in `mcp/`) the scoped turn-token codec.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `mcp/` | `ScopedTurnTokenCodec` mint/verify spec (see `mcp/AGENTS.md`) |
+| `mcp/` | `ScopedTurnTokenCodec` mint/verify and `McpTurnTokenFilter` loopback / forward-header specs (see `mcp/AGENTS.md`) |
 
 ## For AI Agents
 

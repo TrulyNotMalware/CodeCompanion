@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # application/resources
 
@@ -11,7 +11,7 @@ stand up change-data-capture locally and in-cluster.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; scheduler pool sized to 4 |
+| `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; scheduler pool sized to 4; `server.forward-headers-strategy: none` |
 | `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true` |
 | `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
 | `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
@@ -34,6 +34,12 @@ stand up change-data-capture locally and in-cluster.
 - **The base `application.yaml` is intentionally thin.** Only cross-profile *safety* defaults belong
   there (e.g. MCP server disabled so the starter does not auto-expose an open `/mcp`). Environment
   detail belongs in the profile file.
+- **`server.forward-headers-strategy: none` is a safety default, not a proxy setting.** Left unset, Boot
+  switches forward headers on by itself whenever it detects Kubernetes, and Jetty then takes `remoteAddr`
+  from a client-supplied `X-Forwarded-For`, which defeats `McpTurnTokenFilter`'s loopback check. No code reads
+  the scheme, host or client IP from forwarded headers. If something ever needs them, scope a
+  `ForwardedHeaderFilter` to that path instead of changing the global strategy; `McpTurnTokenFilterTest`
+  fails if any profile turns them back on.
 - **Migrations are incremental patches, not a full schema.** Local runs rely on
   `ddl-auto: update` to create base tables, then the `V*` scripts patch them. Prod runs `ddl-auto: none`.
   So: a new migration must be additive and safe against a Hibernate-created base table, and any new
