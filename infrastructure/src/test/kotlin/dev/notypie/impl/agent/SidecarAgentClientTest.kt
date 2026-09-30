@@ -414,4 +414,20 @@ class SidecarAgentClientTest :
                 }
             }
         }
+
+        given("a caller thread that is interrupted, e.g. by an executor shutting down") {
+            respond = sseResponse(body = "event: done\ndata: {\"finalText\":\"late\"}\n\n")
+
+            `when`("converse runs with the interrupt flag set") {
+                Thread.currentThread().interrupt()
+                val result = client.converse(request = AgentTurnRequest(sessionKey = "C1:x", prompt = "hi"))
+                val stillInterrupted = Thread.interrupted()
+
+                then("the turn ends as Failed(interrupted) and the interrupt flag is restored, not swallowed") {
+                    result.shouldBeInstanceOf<AgentTurnResult.Failed>().code shouldBe
+                        SidecarAgentClient.ERROR_CODE_INTERRUPTED
+                    stillInterrupted shouldBe true
+                }
+            }
+        }
     })

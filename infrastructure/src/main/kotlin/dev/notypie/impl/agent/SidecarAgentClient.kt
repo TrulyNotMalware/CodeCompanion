@@ -27,6 +27,7 @@ class SidecarAgentClient(
         const val CONVERSE_PATH = "/v1/converse"
         internal const val ERROR_CODE_BUSY = "busy"
         internal const val ERROR_CODE_TRANSPORT = "transport_error"
+        internal const val ERROR_CODE_INTERRUPTED = "interrupted"
         internal const val ERROR_CODE_INCOMPLETE_STREAM = "incomplete_stream"
         internal const val ERROR_CODE_STREAM_TIMEOUT = "stream_timeout"
         internal const val ERROR_CODE_STREAM_TOO_LARGE = "stream_too_large"
@@ -53,15 +54,21 @@ class SidecarAgentClient(
             .connectTimeout(Duration.ofSeconds(5L))
             .build()
 
+    // Only Exceptions become a Failed result: an Error propagates, and an interrupt keeps its flag for the caller.
     override fun converse(request: AgentTurnRequest): AgentTurnResult =
-        runCatching { execute(request = request) }
-            .getOrElse { exception ->
-                log.error(exception) { "Sidecar converse transport failure sessionKey=${request.sessionKey}" }
-                AgentTurnResult.Failed(
-                    code = ERROR_CODE_TRANSPORT,
-                    message = exception.message ?: exception::class.java.simpleName,
-                )
-            }
+        try {
+            execute(request = request)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            log.warn { "Sidecar converse interrupted sessionKey=${request.sessionKey}" }
+            AgentTurnResult.Failed(code = ERROR_CODE_INTERRUPTED, message = "interrupted before the turn completed")
+        } catch (exception: Exception) {
+            log.error(exception) { "Sidecar converse transport failure sessionKey=${request.sessionKey}" }
+            AgentTurnResult.Failed(
+                code = ERROR_CODE_TRANSPORT,
+                message = exception.message ?: exception::class.java.simpleName,
+            )
+        }
 
     private fun execute(request: AgentTurnRequest): AgentTurnResult {
         val httpRequest =

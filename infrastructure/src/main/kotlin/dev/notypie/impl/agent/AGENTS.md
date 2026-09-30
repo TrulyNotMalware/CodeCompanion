@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # infrastructure/impl/agent
 
@@ -12,7 +12,7 @@ deliberately one blocking turn in, one terminal result out; `SidecarAgentClient`
 | File | Description |
 |------|-------------|
 | `AgentGateway.kt` | `interface AgentGateway { fun converse(request: AgentTurnRequest): AgentTurnResult }`; `AgentTurnRequest(sessionKey, prompt, sessionId?, userId?, appendSystemPrompt?, scopedToken?)`; `sealed interface AgentTurnResult` with `Completed(sessionId?, finalText, inputTokens?, outputTokens?)`, `data object Busy`, `Failed(code, message)` |
-| `SidecarAgentClient.kt` | `class SidecarAgentClient(baseUrl, bearerSecret, requestTimeout = 120s, maxFrameChars = 512 Ki, maxTextChars = 256 Ki) : AgentGateway`. JDK `HttpClient` pinned to HTTP/1.1 with a 5 s connect timeout. Headers: `Authorization: Bearer`, `Accept: text/event-stream`, optional `X-User-Id`, `X-Turn-Token`. `requestTimeout` bounds the **whole turn**: `HttpRequest.timeout` covers the headers and a shared daemon watchdog closes the body stream when the remaining budget runs out (`Failed(stream_timeout)`), so a sidecar that stalls mid-stream cannot pin the relay thread. The body is read as an `InputStream` through a bounded line reader (`SseLineReader`), never `ofLines()`; LF, CRLF and bare CR end a line, and a CR returns the line at once and skips one leading LF on the next read, so a bare-CR server that keeps the connection open after `done` is not waited on: a line or the data of one SSE frame longer than `maxFrameChars`, or accumulated `text` deltas longer than `maxTextChars`, abort the stream with `Failed(stream_too_large)`; a non-200 body reads at most 8,192 chars. Private wire DTOs `SidecarSession`, `SidecarText`, `SidecarDone(finalText, usage)`, `SidecarUsage`, `SidecarError(code, message)`; error codes `busy`, `transport_error`, `incomplete_stream`, `stream_timeout`, `stream_too_large` |
+| `SidecarAgentClient.kt` | `class SidecarAgentClient(baseUrl, bearerSecret, requestTimeout = 120s, maxFrameChars = 512 Ki, maxTextChars = 256 Ki) : AgentGateway`. JDK `HttpClient` pinned to HTTP/1.1 with a 5 s connect timeout. Headers: `Authorization: Bearer`, `Accept: text/event-stream`, optional `X-User-Id`, `X-Turn-Token`. `requestTimeout` bounds the **whole turn**: `HttpRequest.timeout` covers the headers and a shared daemon watchdog closes the body stream when the remaining budget runs out (`Failed(stream_timeout)`), so a sidecar that stalls mid-stream cannot pin the relay thread. The body is read as an `InputStream` through a bounded line reader (`SseLineReader`), never `ofLines()`; LF, CRLF and bare CR end a line, and a CR returns the line at once and skips one leading LF on the next read, so a bare-CR server that keeps the connection open after `done` is not waited on: a line or the data of one SSE frame longer than `maxFrameChars`, or accumulated `text` deltas longer than `maxTextChars`, abort the stream with `Failed(stream_too_large)`; a non-200 body reads at most 8,192 chars. Private wire DTOs `SidecarSession`, `SidecarText`, `SidecarDone(finalText, usage)`, `SidecarUsage`, `SidecarError(code, message)`; error codes `busy`, `transport_error`, `interrupted`, `incomplete_stream`, `stream_timeout`, `stream_too_large` |
 
 ## For AI Agents
 
@@ -28,8 +28,10 @@ deliberately one blocking turn in, one terminal result out; `SidecarAgentClient`
 - **`done.finalText` is authoritative;** accumulated `text` deltas are only the fallback when it is blank.
   `tool_use` / `tool_result` frames are ignored (debug log). A stream that ends without a terminal frame
   yields `Failed(incomplete_stream)`; a final frame with no trailing blank line is still flushed.
-- **`converse` never throws.** Transport exceptions become `Failed(transport_error)`; the caller
-  (`AgentConverseService`, `SidecarAiSummarizer`) branches on the sealed result.
+- **`converse` never throws an `Exception`.** Transport exceptions become `Failed(transport_error)`; an
+  `InterruptedException` (a shutting-down executor) becomes `Failed(interrupted)` **with the thread's interrupt flag
+  restored**, so the caller can see it and stop; an `Error` is not caught. The caller (`AgentConverseService`,
+  `SidecarAiSummarizer`) branches on the sealed result.
 - Wired by `application/configurations/AgentConfiguration.kt`; the sidecar's `openapi.yaml` is the field-name
   source of truth (camelCase: `sessionKey`, `sessionId`, `appendSystemPrompt`, `finalText`, `inputTokens`).
 
@@ -42,7 +44,8 @@ new frame type or error code rather than mocking `HttpClient`.
 
 ### Common Patterns
 - Port and adapter side by side; result modelled as a sealed interface, consumed with exhaustive `when`.
-- `runCatching { ... }.getOrElse { ... }` at the transport boundary; `jsonMapper` (`common/`) for all JSON.
+- `try` / `catch (Exception)` at the transport boundary (never `runCatching`, which would also swallow `Error`s and
+  the interrupt); `jsonMapper` (`common/`) for all JSON.
 
 ## Dependencies
 
