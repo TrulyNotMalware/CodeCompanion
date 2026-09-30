@@ -40,7 +40,6 @@ _type: guide · updated: 2026-09-30_
   맡는다 — 상세는 [events-and-outbox.md](events-and-outbox.md).
 - `local`만 `slack.app.api.app-token`(Socket Mode app-level token)과 `slack.app.socket.meeting-command` /
   `standup-command`를 가진다. 수신기 `SocketModeReceiver`는 `@Profile("local")`이라 다른 프로파일에서는 빈 자체가 없다.
-  루트 `AGENTS.md`와 `application/build.gradle.kts` 주석이 말하는 `socket` 프로파일은 존재하지 않는다 — 코드가 원본이다.
 - AI 사이드카 설정 키(`slack.app.agent.sidecar.base-url` / `bearer-secret` / `request-timeout-seconds`)는 `local`과
   `prod` YAML에만 있다. 빈 자체(`AgentGateway`, `AgentConverseService`)는 `AgentConfiguration`이 프로파일과 무관하게
   만들고 `AppConfig`의 루프백 기본 URL을 쓰므로, 키가 없는 프로파일은 "미연결"이 아니라 "기본값으로 연결 시도"다.
@@ -163,9 +162,11 @@ _type: guide · updated: 2026-09-30_
   `linux/amd64,linux/arm64`. 워크플로는 `deploy-production` concurrency 그룹으로 직렬화된다(취소 없음, 대기 중인 실행은 더 새 머지로 대체될 수 있음).
   머지되지 않고 닫힌 PR은 실행마다 별도 그룹(`deploy-skip-<run_id>`)을 받아 대기 중인 배포를 밀어내지 않는다. 배포 빌드는
   `apply.sh ci`가 검증용 `./gradlew help`로 띄운 데몬을 그대로 재사용한다.
-- 롤백: 배포 전에 Deployment의 `deployment.kubernetes.io/revision`을 기록하고, 실패 시 **이번 실행이 새 리비전을 만들었을 때만**
-  `kubectl rollout undo --to-revision=<기록값>`으로 파드 템플릿 전체(이미지·프로브·리소스)를 되돌린다. 같은 SHA 재배포처럼 리비전이
-  안 바뀌었으면 되돌리지 않고 그렇게 로그를 남긴다(예전 `kubectl set image`는 매니페스트 변경을 못 되돌리고 거짓 성공 로그를 냈다).
+- 롤백: 배포 전에 Deployment의 `deployment.kubernetes.io/revision`과 `.spec.template`의 sha256(`jq -cS`)을 기록하고, 실패 시
+  **파드 템플릿 해시 또는 리비전이 백업과 달라졌을 때만** `kubectl rollout undo --to-revision=<기록값>`으로 파드 템플릿 전체(이미지·
+  프로브·리소스)를 되돌린다. 템플릿을 비교하는 이유는 apply 직후 실패하면 리비전 주석(컨트롤러가 나중에 씀)이 아직 옛 값일 수 있어서다.
+  같은 SHA 재배포처럼 둘 다 그대로면 되돌리지 않고 그렇게 로그를 남기며, Deployment 조회가 3번 실패하면 비교 없이 undo한다(예전
+  `kubectl set image`는 매니페스트 변경을 못 되돌리고 거짓 성공 로그를 냈다).
 - Dependabot: gradle(`/`) · github-actions(`/`) · docker(`/application`) · docker-compose(CDC compose 디렉터리) 네 생태계, 매주 월 09:00 KST, 커밋 프리픽스 `chore :`.
   Kotlin 플러그인 3종 · Spring · 테스트 라이브러리는 그룹으로 묶여 한 PR로 온다. 루트 빌드의 버전은 `extra["x"] = "…"` 형태여야
   Dependabot이 읽는다. `dependabot/**` 브랜치 패턴이 lint·test 워크플로에 있어야 그 PR이 검증된다.

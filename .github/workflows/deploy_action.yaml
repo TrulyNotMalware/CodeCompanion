@@ -187,9 +187,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # merged_at, not head_commit.timestamp: this runs on pull_request, whose payload has no head_commit.
           build-args: |
             JAR_FILE_NAME=${{ env.JAR_FILE_NAME }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ github.event.pull_request.merged_at }}
             VERSION=${{ env.STATIC_DOCKER_TAG }}
             GIT_REF=${{ github.ref_name }}
             BUILD_NUMBER=${{ github.run_number }}

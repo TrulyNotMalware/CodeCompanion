@@ -83,8 +83,9 @@ are served on the application port without authentication.
 
 ## Deployment Steps
 
-Every command below targets the `api-service` namespace explicitly — the deploy workflow does the same, and
-none of the manifests set `metadata.namespace`.
+Every command below targets the `api-service` namespace explicitly — the deploy workflow does the same. Only
+`route/httpRoute.yaml` sets `metadata.namespace` (placeholder `your-namespace`): set it to `api-service` before
+step 4, or `kubectl apply -n api-service` rejects the mismatch.
 
 1. **Configure Secret**
    ```bash
@@ -323,6 +324,10 @@ k8s/
 slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서 인증 없이 제공되므로 절대 외부로 라우팅하지 마세요.
 
 ## 배포 단계
+
+아래 명령은 모두 `api-service` 네임스페이스를 명시합니다 — 배포 워크플로도 같습니다. `metadata.namespace`를 설정하는
+매니페스트는 `route/httpRoute.yaml`(플레이스홀더 `your-namespace`)뿐이므로, 4단계 전에 `api-service`로 바꾸세요. 그대로 두면
+`kubectl apply -n api-service`가 네임스페이스 불일치로 거부합니다.
 
 1. **Secret 설정**
    ```bash

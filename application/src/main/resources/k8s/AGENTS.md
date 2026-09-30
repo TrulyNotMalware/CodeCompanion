@@ -27,31 +27,39 @@ adds what an agent editing the manifests needs to know.
 
 ### Working In This Directory
 - **CI applies `deployment.yaml` only.** `.github/workflows/deploy_action.yaml` runs
-  `envsubst < application/src/main/resources/k8s/deployment.yaml | kubectl apply -n api-service -f -` with
+  `envsubst '${IMAGE_NAME}' < application/src/main/resources/k8s/deployment.yaml | kubectl apply -n api-service -f -` with
   `IMAGE_NAME=<registry>/bot/code-companion:<commit sha>`. ConfigMap, Secret, Service and route objects are
   never touched by CI — a new key in `configmap.yaml`/`secret.yaml` needs a manual `kubectl apply` before
   the next rollout, and the manifest in git is only a template of what the cluster holds.
 - **`envsubst` is restricted to `'${IMAGE_NAME}'`**, so any other `$NAME` in `deployment.yaml` survives
   verbatim (the job env holds the OCI private key, which is why the list is explicit). Still keep `$IMAGE_NAME`
   the only `$` in that file: a new placeholder needs the workflow's variable list extended too.
-- **No manifest sets `metadata.namespace`.** Every workflow step, including the apply, passes
-  `-n api-service`, so the kubeconfig context namespace does not matter; a manual `kubectl apply` of the
-  other manifests must pass the same `-n`.
+- **Only `route/httpRoute.yaml` sets `metadata.namespace`** (placeholder `your-namespace`); none of the manifests
+  in this directory does. Every workflow step, including the apply, passes `-n api-service`, so the kubeconfig
+  context namespace does not matter; a manual `kubectl apply` of the other manifests must pass the same `-n`, and
+  the HTTPRoute's placeholder must be set to `api-service` first, or `kubectl apply -n api-service` rejects the
+  namespace mismatch.
 - **Env-var coverage vs `application-prod.yaml`.** Keys without a default there must come from these two
-  manifests: the five `SQL_*` keys, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS`,
+  manifests: the six `SQL_*` keys (three `SQL_PROD_*` in `configmap.yaml`, three `SQL_DATABASE_*` in
+  `secret.yaml`), `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS`,
   `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. All of them are present in the samples
   (credentials in `secret.yaml`, the rest in `configmap.yaml`). Everything else the profile reads (`MCP_ENABLED`, `MCP_SIGNING_SECRET`, `SIDECAR_*`,
   `AI_PROVIDER`, `GITHUB_TOKEN`, `GITHUB_RELEASES_PER_PAGE`, `NVD_*`, `CVE_COLLECTOR_*`) has a default and is
-  opt-in. `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are baked in by `application/Dockerfile`.
+  opt-in. `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are not manifest keys: the deploy workflow passes
+  them as Docker build args and `application/Dockerfile` bakes them into the image env (`BUILD_DATE` is the
+  merged PR's `merged_at`; the workflow runs on `pull_request`, whose payload has no `head_commit`).
   The management base path is no longer an env var: it is fixed at `/actuator` in `application-prod.yaml`. A
   cluster ConfigMap that still carries `ACTUATOR_BASE_PATH` is harmless; nothing reads it.
-- **A missing env var is not a binding error for String properties.** Spring Boot keeps an unresolvable
-  `${X}` literally, so an absent `KAFKA_BOOTSTRAP_SERVERS`, `SLACK_CDC_TOPIC` or `SQL_DATABASE_URL` starts the
-  context with the literal text and fails later, when the Kafka client, the listener/`NewTopic` or the datasource
-  uses it. Keys bound to a non-String type (the Hikari timeouts) do fail binding.
-  `SLACK_SIGNING_SECRET` is the exception by design: `SlackRequestVerificationFilter` rejects an unresolved or
-  blank value outside `local`. The `YOUR_KAFKA_HOST:9092` placeholder likewise binds and fails only when used, so
-  replace it in-cluster before the first rollout.
+- **A missing env var is usually not a binding error for String properties.** The binder keeps an unresolvable
+  `${X}` literally, so an absent `KAFKA_BOOTSTRAP_SERVERS` or `SQL_DATABASE_URL` starts the context with the
+  literal text and fails later, when the Kafka client or the datasource uses it. Keys bound to a non-String type
+  (the Hikari timeouts) do fail binding. Two keys fail startup instead:
+  `SLACK_SIGNING_SECRET` by design (`SlackRequestVerificationFilter` rejects an unresolved or blank value outside
+  `local`), and `SLACK_CDC_TOPIC`, because `DebeziumLogTailingProcessor`'s
+  `@KafkaListener(topics = ["${slack.app.mode.cdc.topic}"])` goes through the context's strict embedded-value
+  resolver, which resolves the nested `${SLACK_CDC_TOPIC}` and throws `Could not resolve placeholder` (read from the
+  source, not measured). The `YOUR_KAFKA_HOST:9092` placeholder binds and fails only when used, so replace it
+  in-cluster before the first rollout.
 - `SLACK_CDC_TOPIC` must equal the Debezium topic (`topic.prefix` + `.` + `<db>.<table>`, see `../cdc/`). Records the
   CDC listener cannot process go to `<SLACK_CDC_TOPIC>-dlt`: the suffix is a constant in
   `KafkaConsumerConfiguration`, and the app declares that topic as a `NewTopic` bean, which `KafkaAdmin` creates at
@@ -117,7 +125,9 @@ adds what an agent editing the manifests needs to know.
   `pods/exec`, `list` on `replicasets` and `pods`). The aggregate `/actuator/health` is logged but does not gate.
   Renaming the Service, its port, the Deployment or the container, changing the `app` label, or moving the
   management base path, needs the same change in `deploy_action.yaml`. It never uses the public host: that host is fronted by a bearer-authenticating layer
-  outside this repository (every probed path answered `401` on 2026-09-28), and what it forwards to the app has
+  outside this repository (on 2026-09-28 every probed path, nonexistent ones included, answered `401` with
+  `WWW-Authenticate: Bearer`, except `GET /actuator/health`, which answered a `404` JSON body that is not this
+  application's error format), and what it forwards to the app has
   to be confirmed by whoever operates it.
 - **`/actuator` must never be routed publicly** (unauthenticated `metrics`/`info`, and `health` reports outbox
   state). The samples in `route/` therefore forward only `/api/slack` and `/api/slash`; `/api` as a whole would
@@ -135,8 +145,8 @@ adds what an agent editing the manifests needs to know.
   pod template or the revision different from the pre-apply backup triggers
   `kubectl rollout undo --to-revision=<previous>`, which restores the whole previous pod template.
 - After changing `configmap.yaml`/`secret.yaml` keys, confirm `application-prod.yaml` resolves every
-  `${KEY}` without a default. A missing String key does not stop startup (see above), so the gap shows up only
-  at runtime.
+  `${KEY}` without a default. Most missing String keys do not stop startup (see above, `SLACK_SIGNING_SECRET` and
+  `SLACK_CDC_TOPIC` excepted), so the gap shows up only at runtime.
 
 ### Common Patterns
 - One object per file, all named `code-companion-*`, all selected by the label `app: code-companion-deploy`.
