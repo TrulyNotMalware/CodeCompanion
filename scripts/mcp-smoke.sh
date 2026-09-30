@@ -36,18 +36,32 @@ echo "   HTTP $code"
 
 echo "2) initialize with minted token (user=$PROBE_USER_ID)"
 headers_file=$(mktemp)
-curl -s -D "$headers_file" -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
-  "${accept_headers[@]}" -d "$initialize_body" | head -c 600
+body_file=$(mktemp)
+trap 'rm -f "$headers_file" "$body_file"' EXIT
+code=$(curl -s -D "$headers_file" -o "$body_file" -w '%{http_code}' -X POST "$ENDPOINT" \
+  -H "Authorization: Bearer $token" "${accept_headers[@]}" -d "$initialize_body")
+echo "   HTTP $code"
+# Truncated copy for the log, read from the file so a long body cannot SIGPIPE curl under pipefail.
+head -c 600 "$body_file"
 echo
+[ "$code" = "200" ] || { echo "   FAIL: expected 200"; exit 1; }
+grep -q '"serverInfo"' "$body_file" || { echo "   FAIL: no serverInfo in the initialize result"; exit 1; }
 session_id=$(awk 'tolower($1) ~ /^mcp-session-id:/ {gsub("\r",""); print $2}' "$headers_file")
-rm -f "$headers_file"
 session_header=()
 [ -n "$session_id" ] && session_header=(-H "Mcp-Session-Id: $session_id")
 
-curl -s -o /dev/null -X POST "$ENDPOINT" -H "Authorization: Bearer $token" "${session_header[@]}" \
+# ${arr[@]+"${arr[@]}"}: a bare empty "${arr[@]}" is an unbound-variable error under `set -u` in bash 3.2 (macOS).
+curl -s -o /dev/null -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
+  ${session_header[@]+"${session_header[@]}"} \
   "${accept_headers[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 
-echo "3) tools/list"
-curl -s -X POST "$ENDPOINT" -H "Authorization: Bearer $token" "${session_header[@]}" \
-  "${accept_headers[@]}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
-echo
+echo "3) tools/list (expect get_status / list_meetings / list_roles)"
+tools=$(curl -s -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
+  ${session_header[@]+"${session_header[@]}"} \
+  "${accept_headers[@]}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+printf '%s\n' "$tools"
+for tool in get_status list_meetings list_roles; do
+  grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"$tool\"" <<< "$tools" \
+    || { echo "   FAIL: tools/list does not expose $tool"; exit 1; }
+done
+echo "OK: all three steps passed"

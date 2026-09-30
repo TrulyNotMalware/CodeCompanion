@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # CodeCompanion
 
@@ -101,10 +101,10 @@ Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.
 - Spring Boot 4.1.1 — Web on **Jetty** (Tomcat excluded; Undertow unsupported on Boot 4), Actuator,
   AOP/AspectJ, Data JPA
 - Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC — outbox relay
-- MariaDB (runtime) / H2 (local + tests) — persistence
+- MariaDB (runtime, every profile) / H2 (tests only) — persistence
 - Slack Java SDK 1.51.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
-- Jackson 3 (`tools.jackson`, BOM 3.2.0) — serialization, application/infrastructure only
-- Spring AI 2.0.0 — MCP server starter (streamable HTTP on `/mcp`)
+- Jackson 3 (`tools.jackson`, BOM 3.2.2) — serialization, application/infrastructure only
+- Spring AI 2.0.1 (BOM) — MCP server as four modules, not the webmvc starter (streamable HTTP on `/mcp`)
 - Kotest 6.2.5 + MockK 1.14.11 — testing
 - ktlint 14.2.0 — formatting/lint gate
 
