@@ -181,6 +181,40 @@ class SlackMentionMapperTest :
             }
         }
 
+        // A9: a workflow / other-app mention carries bot_id but neither `user` nor `blocks`.
+        given("an app_mention posted by a workflow with text only") {
+            val payload =
+                jsonMapper.readValue(
+                    """
+                    {
+                      "token": "t", "team_id": "T1", "api_app_id": "A1", "type": "event_callback",
+                      "event_id": "Ev2", "event_time": "1", "is_ext_shared_channel": false, "event_context": "c",
+                      "authorizations": [{"enterprise_id": null, "team_id": "T1", "user_id": "$botId",
+                        "is_bot": true, "is_enterprise_install": false}],
+                      "event": {
+                        "type": "app_mention", "bot_id": "B_WORKFLOW", "app_id": "A_WF", "text": "<@$botId> help",
+                        "ts": "1712345678.000200", "team": "T1", "channel": "C1", "event_ts": 1712345678.0002
+                      }
+                    }
+                    """.trimIndent(),
+                    Map::class.java,
+                )
+
+            `when`("the callback is parsed and mapped") {
+                val command =
+                    jsonMapper
+                        .convertValue(payload, SlackEventCallBackRequest::class.java)
+                        .toMentionInboundCommand(appId = TEST_APP_ID, channelName = "", actorName = "")
+
+                then("it deserializes with a blank actor and no command structure instead of throwing") {
+                    command.actorId shouldBe ""
+                    val mention = command.payload.shouldBeInstanceOf<MentionInvocation>()
+                    mention.hasCommandStructure shouldBe false
+                    mention.text shouldBe ""
+                }
+            }
+        }
+
         given("a mention inside an existing thread") {
             `when`("flattened") {
                 val request =

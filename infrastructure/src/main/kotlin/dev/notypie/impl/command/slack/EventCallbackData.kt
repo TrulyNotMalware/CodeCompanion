@@ -9,8 +9,10 @@ data class EventCallbackData(
     val type: String,
     @field:JsonProperty("text")
     val rawText: String? = null,
+    // Absent on mentions posted by a workflow or another app (they carry bot_id instead); non-null here, such a
+    // callback failed deserialization and Slack retried the 500 three times. The handler skips those events.
     @field:JsonProperty("user")
-    val userId: String,
+    val userId: String? = null,
     @field:JsonProperty("app_id")
     val appId: String? = null,
     @field:JsonProperty("bot_id")
@@ -21,8 +23,9 @@ data class EventCallbackData(
     val ts: String,
     @field:JsonProperty("thread_ts")
     val threadTs: String? = null,
+    // Absent when the poster sent text only (chat.postMessage without blocks).
     @field:JsonProperty("blocks")
-    val blocks: List<Block>,
+    val blocks: List<Block> = emptyList(),
     @field:JsonProperty("team")
     val team: String,
     @field:JsonProperty("channel")

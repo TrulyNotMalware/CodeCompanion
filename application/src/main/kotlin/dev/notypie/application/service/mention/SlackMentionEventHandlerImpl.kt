@@ -14,11 +14,14 @@ import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.impl.command.slack.SlackEventCallBackRequest
 import dev.notypie.impl.command.slack.SlackEventType
 import dev.notypie.impl.command.slack.toMentionInboundCommand
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.MultiValueMap
 import java.util.UUID
+
+private val log = KotlinLogging.logger {}
 
 @Service
 class SlackMentionEventHandlerImpl(
@@ -35,8 +38,21 @@ class SlackMentionEventHandlerImpl(
 
     // FIXME Remove AppMention Events.
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
+        if (isPostedByApp(payload = payload)) {
+            log.debug { "Ignoring app_mention posted by an app or workflow (bot_id set or no user)." }
+            return CommandOutput.empty()
+        }
         val commandData = parseAppMentionEvent(headers = headers, payload = payload)
         return handleEvent(commandData = commandData)
+    }
+
+    // Mentions posted by an app — our own replies included — or a workflow are acknowledged and dropped. An AI answer
+    // that echoes `<@bot>` must not start another turn (a reply loop), and a bot has no human actor to resolve a role
+    // for, so a workflow cannot drive commands under its own bot user. Workflow-triggered commands would need an
+    // explicit allow-list decision first.
+    private fun isPostedByApp(payload: Map<String, Any>): Boolean {
+        val event = payload["event"] as? Map<*, *> ?: return false
+        return event["bot_id"] != null || (event["user"] as? String).isNullOrBlank()
     }
 
     override fun parseAppMentionEvent(

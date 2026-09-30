@@ -5,14 +5,15 @@
 
 ## Purpose
 Spec for `SlackMentionEventHandlerImpl.parseAppMentionEvent`, the step that turns a raw `app_mention`
-event map into an `InboundCommand`. Only parsing is covered here; the dispatch path (role resolved before the
+event map into an `InboundCommand`, and for the app-posted filter in `handleEvent(headers, payload)`. The
+transactional dispatch path (role resolved before the
 mention transaction, then `CommandExecutor` inside it) is exercised on a real `JpaTransactionManager` by
 `service/command/RoleLookupJpaTransactionTest`.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, `appToken == TEST_BOT_TOKEN`; `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`/`actorName`; default payload without display names (as a real `app_mention` callback arrives) → `actorName` and `channelName` are `""`, not the string `"null"` (regression). |
+| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, `appToken == TEST_BOT_TOKEN`; `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`/`actorName`; default payload without display names (as a real `app_mention` callback arrives) → `actorName` and `channelName` are `""`, not the string `"null"` (regression); a workflow-shaped payload without `user` and `blocks` parses with a blank `actorId` (A9). `handleEvent(headers, payload)`: `bot_id` set, or no `user` → `Status.DO_NOTHING` with no role lookup and no `execute`; a person's mention → role resolved once and `execute` once. `withoutEventKeys(...)` (file-private) strips keys from the fixture's `event` map. |
 
 ## For AI Agents
 
@@ -23,7 +24,9 @@ mention transaction, then `CommandExecutor` inside it) is exercised on a real `J
 - `event.ts` is a string and `event_ts` a double in the fixture, mirroring the wire shape; a parser change
   that types either differently will surface here first.
 - `commandExecutor` is `relaxed` and `commandRoleResolver` strict, but neither is called by
-  `parseAppMentionEvent`; they and `createH2TransactionManager()` exist only to construct the handler.
+  `parseAppMentionEvent`; they and `createH2TransactionManager()` exist only to construct the handler. The
+  `handleEvent` cases build their own handler with strict mocks so an unexpected call fails.
+- `CommandExecutor.execute` is generic: verify it as `execute<SubCommandDefinition>(command = any())`.
 - Headers are a `LinkedMultiValueMap` with `Content-Type: application/json`; nothing asserts on them.
 
 ### Testing Requirements

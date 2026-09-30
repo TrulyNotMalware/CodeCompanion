@@ -28,6 +28,14 @@ domain context sees it.
   a transaction marks it rollback-only, so until 2026-09-30 (both overloads `@Transactional`) a role-lookup
   failure answered `USER` and then failed the commit with `UnexpectedRollbackException` → 500. Do not move
   the lookup back inside or re-annotate the methods.
+- **Mentions posted by an app or a workflow are dropped** (`isPostedByApp`: `event.bot_id` set, or no `user`).
+  `handleEvent(headers, payload)` returns `CommandOutput.empty()` — a 200 no-op, so Slack does not retry — before
+  parsing, resolving a role or opening the transaction. Two reasons: our own AI answer can echo `<@bot>`, and a
+  reply must never start another turn (a self-reply loop); and a bot has no human actor, so letting its
+  mention run would resolve a role for a bot user and let any workflow drive commands. Workflow-triggered
+  commands would need an explicit allow-list decision first. `parseAppMentionEvent` itself still maps such a
+  payload (blank `actorId`), since `EventCallbackData` now tolerates a missing `user` / `blocks` (A9: it used to
+  throw and answer 500, which Slack retried three times).
 - **Idempotency** comes from `IdempotencyCreator.create(data = commandData)`; a Slack retry of the same
   event yields the same key, which is what the outbox and the domain contexts dedupe on.
 - `channel_name` / `user_name` do not exist on an `app_mention` callback (they are slash-command form
