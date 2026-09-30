@@ -1,6 +1,12 @@
 # Base defaults applied to every profile. Kept minimal on purpose — profile yamls own their
 # environment; only cross-profile safety defaults belong here.
 spring:
+  lifecycle:
+    # Each shutdown phase must outwait one CDC record in flight (CDC_LISTENER_SHUTDOWN_TIMEOUT, 60 s): the listener
+    # container finishes the record in hand and records its status before the DataSource closes; cut shorter,
+    # another pod's sweep re-sends a message that was already posted. k8s/deployment.yaml's grace period is sized
+    # on top of this; ShutdownBudgetTest checks every profile and the manifest.
+    timeout-per-shutdown-phase: 60s
   ai:
     mcp:
       server:

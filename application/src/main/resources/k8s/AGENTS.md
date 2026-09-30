@@ -13,7 +13,7 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup, and the "One-time" checklist of the V18–V22 release (V18 → V19 → V20 → V22 → `Recreate` rollout → V21) |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `strategy: {type: Recreate, rollingUpdate: null}` for the V20 release, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 45`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `strategy: {type: Recreate, rollingUpdate: null}` for the V20 release, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 90`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
 | `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
@@ -69,9 +69,11 @@ adds what an agent editing the manifests needs to know.
   `.gitleaks.toml` allowlists only the CDC MariaDB sample Secret, not this one — the `YOUR_*` placeholders
   pass, but realistic-looking sample values would trip the `secret-scan` job.
 - **Probes and the shutdown budget go together.** On deletion the `preStop` hook sleeps 5s (endpoint removal
-  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown, bounded by
-  `spring.lifecycle.timeout-per-shutdown-phase` (10s) in `application-prod.yaml`; `terminationGracePeriodSeconds`
-  (45) must exceed the sum. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
+  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown, bounded per phase by
+  `spring.lifecycle.timeout-per-shutdown-phase` (60s, `application.yaml`) so the CDC listener can finish the record in
+  hand and record its status before the DataSource closes (review T12); `terminationGracePeriodSeconds` (90) =
+  preStop 5 + one phase 60 + 25 margin. `ShutdownBudgetTest` (application tests) parses this file and fails when the
+  grace period no longer covers preStop + one record + 15 s. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
   `/actuator/health/{liveness,readiness}` exist. The startup probe allows 36 × 5s = 3 minutes.
 - **Memory:** the Dockerfile's `-XX:MaxRAMPercentage=50.0` makes the heap 1Gi of the 2Gi limit. Metaspace, code
   cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is

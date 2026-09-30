@@ -3,9 +3,6 @@ spring:
     activate:
       on-profile: "prod"
 
-  lifecycle:
-    timeout-per-shutdown-phase: 10s
-
   threads:
     virtual:
       enabled: true

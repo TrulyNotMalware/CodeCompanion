@@ -81,7 +81,9 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   can overrun its 60 s share of `max.poll.interval.ms` 300 s / `max-poll-records` 5 — the result is a rebalance
   and redelivery, not a double send, because the listener claims only `PENDING`; (b) the renew → complete window
   (HTTP bound + 3 × `connection-timeout` + 0.32 s) must stay well below `stuck-in-progress-seconds` (300 s), or
-  the sweep reclaims a row mid-send. Raising `connection-timeout` or `STATUS_WRITE_ATTEMPTS` means redoing (b).
+  the sweep reclaims a row mid-send; (c) the shutdown budget (`CDC_LISTENER_SHUTDOWN_TIMEOUT` 60 s in
+  `configurations/KafkaConsumerConfiguration.kt`, the lifecycle phase, the pod grace) covers one record with a
+  healthy pool, not a starved one. Raising `connection-timeout` or `STATUS_WRITE_ATTEMPTS` means redoing (b) and (c).
 - **An outcome event is published only by the owner that recorded it.** `completeClaim` returning 0 means
   another owner has the row and will publish its own outcome.
 - **`MessagePublishSuccessEvent` has a downstream consumer:** `service/standup/StandupSummaryService`

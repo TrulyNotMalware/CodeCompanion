@@ -48,8 +48,8 @@ _type: guide · updated: 2026-09-30_
 - `prod`는 전부 env 주입이다. `MCP_ENABLED` 하나가 `spring.ai.mcp.server.enabled`와 `slack.app.mcp.enabled`를 함께 켠다.
   CVE 수집은 `slack.app.cve.*`(`GITHUB_TOKEN`, `NVD_API_KEY`, `collector.*`, `notification.*`)와 `slack.app.ai.provider`
   (`AI_PROVIDER`, 기본 `noop`)로 조정하지만, **`slack.app.cve.enabled`는 어떤 프로파일도 켜지 않는다**(코드 기본 false) —
-  켜려면 env 또는 `--slack.app.cve.enabled=true` 인자가 필요하다. `spring.lifecycle.timeout-per-shutdown-phase` 10s,
-  `spring.kafka.consumer.isolation-level: read_committed`도 `prod` 전용이다.
+  켜려면 env 또는 `--slack.app.cve.enabled=true` 인자가 필요하다. `spring.kafka.consumer.isolation-level: read_committed`는
+  `prod` 전용이다. `spring.lifecycle.timeout-per-shutdown-phase`(60s)는 `application.yaml`이 모든 프로파일에 준다.
 - `spring.threads.virtual.enabled`는 네 프로파일 모두 on. `slack.app.api.signing-secret`은 `dev`·`prod`·`slack-live`에서
   `${SLACK_SIGNING_SECRET}`(기본값 없음)이다. 2026-09-28에 `slack-live`의 빈 기본값을 제거했다 — 그 프로파일은 터널로 실제
   Slack 앱에 연결되는데 빈 시크릿이면 필터가 검증을 끈다. 기본값이 없다는 것만으로는 fail-fast가 아니다(Boot 바인더는 미해결
@@ -201,15 +201,18 @@ _type: guide · updated: 2026-09-30_
   롤백은 apply·rollout·verify·health 단계가 실패했을 때만 돌고, 배포 전 백업과 비교해 파드 템플릿 해시나 리비전이 달라졌으면
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
-- 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(단계당 10초) ⊂ `terminationGracePeriodSeconds` 45초. 메모리는
+- 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(단계당 60초, CDC 리스너는 `stopImmediate`로 처리 중인
+  레코드 1건만 마치고 멈춤, relay executor도 실행 중 작업을 60초까지 기다림) ⊂ `terminationGracePeriodSeconds` 90초.
+  예전 값(단계 10초, grace 45초)은 레코드 1건의 최악 처리 시간을 못 담아, 발송 뒤 DataSource가 닫혀 완료 기록에 실패하고
+  다른 파드의 스윕이 재발송했다(review 14장 T12). 종료 중 시작된 relay 큐 작업은 SIGKILL에 끊길 수 있고 스윕이 재발송한다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
 - **배포 전략: V20 릴리스 동안은 `Recreate`.** 아웃박스 claim 토큰(V20·V22) 릴리스는 pre-V20 파드와 한순간도 겹치면 안 되므로
   (구 파드가 남의 `IN_PROGRESS` 행을 재발송하고 attempt 조건 없이 상태를 덮는다) `deployment.yaml`이
   `strategy: {type: Recreate, rollingUpdate: null}`을 싣는다. 워크플로의 `kubectl apply`가 전략을 설정하고, 롤아웃과
   `rollout undo`(파드 템플릿만 되돌리고 `spec.strategy`는 그대로) 모두 구 파드를 먼저 멈춘다. 이전의 "머지 전 수동
   `kubectl patch`" 절차는 잊으면 그대로 겹치고 롤백 뒤 무조건 RollingUpdate로 되돌리라는 지시가 다시 겹침을 만들어서 폐기했다.
-  대가는 이 블록이 있는 동안 **모든 배포가 중단**이라는 점이다(새 파드 Ready까지, startup 프로브 최대 3분; 롤아웃 300초 타임아웃
-  안). 모든 파드가 V20 이상이고 pre-V20 롤백이 필요 없어지면 후속 PR에서 블록을 지운다 — last-applied에 있는 필드라
+  대가는 이 블록이 있는 동안 **모든 배포가 중단**이라는 점이다(구 파드 종료 최대 90초 + 새 파드 Ready까지 startup 프로브 최대 3분;
+  롤아웃 420초 타임아웃 안). 모든 파드가 V20 이상이고 pre-V20 롤백이 필요 없어지면 후속 PR에서 블록을 지운다 — last-applied에 있는 필드라
   three-way merge가 지우고 API 서버가 기본 RollingUpdate(25%/25%)로 되돌린다. 그 뒤의 롤링 업데이트(surge 1)는 롤아웃 중 요청 기준
   3 × 1536Mi = 4.5Gi가 동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가
   Pending → 타임아웃 → 롤백). `Recreate` 동안은 2 × 1536Mi.

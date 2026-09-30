@@ -13,6 +13,8 @@ context and assert the bean Boot ends up with.
 |------|-------------|
 | `SchedulingWiringSmokeTest.kt` | `ApplicationContextRunner` with `ConfigDataApplicationContextInitializer` (so the real `application.yaml` is loaded), `TaskSchedulingAutoConfiguration`, `SchedulingConfig`, `AsyncConfig`, an `AppConfig()` bean and `spring.threads.virtual.enabled=true`. Asserts the `taskScheduler` bean is a `ThreadPoolTaskScheduler` with core pool ≥ 2; that a fixed-delay job blocked on a latch does not stop a second fixed-delay job from running within 2 s; and that `relayTaskExecutor` is a `ThreadPoolTaskExecutor` with `AbortPolicy` and queue = `outbox.polling.batch-size`. All three failed before review T1 was fixed (Boot chose `SimpleAsyncTaskScheduler`, the second job never ran, the policy was `CallerRunsPolicy`) |
 
+| `ShutdownBudgetTest.kt` | Review T12. The `concurrentKafkaListenerContainerFactory` has `isStopImmediate = true` and `shutdownTimeout = CDC_LISTENER_SHUTDOWN_TIMEOUT` (≥ 60 s); `relayTaskExecutor`'s `awaitTerminationMillis` (read with `ReflectionTestUtils`) is at least that; for `local`, `dev` and `prod` the resolved `spring.lifecycle.timeout-per-shutdown-phase` is at least that (an `ApplicationContextRunner` with the real config files); `k8s/deployment.yaml` (classpath, multi-document, the `Deployment`) has `terminationGracePeriodSeconds` ≥ the `preStop` sleep + 60 + 15. All six failed before the fix (`stopImmediate` false, 30 s await, 30 s / 30 s / 10 s phases, grace 45) |
+
 ## For AI Agents
 
 ### Working In This Directory

@@ -36,7 +36,8 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             setThreadNamePrefix("relay-")
             setRejectedExecutionHandler(ThreadPoolExecutor.AbortPolicy())
             setWaitForTasksToCompleteOnShutdown(true)
-            setAwaitTerminationSeconds(30)
+            // A dispatch running at shutdown gets one record's budget to record its status before the DataSource closes.
+            setAwaitTerminationSeconds(CDC_LISTENER_SHUTDOWN_TIMEOUT.seconds.toInt())
             initialize()
         }
 }

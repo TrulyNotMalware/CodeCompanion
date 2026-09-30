@@ -27,8 +27,8 @@ spec:
       labels:
         app: code-companion-deploy
     spec:
-      # Must exceed the preStop sleep (5s) plus spring.lifecycle.timeout-per-shutdown-phase (10s).
-      terminationGracePeriodSeconds: 45
+      # preStop 5s + timeout-per-shutdown-phase 60s (application.yaml: one CDC record in flight) + 25s margin.
+      terminationGracePeriodSeconds: 90
       imagePullSecrets:
         - name: dockercred
       containers:

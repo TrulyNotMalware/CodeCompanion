@@ -31,10 +31,15 @@ import org.springframework.kafka.support.micrometer.KafkaListenerObservationConv
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
 import org.springframework.util.backoff.FixedBackOff
+import java.time.Duration
 
 private val logger = KotlinLogging.logger { }
 
 private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
+
+// One record's worst case in the normal case (relay AGENTS.md "Per-record time budget"). The lifecycle phase
+// (spring.lifecycle.timeout-per-shutdown-phase) and the pod grace period are sized on top of it.
+internal val CDC_LISTENER_SHUTDOWN_TIMEOUT: Duration = Duration.ofSeconds(60L)
 
 internal fun deadLetterTopic(topic: String): String = "$topic$DEAD_LETTER_TOPIC_SUFFIX"
 
@@ -135,6 +140,10 @@ class KafkaConsumerConfiguration(
         containerProperties.isObservationEnabled = true
         containerProperties.isMicrometerEnabled = false
         containerProperties.ackMode = ContainerProperties.AckMode.RECORD
+        // On shutdown finish only the record in hand (its status write needs the DataSource still open); the rest
+        // of the poll is uncommitted and redelivered to another pod, where the rows are still PENDING.
+        containerProperties.isStopImmediate = true
+        containerProperties.shutdownTimeout = CDC_LISTENER_SHUTDOWN_TIMEOUT.toMillis()
         setCommonErrorHandler(
             DefaultErrorHandler(cdcDeadLetterRecovery.recoverer, FixedBackOff(1_000L, 2L)).apply {
                 addNotRetryableExceptions(CdcRecordParseException::class.java)
