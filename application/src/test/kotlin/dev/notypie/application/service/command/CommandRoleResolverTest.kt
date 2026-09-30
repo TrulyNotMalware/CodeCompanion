@@ -56,7 +56,21 @@ class CommandRoleResolverTest :
         }
 
         given("the role cache") {
-            `when`("the same user is resolved twice within the TTL") {
+            `when`("a user without a grant is resolved twice within the TTL") {
+                val roleRepository = mockk<UserCommandRoleRepository>()
+                every { roleRepository.findRole(userId = unknownUserId) } returns null
+                val resolver = resolverWith(roleRepository = roleRepository)
+
+                resolver.resolve(userId = unknownUserId)
+                val second = resolver.resolve(userId = unknownUserId)
+
+                then("the second call is served from the cache") {
+                    second shouldBe UserRole.USER
+                    verify(exactly = 1) { roleRepository.findRole(userId = unknownUserId) }
+                }
+            }
+
+            `when`("a user with an elevated grant is resolved twice within the TTL") {
                 val roleRepository = mockk<UserCommandRoleRepository>()
                 every { roleRepository.findRole(userId = grantedDeveloperId) } returns UserRole.DEVELOPER
                 val resolver = resolverWith(roleRepository = roleRepository)
@@ -64,63 +78,75 @@ class CommandRoleResolverTest :
                 resolver.resolve(userId = grantedDeveloperId)
                 val second = resolver.resolve(userId = grantedDeveloperId)
 
-                then("the second call is served from the cache") {
+                then("every call reads the DB, because only USER is cached") {
                     second shouldBe UserRole.DEVELOPER
-                    verify(exactly = 1) { roleRepository.findRole(userId = grantedDeveloperId) }
+                    verify(exactly = 2) { roleRepository.findRole(userId = grantedDeveloperId) }
                 }
             }
 
-            `when`("the TTL has elapsed") {
+            `when`("another replica revokes an admin, so this resolver is never evicted") {
                 val roleRepository = mockk<UserCommandRoleRepository>()
-                every { roleRepository.findRole(userId = grantedDeveloperId) } returnsMany
-                    listOf(UserRole.DEVELOPER, UserRole.USER)
+                every { roleRepository.findRole(userId = grantedDeveloperId) } returnsMany listOf(UserRole.ADMIN, null)
+                val resolver = resolverWith(roleRepository = roleRepository)
+
+                val beforeRevoke = resolver.resolve(userId = grantedDeveloperId)
+                val afterRevoke = resolver.resolve(userId = grantedDeveloperId)
+
+                then("the very next call sees USER, so the revoked admin cannot re-grant themselves within the TTL") {
+                    beforeRevoke shouldBe UserRole.ADMIN
+                    afterRevoke shouldBe UserRole.USER
+                }
+            }
+
+            `when`("another replica grants a cached user and the TTL then elapses") {
+                val roleRepository = mockk<UserCommandRoleRepository>()
+                every { roleRepository.findRole(userId = unknownUserId) } returnsMany listOf(null, UserRole.DEVELOPER)
                 val clock = MutableClock(instant = start)
                 val resolver = resolverWith(roleRepository = roleRepository, clock = clock)
 
-                resolver.resolve(userId = grantedDeveloperId)
+                resolver.resolve(userId = unknownUserId)
+                val withinTtl = resolver.resolve(userId = unknownUserId)
                 clock.instant = start.plus(CommandRoleResolver.CACHE_TTL).plusMillis(1)
-                val afterExpiry = resolver.resolve(userId = grantedDeveloperId)
+                val afterExpiry = resolver.resolve(userId = unknownUserId)
 
-                then("the role is looked up again") {
-                    afterExpiry shouldBe UserRole.USER
-                    verify(exactly = 2) { roleRepository.findRole(userId = grantedDeveloperId) }
+                then("the grant is denied until the cached USER expires, then looked up again") {
+                    withinTtl shouldBe UserRole.USER
+                    afterExpiry shouldBe UserRole.DEVELOPER
+                    verify(exactly = 2) { roleRepository.findRole(userId = unknownUserId) }
                 }
             }
 
-            `when`("the user is evicted after a committed role change") {
+            `when`("a cached user is evicted after a grant committed on this replica") {
                 val roleRepository = mockk<UserCommandRoleRepository>()
-                every { roleRepository.findRole(userId = grantedDeveloperId) } returnsMany
-                    listOf(UserRole.ADMIN, UserRole.USER)
+                every { roleRepository.findRole(userId = unknownUserId) } returnsMany listOf(null, UserRole.ADMIN)
                 val resolver = resolverWith(roleRepository = roleRepository)
 
-                resolver.resolve(userId = grantedDeveloperId)
-                resolver.evict(userId = grantedDeveloperId)
-                val afterRevoke = resolver.resolve(userId = grantedDeveloperId)
-                val cachedAfterRevoke = resolver.resolve(userId = grantedDeveloperId)
+                resolver.resolve(userId = unknownUserId)
+                resolver.evict(userId = unknownUserId)
+                val afterGrant = resolver.resolve(userId = unknownUserId)
 
-                then("the next lookup reads the new role and caches it again") {
-                    afterRevoke shouldBe UserRole.USER
-                    cachedAfterRevoke shouldBe UserRole.USER
-                    verify(exactly = 2) { roleRepository.findRole(userId = grantedDeveloperId) }
+                then("the next lookup reads the new role") {
+                    afterGrant shouldBe UserRole.ADMIN
+                    verify(exactly = 2) { roleRepository.findRole(userId = unknownUserId) }
                 }
             }
 
-            `when`("an eviction lands while a lookup is reading the old role") {
+            `when`("an eviction lands while a lookup is reading the old USER role") {
                 val roleRepository = mockk<UserCommandRoleRepository>()
                 lateinit var resolver: CommandRoleResolver
-                every { roleRepository.findRole(userId = grantedDeveloperId) } answers {
-                    resolver.evict(userId = grantedDeveloperId)
-                    UserRole.ADMIN
-                } andThenAnswer { UserRole.USER }
+                every { roleRepository.findRole(userId = unknownUserId) } answers {
+                    resolver.evict(userId = unknownUserId)
+                    null
+                } andThenAnswer { UserRole.ADMIN }
                 resolver = resolverWith(roleRepository = roleRepository)
 
-                val inFlight = resolver.resolve(userId = grantedDeveloperId)
-                val next = resolver.resolve(userId = grantedDeveloperId)
+                val inFlight = resolver.resolve(userId = unknownUserId)
+                val next = resolver.resolve(userId = unknownUserId)
 
-                then("the stale role is answered once but never cached") {
-                    inFlight shouldBe UserRole.ADMIN
-                    next shouldBe UserRole.USER
-                    verify(exactly = 2) { roleRepository.findRole(userId = grantedDeveloperId) }
+                then("the stale USER is answered once but never cached") {
+                    inFlight shouldBe UserRole.USER
+                    next shouldBe UserRole.ADMIN
+                    verify(exactly = 2) { roleRepository.findRole(userId = unknownUserId) }
                 }
             }
         }

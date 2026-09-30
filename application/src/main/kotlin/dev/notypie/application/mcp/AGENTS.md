@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # application/mcp
 
@@ -28,9 +28,10 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
   through `mcpToolGate.execute { token -> ... }`.
 - The token carries no role on purpose. `McpToolGate` calls `CommandRoleResolver.resolve` on every
   invocation so a `@bot revoke` mid-conversation takes effect on the next tool call. Never cache the
-  role or move the check into the token claims. "Next tool call" is exact only on the replica that
-  committed the revoke: the resolver keeps a 60 s per-JVM cache (`CommandRoleResolver.CACHE_TTL`), so a
-  tool call routed to the other replica can still pass with the old role for up to 60 s.
+  role or move the check into the token claims. "Next tool call" holds on every replica: the resolver
+  caches only `USER`, so an elevated role (the only kind `OPERATIONS` / `ADMINISTRATION` tools accept) is
+  read from the DB on each call. A *grant* may take up to `CommandRoleResolver.CACHE_TTL` (60 s) to reach
+  the replica that did not commit it — that only denies.
 - Pass `argumentsSummary` for any tool with parameters (`list_meetings` sends
   `{"daysAhead":N}`); it is what lands in `mcp_tool_call_history.arguments_json`.
 - Error text returned to the model is deliberately generic ("`tool` failed to execute...").

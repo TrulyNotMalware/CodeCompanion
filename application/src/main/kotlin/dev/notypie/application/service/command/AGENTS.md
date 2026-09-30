@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # application/service/command
 
@@ -14,7 +14,7 @@ single source of truth for a user's `UserRole`, and `RoleManagementService` appl
 | File | Description |
 |------|-------------|
 | `CommandExecutor.kt` | `class CommandExecutor(intentResolver: SlackIntentResolver, outboundStager, eventPublisher)`. `execute(command): CommandOutput` = `command.handleEvent()` → `command.drainIntents()` (always, so error effects reach Slack) → `publishIntents`: classifies every effect explicitly (`CommandIntent` / `OutboundMessage`; an unrouted third `CommandEffect` implementor fails loudly instead of being dropped — the interface cannot be sealed across packages), builds `basicInfo = commandData.extractBasicInfo(idempotencyKey)`, `intentResolver.resolveAll(...) + outbound.mapNotNull { outboundStager.stage(...) }`, queues into `DefaultEventQueue`, `eventPublisher.publishEvent(events)`. Resolution and publish failures are logged with `commandId` / `idempotencyKey` / counts and rethrown. Declared as `@Bean commandExecutor` in `configurations/SlackRequestBuilderConfiguration` with the `SlackOutboundStager` |
-| `CommandRoleResolver.kt` | `@Service class CommandRoleResolver(appConfig, userCommandRoleRepository, clock = Clock.systemUTC())`. `bootstrapAdmins: Set<String>` from `slack.app.authorization.bootstrap-admins`; `resolve(userId)` = bootstrap → `ADMIN`, else a per-JVM cache (`CACHE_TTL` 60 s, at most 10 000 users; when full, expired entries are dropped and new ones are not cached) in front of `findRole(userId) ?: USER`; a lookup exception is logged at `WARN` and answered with `USER` (not cached). `evict(userId)` bumps an eviction generation and drops the entry; `resolve` stores its result only if no eviction happened since its lookup began (checked inside `ConcurrentHashMap.compute`), so a lookup that read the old role before an eviction cannot re-cache it; `isBootstrapAdmin(userId)` |
+| `CommandRoleResolver.kt` | `@Service class CommandRoleResolver(appConfig, userCommandRoleRepository, clock = Clock.systemUTC())`. `bootstrapAdmins: Set<String>` from `slack.app.authorization.bootstrap-admins`; `resolve(userId)` = bootstrap → `ADMIN`, else a per-JVM cache of **`USER` results only** (`cachedUsers: userId → expiry`, `CACHE_TTL` 60 s, at most 10 000 users; when full, expired entries are dropped and new ones are not cached) in front of `findRole(userId) ?: USER` — `AI_USER` / `DEVELOPER` / `ADMIN` are read from the DB on every call; a lookup exception is logged at `WARN` and answered with `USER` (not cached). `evict(userId)` bumps an eviction generation and drops the entry; `resolve` stores a `USER` result only if no eviction happened since its lookup began (checked inside `ConcurrentHashMap.compute`), so a lookup that read the old role before an eviction cannot re-cache it; `isBootstrapAdmin(userId)` |
 | `RoleManagementService.kt` | `@Service`. `@Transactional @EventListener handleRoleManage(RoleManageRequestEvent)` runs `GRANT` (`saveRole`), `REVOKE` (`deleteRole`, reports "no role grant" when nothing was removed) or `LIST` (`renderGrants()`); after a `GRANT` / `REVOKE` write it evicts the target from `CommandRoleResolver` in `TransactionSynchronization.afterCommit` (immediately when no transaction synchronization is active); refuses to touch bootstrap admins, and stages a `ChannelMessage` headlined `CodeCompanion — role management` via `checkNotNull(outboundStager.stage(...))` + `publishOne`. `internal fun renderGrants()` is shared with the MCP `list_roles` tool |
 
 ## For AI Agents
@@ -31,11 +31,16 @@ single source of truth for a user's `UserRole`, and `RoleManagementService` appl
   actions — `SlackMentionEventHandlerImpl` / `SlackInteractionHandlerImpl` (set `actorRole` on the
   command), `mcp/McpToolGate` — must call `resolve` per request; never keep a role of their own across a
   turn. The resolver's cache is the only role cache.
-- Role cache staleness: a grant/revoke is visible on the replica that committed it as soon as the commit
-  finishes — eviction is registered from inside the writing transaction and runs `afterCommit`, and the
-  eviction generation stops a lookup that read the pre-commit row from caching it (that one in-flight call
-  may still answer with the old role). The other replica may serve the old role for up to `CACHE_TTL` (60 s).
-  The generation is global, not per user: an eviction only costs concurrent lookups one cache store.
+- Role cache staleness (decision #15, "a revoke applies immediately"): only `USER` is cached, so a stale
+  entry can only under-grant. A revoke or downgrade of an elevated role is seen by the next call on **every**
+  replica — the Deployment runs 2 and eviction is local, and while `ADMIN` was cached (until 2026-09-30) a
+  revoked admin could `@bot grant` themselves back through the other replica within 60 s. A grant to a cached
+  `USER` is visible on the committing replica as soon as the commit finishes — eviction is registered from
+  inside the writing transaction and runs `afterCommit`, and the eviction generation stops a lookup that read
+  the pre-commit row from caching it — and on the other replica after up to `CACHE_TTL` (60 s). One in-flight
+  call may still answer with the old role. The generation is global, not per user: an eviction only costs
+  concurrent lookups one cache store. Do not start caching elevated roles again without a cross-replica
+  invalidation (e.g. comparing `user_command_role.updated_at`).
   `RoleManagementService` is the only writer of `user_command_role`; another writer must call
   `CommandRoleResolver.evict` after its commit the same way. Do not evict from an event listener: with
   `fallbackExecution` it ran before the write when no transaction was active.

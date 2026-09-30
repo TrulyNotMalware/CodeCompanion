@@ -265,11 +265,51 @@ class RoleManagementServiceTest :
             }
         }
 
-        given("a cached role that a REVOKE changes") {
-            `when`("the revoke runs inside a transaction") {
+        given("a cached role that a role change affects") {
+            // Only USER is cached, so the eviction timing is observable on a GRANT to a cached USER.
+            `when`("the grant runs inside a transaction") {
+                val roleRepository = mockk<UserCommandRoleRepository>(relaxed = true)
+                every { roleRepository.findRole(userId = targetUserId) } returnsMany
+                    listOf(UserRole.USER, UserRole.ADMIN)
+                val resolver =
+                    CommandRoleResolver(appConfig = AppConfig(), userCommandRoleRepository = roleRepository)
+                val (service, _) =
+                    serviceWith(
+                        roleRepository = roleRepository,
+                        stagedMessage = slot(),
+                        commandRoleResolver = resolver,
+                    )
+                resolver.resolve(userId = targetUserId)
+
+                TransactionSynchronizationManager.initSynchronization()
+                val beforeCommit =
+                    try {
+                        service.handleRoleManage(
+                            event =
+                                createRoleManageRequestEvent(
+                                    action = RoleManageAction.GRANT,
+                                    targetUserId = targetUserId,
+                                    role = UserRole.ADMIN,
+                                ),
+                        )
+                        resolver.resolve(userId = targetUserId).also {
+                            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+                        }
+                    } finally {
+                        TransactionSynchronizationManager.clearSynchronization()
+                    }
+                val afterCommit = resolver.resolve(userId = targetUserId)
+
+                then("the cache is evicted only once the transaction has committed") {
+                    beforeCommit shouldBe UserRole.USER
+                    afterCommit shouldBe UserRole.ADMIN
+                }
+            }
+
+            `when`("an admin is revoked while no cache entry could hold the old role") {
                 val roleRepository = mockk<UserCommandRoleRepository>()
                 every { roleRepository.findRole(userId = targetUserId) } returnsMany
-                    listOf(UserRole.ADMIN, UserRole.USER)
+                    listOf(UserRole.ADMIN, null)
                 every { roleRepository.deleteRole(userId = targetUserId) } returns true
                 val resolver =
                     CommandRoleResolver(appConfig = AppConfig(), userCommandRoleRepository = roleRepository)
@@ -292,17 +332,13 @@ class RoleManagementServiceTest :
                                     role = null,
                                 ),
                         )
-                        resolver.resolve(userId = targetUserId).also {
-                            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
-                        }
+                        resolver.resolve(userId = targetUserId)
                     } finally {
                         TransactionSynchronizationManager.clearSynchronization()
                     }
-                val afterCommit = resolver.resolve(userId = targetUserId)
 
-                then("the cache is evicted only once the transaction has committed") {
-                    beforeCommit shouldBe UserRole.ADMIN
-                    afterCommit shouldBe UserRole.USER
+                then("the next resolve reads the revoked row even before the eviction runs") {
+                    beforeCommit shouldBe UserRole.USER
                 }
             }
 

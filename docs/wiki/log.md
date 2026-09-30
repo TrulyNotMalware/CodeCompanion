@@ -18,3 +18,4 @@ append-only. 형식: `## [YYYY-MM-DD] <create|update|lint> | 요약`
 ## [2026-09-30] update | 리뷰 3차(14장) 운영 반영 — dev-environment: V20 릴리스 동안 `Recreate` 전략(수동 patch 절차 폐기, 제거 시점), V18~V22 적용 순서(V18 → V19 → V20 → V22 → 구 파드 종료 → 배포 → V21, 번호 ≠ 순서), exec 폴백이 현재 리비전의 종료 중이 아닌 파드 전부를 검사, CI `workers.max=2`, 롤백 조건(템플릿 해시 또는 리비전) 정정, 없는 `socket` 프로파일 언급 삭제
 ## [2026-09-30] update | events-and-outbox: 디스패치 결과를 다섯 가지로 갱신 — 비멱등 호출의 전송 후 실패와 `internal_error`는 결과 불명(재발송 없음, 리뷰 T6·T13), 토큰·워크스페이스 오류는 15분 보류(T14), `Retry-After` 24시간 제한(D4), `response_url` 2xx는 문서화된 `ok`만 성공(D5)
 ## [2026-09-30] update | dev-environment: `local` 프로파일 HTTP를 `server.address: 127.0.0.1`로 루프백 바인드(W7), `run`은 기본값 유지·경고만, actuator 노출 서술 정정
+## [2026-09-30] update | decisions #15: 역할 캐시를 `USER` 결과만 담도록 축소(T10) — 상승 역할은 매 호출 DB 조회라 revoke가 레플리카와 무관하게 즉시 반영, grant만 다른 레플리카에서 최대 60초 지연

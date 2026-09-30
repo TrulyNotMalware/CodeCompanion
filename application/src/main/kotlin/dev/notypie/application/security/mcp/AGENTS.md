@@ -43,8 +43,8 @@ token before the MCP protocol sees the request, and the transport provider's con
   from `slack.app.mcp.token-ttl-seconds` / `clock-skew-seconds`, the secret from
   `slack.app.mcp.signing-secret` (boot fails when MCP is enabled with a blank secret).
 - Role decisions never belong here — `mcp/McpToolGate` resolves the role from DB/config per call. A token
-  outlives a revoke: the next call is denied at once on the replica that committed it, and within the
-  resolver's 60 s cache TTL on the other replica.
+  outlives a revoke, but the next call is denied on every replica: the resolver never caches an elevated
+  role (only `USER`).
 
 ### Testing Requirements
 ```bash

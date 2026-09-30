@@ -23,12 +23,11 @@ class CommandRoleResolver(
         private const val MAX_CACHED_USERS = 10_000
     }
 
-    private data class CachedRole(
-        val role: UserRole,
-        val expiresAt: Long,
-    )
-
-    private val cache = ConcurrentHashMap<String, CachedRole>()
+    // Only USER (no row) is cached, as userId -> expiry. An elevated role is read from the DB on every call, so a
+    // revoke committed on another replica applies to the next call here: a cached ADMIN let a revoked admin
+    // re-grant themselves within the TTL. A stale USER can only deny, never grant (a grant may take up to
+    // CACHE_TTL to reach a replica that has not evicted the user).
+    private val cachedUsers = ConcurrentHashMap<String, Long>()
     private val evictionGeneration = AtomicLong(0L)
 
     val bootstrapAdmins: Set<String> = appConfig.authorization.bootstrapAdmins.toSet()
@@ -36,7 +35,7 @@ class CommandRoleResolver(
     fun resolve(userId: String): UserRole {
         if (isBootstrapAdmin(userId = userId)) return UserRole.ADMIN
         val now = clock.millis()
-        cache[userId]?.takeIf { it.expiresAt > now }?.let { return it.role }
+        cachedUsers[userId]?.takeIf { expiresAt -> expiresAt > now }?.let { return UserRole.USER }
         val generationAtLookup = evictionGeneration.get()
         val role =
             try {
@@ -45,7 +44,7 @@ class CommandRoleResolver(
                 log.warn(failure) { "Role lookup failed; falling back to USER for userId=$userId" }
                 return UserRole.USER
             }
-        remember(userId = userId, role = role, now = now, generationAtLookup = generationAtLookup)
+        if (role == UserRole.USER) rememberUser(userId = userId, now = now, generationAtLookup = generationAtLookup)
         return role
     }
 
@@ -53,23 +52,14 @@ class CommandRoleResolver(
 
     fun evict(userId: String) {
         evictionGeneration.incrementAndGet()
-        cache.remove(userId)
+        cachedUsers.remove(userId)
     }
 
-    private fun remember(
-        userId: String,
-        role: UserRole,
-        now: Long,
-        generationAtLookup: Long,
-    ) {
-        if (cache.size >= MAX_CACHED_USERS) cache.entries.removeIf { (_, cached) -> cached.expiresAt <= now }
-        if (cache.size >= MAX_CACHED_USERS) return
-        cache.compute(userId) { _, existing ->
-            if (evictionGeneration.get() == generationAtLookup) {
-                CachedRole(role = role, expiresAt = now + CACHE_TTL.toMillis())
-            } else {
-                existing
-            }
+    private fun rememberUser(userId: String, now: Long, generationAtLookup: Long) {
+        if (cachedUsers.size >= MAX_CACHED_USERS) cachedUsers.entries.removeIf { (_, expiresAt) -> expiresAt <= now }
+        if (cachedUsers.size >= MAX_CACHED_USERS) return
+        cachedUsers.compute(userId) { _, existing ->
+            if (evictionGeneration.get() == generationAtLookup) now + CACHE_TTL.toMillis() else existing
         }
     }
 }
