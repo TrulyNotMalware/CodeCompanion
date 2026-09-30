@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # k8s
 
@@ -13,7 +13,7 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 45`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `strategy: {type: Recreate, rollingUpdate: null}` for the V20 release, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 45`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
 | `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
@@ -69,18 +69,27 @@ adds what an agent editing the manifests needs to know.
   cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is
   sized for heap + non-heap; a request equal to the heap would leave the Pod above its request and first in line
   for node-pressure eviction. Change the request, the limit and the percentage together.
-- **Rollout capacity:** the Deployment uses the default RollingUpdate (`maxSurge` 25% → 1 Pod, `maxUnavailable`
-  25% → 0 with 2 replicas), so a rollout briefly runs 3 Pods and needs 3 × 1536Mi = 4.5Gi of *requested* memory
-  schedulable at once (was 3Gi at the old 1Gi request). If the surge Pod cannot be scheduled it stays `Pending`,
-  `rollout status` times out and the workflow rolls back. Check before a rollout with
-  `kubectl describe nodes | grep -A8 'Allocated resources'` (requests vs allocatable per node). The strategy is
-  deliberately unchanged; if capacity is short, `maxSurge: 0` / `maxUnavailable: 1` keeps the PDB satisfied.
-- **Releases that must not overlap their predecessor** (first rollout of the outbox claim-token release, V20) are
-  handled by a one-time `kubectl patch` of the live strategy to `Recreate` (or a scale to 0) before the merge, and a
-  patch back afterwards, as `README.md` describes. Keep `deployment.yaml` on the rolling update: the manifest does
-  not set `spec.strategy`, which is what lets the live patch survive the workflow's `kubectl apply`.
+- **Rollout capacity:** while the `Recreate` block below is in the manifest a rollout never runs more than 2 Pods
+  (2 × 1536Mi of requests). Under the default RollingUpdate (`maxSurge` 25% → 1 Pod, `maxUnavailable` 25% → 0 with
+  2 replicas) a rollout briefly runs 3 Pods and needs 3 × 1536Mi = 4.5Gi of *requested* memory schedulable at once
+  (was 3Gi at the old 1Gi request). If the surge Pod cannot be scheduled it stays `Pending`, `rollout status` times
+  out and the workflow rolls back. Check before a rollout with
+  `kubectl describe nodes | grep -A8 'Allocated resources'` (requests vs allocatable per node). If capacity is short
+  under the rolling update, `maxSurge: 0` / `maxUnavailable: 1` keeps the PDB satisfied.
+- **The outbox claim-token release (V20/V22) must never overlap a pre-V20 Pod**, so `deployment.yaml` carries
+  `strategy: {type: Recreate, rollingUpdate: null}`. The workflow's `kubectl apply` sets it; the rollout and the
+  workflow's `rollout undo` (which restores only the pod template, never `spec.strategy`) both stop every old Pod
+  before starting a new one. `rollingUpdate: null` makes the apply delete the live object's defaulted
+  `rollingUpdate` block, which the API server rejects next to `Recreate`. Cost: every deploy while the block is
+  there is an outage until a new Pod is Ready (startup probe up to 3 minutes); old-Pod shutdown (≤ 45s) + startup
+  (≤ 180s) + readiness fits the workflow's 300s rollout timeout, so do not lengthen either without raising
+  `DEPLOYMENT_ROLLOUT_TIMEOUT`. **Removal:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision
+  is no longer wanted, delete the whole `strategy` block in a follow-up PR; the three-way merge removes the field
+  (it is in the `last-applied-configuration` annotation) and the API server defaults to RollingUpdate 25%/25%. Do
+  not go back to a one-time `kubectl patch` of the live strategy: a patched field is not in the last-applied
+  configuration, so nothing in git records or removes it.
 - **Open decision — Slack retry dedup across replicas.** `SlackRetryDeduplicator` keeps its state in one JVM,
-  while this Deployment runs 2 replicas (3 during a rollout), so a Slack retry routed to the other Pod is processed
+  while this Deployment runs 2 replicas (3 during a rolling update), so a Slack retry routed to the other Pod is processed
   again. Two options, not yet chosen (`docs/wiki/decisions.md` #34):
   1. Shared `event_id` store (a DB table with a unique key and an atomic state transition): works with any replica
      count, costs a migration, one DB round-trip per Slack request inside the 3s ack budget, and a retention job.

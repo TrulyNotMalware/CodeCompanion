@@ -4,6 +4,21 @@ metadata:
   name: code-companion-deploy
 spec:
   replicas: 2 # Change replicas
+  # Recreate for the release that introduced the outbox claim token (V20/V22): it must never run beside a
+  # pre-V20 Pod, which re-dispatches IN_PROGRESS rows it does not own and overwrites outbox status without the
+  # attempt guard. A rolling update would overlap old and new Pods during the rollout, and again during the
+  # workflow's `rollout undo`. Recreate stops every old Pod before the first new one starts, and an undo keeps
+  # it because the strategy is not part of the pod template.
+  # Cost: while this block is here, every deploy (rollbacks included) is an outage until a new Pod is Ready,
+  # up to the startup probe's 3 minutes.
+  # Remove the whole block in a follow-up PR once every Pod runs a V20+ binary and a rollback to a pre-V20
+  # revision is no longer wanted: `kubectl apply`'s three-way merge deletes the field (it is in the
+  # last-applied configuration) and the API server defaults it back to RollingUpdate (25% / 25%).
+  # `rollingUpdate: null` clears the defaulted rollingUpdate block of the live object; the API server rejects
+  # a rollingUpdate next to `type: Recreate`.
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       app: code-companion-deploy

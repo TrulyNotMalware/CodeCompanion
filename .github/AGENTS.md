@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # .github
 
@@ -125,7 +125,10 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   logs an `::error::` and undoes anyway; `rollout undo` skips when the template already matches. A same-SHA
   redeploy or a failure before the apply leaves the template unchanged and logs "nothing to roll back". Its
   outcome (`rolled back` / `not rolled back` / `rollback failed`) feeds the failure deployment status. Do not
-  remove the backup step — without the recorded revision the rollback deliberately does nothing.
+  remove the backup step — without the recorded revision the rollback deliberately does nothing. `rollout undo`
+  restores only the pod template, never `spec.strategy`: while `k8s/deployment.yaml` carries
+  `strategy: Recreate` (the V20 release, see `k8s/AGENTS.md`) the undo also stops every new Pod before an old one
+  starts, which is what keeps the rollback from overlapping the two releases.
 - **Health verification is in-cluster and gates on readiness:** after rollout and the Ready-pod count (from
   the `Ready` condition, not `phase == Running`; `-lt` so a terminating old Pod does not fail the count), the
   `health` step polls `/actuator/health/readiness` for up to ~2 minutes and requires `jq -e '.status == "UP"'`

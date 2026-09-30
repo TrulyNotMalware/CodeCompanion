@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-09-28_
+_type: guide · updated: 2026-09-30_
 
 > JDK 25 · Gradle 9.7.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -185,8 +185,17 @@ _type: guide · updated: 2026-09-28_
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
 - 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(단계당 10초) ⊂ `terminationGracePeriodSeconds` 45초. 메모리는
-  힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 기본 롤링 업데이트(surge 1)라 롤아웃 중에는 요청 기준 3 × 1536Mi = 4.5Gi가
-  동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가 Pending → 타임아웃 → 롤백). 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
+  힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
+- **배포 전략: V20 릴리스 동안은 `Recreate`.** 아웃박스 claim 토큰(V20·V22) 릴리스는 pre-V20 파드와 한순간도 겹치면 안 되므로
+  (구 파드가 남의 `IN_PROGRESS` 행을 재발송하고 attempt 조건 없이 상태를 덮는다) `deployment.yaml`이
+  `strategy: {type: Recreate, rollingUpdate: null}`을 싣는다. 워크플로의 `kubectl apply`가 전략을 설정하고, 롤아웃과
+  `rollout undo`(파드 템플릿만 되돌리고 `spec.strategy`는 그대로) 모두 구 파드를 먼저 멈춘다. 이전의 "머지 전 수동
+  `kubectl patch`" 절차는 잊으면 그대로 겹치고 롤백 뒤 무조건 RollingUpdate로 되돌리라는 지시가 다시 겹침을 만들어서 폐기했다.
+  대가는 이 블록이 있는 동안 **모든 배포가 중단**이라는 점이다(새 파드 Ready까지, startup 프로브 최대 3분; 롤아웃 300초 타임아웃
+  안). 모든 파드가 V20 이상이고 pre-V20 롤백이 필요 없어지면 후속 PR에서 블록을 지운다 — last-applied에 있는 필드라
+  three-way merge가 지우고 API 서버가 기본 RollingUpdate(25%/25%)로 되돌린다. 그 뒤의 롤링 업데이트(surge 1)는 롤아웃 중 요청 기준
+  3 × 1536Mi = 4.5Gi가 동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가
+  Pending → 타임아웃 → 롤백). `Recreate` 동안은 2 × 1536Mi.
 - `run`은 **빌드된 jar를 손으로 띄우는** 스크립트다(`./run [-e local|dev|prod] <jar>`). 환경별 힙·GC(local/dev G1, prod ZGC) ·
   JDWP 디버그 포트(기본 5005, 인증 없음, `127.0.0.1`에만 바인드) · devtools · prod 확인 프롬프트 · JMX(기본 9010, 인증 없음,
   `127.0.0.1`에만 바인드, RMI 포트를 레지스트리 포트와 같게 고정해 포트 하나짜리 SSH 터널로 접근)를 붙이고 `-Dspring.profiles.active`를
