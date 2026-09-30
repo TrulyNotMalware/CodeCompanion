@@ -210,6 +210,8 @@ class OutboxRecoverySchedulerTest :
             every {
                 repository.reclaimStuck(eventId = any(), attemptCount = 1, olderThan = cutoff, now = DEFAULT_TEST_NOW)
             } returns 1
+            every { repository.findStalePending(olderThan = cutoff, limit = 100) } returns
+                listOf(createOutboxRow(eventId = "stale", createdAt = DEFAULT_TEST_NOW.minusHours(1L)))
             val dispatched = slot<List<OutboxClaim>>()
             every { relay.batchPendingMessages(claims = capture(dispatched)) } returns Unit
 
@@ -227,7 +229,7 @@ class OutboxRecoverySchedulerTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { repository.findStalePending(olderThan = any(), limit = any()) }
+                    verify(exactly = 0) { repository.claimPending(eventId = any(), attemptCount = any(), now = any()) }
                     verify(exactly = 1) {
                         repository.abandonStuck(
                             eventId = "expired",
@@ -240,12 +242,39 @@ class OutboxRecoverySchedulerTest :
             }
         }
 
+        given("stale PENDING rows, one of them older than the give-up window") {
+            val repository = mockk<MessageOutboxRepository>()
+            val relay = relayWithSlots(slots = 0)
+            every { repository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
+            every { repository.findStalePending(olderThan = cutoff, limit = 100) } returns
+                listOf(
+                    createOutboxRow(eventId = "expired", createdAt = DEFAULT_TEST_NOW.minusHours(25L)),
+                    createOutboxRow(eventId = "live", createdAt = DEFAULT_TEST_NOW.minusHours(1L)),
+                )
+            every { repository.abandonPending(eventId = "expired", attemptCount = 0, now = DEFAULT_TEST_NOW) } returns 1
+
+            `when`("the sweep runs while the relay executor is full") {
+                val count = scheduler(repository = repository, relay = relay).recoverOnce()
+
+                then(
+                    "the expired row is abandoned to FAILURE without a claim or a send, the live one is left PENDING",
+                ) {
+                    count shouldBe 0
+                    verify(exactly = 1) {
+                        repository.abandonPending(eventId = "expired", attemptCount = 0, now = DEFAULT_TEST_NOW)
+                    }
+                    verify(exactly = 0) { repository.claimPending(eventId = any(), attemptCount = any(), now = any()) }
+                    verify(exactly = 0) { relay.batchPendingMessages(claims = any()) }
+                }
+            }
+        }
+
         given("a relay executor with a few free slots and more stale PENDING rows than that") {
             val repository = mockk<MessageOutboxRepository>()
             val relay = relayWithSlots(slots = 2)
             every { repository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
-            every { repository.findStalePending(olderThan = cutoff, limit = 2) } returns
-                listOf(createOutboxRow(eventId = "a"), createOutboxRow(eventId = "b"))
+            every { repository.findStalePending(olderThan = cutoff, limit = 100) } returns
+                listOf(createOutboxRow(eventId = "a"), createOutboxRow(eventId = "b"), createOutboxRow(eventId = "c"))
             every { repository.claimPending(eventId = any(), attemptCount = 0, now = DEFAULT_TEST_NOW) } returns 1
             val dispatched = slot<List<OutboxClaim>>()
             every { relay.batchPendingMessages(claims = capture(dispatched)) } returns Unit
@@ -253,9 +282,9 @@ class OutboxRecoverySchedulerTest :
             `when`("the sweep runs") {
                 scheduler(repository = repository, relay = relay).recoverOnce()
 
-                then("the stale read is capped at the free slots") {
+                then("only as many stale rows as there are free slots are claimed; the rest stay PENDING") {
                     dispatched.captured.map { it.row.eventId } shouldBe listOf("a", "b")
-                    verify(exactly = 1) { repository.findStalePending(olderThan = cutoff, limit = 2) }
+                    verify(exactly = 0) { repository.claimPending(eventId = "c", attemptCount = any(), now = any()) }
                 }
             }
         }

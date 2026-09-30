@@ -485,6 +485,45 @@ class SlackMessageRelayServiceImplTest :
                 }
             }
 
+            `when`("a claimed row is older than the give-up window (e.g. a CDC backlog replayed after a long outage)") {
+                val rowEventId = UUID.randomUUID()
+                val row =
+                    createOutboxRow(eventId = rowEventId.toString(), createdAt = DEFAULT_TEST_NOW.minusHours(25L))
+                val payloadRenderer = mockk<OutboxPayloadRenderer>()
+                val messageDispatcher = mockk<MessageDispatcher>()
+                val published = slot<Any>()
+                val eventPublisher = mockk<ApplicationEventPublisher>()
+                every { eventPublisher.publishEvent(capture(published)) } returns Unit
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        payloadRenderer = payloadRenderer,
+                        messageDispatcher = messageDispatcher,
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                then("it is completed as FAILURE without renewing, rendering or sending") {
+                    verify(exactly = 1) {
+                        outboxRepository.completeClaim(
+                            eventId = rowEventId.toString(),
+                            attemptCount = 1,
+                            status = MessageStatus.FAILURE.name,
+                            now = DEFAULT_TEST_NOW,
+                        )
+                    }
+                    verify(exactly = 0) {
+                        outboxRepository.renewClaim(eventId = any(), attemptCount = any(), now = any())
+                    }
+                    verify(exactly = 0) { payloadRenderer.render(row = any()) }
+                    verify(exactly = 0) { messageDispatcher.dispatch(event = any()) }
+                    published.captured.shouldBeInstanceOf<MessagePublishFailedEvent>().eventId shouldBe rowEventId
+                }
+            }
+
             `when`("the row carries a malformed eventId") {
                 val row = createOutboxRow(eventId = "not-a-uuid")
                 val payloadRenderer = mockk<OutboxPayloadRenderer>()

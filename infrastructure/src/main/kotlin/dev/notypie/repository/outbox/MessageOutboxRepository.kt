@@ -111,6 +111,25 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("now") now: LocalDateTime,
     ): Int
 
+    // Gives up on a PENDING row past the give-up window without claiming it, so it is never sent.
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
+        SET status = 'FAILURE', updated_at = :now
+        WHERE event_id = :eventId
+          AND status = 'PENDING'
+          AND attempt_count = :attemptCount
+    """,
+        nativeQuery = true,
+    )
+    fun abandonPending(
+        @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
     @Modifying
     @Transactional
     @Query(

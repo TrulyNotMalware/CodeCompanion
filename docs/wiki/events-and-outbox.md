@@ -110,6 +110,9 @@ _type: architecture · updated: 2026-09-30_
   게시를 감수한 선택이다(아래 보장 절). 단 `send_count >= slack.app.outbox.polling.max-sends`(기본 10)이거나
   `created_at`이 `give-up-after-hours`(24)를 넘긴 행은 `FAILURE`로 포기한다 — 예전엔 reclaim이 `updated_at`을
   리셋해 poison 행이 300초마다 24시간(≈288회) 재발송됐다. 24시간 상한은 rate limit 행에도 걸리는 최종 정지선이다.
+  `PENDING`에도 걸린다: 스윕은 `give-up-after-hours`를 넘긴 오래된 `PENDING`을 claim하지 않고 `abandonPending`으로
+  바로 `FAILURE` 처리하며, 폴러·CDC가 그런 행을 claim해도 `dispatchClaimed`가 보내기 전에 `FAILURE`로 끝낸다(앱이
+  하루 넘게 멈췄다 재기동하면 지난 리마인더·아젠다가 뒤늦게 나가던 문제, review 14장 O8).
 - rate limit 유예는 `updated_at = now + 대기 - stuck 임계`로 쓴다. 스윕의 나이 조건이 그대로 `Retry-After`를
   기다리게 하는 셈이다. 대기 = `Retry-After`(없으면 60초) + 분산값(`eventId` 해시를 2분으로 나눈 나머지)이라,
   한꺼번에 429를 맞은 CVE 알림·standup 팬아웃이 같은 스윕에 몰려 다시 429를 맞지 않는다. 몇 시간짜리

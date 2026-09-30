@@ -139,6 +139,31 @@ class OutboxRelayRecoveryScenarioTest :
             }
         }
 
+        given("PENDING rows that outlived the give-up window while the whole app was down") {
+            jdbc.update("DELETE FROM outbox_message")
+            val clock = MutableClock()
+            val dispatcher = ScriptedMessageDispatcher(outcomes = emptyList(), fallback = delivered)
+            val lane = Lane(clock = clock, dispatcher = dispatcher)
+            val sweptId = repository.save(createOutboxMessage(createdAt = clock.now)).eventId
+            clock.advance(by = Duration.ofHours(25L))
+
+            `when`("the recovery sweep runs first, then a new row arrives and the poller runs") {
+                lane.sweeper.recoverOnce()
+                val sweptStatus = statusOf(eventId = sweptId)
+                val polledId = repository.save(createOutboxMessage(createdAt = clock.now)).eventId
+                clock.advance(by = Duration.ofHours(25L))
+                lane.poller.pollPending()
+
+                then("neither is sent: both end as FAILURE, the swept one without ever being claimed") {
+                    dispatcher.calls shouldBe 0
+                    sweptStatus shouldBe MessageStatus.FAILURE.name
+                    claimsOf(eventId = sweptId) shouldBe 0
+                    statusOf(eventId = polledId) shouldBe MessageStatus.FAILURE.name
+                    sendsOf(eventId = polledId) shouldBe 0
+                }
+            }
+        }
+
         given("a claim that waits in the relay queue past the stuck threshold") {
             jdbc.update("DELETE FROM outbox_message")
             val clock = MutableClock()

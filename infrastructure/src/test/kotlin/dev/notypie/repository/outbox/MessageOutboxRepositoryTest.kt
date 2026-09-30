@@ -303,6 +303,36 @@ class MessageOutboxRepositoryTest
                 }
             }
 
+            given("abandonPending") {
+                `when`("the sweep gives up on a PENDING row on the attempt count it read") {
+                    val row = repository.save(createOutboxMessage())
+                    val abandonedAt = LocalDateTime.of(2030, 6, 1, 12, 0, 0)
+
+                    val abandoned =
+                        repository.abandonPending(eventId = row.eventId, attemptCount = 0, now = abandonedAt)
+
+                    then("it becomes FAILURE without being claimed, stamped with the supplied time") {
+                        abandoned shouldBe 1
+                        statusOf(eventId = row.eventId) shouldBe MessageStatus.FAILURE.name
+                        attemptsOf(eventId = row.eventId) shouldBe 0
+                        updatedAtOf(eventId = row.eventId) shouldBe abandonedAt
+                    }
+                }
+
+                `when`("another reader claimed the row after the sweep read it") {
+                    val row = repository.save(createOutboxMessage())
+                    repository.claimPending(eventId = row.eventId, attemptCount = 0, now = LocalDateTime.now())
+
+                    val abandoned =
+                        repository.abandonPending(eventId = row.eventId, attemptCount = 0, now = LocalDateTime.now())
+
+                    then("the claim survives") {
+                        abandoned shouldBe 0
+                        statusOf(eventId = row.eventId) shouldBe MessageStatus.IN_PROGRESS.name
+                    }
+                }
+            }
+
             given("countInProgressWithSendsAtLeast") {
                 `when`("IN_PROGRESS rows sit on different send and attempt counts") {
                     val before = repository.countInProgressWithSendsAtLeast(sends = 3)

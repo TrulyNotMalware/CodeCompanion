@@ -84,6 +84,22 @@ class SlackMessageRelayServiceImpl(
                     writeTerminal(claim = claim, status = MessageStatus.FAILURE)
                     return
                 }
+        // Every reader funnels here, so the give-up window holds even for a CDC backlog replayed after a long outage.
+        if (row.createdAt < now().minus(giveUpAfter)) {
+            logger.error {
+                "Failing outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} unsent: created at " +
+                    "${row.createdAt}, past the ${giveUpAfter.toHours()} h give-up window"
+            }
+            complete(
+                claim = claim,
+                updateEvent =
+                    MessagePublishFailedEvent(
+                        eventId = eventId,
+                        reason = "expired: created ${row.createdAt}",
+                    ),
+            )
+            return
+        }
         if (!renew(claim = claim)) return
 
         val rendered =
