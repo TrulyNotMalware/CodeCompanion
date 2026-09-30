@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # db/migration
 
@@ -8,6 +8,9 @@ Ordered MariaDB patch scripts, one per schema change, in versioned `V<n>__*.sql`
 tool is a dependency of any module, so nothing runs these automatically: `local`/`dev`/`slack-live` shape tables from the JPA mappings via
 `ddl-auto: update`, and `prod` (`ddl-auto: none`) has each script applied by hand before the matching code
 rolls out. The folder is therefore the production schema runbook and the audit trail of every change.
+The number is the order a script was written in, and usually the order it is applied in, but not always: a data
+fix that must wait for the new code (V21) carries a lower number than a schema change that must precede it (V22).
+The headers, not the numbers, decide the apply order (see "Release checklist" below).
 
 ## Key Files
 | File | Description |
@@ -56,6 +59,22 @@ rolls out. The folder is therefore the production schema runbook and the audit t
 - **Ordering assumptions live in the headers.** `V1` expects an `outbox_message` with an `idempotency_key`
   PK; `V11` expects the outbox to be drained first; `V17` supersedes the status-only index from `V14` for
   the `/latest` query. Read the "Apply … BEFORE rolling out" line before sequencing a deploy.
+- **Number ≠ apply order: the V18–V22 release checklist.** `main` stopped at `V17`, and the release after it
+  ships `V18`–`V22` together. Apply them in this order, which is also in `../../k8s/README.md` ("One-time")
+  and `docs/wiki/dev-environment.md`:
+  1. `V18`, after its header's duplicate check on `meeting_participants (meeting_id, user_id)` (delete the extra
+     rows, keep the lowest `id`), or the unique key fails;
+  2. `V19`;
+  3. `V20`, then `V22`. Steps 1–3 only add defaulted columns and indexes that the pre-V20 binary never reads,
+     so they go in while the old release still serves;
+  4. stop the old Pods, then deploy — the `Recreate` strategy in `k8s/deployment.yaml` does both in one
+     rollout. This is how the "stop every old pod … then start the new release" constraint in the `V20`
+     header is met; applying `V20`/`V22` before the old Pods stop does not break it;
+  5. `V21`, only once every Pod runs the new release (an older binary's reschedule moves `start_at` alone and
+     skips the `version` check).
+  Readiness does not check the schema, so a skipped `V18` (every `meetings` query fails) or `V20`/`V22` (every
+  outbox claim fails) passes the deploy gate. A future release that again needs a script *after* the rollout
+  gets the next free number like any other and says so in its header; never renumber to make the order match.
 - Keep the header block (Rationale / Behaviour / Apply-before-rollout) — it is the only place the reason
   for a change is recorded, since prod applies these outside any migration tool.
 - The profile YAML carries no `spring.flyway.*` keys (the inert `enabled: false` leftovers were removed

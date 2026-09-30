@@ -130,9 +130,36 @@ included — is an outage from the moment the old Pods stop until a new Pod is R
 3 minutes). The rollout (up to 45s of shutdown, 3 minutes of startup, then readiness) still fits the workflow's
 300s rollout timeout.
 
-1. Apply the migrations that release needs, as their headers say (V20 and V22 must be in place before the new
-   code runs).
-2. Merge and watch the workflow. Its rollout, and a rollback it performs, stop the old Pods first.
+That release ships V18 through V22 at once (`main` was at V17), and the script numbers are not the apply order:
+V21 goes last. Production runs `ddl-auto: none` and nothing applies the scripts automatically, so work through
+this list by hand:
+
+1. **V18** — first run the duplicate check in its header and delete the extra `meeting_participants` rows (keep
+   the lowest `id`); the new unique key fails otherwise:
+   ```sql
+   SELECT meeting_id, user_id, COUNT(*) FROM meeting_participants
+   GROUP BY meeting_id, user_id HAVING COUNT(*) > 1;
+   ```
+   Then apply V18.
+2. **V19** (outbox status indexes).
+3. **V20**, then **V22** (the claim token and the send budget).
+
+   Steps 1–3 only add columns with defaults and indexes, which the running pre-V20 Pods never read, so apply them
+   while the previous release still serves. The new release needs all of them, and readiness does not check the
+   schema: without V18 every `meetings` query fails on the unknown `version` column, and without V20/V22 every
+   outbox claim fails and no Slack message goes out, while the Pods stay Ready and the workflow reports success.
+   Confirm before merging:
+   ```sql
+   SHOW COLUMNS FROM meetings LIKE 'version';
+   SHOW COLUMNS FROM outbox_message WHERE Field IN ('attempt_count', 'send_count');
+   ```
+4. **Stop the old Pods, then deploy** — merge and watch the workflow. Its `Recreate` rollout does both, in that
+   order, and a rollback it performs stops the new Pods first the same way.
+5. **V21** — only once every Pod runs the new release: the workflow finished and `kubectl get pods -n api-service
+   -l app=code-companion-deploy` lists only Pods of the new ReplicaSet. An older binary's reschedule moves only
+   `start_at` without checking `version`, so it can leave new inverted rows behind the script. If the workflow
+   rolled back, V21 waits for the next successful deploy; the previous release runs on the V18–V22 schema
+   unchanged.
 
 **Afterwards:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision is no longer wanted, delete
 the `strategy` block from `deployment.yaml` in a follow-up PR. `kubectl apply` removes the field, because it is in
@@ -143,8 +170,8 @@ revision under the rolling update.
 
 If you would rather stop the old Pods before touching the schema, run `kubectl scale deployment
 code-companion-deploy -n api-service --replicas=0`, wait for the Pods to disappear (`kubectl get pods -n
-api-service -l app=code-companion-deploy`), apply the scripts, then merge. The workflow's apply sets
-`replicas: 2` again. The outage then lasts until the build finishes and a new Pod is Ready.
+api-service -l app=code-companion-deploy`), apply V18–V22 as above, then merge; V21 still waits for step 5. The
+workflow's apply sets `replicas: 2` again. The outage then lasts until the build finishes and a new Pod is Ready.
 
 ## Prerequisites
 
@@ -338,8 +365,33 @@ undo는 파드 템플릿만 되돌리고 전략은 템플릿에 속하지 않기
 멈춘 순간부터 새 파드가 Ready가 될 때까지(startup 프로브 최대 3분) 서비스 중단입니다. 롤아웃(종료 최대 45초 + 기동 최대
 3분 + readiness)은 워크플로의 롤아웃 타임아웃 300초 안에 들어갑니다.
 
-1. 그 릴리스에 필요한 마이그레이션을 각 헤더의 안내대로 적용합니다(V20·V22는 새 코드가 뜨기 전에 있어야 함).
-2. 머지하고 워크플로를 지켜봅니다. 롤아웃과 워크플로가 수행하는 롤백 모두 이전 파드를 먼저 멈춥니다.
+그 릴리스는 V18부터 V22까지를 한꺼번에 싣고(`main`은 V17까지), 스크립트 번호는 적용 순서가 아닙니다. V21이 마지막입니다.
+운영은 `ddl-auto: none`이고 스크립트를 자동으로 적용하는 도구가 없으므로 아래 순서대로 직접 진행합니다:
+
+1. **V18** — 먼저 헤더의 중복 점검 쿼리를 실행하고, 중복된 `meeting_participants` 행을 지웁니다(가장 작은 `id`만 남김).
+   그러지 않으면 새 유니크 키 생성이 실패합니다:
+   ```sql
+   SELECT meeting_id, user_id, COUNT(*) FROM meeting_participants
+   GROUP BY meeting_id, user_id HAVING COUNT(*) > 1;
+   ```
+   그다음 V18을 적용합니다.
+2. **V19** (아웃박스 status 인덱스).
+3. **V20**, 이어서 **V22** (claim 토큰과 발송 예산).
+
+   1~3단계는 기본값 있는 컬럼과 인덱스만 추가하고 실행 중인 pre-V20 파드는 그 컬럼을 읽지 않으므로, 이전 릴리스가 서비스하는
+   동안 적용합니다. 새 릴리스에는 모두 필요한데 readiness는 스키마를 검사하지 않습니다. V18이 없으면 모든 `meetings` 조회가
+   알 수 없는 `version` 컬럼으로 실패하고, V20·V22가 없으면 아웃박스 claim이 전부 실패해 Slack 메시지가 하나도 나가지 않는데,
+   파드는 Ready이고 워크플로는 성공으로 끝납니다. 머지 전에 확인하세요:
+   ```sql
+   SHOW COLUMNS FROM meetings LIKE 'version';
+   SHOW COLUMNS FROM outbox_message WHERE Field IN ('attempt_count', 'send_count');
+   ```
+4. **이전 파드 종료 후 배포** — 머지하고 워크플로를 지켜봅니다. `Recreate` 롤아웃이 이 순서로 둘 다 수행하고, 워크플로가
+   롤백하면 같은 방식으로 새 파드를 먼저 멈춥니다.
+5. **V21** — 모든 파드가 새 릴리스로 돈 뒤에만 적용합니다. 워크플로가 끝났고 `kubectl get pods -n api-service -l
+   app=code-companion-deploy`에 새 ReplicaSet의 파드만 보여야 합니다. 이전 바이너리의 일정 변경은 `version` 검사 없이
+   `start_at`만 옮기므로 스크립트 뒤에 뒤집힌 행을 새로 남길 수 있습니다. 워크플로가 롤백했다면 V21은 다음 배포가 성공할 때까지 기다립니다. 이전 릴리스는
+   V18~V22 스키마에서 그대로 돕니다.
 
 **그 뒤:** 모든 파드가 V20 이상 바이너리로 돌고 pre-V20 리비전으로 롤백할 일이 없어지면, 후속 PR에서 `deployment.yaml`의
 `strategy` 블록을 지웁니다. 그 필드는 last-applied 설정에 있으므로 `kubectl apply`가 지우고, API 서버가 기본값
@@ -349,7 +401,7 @@ undo는 파드 템플릿만 되돌리고 전략은 템플릿에 속하지 않기
 
 스키마를 건드리기 전에 이전 파드를 먼저 멈추고 싶다면 `kubectl scale deployment code-companion-deploy -n api-service
 --replicas=0`으로 내리고 파드가 사라진 것을 확인한 뒤(`kubectl get pods -n api-service -l app=code-companion-deploy`)
-스크립트를 적용하고 머지합니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
+위 순서대로 V18~V22를 적용하고 머지합니다. V21은 여전히 5단계를 기다립니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
 Ready가 될 때까지 이어집니다.
 
 ## 사전 요구사항
