@@ -1,8 +1,12 @@
 package dev.notypie.application.security
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -12,6 +16,7 @@ import jakarta.servlet.ServletRequest
 import jakarta.servlet.ServletResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
 import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockHttpServletRequest
@@ -173,6 +178,37 @@ class SlackRequestVerificationFilterTest :
                         chain.invocationCount shouldBe 0
                         request.bodyRead shouldBe false
                     }
+                }
+            }
+        }
+
+        given("a rejected request is logged") {
+            val headerRejection = BodyReadTrackingRequest()
+            headerRejection.method = "POST"
+            headerRejection.requestURI = EVENTS_PATH
+            headerRejection.addHeader(SlackHeaders.REQUEST_TIMESTAMP, (TIMESTAMP.toLong() - 301L).toString())
+            headerRejection.addHeader(SlackHeaders.SIGNATURE, WELL_FORMED_SIGNATURE)
+            val badSignature =
+                slackRequest(
+                    rawBody = EVENT_BODY,
+                    path = EVENTS_PATH,
+                    timestamp = TIMESTAMP,
+                    signature = WELL_FORMED_SIGNATURE,
+                )
+
+            `when`("the header check and the signature check reject a request each") {
+                val messages =
+                    capturedFilterLogs {
+                        filter().doFilter(headerRejection, MockHttpServletResponse(), CountingFilterChain())
+                        filter().doFilter(badSignature, MockHttpServletResponse(), CountingFilterChain())
+                    }
+
+                then("each WARN line carries the reason and path, not a lambda's toString()") {
+                    messages shouldContainExactly
+                        listOf(
+                            "Rejected Slack request headers: reason=EXPIRED_TIMESTAMP path=$EVENTS_PATH",
+                            "Rejected Slack request: reason=INVALID_SIGNATURE path=$EVENTS_PATH",
+                        )
                 }
             }
         }
@@ -424,6 +460,20 @@ class SlackRequestVerificationFilterTest :
             }
         }
     })
+
+// Both the file's kotlin-logging logger and GenericFilterBean's inherited commons-logging `logger` log under
+// this class name, so the capture sees whichever one the filter's calls resolve to.
+private fun capturedFilterLogs(block: () -> Unit): List<String> {
+    val filterLogger = LoggerFactory.getLogger(SlackRequestVerificationFilter::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    filterLogger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        filterLogger.detachAppender(appender)
+    }
+    return appender.list.map { it.formattedMessage }
+}
 
 private fun slackRequest(
     rawBody: String,

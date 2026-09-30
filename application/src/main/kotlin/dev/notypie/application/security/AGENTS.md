@@ -114,6 +114,11 @@ End-to-end MCP auth can be probed against a running app with `./scripts/mcp-smok
 - Interface + in-memory implementation (`SlackRetryDeduplicator` / `InMemorySlackRetryDeduplicator`)
   so a distributed implementation can be swapped in without touching the filter.
 - Fail closed and log the reason; never leak the expected signature or token into a response.
+- In a `OncePerRequestFilter` (any `GenericFilterBean`) name the file-level kotlin-logging logger `log`, never
+  `logger`: inside the class `logger` resolves to the inherited commons-logging `Log`, whose `warn(Object)`
+  prints the message lambda's `toString()`. Until 2026-09-30 every rejection line of
+  `SlackRequestVerificationFilter` read `SlackRequestVerificationFilter$$Lambda/0x…`; its spec now captures the
+  log lines (Logback `ListAppender`) and asserts the reason text.
 
 ## Dependencies
 
