@@ -25,7 +25,12 @@ class NvdCveSourceAdapter(
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     private val clock: Clock = Clock.systemUTC(),
+    private val sleeper: (Duration) -> Unit = { Thread.sleep(it.toMillis()) },
 ) : SourceAdapter {
+    // NVD allows 5 requests per rolling 30 s without a key and 50 with one, and asks clients to pace
+    // accordingly; the pause runs between the pages of one fetch.
+    private val pagePause: Duration = if (apiKey.isBlank()) ANONYMOUS_PAGE_PAUSE else KEYED_PAGE_PAUSE
+
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
@@ -46,6 +51,38 @@ class NvdCveSourceAdapter(
                 "lastModEndDate=${encode(value = now.format(NVD_DATE_FORMAT))}",
             ).joinToString(separator = "&")
 
+        // A window can exceed one page (2,000 results) during an NVD bulk re-analysis; follow startIndex up to
+        // totalResults. A failed or interrupted later page keeps the earlier pages — the next window's lookback
+        // re-covers the rest — and fetch still never throws.
+        val events = mutableListOf<RawSourceEvent>()
+        var startIndex = 0
+        repeat(MAX_PAGES) { page ->
+            if (page > 0 && !pause(topic = topic)) return events
+            val root = fetchPage(query = "$query&startIndex=$startIndex", topic = topic) ?: return events
+            val vulnerabilities = root["vulnerabilities"]
+            vulnerabilities?.mapNotNullTo(events) { toRawEvent(node = it) }
+            val pageSize = vulnerabilities?.size() ?: 0
+            startIndex += pageSize
+            val totalResults = root["totalResults"]?.stringOrNull()?.toIntOrNull()
+            if (pageSize == 0 || totalResults == null || startIndex >= totalResults) return events
+        }
+        log.warn {
+            "NVD results for topic=${topic.topicKey} exceed $MAX_PAGES pages; stopped at startIndex=$startIndex"
+        }
+        return events
+    }
+
+    private fun pause(topic: CveTopic): Boolean =
+        try {
+            sleeper(pagePause)
+            true
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            log.warn { "NVD paging interrupted for topic=${topic.topicKey}; keeping the pages read so far" }
+            false
+        }
+
+    private fun fetchPage(query: String, topic: CveTopic): JsonNode? {
         val request =
             HttpRequest
                 .newBuilder(URI.create("$apiBaseUrl?$query"))
@@ -59,13 +96,17 @@ class NvdCveSourceAdapter(
             runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
                 .getOrElse { ex ->
                     log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
-                    return emptyList()
+                    return null
                 }
         if (response.statusCode() !in 200..299) {
             log.warn { "NVD returned ${response.statusCode()} for topic=${topic.topicKey}" }
-            return emptyList()
+            return null
         }
-        return parseVulnerabilities(body = response.body(), topic = topic)
+        return runCatching { jsonMapper.readTree(response.body()) }
+            .getOrElse { ex ->
+                log.warn(ex) { "NVD response was not valid JSON for topic=${topic.topicKey}" }
+                null
+            }
     }
 
     private fun parseMatchParam(topic: CveTopic): String? {
@@ -86,17 +127,6 @@ class NvdCveSourceAdapter(
         if (!keyword.isNullOrBlank()) return "keywordSearch=${encode(value = keyword)}"
         log.error { "NVD topic=${topic.topicKey} source_config needs 'cpe' or 'keyword'" }
         return null
-    }
-
-    private fun parseVulnerabilities(body: String, topic: CveTopic): List<RawSourceEvent> {
-        val root =
-            runCatching { jsonMapper.readTree(body) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "NVD response was not valid JSON for topic=${topic.topicKey}" }
-                    return emptyList()
-                }
-        val vulnerabilities = root["vulnerabilities"] ?: return emptyList()
-        return vulnerabilities.mapNotNull { toRawEvent(node = it) }
     }
 
     private fun toRawEvent(node: JsonNode): RawSourceEvent? {
@@ -149,6 +179,11 @@ class NvdCveSourceAdapter(
 
     companion object {
         const val DEFAULT_API_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+        // 5 pages of 2,000 bound one fetch; at the anonymous pace that is at most 24 s of pauses.
+        const val MAX_PAGES = 5
+        private val ANONYMOUS_PAGE_PAUSE: Duration = Duration.ofSeconds(6)
+        private val KEYED_PAGE_PAUSE: Duration = Duration.ofMillis(600)
 
         // NVD expects ISO-8601 extended with milliseconds; a bare seconds form is rejected.
         private val NVD_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # infrastructure/impl/cve
 
@@ -13,7 +13,7 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 |------|-------------|
 | `SourceAdapter.kt` | `data class RawSourceEvent(externalId, title, rawContent, publishedAt: LocalDateTime?)`; `interface SourceAdapter { supports(CveSourceType): Boolean; fetch(CveTopic): List<RawSourceEvent> }`; `internal fun JsonNode.stringOrNull()` (blank folds to null); `internal fun parseSourceTimestamp(String?)` (offset or offset-free ISO, null on failure) |
 | `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com")`. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` |
-| `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC)`. `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
+| `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC, sleeper = Thread.sleep)`. Pages with `startIndex` until `totalResults` (or an empty page), at most `MAX_PAGES` (5) requests, pausing 6 s between pages without a key and 0.6 s with one; `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
 
 ## For AI Agents
 
@@ -21,6 +21,11 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 - **`fetch` must never throw.** Missing/invalid `source_config`, a non-2xx status (rate limits included),
   invalid JSON, or a transport failure logs and returns `emptyList()`. `URI.create` on an unvalidated repo
   string would break that contract — that is why `REPO_PATTERN` exists.
+- **NVD paging respects the NVD rate limit** (5 requests / 30 s anonymous, 50 with a key): the adapter
+  sleeps `sleeper(pagePause)` before every page after the first and caps a fetch at `MAX_PAGES`. A failed
+  later page (transport, non-2xx, bad JSON) or an interrupted pause keeps the events already read — the
+  next window's 120-minute lookback re-covers the rest — and an interrupt restores the thread's flag
+  rather than throwing. Pacing *between topics* is still the collector's open item (review M23).
 - **Never log credentials.** Log lines carry only `topic.topicKey`, the status code, and the exception.
 - **The NVD window is derived in UTC from `clock.instant()`.** NVD reads offset-free timestamps as UTC; a
   zoned wall clock would shift the window and silently empty every response. Inject a fixed `Clock` in
