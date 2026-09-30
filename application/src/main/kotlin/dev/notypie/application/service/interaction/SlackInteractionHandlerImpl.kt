@@ -6,6 +6,7 @@ import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.meeting.MeetingWriteDeferral
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.common.jsonMapper
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
@@ -22,7 +23,7 @@ import dev.notypie.templates.DeclineReasonModalIds
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.interceptor.DefaultTransactionAttribute
+import org.springframework.transaction.support.DefaultTransactionDefinition
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.MultiValueMap
 import java.util.UUID
@@ -45,17 +46,29 @@ class SlackInteractionHandlerImpl(
             )
 
         private val INTERACTION_TRANSACTION =
-            DefaultTransactionAttribute().apply { setName("SlackInteractionHandlerImpl.handleInteraction") }
+            DefaultTransactionDefinition().apply { setName("SlackInteractionHandlerImpl.handleInteraction") }
     }
 
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String): String? {
-        if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            return inInteractionTransaction { handle(payload = payload) }
+        val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
+
+        // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
+        declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
+
+        val commandData = interactionPayload.toInboundCommand()
+        // Resolved before the interaction transaction opens: a failed role query inside it marks the transaction
+        // rollback-only, so the resolver's USER fallback would still end in UnexpectedRollbackException (500).
+        val actorRole = commandRoleResolver.resolve(userId = commandData.actorId)
+        val handling = {
+            handle(interactionPayload = interactionPayload, commandData = commandData, actorRole = actorRole)
         }
-        val (ack, meetingWrites) =
-            MeetingWriteDeferral.collecting { inInteractionTransaction { handle(payload = payload) } }
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            inInteractionTransaction(block = handling)
+            return null
+        }
+        val (_, meetingWrites) = MeetingWriteDeferral.collecting { inInteractionTransaction(block = handling) }
         meetingWrites.forEach { it() }
-        return ack
+        return null
     }
 
     private fun <T> inInteractionTransaction(block: () -> T): T {
@@ -64,10 +77,13 @@ class SlackInteractionHandlerImpl(
             try {
                 block()
             } catch (failure: Throwable) {
-                if (INTERACTION_TRANSACTION.rollbackOn(failure)) {
+                // Any failure rolls back, checked exceptions included: committing on one kept the interaction's
+                // rows while MeetingWriteDeferral.collecting dropped the meeting writes queued behind them. A
+                // rollback that fails as well is attached to the original instead of replacing it.
+                try {
                     transactionManager.rollback(status)
-                } else {
-                    transactionManager.commit(status)
+                } catch (rollbackFailure: Throwable) {
+                    failure.addSuppressed(rollbackFailure)
                 }
                 throw failure
             }
@@ -75,13 +91,7 @@ class SlackInteractionHandlerImpl(
         return result
     }
 
-    private fun handle(payload: String): String? {
-        val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
-
-        // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
-        declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
-
-        val commandData = interactionPayload.toInboundCommand()
+    private fun handle(interactionPayload: InteractionPayload, commandData: InboundCommand, actorRole: UserRole) {
         val idempotencyKey = IdempotencyCreator.create(data = commandData)
 
         if (shouldUseLegacyReject(payload = interactionPayload)) {
@@ -94,12 +104,12 @@ class SlackInteractionHandlerImpl(
                     ),
             )
         } else if (interactionPayload.isPrimary() || interactionPayload.isCanceled()) {
-            val command = buildCommand(idempotencyKey = idempotencyKey, commandData = commandData)
+            val command =
+                buildCommand(idempotencyKey = idempotencyKey, commandData = commandData, actorRole = actorRole)
             val result = commandExecutor.execute(command = command)
             // FIXME Event publisher
             result.takeIf { it.ok }?.let { applicationEventPublisher.publishEvent(it) }
         }
-        return null
     }
 
     private fun declineDetailErrorOrNull(payload: InteractionPayload): String? {
@@ -133,12 +143,16 @@ class SlackInteractionHandlerImpl(
     private fun shouldUseLegacyReject(payload: InteractionPayload): Boolean =
         payload.isCanceled() && payload.type in LEGACY_AUTO_REJECT_TYPES
 
-    private fun buildCommand(idempotencyKey: UUID, commandData: InboundCommand): InteractionCommand =
+    private fun buildCommand(
+        idempotencyKey: UUID,
+        commandData: InboundCommand,
+        actorRole: UserRole,
+    ): InteractionCommand =
         InteractionCommand(
             appName = SLACK_APP_NAME,
             idempotencyKey = idempotencyKey,
             commandData = commandData,
-            actorRole = commandRoleResolver.resolve(userId = commandData.actorId),
+            actorRole = actorRole,
             parseObserver = submissionParseObserver,
         )
 

@@ -5,8 +5,9 @@
 
 ## Purpose
 Spec for `SlackMentionEventHandlerImpl.parseAppMentionEvent`, the step that turns a raw `app_mention`
-event map into an `InboundCommand`. Only parsing is covered; the dispatch path through `CommandExecutor`
-is not exercised here.
+event map into an `InboundCommand`. Only parsing is covered here; the dispatch path (role resolved before the
+mention transaction, then `CommandExecutor` inside it) is exercised on a real `JpaTransactionManager` by
+`service/command/RoleLookupJpaTransactionTest`.
 
 ## Key Files
 | File | Description |
@@ -22,7 +23,7 @@ is not exercised here.
 - `event.ts` is a string and `event_ts` a double in the fixture, mirroring the wire shape; a parser change
   that types either differently will surface here first.
 - `commandExecutor` is `relaxed` and `commandRoleResolver` strict, but neither is called by
-  `parseAppMentionEvent`; they exist only to construct the handler.
+  `parseAppMentionEvent`; they and `createH2TransactionManager()` exist only to construct the handler.
 - Headers are a `LinkedMultiValueMap` with `Content-Type: application/json`; nothing asserts on them.
 
 ### Testing Requirements

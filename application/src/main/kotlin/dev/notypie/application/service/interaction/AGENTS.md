@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # application/service/interaction
 
@@ -14,7 +14,7 @@ persisting anything.
 | File | Description |
 |------|-------------|
 | `InteractionHandler.kt` | Interface `handleInteraction(headers, payload: String): String?` — `null` is the normal empty ack; a non-null string is the `response_action` JSON the caller must relay to Slack (HTTP 200 body in `SlackEventController`, ack body in `SocketModeReceiver.handleInteractive`) |
-| `SlackInteractionHandlerImpl.kt` | `@Service` taking the `PlatformTransactionManager`. `handleInteraction` opens the interaction transaction programmatically (`DefaultTransactionAttribute`, REQUIRED, rolls back on `RuntimeException` / `Error` and commits on a checked exception — the same rules `@Transactional` applied) inside `MeetingWriteDeferral.collecting { }`, and after that transaction has committed and released its connection runs the meeting writes the command queued (cancel, reschedule, add-participant); if the transaction fails they are dropped. Called inside an already active transaction it joins it and nothing is deferred. The body: `InteractionPayloadParser.parseStringPayload` → `declineDetailErrorOrNull` (early return with the errors body) → `toInboundCommand()` → `IdempotencyCreator.create`. `LEGACY_AUTO_REJECT_TYPES = {APPLY_REQUEST, APPROVAL_REQUEST}` + `isCanceled()` → `ReplaceTextResponseCommand("Canceled.", replyHandle = responseUrl)`; otherwise `isPrimary() || isCanceled()` → `InteractionCommand(actorRole = commandRoleResolver.resolve(actorId), parseObserver = MeteredSubmissionParseObserver)` → `commandExecutor.execute`, and `applicationEventPublisher.publishEvent(result)` when `result.ok` |
+| `SlackInteractionHandlerImpl.kt` | `@Service` taking the `PlatformTransactionManager`. `handleInteraction`, outside any transaction: `InteractionPayloadParser.parseStringPayload` → `declineDetailErrorOrNull` (early return with the errors body, no transaction at all) → `toInboundCommand()` → `actorRole = commandRoleResolver.resolve(actorId)`. Then it opens the interaction transaction programmatically (`DefaultTransactionDefinition`, REQUIRED; **every** `Throwable` rolls back, and a rollback that throws too is attached to the original via `addSuppressed`) inside `MeetingWriteDeferral.collecting { }`, and after that transaction has committed and released its connection runs the meeting writes the command queued (cancel, reschedule, add-participant); if the transaction fails they are dropped. Called inside an already active transaction it joins it and nothing is deferred. In the transaction: `IdempotencyCreator.create`; `LEGACY_AUTO_REJECT_TYPES = {APPLY_REQUEST, APPROVAL_REQUEST}` + `isCanceled()` → `ReplaceTextResponseCommand("Canceled.", replyHandle = responseUrl)`; otherwise `isPrimary() || isCanceled()` → `InteractionCommand(actorRole, parseObserver = MeteredSubmissionParseObserver)` → `commandExecutor.execute`, and `applicationEventPublisher.publishEvent(result)` when `result.ok` |
 | `MeteredSubmissionParseObserver.kt` | `@Component` binding the domain `SubmissionParseObserver` port to Micrometer: `codecompanion.submission.ignored` counter tagged `detail_type` × `reason` plus a debug log; raw form values never reach a tag or log line |
 
 ## For AI Agents
@@ -23,8 +23,15 @@ persisting anything.
 - **Do not extend `LEGACY_AUTO_REJECT_TYPES`.** Those two types get a handler-level "Canceled." replace
   that bypasses context routing. Every newer context handles its own REJECT button inside its
   `ReactionContext` (`domain/command/entity/context/`).
-- **The actor's role is resolved per interaction** through `CommandRoleResolver` (a DB read, which is also
-  when the interaction transaction takes its pooled connection).
+- **The actor's role is resolved per interaction, before the interaction transaction opens.** A failed JPA
+  query inside a transaction marks it rollback-only, so while the lookup ran inside it (until 2026-09-30) the
+  resolver's `USER` fallback still ended in `UnexpectedRollbackException` → 500. It is resolved for every
+  payload past the inline-error gate, including the legacy reject and dropped payloads; a cached `USER` costs
+  no query. `service/command/RoleLookupJpaTransactionTest` pins this on real Hibernate + `JpaTransactionManager`.
+- **Any exception rolls the interaction back.** Until 2026-09-30 a checked exception committed (the
+  `@Transactional` rule), which kept the interaction's rows while `MeetingWriteDeferral.collecting` discarded the
+  meeting writes queued behind them; and a rollback/commit failure in the catch replaced the original
+  exception. Keep the rollback-on-`Throwable` + `addSuppressed` shape.
 - **The inline-error branch returns before idempotency and before any command.** A
   `MEETING_DECLINE_REASON` submission with `RejectReason.OTHER` and a blank `PLAIN_TEXT_INPUT` must not
   create a command or an outbox row; Slack keeps the modal open with the error on
@@ -59,7 +66,11 @@ Spec under `application/src/test/kotlin/dev/notypie/application/service/interact
 (`ReplaceTextResponseCommand` for legacy reject vs `InteractionCommand`), that nothing is executed for a
 non-primary payload, and the exact `response_action` JSON for the blank-Other decline case. The handler takes a
 real `createH2TransactionManager()`; the deferral and pool cases use `createBoundedH2DataSource`,
-`CommitRecordingEventPublisher` and a real `MeetingServiceImpl` from `service/meeting` fixtures.
+`CommitRecordingEventPublisher` and a real `MeetingServiceImpl` from `service/meeting` fixtures (the pool case
+parks the threads on a `CyclicBarrier` inside `execute`, i.e. while each holds its interaction connection). A
+checked `IOException` must end `STATUS_ROLLED_BACK` without running the queued write, and a MockK
+`PlatformTransactionManager` whose `rollback` throws must leave the original exception on top with the rollback
+failure in `suppressed`.
 
 ### Common Patterns
 - Interface + `Impl` pair; the controller and socket receiver depend on the interface.
@@ -81,7 +92,7 @@ real `createH2TransactionManager()`; the deferral and pool cases use `createBoun
   `authorization/UserRole`; `domain/command/inbound/InboundCommand`; `domain/meet/entity/RejectReason`
 
 ### External
-Spring `@Service`, `PlatformTransactionManager` / `DefaultTransactionAttribute` /
+Spring `@Service`, `PlatformTransactionManager` / `DefaultTransactionDefinition` /
 `TransactionSynchronizationManager`, `ApplicationEventPublisher`, `MultiValueMap`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

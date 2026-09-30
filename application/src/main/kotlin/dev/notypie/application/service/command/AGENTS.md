@@ -45,9 +45,12 @@ single source of truth for a user's `UserRole`, and `RoleManagementService` appl
   `CommandRoleResolver.evict` after its commit the same way. Do not evict from an event listener: with
   `fallbackExecution` it ran before the write when no transaction was active.
 - Failure degrades to `USER` (least privilege), so a DB hiccup denies elevated actions instead of turning
-  every button into a 500. Inside a caller's `@Transactional` (the interaction and mention handlers), a
-  failed JPA query may already have marked that transaction rollback-only, so the request can still fail
-  at commit; the fallback protects non-transactional callers and cache hits never touch the DB.
+  every button into a 500. That only works outside a transaction: a failed JPA query inside one marks it
+  rollback-only and the caller's commit then throws `UnexpectedRollbackException`. The interaction and
+  mention handlers therefore call `resolve` **before** opening their transaction (since 2026-09-30);
+  `McpToolGate` has none. A new caller must do the same — never resolve inside a transaction that should
+  survive a failed lookup. `RoleLookupJpaTransactionTest` shows both sides on real Hibernate +
+  `JpaTransactionManager` (H2 with the `user_command_role` table missing).
 - `handleRoleManage` is `@Transactional` because the staged reply is only persisted by the
   `BEFORE_COMMIT` listener in `service/relay`; the role write and the confirmation must share one
   transaction even though the event arrives via `EventPublisher` from `CommandExecutor`.
@@ -59,9 +62,12 @@ single source of truth for a user's `UserRole`, and `RoleManagementService` appl
 
 ### Testing Requirements
 ```bash
-./gradlew :application:test --tests '*CommandExecutorTest*' --tests '*CommandRoleResolverTest*' --tests '*RoleManagementServiceTest*'
+./gradlew :application:test --tests '*CommandExecutorTest*' --tests '*CommandRoleResolverTest*' --tests '*RoleManagementServiceTest*' --tests '*RoleLookupJpaTransactionTest*'
 ```
-All three are Kotest `BehaviorSpec` + MockK. `CommandExecutorTest` uses a MockK `Command` whose
+The first three are Kotest `BehaviorSpec` + MockK; `RoleLookupJpaTransactionTest` builds a Hibernate
+`EntityManagerFactory` on H2 for `repository/authorization/schema` (once without DDL so every role query
+fails) and drives both inbound handlers through a real `JpaTransactionManager`, spying on the real resolver to
+record the roles it answered. `CommandExecutorTest` uses a MockK `Command` whose
 `drainIntents()` returns mixed `CommandIntent` / `OutboundMessage` lists and asserts the resolver and
 stager calls, the published queue size, and that a resolver / publisher exception propagates.
 `RoleManagementServiceTest` asserts the repository call per action, the bootstrap-immutable branch, and

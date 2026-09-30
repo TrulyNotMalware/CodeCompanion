@@ -38,10 +38,12 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.LinkedMultiValueMap
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CyclicBarrier
@@ -153,6 +155,71 @@ class SlackInteractionHandlerImplTest :
             }
         }
 
+        given("a command that fails with a checked exception after queueing a meeting write") {
+            val completions = CopyOnWriteArrayList<Int>()
+            val meetingWrites = CopyOnWriteArrayList<String>()
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } answers {
+                TransactionSynchronizationManager.registerSynchronization(
+                    object : TransactionSynchronization {
+                        override fun afterCompletion(status: Int) {
+                            completions.add(status)
+                        }
+                    },
+                )
+                MeetingWriteDeferral.runOrDefer { meetingWrites.add("meeting write") }
+                throw IOException("checked failure")
+            }
+            val checkedHandler =
+                isolatedHandler(
+                    transactionManager = createH2TransactionManager(),
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the interaction is handled") {
+                val escaped =
+                    runCatching {
+                        checkedHandler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+                    }.exceptionOrNull()
+
+                then("the interaction rolls back instead of committing without its queued meeting write") {
+                    (escaped is IOException) shouldBe true
+                    completions shouldBe listOf(TransactionSynchronization.STATUS_ROLLED_BACK)
+                    meetingWrites shouldBe emptyList()
+                }
+            }
+        }
+
+        given("an interaction whose rollback fails too") {
+            val failingTransactionManager = mockk<PlatformTransactionManager>()
+            every { failingTransactionManager.getTransaction(any()) } returns mockk<TransactionStatus>()
+            every { failingTransactionManager.rollback(any()) } throws IllegalStateException("rollback failed")
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } throws IllegalArgumentException("original failure")
+            val rollbackFailingHandler =
+                isolatedHandler(
+                    transactionManager = failingTransactionManager,
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the command throws") {
+                val escaped =
+                    runCatching {
+                        rollbackFailingHandler.handleInteraction(
+                            headers = LinkedMultiValueMap(),
+                            payload = "dummy-payload",
+                        )
+                    }.exceptionOrNull()
+
+                then("the original exception escapes with the rollback failure attached as suppressed") {
+                    escaped?.message shouldBe "original failure"
+                    escaped?.suppressed?.map { it.message } shouldBe listOf("rollback failed")
+                }
+            }
+        }
+
         given("as many concurrent meeting interactions as the pool has connections") {
             val transactionManager = createH2TransactionManager(dataSource = pool)
             val publisher = CommitRecordingEventPublisher()
@@ -205,21 +272,19 @@ class SlackInteractionHandlerImplTest :
 
             `when`("the interactions go through handleInteraction") {
                 val executor = mockk<CommandExecutor>()
+                val allHoldAConnection = CyclicBarrier(poolSize)
+                // The barrier sits inside the interaction transaction (the role is resolved before it opens), so
+                // every thread holds its interaction connection when the meeting writes are queued.
                 every { executor.execute(command = any<Command<*>>()) } answers {
+                    allHoldAConnection.await(5L, TimeUnit.SECONDS)
                     meetingService.addParticipants(event = event)
                     CommandOutput.empty()
-                }
-                val roleResolver = mockk<CommandRoleResolver>()
-                val allHoldAConnection = CyclicBarrier(poolSize)
-                every { roleResolver.resolve(userId = any()) } answers {
-                    allHoldAConnection.await(5L, TimeUnit.SECONDS)
-                    UserRole.USER
                 }
                 val poolHandler =
                     isolatedHandler(
                         transactionManager = transactionManager,
                         executor = executor,
-                        roleResolver = roleResolver,
+                        roleResolver = commandRoleResolver,
                     )
 
                 runConcurrently {
