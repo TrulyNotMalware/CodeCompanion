@@ -89,11 +89,8 @@ class InMemorySlackRetryDeduplicator(
                     Entry(state = State.IN_FLIGHT, recordedAt = now, generation = ticket.generation)
                 }
 
-                retryNum == null -> {
-                    admission = SlackRetryAdmission.Untracked
-                    existing
-                }
-
+                // Judged on the entry alone, with or without X-Slack-Retry-Num: Slack never resends an
+                // identical body (event_id is unique) without that header, so a header-less copy is a replay.
                 existing.state == State.IN_FLIGHT -> {
                     admission = SlackRetryAdmission.RetryOfInFlight
                     existing
