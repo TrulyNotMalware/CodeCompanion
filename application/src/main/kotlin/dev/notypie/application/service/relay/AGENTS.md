@@ -77,7 +77,10 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   `infrastructure/src/main/kotlin/dev/notypie/impl/command/AGENTS.md`; do not copy its total here or in the wiki.
   The SQL side is this file's: with the Hikari pool exhausted each statement attempt can wait a full
   `connection-timeout` (dev/local 5 s, prod `SQL_PROD_CONNECTION_TIMEOUT`), so find + claim + renew + 3 completes
-  add up to 6 × `connection-timeout` + 0.32 s (≈ 30 s at 5 s). Consequences: (a) with a starved pool one record
+  add up to 6 × `connection-timeout` + 0.32 s (≈ 30 s at 5 s). Worked example as of 2026-09-30, after the Slack
+  lane cut the profile read timeout to 6 s: HTTP 45.64 s (dispatch 39.64 + profile 6) + SQL ≈ 0 with a healthy pool
+  ≈ 46 s, inside the 60 s share and the 60 s shutdown timeout; with a starved pool at 5 s, ≈ 76 s. Re-derive this
+  line from the impl/command source whenever that total changes. Consequences: (a) with a starved pool one record
   can overrun its 60 s share of `max.poll.interval.ms` 300 s / `max-poll-records` 5 — the result is a rebalance
   and redelivery, not a double send, because the listener claims only `PENDING`; (b) the renew → complete window
   (HTTP bound + 3 × `connection-timeout` + 0.32 s) must stay well below `stuck-in-progress-seconds` (300 s), or
