@@ -1,10 +1,11 @@
 package dev.notypie.impl.command
 
 import com.slack.api.Slack
-import com.slack.api.SlackConfig
+import com.slack.api.util.http.SlackHttpClient
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createActionEventPayloadContents
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.retry.RetryService
@@ -13,8 +14,10 @@ import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
 import io.mockk.mockk
+import okhttp3.OkHttpClient
 import java.io.IOException
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.time.Duration
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CountDownLatch
@@ -44,39 +47,47 @@ class ApplicationMessageDispatcherTest :
         val port = server.address.port
         val slackResponseUrl = "https://hooks.slack.com/actions/T0001/1234/token"
 
-        val slack =
-            Slack.getInstance(
-                SlackConfig().apply {
-                    methodsEndpointUrlPrefix = "http://127.0.0.1:$port/api/"
-                    isPrettyResponseLoggingEnabled = false
-                    isStatsEnabled = false
-                },
-            )
-        val loopbackClient =
-            responseUrlClient(slack = slack)
-                .newBuilder()
+        fun fakeSlack(callTimeout: Duration = SLACK_CALL_TIMEOUT) =
+            slackClient(callTimeout = callTimeout) {
+                methodsEndpointUrlPrefix = "http://127.0.0.1:$port/api/"
+                isPrettyResponseLoggingEnabled = false
+            }
+
+        val slack = fakeSlack()
+        val closedPort = ServerSocket(0).use { it.localPort }
+        val attempts = AtomicInteger(0)
+
+        // Every attempt is counted; with refuseFirst the first one is sent to a closed port, a real connect failure.
+        fun OkHttpClient.toLoopback(refuseFirst: Boolean = false): OkHttpClient =
+            newBuilder()
                 .addInterceptor { chain ->
                     val original = chain.request()
+                    val target = if (refuseFirst && attempts.incrementAndGet() == 1) closedPort else port
                     val rewritten =
                         original.url
                             .newBuilder()
                             .scheme("http")
                             .host("127.0.0.1")
-                            .port(port)
+                            .port(target)
                             .build()
                     chain.proceed(original.newBuilder().url(rewritten).build())
                 }.build()
+
+        val loopbackClient = responseUrlClient(slack = slack).toLoopback()
         val sleeps = mutableListOf<Duration>()
 
-        fun dispatcher(sleeper: (Duration) -> Unit = { sleeps.add(it) }) =
-            ApplicationMessageDispatcher(
-                botToken = "xoxb-test",
-                applicationEventPublisher = mockk(relaxed = true),
-                retryService = RetryService(),
-                slack = slack,
-                okHttpClient = loopbackClient,
-                sleeper = sleeper,
-            )
+        fun dispatcher(
+            sleeper: (Duration) -> Unit = { sleeps.add(it) },
+            client: Slack = slack,
+            responseClient: OkHttpClient = loopbackClient,
+        ) = ApplicationMessageDispatcher(
+            botToken = "xoxb-test",
+            applicationEventPublisher = mockk(relaxed = true),
+            retryService = RetryService(),
+            slack = client,
+            okHttpClient = responseClient,
+            sleeper = sleeper,
+        )
 
         val defaultDispatcher = dispatcher()
 
@@ -84,13 +95,19 @@ class ApplicationMessageDispatcherTest :
             responses.clear()
             sleeps.clear()
             calls.set(0)
+            attempts.set(0)
         }
+
+        fun stallAfterReadingRequest(release: CountDownLatch): (HttpExchange) -> Unit =
+            { exchange -> release.await(5L, TimeUnit.SECONDS).also { exchange.close() } }
 
         fun channelMessage() =
             createPostEventPayloadContents(
                 commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 body = mapOf("text" to "hi"),
             )
+
+        fun updateMessage() = channelMessage().copy(messageType = MessageType.UPDATE_MESSAGE)
 
         fun actionResponse(responseUrl: String = slackResponseUrl) =
             createActionEventPayloadContents(
@@ -275,9 +292,9 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("chat.* keeps answering HTTP 500") {
+        given("chat.* keeps answering HTTP 503") {
             reset()
-            repeat(3) { responses.add(status(code = 500, body = "boom")) }
+            repeat(3) { responses.add(status(code = 503, body = "unavailable")) }
 
             `when`("a channel message is dispatched") {
                 val output = defaultDispatcher.dispatch(event = channelMessage())
@@ -285,6 +302,35 @@ class ApplicationMessageDispatcherTest :
                 then("the exhausted quick retries become a transient outcome the outbox retries later") {
                     output.isTransientExhausted() shouldBe true
                     output.isRateLimited() shouldBe false
+                    calls.get() shouldBe 3
+                }
+            }
+        }
+
+        given("chat.postMessage answers HTTP 500, which Slack may have answered after posting") {
+            reset()
+            responses.add(status(code = 500, body = "boom"))
+
+            `when`("a channel message is dispatched") {
+                val output = defaultDispatcher.dispatch(event = channelMessage())
+
+                then("it is not resent and ends as outcome_unknown, which the outbox treats as terminal") {
+                    output.isOutcomeUnknown() shouldBe true
+                    output.isTransientExhausted() shouldBe false
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update keeps answering HTTP 500") {
+            reset()
+            repeat(3) { responses.add(status(code = 500, body = "boom")) }
+
+            `when`("a message update is dispatched") {
+                val output = defaultDispatcher.dispatch(event = updateMessage())
+
+                then("an idempotent update is still retried and ends as a transient outcome") {
+                    output.isTransientExhausted() shouldBe true
                     calls.get() shouldBe 3
                 }
             }
@@ -306,49 +352,76 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("chat.* stalls longer than the call timeout on every attempt") {
+        given("chat.postMessage stalls past the call timeout after Slack has read the whole request") {
             reset()
             val release = CountDownLatch(1)
-            repeat(3) { responses.add { exchange -> release.await(5L, TimeUnit.SECONDS).also { exchange.close() } } }
-            val impatientSlack =
-                Slack.getInstance(
-                    SlackConfig().apply {
-                        methodsEndpointUrlPrefix = "http://127.0.0.1:$port/api/"
-                        isPrettyResponseLoggingEnabled = false
-                        isStatsEnabled = false
-                        httpClientCallTimeoutMillis = 200
-                    },
-                )
-            val impatient =
-                ApplicationMessageDispatcher(
-                    botToken = "xoxb-test",
-                    applicationEventPublisher = mockk(relaxed = true),
-                    retryService = RetryService(),
-                    slack = impatientSlack,
-                    okHttpClient = loopbackClient,
-                )
+            repeat(3) { responses.add(stallAfterReadingRequest(release = release)) }
+            val impatient = dispatcher(client = fakeSlack(callTimeout = Duration.ofMillis(200L)))
 
             `when`("a channel message is dispatched") {
                 val output = impatient.dispatch(event = channelMessage())
                 release.countDown()
 
-                then("each call is cut at the call timeout and the IOException ends as a transient outcome") {
+                then("the call is cut once and not resent, because Slack may already have posted it") {
+                    output.isOutcomeUnknown() shouldBe true
+                    output.isTransientExhausted() shouldBe false
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update stalls past the call timeout on every attempt") {
+            reset()
+            val release = CountDownLatch(1)
+            repeat(3) { responses.add(stallAfterReadingRequest(release = release)) }
+            val impatient = dispatcher(client = fakeSlack(callTimeout = Duration.ofMillis(200L)))
+
+            `when`("a message update is dispatched") {
+                val output = impatient.dispatch(event = updateMessage())
+                release.countDown()
+
+                then("an idempotent update is retried at each timeout and ends as a transient outcome") {
                     output.isTransientExhausted() shouldBe true
                     calls.get() shouldBe 3
                 }
             }
         }
 
+        given("chat.postMessage cannot connect on the first attempt") {
+            reset()
+            responses.add(jsonOk())
+            val refusingSlack =
+                Slack.getInstance(
+                    slack.config,
+                    SlackHttpClient(slack.httpClient.okHttpClient.toLoopback(refuseFirst = true)),
+                )
+
+            `when`("a channel message is dispatched") {
+                val output = dispatcher(client = refusingSlack).dispatch(event = channelMessage())
+
+                then("the request never reached Slack, so it is retried and delivered once") {
+                    output.ok shouldBe true
+                    attempts.get() shouldBe 2
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
         given("the production Slack client and response_url client") {
             val production = slackClient()
+            val sdkClient = production.httpClient.okHttpClient
             val responseClient = responseUrlClient(slack = production)
 
-            then("stats are off, every call is bounded, and redirects are never followed") {
+            then("stats are off, every call is bounded and tracked, and redirects are never followed") {
                 production.config.isStatsEnabled shouldBe false
                 production.config.httpClientCallTimeoutMillis shouldBe SLACK_CALL_TIMEOUT.toMillis().toInt()
+                sdkClient.callTimeoutMillis shouldBe SLACK_CALL_TIMEOUT.toMillis().toInt()
+                sdkClient.followRedirects shouldBe false
+                sdkClient.eventListenerFactory shouldBe RequestSendTracker
                 responseClient.callTimeoutMillis shouldBe SLACK_CALL_TIMEOUT.toMillis().toInt()
                 responseClient.followRedirects shouldBe false
                 responseClient.followSslRedirects shouldBe false
+                responseClient.eventListenerFactory shouldBe RequestSendTracker
             }
         }
 
@@ -449,6 +522,54 @@ class ApplicationMessageDispatcherTest :
                 then("the 5xx is retried") {
                     output.ok shouldBe true
                     calls.get() shouldBe 2
+                }
+            }
+        }
+
+        given("a response_url that answers HTTP 500") {
+            reset()
+            responses.add(status(code = 500, body = "boom"))
+
+            `when`("an action response is dispatched") {
+                val output = defaultDispatcher.dispatch(event = actionResponse())
+
+                then("it is not resent and ends as outcome_unknown") {
+                    output.isOutcomeUnknown() shouldBe true
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("a response_url that stalls past the call timeout after reading the request") {
+            reset()
+            val release = CountDownLatch(1)
+            repeat(3) { responses.add(stallAfterReadingRequest(release = release)) }
+            val impatientSlack = fakeSlack(callTimeout = Duration.ofMillis(200L))
+            val impatientClient = responseUrlClient(slack = impatientSlack).toLoopback()
+
+            `when`("an action response is dispatched") {
+                val output = dispatcher(responseClient = impatientClient).dispatch(event = actionResponse())
+                release.countDown()
+
+                then("it is cut once and not resent") {
+                    output.isOutcomeUnknown() shouldBe true
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("a response_url that cannot connect on the first attempt") {
+            reset()
+            responses.add(status(code = 200, body = "ok"))
+            val refusingClient = responseUrlClient(slack = slack).toLoopback(refuseFirst = true)
+
+            `when`("an action response is dispatched") {
+                val output = dispatcher(responseClient = refusingClient).dispatch(event = actionResponse())
+
+                then("the connect failure is retried and delivered once") {
+                    output.ok shouldBe true
+                    attempts.get() shouldBe 2
+                    calls.get() shouldBe 1
                 }
             }
         }

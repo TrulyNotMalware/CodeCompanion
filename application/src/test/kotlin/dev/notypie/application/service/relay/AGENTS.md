@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # test/kotlin/dev/notypie/application/service/relay
 
@@ -33,6 +33,9 @@ real `MessageOutboxRepository` on H2 with a `MutableClock`.
   slowest cases here.
 - `DEFAULT_TEST_NOW` is what every `now` parameter equals; stub with it when the spec is about the clock,
   and with `any()` otherwise.
+- `SlackMessageRelayServiceImplTest` also pins the dispatcher outcomes added for review T6/T14:
+  `failOutput(OUTCOME_UNKNOWN_REASON)` → one `completeClaim(FAILURE)` and a `MessagePublishFailedEvent` with that
+  reason, never deferred or left `IN_PROGRESS` for the sweep.
 
 ### Testing Requirements
 ```bash
@@ -58,7 +61,7 @@ testFixtures `createOutboxMessage` / `createPostEventPayloadContents`, and `serv
 - `infrastructure/repository/outbox/MessageOutboxRepository`, `OutboundMessagePort`,
   `CodecOutboundMessagePort`, `Transport`, `schema/MessageStatus`, `dto/*`,
   `impl/command/event/MessageDispatcher`, `failOutput`, `successOutput`, `impl/command/RATE_LIMITED_REASON`,
-  `TRANSIENT_EXHAUSTED_REASON`, `RateLimitedOutput`, `impl/retry/RetryService`
+  `TRANSIENT_EXHAUSTED_REASON`, `OUTCOME_UNKNOWN_REASON`, `RateLimitedOutput`, `impl/retry/RetryService`
 
 ### External
 MockK, Kotest, Spring `ApplicationEventPublisher`, Spring Kafka (`KafkaOperations`, `KafkaTemplate`,

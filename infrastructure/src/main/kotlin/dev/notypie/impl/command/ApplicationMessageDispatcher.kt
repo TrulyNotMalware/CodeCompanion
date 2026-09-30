@@ -8,6 +8,7 @@ import com.slack.api.methods.SlackApiTextResponse
 import com.slack.api.methods.response.chat.ChatPostEphemeralResponse
 import com.slack.api.methods.response.chat.ChatPostMessageResponse
 import com.slack.api.methods.response.chat.ChatUpdateResponse
+import com.slack.api.util.http.SlackHttpClient
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -46,19 +47,24 @@ private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "service_unavailabl
 private val SLACK_RESPONSE_URL_HOSTS = setOf("hooks.slack.com", "hooks.slack-gov.com")
 private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR = 500
+private const val HTTP_SERVICE_UNAVAILABLE = 503
 private const val HTTPS_PORT = 443
 private const val MAX_RESPONSE_BODY_BYTES = 4_096L
 private const val MAX_FAILURE_REASON_CHARS = 200
+private const val RESPONSE_URL_CALL = "response_url POST"
 private val MAX_INLINE_RETRY_AFTER: Duration = Duration.ofSeconds(3L)
 private val TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(IOException::class.java, SlackApiException::class.java, SlackTransientErrorException::class.java)
 val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
 const val RATE_LIMITED_REASON = "ratelimited"
 const val TRANSIENT_EXHAUSTED_REASON = "transient_exhausted"
+const val OUTCOME_UNKNOWN_REASON = "outcome_unknown"
 
 fun CommandOutput.isRateLimited(): Boolean = !ok && errorReason == RATE_LIMITED_REASON
 
 fun CommandOutput.isTransientExhausted(): Boolean = !ok && errorReason == TRANSIENT_EXHAUSTED_REASON
+
+fun CommandOutput.isOutcomeUnknown(): Boolean = !ok && errorReason == OUTCOME_UNKNOWN_REASON
 
 fun CommandOutput.retryAfter(): Duration? = (this as? RateLimitedOutput)?.retryAfter
 
@@ -77,17 +83,23 @@ class RateLimitedOutput(
         errorReason = RATE_LIMITED_REASON,
     )
 
-fun slackClient(callTimeout: Duration = SLACK_CALL_TIMEOUT): Slack =
-    Slack.getInstance(
+// The SDK's own OkHttp client is rebuilt with RequestSendTracker so a failed non-idempotent call can tell whether
+// Slack may already have acted on it.
+fun slackClient(callTimeout: Duration = SLACK_CALL_TIMEOUT, configure: SlackConfig.() -> Unit = {}): Slack {
+    val config =
         SlackConfig().apply {
             isStatsEnabled = false
             httpClientCallTimeoutMillis = callTimeout.toMillis().toInt()
-        },
-    )
+            configure()
+        }
+    val okHttpClient = buildOkHttpClient(config).newBuilder().eventListenerFactory(RequestSendTracker).build()
+    return Slack.getInstance(config, SlackHttpClient(okHttpClient))
+}
 
 fun responseUrlClient(slack: Slack): OkHttpClient =
     buildOkHttpClient(slack.config)
         .newBuilder()
+        .eventListenerFactory(RequestSendTracker)
         .followRedirects(false)
         .followSslRedirects(false)
         .build()
@@ -188,6 +200,7 @@ class ApplicationMessageDispatcher(
             event = event,
             apiMethod = "chat.postEphemeral",
             responseType = ChatPostEphemeralResponse::class.java,
+            idempotent = false,
         )
 
     private fun dispatchChatPostMessageContents(event: PostEventPayloadContents) =
@@ -195,29 +208,41 @@ class ApplicationMessageDispatcher(
             event = event,
             apiMethod = "chat.postMessage",
             responseType = ChatPostMessageResponse::class.java,
+            idempotent = false,
         )
 
     private fun dispatchChatUpdateContents(event: PostEventPayloadContents) =
-        dispatchPostContents(event = event, apiMethod = "chat.update", responseType = ChatUpdateResponse::class.java)
+        dispatchPostContents(
+            event = event,
+            apiMethod = "chat.update",
+            responseType = ChatUpdateResponse::class.java,
+            idempotent = true,
+        )
 
+    // A non-idempotent call is retried only when Slack cannot have acted on it: the body never left, or Slack
+    // answered 503. Anything after the body was sent ends as OUTCOME_UNKNOWN_REASON instead of a second post.
     private fun <T : SlackApiTextResponse> dispatchPostContents(
         event: PostEventPayloadContents,
         apiMethod: String,
         responseType: Class<T>,
+        idempotent: Boolean,
     ): CommandOutput {
         val requestConfigurer =
             RequestConfigurator<FormBody.Builder> { builder ->
                 for ((key, value) in event.body) builder.add(key, value.toString())
                 builder
             }
+        val probe = RequestSendProbe()
         val result =
             try {
-                slack.methods().postFormWithTokenAndParseResponse(
-                    requestConfigurer,
-                    apiMethod,
-                    botToken,
-                    responseType,
-                )
+                RequestSendTracker.track(probe = probe) {
+                    slack.methods().postFormWithTokenAndParseResponse(
+                        requestConfigurer,
+                        apiMethod,
+                        botToken,
+                        responseType,
+                    )
+                }
             } catch (exception: SlackApiException) {
                 val code = exception.response.code
                 if (code == HTTP_TOO_MANY_REQUESTS) {
@@ -225,13 +250,37 @@ class ApplicationMessageDispatcher(
                         retryAfter = parseRetryAfter(value = exception.response.header("Retry-After")),
                     )
                 }
-                if (code >= HTTP_SERVER_ERROR) throw exception
+                if (code >= HTTP_SERVER_ERROR) {
+                    if (idempotent || code == HTTP_SERVICE_UNAVAILABLE) throw exception
+                    return outcomeUnknownOutput(
+                        event = event,
+                        call = apiMethod,
+                        detail = "http_$code",
+                        cause = exception,
+                    )
+                }
                 return failOutput(
                     event = event,
                     reason = "http_$code: ${exception.responseBody.orEmpty().take(MAX_FAILURE_REASON_CHARS)}",
                 )
+            } catch (exception: IOException) {
+                if (idempotent || !probe.mayHaveBeenSent) throw exception
+                return outcomeUnknownOutput(event = event, call = apiMethod, detail = "$exception", cause = exception)
             }
         return buildCommandOutputFromResponse(result = result, event = event)
+    }
+
+    private fun outcomeUnknownOutput(
+        event: SlackEventPayload,
+        call: String,
+        detail: String,
+        cause: Throwable? = null,
+    ): CommandOutput {
+        dispatcherLog.error(cause) {
+            "$call for ${event.commandDetailType} idempotencyKey=${event.idempotencyKey} may already have been " +
+                "acted on by Slack ($detail); not resending it, so it is posted at most once"
+        }
+        return failOutput(event = event, reason = OUTCOME_UNKNOWN_REASON)
     }
 
     private fun parseRetryAfter(value: String?): Duration? {
@@ -322,22 +371,34 @@ class ApplicationMessageDispatcher(
                 .url(url)
                 .post(event.body.toRequestBody(contentType = mediaTypeJson))
                 .build()
-        return okHttpClient.newCall(request).execute().use { response ->
-            val body = response.peekBody(MAX_RESPONSE_BODY_BYTES).string()
-            val slackError = slackErrorOf(body = body)
-            val retryAfterHeader = response.header("Retry-After")
-            if (response.code == HTTP_TOO_MANY_REQUESTS) {
-                throw SlackRateLimitedException(retryAfter = parseRetryAfter(value = retryAfterHeader))
+        // A response_url POST can post a new message, so it follows the non-idempotent rule of dispatchPostContents.
+        val probe = RequestSendProbe()
+        return try {
+            RequestSendTracker.track(probe = probe) { okHttpClient.newCall(request).execute() }.use { response ->
+                val body = response.peekBody(MAX_RESPONSE_BODY_BYTES).string()
+                val slackError = slackErrorOf(body = body)
+                val retryAfterHeader = response.header("Retry-After")
+                if (response.code == HTTP_TOO_MANY_REQUESTS) {
+                    throw SlackRateLimitedException(retryAfter = parseRetryAfter(value = retryAfterHeader))
+                }
+                slackError?.let { raiseIfRetryable(error = it, retryAfterHeader = retryAfterHeader) }
+                when {
+                    response.code == HTTP_SERVICE_UNAVAILABLE ->
+                        throw SlackTransientErrorException(error = "http_${response.code}")
+                    response.code >= HTTP_SERVER_ERROR ->
+                        outcomeUnknownOutput(event = event, call = RESPONSE_URL_CALL, detail = "http_${response.code}")
+                    !response.isSuccessful ->
+                        failOutput(
+                            event = event,
+                            reason = "http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}",
+                        )
+                    slackError != null -> failOutput(event = event, reason = slackError.take(MAX_FAILURE_REASON_CHARS))
+                    else -> successOutput(payload = event, commandType = CommandType.RESPONSE)
+                }
             }
-            slackError?.let { raiseIfRetryable(error = it, retryAfterHeader = retryAfterHeader) }
-            when {
-                response.code >= HTTP_SERVER_ERROR ->
-                    throw SlackTransientErrorException(error = "http_${response.code}")
-                !response.isSuccessful ->
-                    failOutput(event = event, reason = "http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}")
-                slackError != null -> failOutput(event = event, reason = slackError.take(MAX_FAILURE_REASON_CHARS))
-                else -> successOutput(payload = event, commandType = CommandType.RESPONSE)
-            }
+        } catch (exception: IOException) {
+            if (!probe.mayHaveBeenSent) throw exception
+            outcomeUnknownOutput(event = event, call = RESPONSE_URL_CALL, detail = "$exception", cause = exception)
         }
     }
 

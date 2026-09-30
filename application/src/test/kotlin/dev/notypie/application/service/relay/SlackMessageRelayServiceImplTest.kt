@@ -11,6 +11,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.impl.command.OUTCOME_UNKNOWN_REASON
 import dev.notypie.impl.command.RateLimitedOutput
 import dev.notypie.impl.command.TRANSIENT_EXHAUSTED_REASON
 import dev.notypie.impl.command.event.MessageDispatcher
@@ -375,6 +376,43 @@ class SlackMessageRelayServiceImplTest :
                         outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = any())
                     }
                     verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                }
+            }
+
+            `when`("the dispatcher cannot tell whether Slack acted on a non-idempotent send") {
+                val rowEventId = UUID.randomUUID()
+                val row = createOutboxRow(eventId = rowEventId.toString())
+                val published = slot<Any>()
+                val eventPublisher = mockk<ApplicationEventPublisher>()
+                every { eventPublisher.publishEvent(capture(published)) } returns Unit
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher =
+                            dispatcherReturning(
+                                output = failOutput(event = payload(), reason = OUTCOME_UNKNOWN_REASON),
+                            ),
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                then("the row is closed as FAILURE at once, so the recovery sweep never resends it") {
+                    verify(exactly = 1) {
+                        outboxRepository.completeClaim(
+                            eventId = rowEventId.toString(),
+                            attemptCount = 1,
+                            status = MessageStatus.FAILURE.name,
+                            now = DEFAULT_TEST_NOW,
+                        )
+                    }
+                    verify(exactly = 0) {
+                        outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = any())
+                    }
+                    published.captured.shouldBeInstanceOf<MessagePublishFailedEvent>().reason shouldBe
+                        OUTCOME_UNKNOWN_REASON
                 }
             }
 
