@@ -74,9 +74,11 @@ class Routine(
         val DEFAULT_CUTOFF_OFFSET: Duration = Duration.ofHours(1L)
     }
 
+    // Capacity counts distinct users: re-adding an existing id replaces it, so a full routine must accept it.
     fun addMember(member: RoutineMember) {
+        val othersCount = members.count { it.userId != member.userId }
         validate(className = this.javaClass.simpleName) {
-            "members" of (members.size + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
+            "members" of (othersCount + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
         }
         members.removeIf { it.userId == member.userId }
         members.add(member)
