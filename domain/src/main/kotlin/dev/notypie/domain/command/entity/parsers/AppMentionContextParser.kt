@@ -103,7 +103,7 @@ internal class AppMentionContextParser(
                 )
             }
 
-            CommandSet.ASK -> agentChatContext(promptTokens = mention.commandTokens.drop(1))
+            CommandSet.ASK -> agentChatContext(prompt = agentPrompt(dropCommandWord = true))
 
             CommandSet.GRANT -> grantRoleContext()
 
@@ -118,7 +118,7 @@ internal class AppMentionContextParser(
 
             CommandSet.CVE -> cveOpsContext()
 
-            CommandSet.UNKNOWN -> agentChatContext(promptTokens = mention.commandTokens)
+            CommandSet.UNKNOWN -> agentChatContext(prompt = agentPrompt(dropCommandWord = false))
         }
     }
 
@@ -176,9 +176,22 @@ internal class AppMentionContextParser(
             intents = intents,
         )
 
-    private fun agentChatContext(promptTokens: List<String>): AgentChatContext =
+    // The restored message text keeps the links, code blocks and other people's mentions that commandTokens (first
+    // text section, words only) drops; the tokens stay the fallback when the transport supplied no text.
+    private fun agentPrompt(dropCommandWord: Boolean): String {
+        val text = mention.text.trim()
+        if (text.isEmpty()) {
+            val tokens = if (dropCommandWord) mention.commandTokens.drop(1) else mention.commandTokens
+            return tokens.joinToString(separator = " ")
+        }
+        if (!dropCommandWord) return text
+        val commandWord = mention.commandTokens.first()
+        return if (text.startsWith(commandWord)) text.removePrefix(commandWord).trim() else text
+    }
+
+    private fun agentChatContext(prompt: String): AgentChatContext =
         AgentChatContext(
-            prompt = promptTokens.joinToString(separator = " "),
+            prompt = prompt,
             threadId = (mention.thread ?: mention.message)?.raw,
             requesterName = commandData.actorName,
             channelName = commandData.channelName,

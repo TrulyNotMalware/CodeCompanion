@@ -98,6 +98,23 @@ class ElementTest :
                     element.text shouldBe null
                 }
             }
+
+            // A bold or inline-code word in a mention arrives as a rich_text leaf whose style is an object.
+            `when`("a rich_text leaf carries an object style") {
+                val json = """{"type":"text","text":"deploy","style":{"bold":true,"code":true}}"""
+
+                then("it deserializes and keeps the text") {
+                    mapper.readValue<Element>(json).extractText() shouldBe "deploy"
+                }
+            }
+
+            `when`("a button or list carries a string style") {
+                val json = """{"type":"rich_text_list","style":"ordered","elements":[]}"""
+
+                then("the string style is kept") {
+                    mapper.readValue<Element>(json).style shouldBe "ordered"
+                }
+            }
         }
 
         given("PlainText") {

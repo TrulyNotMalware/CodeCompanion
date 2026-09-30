@@ -157,6 +157,60 @@ class AppMentionContextParserTest :
                 }
             }
 
+            // T24: the prompt was rebuilt from the first section's words only, dropping links, code blocks and
+            // other people's mentions.
+            `when`("command is 'ask' and the transport restored the whole message text") {
+                val askIntents = createIntentQueue()
+                val restored = "ask summarize https://example.com/log for <@U_ALICE>\n```\nval x = 1\n```"
+                val parser =
+                    createParser(
+                        mention =
+                            MentionInvocation(
+                                mentionedUserIds = listOf("U_ALICE"),
+                                commandTokens = listOf("ask", "summarize"),
+                                hasCommandStructure = true,
+                                message = MessageHandle(raw = TEST_MESSAGE_TS),
+                                text = restored,
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the prompt is the restored text without the keyword, link, mention and code block included") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "summarize https://example.com/log for <@U_ALICE>\n```\nval x = 1\n```"
+                }
+            }
+
+            `when`("free text arrives with the restored message text") {
+                val fallbackIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            MentionInvocation(
+                                mentionedUserIds = emptyList(),
+                                commandTokens = listOf("what", "is"),
+                                hasCommandStructure = true,
+                                text = "  what is <#C_OPS> for?  ",
+                            ),
+                        intentQueue = fallbackIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the whole restored text, trimmed, becomes the prompt") {
+                    fallbackIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is <#C_OPS> for?"
+                }
+            }
+
             `when`("command is unknown free text") {
                 val fallbackIntents = createIntentQueue()
                 val parser =

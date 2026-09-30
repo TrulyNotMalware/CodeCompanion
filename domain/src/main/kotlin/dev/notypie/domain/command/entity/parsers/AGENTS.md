@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/command/entity/parsers
 
@@ -25,8 +25,10 @@ is a thin lookup from `CommandDetailType` to context.
   you add a keyword.
 - The permission check runs before the `when`, so a denied `grant` never reaches the argument checks.
   Usage errors after the gate are `TextResponseContext` **channel** messages, not ephemerals.
-- `ask` drops the keyword from the prompt; the `UNKNOWN` fallback keeps every token ("what does status
-  mean" must not lose "what"). `threadId` is `(thread ?: message)?.raw` — a top-level mention anchors a
+- The agent prompt comes from `mention.text` (the restored whole message) so links, code blocks and other
+  people's mentions reach the model; `ask` strips the leading keyword, the `UNKNOWN` fallback keeps all of it
+  ("what does status mean" must not lose "what"). Blank `text` falls back to joining `commandTokens` the same
+  way. `threadId` is `(thread ?: message)?.raw` — a top-level mention anchors a
   new thread at itself.
 - Argument shapes are strict: `grant` needs exactly one mentioned user and exactly two tokens; `revoke`
   one user and one token; `roles` one token; `cve retry <id>` needs a `Long`. Topic keys are lowercased

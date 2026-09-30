@@ -24,9 +24,27 @@ data class Element(
     val actionId: String? = null,
     @field:JsonProperty("value")
     val value: String? = null,
+    // A string on buttons and rich_text_list ("primary", "ordered") but an object on rich_text leaves
+    // ({"bold": true, "code": true}); typed String, any styled word in a mention failed deserialization.
     @field:JsonProperty("style")
-    val style: String? = null,
+    val style: Any? = null,
     val elements: List<Element> = listOf(),
+    // rich_text leaf fields, read when a mention is restored to text: link url, emoji name, channel / user-group id,
+    // broadcast range ("here", "channel", "everyone"), date fallback text, and a list's nesting depth.
+    @field:JsonProperty("url")
+    val url: String? = null,
+    @field:JsonProperty("name")
+    val name: String? = null,
+    @field:JsonProperty("channel_id")
+    val channelId: String? = null,
+    @field:JsonProperty("usergroup_id")
+    val usergroupId: String? = null,
+    @field:JsonProperty("range")
+    val range: String? = null,
+    @field:JsonProperty("fallback")
+    val fallback: String? = null,
+    @field:JsonProperty("indent")
+    val indent: Int = 0,
 )
 
 internal fun Element.extractText(): String? =

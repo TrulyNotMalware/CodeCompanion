@@ -16,12 +16,19 @@ data class SlashInvocation(
     val trigger: TriggerHandle,
 ) : InboundPayload
 
+/**
+ * [commandTokens] are the words of the first text section only, which is what command parsing needs. [text] is the
+ * whole message restored as plain text in reading order — other people's mentions as `<@id>`, links with their url,
+ * code blocks fenced, the bot's own mention removed — for free-text consumers such as the agent prompt. Blank when
+ * the transport supplied none.
+ */
 data class MentionInvocation(
     val mentionedUserIds: List<String>,
     val commandTokens: List<String>,
     val hasCommandStructure: Boolean,
     val message: MessageHandle? = null,
     val thread: MessageHandle? = null,
+    val text: String = "",
 ) : InboundPayload
 
 data class InboundCommand(
