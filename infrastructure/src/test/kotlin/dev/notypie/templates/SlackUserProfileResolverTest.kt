@@ -5,6 +5,7 @@ import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createProfile
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -17,6 +18,11 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class SlackUserProfileResolverTest :
     BehaviorSpec({
@@ -233,6 +239,72 @@ class SlackUserProfileResolverTest :
             }
         }
 
+        given("several renders that miss the same user while its lookup is in flight") {
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val lookups = AtomicInteger(0)
+            val requester: RestRequester =
+                mockk {
+                    every {
+                        safeGet(
+                            uri = any(),
+                            authorizationHeader = TEST_BOT_TOKEN,
+                            responseType = SlackUserProfileDto::class.java,
+                            uriVariables = any(),
+                        )
+                    } answers {
+                        lookups.incrementAndGet()
+                        entered.countDown()
+                        release.await(5L, TimeUnit.SECONDS)
+                        profileOk()
+                    }
+                }
+            val resolver = SlackUserProfileResolver(restRequester = requester, slackApiToken = TEST_BOT_TOKEN)
+
+            `when`("three more threads resolve the user before the first lookup returns") {
+                val views = ConcurrentLinkedQueue<PublisherView>()
+                val first = thread { views.add(resolver.resolve(userId = TEST_USER_ID)) }
+                entered.await(5L, TimeUnit.SECONDS)
+                val others = List(3) { thread { views.add(resolver.resolve(userId = TEST_USER_ID)) } }
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5L)
+                while (others.any { it.state !in PARKED } && System.nanoTime() < deadline) Thread.onSpinWait()
+                release.countDown()
+                (listOf(first) + others).forEach { it.join(5_000L) }
+
+                then("Slack is asked once and every caller gets the same view") {
+                    lookups.get() shouldBe 1
+                    views.size shouldBe 4
+                    views.distinct().size shouldBe 1
+                }
+            }
+        }
+
+        given("a lookup that throws instead of returning a failed Result") {
+            val requester: RestRequester =
+                mockk {
+                    every {
+                        safeGet(
+                            uri = any(),
+                            authorizationHeader = TEST_BOT_TOKEN,
+                            responseType = SlackUserProfileDto::class.java,
+                            uriVariables = any(),
+                        )
+                    } throws IllegalStateException("boom") andThen profileOk()
+                }
+            val resolver = SlackUserProfileResolver(restRequester = requester, slackApiToken = TEST_BOT_TOKEN)
+
+            `when`("the user is resolved twice") {
+                val thrown = shouldThrow<IllegalStateException> { resolver.resolve(userId = TEST_USER_ID) }
+                val second = resolver.resolve(userId = TEST_USER_ID)
+
+                then("the in-flight entry is released, so the next render asks Slack again") {
+                    thrown.message shouldBe "boom"
+                    second shouldBe resolver.resolve(userId = TEST_USER_ID)
+                    requester.verifyLookups(times = 2)
+                }
+            }
+        }
+
         given("a full cache with no expired entries") {
             val clock = MutableClock(now = start)
             val requester = requesterReturning(profileOk())
@@ -260,3 +332,5 @@ class SlackUserProfileResolverTest :
             }
         }
     })
+
+private val PARKED = setOf(Thread.State.WAITING, Thread.State.TIMED_WAITING)

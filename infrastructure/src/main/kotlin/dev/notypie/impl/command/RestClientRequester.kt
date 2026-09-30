@@ -179,7 +179,8 @@ class RestClientRequester(
                 logger.debug { "Http request successful : ${method.javaClass.simpleName} $uri" }
             }
     }.onFailure { e ->
-        logger.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
+        // DEBUG: a safe* caller gets the failure as a Result and logs it with its own context.
+        logger.debug(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
     }
 
     private fun <T : Any> performRequest(
@@ -202,7 +203,8 @@ class RestClientRequester(
                 logger.debug { "Http request successful : ${method.javaClass.simpleName} $uri" }
             }
     }.onFailure { e ->
-        logger.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
+        // DEBUG: a safe* caller gets the failure as a Result and logs it with its own context.
+        logger.debug(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
     }
 
     private fun RestClient.RequestHeadersSpec<*>.addAuthorizationIfPresent(authorizationHeader: String?) =
