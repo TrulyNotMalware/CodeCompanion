@@ -200,9 +200,11 @@ _type: architecture · updated: 2026-09-30_
 - claim 토큰이 붙은 이유: `markDispatchFailed`가 **다른 tick의** claim을 덮어쓸 수 있다는 Codex 3라운드 지적.
   이후 모든 CAS 술어가 토큰을 함께 검사한다(`Handoff.md`). 4라운드는 `claim_token`에 마이그레이션이 없어 prod
   (`ddl-auto: none`)에서 깨질 뻔한 지적 — 새 컬럼은 반드시 `V*` 스크립트가 따라가야 한다.
-- 트랜잭션 구조(`StandupSchedulingService.processDispatch`): claim은 자체 트랜잭션으로 커밋 → 메시지 빌드 +
-  `outboxRepository.save` + `markDispatchSent`를 한 트랜잭션(`markDispatchSent`가 no-op이면 `error()`로 롤백:
-  복구가 먼저 리셋한 경우) → 실패 시 `markDispatchFailed`는 새 트랜잭션. `CveNotificationDispatcher`는 claim과
+- 트랜잭션 구조(`StandupSchedulingService.processDispatch`): claim + 메시지 빌드 + `outboxRepository.save` +
+  `markDispatchSent`를 한 트랜잭션에서 실행한다(`markDispatchSent`가 no-op이면 `error()`로 롤백). 실패하면 claim도
+  롤백돼 `PENDING`으로 남고 다음 틱이 재시도하며, 마감이 지나면 `SKIPPED`로 끝난다. 예전에는 claim을 먼저 커밋하고
+  실패 시 `markDispatchFailed`로 종단 `FAILED`를 기록해 일시 오류 한 번에 그날 DM이 사라졌다(리뷰 T18, 12.2 N1과
+  같은 패턴). 넛지도 `claimNudge`를 저장 트랜잭션에 합류시킨다. `CveNotificationDispatcher`는 claim과
   outbox save를 한 트랜잭션에 넣는다(claim 쪽 `@Transactional`이 REQUIRED라 join) — "저장 안 된 배송을 ledger가
   기록"하는 일을 막는다.
 - 아웃박스 자체의 다중 인스턴스 안전은 같은 claim-token 패턴이다. 토큰이 별도 컬럼 대신 `attempt_count`이고,

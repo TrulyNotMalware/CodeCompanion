@@ -10,13 +10,13 @@ The two forward-only state machines of the standup aggregate: one per session, o
 | File | Description |
 |------|-------------|
 | `SessionStatus.kt` | `COLLECTING` (awaiting answers) `→ SUMMARIZED` (cutoff reached, summary posted, `summaryMessageTs` set) or `→ SKIPPED` (host cancelled / routine deactivated before cutoff — never summarized). Both end states are terminal |
-| `DispatchStatus.kt` | `PENDING → SENDING → SENT | FAILED` for one `SessionDispatch`; `SENT` means the outbox row exists, not that Slack acknowledged; `FAILED` is terminal and a retry is a new dispatch row. `PENDING → SKIPPED` (terminal, reason in `failure_reason`) when the DM would be pointless: the session is no longer `COLLECTING` or its cutoff passed (review T19), or the routine is inactive (review T28) |
+| `DispatchStatus.kt` | `PENDING → SENDING → SENT | FAILED` for one `SessionDispatch`; `SENT` means the outbox row exists, not that Slack acknowledged; `FAILED` is terminal and no longer written (since review T18 a failed enqueue rolls the claim back to `PENDING`); it remains for rows written by older builds. `PENDING → SKIPPED` (terminal, reason in `failure_reason`) when the DM would be pointless: the session is no longer `COLLECTING` or its cutoff passed (review T19), or the routine is inactive (review T28) |
 
 ## For AI Agents
 
 ### Working In This Directory
 - Transitions are compare-and-set SQL, not entity methods: `JpaSessionDispatchRepository.claimDispatch`
-  (`PENDING → SENDING` with `claim_token`), `markSent` / `markFailed`, `resetStuckSending`
+  (`PENDING → SENDING` with `claim_token`), `markSent`, `resetStuckSending`
   (`SENDING` past a threshold `→ PENDING`), `markSkipped` (`PENDING → SKIPPED`); `JpaStandupSessionRepository.markSummarized`
   (`COLLECTING → SUMMARIZED`, writes `summary_message_ts`). Add a state by adding a query there.
 - Constants are referenced by fully-qualified name in JPQL (`WHERE d.dmStatus =

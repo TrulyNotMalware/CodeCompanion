@@ -40,12 +40,15 @@ is written back onto the session row once the relay has posted it.
   A dispatch whose routine is inactive / unknown is marked `SKIPPED` too: left `PENDING`, such rows kept
   winning `ORDER BY dm_trigger_at` + `dispatchBatchSize` and starved every active routine (review T28).
 - **Dispatch CAS with a claim token.** `resetStuckDispatches(olderThan)` runs first. Then per row:
-  `claimDispatch(dispatchId, claimToken)` commits in its own tx; `buildDmNotice` +
-  `outboxRepository.save(outboundMessagePort.toRow(...))` + `markDispatchSent(claimToken)` run in one
-  `runInTx` that rolls back when the mark is a no-op (recovery raced us); `markDispatchFailed(claimToken)`
-  records failure in a fresh tx. Only the token that claimed may acknowledge.
-- **Nudge is at-most-once by design.** `claimNudge(sessionId)` is taken only when non-responders exist and
-  commits *before* the DMs are enqueued; an enqueue failure after the claim is logged, not retried.
+  `claimDispatch(dispatchId, claimToken)`, `buildDmNotice` + `outboxRepository.save(outboundMessagePort.toRow(...))`
+  and `markDispatchSent(claimToken)` run in **one** `runInTx` (the daily agenda's N1 fix). Any failure rolls
+  the claim back to `PENDING` and the next tick retries; the retries are bounded by cutoff, where the
+  closed-session rule above marks the row `SKIPPED`. Before this, the claim committed first and one
+  transient error ended the member's day in terminal `FAILED` (review T18). The claim `UPDATE ... WHERE
+  dm_status = 'PENDING'` row-locks, so a concurrent tick blocks and then matches nothing — no double DM.
+- **Nudge is at-most-once, and the claim joins the enqueue.** `claimNudge(sessionId)` is taken only when
+  non-responders exist, inside the same `runInTx` as the outbox saves, so a failed enqueue un-claims the
+  session and the next tick retries while `cutoffAt > now` still selects it (review T18).
   `standup.nudge.offsetMinutes <= 0` disables the phase entirely.
 - **Summary marker.** `summary_message_ts` holds `outbox:<eventId>` until the relay posts; the write-back
   `UPDATE` is keyed on that marker, so it is a cheap no-op for every non-standup
@@ -72,7 +75,10 @@ CAS calls and captured outbox rows / staged messages. Fixtures: `createNudgeCand
 (application testFixtures, same package), `createRoutineDto` / `createRoutineMemberDto` /
 `createSessionDispatchDto` / `createStandupSessionDto` and `createCreateStandupRoutineEvent`,
 `createCommandBasicInfo` (domain testFixtures), `createOutboxRow` (`dev.notypie.application.outbox`).
-There is no H2 spec for the standup repository CAS methods — assert orchestration here.
+`StandupSchedulingServiceTest` also runs the dispatch / nudge claims against an H2
+`DataSourceTransactionManager` (`createH2DataSource` / `createH2TransactionManager` from the meeting
+testFixtures) to prove the claim rolls back with a failed enqueue. The repository's own SQL is covered by
+`infrastructure/.../repository/standup/StandupRepositoryImplJpaTest`.
 
 ### Common Patterns
 - Thin `@Scheduled` `*Scheduler` → logic in `*SchedulingService`; specs target the service only.

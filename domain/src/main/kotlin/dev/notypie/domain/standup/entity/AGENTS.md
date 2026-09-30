@@ -34,7 +34,7 @@ itself in `init`, and the same constructors are used when `infrastructure` rehyd
 - `Routine` rejects a question containing `\n` because persistence joins questions with `\n` and the
   modal renders each as a label. Keep that rule in sync with `infrastructure/repository/standup/schema/`.
 - `status` fields are constructor `val`s with no mutators. Transitions happen as compare-and-set SQL in
-  `JpaSessionDispatchRepository` (`claimDispatch`, `markSent`, `markFailed`, `resetStuckSending`) and
+  `JpaSessionDispatchRepository` (`claimDispatch`, `markSent`, `markSkipped`, `resetStuckSending`) and
   `JpaStandupSessionRepository` (`markSummarized`, `WHERE status = 'COLLECTING'`). The `init` invariants
   here (`SENT ⇒ dmSentAt`, `FAILED ⇒ failureReason`, `SUMMARIZED ⇒ summaryMessageTs`) are the load-time
   contract for what those queries write.

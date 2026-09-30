@@ -59,23 +59,6 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         @Param("sentAt") sentAt: Instant,
     ): Int
 
-    @Modifying
-    @Transactional
-    @Query(
-        value = """
-            UPDATE standup_session_dispatch
-            SET dm_status = 'FAILED', failure_reason = :reason, claim_token = NULL,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = :id AND dm_status = 'SENDING' AND claim_token = :token
-        """,
-        nativeQuery = true,
-    )
-    fun markFailed(
-        @Param("id") id: Long,
-        @Param("token") token: String,
-        @Param("reason") reason: String,
-    ): Int
-
     // Guarded by dm_status = 'PENDING' so a row another tick already claimed or sent is never overwritten.
     @Modifying
     @Transactional

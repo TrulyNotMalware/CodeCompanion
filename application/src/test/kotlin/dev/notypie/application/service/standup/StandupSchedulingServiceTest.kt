@@ -2,6 +2,8 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.application.service.meeting.createH2DataSource
+import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -27,8 +29,10 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
@@ -62,9 +66,8 @@ class StandupSchedulingServiceTest :
             return port
         }
 
-        fun stubTransactionManager(): PlatformTransactionManager {
+        fun stubTransactionManager(status: TransactionStatus = mockk(relaxed = true)): PlatformTransactionManager {
             val tm = mockk<PlatformTransactionManager>()
-            val status = mockk<TransactionStatus>(relaxed = true)
             every { tm.getTransaction(any()) } returns status
             every { tm.commit(any()) } just Runs
             every { tm.rollback(any()) } just Runs
@@ -361,9 +364,6 @@ class StandupSchedulingServiceTest :
                     verify(exactly = 1) { repo.claimDispatch(dispatchId = 42L, claimToken = any()) }
                     verify(exactly = 1) { outboxRepo.save(any()) }
                     verify(exactly = 1) { repo.markDispatchSent(dispatchId = 42L, claimToken = any(), sentAt = any()) }
-                    verify(
-                        exactly = 0,
-                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
                 }
 
                 then("the same claim token is threaded from claim through markDispatchSent") {
@@ -406,30 +406,29 @@ class StandupSchedulingServiceTest :
 
                 service.sendPendingDispatches()
 
-                then("no outbox save, no markSent, no markFailed") {
+                then("no outbox save, no markSent") {
                     verify(exactly = 0) { outboxRepo.save(any()) }
                     verify(
                         exactly = 0,
                     ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
-                    verify(
-                        exactly = 0,
-                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
                 }
             }
 
-            `when`("the row build throws") {
+            `when`("the row build throws after the claim (T18: one transient failure)") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
                 val port = mockk<OutboundMessagePort>()
                 every {
                     port.toRow(message = any(), basicInfo = any())
                 } throws RuntimeException("Slack API error")
+                val status = mockk<TransactionStatus>(relaxed = true)
+                val transactionManager = stubTransactionManager(status = status)
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
                         outboundMessagePort = port,
-                        transactionManager = stubTransactionManager(),
+                        transactionManager = transactionManager,
                         clock = clock,
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
@@ -438,18 +437,15 @@ class StandupSchedulingServiceTest :
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
                 every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns true
-                every { repo.markDispatchFailed(dispatchId = 42L, claimToken = any(), reason = any()) } returns true
 
                 service.sendPendingDispatches()
 
-                then("dispatch is marked FAILED with the exception message") {
-                    verify(exactly = 1) {
-                        repo.markDispatchFailed(
-                            dispatchId = 42L,
-                            claimToken = any(),
-                            reason = match { it.contains("Slack API error") },
-                        )
+                then("the claim runs inside the enqueue tx and is rolled back instead of ending in terminal FAILED") {
+                    verifyOrder {
+                        transactionManager.getTransaction(any())
+                        repo.claimDispatch(dispatchId = 42L, claimToken = any())
                     }
+                    verify(exactly = 1) { status.setRollbackOnly() }
                     verify(
                         exactly = 0,
                     ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
@@ -594,6 +590,106 @@ class StandupSchedulingServiceTest :
             }
         }
 
+        given("the dispatch and nudge claims run against a real transaction manager (T18)") {
+            val dataSource = createH2DataSource()
+            val jdbc = JdbcTemplate(dataSource)
+            jdbc.execute("CREATE TABLE dispatch_claim (id BIGINT PRIMARY KEY, dm_status VARCHAR(16))")
+            jdbc.execute("CREATE TABLE nudge_claim (id BIGINT PRIMARY KEY, nudged BOOLEAN)")
+            val transactionManager = createH2TransactionManager(dataSource = dataSource)
+            val routineUid = UUID.randomUUID()
+            val routine = createRoutineDto(routineUid = routineUid, name = "Daily Standup", routineTimezone = seoul)
+
+            fun dispatchStatus(id: Long): String =
+                jdbc.queryForObject("SELECT dm_status FROM dispatch_claim WHERE id = ?", String::class.java, id)!!
+
+            fun nudged(id: Long): Boolean =
+                jdbc.queryForObject("SELECT nudged FROM nudge_claim WHERE id = ?", Boolean::class.java, id)!!
+
+            fun claimingRepo(dispatchId: Long, sessionId: Long): StandupRepository {
+                jdbc.update("INSERT INTO dispatch_claim (id, dm_status) VALUES (?, 'PENDING')", dispatchId)
+                jdbc.update("INSERT INTO nudge_claim (id, nudged) VALUES (?, FALSE)", sessionId)
+                val repo = mockk<StandupRepository>()
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns
+                    listOf(
+                        ReadyDispatch(
+                            dispatch =
+                                createSessionDispatchDto(id = dispatchId, userId = "U_A", dmTriggerAt = nowInstant),
+                            sessionUid = UUID.randomUUID(),
+                            sessionDate = today,
+                            cutoffAt = nowInstant.plusSeconds(3600L),
+                            sessionStatus = SessionStatus.COLLECTING,
+                            summaryMessageTs = null,
+                            routineUid = routineUid,
+                        ),
+                    )
+                every { repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any()) } returns
+                    listOf(
+                        createNudgeCandidateSession(
+                            sessionId = sessionId,
+                            routineUid = routineUid,
+                            cutoffAt = nowInstant.plusSeconds(600L),
+                            sentMemberIds = setOf("U_A"),
+                        ),
+                    )
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimDispatch(dispatchId = dispatchId, claimToken = any()) } answers {
+                    jdbc.update(
+                        "UPDATE dispatch_claim SET dm_status = 'SENDING' WHERE id = ? AND dm_status = 'PENDING'",
+                        dispatchId,
+                    ) == 1
+                }
+                every { repo.markDispatchSent(dispatchId = dispatchId, claimToken = any(), sentAt = any()) } answers {
+                    jdbc.update(
+                        "UPDATE dispatch_claim SET dm_status = 'SENT' WHERE id = ? AND dm_status = 'SENDING'",
+                        dispatchId,
+                    ) == 1
+                }
+                every { repo.claimNudge(sessionId = sessionId) } answers {
+                    jdbc.update("UPDATE nudge_claim SET nudged = TRUE WHERE id = ? AND nudged = FALSE", sessionId) == 1
+                }
+                return repo
+            }
+
+            fun serviceOf(repo: StandupRepository, outboxRepo: MessageOutboxRepository) =
+                StandupSchedulingService(
+                    standupRepository = repo,
+                    outboxRepository = outboxRepo,
+                    outboundMessagePort = stubPort(),
+                    transactionManager = transactionManager,
+                    clock = clock,
+                )
+
+            `when`("the outbox write fails after both claims were taken") {
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                every { outboxRepo.save(any()) } throws IllegalStateException("connection timeout")
+                val service = serviceOf(repo = claimingRepo(dispatchId = 1L, sessionId = 1L), outboxRepo = outboxRepo)
+
+                service.sendPendingDispatches()
+                service.nudgeNonResponders()
+
+                then("both claims roll back — the dispatch stays PENDING and the session un-nudged for the next tick") {
+                    dispatchStatus(id = 1L) shouldBe "PENDING"
+                    nudged(id = 1L) shouldBe false
+                }
+            }
+
+            `when`("the outbox write succeeds") {
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                every { outboxRepo.save(any()) } answers { firstArg() }
+                val service = serviceOf(repo = claimingRepo(dispatchId = 2L, sessionId = 2L), outboxRepo = outboxRepo)
+
+                service.sendPendingDispatches()
+                service.nudgeNonResponders()
+
+                then("both claims commit together with their outbox rows") {
+                    dispatchStatus(id = 2L) shouldBe "SENT"
+                    nudged(id = 2L) shouldBe true
+                    verify(exactly = 2) { outboxRepo.save(any()) }
+                }
+            }
+        }
+
         given("detectCutoffs") {
             `when`("a COLLECTING session is past its cutoff") {
                 val repo = mockk<StandupRepository>()
@@ -729,6 +825,46 @@ class StandupSchedulingServiceTest :
                             )
                         }
                     }
+                }
+            }
+
+            `when`("the nudge outbox write fails after the claim (T18)") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val status = mockk<TransactionStatus>(relaxed = true)
+                val transactionManager = stubTransactionManager(status = status)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = transactionManager,
+                        clock = clock,
+                    )
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = 11L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A"),
+                        answeredUserIds = emptySet(),
+                    )
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(candidate)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimNudge(sessionId = 11L) } returns true
+                every { outboxRepo.save(any()) } throws IllegalStateException("deadlock")
+
+                service.nudgeNonResponders()
+
+                then("the claim is taken inside the enqueue tx and rolled back with it, so the next tick retries") {
+                    verifyOrder {
+                        transactionManager.getTransaction(any())
+                        repo.claimNudge(sessionId = 11L)
+                        outboxRepo.save(any())
+                    }
+                    verify(exactly = 1) { status.setRollbackOnly() }
                 }
             }
 

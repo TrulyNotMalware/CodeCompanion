@@ -153,16 +153,19 @@ class StandupSchedulingService(
         }
     }
 
-    // Claim, save+markSent, and failure-record each run in their own tx; the claim token gates the CAS.
+    // Claim, outbox save and markSent share one tx (same fix as the daily agenda's N1): a failed enqueue rolls the
+    // claim back to PENDING so the next tick retries, instead of a committed claim ending in terminal FAILED after
+    // one transient error. Retries stop at cutoff, where sendPendingDispatches marks the row SKIPPED (review T18).
     private fun processDispatch(item: ReadyDispatch, routine: RoutineDto, sentAt: Instant) {
         val dispatchId = item.dispatch.id
         val userId = item.dispatch.userId
         val claimToken = UUID.randomUUID().toString()
 
-        if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken)) return
-
-        val outcome: Result<Unit> =
-            transactionTemplate.runInTx<Unit> {
+        val outcome: Result<Boolean> =
+            transactionTemplate.runInTx {
+                if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken)) {
+                    return@runInTx false
+                }
                 val commandBasicInfo =
                     CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                 val message =
@@ -185,22 +188,17 @@ class StandupSchedulingService(
                 ) {
                     error("markDispatchSent had no effect for dispatch $dispatchId — rolling back.")
                 }
+                true
             }
 
-        if (outcome.isFailure) {
-            val ex = outcome.exceptionOrNull()!!
-            log.error(ex) { "Standup DM dispatch failed: dispatchId=$dispatchId userId=$userId" }
-            if (!standupRepository.markDispatchFailed(
-                    dispatchId = dispatchId,
-                    claimToken = claimToken,
-                    reason = ex.message ?: "unknown",
-                )
-            ) {
-                log.warn { "markDispatchFailed no-op for dispatch $dispatchId — recovery already reset or re-claimed." }
+        outcome
+            .onSuccess { enqueued ->
+                if (enqueued) log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
+            }.onFailure { ex ->
+                log.error(ex) {
+                    "Standup DM dispatch failed, claim rolled back for retry: dispatchId=$dispatchId userId=$userId"
+                }
             }
-        } else {
-            log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
-        }
     }
 
     fun nudgeNonResponders() {
@@ -232,10 +230,11 @@ class StandupSchedulingService(
         val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
         if (nonResponders.isEmpty()) return
 
-        if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return
-
-        val outcome: Result<Unit> =
-            transactionTemplate.runInTx<Unit> {
+        // The claim joins the enqueue tx so a failed save un-claims the session; the next tick retries while the
+        // session is still inside the nudge window (cutoffAt > now), which bounds the retries (review T18).
+        val outcome: Result<Boolean> =
+            transactionTemplate.runInTx {
+                if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return@runInTx false
                 nonResponders.forEach { userId ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
@@ -250,18 +249,21 @@ class StandupSchedulingService(
                         outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
                     )
                 }
+                true
             }
 
-        if (outcome.isFailure) {
-            log.error(outcome.exceptionOrNull()) {
-                "Standup nudge enqueue failed after claim: sessionUid=${candidate.sessionUid}"
+        outcome
+            .onSuccess { enqueued ->
+                if (!enqueued) return@onSuccess
+                log.info {
+                    "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
+                        "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
+                }
+            }.onFailure { ex ->
+                log.error(ex) {
+                    "Standup nudge enqueue failed, claim rolled back for retry: sessionUid=${candidate.sessionUid}"
+                }
             }
-        } else {
-            log.info {
-                "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
-                    "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
-            }
-        }
     }
 
     // The summary listener runs synchronously, so a per-session catch keeps one broken session from blocking the rest.

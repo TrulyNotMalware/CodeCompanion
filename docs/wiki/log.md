@@ -19,3 +19,4 @@ append-only. 형식: `## [YYYY-MM-DD] <create|update|lint> | 요약`
 ## [2026-09-30] update | events-and-outbox: 디스패치 결과를 다섯 가지로 갱신 — 비멱등 호출의 전송 후 실패와 `internal_error`는 결과 불명(재발송 없음, 리뷰 T6·T13), 토큰·워크스페이스 오류는 15분 보류(T14), `Retry-After` 24시간 제한(D4), `response_url` 2xx는 문서화된 `ok`만 성공(D5)
 ## [2026-09-30] update | dev-environment: `local` 프로파일 HTTP를 `server.address: 127.0.0.1`로 루프백 바인드(W7), `run`은 기본값 유지·경고만, actuator 노출 서술 정정
 ## [2026-09-30] update | decisions #15: 역할 캐시를 `USER` 결과만 담도록 축소(T10) — 상승 역할은 매 호출 DB 조회라 revoke가 레플리카와 무관하게 즉시 반영, grant만 다른 레플리카에서 최대 60초 지연
+## [2026-09-30] update | events-and-outbox: 스탠드업 DM의 claim·outbox 저장·markSent를 한 트랜잭션으로 묶고(실패 시 PENDING 복귀, 마감 후 SKIPPED), 넛지 claim도 저장 트랜잭션에 합류(리뷰 T18)

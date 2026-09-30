@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/standup/dto
 
@@ -28,7 +28,7 @@ single repository round-trip.
 - `StandupAnswerDto.responses` is positional: the renderer pairs `questions[i]` with `responses[i]`
   with no question id. Never reorder responses or questions independently.
 - `SessionDispatchDto.id` is the JPA row id the scheduler hands back to `claimDispatch` / `markSent` /
-  `markFailed` in `JpaSessionDispatchRepository`; it is not a business key. `userId` is the natural key.
+  `markSkipped` in `JpaSessionDispatchRepository`; it is not a business key. `userId` is the natural key.
 - `routineTimezone` decides which calendar day a session belongs to; each `RoutineMemberDto.userTimezone`
   decides when that member's DM fires. Do not collapse the two when adding fields.
 - Must not import `dev.notypie.domain.command` (guard-enforced one-way edge).
