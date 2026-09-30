@@ -50,8 +50,14 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   (`slack-live,local`, `prod,local`) fails, because `local`'s empty `${SLACK_SIGNING_SECRET:}` default would
   otherwise switch verification off on a network-exposed instance. Only `local` alone disables verification,
   with one warning.
-- **Cheap rejection first.** Header presence, timestamp freshness and signature shape are checked before the
-  body is read, so an unsigned flood costs no buffering. Only a request that could be genuine is buffered.
+- **Cheap rejection first — against scanners, not against an attacker.** Header presence, timestamp freshness
+  and signature shape are checked before the body is read, so requests without plausible Slack headers cost
+  no buffering. The check is not authentication: the format is public (current epoch seconds + `v0=` + any 64
+  lower-case hex digits), so a forged request that matches it is buffered up to the 1 MiB limit (`readNBytes`
+  can briefly hold about twice that) before the HMAC rejects it. Unauthenticated clients can therefore force
+  roughly 1–2 MiB of heap per concurrent request; Jetty's virtual-thread pool is the only concurrency cap
+  in the app. Put a per-client rate limit and a request-body / concurrency limit on the gateway (ingress /
+  HTTPRoute) in front of `/api/slack` and `/api/slash`; do not rely on this pre-check for flood protection.
 - **Parameters come from the signed body only.** Never re-enable query-string parameters in the wrapper: a
   replayed signed request with `?payload=` / `?user_id=` appended would otherwise override the signed values.
 - **Body limit.** 1 MiB, enforced before signature verification because the body is buffered to verify it.
