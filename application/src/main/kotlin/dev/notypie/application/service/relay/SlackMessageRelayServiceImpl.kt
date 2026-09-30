@@ -1,8 +1,10 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.impl.command.ACCESS_BLOCKED_DEFER
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
+import dev.notypie.impl.command.isAccessBlocked
 import dev.notypie.impl.command.isRateLimited
 import dev.notypie.impl.command.isTransientExhausted
 import dev.notypie.impl.command.retryAfter
@@ -89,6 +91,10 @@ class SlackMessageRelayServiceImpl(
             }
         when {
             result.isRateLimited() -> defer(claim = claim, retryAfter = result.retryAfter())
+            result.isAccessBlocked() -> {
+                logger.error { "Slack refused the bot's access; holding eventId=$eventId until it is fixed" }
+                defer(claim = claim, retryAfter = ACCESS_BLOCKED_DEFER)
+            }
             result.isTransientExhausted() ->
                 logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
             else -> complete(claim = claim, updateEvent = result.toOutboxUpdateEvent(eventId = eventId))

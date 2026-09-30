@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # application/service/relay
 
@@ -53,6 +53,11 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   (`SlackInteractionHandlerImpl`, `SlackMentionEventHandlerImpl`, the slash services). With no active
   transaction the event is simply not delivered (`fallbackExecution` defaults to false) and nothing
   reaches the outbox.
+- **Two dispatcher outcomes beyond the three below** (owned by `impl/command`, see its decision table):
+  `isAccessBlocked()` (Slack refused the bot token or workspace) logs ERROR and reuses `defer` with
+  `ACCESS_BLOCKED_DEFER` (15 min) instead of `Retry-After`, so a token rotation holds rows until the 24 h bound
+  rather than failing them (the `defer` WARN still says "rate limit"); `isOutcomeUnknown()` (a non-idempotent send
+  that may already be posted) falls through to `complete` and is written `FAILURE`, so the sweep never resends it.
 - **Three dispatch outcomes, one budget in real sends.** Done (success or permanent failure) is written
   and published. Rate-limited and transient-exhausted rows, and dispatches that threw, stay `IN_PROGRESS`
   for the sweep. `attempt_count` is only the ownership token; the abandon budget is `send_count`, which

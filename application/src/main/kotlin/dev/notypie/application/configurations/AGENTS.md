@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # application/configurations
 
@@ -22,7 +22,7 @@ is the map of what actually exists at runtime in a given profile.
 | `SchedulingConfig.kt` | Enables scheduling for the meeting/standup/CVE/outbox jobs |
 | `AppConfig`-driven feature configs | `CveConfiguration.kt` (whole CVE lane), `AgentConfiguration.kt` (sidecar client + agent service), `McpServerConfiguration.kt` (MCP tools, gate, turn-token filter) |
 | `RestClientConfiguration.kt` | Shared `RestClient` used by Slack and source adapters |
-| `SlackRequestBuilderConfiguration.kt` | Slack request/template builder beans |
+| `SlackRequestBuilderConfiguration.kt` | Slack request/template builder beans. `messageDispatcher` also takes the `MeterRegistry` and counts access-blocked sends on `METRIC_ACCESS_BLOCKED` (`codecompanion.slack.dispatch.access_blocked`, tag `error` = the Slack code) through the dispatcher's `onAccessBlocked` hook |
 
 ## Subdirectories
 | Directory | Purpose |

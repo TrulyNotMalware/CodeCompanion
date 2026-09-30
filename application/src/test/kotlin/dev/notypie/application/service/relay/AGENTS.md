@@ -35,7 +35,8 @@ real `MessageOutboxRepository` on H2 with a `MutableClock`.
   and with `any()` otherwise.
 - `SlackMessageRelayServiceImplTest` also pins the dispatcher outcomes added for review T6/T14:
   `failOutput(OUTCOME_UNKNOWN_REASON)` → one `completeClaim(FAILURE)` and a `MessagePublishFailedEvent` with that
-  reason, never deferred or left `IN_PROGRESS` for the sweep.
+  reason, never deferred or left `IN_PROGRESS` for the sweep; `failOutput(ACCESS_BLOCKED_REASON)` → `deferClaim` so
+  the row is eligible again in `[now + ACCESS_BLOCKED_DEFER, + 2 min)`, no terminal write, no event.
 
 ### Testing Requirements
 ```bash
@@ -61,7 +62,8 @@ testFixtures `createOutboxMessage` / `createPostEventPayloadContents`, and `serv
 - `infrastructure/repository/outbox/MessageOutboxRepository`, `OutboundMessagePort`,
   `CodecOutboundMessagePort`, `Transport`, `schema/MessageStatus`, `dto/*`,
   `impl/command/event/MessageDispatcher`, `failOutput`, `successOutput`, `impl/command/RATE_LIMITED_REASON`,
-  `TRANSIENT_EXHAUSTED_REASON`, `OUTCOME_UNKNOWN_REASON`, `RateLimitedOutput`, `impl/retry/RetryService`
+  `TRANSIENT_EXHAUSTED_REASON`, `OUTCOME_UNKNOWN_REASON`, `ACCESS_BLOCKED_REASON`, `ACCESS_BLOCKED_DEFER`,
+  `RateLimitedOutput`, `impl/retry/RetryService`
 
 ### External
 MockK, Kotest, Spring `ApplicationEventPublisher`, Spring Kafka (`KafkaOperations`, `KafkaTemplate`,

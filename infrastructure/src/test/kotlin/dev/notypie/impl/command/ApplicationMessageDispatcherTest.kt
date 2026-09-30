@@ -242,7 +242,39 @@ class ApplicationMessageDispatcherTest :
                 then("it fails once without any retry") {
                     output.ok shouldBe false
                     output.errorReason shouldBe "channel_not_found"
+                    output.isAccessBlocked() shouldBe false
                     calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.* refuses the bot token or workspace as a whole") {
+            reset()
+            val blockedCodes = listOf("invalid_auth", "token_revoked", "missing_scope", "ekm_access_denied")
+            blockedCodes.forEach { code ->
+                responses.add(status(code = 200, body = """{"ok":false,"error":"$code"}"""))
+            }
+            val reported = mutableListOf<String>()
+            val reporting =
+                ApplicationMessageDispatcher(
+                    botToken = "xoxb-test",
+                    applicationEventPublisher = mockk(relaxed = true),
+                    retryService = RetryService(),
+                    slack = slack,
+                    okHttpClient = loopbackClient,
+                    onAccessBlocked = { reported.add(it) },
+                )
+
+            `when`("one channel message per error code is dispatched") {
+                val outputs = blockedCodes.map { reporting.dispatch(event = channelMessage()) }
+
+                then("each is access-blocked for the relay to hold, reported once, and not retried here") {
+                    outputs.forEach { output ->
+                        output.isAccessBlocked() shouldBe true
+                        output.ok shouldBe false
+                    }
+                    reported shouldBe blockedCodes
+                    calls.get() shouldBe blockedCodes.size
                 }
             }
         }

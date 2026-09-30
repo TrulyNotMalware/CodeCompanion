@@ -47,6 +47,25 @@ private val dispatcherLog = KotlinLogging.logger {}
 // retried only for an idempotent call.
 private const val SLACK_UNAVAILABLE_ERROR = "service_unavailable"
 private const val SLACK_INTERNAL_ERROR = "internal_error"
+
+// Token- or workspace-wide refusals from the chat.postMessage error list on docs.slack.dev: every row fails the same
+// way until the token, its scopes or the workspace are fixed, so the row is held instead of failed.
+private val SLACK_ACCESS_ERRORS =
+    setOf(
+        "invalid_auth",
+        "not_authed",
+        "account_inactive",
+        "token_revoked",
+        "token_expired",
+        "missing_scope",
+        "no_permission",
+        "not_allowed_token_type",
+        "team_access_not_granted",
+        "accesslimited",
+        "ekm_access_denied",
+        "org_login_required",
+        "team_added_to_org",
+    )
 private val SLACK_RESPONSE_URL_HOSTS = setOf("hooks.slack.com", "hooks.slack-gov.com")
 private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR = 500
@@ -62,12 +81,19 @@ val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
 const val RATE_LIMITED_REASON = "ratelimited"
 const val TRANSIENT_EXHAUSTED_REASON = "transient_exhausted"
 const val OUTCOME_UNKNOWN_REASON = "outcome_unknown"
+const val ACCESS_BLOCKED_REASON = "access_blocked"
+
+// How long the relay holds an access-blocked row before trying it again: long enough not to hammer Slack with a
+// dead token, short enough that rows go out soon after the token or workspace is fixed.
+val ACCESS_BLOCKED_DEFER: Duration = Duration.ofMinutes(15L)
 
 fun CommandOutput.isRateLimited(): Boolean = !ok && errorReason == RATE_LIMITED_REASON
 
 fun CommandOutput.isTransientExhausted(): Boolean = !ok && errorReason == TRANSIENT_EXHAUSTED_REASON
 
 fun CommandOutput.isOutcomeUnknown(): Boolean = !ok && errorReason == OUTCOME_UNKNOWN_REASON
+
+fun CommandOutput.isAccessBlocked(): Boolean = !ok && errorReason == ACCESS_BLOCKED_REASON
 
 fun CommandOutput.retryAfter(): Duration? = (this as? RateLimitedOutput)?.retryAfter
 
@@ -122,6 +148,7 @@ class ApplicationMessageDispatcher(
     private val slack: Slack = slackClient(),
     private val okHttpClient: OkHttpClient = responseUrlClient(slack = slack),
     private val sleeper: (Duration) -> Unit = { Thread.sleep(it.toMillis()) },
+    private val onAccessBlocked: (slackError: String) -> Unit = {},
 ) : MessageDispatcher {
     private val mediaTypeJson = "application/json; charset=utf-8".toMediaType()
 
@@ -452,6 +479,14 @@ class ApplicationMessageDispatcher(
             idempotent = idempotent,
         )
         if (error == SLACK_INTERNAL_ERROR) return outcomeUnknownOutput(event = event, call = apiMethod, detail = error)
+        if (error in SLACK_ACCESS_ERRORS) {
+            dispatcherLog.error {
+                "Slack refused the bot token or workspace on $apiMethod for ${event.commandDetailType}: " +
+                    "error=$error; holding idempotencyKey=${event.idempotencyKey} until the configuration is fixed"
+            }
+            onAccessBlocked(error)
+            return failOutput(event = event, reason = ACCESS_BLOCKED_REASON)
+        }
         dispatcherLog.warn {
             "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
         }

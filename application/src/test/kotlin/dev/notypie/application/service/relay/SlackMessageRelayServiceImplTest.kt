@@ -11,6 +11,8 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.impl.command.ACCESS_BLOCKED_DEFER
+import dev.notypie.impl.command.ACCESS_BLOCKED_REASON
 import dev.notypie.impl.command.OUTCOME_UNKNOWN_REASON
 import dev.notypie.impl.command.RateLimitedOutput
 import dev.notypie.impl.command.TRANSIENT_EXHAUSTED_REASON
@@ -374,6 +376,43 @@ class SlackMessageRelayServiceImplTest :
                     }
                     verify(exactly = 0) {
                         outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = any())
+                    }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                }
+            }
+
+            `when`("Slack refuses the bot token or workspace") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val deferredTo = slot<LocalDateTime>()
+                val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every {
+                    outboxRepository.deferClaim(eventId = any(), attemptCount = 1, updatedAt = capture(deferredTo))
+                } returns 1
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher =
+                            dispatcherReturning(
+                                output = failOutput(event = payload(), reason = ACCESS_BLOCKED_REASON),
+                            ),
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                then("the row is held for the longer access wait instead of failing, and nothing terminal happens") {
+                    val eligibleAt = deferredTo.captured.plusSeconds(300L)
+                    eligibleAt shouldBeGreaterThanOrEqualTo DEFAULT_TEST_NOW.plus(ACCESS_BLOCKED_DEFER)
+                    eligibleAt shouldBeLessThan DEFAULT_TEST_NOW.plus(ACCESS_BLOCKED_DEFER).plusMinutes(2L)
+                    verify(exactly = 0) {
+                        outboxRepository.completeClaim(
+                            eventId = any(),
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
                     }
                     verify(exactly = 0) { eventPublisher.publishEvent(any()) }
                 }

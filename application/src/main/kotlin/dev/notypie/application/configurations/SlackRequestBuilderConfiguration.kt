@@ -12,10 +12,13 @@ import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+
+internal const val METRIC_ACCESS_BLOCKED = "codecompanion.slack.dispatch.access_blocked"
 
 @Configuration
 class SlackRequestBuilderConfiguration(
@@ -28,12 +31,17 @@ class SlackRequestBuilderConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(MessageDispatcher::class)
-    fun messageDispatcher(applicationEventPublisher: ApplicationEventPublisher, retryService: RetryService) =
-        ApplicationMessageDispatcher(
-            botToken = appConfig.api.token,
-            applicationEventPublisher = applicationEventPublisher,
-            retryService = retryService,
-        )
+    fun messageDispatcher(
+        applicationEventPublisher: ApplicationEventPublisher,
+        retryService: RetryService,
+        meterRegistry: MeterRegistry,
+    ) = ApplicationMessageDispatcher(
+        botToken = appConfig.api.token,
+        applicationEventPublisher = applicationEventPublisher,
+        retryService = retryService,
+        // The tag is one of the dispatcher's fixed Slack access error codes, so it stays low-cardinality.
+        onAccessBlocked = { error -> meterRegistry.counter(METRIC_ACCESS_BLOCKED, "error", error).increment() },
+    )
 
     @Bean
     @ConditionalOnMissingBean(SlackViewOpenDispatcher::class)
