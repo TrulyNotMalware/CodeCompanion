@@ -496,12 +496,48 @@ class StandupSchedulingServiceTest :
                 every { repo.resetStuckDispatches(olderThan = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns emptyList()
+                every { repo.markDispatchSkipped(dispatchId = 99L, reason = any()) } returns true
 
                 service.sendPendingDispatches()
 
-                then("the dispatch is skipped, no claim attempted") {
+                then("no claim is attempted and the row is marked SKIPPED so it leaves the PENDING queue (T28)") {
                     verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
+                    verify(exactly = 1) { repo.markDispatchSkipped(dispatchId = 99L, reason = "routine inactive") }
+                }
+            }
+
+            `when`("an inactive routine's stale dispatch sits ahead of an active routine's dispatch in the batch") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val stale =
+                    readyDispatchOf(dispatchId = 1L, userId = "U_OLD", triggerOffsetSeconds = -86_400L)
+                        .copy(routineUid = UUID.randomUUID())
+                val active = readyDispatchOf(dispatchId = 2L, userId = "U_A", triggerOffsetSeconds = -60L)
+
+                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(stale, active)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.markDispatchSkipped(dispatchId = 1L, reason = any()) } returns true
+                every { repo.claimDispatch(dispatchId = 2L, claimToken = any()) } returns true
+                every { repo.markDispatchSent(dispatchId = 2L, claimToken = any(), sentAt = any()) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.sendPendingDispatches()
+
+                then("the stale row is retired and the active routine's member is still DM'd in the same tick") {
+                    verify(exactly = 1) { repo.markDispatchSkipped(dispatchId = 1L, reason = any()) }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = 1L, claimToken = any()) }
+                    verify(exactly = 1) { repo.markDispatchSent(dispatchId = 2L, claimToken = any(), sentAt = any()) }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
                 }
             }
         }

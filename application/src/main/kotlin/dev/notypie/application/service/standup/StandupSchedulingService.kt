@@ -132,10 +132,13 @@ class StandupSchedulingService(
             }
             val routine = routinesByUid[item.routineUid]
             if (routine == null) {
+                // Left PENDING, these rows kept winning ORDER BY dm_trigger_at + limit and starved every active
+                // routine's DMs; a terminal SKIPPED takes them out of the queue (review T28).
                 log.warn {
                     "Pending dispatch points at unknown/inactive routine: " +
                         "dispatchId=${item.dispatch.id} routineUid=${item.routineUid}"
                 }
+                skipDispatch(item = item, reason = "routine inactive")
                 return@forEach
             }
             processDispatch(item = item, routine = routine, sentAt = now)

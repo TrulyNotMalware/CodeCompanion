@@ -37,6 +37,8 @@ is written back onto the session row once the relay has posted it.
   `sendPendingDispatches` queries by absolute instant across all sessions, never "today in routine zone".
 - **Closed sessions get no DM.** A ready dispatch whose session is not `COLLECTING` or whose `cutoffAt` has
   passed is marked `SKIPPED` (`markDispatchSkipped`) instead of sending a "Fill in" DM (review T19).
+  A dispatch whose routine is inactive / unknown is marked `SKIPPED` too: left `PENDING`, such rows kept
+  winning `ORDER BY dm_trigger_at` + `dispatchBatchSize` and starved every active routine (review T28).
 - **Dispatch CAS with a claim token.** `resetStuckDispatches(olderThan)` runs first. Then per row:
   `claimDispatch(dispatchId, claimToken)` commits in its own tx; `buildDmNotice` +
   `outboxRepository.save(outboundMessagePort.toRow(...))` + `markDispatchSent(claimToken)` run in one
