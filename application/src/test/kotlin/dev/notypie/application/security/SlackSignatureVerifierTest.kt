@@ -69,6 +69,51 @@ class SlackSignatureVerifierTest :
                 }
             }
 
+            `when`("the timestamp is far enough in the past that now - timestamp overflows a Long") {
+                val overflowingTimestamp = Long.MIN_VALUE + timestamp.toLong()
+                val result =
+                    verifier.checkHeaders(
+                        requestTimestamp = overflowingTimestamp.toString(),
+                        requestSignature = validSignature,
+                        toleranceSeconds = 300,
+                    )
+
+                then("it is rejected as expired instead of wrapping around to fresh") {
+                    result.valid shouldBe false
+                    result.reason shouldBe SlackSignatureVerificationFailureReason.EXPIRED_TIMESTAMP
+                }
+            }
+
+            listOf(Long.MIN_VALUE, Long.MAX_VALUE).forEach { extreme ->
+                `when`("the timestamp is $extreme") {
+                    val result =
+                        verifier.checkHeaders(
+                            requestTimestamp = extreme.toString(),
+                            requestSignature = validSignature,
+                            toleranceSeconds = 300,
+                        )
+
+                    then("it is rejected as expired") {
+                        result.reason shouldBe SlackSignatureVerificationFailureReason.EXPIRED_TIMESTAMP
+                    }
+                }
+            }
+
+            `when`("the timestamp is exactly at either edge of the tolerance") {
+                val edges =
+                    listOf(timestamp.toLong() - 300, timestamp.toLong() + 300).map { edge ->
+                        verifier.checkHeaders(
+                            requestTimestamp = edge.toString(),
+                            requestSignature = validSignature,
+                            toleranceSeconds = 300,
+                        )
+                    }
+
+                then("both are still fresh") {
+                    edges.map { it.valid } shouldBe listOf(true, true)
+                }
+            }
+
             `when`("the signature is not v0= followed by 64 lower-case hex digits") {
                 val result =
                     verifier.checkHeaders(

@@ -4,7 +4,6 @@ import java.security.MessageDigest
 import java.time.Clock
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
-import kotlin.math.abs
 
 class SlackSignatureVerifier(
     private val clock: Clock,
@@ -54,8 +53,14 @@ class SlackSignatureVerifier(
         val timestamp =
             requestTimestamp.toLongOrNull()
                 ?: return SlackSignatureVerificationResult.invalidTimestamp()
-        val currentEpochSeconds = clock.instant().epochSecond
-        if (abs(currentEpochSeconds - timestamp) > toleranceSeconds) {
+        // subtractExact: a plain `abs(now - ts)` wraps for ts near Long.MIN_VALUE + now and reads as fresh.
+        val skewSeconds =
+            try {
+                Math.subtractExact(clock.instant().epochSecond, timestamp)
+            } catch (_: ArithmeticException) {
+                return SlackSignatureVerificationResult.expiredTimestamp()
+            }
+        if (skewSeconds !in -toleranceSeconds..toleranceSeconds) {
             return SlackSignatureVerificationResult.expiredTimestamp()
         }
         if (!SIGNATURE_FORMAT.matches(input = requestSignature)) {
