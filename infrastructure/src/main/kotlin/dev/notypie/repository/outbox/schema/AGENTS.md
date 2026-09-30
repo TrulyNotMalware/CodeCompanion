@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # infrastructure/repository/outbox/schema
 
@@ -31,8 +31,7 @@ decoding.
   either column (written before V20 / V22) maps to the default `0`.
 - **Bumping the payload shape**: add `V3`, set `CURRENT = V3`, and add `V3` to `SUPPORTED` in the same
   change; remove `V2` from `SUPPORTED` only after the outbox is guaranteed drained. The relay refuses to
-  decode a row whose version is outside `SUPPORTED`, leaving it stuck (visible to the health indicator)
-  rather than sending a malformed request. V1 (pre-rendered Slack body across payload / metadata / type
+  decode a row whose version is outside `SUPPORTED` rather than sending a malformed request: it leaves it `IN_PROGRESS` unsent — no renew, so no send budget is spent, and no `FAILURE` — logging ERROR; the recovery sweep reclaims it every stuck threshold until a binary that supports the version sends it, or the 24 h bound abandons it. It is not a health signal: each reclaim refreshes `updated_at` and `send_count` stays 0, so watch the ERROR log. V1 (pre-rendered Slack body across payload / metadata / type
   columns) is unsupported; see `V11__outbox_transport_neutral_envelope.sql`.
 - Migrations: `V1__outbox_pk_event_id.sql`, `V11__outbox_transport_neutral_envelope.sql`,
   `V19__add_outbox_status_indexes.sql`, `V20__add_outbox_attempt_count.sql`, `V22__add_outbox_send_count.sql`.

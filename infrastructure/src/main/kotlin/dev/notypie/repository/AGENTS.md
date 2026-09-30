@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
 
 # infrastructure/repository
 
@@ -33,8 +33,9 @@ subpackage of `@Entity` classes.
   **unregistered**: neither is outbox-bound, so encoding or decoding one fails fast with an unresolved
   type id instead of silently round-tripping. Do not "complete" the subtype list.
 - **`OutboxSchemaVersion` is the compatibility gate.** Writers stamp `CURRENT`; readers validate against
-  `SUPPORTED` before decoding, so a relay binary that cannot parse a shape leaves a stuck row (which the
-  health indicator surfaces) rather than sending a malformed request. Bump `CURRENT` **and** extend
+  `SUPPORTED` before decoding, so a relay binary that cannot parse a shape leaves the row `IN_PROGRESS` unsent
+  (no send budget spent, ERROR log, reclaimed by the sweep until a binary that can read it sends it) rather
+  than sending a malformed request or failing it. Bump `CURRENT` **and** extend
   `SUPPORTED` for a new shape; remove a version from `SUPPORTED` only after a guaranteed-drained
   migration window.
 - **Status transitions are atomic CAS, not read-then-write.** `claimPending`'s `WHERE status = 'PENDING'`

@@ -15,6 +15,7 @@ import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
@@ -98,6 +99,15 @@ class SlackMessageRelayServiceImpl(
                         reason = "expired: created ${row.createdAt}",
                     ),
             )
+            return
+        }
+        // A shape only a newer release can read is left to that release: no renew (no send spent), no FAILURE.
+        // The sweep reclaims it every stuck threshold until a binary that can read it sends it, or the 24 h bound ends it.
+        if (row.schemaVersion !in OutboxSchemaVersion.SUPPORTED) {
+            logger.error {
+                "Outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} has schemaVersion=" +
+                    "${row.schemaVersion}, not in ${OutboxSchemaVersion.SUPPORTED}; leaving it IN_PROGRESS unsent"
+            }
             return
         }
         if (!renew(claim = claim)) return

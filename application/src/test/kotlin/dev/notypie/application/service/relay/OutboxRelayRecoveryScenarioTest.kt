@@ -164,6 +164,30 @@ class OutboxRelayRecoveryScenarioTest :
             }
         }
 
+        given("a row a newer release wrote in a schema version this binary cannot read") {
+            jdbc.update("DELETE FROM outbox_message")
+            val clock = MutableClock()
+            val dispatcher = ScriptedMessageDispatcher(outcomes = emptyList(), fallback = delivered)
+            val lane = Lane(clock = clock, dispatcher = dispatcher)
+            val eventId = repository.save(createOutboxMessage(createdAt = clock.now)).eventId
+            jdbc.update("UPDATE outbox_message SET schema_version = 9999 WHERE event_id = ?", eventId)
+
+            `when`("the poller claims it and two recovery sweeps reclaim it") {
+                lane.poller.pollPending()
+                repeat(times = 2) {
+                    clock.advance(by = Duration.ofMinutes(6L))
+                    lane.sweeper.recoverOnce()
+                }
+
+                then("it is never sent and never failed, and spends none of the send budget") {
+                    dispatcher.calls shouldBe 0
+                    statusOf(eventId = eventId) shouldBe MessageStatus.IN_PROGRESS.name
+                    sendsOf(eventId = eventId) shouldBe 0
+                    claimsOf(eventId = eventId) shouldBe 3
+                }
+            }
+        }
+
         given("a claim that waits in the relay queue past the stuck threshold") {
             jdbc.update("DELETE FROM outbox_message")
             val clock = MutableClock()

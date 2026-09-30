@@ -10,6 +10,7 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.context.ApplicationEventPublisher
@@ -30,6 +31,7 @@ fun createOutboxRow(
     createdAt: LocalDateTime = DEFAULT_TEST_NOW,
     attemptCount: Int = 0,
     sendCount: Int = 0,
+    schemaVersion: Int = OutboxSchemaVersion.CURRENT,
 ): OutboxMessage =
     mockk(relaxed = true) {
         every { this@mockk.eventId } returns eventId
@@ -37,6 +39,7 @@ fun createOutboxRow(
         every { this@mockk.createdAt } returns createdAt
         every { this@mockk.attemptCount } returns attemptCount
         every { this@mockk.sendCount } returns sendCount
+        every { this@mockk.schemaVersion } returns schemaVersion
     }
 
 data class PollingProcessorFixture(
