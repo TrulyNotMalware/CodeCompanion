@@ -5,6 +5,7 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import org.springframework.scheduling.annotation.Scheduled
 import java.time.Clock
 import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicBoolean
 
 // Stuck/stale recovery lives in OutboxRecoveryScheduler, shared with CDC mode.
 class PollingMessageProcessor(
@@ -14,10 +15,18 @@ class PollingMessageProcessor(
     private val clock: Clock,
 ) : MessageProcessor {
     private val batchSize: Int = appConfig.outbox.polling.batchSize
+    private val ticking = AtomicBoolean(false)
 
+    // fixedRate ticks can overlap (a SimpleAsyncTaskScheduler starts each on a new thread), so a tick that finds
+    // the previous one still claiming is skipped rather than adding another claim lane.
     @Scheduled(fixedRate = 5000)
     fun pollPending() {
-        claimAndDispatch()
+        if (!ticking.compareAndSet(false, true)) return
+        try {
+            claimAndDispatch()
+        } finally {
+            ticking.set(false)
+        }
     }
 
     // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work. Claims only what the

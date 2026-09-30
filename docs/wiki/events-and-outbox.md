@@ -129,7 +129,8 @@ _type: architecture · updated: 2026-09-30_
   `${SLACK_CDC_TOPIC}`). `slack-live`는 `polling` + `application_event`로 Kafka/Debezium 없이 전체 릴레이가 in-process다.
 - **POLLING** — `PollingMessageProcessor`, `@Scheduled(fixedRate = 5000)`(하드코딩). tick당 `PENDING`
   `batch-size`(기본 100)건 읽기 → 행마다 `claimPending` → 이긴 claim만 `batchPendingMessages`, 내부 루프 없음(스케줄러
-  스레드 독점 방지). 복구는 여기 없고 `OutboxRecoveryScheduler`가 한다. `SlackMessageRelayServiceImpl.batchPendingMessages`는
+  스레드 독점 방지). 앞 tick이 아직 claim 중이면 다음 tick은 `AtomicBoolean` 가드로 바로 빠진다(가상 스레드
+  스케줄러는 fixedRate tick마다 새 스레드를 써서 tick이 겹쳤다, review 14장 O2). 복구는 여기 없고 `OutboxRecoveryScheduler`가 한다. `SlackMessageRelayServiceImpl.batchPendingMessages`는
   `@Async` 대신 `@Qualifier("relayTaskExecutor")`(4스레드, 큐 = batch-size, `AbortPolicy`)에 직접 submit 한다
   (같은 빈 내부 self-invocation은 AOP 프록시를 타지 않음). 큐에서 오래 기다린 작업의 안전은 큐 크기가 아니라 위의
   `renewClaim` 검사가 보장한다.

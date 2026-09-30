@@ -10,6 +10,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class PollingMessageProcessorTest :
     BehaviorSpec({
@@ -108,6 +112,33 @@ class PollingMessageProcessorTest :
                 then("the tick neither reads nor claims, leaving every row PENDING for a later tick") {
                     verify(exactly = 0) { outboxRepository.findPendingMessages(limit = any()) }
                     verify(exactly = 0) { relayService.batchPendingMessages(claims = any()) }
+                }
+            }
+
+            `when`("a tick fires while the previous tick is still running") {
+                val (outboxRepository, _, processor) = createPollingProcessorFixture()
+                val entered = CountDownLatch(1)
+                val release = CountDownLatch(1)
+                val reads = AtomicInteger(0)
+                every { outboxRepository.findPendingMessages(limit = 100) } answers {
+                    if (reads.incrementAndGet() == 1) {
+                        entered.countDown()
+                        release.await(5L, TimeUnit.SECONDS)
+                    }
+                    emptyList()
+                }
+
+                val first = thread { processor.pollPending() }
+                entered.await(5L, TimeUnit.SECONDS)
+                processor.pollPending()
+                val readsWhileOverlapping = reads.get()
+                release.countDown()
+                first.join(5_000L)
+                processor.pollPending()
+
+                then("the overlapping tick returns without reading, and the next tick after it runs again") {
+                    readsWhileOverlapping shouldBe 1
+                    reads.get() shouldBe 2
                 }
             }
 
