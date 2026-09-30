@@ -35,6 +35,10 @@ private val logger = KotlinLogging.logger {}
 private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
 private val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
 
+// Each attempt can wait a full Hikari connection-timeout on the listener thread; three ride out a deadlock or a
+// dropped connection, and anything longer is an outage the recovery sweep handles (budget: relay AGENTS.md).
+private const val STATUS_WRITE_ATTEMPTS = 3L
+
 @Service
 class SlackMessageRelayServiceImpl(
     private val outboxRepository: MessageOutboxRepository,
@@ -214,7 +218,7 @@ class SlackMessageRelayServiceImpl(
                             now = now(),
                         )
                     },
-                    maxAttempts = 5,
+                    maxAttempts = STATUS_WRITE_ATTEMPTS,
                 )
             } catch (exception: Exception) {
                 logger.error(exception) {

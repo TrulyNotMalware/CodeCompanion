@@ -63,10 +63,11 @@ _type: guide · updated: 2026-09-30_
   `run` 스크립트는 더 이상 `-Dmanagement.endpoints.web.exposure.include`로 YAML을 덮지 않는다.
 - Kafka 컨슈머(`local`·`dev`·`prod`): `max-poll-records: 5`, `max.poll.interval.ms: 300000`. 한 번에 받은 5건을 300초 안에
   끝내야 하므로 레코드당 평균 예산은 60초다. PENDING 행 레코드 1건은 Slack 디스패치 1회이고(나머지 CDC 이벤트는 즉시 반환),
-  디스패치 1회는 `RetryService` 기본 3회 시도에, 429의 `Retry-After`가 3초 이하면 그만큼 기다린 뒤 한 번 더(다시 최대 3회) 돈다.
-  모든 Slack 호출(SDK와 `response_url`)은 SDK 클라이언트의 호출 전체 타임아웃 `SLACK_CALL_TIMEOUT`(6초,
-  `ApplicationMessageDispatcher`)을 공유하므로 디스패치 1회는 2 × (3 × 6초 + 백오프) + 3초 ≈ 40초로 묶이고,
-  렌더링의 프로필 조회(연결 3초 + 읽기 10초)를 더하면 레코드당 약 53초다. 60초 예산에서 남는 약 7초가 claim·갱신·완료 SQL 몫이다. 그 타임아웃·재시도 정책·위 두 값을 바꾸거나 리스너 안에 대기를 넣을 때는 이 계산부터 다시 한다. 배치가 초과되면 컨슈머가
+  레코드 1건의 최악 시간은 Slack HTTP 상한(산식은 `infrastructure/.../impl/command/AGENTS.md`에만 있다)과 SQL 대기
+  (풀 고갈 시 6 × Hikari `connection-timeout` + 약 0.3초, `application/.../service/relay/AGENTS.md`의 "Per-record
+  time budget")의 합이다. 풀이 고갈되면 60초를 넘을 수 있고, 그때는 리밸런스·재전달이 일어나지만 PENDING만 claim하므로
+  중복 발송은 없다. Slack 타임아웃·재시도 정책·`connection-timeout`·위 두 값을 바꾸거나 리스너 안에 대기를 넣을 때는
+  두 문서의 계산부터 다시 한다. 배치가 초과되면 컨슈머가
   그룹에서 빠졌다가 재전달받는데, 이미 claim된 행은 PENDING이 아니므로 CDC 프로세서가 건너뛴다.
 - Hikari 풀: 모든 프로파일 `maximum-pool-size: 20`. 회의 cancel/reschedule/참가자 추가는 바깥 interaction 트랜잭션과
   `isolatedWriteTemplate`의 `REQUIRES_NEW` 쓰기로 커넥션 두 개를 동시에 잡고, 릴레이 executor·스케줄러·CDC 리스너가 같은 풀을 쓴다.

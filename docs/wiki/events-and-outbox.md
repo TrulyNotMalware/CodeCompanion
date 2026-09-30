@@ -71,9 +71,11 @@ _type: architecture · updated: 2026-09-30_
 - **한 번의 dispatch는 시간 상한이 있다.** Slack SDK 클라이언트와 `response_url` 클라이언트 모두 OkHttp
   `callTimeout` 6초(`SLACK_CALL_TIMEOUT`), SDK stats는 끈다(stats가 켜져 있으면 SDK가 `Retry-After`를
   `Long.valueOf`로 먼저 읽어 HTTP-date에서 예외가 나고, 팀 ID 해석용 `auth.test`를 호출마다 추가로 부른다).
-  최악은 (3회 × 6초 + 백오프) × 2 + 인라인 대기 3초 ≈ 39.6초, 렌더의 프로필 조회 10초를 더해 ≈ 49.6초로, CDC의
-  레코드당 예산(`max.poll.interval.ms` 300초 / `max-poll-records` 5 = 60초)과 stuck 임계 300초 안에 든다.
-  산식과 전제는 `infrastructure/.../impl/command/AGENTS.md`에 있다. `response_url` 클라이언트는 리다이렉트를
+  Slack HTTP 쪽 최악값(렌더의 프로필 조회 + 디스패치 재시도)의 산식과 합계는 `infrastructure/.../impl/command/AGENTS.md`
+  한 곳에만 둔다(여기에 숫자를 복사하지 않는다). 레코드 1건에는 여기에 SQL 대기가 더해진다: 풀이 고갈되면
+  `findById`·`claimPending`·`renewClaim`·`completeClaim`(최대 3회) 시도마다 Hikari `connection-timeout`까지 기다릴 수
+  있다(6 × `connection-timeout` + 약 0.3초). 이 몫과 결과(리밸런스는 나도 중복 발송은 없음, stuck 임계 300초 조건)는
+  `application/.../service/relay/AGENTS.md`의 "Per-record time budget"에 있다(review 14장 O3). `response_url` 클라이언트는 리다이렉트를
   따라가지 않으므로 호스트 허용 목록(`https`, 443, `hooks.slack.com`/`hooks.slack-gov.com`)이 최종이다.
 
 ## 아웃박스 행(`outbox_message`)
