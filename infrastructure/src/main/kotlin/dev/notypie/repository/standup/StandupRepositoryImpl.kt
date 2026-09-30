@@ -87,15 +87,23 @@ open class StandupRepositoryImpl(
         val session =
             jpaStandupSessionRepository.findBySessionUid(sessionUid = sessionUid)
                 ?: return false
-        session.answers.removeIf { it.userId == userId }
-        session.answers.add(
-            StandupAnswerSchema(
-                session = session,
-                userId = userId,
-                responsesRaw = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER),
-                submittedAt = submittedAt,
-            ),
-        )
+        val responsesRaw = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER)
+        // Update in place: an IDENTITY insert runs at merge time, ahead of the orphan delete, so remove + add
+        // always hit uk_standup_answer_session_user on a resubmission (T9).
+        val existing = session.answers.firstOrNull { it.userId == userId }
+        if (existing != null) {
+            existing.responsesRaw = responsesRaw
+            existing.submittedAt = submittedAt
+        } else {
+            session.answers.add(
+                StandupAnswerSchema(
+                    session = session,
+                    userId = userId,
+                    responsesRaw = responsesRaw,
+                    submittedAt = submittedAt,
+                ),
+            )
+        }
         jpaStandupSessionRepository.save(session)
         return true
     }

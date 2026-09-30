@@ -128,10 +128,12 @@ class StandupAnswerSchema(
     val session: StandupSessionSchema,
     @field:Column(name = "user_id", nullable = false)
     val userId: String,
+    // Mutable so a resubmission updates the row in place (T9): remove + add inserted the new IDENTITY row
+    // before the orphan delete flushed, violating uk_standup_answer_session_user.
     @field:Column(name = "responses", nullable = false, columnDefinition = "TEXT")
-    val responsesRaw: String,
+    var responsesRaw: String,
     @field:Column(name = "submitted_at", nullable = false)
-    val submittedAt: Instant,
+    var submittedAt: Instant,
 )
 
 fun StandupSession.toSchema(): StandupSessionSchema {

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # infrastructure/repository/standup
 
@@ -12,7 +12,7 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
 | File | Description |
 |------|-------------|
 | `StandupRepository.kt` | Read views `ReadyDispatch(dispatch: SessionDispatchDto, sessionUid, sessionDate, cutoffAt, sessionStatus, summaryMessageTs?, routineUid)` and `NudgeCandidateSession(sessionId, sessionUid, routineUid, cutoffAt, sentMemberIds: Set, answeredUserIds: Set)`. Port: `createRoutine(routine): Routine`, `getRoutine(routineUid): RoutineDto` (throws `DatabaseException`), `findActiveRoutinesByChannel(commandChannel)`, `listActiveRoutines()`, `deactivateRoutine(routineUid): Boolean`, `createSession(session): StandupSession` (no upsert), `findSession(routineUid, sessionDate)`, `findSession(sessionUid)`, `recordAnswer(sessionUid, userId, responses, submittedAt): Boolean`, `claimDispatch(dispatchId, claimToken): Boolean`, `markDispatchSent(dispatchId, claimToken, sentAt)`, `markDispatchFailed(dispatchId, claimToken, reason)`, `resetStuckDispatches(olderThan): Int`, `findPendingDispatchesBefore(before, limit): List<ReadyDispatch>`, `findCollectingSessionsPastCutoff(before)`, `markSessionSummarized(sessionId, messageTs): Boolean`, `findCollectingSessionsForNudge(now, nudgeWindowEnd): List<NudgeCandidateSession>`, `claimNudge(sessionId): Boolean`, `replaceSummaryMessageTs(currentMessageTs, messageTs): Boolean` |
-| `StandupRepositoryImpl.kt` | `open class` over `JpaRoutineRepository`, `JpaStandupSessionRepository`, `JpaSessionDispatchRepository`. `recordAnswer` removes the user's previous `StandupAnswerSchema` and appends a new one (last submission wins), joining responses with `RESPONSE_DELIMITER`; `findCollectingSessionsForNudge` derives `sentMemberIds` from dispatches with `dmStatus == SENT` only; CAS results map `== 1` |
+| `StandupRepositoryImpl.kt` | `open class` over `JpaRoutineRepository`, `JpaStandupSessionRepository`, `JpaSessionDispatchRepository`. `recordAnswer` updates the user's existing `StandupAnswerSchema` in place or appends a new one (last submission wins), joining responses with `RESPONSE_DELIMITER`; `findCollectingSessionsForNudge` derives `sentMemberIds` from dispatches with `dmStatus == SENT` only; CAS results map `== 1` |
 | `JpaRoutineRepository.kt` | JPQL with `LEFT JOIN FETCH r.members`: `findByRoutineUid`, `findActiveByCommandChannel(channel)` (`DISTINCT`, `isActive = true`), `findAllActive()`; `@Modifying markInactive(routineUid)` guarded by `isActive = true` (soft delete, returns the row count) |
 | `JpaStandupSessionRepository.kt` | JPQL fetching `dispatches` + `answers`: `findByRoutineUidAndSessionDate`, `findBySessionUid`, `findCollectingPastCutoff(before)`, `findCollectingForNudge(now, nudgeWindowEnd)` (`nudgedAt IS NULL AND cutoffAt > :now AND cutoffAt <= :nudgeWindowEnd`); shallow `findShallowByRoutineUidAndSessionDate`; native CAS `markSummarized(id, messageTs)` (COLLECTING→SUMMARIZED), `claimNudge(id)` (`nudged_at IS NULL AND status = 'COLLECTING'`), `replaceSummaryMessageTs(currentMessageTs, messageTs)` (`WHERE summary_message_ts = :currentMessageTs AND status = 'SUMMARIZED'`) |
 | `JpaSessionDispatchRepository.kt` | JPQL `findPendingBefore(before, pageable)` (`JOIN FETCH d.session`, `PENDING`, `dmTriggerAt <= :before`); native CAS `claimDispatch(id, token)` (PENDING→SENDING), `markSent(id, token, sentAt)`, `markFailed(id, token, reason)` (both `WHERE dm_status = 'SENDING' AND claim_token = :token`), `resetStuckSending(olderThan)` |
@@ -34,8 +34,9 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
   a no-op. All three return row counts the impl maps to booleans.
 - **`createSession` does not upsert.** Unique `(routine_uid, session_date)` throws on a duplicate; callers
   check `findSession(routineUid, sessionDate)` first.
-- **`recordAnswer` is remove-then-add on a fetched graph**, not a CAS; concurrent submissions by one user are
-  last-writer-wins. `responses` are joined by `StandupSessionSchema.RESPONSE_DELIMITER` (ASCII Unit
+- **`recordAnswer` updates the existing answer row in place**, not a CAS; concurrent submissions by one user
+  are last-writer-wins. Never go back to remove + add: with IDENTITY ids the new row's INSERT runs at merge
+  time, before the orphan DELETE flushes, so every resubmission hit `uk_standup_answer_session_user` (T9). `responses` are joined by `StandupSessionSchema.RESPONSE_DELIMITER` (ASCII Unit
   Separator) and split back on read — never accept that character in a question or answer.
 - **`ReadyDispatch` carries the session's own `sessionDate`** so members whose local trigger time falls on a
   different calendar day than the routine zone are dispatched correctly; do not re-derive the date from
@@ -53,9 +54,9 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.standup.*'
 ```
-**No spec exists for this lane in `:infrastructure`** — neither a `JpaStandup*RepositoryTest` on H2 nor a
-`StandupRepositoryImplTest`. The CAS guards and the routine / session mapping are only exercised from
-`:application` specs that mock `StandupRepository`. The missing pair: a `@DataJpaTest` racing two
+`StandupRepositoryImplJpaTest` (H2, real Hibernate) covers the answer resubmission path. The remaining
+gaps are the dispatch / nudge CAS guards and the routine mapping, still exercised only from `:application`
+specs that mock `StandupRepository`. Still missing: a `@DataJpaTest` racing two
 `claimDispatch` calls (expect `1` then `0`), foreign-token `markSent` (expect `0`), `resetStuckSending`, and
 `claimNudge` twice; plus a mapping spec for `Routine.toSchema().toDomainEntity()` and the session round-trip.
 
