@@ -67,6 +67,10 @@ class ModalTemplateBuilder(
                 "Europe/London",
             )
 
+        // meeting_participants.absent_reason_detail is VARCHAR(255) (V8); Slack's default cap is 3,000, and a longer
+        // detail failed the decline submit with "Data too long" and a generic modal error.
+        internal const val DECLINE_DETAIL_MAX_LENGTH: Int = 255
+
         private const val DEFAULT_TRIGGER_TIME: String = "10:00"
         private const val DEFAULT_CUTOFF_MINUTES: String = "120"
 
@@ -362,7 +366,11 @@ class ModalTemplateBuilder(
                     input(blockId = DeclineReasonModalIds.DETAIL_BLOCK_ID) {
                         optional(value = true)
                         label(text = "Details (required if you pick Other)")
-                        plainTextInput(actionId = DeclineReasonModalIds.DETAIL_ACTION_ID, multiline = true)
+                        plainTextInput(
+                            actionId = DeclineReasonModalIds.DETAIL_ACTION_ID,
+                            multiline = true,
+                            maxLength = DECLINE_DETAIL_MAX_LENGTH,
+                        )
                     }
                 }
             }

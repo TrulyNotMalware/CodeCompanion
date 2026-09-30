@@ -953,6 +953,17 @@ class ModalTemplateBuilderTest :
                         detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
                     textInput.actionId shouldBe DeclineReasonModalIds.DETAIL_ACTION_ID
                 }
+
+                // T22: Slack's default cap is 3,000, and a detail over the VARCHAR(255) column failed the submit.
+                then("the detail input is capped at the absent_reason_detail column width (255)") {
+                    val detailBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
+                    val textInput =
+                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    textInput.maxLength shouldBe 255
+                }
             }
         }
 
