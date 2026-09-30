@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.mockk
 import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
@@ -29,7 +30,11 @@ class ShutdownBudgetTest :
                     kafkaTemplateProvider = mockk(relaxed = true),
                 ).concurrentKafkaListenerContainerFactory(
                     consumerFactory = mockk(relaxed = true),
-                    cdcDeadLetterRecovery = CdcDeadLetterRecovery(jsonTemplate = null),
+                    cdcDeadLetterRecovery =
+                        CdcDeadLetterRecovery(
+                            jsonTemplate = null,
+                            meterRegistry = SimpleMeterRegistry(),
+                        ),
                 )
 
             then("it stops after the record in hand, not the rest of the poll, and waits one record for it") {

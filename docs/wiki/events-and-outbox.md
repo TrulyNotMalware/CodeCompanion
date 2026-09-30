@@ -164,7 +164,10 @@ _type: architecture · updated: 2026-09-30_
   **원본 바이트 그대로** 실리고(JSON 템플릿으로 보내면 Base64 문자열이 되어 replay 불가), 역직렬화된 `Envelope`는 JSON
   템플릿으로 간다. `NewTopic` 빈이 기동 시 `<cdc topic>-dlt`를 만들되(브로커 기본 파티션·복제), 생성 권한이 없는
   환경에서는 수동으로 만들어야 한다. dead-letter 전송이 실패해도(토픽 없음 등) `failIfSendResultIsError = false`라
-  레코드는 복구된 것으로 처리되어 파티션이 막히지 않는다 — 행은 `PENDING`으로 남아 스윕이 구한다.
+  레코드는 복구된 것으로 처리되어 파티션이 막히지 않는다 — 행은 `PENDING`으로 남아 스윕이 구한다. 잃는 것은
+  replay용 사본이므로 실패는 모두 `codecompanion.cdc.dlt.publish.failures` 카운터와 ERROR 로그로 드러낸다. 두
+  dead-letter 템플릿은 앱 템플릿과 별도의 producer를 쓰고 `max.block.ms`를 5초로 제한한다(기본 60초 동안 리스너가
+  메타데이터를 기다리며 막혔다, review 14장 O7·Codex R3-03).
   `KafkaTemplate`이 없는 조합에서는 ERROR 로그로 강등. `ErrorHandlingDeserializer` 래핑은 그대로다.
 - `SchedulingConfig`가 `@EnableScheduling`을 무조건 켠다. 과거엔 `PoolingPublisherConfig`에만 있어 CDC 모드에서
   `StandupScheduler` 등 모든 `@Scheduled`가 조용히 no-op이었다.
