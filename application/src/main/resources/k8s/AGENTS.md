@@ -91,8 +91,8 @@ adds what an agent editing the manifests needs to know.
   workflow's `rollout undo` (which restores only the pod template, never `spec.strategy`) both stop every old Pod
   before starting a new one. `rollingUpdate: null` makes the apply delete the live object's defaulted
   `rollingUpdate` block, which the API server rejects next to `Recreate`. Cost: every deploy while the block is
-  there is an outage until a new Pod is Ready (startup probe up to 3 minutes); old-Pod shutdown (≤ 45s) + startup
-  (≤ 180s) + readiness fits the workflow's 300s rollout timeout, so do not lengthen either without raising
+  there is an outage until a new Pod is Ready (startup probe up to 3 minutes); old-Pod shutdown (≤ 90s) + startup
+  (≤ 180s) + readiness fits the workflow's 420s rollout timeout, so do not lengthen either without raising
   `DEPLOYMENT_ROLLOUT_TIMEOUT`. **Removal:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision
   is no longer wanted, delete the whole `strategy` block in a follow-up PR; the three-way merge removes the field
   (it is in the `last-applied-configuration` annotation) and the API server defaults to RollingUpdate 25%/25%. Do

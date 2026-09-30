@@ -42,7 +42,9 @@ env:
   K8S_DEPLOYMENT_NAME: code-companion-deploy
   K8S_SERVICE_NAME: code-companion-svc
   K8S_CONTAINER_NAME: code-companion-deploy
-  DEPLOYMENT_ROLLOUT_TIMEOUT: 300s
+  # Recreate (k8s/deployment.yaml): old Pods' grace (≤ 90s) + startup probe (≤ 180s) + first readiness (10s period)
+  # + scheduling and image pull. Lower it only together with that grace or the startup probe.
+  DEPLOYMENT_ROLLOUT_TIMEOUT: 420s
 
   JAR_FILE_NAME: code-companion-prod
   STATIC_DOCKER_TAG: ${{ github.sha }}

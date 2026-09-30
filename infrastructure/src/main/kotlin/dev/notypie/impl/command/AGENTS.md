@@ -113,7 +113,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   `max-poll-records: 5` under `max.poll.interval.ms: 300000`, i.e. 60 s per record. This file owns only the HTTP
   part; the database waits of the same record (claim, renew and completion SQL with their retries, Hikari
   `connection-timeout`) are budgeted in `application/.../service/relay/AGENTS.md`. Raising `SLACK_CALL_TIMEOUT`,
-  the retry attempts, the inline wait or `max-poll-records` must keep the total below 60 s.
+  the retry attempts, the inline wait or `max-poll-records` must leave room for those waits: the relay file
+  owns the combined per-record budget and what happens when a starved pool pushes a record past 60 s.
 - **`response_url` is validated before any request**: `https`, port 443 and a host in `SLACK_RESPONSE_URL_HOSTS`
   (`hooks.slack.com`, GovSlack `hooks.slack-gov.com`), checked on the parsed `HttpUrl` that is then sent, so
   userinfo (`https://hooks.slack.com@evil.example/…`) and a trailing dot are rejected and upper case is
