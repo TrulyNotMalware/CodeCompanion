@@ -15,7 +15,7 @@ The whole lane is **feature-gated**: every bean here is declared conditionally i
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, upserts the YAML-declared topics into `cve_topic` (keyed by topic key) |
+| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, validates every YAML-declared topic (non-blank key and display name, keys unique ignoring case), then upserts them into `cve_topic` (keyed by topic key) |
 
 ## Subdirectories
 | Directory | Purpose |

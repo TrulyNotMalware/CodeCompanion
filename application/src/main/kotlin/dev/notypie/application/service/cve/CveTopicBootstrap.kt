@@ -15,10 +15,11 @@ class CveTopicBootstrap(
 ) {
     @EventListener(ApplicationReadyEvent::class)
     fun bootstrapTopics() {
-        val written =
-            topics
-                .map { toDefinition(topic = it) }
-                .count { cveTopicRepository.upsert(definition = it) }
+        val definitions = topics.map { toDefinition(topic = it) }
+        // /latest matches keys ignoring case, and MariaDB's _ci collation would reject the pair on the UNIQUE key.
+        val caseClashes = definitions.groupBy { it.topicKey.lowercase() }.filterValues { it.size > 1 }.keys
+        require(caseClashes.isEmpty()) { "CVE topic keys must be unique ignoring case: $caseClashes" }
+        val written = definitions.count { cveTopicRepository.upsert(definition = it) }
         log.info { "CVE topic bootstrap finished: declared=${topics.size} written=$written" }
     }
 

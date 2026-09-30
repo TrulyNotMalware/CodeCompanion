@@ -14,7 +14,7 @@ pure DB read — the AI summary was produced once by `../ai/CveSummaryWorker`, n
 |------|-------------|
 | `CveQuerySlashService.kt` | Interface: `handleLatest(headers, payload: SlashCommandRequestBody, commandData: InboundCommand)`. Called from `controllers/SlashCommandController` and `socket/SocketModeReceiver` |
 | `CveQuerySlashServiceImpl.kt` | `@Transactional handleLatest`: feature off → `log.warn` and return; else `CveLatestSlashCommand(idempotencyKey, commandData, topicKey = extractTopicKey(commandData.subCommands))`. `internal fun extractTopicKey(subCommands)` in the companion: first non-blank argument, lower-cased; `null` when there is none |
-| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently. No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey == key }` or "Topic `key` is not available." (key escaped). `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700), every piece passed through `escapeMrkdwn()`; the joined (escaped) body is cut at `BODY_MAX_LENGTH` (2 900) with `…(truncated)`. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` |
+| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently. No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey.equals(key, ignoreCase = true) }` or "Topic `key` is not available." (key escaped). `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700), every piece passed through `escapeMrkdwn()`; the joined (escaped) body is cut at `BODY_MAX_LENGTH` (2 900) with `…(truncated)`. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` |
 
 ## For AI Agents
 
@@ -27,9 +27,10 @@ pure DB read — the AI summary was produced once by `../ai/CveSummaryWorker`, n
   rejects mrkdwn over 3 000 characters (`invalid_blocks`); 5 × 700 already exceeds that, so
   `BODY_MAX_LENGTH` is what makes the DM postable. The same rule lives in
   `../notification/CveNotificationDispatcher`.
-- Key normalisation happens once, in `extractTopicKey` (`lowercase()`), because topic keys are
-  lower-case by convention; `/latest Kotlin` must find `kotlin`. Keep it `internal` — the spec calls it
-  directly.
+- `extractTopicKey` lower-cases the argument, so the listener matches keys **ignoring case** (V5):
+  `/latest springBoot` arrives as `springboot` and must still find the yaml key `springBoot`, which the
+  subscribe modal uses verbatim. Keys are unique ignoring case (`CveTopicBootstrap` fails the boot
+  otherwise), so the match is unambiguous. Keep `extractTopicKey` `internal` — the spec calls it directly.
 - A topic argument only matches **active** topics, so a deactivated topic reads as "not available" even
   for a user still subscribed to it; the no-argument path reads subscribed topics regardless of
   `active`.

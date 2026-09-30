@@ -296,6 +296,37 @@ class CveLatestQueryServiceTest :
             }
         }
 
+        given("a mixed-case topic key and the lower-cased argument /latest produces") {
+            val topicRepository = mockk<CveTopicRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findActiveTopics() } returns
+                listOf(createCveTopic(id = 21L, topicKey = "springBoot", displayName = "Spring Boot"))
+            every { eventRepository.findRecentDoneEvents(topicIds = listOf(21L), limit = 5) } returns
+                listOf(createCveRecentEvent(topicDisplayName = "Spring Boot", title = "v4.1.1", aiSummary = "Patch."))
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = mockk(),
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled with the key as the slash layer normalised it") {
+                service.handleCveLatest(
+                    event =
+                        createCveLatestRequestEvent(
+                            topicKey = CveQuerySlashServiceImpl.extractTopicKey(subCommands = listOf("springBoot")),
+                        ),
+                )
+
+                then("the topic is found regardless of case, as the subscribe modal finds it") {
+                    staged.markdown() shouldContain "*Spring Boot* — *v4.1.1*"
+                    verify(exactly = 1) { eventRepository.findRecentDoneEvents(topicIds = listOf(21L), limit = 5) }
+                }
+            }
+        }
+
         given("a topic argument matching an active topic") {
             val topicRepository = mockk<CveTopicRepository>()
             val eventRepository = mockk<CveEventRepository>()

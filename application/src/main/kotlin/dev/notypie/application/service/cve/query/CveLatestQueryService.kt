@@ -81,8 +81,11 @@ class CveLatestQueryService(
             topicIds = subscribed.map { it.id }
             emptyMessage = "No recent CVE updates for your subscribed topics yet."
         } else {
+            // The slash layer lower-cases the argument while the subscribe modal uses the stored key verbatim; a
+            // case-insensitive match keeps a key like `springBoot` reachable from both (keys are unique ignoring
+            // case — CveTopicBootstrap enforces it and MariaDB's _ci collation already does for the UNIQUE key).
             val topic =
-                cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey == topicKey }
+                cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey.equals(topicKey, ignoreCase = true) }
                     ?: return "Topic `${topicKey.escapeMrkdwn()}` is not available."
             topicIds = listOf(topic.id)
             emptyMessage = "No recent CVE updates for *${topic.displayName.escapeMrkdwn()}* yet."
