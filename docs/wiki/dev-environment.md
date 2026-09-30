@@ -53,10 +53,12 @@ _type: guide · updated: 2026-09-30_
   `${SLACK_SIGNING_SECRET}`(기본값 없음)이다. 2026-09-28에 `slack-live`의 빈 기본값을 제거했다 — 그 프로파일은 터널로 실제
   Slack 앱에 연결되는데 빈 시크릿이면 필터가 검증을 끈다. 기본값이 없다는 것만으로는 fail-fast가 아니다(Boot 바인더는 미해결
   플레이스홀더를 리터럴로 보존) — 기동 거부는 `local` 외 프로파일에서 빈 값·미해결 값을 거절하는 애플리케이션 검증이 맡는다.
-  `local`만 빈 기본값을 유지한다(Socket Mode라 HTTP 수신이 없다).
+  `local`만 빈 기본값을 유지한다(Socket Mode라 HTTP 수신이 없다). 2026-09-30부터 `local`은 `server.address: 127.0.0.1`로
+  루프백에만 바인드한다 — `run`의 기본 환경이 `local`이라 서버에서 `-e` 없이 띄우면 검증이 꺼진 채 모든 인터페이스에 열렸기
+  때문이다. `run` 기본값은 그대로 두고 경고만 출력한다. 터널(`localhost:9000`)과 `scripts/mcp-smoke.sh`는 그대로 동작한다.
 - actuator: `prod`와 `dev`는 `health,info,metrics` + `show-details: when_authorized`(Spring Security가 없어 상세는 항상 가려짐).
-  `local`은 개발자 편의를 위해 `loggers`·`threaddump`·`mappings`·`conditions`까지 열고 `show-details: always`다 — 인증 없이 모든
-  인터페이스에 바인드되므로 9000 포트를 네트워크에 노출하지 않는다. `heapdump`는 어느 프로파일에도 없다(덤프에 토큰이 실림).
+  `local`은 개발자 편의를 위해 `loggers`·`threaddump`·`mappings`·`conditions`까지 열고 `show-details: always`다 — 인증이 없으므로
+  루프백 바인드(`server.address: 127.0.0.1`)를 풀지 않는다. `heapdump`는 어느 프로파일에도 없다(덤프에 토큰이 실림).
   `run` 스크립트는 더 이상 `-Dmanagement.endpoints.web.exposure.include`로 YAML을 덮지 않는다.
 - Kafka 컨슈머(`local`·`dev`·`prod`): `max-poll-records: 5`, `max.poll.interval.ms: 300000`. 한 번에 받은 5건을 300초 안에
   끝내야 하므로 레코드당 평균 예산은 60초다. PENDING 행 레코드 1건은 Slack 디스패치 1회이고(나머지 CDC 이벤트는 즉시 반환),

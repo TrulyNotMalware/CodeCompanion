@@ -373,6 +373,8 @@ case "$ENVIRONMENT" in
             "-Dspring.devtools.livereload.enabled=true"
         )
         print_info "Local development mode - optimized for fast startup"
+        print_warn "local profile: HTTP binds 127.0.0.1 and a blank SLACK_SIGNING_SECRET disables Slack signature"
+        print_warn "verification. This is the default when -e is omitted; on a server pass -e dev or -e prod."
         ;;
 
     dev)

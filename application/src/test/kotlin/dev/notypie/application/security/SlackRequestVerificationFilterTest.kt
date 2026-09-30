@@ -17,6 +17,8 @@ import jakarta.servlet.ServletResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
+import org.springframework.boot.env.YamlPropertySourceLoader
+import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
 import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockHttpServletRequest
@@ -456,6 +458,15 @@ class SlackRequestVerificationFilterTest :
                 then("verification is skipped") {
                     chain.invocationCount shouldBe 1
                     response.status shouldBe 200
+                }
+            }
+
+            `when`("application-local.yaml, the only profile allowed to run unverified, is loaded") {
+                val localProfile = YamlPropertySourceLoader().load("local", ClassPathResource("application-local.yaml"))
+                val environment = MockEnvironment().apply { localProfile.forEach { propertySources.addLast(it) } }
+
+                then("the HTTP server binds to loopback only") {
+                    environment.getProperty("server.address") shouldBe "127.0.0.1"
                 }
             }
         }

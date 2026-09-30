@@ -12,7 +12,7 @@ stand up change-data-capture locally and in-cluster.
 | File | Description |
 |------|-------------|
 | `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; scheduler pool sized to 4; `server.forward-headers-strategy: none` |
-| `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true` |
+| `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true`; HTTP bound to `server.address: 127.0.0.1` (the only profile allowed a blank signing secret, with unauthenticated actuator endpoints) |
 | `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
 | `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
 | `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB defaults, port 9000, `SLACK_SIGNING_SECRET` required (no default), health `show-details: when_authorized` because the port is tunnelled to the internet |
