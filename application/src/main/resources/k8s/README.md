@@ -120,7 +120,9 @@ step 4, or `kubectl apply -n api-service` rejects the mismatch.
 
 The release that introduced outbox claim tokens (`attempt_count`, migration V20) cannot overlap its predecessor:
 the old Pods write outbox timestamps with the database clock, re-dispatch `IN_PROGRESS` rows they do not own and
-overwrite outbox status without the attempt guard. That release therefore ships `deployment.yaml` with
+overwrite outbox status without the attempt guard. Their meeting writes are bulk `UPDATE`s that never bump the V18
+`version` column either, so a new Pod's full-row flush can silently undo a reschedule an old Pod committed in
+between (a lost update) and the cancel/add race check no longer holds. That release therefore ships `deployment.yaml` with
 `strategy.type: Recreate`, and no manual `kubectl patch` is needed. The workflow's `kubectl apply` sets the
 strategy, and its rollout stops every old Pod before the first new one starts. A `rollout undo` does the same,
 because it restores only the pod template and the strategy is not part of it. `Recreate` deletes the old Pods
@@ -363,7 +365,8 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
 
 아웃박스 claim 토큰(`attempt_count`, 마이그레이션 V20)을 도입한 릴리스는 이전 릴리스와 겹치면 안 됩니다. 이전 파드는
 아웃박스 시각을 DB 시계로 쓰고, 자기 것이 아닌 `IN_PROGRESS` 행을 다시 발송하며, attempt 조건 없이 아웃박스 상태를 덮어씁니다.
-그래서 그 릴리스의 `deployment.yaml`은 `strategy.type: Recreate`를 싣고 있고, 수동 `kubectl patch`는 필요 없습니다. 워크플로의
+회의 쓰기도 V18의 `version`을 올리지 않는 벌크 `UPDATE`라서, 그 사이 이전 파드가 커밋한 일정 변경을 새 파드의 전체 컬럼
+flush가 조용히 되돌리고(lost update) 취소·참가자 추가 경합 검사도 무너집니다. 그래서 그 릴리스의 `deployment.yaml`은 `strategy.type: Recreate`를 싣고 있고, 수동 `kubectl patch`는 필요 없습니다. 워크플로의
 `kubectl apply`가 전략을 설정하고, 롤아웃은 새 파드를 하나라도 띄우기 전에 이전 파드를 모두 멈춥니다. `rollout undo`도 같습니다.
 undo는 파드 템플릿만 되돌리고 전략은 템플릿에 속하지 않기 때문입니다. `Recreate`는 eviction API가 아니라 ReplicaSet으로
 파드를 지우므로 PodDisruptionBudget에 막히지 않습니다.

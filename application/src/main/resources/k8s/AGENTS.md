@@ -86,7 +86,8 @@ adds what an agent editing the manifests needs to know.
   out and the workflow rolls back. Check before a rollout with
   `kubectl describe nodes | grep -A8 'Allocated resources'` (requests vs allocatable per node). If capacity is short
   under the rolling update, `maxSurge: 0` / `maxUnavailable: 1` keeps the PDB satisfied.
-- **The outbox claim-token release (V20/V22) must never overlap a pre-V20 Pod**, so `deployment.yaml` carries
+- **The outbox claim-token release (V20/V22) must never overlap a pre-V20 Pod** (its outbox writes skip the attempt
+  guard, and its bulk meeting `UPDATE`s skip the V18 `version`, so meeting writes lose updates too), so `deployment.yaml` carries
   `strategy: {type: Recreate, rollingUpdate: null}`. The workflow's `kubectl apply` sets it; the rollout and the
   workflow's `rollout undo` (which restores only the pod template, never `spec.strategy`) both stop every old Pod
   before starting a new one. `rollingUpdate: null` makes the apply delete the live object's defaulted

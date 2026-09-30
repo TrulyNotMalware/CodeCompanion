@@ -69,7 +69,9 @@ The headers, not the numbers, decide the apply order (see "Release checklist" be
      so they go in while the old release still serves;
   4. stop the old Pods, then deploy — the `Recreate` strategy in `k8s/deployment.yaml` does both in one
      rollout. This is how the "stop every old pod … then start the new release" constraint in the `V20`
-     header is met; applying `V20`/`V22` before the old Pods stop does not break it;
+     header is met; applying `V20`/`V22` before the old Pods stop does not break it. The overlap is unsafe for
+     meetings as well: the old binary's bulk meeting `UPDATE`s never bump the `V18` `version`, so a new Pod's
+     full-row flush can undo a reschedule an old Pod committed in between;
   5. `V21`, only once every Pod runs the new release (an older binary's reschedule moves `start_at` alone and
      skips the `version` check).
   Readiness does not check the schema, so a skipped `V18` (every `meetings` query fails) or `V20`/`V22` (every
@@ -103,8 +105,9 @@ The headers, not the numbers, decide the apply order (see "Release checklist" be
 
 ### Internal
 - `infrastructure/repository/outbox/schema/` — `V1`, `V11`, `V19`, `V20`, `V22`
-- `infrastructure/repository/meeting/schema/` — `V2`, `V3`, `V5`, `V7`, `V8`
-- `infrastructure/repository/standup/schema/` — `V4`, `V6`
+- `infrastructure/repository/meeting/schema/` — `V2`, `V3`, `V5`, `V7`, `V8`, `V18` (`version`, participant unique
+  key, indexes), `V21` (data fix that bumps `version`)
+- `infrastructure/repository/standup/schema/` — `V4`, `V6`, `V18` (`standup_routine` index)
 - `infrastructure/repository/agent/schema/` — `V9`, `V10`
 - `infrastructure/repository/authorization/schema/` — `V12`
 - `infrastructure/repository/mcp/schema/` — `V13`
