@@ -90,7 +90,7 @@ class AgentConverseServiceTest :
                     threadId = TEST_THREAD_TS,
                     responseBasicInfo = basicInfo,
                 )
-            val expectedSessionKey = "${basicInfo.channel}:$TEST_THREAD_TS"
+            val expectedSessionKey = "${basicInfo.channel}:$TEST_THREAD_TS:${basicInfo.publisherId}"
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = expectedSessionKey) } returns "sess-prev"
@@ -127,7 +127,7 @@ class AgentConverseServiceTest :
             `when`("handleAgentConverse") {
                 service.handleAgentConverse(event = event)
 
-                then("the turn is keyed by channel:thread and resumes the stored session") {
+                then("the turn is keyed by channel:thread:requester and resumes that requester's stored session") {
                     turnRequest.captured.sessionKey shouldBe expectedSessionKey
                     turnRequest.captured.prompt shouldBe "what is on my calendar"
                     turnRequest.captured.sessionId shouldBe "sess-prev"
@@ -250,6 +250,47 @@ class AgentConverseServiceTest :
                             .shouldBeInstanceOf<MessageContent.Text>()
                     content.markdown shouldBe
                         "Meeting *&lt;!channel&gt;* moved — see <https://example.com|notes>, cc <@U123> &lt;!here&gt;"
+                }
+            }
+        }
+
+        // T20: keyed by channel:thread alone, a second participant resumed the first one's provider session and
+        // could read back tool results fetched under the first user's role.
+        given("two people mentioning the bot in the same thread") {
+            val alice = createCommandBasicInfo(publisherId = "U_ALICE")
+            val bob = createCommandBasicInfo(publisherId = "U_BOB")
+            val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
+            every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
+            every {
+                sessionRepository.findProviderSessionId(sessionKey = "${alice.channel}:$TEST_THREAD_TS:U_ALICE")
+            } returns "sess-alice"
+
+            val gateway = mockk<AgentGateway>()
+            val requests = mutableListOf<AgentTurnRequest>()
+            every { gateway.converse(request = capture(requests)) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "ok")
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    outboundStager = stagerCapturing(stagedMessage = slot()),
+                )
+
+            `when`("each asks in turn") {
+                service.handleAgentConverse(
+                    event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS, responseBasicInfo = alice),
+                )
+                service.handleAgentConverse(
+                    event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS, responseBasicInfo = bob),
+                )
+
+                then("each gets a session key of their own and only the first resumes a stored session") {
+                    requests.map { it.sessionKey } shouldBe
+                        listOf(
+                            "${alice.channel}:$TEST_THREAD_TS:U_ALICE",
+                            "${bob.channel}:$TEST_THREAD_TS:U_BOB",
+                        )
+                    requests.map { it.sessionId } shouldBe listOf("sess-alice", null)
                 }
             }
         }
@@ -544,7 +585,7 @@ class AgentConverseServiceTest :
                     val scopedToken = turnRequest.captured.scopedToken.shouldNotBeNull()
                     val decoded = codec.verify(token = scopedToken).shouldNotBeNull()
                     decoded.userId shouldBe basicInfo.publisherId
-                    decoded.sessionKey shouldBe "${basicInfo.channel}:$TEST_THREAD_TS"
+                    decoded.sessionKey shouldBe "${basicInfo.channel}:$TEST_THREAD_TS:${basicInfo.publisherId}"
                     decoded.turnId shouldBe event.idempotencyKey.toString()
                 }
             }

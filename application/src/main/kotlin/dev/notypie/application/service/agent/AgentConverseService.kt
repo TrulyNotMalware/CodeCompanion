@@ -88,7 +88,12 @@ class AgentConverseService(
     fun handleAgentConverse(event: AgentConverseRequestEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        val sessionKey = "${basicInfo.channel}:${payload.threadId ?: basicInfo.publisherId}"
+        // Per requester, not per thread: a provider session remembers the tool results fetched under its user's role,
+        // so another participant in the same thread must not resume it. "channel:thread:user" ("channel:user" with
+        // no thread); sessions stored under the old "channel:thread" key are not resumed and start fresh.
+        val sessionKey =
+            listOfNotNull(basicInfo.channel, payload.threadId?.takeIf { it.isNotBlank() }, basicInfo.publisherId)
+                .joinToString(separator = ":")
 
         val startedAtNanos = System.nanoTime()
         val result =

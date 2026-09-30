@@ -14,7 +14,7 @@ proxy that `@Async` needs is guaranteed.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE` whose text went through `neutralizeBroadcastMentions()`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
+| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "channel:thread:publisherId"` (`"channel:publisherId"` when there is no thread), sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE` whose text went through `neutralizeBroadcastMentions()`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
 
 ## For AI Agents
 
@@ -26,9 +26,17 @@ proxy that `@Async` needs is guaranteed.
   `Result` — failures are logged with `sessionKey` and `idempotencyKey`, never rethrown.
 - `stageReply` is `checkNotNull` on `outboundStager.stage(...)`: a null stage means the reply would
   vanish, so the turn's transaction must fail instead. Keep that check when adding reply kinds.
-- Session continuity is two keys: `sessionKey` (sidecar workspace, derived from thread or requester)
-  and the provider session id stored in `agent_session`, echoed back as `sessionId` on the next turn.
-  Change the `sessionKey` formula and every open conversation loses its context.
+- Session continuity is two keys: `sessionKey` (sidecar workspace) and the provider session id stored in
+  `agent_session`, echoed back as `sessionId` on the next turn. Change the `sessionKey` formula and every open
+  conversation loses its context.
+- **`sessionKey` is per requester: `channel:thread:user`.** Until 2026-09-30 it was `channel:thread` (the
+  `?: publisherId` fallback was unreachable, since a mention always has a message ts), so a second participant in
+  a thread resumed the first one's provider session and could read back tool results fetched under the first
+  user's role (`list_roles`, `get_status`, their `list_meetings`) — the MCP gate checks each call, not the
+  conversation memory. Rows saved under the old `channel:thread` key are never looked up again: the first turn
+  after the deploy in such a thread starts a fresh provider session (no migration; the stale rows are inert).
+  `agent_turn_history` rows and the turn token's `sk` (hence MCP audit rows) carry the same key; every
+  `session_key` column is 160 characters, and `C…:1712345678.123456:U…` is about 45.
 - `contextPrompt` is appended to the sidecar's base prompt: requester, channel, current time in
   `clock.zone` (so relative dates resolve), and the Slack mrkdwn contract. Facts only — identity for
   authorization travels as the turn token / `X-User-Id` in `SidecarAgentClient`, never as prompt text.
