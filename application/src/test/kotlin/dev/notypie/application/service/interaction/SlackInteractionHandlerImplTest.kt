@@ -235,7 +235,6 @@ class SlackInteractionHandlerImplTest :
             val meetingService =
                 MeetingServiceImpl(
                     meetingRepository = meetingRepository,
-                    retryService = mockk(),
                     commandExecutor = mockk(),
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = publisher,

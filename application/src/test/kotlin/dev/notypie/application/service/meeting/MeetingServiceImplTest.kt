@@ -20,12 +20,12 @@ import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createGetMeetingListEvent
 import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
-import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.assertions.throwables.shouldThrow
@@ -37,13 +37,13 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.dao.CannotAcquireLockException
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.support.TransactionTemplate
 import java.util.UUID
 
 class MeetingServiceImplTest :
     BehaviorSpec({
         val meetingRepository = mockk<MeetingRepository>()
-        val retryService = mockk<RetryService>()
         val commandExecutor = mockk<CommandExecutor>()
         val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
@@ -52,16 +52,11 @@ class MeetingServiceImplTest :
         val service =
             MeetingServiceImpl(
                 meetingRepository = meetingRepository,
-                retryService = retryService,
                 commandExecutor = commandExecutor,
                 outboundStager = stager,
                 eventPublisher = eventPublisher,
                 transactionManager = createH2TransactionManager(),
             )
-
-        every { retryService.execute<Int>(action = any(), any(), any(), any(), any(), any(), any(), any()) } answers {
-            firstArg<() -> Int>().invoke()
-        }
 
         given("updateParticipantAttendance receives an UpdateMeetingAttendanceEvent") {
             val meetingKey = UUID.randomUUID()
@@ -128,6 +123,64 @@ class MeetingServiceImplTest :
                 then("the listener throws so the enclosing transaction rolls back") {
                     shouldThrow<IllegalStateException> {
                         service.updateParticipantAttendance(event = event)
+                    }
+                }
+            }
+
+            `when`("the UPDATE itself fails, as a too-long value does on the column") {
+                val tooLong = DataIntegrityViolationException("Data too long for column 'absent_reason_detail'")
+                val failingEvent = createUpdateMeetingAttendanceEvent(meetingIdempotencyKey = UUID.randomUUID())
+                val failingKey = failingEvent.payload.meetingIdempotencyKey
+                every {
+                    meetingRepository.updateParticipantAttendance(
+                        meetingIdempotencyKey = failingKey,
+                        userId = any(),
+                        isAttending = any(),
+                        absentReason = any(),
+                        absentReasonDetail = any(),
+                    )
+                } throws tooLong
+
+                then("the original exception propagates after one attempt: no retry inside the doomed transaction") {
+                    shouldThrow<DataIntegrityViolationException> {
+                        service.updateParticipantAttendance(event = failingEvent)
+                    } shouldBe tooLong
+                    verify(exactly = 1) {
+                        meetingRepository.updateParticipantAttendance(
+                            meetingIdempotencyKey = failingKey,
+                            userId = any(),
+                            isAttending = any(),
+                            absentReason = any(),
+                            absentReasonDetail = any(),
+                        )
+                    }
+                }
+            }
+        }
+
+        given("createNewMeeting receives a RequestMeetingContextResult") {
+            val result = createRequestMeetingContextResult()
+
+            `when`("the INSERT fails") {
+                val duplicate = DataIntegrityViolationException("Duplicate entry for key 'idempotency_key'")
+                every {
+                    meetingRepository.createNewMeeting(
+                        meeting = result.meeting,
+                        idempotencyKey = any(),
+                        channel = any(),
+                    )
+                } throws duplicate
+
+                then("the original exception propagates after one attempt") {
+                    shouldThrow<DataIntegrityViolationException> {
+                        service.createNewMeeting(event = result)
+                    } shouldBe duplicate
+                    verify(exactly = 1) {
+                        meetingRepository.createNewMeeting(
+                            meeting = result.meeting,
+                            idempotencyKey = result.idempotencyKey,
+                            channel = result.commandBasicInfo.channel,
+                        )
                     }
                 }
             }
@@ -377,7 +430,6 @@ class MeetingServiceImplTest :
             val conflictedService =
                 MeetingServiceImpl(
                     meetingRepository = conflictedRepository,
-                    retryService = retryService,
                     commandExecutor = commandExecutor,
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,
@@ -570,7 +622,6 @@ class MeetingServiceImplTest :
             val boundedService =
                 MeetingServiceImpl(
                     meetingRepository = boundedRepository,
-                    retryService = retryService,
                     commandExecutor = commandExecutor,
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,

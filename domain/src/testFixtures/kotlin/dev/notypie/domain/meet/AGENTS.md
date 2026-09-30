@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/meet
 
@@ -11,14 +11,15 @@ Builders for the meeting lane: the `Meeting` aggregate, its read-side DTOs (`Mee
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MeetingTestFixtures.kt` | `createMeeting(title = "Standup", publisher = "U001", members = {U002, U003}, reason, startAt = now+1d, endAt = startAt+1h, isCanceled, meetingUid)`; `createUpdateMeetingAttendanceEvent(meetingIdempotencyKey, participantUserId, isAttending = false, absentReason = OTHER, idempotencyKey)`; `createCancelMeetingEvent(meetingUid, requesterId, idempotencyKey, responseBasicInfo)`; `createAddParticipantEvent(meetingUid, requesterId, participantUserIds = ["U_NEW_PARTICIPANT"], idempotencyKey, responseBasicInfo)`; `createGetMeetingListEvent(publisherId, startDate = now, endDate = now+1w, ...)`; `createRescheduleMeetingEvent(meetingUid, requesterId, newStartAt = now+1d, ...)` |
+| `MeetingTestFixtures.kt` | `createMeeting(title = "Standup", publisher = "U001", members = {U002, U003}, reason, startAt = now+1d, endAt = startAt+1h, isCanceled, meetingUid)`; `createRequestMeetingContextResult(meeting = createMeeting(), commandBasicInfo)` (`ok = true`, `SUCCESS`); `createUpdateMeetingAttendanceEvent(meetingIdempotencyKey, participantUserId, isAttending = false, absentReason = OTHER, idempotencyKey)`; `createCancelMeetingEvent(meetingUid, requesterId, idempotencyKey, responseBasicInfo)`; `createAddParticipantEvent(meetingUid, requesterId, participantUserIds = ["U_NEW_PARTICIPANT"], idempotencyKey, responseBasicInfo)`; `createGetMeetingListEvent(publisherId, startDate = now, endDate = now+1w, ...)`; `createRescheduleMeetingEvent(meetingUid, requesterId, newStartAt = now+1d, ...)` |
 | `MeetingDtoCreator.kt` | `createMeetingDto(meetingId = 0L, meetingUid, idempotencyKey, creator = TEST_USER_ID, title = "Test Meeting", reason, startAt = now+1d, endAt = startAt+1h, participants = [], isCanceled)`; `createMeetingParticipantDto(userId (required), isAttending = true, absentReason = ATTENDING, absentReasonDetail)` |
 | `MeetingReminderDtoCreator.kt` | `createMeetingReminderDto(id = 1L, meetingId = 1L, offsetMinutes = 15, scheduledAt = 2026-05-01T01:00Z, sentAt, status = PENDING, failureReason)` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- Consumers by builder: `createMeeting` → domain `meet/entity/MeetingTest`; `createMeetingDto` →
+- Consumers by builder: `createMeeting` → domain `meet/entity/MeetingTest`; `createRequestMeetingContextResult` →
+  application `MeetingServiceImplTest` (`createNewMeeting`); `createMeetingDto` →
   application `MeetingServiceImplTest`, `MeetingRescheduleServiceTest`, `mcp/DomainReadToolsTest`,
   infrastructure `SlackOutboundRendererTest`, `OutboundMessageCodecTest`, `ModalTemplateBuilderTest`;
   `createMeetingParticipantDto` → `MeetingRescheduleServiceTest`, `ModalTemplateBuilderTest`;

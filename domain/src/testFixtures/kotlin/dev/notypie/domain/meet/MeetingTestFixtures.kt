@@ -3,6 +3,7 @@ package dev.notypie.domain.meet
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.AddParticipantPayload
@@ -14,6 +15,7 @@ import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
+import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
@@ -37,6 +39,16 @@ fun createMeeting(
     endAt = endAt,
     isCanceled = isCanceled,
     meetingUid = meetingUid,
+)
+
+fun createRequestMeetingContextResult(
+    meeting: Meeting = createMeeting(),
+    commandBasicInfo: CommandBasicInfo = createCommandBasicInfo(),
+) = RequestMeetingContextResult(
+    ok = true,
+    status = Status.SUCCESS,
+    meeting = meeting,
+    commandBasicInfo = commandBasicInfo,
 )
 
 fun createUpdateMeetingAttendanceEvent(

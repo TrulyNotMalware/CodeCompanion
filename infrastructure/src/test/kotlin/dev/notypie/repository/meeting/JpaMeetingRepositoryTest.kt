@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import dev.notypie.schema.createParticipants
@@ -11,8 +12,10 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.LocalDateTime
 import java.util.UUID
+import javax.sql.DataSource
 
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
@@ -20,6 +23,7 @@ class JpaMeetingRepositoryTest
     @Autowired
     constructor(
         private val repository: JpaMeetingRepository,
+        private val dataSource: DataSource,
     ) : BehaviorSpec({
 
             given("save and findById") {
@@ -278,6 +282,41 @@ class JpaMeetingRepositoryTest
                         found.absentReason shouldBe
                             dev.notypie.domain.meet.entity.RejectReason.OTHER
                         found.absentReasonDetail shouldBe "Out of town for a family event"
+                    }
+                }
+
+                `when`("the detail is exactly RejectReason.MAX_DETAIL_LENGTH characters") {
+                    val meetingKey = UUID.randomUUID()
+                    val participantUserId = "U_ATTENDANCE_LIMIT"
+                    val meeting = createMeetingSchema(idempotencyKey = meetingKey, publisherId = "U_LIMIT_PUB")
+                    meeting.participants.add(createParticipants(meeting = meeting, userId = participantUserId))
+                    repository.save(meeting)
+
+                    fun decline(detail: String) =
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = participantUserId,
+                            isAttending = false,
+                            absentReason = RejectReason.OTHER,
+                            absentReasonDetail = detail,
+                        )
+
+                    // Only the fitting side is asserted: past the limit H2 truncates the bound value (Hibernate casts it
+                    // to the column type) where strict MariaDB rejects it, so the overflow behaviour is dialect-specific.
+                    then(
+                        "the mapped column is exactly the domain limit wide and a note of that length is stored intact",
+                    ) {
+                        JdbcTemplate(dataSource).queryForObject(
+                            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS " +
+                                "WHERE TABLE_NAME = 'MEETING_PARTICIPANTS' AND COLUMN_NAME = 'ABSENT_REASON_DETAIL'",
+                            Int::class.java,
+                        ) shouldBe RejectReason.MAX_DETAIL_LENGTH
+                        decline(detail = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)) shouldBe 1
+                        repository
+                            .findMeetingWithParticipants(meetingId = meeting.id)!!
+                            .participants
+                            .single()
+                            .absentReasonDetail shouldBe "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
                     }
                 }
 

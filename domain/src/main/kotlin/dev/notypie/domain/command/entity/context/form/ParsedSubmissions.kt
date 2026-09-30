@@ -91,23 +91,33 @@ internal data class DeclineReasonParsed(
     val reason: RejectReason,
     val reasonDetail: String?,
     val notice: NoticeTarget,
+    val detailTooLong: Boolean = false,
 ) {
     fun noticeSummaryMarkdown(): String =
         buildString {
             append("You declined the meeting — *Reason:* ${reason.showMessage}")
             if (!reasonDetail.isNullOrBlank()) append(" — $reasonDetail")
+            if (detailTooLong) {
+                append(" — _Your note was longer than ${RejectReason.MAX_DETAIL_LENGTH} characters and was not saved._")
+            }
         }
 
     companion object {
         fun from(raw: InboundSubmission.DeclineReason, actorId: String): DeclineReasonParsed? {
             val meetingIdempotencyKey = raw.meetingIdempotencyKeyRaw.toUuidOrNull() ?: return null
             val reason = parseReason(raw = raw.reasonRaw)
+            val detail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER }
+            // The decline itself is still recorded; only an over-long note is dropped (and the notice says so), because
+            // storing it would fail the column and roll the whole decline back. UTF-16 length is never below the
+            // character count VARCHAR measures, so any note that passes here fits.
+            val detailTooLong = detail != null && detail.length > RejectReason.MAX_DETAIL_LENGTH
             return DeclineReasonParsed(
                 meetingIdempotencyKey = meetingIdempotencyKey,
                 participantUserId = raw.participantUserId.ifBlank { actorId },
                 reason = reason,
-                reasonDetail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER },
+                reasonDetail = detail.takeUnless { detailTooLong },
                 notice = NoticeTarget.of(channel = raw.noticeChannel, messageTs = raw.noticeMessageTs),
+                detailTooLong = detailTooLong,
             )
         }
 

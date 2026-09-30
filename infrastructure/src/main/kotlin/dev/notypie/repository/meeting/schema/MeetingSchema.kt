@@ -167,7 +167,7 @@ class ParticipantsSchema(
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "absent_reason")
     val absentReason: RejectReason = RejectReason.ATTENDING,
-    @field:Column(name = "absent_reason_detail")
+    @field:Column(name = "absent_reason_detail", length = RejectReason.MAX_DETAIL_LENGTH)
     val absentReasonDetail: String? = null,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)

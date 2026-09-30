@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # application/service/meeting
 
@@ -14,7 +14,7 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
 | File | Description |
 |------|-------------|
 | `MeetingService.kt` | Interface `handleMeeting(headers, payload: SlashCommandRequestBody, commandData)` taken by `SlashCommandController` and `SocketModeReceiver` |
-| `MeetingServiceImpl.kt` | `@Service`. `@Transactional handleMeeting` → `RequestMeetingCommand` → `CommandExecutor.execute`. `@TransactionalEventListener(BEFORE_COMMIT, fallbackExecution = false) createNewMeeting(RequestMeetingContextResult)` and `updateParticipantAttendance(UpdateMeetingAttendanceEvent)` (both through `RetryService`); `@EventListener onDeclineModalOpenFailed`, `cancelMeeting(CancelMeetingEvent)`, `addParticipants(AddParticipantEvent)`, `getMeetingListEvent(GetMeetingListEvent)` — each ends in `outboundStager.stage(...)?.let { eventPublisher.publishOne(it) }`. Cancel and add-participant go through `MeetingWriteDeferral.runOrDefer` and run the repository write **and** the staging of their replies inside `executeRetryingOnConflict`; the failure reply goes through a `REQUIRED` `replyTemplate`. Also declares the two package helpers `isolatedWriteTemplate(transactionManager)` (`TransactionTemplate` with `PROPAGATION_REQUIRES_NEW`) and `TransactionTemplate.executeRetryingOnConflict(action): Result<Unit>`: catches `RuntimeException` only, retries once in a fresh transaction when `isMeetingWriteConflict()` (infrastructure `repository/meeting/MeetingWriteConflict.kt`: any `ConcurrencyFailureException` — optimistic, pessimistic, lock-acquisition — or a `DataIntegrityViolationException` naming the participant unique key), returns any other `RuntimeException` as a failure (the generic reply) and lets an `Error` propagate |
+| `MeetingServiceImpl.kt` | `@Service`. `@Transactional handleMeeting` → `RequestMeetingCommand` → `CommandExecutor.execute`. `@TransactionalEventListener(BEFORE_COMMIT, fallbackExecution = false) createNewMeeting(RequestMeetingContextResult)` and `updateParticipantAttendance(UpdateMeetingAttendanceEvent)` (one repository call each, no `RetryService`: see "`BEFORE_COMMIT` listeners ride the caller's transaction"); `@EventListener onDeclineModalOpenFailed`, `cancelMeeting(CancelMeetingEvent)`, `addParticipants(AddParticipantEvent)`, `getMeetingListEvent(GetMeetingListEvent)` — each ends in `outboundStager.stage(...)?.let { eventPublisher.publishOne(it) }`. Cancel and add-participant go through `MeetingWriteDeferral.runOrDefer` and run the repository write **and** the staging of their replies inside `executeRetryingOnConflict`; the failure reply goes through a `REQUIRED` `replyTemplate`. Also declares the two package helpers `isolatedWriteTemplate(transactionManager)` (`TransactionTemplate` with `PROPAGATION_REQUIRES_NEW`) and `TransactionTemplate.executeRetryingOnConflict(action): Result<Unit>`: catches `RuntimeException` only, retries once in a fresh transaction when `isMeetingWriteConflict()` (infrastructure `repository/meeting/MeetingWriteConflict.kt`: any `ConcurrencyFailureException` — optimistic, pessimistic, lock-acquisition — or a `DataIntegrityViolationException` naming the participant unique key), returns any other `RuntimeException` as a failure (the generic reply) and lets an `Error` propagate |
 | `MeetingRescheduleService.kt` | `@EventListener rescheduleMeeting(RescheduleMeetingEvent)`, takes the context's `Clock`. A `newStartAt` not after `LocalDateTime.now(clock)` truncated to the minute (the modal's precision, so the current minute counts as past) → "Pick a future time. The meeting was not rescheduled." to the host, staged in the caller's transaction, no write. Otherwise, through `MeetingWriteDeferral.runOrDefer`, inside `executeRetryingOnConflict`: `MeetingRepository.rescheduleMeeting` → `RescheduleResult`: `NotAuthorized` → "Meeting was canceled, or you are not the host."; `AlreadyAtRequestedTime` → "The meeting is already scheduled for <time>. Nothing was changed." and nothing else; `Rescheduled(meeting)` → `MeetingReminderRepository.deleteByMeetingId` so reminders re-materialize, a channel re-notification to the returned participants and "Meeting rescheduled to <time>." (`MEETING_RESCHEDULE_SUBMIT`). Failure after the retry → "Failed to reschedule the meeting. Please try again later." staged in the caller's transaction. `:domain` parses a past start on purpose so it reaches this check |
 | `MeetingReminderScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `materializeReminders()` then `sendDueReminders()` inside one `runCatching` |
 | `MeetingReminderSchedulingService.kt` | Phase A `materializeReminders`: one `meeting_reminder` row per `meeting.reminder.offsetsMinutes` for active meetings in `[now - materializeLookbackMinutes, now + maxOffset]`, `ensureReminder` idempotent via unique `(meeting_id, offset_minutes)`. Phase B `sendDueReminders`: `resetStuckReminders`, `findDueBefore(limit = dispatchBatchSize)`, claim-token CAS, `runInTx` outbox writes, `markReminderSent` / `markReminderFailed`. `internal fun buildReminderDm` (`MEETING_REMINDER`) |
@@ -30,6 +30,12 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
   `updateParticipantAttendance` run inside the `@Transactional` boundary of `handleMeeting` or
   `SlackInteractionHandlerImpl.handleInteraction`; `fallbackExecution = false` means they never run outside
   one. A throw there rolls back the whole command — that is how an unrecorded decision is refused.
+  **Never wrap them in `RetryService`** (review T22): the failed statement has already marked the shared
+  transaction rollback-only and left the Hibernate session unusable, so an in-place retry only sleeps on the
+  request thread with the connection held and then fails again (or ends in `UnexpectedRollbackException`), and
+  it replaces the original exception with a `RetryException`. The interaction is the unit of retry. Keep a
+  predictable failure out of these writes instead: an "Other" note longer than `RejectReason.MAX_DETAIL_LENGTH`
+  is dropped in `:domain` (`DeclineReasonParsed`), not left to fail `absent_reason_detail VARCHAR(255)`.
 - **Zero rows ≠ missing row, depending on the JDBC URL.** MariaDB Connector/J 3.5.10 (the resolved runtime
   version) defaults to `useAffectedRows=false`, which sets the `FOUND_ROWS` capability: an UPDATE reports
   matched rows, so a no-op re-submit (same reason, or `OTHER` after the provisional-OTHER write from the Deny
@@ -127,7 +133,7 @@ context. Repository write semantics
   `AgendaDispatchRepository`, `ReadyReminder`, `ReminderCandidateMeeting`, `AgendaCandidateMeeting`,
   `AddParticipantResult`, `RescheduleResult`, `isMeetingWriteConflict`
 - `infrastructure/repository/outbox/` — `MessageOutboxRepository`, `OutboundMessagePort`
-- `infrastructure/impl/retry/RetryService`, `infrastructure/impl/command/slack/SlashCommandRequestBody`
+- `infrastructure/impl/command/slack/SlashCommandRequestBody`
 - `domain/meet/` — `Meeting` (`MAX_PARTICIPANTS`), `MeetingDto`, `RejectReason`
 - `domain/command/entity/slash/` — `RequestMeetingCommand`, `RequestMeetingContextResult`
 - `domain/command/entity/event/` — the events listed above, `EventPublisher.publishOne`

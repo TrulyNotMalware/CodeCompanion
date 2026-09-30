@@ -23,7 +23,6 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
-import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.isMeetingWriteConflict
@@ -41,7 +40,6 @@ import org.springframework.util.MultiValueMap
 @Service
 class MeetingServiceImpl(
     private val meetingRepository: MeetingRepository,
-    private val retryService: RetryService,
     private val commandExecutor: CommandExecutor,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
@@ -66,16 +64,17 @@ class MeetingServiceImpl(
         commandExecutor.execute(command = command)
     }
 
+    // The two BEFORE_COMMIT listeners write once, with no RetryService around them. They run inside the caller's
+    // transaction and Hibernate session: once a statement fails, the joined @Transactional repository call has marked
+    // that transaction rollback-only and the session is unusable, so a retry in the same place can only fail again
+    // (or "succeed" and still end in UnexpectedRollbackException) after sleeping on the request thread with the
+    // connection held. The unit of retry is the whole interaction: the failure rolls it back and the user resubmits.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
     fun createNewMeeting(event: RequestMeetingContextResult) {
-        retryService.execute(
-            action = {
-                meetingRepository.createNewMeeting(
-                    meeting = event.meeting,
-                    idempotencyKey = event.idempotencyKey,
-                    channel = event.commandBasicInfo.channel,
-                )
-            },
+        meetingRepository.createNewMeeting(
+            meeting = event.meeting,
+            idempotencyKey = event.idempotencyKey,
+            channel = event.commandBasicInfo.channel,
         )
     }
 
@@ -84,16 +83,12 @@ class MeetingServiceImpl(
     fun updateParticipantAttendance(event: UpdateMeetingAttendanceEvent) {
         val payload = event.payload
         val rowsUpdated =
-            retryService.execute(
-                action = {
-                    meetingRepository.updateParticipantAttendance(
-                        meetingIdempotencyKey = payload.meetingIdempotencyKey,
-                        userId = payload.participantUserId,
-                        isAttending = payload.isAttending,
-                        absentReason = payload.absentReason,
-                        absentReasonDetail = payload.absentReasonDetail,
-                    )
-                },
+            meetingRepository.updateParticipantAttendance(
+                meetingIdempotencyKey = payload.meetingIdempotencyKey,
+                userId = payload.participantUserId,
+                isAttending = payload.isAttending,
+                absentReason = payload.absentReason,
+                absentReasonDetail = payload.absentReasonDetail,
             )
         // A JDBC URL with useAffectedRows=true makes a no-op UPDATE return 0, so 0 alone is not "no match".
         if (rowsUpdated == 0 &&
