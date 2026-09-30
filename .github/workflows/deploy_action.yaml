@@ -28,6 +28,13 @@ concurrency:
   group: ${{ github.event.pull_request.merged && 'deploy-production' || format('deploy-skip-{0}', github.run_id) }}
   cancel-in-progress: false
 
+# An explicit `shell: bash` runs `bash --noprofile --norc -eo pipefail {0}`; the implicit default is `bash -e {0}`,
+# where a pipeline takes the status of its last command. Without pipefail a failing jq in
+# `jq -cS … | sha256sum | cut` hashes empty input and the rollback step's change check can see "unchanged".
+defaults:
+  run:
+    shell: bash
+
 env:
   ENVIRONMENT_URL: https://api.notypie.dev
 

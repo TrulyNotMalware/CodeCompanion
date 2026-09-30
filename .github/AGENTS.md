@@ -153,6 +153,13 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   The host is fronted by a bearer-authenticating layer that is not part of this repository, so what it forwards
   to the app is unknown from outside and must be confirmed by whoever operates it; the 401s say nothing about
   this app's Slack signature filter.
+- **`deploy_action.yaml` runs every `run:` step with pipefail.** Its workflow-level `defaults.run.shell: bash`
+  makes GitHub invoke `bash --noprofile --norc -eo pipefail {0}`; without an explicit `shell` the default is
+  `bash -e {0}`, where a pipeline takes the status of its last command, so a failing `jq` in
+  `jq -cS '.spec.template' | sha256sum | cut` hashed empty input and the rollback's change check could read
+  "unchanged". The Ready-pod count keeps its `|| true`, because `grep -c` exits 1 on zero matches. The other
+  workflows set no default: their only pipe is `simple_test_action.yaml`'s `find | zip` in the failure-report
+  step. Add the same `defaults` block before adding a pipe whose upstream failure must fail a step there.
 - **Rollback is scoped to the deploy steps:** `Rollback on failure` runs only when `apply`, `rollout`, `verify` or
   `health` failed (`steps.<id>.outcome`), so a GitHub API error in `Update deployment status to success` marks
   the deployment failed but does not undo a healthy rollout. Keep the step `id`s if you rename the steps.
