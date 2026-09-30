@@ -222,6 +222,38 @@ class AgentConverseServiceTest :
             }
         }
 
+        // T21: the model can echo a meeting title or tool result verbatim; a special mention in it would notify
+        // the whole channel under the bot's name.
+        given("a turn whose answer carries a special mention next to ordinary formatting") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Completed(
+                    sessionId = null,
+                    finalText = "Meeting *<!channel>* moved — see <https://example.com|notes>, cc <@U123> <!here>",
+                )
+
+            val stagedMessage = slot<OutboundMessage>()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                )
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent())
+
+                then("only the special mentions are defused; links, emphasis and user mentions survive") {
+                    val content =
+                        stagedMessage.captured
+                            .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe
+                        "Meeting *&lt;!channel&gt;* moved — see <https://example.com|notes>, cc <@U123> &lt;!here&gt;"
+                }
+            }
+        }
+
         given("a turn rejected as busy") {
             val basicInfo = createCommandBasicInfo()
             val gateway = mockk<AgentGateway>()

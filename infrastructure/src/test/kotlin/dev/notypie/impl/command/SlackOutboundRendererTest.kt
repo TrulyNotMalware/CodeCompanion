@@ -633,6 +633,35 @@ class SlackOutboundRendererTest :
             }
         }
 
+        // T21: the notice body is the sender's text; unescaped it could broadcast or disguise a link.
+        given("a Notice whose body carries Slack control sequences") {
+            val message =
+                OutboundMessage.Notice(
+                    target = target,
+                    mentions = listOf(UserRef(id = "U1")),
+                    message = "<!channel> see <https://evil.example|the doc>",
+                )
+
+            `when`("render is called") {
+                val capturedText = slot<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(capturedText),
+                    )
+                } returns stubEvent
+
+                renderer.render(message = message, basicInfo = basicInfo)
+
+                then("the body is escaped while the template's own mentions stay markup") {
+                    capturedText.captured shouldBe
+                        "[Notice] <@U1> &lt;!channel&gt; see &lt;https://evil.example|the doc&gt;"
+                }
+            }
+        }
+
         given("an UpdateMessage with STANDUP_ANSWER_SUBMIT detailType") {
             val message =
                 OutboundMessage.UpdateMessage(

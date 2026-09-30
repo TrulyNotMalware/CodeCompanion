@@ -257,6 +257,130 @@ class ModalTemplateBuilderTest :
             }
         }
 
+        // T21: user-supplied text interpolated into mrkdwn could broadcast (`<!channel>`) or disguise a link.
+        given("user-supplied text interpolated into mrkdwn") {
+            val hostile = "<!channel> <https://evil.example|docs> R&D"
+            val escaped = "&lt;!channel&gt; &lt;https://evil.example|docs&gt; R&amp;D"
+
+            `when`("a standup summary carries it in the routine name, a question and an answer") {
+                val result =
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = hostile,
+                        sessionDate = LocalDate.of(2026, 5, 4),
+                        members = listOf(createRoutineMemberDto(userId = "U_ESC")),
+                        answers = listOf(createStandupAnswerDto(userId = "U_ESC", responses = listOf(hostile))),
+                        questions = listOf(hostile),
+                    )
+                val texts =
+                    result.template.map { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
+
+                then("each value is escaped while the template's bold markers and member mention stay markup") {
+                    texts[0] shouldBe "*$escaped — 2026-05-04*"
+                    texts[1] shouldBe "<@U_ESC>\n• *$escaped* $escaped"
+                }
+            }
+
+            `when`("a meeting list carries it in the title and a decline detail") {
+                val meeting =
+                    createMeetingDto(
+                        title = hostile,
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(
+                                    userId = "U_DECLINER",
+                                    isAttending = false,
+                                    absentReason = RejectReason.OTHER,
+                                    absentReasonDetail = hostile,
+                                ),
+                            ),
+                    )
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_VIEWER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+                val section = (result.template[2].shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text
+
+                then("the title and the detail are escaped; the decliner mention stays markup") {
+                    section shouldStartWith "*$escaped*"
+                    section shouldContain "<@U_DECLINER>"
+                    section shouldContain "(_${escaped}_)"
+                    section shouldNotContain "<!channel>"
+                }
+            }
+
+            `when`("a decline-reason modal carries it in the meeting title") {
+                val json =
+                    templateBuilder.declineReasonModalViewJson(
+                        meetingTitle = hostile,
+                        meetingIdempotencyKey = UUID.randomUUID(),
+                        participantUserId = "U_P",
+                        noticeChannel = "C_N",
+                        noticeMessageTs = "1700000000.000100",
+                    )
+                val title =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(json, com.slack.api.model.view.View::class.java)
+                        .blocks
+                        .filterIsInstance<SectionBlock>()
+                        .single()
+                        .text
+                        .text
+
+                then("the title section shows it as literal text") {
+                    title shouldBe "*$escaped*"
+                }
+            }
+
+            `when`("an approval names a publisher whose profile name and meeting subtitle carry it") {
+                val hostileRequester = mockk<RestRequester>()
+                every {
+                    hostileRequester.safeGet(
+                        uri = any(),
+                        authorizationHeader = any(),
+                        responseType = SlackUserProfileDto::class.java,
+                        uriVariables = any(),
+                    )
+                } returns
+                    Result.success(
+                        ResponseEntity.ok(
+                            SlackUserProfileDto(ok = true, profile = createProfile(displayName = hostile)),
+                        ),
+                    )
+                val result =
+                    ModalTemplateBuilder(
+                        modalBlockBuilder = ModalBlockBuilder(),
+                        restRequester = hostileRequester,
+                        slackApiToken = TEST_BOT_TOKEN,
+                    ).approvalTemplate(
+                        headLineText = "Meeting Request!",
+                        approvalContents = testApprovalContents.copy(publisherId = "U_HOSTILE", subTitle = hostile),
+                        idempotencyKey = testIdempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+                val publisherTexts =
+                    result.template[2]
+                        .shouldBeInstanceOf<ContextBlock>()
+                        .elements
+                        .filterIsInstance<MarkdownTextObject>()
+                        .map { it.text }
+                val subtitle =
+                    (
+                        result.template[3]
+                            .shouldBeInstanceOf<SectionBlock>()
+                            .fields
+                            .single() as MarkdownTextObject
+                    ).text
+
+                then("the display name and the subtitle are escaped") {
+                    publisherTexts shouldContainAll listOf("*$escaped* ")
+                    subtitle shouldBe "*$escaped*"
+                }
+            }
+        }
+
         given("onlyTextTemplate") {
             `when`("called with a simple message") {
                 val result = templateBuilder.onlyTextTemplate(message = "Hello", isMarkDown = false)

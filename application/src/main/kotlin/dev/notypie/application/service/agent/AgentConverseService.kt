@@ -22,6 +22,7 @@ import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
+import dev.notypie.templates.neutralizeBroadcastMentions
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.event.EventListener
@@ -184,9 +185,10 @@ class AgentConverseService(
                             outputTokens = result.outputTokens,
                         ),
                 )
-                eventPublisher.publishOne(
-                    event = answerEvent(event = event, text = result.finalText.ifBlank { EMPTY_RESPONSE_MESSAGE }),
-                )
+                // The model may echo user text (a meeting title, a tool result) verbatim; its links and emphasis
+                // stay, but a `<!channel>`-style special mention must not notify a channel under the bot's name.
+                val answer = result.finalText.neutralizeBroadcastMentions().ifBlank { EMPTY_RESPONSE_MESSAGE }
+                eventPublisher.publishOne(event = answerEvent(event = event, text = answer))
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent answer sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"

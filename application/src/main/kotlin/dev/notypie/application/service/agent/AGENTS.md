@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # application/service/agent
 
@@ -14,7 +14,7 @@ proxy that `@Async` needs is guaranteed.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
+| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE` whose text went through `neutralizeBroadcastMentions()`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
 
 ## For AI Agents
 
@@ -45,6 +45,10 @@ proxy that `@Async` needs is guaranteed.
   so tool audit rows join back to `agent_turn_history`.
 - A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds`; ten concurrent turns
   saturate the async pool shared with every other `@Async` listener.
+- **The answer is model output and may echo user text** (a meeting title, a tool result), so `publishAnswer` runs
+  it through `neutralizeBroadcastMentions()` (`infrastructure/templates/SlackMrkdwn.kt`): `<!channel>`-style
+  special mentions become literal, while links, emphasis and `<@user>` mentions stay. Do not `escapeMrkdwn` it —
+  that would break the model's formatting. Long answers are split by the text template, not here.
 - Metric names are `internal const` and dashboards depend on the `outcome` / `direction` tags.
 
 ### Testing Requirements

@@ -119,13 +119,17 @@ class ModalTemplateBuilder(
         commandDetailType: CommandDetailType,
     ): LayoutBlocks {
         val publisher = profileResolver.resolve(userId = approvalContents.publisherId)
+        // A profile name is user-chosen text; the resolver's fallback is the `<@id>` mention and must stay markup.
+        val publisherName =
+            publisher.displayName.takeIf { it == "<@${approvalContents.publisherId}>" }
+                ?: publisher.displayName.escapeMrkdwn()
         return layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
             add(
                 block =
                     modalBlockBuilder.userNameWithThumbnailBlock(
-                        userName = publisher.displayName,
+                        userName = publisherName,
                         userThumbnailUrl = publisher.thumbnailUrl,
                         mkdIntroduceComment = "*Publisher* :",
                     ),
@@ -133,7 +137,7 @@ class ModalTemplateBuilder(
             add(
                 block =
                     modalBlockBuilder.textBlock(
-                        "*${approvalContents.subTitle}*",
+                        "*${approvalContents.subTitle.escapeMrkdwn()}*",
                         isMarkDown = true,
                     ),
             )
@@ -232,11 +236,12 @@ class ModalTemplateBuilder(
         }
 
     private fun renderMeetingSection(meeting: MeetingDto): String {
+        val title = meeting.title.escapeMrkdwn()
         val titleLine =
             if (meeting.isCanceled) {
-                "*${meeting.title}* *[CANCELED]*"
+                "*$title* *[CANCELED]*"
             } else {
-                "*${meeting.title}*"
+                "*$title*"
             }
         val timeLine =
             buildString {
@@ -261,7 +266,7 @@ class ModalTemplateBuilder(
                 append("\n• <@${participant.userId}> — ${participant.absentReason.showMessage}")
                 participant.absentReasonDetail
                     ?.takeIf { it.isNotBlank() }
-                    ?.let { detail -> append(" (_${detail}_)") }
+                    ?.let { detail -> append(" (_${detail.escapeMrkdwn()}_)") }
             }
         }
     }
@@ -348,7 +353,7 @@ class ModalTemplateBuilder(
                 close(text = "Cancel")
                 blocks {
                     if (meetingTitle.isNotBlank()) {
-                        section { mrkdwn(text = "*$meetingTitle*") }
+                        section { mrkdwn(text = "*${meetingTitle.escapeMrkdwn()}*") }
                     }
                     input(blockId = DeclineReasonModalIds.BLOCK_ID) {
                         label(text = "Reason")
@@ -474,7 +479,11 @@ class ModalTemplateBuilder(
                 close(text = "Cancel")
                 blocks {
                     section {
-                        mrkdwn(text = "*$routineName* — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}")
+                        mrkdwn(
+                            text = "*${routineName.escapeMrkdwn()}* — ${sessionDate.format(
+                                STANDUP_SESSION_DATE_FORMAT,
+                            )}",
+                        )
                     }
                     val answerMaxLength = standupAnswerMaxLength(questions = questions)
                     questions.forEachIndexed { index, question ->
@@ -494,10 +503,11 @@ class ModalTemplateBuilder(
 
     // Sized so a member's whole summary section (see standupSummaryTemplate) fits the section budget even when every
     // answer is at the cap: the budget minus the member line and every question line, split across the answers.
-    // Routine's worst case (8 questions × 200 characters) still leaves about 150 characters per answer; answers
-    // heavy in `&<>` grow when escaped, and the summary's per-section cut covers that remainder.
+    // Questions are measured as rendered (escaped). Routine's worst case (8 questions × 200 characters) still leaves
+    // about 150 characters per answer; answers heavy in `&<>` grow when escaped, and the per-section cut covers that.
     private fun standupAnswerMaxLength(questions: List<String>): Int {
-        val fixed = STANDUP_MEMBER_LINE_RESERVE + questions.sumOf { it.length + STANDUP_QUESTION_LINE_OVERHEAD }
+        val fixed =
+            STANDUP_MEMBER_LINE_RESERVE + questions.sumOf { it.escapeMrkdwn().length + STANDUP_QUESTION_LINE_OVERHEAD }
         return ((SlackBlockLimits.SECTION_TEXT_BUDGET - fixed) / questions.size.coerceAtLeast(minimumValue = 1))
             .coerceIn(minimumValue = 1, maximumValue = SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH)
     }
@@ -675,7 +685,7 @@ class ModalTemplateBuilder(
             add(
                 block =
                     modalBlockBuilder.simpleText(
-                        text = "*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*",
+                        text = "*${routineName.escapeMrkdwn()} — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*",
                         isMarkDown = true,
                     ),
             )
@@ -713,7 +723,7 @@ class ModalTemplateBuilder(
                         .getOrNull(index)
                         .orEmpty()
                         .ifBlank { "(blank)" }
-                append("\n• *$question* $response")
+                append("\n• *${question.escapeMrkdwn()}* ${response.escapeMrkdwn()}")
             }
         }
 
@@ -727,7 +737,7 @@ class ModalTemplateBuilder(
             add(
                 block =
                     modalBlockBuilder.calendarThumbnailBlock(
-                        title = timeScheduleInfo.title,
+                        title = timeScheduleInfo.title.escapeMrkdwn(),
                         markdownBody = timeScheduleInfo.description,
                     ),
             )

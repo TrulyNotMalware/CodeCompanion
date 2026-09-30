@@ -18,7 +18,7 @@ modal payloads — behind small type-safe DSLs.
 | `ModalBlockBuilder.kt` | Block-level assembly used by the template builder. `simpleText` cuts text over the 3,000-character section cap (`truncateSectionText`) instead of letting one section fail the message; `textSections(text, isMarkDown, maxSections)` renders free text of any length as consecutive sections through `splitSectionText` |
 | `SlackBlockLimits.kt` | `object SlackBlockLimits` — the Block Kit caps this module renders against (section text 3,000 with a 2,900 working budget, 50 blocks per message, header 150, option text 75, 100 options, `plain_text_input` 3,000) and `TRUNCATION_MARKER`. `splitSectionText(text, maxSections, balanceCodeFences)` packs lines into chunks within the budget (hard-wrapping only a single over-long line, at a space when one is in the second half), keeps at most `maxSections` chunks and ends the last with the marker, and with `balanceCodeFences` closes and re-opens a triple-backtick block cut by a boundary; text that fits comes back unchanged. `truncateSectionText` / `truncatePlainText` cut one value. No cut splits a surrogate pair or an `&amp;`-style entity |
 | `ModalElementBuilder.kt` | Element-level widgets: text inputs, selects, date/time pickers, checkboxes |
-| `SlackMrkdwn.kt` | `String.escapeMrkdwn()`: escapes `&`, `<`, `>` so user- or externally-supplied text interpolated into mrkdwn cannot become `<!channel>` or a disguised `<url\|label>` link — `verbatim` does not stop explicit `<…>` markup. Apply it at the interpolation site, not to whole template strings |
+| `SlackMrkdwn.kt` | `String.escapeMrkdwn()`: escapes `&`, `<`, `>` so user- or externally-supplied text interpolated into mrkdwn cannot become `<!channel>` or a disguised `<url\|label>` link — `verbatim` does not stop explicit `<…>` markup. Apply it at the interpolation site, not to whole template strings. `String.neutralizeBroadcastMentions()` is for AI output, which keeps its links, emphasis and `<@user>` mentions: it escapes only `<!…>` special mentions (`channel`, `here`, `everyone`, legacy `group`, `subteam^…`, with or without `\|label`) and leaves `<!date^…>` formatting alone |
 | `SlackTemplateBuilder.kt` | Non-modal message templates |
 | `InteractiveIds.kt` | Canonical `action_id` / `block_id` / `callback_id` constants |
 | `dto/LayoutBlocks.kt` | Layout block DTOs |
@@ -43,6 +43,12 @@ modal payloads — behind small type-safe DSLs.
 - **`action_id` / `block_id` / `callback_id` values are a wire contract** with the inbound side.
   `InteractiveIds` is the single source; `SlackInboundMapper` and the domain contexts route on these
   values, so renaming one without updating the parser silently breaks the interaction round trip.
+- **Escape user text where it is interpolated.** `ModalTemplateBuilder` escapes the meeting title (list, decline
+  modal, schedule notice), the decline detail, the approval subtitle and a resolved publisher name (not the
+  `<@id>` fallback), and the standup routine name, questions and answers; the notice body is escaped in
+  `SlackOutboundRenderer`. The bold markers and `<@id>` mentions a template adds stay outside the escape.
+  Bodies of `onlyTextTemplate` / `simpleTextResponseTemplate` are caller-composed mrkdwn — escaping them is the
+  caller's job (the AI answer is neutralized in `AgentConverseService`).
 - **Render within Block Kit limits.** A payload over any cap in `SlackBlockLimits` is rejected whole and the
   relay treats that as permanent, so free text goes through `textSections` (or `truncateSectionText` for one
   section) and a new template that can grow with data needs a spec asserting its worst case stays under the caps.
