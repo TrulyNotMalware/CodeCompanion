@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-09-28_
+_type: architecture · updated: 2026-09-30_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -50,13 +50,21 @@ _type: architecture · updated: 2026-09-28_
 - 렌더 실패(코덱/스키마)는 재시도하지 않고 `MessagePublishFailedEvent`로 바로 `FAILURE` 처리한다. 재시도는
   dispatch(Slack HTTP)에만 있다: 짧은 재시도는 `ApplicationMessageDispatcher` 안의 `RetryService`(3회, 약 0.3초),
   긴 재시도는 복구 스윕이다.
-- dispatcher는 릴레이에 **세 가지 결과**를 돌려준다. ① 완료(성공 또는 영구 실패: `fatal_error`, `ok=false` 오류,
-  3xx/4xx, 거부된 `response_url`) → `completeClaim`으로 `SUCCESS`/`FAILURE`. ② rate limit(`RateLimitedOutput`,
-  `retryAfter()`) → 행을 `IN_PROGRESS`로 두고 `deferClaim`으로 `Retry-After` 이후까지 미룬다. ③ 일시 오류
-  소진(`TRANSIENT_EXHAUSTED_REASON`: 5xx, `IOException`·call timeout, `internal_error`/`service_unavailable`가 짧은
-  재시도를 다 쓴 경우) → 아무것도 쓰지 않고 `IN_PROGRESS`로 둬 stuck 임계 뒤 스윕이 재발송한다. 예전에는 ③이
-  예외로 올라가 `FAILURE`가 되어 1초짜리 Slack 장애에도 메시지를 잃었다. dispatcher가 예상 밖 예외를 던져도 ③과
-  같이 다룬다.
+- dispatcher는 릴레이에 **다섯 가지 결과**를 돌려준다. ① 완료(성공 또는 영구 실패: `fatal_error`, `ok=false` 오류,
+  3xx/4xx, 거부된 `response_url`, 평문 `ok`·JSON `ok=true`가 아닌 `response_url` 2xx 본문) → `completeClaim`으로
+  `SUCCESS`/`FAILURE`. ② rate limit(`RateLimitedOutput`, `retryAfter()`) → 행을 `IN_PROGRESS`로 두고
+  `deferClaim`으로 `Retry-After`(파싱할 때 24시간으로 제한) 이후까지 미룬다. ③ 일시 오류 소진
+  (`TRANSIENT_EXHAUSTED_REASON`: 요청 본문을 보내기 전의 연결 실패·타임아웃, HTTP 503, `service_unavailable`, 그리고
+  멱등인 `chat.update`의 5xx·`IOException`·`internal_error`가 짧은 재시도를 다 쓴 경우) → 아무것도 쓰지 않고
+  `IN_PROGRESS`로 둬 stuck 임계 뒤 스윕이 재발송한다. 예전에는 ③이 예외로 올라가 `FAILURE`가 되어 1초짜리 Slack
+  장애에도 메시지를 잃었다. dispatcher가 예상 밖 예외를 던져도 ③과 같이 다룬다. ④ 결과 불명
+  (`OUTCOME_UNKNOWN_REASON`: `chat.postMessage`·`chat.postEphemeral`·`response_url`처럼 멱등이 아닌 호출이 요청
+  본문을 다 보낸 뒤 타임아웃·연결 끊김·503 외 5xx·`internal_error`로 끝난 경우) → 재시도도 스윕 재발송도 없이
+  ERROR 로그와 `FAILURE`. 이 메서드들에는 멱등 키가 없어 재발송은 채널에 보이는 중복이 되므로, 중복보다 한 건
+  유실을 택했다. "본문을 다 보냈는가"는 예외 종류가 아니라 OkHttp `EventListener.requestBodyEnd`로 판정한다.
+  ⑤ 접근 차단(`ACCESS_BLOCKED_REASON`: `invalid_auth`·`token_revoked`·`missing_scope` 등 토큰·워크스페이스 전체
+  오류) → 행마다 실패시키지 않고 `deferClaim`으로 15분씩 보류해 토큰·권한을 고친 뒤 나가게 한다(24시간 한도).
+  카운터 `codecompanion.slack.dispatch.access_blocked`가 오른다.
 - **한 번의 dispatch는 시간 상한이 있다.** Slack SDK 클라이언트와 `response_url` 클라이언트 모두 OkHttp
   `callTimeout` 6초(`SLACK_CALL_TIMEOUT`), SDK stats는 끈다(stats가 켜져 있으면 SDK가 `Retry-After`를
   `Long.valueOf`로 먼저 읽어 HTTP-date에서 예외가 나고, 팀 ID 해석용 `auth.test`를 호출마다 추가로 부른다).
