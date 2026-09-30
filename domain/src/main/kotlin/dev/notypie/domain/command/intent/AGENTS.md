@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/command/intent
 
@@ -33,7 +33,8 @@ emission order until the application layer drains the command.
 - `MeetingListRequest` defaults `startDate` / `endDate` to `now()` / `now() + 1 week` at construction;
   `RequestMeetingContext` always passes explicit bounds from `MeetingListRange`.
 - `CreateStandupRoutine` is the v1 shape: every member gets the single `timezone`, and `cutoffMinutes`
-  is a `Long` that the application converts to the entity's `Duration`.
+  is a `Long?` that the application converts to the entity's `Duration` — `null` means the typed cutoff was
+  not a whole number within `Routine`'s bounds and the application rejects the setup.
 - `DefaultIntentQueue.drainSnapshot()` copies then clears — that is what `Command.drainIntents()` exposes
   and why a retry after a publish failure does not re-deliver stale effects. `Nothing` is the explicit
   no-op variant for paths that must emit something.

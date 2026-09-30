@@ -56,6 +56,11 @@ class StandupRoutineSetupService(
     }
 
     private fun persistRoutine(payload: CreateStandupRoutinePayload): Routine {
+        val cutoffMinutes =
+            requireNotNull(payload.cutoffMinutes) {
+                "cutoff must be a whole number of minutes between ${Routine.MIN_CUTOFF_MINUTES} and " +
+                    "${Routine.MAX_CUTOFF_MINUTES}"
+            }
         val routine =
             Routine(
                 name = payload.name,
@@ -64,7 +69,7 @@ class StandupRoutineSetupService(
                 summaryChannel = payload.summaryChannel,
                 questions = payload.questions,
                 triggerLocalTime = payload.triggerLocalTime,
-                cutoffOffset = Duration.ofMinutes(payload.cutoffMinutes),
+                cutoffOffset = Duration.ofMinutes(cutoffMinutes),
                 weekdays = payload.weekdays,
                 routineTimezone = payload.timezone,
             )

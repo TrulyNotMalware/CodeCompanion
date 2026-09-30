@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/command/entity/context/form
 
@@ -23,7 +23,7 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
 | `CancelMeetingContext.kt` | Cancel button on `/meetup list` (`CANCEL_MEETING`): `routingExtras[0]` → `CommandIntent.CancelMeeting` |
 | `RescheduleMeetingContext.kt` / `RescheduleMeetingSubmissionContext.kt` | Reschedule button → `OpenModal(Reschedule)`; submit parses `date time` with `yyyy-MM-dd HH:mm` → `CommandIntent.RescheduleMeeting` |
 | `AddParticipantContext.kt` / `AddParticipantSubmissionContext.kt` | Add-participant button → `OpenModal(AddParticipant)`; submit splits the comma-joined user ids → `CommandIntent.AddParticipant` |
-| `RequestStandupSetupContext.kt` / `StandupSetupSubmissionContext.kt` | `/standup setup` → `OpenModal(StandupSetup)`; submit parses name, `\n`-separated questions, comma-separated members and weekdays, `LocalTime`, cutoff minutes (default 120), `ZoneId` (default `Asia/Seoul`) → `CommandIntent.CreateStandupRoutine` |
+| `RequestStandupSetupContext.kt` / `StandupSetupSubmissionContext.kt` | `/standup setup` → `OpenModal(StandupSetup)`; submit parses name, `\n`-separated questions, comma-separated members and weekdays, `LocalTime`, cutoff minutes (blank → 120; non-numeric or outside `Routine.MIN/MAX_CUTOFF_MINUTES` → `null`), `ZoneId` (default `Asia/Seoul`) → `CommandIntent.CreateStandupRoutine` |
 | `StandupFillContext.kt` / `StandupAnswerSubmissionContext.kt` | "Fill in standup" button (`routingExtras = [sessionUid, routineUid]`) → `OpenModal(StandupFill)` with the origin notice; submit → `CommandIntent.RecordStandupAnswer` (only if answers non-empty) + `UpdateMessage("Standup submitted.")` |
 | `CveSubscriptionRequestContexts.kt` | `RequestCveSubscribeContext` / `RequestCveUnsubscribeContext` open the topic modals; `RequestCveSubscriptionsContext` queues `CveListSubscriptions` |
 | `CveSubscriptionSubmissionContexts.kt` | `CveSubscribeSubmissionContext` / `CveUnsubscribeSubmissionContext` → intents keyed on `interaction.actor.id` |
@@ -47,7 +47,9 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
   blank; the actor is always the authority for "who clicked".
 - `StandupSetupSubmissionContext` does not validate. `Routine`'s `init` block is the single source of
   truth and runs when `application/service/standup/StandupRoutineSetupService` builds the entity;
-  invalid weekday tokens are dropped and unparsable time / cutoff / timezone fall back to defaults.
+  invalid weekday tokens are dropped and unparsable time / timezone fall back to defaults. The cutoff is the
+  exception: a non-numeric or out-of-bounds value is carried as `cutoffMinutes = null` so the setup service
+  replies with a validation error instead of silently substituting 120 (review U8).
 - `RequestMeetingContext` renders `CodeCompanionRuntimeException.details` from `Meeting` as
   `fieldName: reason` lines in an ephemeral — wording changes to `Meeting` invariants show up in
   `MeetingContextTest`.

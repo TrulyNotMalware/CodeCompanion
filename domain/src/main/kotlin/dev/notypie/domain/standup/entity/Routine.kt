@@ -37,6 +37,11 @@ class Routine(
             "questions" of questions shouldHaveMaxSize MAX_QUESTIONS
             ("weekdays" of weekdays).shouldNotBeEmpty(message = "weekdays must include at least one day")
             ("cutoffOffset" of cutoffOffset).shouldSatisfy("must be positive") { it > Duration.ZERO }
+            // A session covers one day, so a cutoff past 24 h would overlap the next session; an unbounded value
+            // also overflows the scheduler's Instant arithmetic and MariaDB DATETIME (review T2).
+            ("cutoffOffset" of cutoffOffset).shouldSatisfy("must be at most $MAX_CUTOFF_MINUTES minutes") {
+                it <= MAX_CUTOFF_OFFSET
+            }
 
             // Questions are joined with `\n` in persistence and rendered into Slack modal labels.
             questions.forEachIndexed { index, question ->
@@ -55,6 +60,9 @@ class Routine(
         const val MAX_QUESTIONS: Int = 8
         const val MAX_QUESTION_LENGTH: Int = 200
         const val MAX_MEMBERS: Int = 30
+        const val MIN_CUTOFF_MINUTES: Long = 1L
+        const val MAX_CUTOFF_MINUTES: Long = 1440L
+        val MAX_CUTOFF_OFFSET: Duration = Duration.ofMinutes(MAX_CUTOFF_MINUTES)
         val DEFAULT_WEEKDAYS: Set<DayOfWeek> =
             setOf(
                 DayOfWeek.MONDAY,

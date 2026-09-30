@@ -18,6 +18,7 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.Runs
@@ -221,22 +222,20 @@ class StandupSchedulingServiceTest :
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
-                val routine =
-                    createRoutineDto(
-                        weekdays = setOf(DayOfWeek.MONDAY),
-                        routineTimezone = seoul,
-                    )
-                every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
-                every { repo.createSession(session = any()) } throws
+                val broken = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                val healthy = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                every { repo.listActiveRoutines() } returns listOf(broken, healthy)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } answers { firstArg() }
+                every { repo.createSession(session = match { it.routineUid == broken.routineUid }) } throws
                     DataIntegrityViolationException("UUID collision on session_uid")
 
-                then("the exception propagates so the underlying schema/data bug is not hidden") {
-                    try {
-                        service.openSessionsForToday()
-                        throw AssertionError("expected DataIntegrityViolationException to propagate")
-                    } catch (ex: DataIntegrityViolationException) {
-                        ex.message?.contains("UUID collision") shouldBe true
+                service.openSessionsForToday()
+
+                then("the violation is re-raised for its own routine only — the next routine still opens") {
+                    verify(exactly = 2) { repo.findSession(routineUid = broken.routineUid, sessionDate = today) }
+                    verify(exactly = 1) {
+                        repo.createSession(session = match { it.routineUid == healthy.routineUid })
                     }
                 }
             }
@@ -251,22 +250,55 @@ class StandupSchedulingServiceTest :
                         transactionManager = stubTransactionManager(),
                         clock = clock,
                     )
-                val routine =
+                val broken = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                val healthy = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                every { repo.listActiveRoutines() } returns listOf(broken, healthy)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } answers { firstArg() }
+                every { repo.createSession(session = match { it.routineUid == broken.routineUid }) } throws
+                    RuntimeException("DB outage")
+
+                then("the failure is contained to its routine instead of aborting every routine's session") {
+                    shouldNotThrowAny { service.openSessionsForToday() }
+                    verify(exactly = 1) {
+                        repo.createSession(session = match { it.routineUid == healthy.routineUid })
+                    }
+                }
+            }
+
+            `when`("one routine's cutoff overflows Instant arithmetic (T2: a huge cutoff saved before validation)") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                    )
+                val overflowing =
                     createRoutineDto(
                         weekdays = setOf(DayOfWeek.MONDAY),
                         routineTimezone = seoul,
+                        cutoffOffset = Duration.ofMinutes(1_000_000_000_000_000L),
+                        members = listOf(createRoutineMemberDto(userId = "U_A", userTimezone = seoul)),
                     )
-                every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
-                every { repo.createSession(session = any()) } throws RuntimeException("DB outage")
+                val healthy =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                        members = listOf(createRoutineMemberDto(userId = "U_B", userTimezone = seoul)),
+                    )
+                every { repo.listActiveRoutines() } returns listOf(overflowing, healthy)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                val created = slot<StandupSession>()
+                every { repo.createSession(session = capture(created)) } answers { firstArg() }
 
-                then("the exception propagates so it can be caught by the scheduler tick wrapper") {
-                    try {
-                        service.openSessionsForToday()
-                        throw AssertionError("expected RuntimeException to propagate")
-                    } catch (ex: RuntimeException) {
-                        ex.message shouldBe "DB outage"
-                    }
+                service.openSessionsForToday()
+
+                then("only the broken routine is skipped; the healthy routine's session is still created") {
+                    verify(exactly = 1) { repo.createSession(session = any()) }
+                    created.captured.routineUid shouldBe healthy.routineUid
                 }
             }
         }
@@ -512,6 +544,33 @@ class StandupSchedulingServiceTest :
                                 sessionDate = LocalDate.of(2026, 5, 4),
                             ),
                         )
+                    }
+                }
+            }
+
+            `when`("the synchronous summary listener throws for the first of two sessions (U6)") {
+                val repo = mockk<StandupRepository>()
+                val publisher = mockk<ApplicationEventPublisher>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        applicationEventPublisher = publisher,
+                        clock = clock,
+                    )
+                val broken = createStandupSessionDto(sessionId = 1L)
+                val healthy = createStandupSessionDto(sessionId = 2L)
+                every { repo.findCollectingSessionsPastCutoff(before = any()) } returns listOf(broken, healthy)
+                every { publisher.publishEvent(any<Any>()) } just Runs
+                every { publisher.publishEvent(match<Any> { (it as StandupCutoffEvent).sessionId == 1L }) } throws
+                    IllegalStateException("routine row missing")
+
+                then("the failure is contained and the next session is still summarized") {
+                    shouldNotThrowAny { service.detectCutoffs() }
+                    verify(exactly = 1) {
+                        publisher.publishEvent(match<Any> { (it as StandupCutoffEvent).sessionId == 2L })
                     }
                 }
             }

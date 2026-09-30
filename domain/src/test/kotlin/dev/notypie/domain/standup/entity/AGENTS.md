@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # domain/standup/entity (test)
 
@@ -10,7 +10,7 @@ Invariants of the standup aggregates: `Routine` (the schedule definition and its
 ## Key Files
 | File | Description |
 |------|-------------|
-| `RoutineTest.kt` | `BehaviorSpec` over `Routine` / `RoutineMember`. Valid construction preserves question order and the weekday set, `isActive` defaults to `true`, `memberSnapshot()` starts empty. Rejections (`ValidationExceptionWithName`): blank `name`, empty `questions`, a blank question, a question containing `\n` (would break the persistence delimiter), a question > `MAX_QUESTION_LENGTH`, more than `MAX_QUESTIONS`, empty `weekdays`, `cutoffOffset` ≤ 0. `addMember`: same `userId` twice keeps only the latest (timezone overwritten), one past `MAX_MEMBERS` is rejected. Uses `createRoutine`, `createRoutineMember` |
+| `RoutineTest.kt` | `BehaviorSpec` over `Routine` / `RoutineMember`. Valid construction preserves question order and the weekday set, `isActive` defaults to `true`, `memberSnapshot()` starts empty. Rejections (`ValidationExceptionWithName`): blank `name`, empty `questions`, a blank question, a question containing `\n` (would break the persistence delimiter), a question > `MAX_QUESTION_LENGTH`, more than `MAX_QUESTIONS`, empty `weekdays`, `cutoffOffset` ≤ 0, `cutoffOffset` > `MAX_CUTOFF_MINUTES` (incl. the T2 overflow value 10^15 min); exactly 1440 min is accepted. `addMember`: same `userId` twice keeps only the latest (timezone overwritten), one past `MAX_MEMBERS` is rejected. Uses `createRoutine`, `createRoutineMember` |
 | `StandupSessionTest.kt` | `BehaviorSpec` over `StandupSession`, `SessionDispatch`, `StandupAnswer`. `SUMMARIZED` status requires a `summaryMessageTs`; `addDispatch` and `addAnswer` replace an existing row for the same `userId` (latest wins, no duplicates); `SessionDispatch` with `SENT` needs `dmSentAt`, with `FAILED` needs `failureReason`; `StandupAnswer` needs at least one response. Uses `createStandupSession`, `createSessionDispatch`, `createStandupAnswer` |
 
 ## For AI Agents

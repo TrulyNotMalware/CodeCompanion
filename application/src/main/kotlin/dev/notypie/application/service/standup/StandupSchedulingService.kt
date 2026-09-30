@@ -54,10 +54,14 @@ class StandupSchedulingService(
     private val dispatchBatchSize: Int = appConfig.standup.scheduler.dispatchBatchSize
     private val nudgeOffsetMinutes: Long = appConfig.standup.nudge.offsetMinutes
 
+    // Per-routine isolation: one routine's bad data (e.g. an overflowing cutoff) must not block every other routine.
     fun openSessionsForToday() {
         val now = clock.instant()
         standupRepository.listActiveRoutines().forEach { routine ->
-            openSessionForRoutine(routine = routine, now = now)
+            runCatching { openSessionForRoutine(routine = routine, now = now) }
+                .onFailure { ex ->
+                    log.error(ex) { "Standup session open failed: routine=${routine.routineUid}" }
+                }
         }
     }
 
@@ -243,18 +247,23 @@ class StandupSchedulingService(
         }
     }
 
+    // The summary listener runs synchronously, so a per-session catch keeps one broken session from blocking the rest.
     fun detectCutoffs() {
         val now = clock.instant()
         standupRepository.findCollectingSessionsPastCutoff(before = now).forEach { session ->
             log.info { "Standup cutoff reached: sessionUid=${session.sessionUid} routineUid=${session.routineUid}" }
-            applicationEventPublisher.publishEvent(
-                StandupCutoffEvent(
-                    sessionId = session.sessionId,
-                    sessionUid = session.sessionUid,
-                    routineUid = session.routineUid,
-                    sessionDate = session.sessionDate,
-                ),
-            )
+            runCatching {
+                applicationEventPublisher.publishEvent(
+                    StandupCutoffEvent(
+                        sessionId = session.sessionId,
+                        sessionUid = session.sessionUid,
+                        routineUid = session.routineUid,
+                        sessionDate = session.sessionDate,
+                    ),
+                )
+            }.onFailure { ex ->
+                log.error(ex) { "Standup cutoff handling failed: sessionUid=${session.sessionUid}" }
+            }
         }
     }
 }

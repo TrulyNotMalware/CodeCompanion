@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # domain/standup/entity
 
@@ -11,7 +11,7 @@ itself in `init`, and the same constructors are used when `infrastructure` rehyd
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Routine.kt` | `Routine(name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime, cutoffOffset, weekdays, routineTimezone, isActive = true, routineUid = random)`; limits `MAX_NAME_LENGTH = 60`, `MIN_QUESTIONS = 1`, `MAX_QUESTIONS = 8`, `MAX_QUESTION_LENGTH = 200`, `MAX_MEMBERS = 30`; defaults `DEFAULT_WEEKDAYS` (Mon–Fri), `DEFAULT_CUTOFF_OFFSET` (1h); `addMember` replaces by `userId`; `memberSnapshot()` / `memberIdSnapshot()` |
+| `Routine.kt` | `Routine(name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime, cutoffOffset, weekdays, routineTimezone, isActive = true, routineUid = random)`; limits `MAX_NAME_LENGTH = 60`, `MIN_QUESTIONS = 1`, `MAX_QUESTIONS = 8`, `MAX_QUESTION_LENGTH = 200`, `MAX_MEMBERS = 30`, `MIN_CUTOFF_MINUTES = 1` / `MAX_CUTOFF_MINUTES = 1440` (`MAX_CUTOFF_OFFSET`; `cutoffOffset` must be in `(0, 24 h]`, review T2); defaults `DEFAULT_WEEKDAYS` (Mon–Fri), `DEFAULT_CUTOFF_OFFSET` (1h); `addMember` replaces by `userId`; `memberSnapshot()` / `memberIdSnapshot()` |
 | `RoutineMember.kt` | `RoutineMember(userId, userTimezone: ZoneId)`; non-blank `userId` |
 | `StandupSession.kt` | `StandupSession(routineUid, sessionDate, cutoffAt, status = COLLECTING, summaryMessageTs?, sessionUid = random)`; `SUMMARIZED` requires non-blank `summaryMessageTs`; `addDispatch` / `addAnswer` replace by `userId`; `dispatchSnapshot()` / `answerSnapshot()` |
 | `SessionDispatch.kt` | `SessionDispatch(userId, dmTriggerAt: Instant, dmSentAt?, dmStatus = PENDING, failureReason?)`; `SENT` requires `dmSentAt`, `FAILED` requires non-blank `failureReason` |
@@ -29,6 +29,8 @@ itself in `init`, and the same constructors are used when `infrastructure` rehyd
   `RoutineMember`; `StandupSchedulingService` builds `StandupSession` + `SessionDispatch`) and the JPA
   mappers `RoutineSchema.toDomainEntity()` / `StandupSessionSchema.toDomainEntity()`. A new `init` rule
   therefore runs on every read — if existing rows violate it, reads fail. Migrate data before tightening.
+  (Today only `createRoutine` maps a routine row back to the entity; scheduler reads go through the
+  unvalidated `RoutineDto`, which is why the scheduler isolates each routine instead of trusting old rows.)
 - `Routine` rejects a question containing `\n` because persistence joins questions with `\n` and the
   modal renders each as a label. Keep that rule in sync with `infrastructure/repository/standup/schema/`.
 - `status` fields are constructor `val`s with no mutators. Transitions happen as compare-and-set SQL in

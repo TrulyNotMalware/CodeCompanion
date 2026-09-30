@@ -10,15 +10,18 @@ private val log = KotlinLogging.logger {}
 class StandupScheduler(
     private val schedulingService: StandupSchedulingService,
 ) {
+    // Each phase is isolated: one failing phase used to skip every later phase for every routine on every tick.
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
-        runCatching {
-            schedulingService.openSessionsForToday()
-            schedulingService.sendPendingDispatches()
-            schedulingService.nudgeNonResponders()
-            schedulingService.detectCutoffs()
-        }.onFailure { ex ->
-            log.error(ex) { "Standup scheduler tick failed" }
+        runPhase(name = "openSessionsForToday") { schedulingService.openSessionsForToday() }
+        runPhase(name = "sendPendingDispatches") { schedulingService.sendPendingDispatches() }
+        runPhase(name = "nudgeNonResponders") { schedulingService.nudgeNonResponders() }
+        runPhase(name = "detectCutoffs") { schedulingService.detectCutoffs() }
+    }
+
+    private fun runPhase(name: String, phase: () -> Unit) {
+        runCatching(phase).onFailure { ex ->
+            log.error(ex) { "Standup scheduler phase failed: phase=$name" }
         }
     }
 }

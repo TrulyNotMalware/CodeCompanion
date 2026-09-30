@@ -12,6 +12,7 @@ import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -119,6 +120,51 @@ class StandupRoutineSetupServiceTest :
                     val body = (ephemeral.content as MessageContent.Text).markdown
                     body.contains("Couldn't create the standup routine") shouldBe true
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            `when`("the cutoff did not parse as a whole number within bounds (T2/U8)") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                val eventPublisher = mockk<EventPublisher>(relaxed = true)
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = eventPublisher,
+                    )
+                val errorSlot = slot<OutboundMessage>()
+                every { stager.stage(message = capture(errorSlot), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+
+                service.createRoutine(event = createCreateStandupRoutineEvent(cutoffMinutes = null))
+
+                then("the routine is never persisted and the reply names the accepted cutoff range") {
+                    verify(exactly = 0) { repo.createRoutine(routine = any()) }
+                    val body =
+                        ((errorSlot.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
+                            .markdown
+                    body shouldContain "Couldn't create the standup routine"
+                    body shouldContain "whole number of minutes between 1 and 1440"
+                }
+            }
+
+            `when`("the cutoff is a number past the one-day bound") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = mockk(relaxed = true),
+                    )
+
+                service.createRoutine(event = createCreateStandupRoutineEvent(cutoffMinutes = 1441L))
+
+                then("Routine validation rejects it before anything is persisted") {
+                    verify(exactly = 0) { repo.createRoutine(routine = any()) }
                 }
             }
         }

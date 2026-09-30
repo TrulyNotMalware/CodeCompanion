@@ -40,6 +40,14 @@ class RoutineTest :
                     routine.memberSnapshot().size shouldBe 0
                 }
             }
+
+            `when`("cutoffOffset sits exactly on the one-day upper bound") {
+                val routine = createRoutine(cutoffOffset = Duration.ofMinutes(Routine.MAX_CUTOFF_MINUTES))
+
+                then("it is accepted") {
+                    routine.cutoffOffset shouldBe Routine.MAX_CUTOFF_OFFSET
+                }
+            }
         }
 
         given("Routine creation with invalid data") {
@@ -95,6 +103,22 @@ class RoutineTest :
                 then("rejects — cutoff must run after the trigger") {
                     shouldThrow<ValidationExceptionWithName> {
                         createRoutine(cutoffOffset = Duration.ZERO)
+                    }
+                }
+            }
+
+            `when`("cutoffOffset exceeds one day") {
+                then("rejects — a cutoff past 24 h would overlap the next day's session") {
+                    shouldThrow<ValidationExceptionWithName> {
+                        createRoutine(cutoffOffset = Duration.ofMinutes(Routine.MAX_CUTOFF_MINUTES + 1L))
+                    }
+                }
+            }
+
+            `when`("cutoffOffset is the T2 overflow value (10^15 minutes)") {
+                then("rejects before it can reach the scheduler's Instant arithmetic") {
+                    shouldThrow<ValidationExceptionWithName> {
+                        createRoutine(cutoffOffset = Duration.ofMinutes(1_000_000_000_000_000L))
                     }
                 }
             }

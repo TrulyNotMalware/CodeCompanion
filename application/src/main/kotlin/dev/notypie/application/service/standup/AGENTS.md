@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
 
 # application/service/standup
 
@@ -15,9 +15,9 @@ is written back onto the session row once the relay has posted it.
 |------|-------------|
 | `StandupSlashService.kt` | Interface `handleStandup(headers, payload: SlashCommandRequestBody, commandData)` — the dependency `SlashCommandController` and `SocketModeReceiver` take |
 | `StandupSlashServiceImpl.kt` | `@Service`, `@Transactional handleStandup`: `IdempotencyCreator.create(data = commandData)` → `SetupStandupCommand` → `CommandExecutor.execute` (the resolved intent is the synchronous `views.open` of the setup modal) |
-| `StandupRoutineSetupService.kt` | `@EventListener createRoutine(CreateStandupRoutineEvent)`: builds `Routine` + one `RoutineMember` per id (each member adopts the routine timezone), `StandupRepository.createRoutine`, then stages an `OutboundMessage.Ephemeral` confirmation or rejection (`STANDUP_SETUP_SUBMIT`) and `eventPublisher.publishOne`. `Routine.init` is the only validator; its throw becomes the rejection text |
+| `StandupRoutineSetupService.kt` | `@EventListener createRoutine(CreateStandupRoutineEvent)`: builds `Routine` + one `RoutineMember` per id (each member adopts the routine timezone), `StandupRepository.createRoutine`, then stages an `OutboundMessage.Ephemeral` confirmation or rejection (`STANDUP_SETUP_SUBMIT`) and `eventPublisher.publishOne`. `Routine.init` is the only validator (plus a `null` `cutoffMinutes`, meaning the typed cutoff was not a whole number in `1..1440`); its throw becomes the rejection text |
 | `StandupAnswerService.kt` | `@EventListener recordAnswer(RecordStandupAnswerEvent)` → `StandupRepository.recordAnswer` (the transaction lives in the repository impl, not here); `@EventListener onStandupModalOpenFailed(StandupModalOpenFailedEvent)` stages an `Ephemeral` with `recipient = null` into the originating DM channel |
-| `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, one `runCatching` around the whole tick |
+| `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, each phase in its own `runCatching` so one failing phase cannot skip the later ones (review T2) |
 | `StandupSchedulingService.kt` | `@Service` owning the four phases, a `TransactionTemplate` built from the injected `PlatformTransactionManager`, and the `internal` builders `buildDmNotice` (`OutboundMessage.Approval`, buttons "Fill in standup" / "Skip", `STANDUP_PROMPT`, `routingExtras = [sessionUid, routineUid]`) and `buildNudgeNotice` (`ChannelMessage`). Publishes `StandupCutoffEvent` through a plain `ApplicationEventPublisher` |
 | `StandupSummaryService.kt` | `@EventListener postSummary(StandupCutoffEvent)`: builds a `MessageContent.StandupSummary` outbox row, then `runInTx { outboxRepository.save(row); markSessionSummarized(messageTs = "outbox:<eventId>") }` — a `false` from the CAS throws so the row rolls back. `@EventListener replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` swaps the marker for the real Slack `ts` |
 
@@ -27,7 +27,11 @@ is written back onto the session row once the relay has posted it.
 - **Phase order is load-bearing.** Open sessions before sending, send before nudging, nudge before cutoff.
   `openSessionForRoutine` is idempotent through the unique `(routine_uid, session_date)` constraint; the
   `DataIntegrityViolationException` is swallowed only after `findSession` confirms the row exists — any
-  other violation must surface.
+  other violation is re-raised out of `openSessionForRoutine` and surfaces as that routine's error log.
+- **Failure isolation is per phase, per routine, per session.** The tick wraps each phase;
+  `openSessionsForToday` wraps each routine and `detectCutoffs` wraps each session's (synchronous) summary
+  listener. Before this, one routine with an overflowing cutoff (`cutoffAnchor.plus(cutoffOffset)` →
+  `DateTimeException`) stopped DMs, nudges and summaries for every routine on every tick (T2, U6).
 - **Per-member timezone.** `dmTriggerAt` is `today@triggerLocalTime` in the *member's* zone; `cutoffAt` is
   the **latest** member trigger plus `cutoffOffset`, so a westward member still gets the full window.
   `sendPendingDispatches` queries by absolute instant across all sessions, never "today in routine zone".
