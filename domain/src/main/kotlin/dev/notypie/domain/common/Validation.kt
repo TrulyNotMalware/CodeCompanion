@@ -20,7 +20,10 @@ class ValidationBuilder {
     private fun <T> field(name: String, value: T): Field<T> =
         Field(name = name, value = value, raisedErrors = identitySet())
 
-    private fun <T> Field<*>.nested(value: T): Field<T> = Field(name = name, value = value, raisedErrors = raisedErrors)
+    // A block gets a child Field with its own error set, so an `or` inside it sees only the block's errors
+    // as its left operand; claimErrorsOf merges the block's surviving errors into the parent afterwards.
+    private fun <T> Field<*>.nested(value: T): Field<T> =
+        Field(name = name, value = value, raisedErrors = identitySet())
 
     private fun identitySet(): MutableSet<ExceptionArgument> = Collections.newSetFromMap(IdentityHashMap())
 
@@ -47,13 +50,13 @@ class ValidationBuilder {
     infix fun <T> String.of(value: T): Field<T> = field(name = this, value = value)
 
     infix fun <T> Field<T>.and(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
-        claimErrorsOf { block(this) }
+        claimErrorsOf { block(nested(value = value)) }
         return this
     }
 
     infix fun <T> Field<T>.or(block: ValidationBuilder.(Field<T>) -> Unit): Field<T> {
         val leftErrors = raisedErrors.toList()
-        val rightErrors = errorsAddedBy { block(this) }
+        val rightErrors = errorsAddedBy { block(nested(value = value)) }
         val cleared = if (rightErrors.isEmpty()) leftErrors else rightErrors
         discard(discarded = cleared)
         cleared.forEach { raisedErrors.remove(it) }

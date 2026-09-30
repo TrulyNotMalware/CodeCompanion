@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-09-30 -->
 
 # domain/common
 
@@ -41,7 +41,10 @@ outside itself — only `java.time`, `java.io` and `java.util` (identity sets fo
   for a `Field` stored in a `val` and used after other fields were validated (see below).
 - `Field` is a plain class with an `internal` constructor carrying `raisedErrors`, an identity set of the
   errors its own chain produced: matchers add through the private `reject`, and `and` / `shouldNotBeNullAnd` /
-  `ifNotNull` claim every error their block added (the nested non-null `Field` shares the parent's set). `or`
+  `ifNotNull` claim every error their block added. Each block (including `or`'s right block) receives a
+  child `Field` with a fresh set, so an `or` inside a block treats only that block's chain as its left
+  operand; the block's surviving errors are merged into the parent's set when it ends. Before 2026-09-30 the
+  child shared the parent's set, and `p1 and { p2 or { p3 } }` erased `p1`'s error when `p3` passed. `or`
   snapshots the errors when it starts, runs the right block, and then removes by identity either the right
   block's errors (left passed, or both failed) or the field's own left-hand errors (right passed). It never
   uses list positions, so a stored field OR-ed after other fields failed cannot erase their errors, and an
@@ -73,7 +76,8 @@ errors. Entity specs (`MeetingTest`, `RoutineTest`, `StandupSessionTest`) cover 
 `shouldThrow<ValidationExceptionWithName>`. Assert on `fieldName` and `value`; treat `reason` text as
 non-contractual — `shouldBeNegative` reports "must be positive". The `or` specs include an earlier failing
 field followed by an `or` inside `shouldNotBeNullAnd` / `ifNotNull`, a `Field` stored in a `val` and OR-ed
-after another field failed, an equal error from another field, and an `and` block on the left operand, which
+after another field failed, an equal error from another field, an `and` block on the left operand, and a
+satisfied `or` inside `and` / `ifNotNull` / `shouldNotBeNullAnd` after the same field already failed, which
 pin that `or` never removes errors outside its own operands.
 
 ### Common Patterns
