@@ -166,8 +166,53 @@ class SlackRetryDeduplicatorTest :
                 then("completed entries are trimmed to 90% of the cap in one pass and the new request is tracked") {
                     newest.shouldBeInstanceOf<SlackRetryAdmission.FirstAttempt>()
                     deduplicator.trackedEntries() shouldBe 10
+                    deduplicator.trimScans() shouldBe 1
                     deduplicator.admit(fingerprint = fingerprintOf(index = 10), retryNum = "1") shouldBe
                         SlackRetryAdmission.RetryOfInFlight
+                }
+            }
+
+            `when`("a trim left completed entries behind and the map fills up again with new requests") {
+                val deduplicator =
+                    InMemorySlackRetryDeduplicator(
+                        clock = Clock.fixed(start, ZoneOffset.UTC),
+                        maxEntries = 10,
+                    )
+                repeat(10) { index ->
+                    val ticket = deduplicator.firstAttempt(fingerprint = fingerprintOf(index = index))
+                    deduplicator.markCompleted(ticket = ticket)
+                }
+                deduplicator.firstAttempt(fingerprint = fingerprintOf(index = 10))
+                val next = deduplicator.admit(fingerprint = fingerprintOf(index = 11), retryNum = null)
+
+                then("the next trim still scans for the remaining completed entries without a new completion") {
+                    next.shouldBeInstanceOf<SlackRetryAdmission.FirstAttempt>()
+                    deduplicator.trimScans() shouldBe 2
+                    deduplicator.trackedEntries() shouldBe 10
+                }
+            }
+
+            `when`("the cap is full of in-flight entries and more new requests keep arriving") {
+                val deduplicator =
+                    InMemorySlackRetryDeduplicator(
+                        clock = Clock.fixed(start, ZoneOffset.UTC),
+                        maxEntries = 3,
+                    )
+                val inFlight =
+                    (0 until 3).map { index -> deduplicator.firstAttempt(fingerprint = fingerprintOf(index = index)) }
+                repeat(5) { index ->
+                    deduplicator.admit(fingerprint = fingerprintOf(index = 100 + index), retryNum = null)
+                }
+                val scansWhileNothingCompleted = deduplicator.trimScans()
+
+                deduplicator.markCompleted(ticket = inFlight.first())
+                val afterCompletion = deduplicator.admit(fingerprint = fingerprintOf(index = 200), retryNum = null)
+
+                then("no trim scan runs until an entry completes, and then one scan makes room") {
+                    scansWhileNothingCompleted shouldBe 0
+                    afterCompletion.shouldBeInstanceOf<SlackRetryAdmission.FirstAttempt>()
+                    deduplicator.trimScans() shouldBe 1
+                    deduplicator.trackedEntries() shouldBe 3
                 }
             }
 

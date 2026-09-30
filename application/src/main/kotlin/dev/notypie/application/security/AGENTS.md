@@ -68,7 +68,9 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   again untracked, so a replay inside the 300 s timestamp window re-ran the command or AI turn. Entries expire after
   the TTL (amortised sweep every TTL/2). At `maxEntries` the oldest COMPLETED entries are trimmed to 90% of
   the cap in one pass under a `tryLock`; IN_FLIGHT entries are never trimmed, but they still expire after the TTL
-  like any other entry. When the map is still full (all in flight), a new fingerprint is answered `Untracked`:
+  like any other entry. The scan runs only while `completedEntriesMayRemain` is set (by every `markCompleted`,
+  and by a trim that left COMPLETED entries behind), so a map full of in-flight entries does not cost each new
+  request a filter + sort over 10 000 entries; `trimScans()` exposes the count to the spec. When the map is still full (all in flight), a new fingerprint is answered `Untracked`:
   the event is processed but not recorded, so a signed event is never refused for bookkeeping and memory stays
   at the cap. `markCompleted` / `markFailed` apply only to the entry of their ticket's generation, so a late
   mark from an attempt whose entry already expired cannot complete or delete a newer attempt's entry. `codecompanion.slack.retry.deferred` counts the 503s: Slack counts them as delivery

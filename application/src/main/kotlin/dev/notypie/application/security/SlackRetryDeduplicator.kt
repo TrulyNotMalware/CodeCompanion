@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 
@@ -64,6 +65,12 @@ class InMemorySlackRetryDeduplicator(
     private val generations = AtomicLong(0L)
     private val lastSweepAt = AtomicLong(0L)
     private val trimLock = ReentrantLock()
+
+    // Set by every completion and by a trim that left COMPLETED entries behind; cleared when a trim scan starts.
+    // While it is false the map holds no COMPLETED entry a scan could remove, so a full map of in-flight entries
+    // does not cost every new request a filter + sort over all of them.
+    private val completedEntriesMayRemain = AtomicBoolean(false)
+    private val trimScans = AtomicLong(0L)
     private val trimTarget: Int
 
     init {
@@ -113,6 +120,7 @@ class InMemorySlackRetryDeduplicator(
                 entry
             }
         }
+        completedEntriesMayRemain.set(true)
     }
 
     override fun markFailed(ticket: SlackRetryTicket) {
@@ -122,6 +130,8 @@ class InMemorySlackRetryDeduplicator(
     }
 
     internal fun trackedEntries(): Int = entries.size
+
+    internal fun trimScans(): Long = trimScans.get()
 
     private fun isExpired(entry: Entry, now: Long): Boolean = entry.recordedAt < now - ttl.toMillis()
 
@@ -135,12 +145,14 @@ class InMemorySlackRetryDeduplicator(
         if (!trimLock.tryLock()) return
         try {
             val excess = entries.size - trimTarget
-            if (excess <= 0) return
-            entries.entries
-                .filter { (_, entry) -> entry.state == State.COMPLETED }
+            if (excess <= 0 || !completedEntriesMayRemain.getAndSet(false)) return
+            trimScans.incrementAndGet()
+            val completed = entries.entries.filter { (_, entry) -> entry.state == State.COMPLETED }
+            completed
                 .sortedBy { (_, entry) -> entry.recordedAt }
                 .take(excess)
                 .forEach { (fingerprint, entry) -> entries.remove(fingerprint, entry) }
+            if (completed.size > excess) completedEntriesMayRemain.set(true)
         } finally {
             trimLock.unlock()
         }
