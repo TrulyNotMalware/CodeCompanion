@@ -75,7 +75,7 @@ Specs live beside their subject: `SlackInboundMapperTest`, `SlackIntentResolverT
 `ApplicationMessageDispatcherTest` (fake Slack over `com.sun.net.httpserver`), `slack/ElementTest`,
 `slack/SlackMentionMapperTest`, `agent/SidecarAgentClientTest`, `cve/GithubReleaseSourceAdapterTest`,
 `cve/NvdCveSourceAdapterTest`, `cve/SourceAdapterTest`, `retry/RetryServiceTest`,
-`KafkaEventPublisherTest` (EmbeddedKafka), `RestClientRequesterTest`.
+`KafkaEventPublisherTest` (EmbeddedKafka), `RestClientRequesterTest`, `RestClientRequesterTimeoutTest` (loopback).
 When you add an `OutboundMessage` or `CommandIntent` variant in the domain, the resolver/stager/renderer
 `when` branches here are what make it real — add all three plus their specs, or the effect is silently
 dropped.

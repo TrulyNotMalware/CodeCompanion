@@ -24,7 +24,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 | `SlackViewOpenDispatcher.kt` | Synchronous (non-`@Async`) `@EventListener` for `OpenViewEvent` → `dispatchImmediate` |
 | `KafkaEventPublisher.kt` | `EventPublisher`: `isInternal` → Spring bus, else `kafkaTemplate.send(destination, idempotencyKey, payload)` awaited `sendTimeoutMillis` (default 5000) — timeout / execution cause / interrupt are rethrown |
 | `AppEventPublisher.kt` | `EventPublisher` that publishes every event on the Spring bus (default `APPLICATION_EVENT` mode) |
-| `RestRequester.kt` / `RestClientRequester.kt` | Generic Spring `RestClient` wrapper: `safe*` verbs return `Result<ResponseEntity<T>>`, plain verbs `bodyOrThrow`; per-call bearer header; `SLACK_API_BASE_URL`; explicit `JdkClientHttpRequestFactory` with `connectTimeout = 3s` / `readTimeout = 10s` (constructor params) because the static `RestClient.builder()` ignores `spring.http.client.*`. `safeGet` takes `uriVariables`, expanded and encoded by Spring's URI template (never interpolate caller values into `uri`). A `safe*` failure is logged at DEBUG only — the caller gets it as a `Result` and logs it with its own context. Only consumer: `templates/SlackUserProfileResolver` (`users.profile.get?user={user}`), fed through `ModalTemplateBuilder` with the `restRequester` bean from `application/configurations/RestClientConfiguration` (default timeouts) |
+| `RestRequester.kt` / `RestClientRequester.kt` | Generic Spring `RestClient` wrapper: `safe*` verbs return `Result<ResponseEntity<T>>`, plain verbs `bodyOrThrow`; per-call bearer header; `SLACK_API_BASE_URL`; explicit `JdkClientHttpRequestFactory` with `connectTimeout = 3s` / `readTimeout = SLACK_CALL_TIMEOUT` (6 s) (constructor params; Spring starts the read timer right after `sendAsync` and closes the body stream when it fires, so it bounds connect, headers and body together) because the static `RestClient.builder()` ignores `spring.http.client.*`. `safeGet` takes `uriVariables`, expanded and encoded by Spring's URI template (never interpolate caller values into `uri`). A `safe*` failure is logged at DEBUG only — the caller gets it as a `Result` and logs it with its own context. Only consumer: `templates/SlackUserProfileResolver` (`users.profile.get?user={user}`), fed through `ModalTemplateBuilder` with the `restRequester` bean from `application/configurations/RestClientConfiguration` (default timeouts, so `users.profile.get` gets the same 6 s whole-call bound as `chat.*`) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -106,11 +106,14 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   each HTTP call ≤ `SLACK_CALL_TIMEOUT` 6 s (OkHttp `callTimeout` spans DNS, connect, write, server time and
   the whole body); one `RetryService` run is 3 calls + backoff ≤ 0.1 + 0.2 s + 2 × 10 ms jitter = 18.32 s; with
   the single inline rate-limit wait (≤ 3 s) and the second run, `dispatch` ≤ 18.32 + 3 + 18.32 = 39.64 s.
-  Render adds at most one `users.profile.get` (`RestClientRequester` connect timeout 3 s + read timeout 10 s,
-  which Spring's JDK factory applies to the whole exchange including the body): ≤ 52.64 s of HTTP per record. The CDC consumer
-  runs `max-poll-records: 5` under `max.poll.interval.ms: 300000`, i.e. 60 s per record, which leaves ≥ 7 s
-  for the claim, renew and completion SQL. Raising `SLACK_CALL_TIMEOUT`, the retry attempts, the inline wait
-  or `max-poll-records` must keep this sum below 60 s.
+  An outcome-unknown or access-blocked call ends its run at once, so neither lengthens this. Render adds at most
+  one `users.profile.get`, ≤ `SLACK_CALL_TIMEOUT` 6 s as a whole (`RestClientRequester` read timeout, which
+  Spring's JDK factory starts right after `sendAsync` and applies to the whole exchange including the body; the 3 s
+  connect timeout runs inside it): **≤ 39.64 + 6 = 45.64 s of HTTP per record**. The CDC consumer runs
+  `max-poll-records: 5` under `max.poll.interval.ms: 300000`, i.e. 60 s per record. This file owns only the HTTP
+  part; the database waits of the same record (claim, renew and completion SQL with their retries, Hikari
+  `connection-timeout`) are budgeted in `application/.../service/relay/AGENTS.md`. Raising `SLACK_CALL_TIMEOUT`,
+  the retry attempts, the inline wait or `max-poll-records` must keep the total below 60 s.
 - **`response_url` is validated before any request**: `https`, port 443 and a host in `SLACK_RESPONSE_URL_HOSTS`
   (`hooks.slack.com`, GovSlack `hooks.slack-gov.com`), checked on the parsed `HttpUrl` that is then sent, so
   userinfo (`https://hooks.slack.com@evil.example/…`) and a trailing dot are rejected and upper case is
@@ -141,6 +144,7 @@ Specs: `SlackInteractionRequestParserTest`, `SlackInboundMapperTest`, `SlackInte
 `SlackOutboundStagerTest`, `SlackOutboundRendererTest`, `SlackApiEventConstructorTest`,
 `ViewSubmissionChannelRoutingRegressionTest` (guards the `private_metadata` channel recovery — never
 delete), `KafkaEventPublisherTest` (`@SpringBootTest` + `EmbeddedKafka`), `RestClientRequesterTest`,
+`RestClientRequesterTimeoutTest` (loopback: the 6 s read timeout bounds the body too),
 `ApplicationMessageDispatcherTest` (a `com.sun.net.httpserver` fake Slack built with the production
 `slackClient { methodsEndpointUrlPrefix = … }`, so stats stay off — with stats on the SDK calls `auth.test` first
 and eats the queued response — and `RequestSendTracker` is installed, plus `responseUrlClient(...)` with an OkHttp
