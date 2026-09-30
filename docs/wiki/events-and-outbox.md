@@ -230,8 +230,10 @@ _type: architecture · updated: 2026-09-30_
   않는다. 디테일 키: `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`,
   `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`,
   `retryingSendThreshold`.
-- `OpsStatusService.renderReport`가 **같은 카운터**(retrying 제외)를 읽어 `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP
-  `get_status`를 만든다. 채팅과 actuator가 다른 숫자를 말하지 않게 하려는 의도다.
+- `OpsStatusService.renderReport`와 `OutboxHealthIndicator`는 같은 함수 `readOutboxHealth`(`health/OutboxHealthSnapshot.kt`)의
+  스냅숏과 판정(`healthy`)을 쓴다. 예전에는 채팅 쪽이 스윕 유예 60초와 retrying 카운터 없이 따로 계산해 actuator와
+  UP/DOWN이 갈렸다(review 14장 O4). `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP `get_status`가 이 텍스트를
+  쓰고, `OutboxHealthAgreementTest`가 두 판정의 일치를 고정한다.
 - 미지원 `schema_version` 행은 `IN_PROGRESS`로 남지만 헬스에는 잡히지 않는다: 회수할 때마다 `updated_at`이 갱신되고
   `send_count`는 0이다. ERROR 로그(`not in [...]; leaving it IN_PROGRESS unsent`)로 본다.
 

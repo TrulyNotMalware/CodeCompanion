@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # test/kotlin/dev/notypie/application/health
 
@@ -11,6 +11,8 @@ status with a detail map that dashboards and `@bot status` read.
 | File | Description |
 |------|-------------|
 | `OutboxHealthIndicatorTest.kt` | `OutboxHealthIndicator.health()` with a MockK `MessageOutboxRepository` driven by `stubOutboxStatus(...)`, `createFixedUtcClock(DEFAULT_TEST_NOW)`, and `AppConfig.Outbox.Health(stuckThresholdSeconds = 300, retryingSendThreshold = 3)`. Cases: no rows → `UP` and every detail key at 0 (`pendingCount`, `stuckPendingCount`, legacy `stuckCount`, `oldestPendingAgeSeconds`, `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `retryingCount`) plus `stuckThresholdSeconds = 300`, `retryingSendThreshold = 3`; fresh pending → `UP` with `oldestPendingAgeSeconds = 60`; stuck pending → `DOWN`; oldest pending in the future → age clamped to 0; stuck `IN_PROGRESS` → `DOWN` driven by in-flight details; fresh in-flight → `UP`; a deferred row 320 s old → `UP`, with the in-flight count queried at `now − 360 s` (threshold plus one sweep period) and the retrying count by sends ≥ 3; a just-reclaimed row with a fresh age but `retryingCount = 1` → still `DOWN`, queried with `countInProgressWithSendsAtLeast(3)`. |
+
+| `OutboxHealthAgreementTest.kt` | The "never disagree" contract: a MockK repository answers every count / oldest query from one list of rows (threshold arguments are honoured, not `any()`), and for each state `OutboxHealthIndicator.health().status == UP` must equal `OpsStatusService.renderReport()` containing `UP`. States: empty; an `IN_PROGRESS` row 330 s old (inside the sweep grace, both UP); one 400 s old (both DOWN); a fresh row with `send_count = 3` (both DOWN); a PENDING row 400 s old (both DOWN); a fresh PENDING row (both UP). The 330 s and `send_count = 3` states disagreed before `readOutboxHealth` was shared |
 
 ## For AI Agents
 

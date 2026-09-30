@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
 
 # application/health
 
@@ -8,13 +8,15 @@ The Actuator `HealthIndicator` for the transactional outbox. It reports pending 
 ages and flips the application to `DOWN` when any outbox row has sat in `PENDING` (poller stalled) or
 `IN_PROGRESS` (dispatcher claimed it and died) longer than the configured stuck threshold plus one recovery
 sweep period, or when an `IN_PROGRESS` row has been sent at least `retryingSendThreshold` times (a row the
-recovery sweep keeps re-sending). A row that is only rate-limited is never `DOWN`. The first six counters also back the `@bot status` chat report in
-`service/ops/OpsStatusService`; the retrying counter is not in that report yet.
+recovery sweep keeps re-sending). A row that is only rate-limited is never `DOWN`. The counters and the verdict are computed once, in
+`readOutboxHealth`, and shared with the `@bot status` chat report (`service/ops/OpsStatusService`, also MCP
+`get_status`), so the two cannot disagree.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxHealthIndicator.kt` | `@Component class OutboxHealthIndicator(outboxRepository, clock: Clock, appConfig = AppConfig()) : HealthIndicator`. `health()` computes `cutoff = now - slack.app.outbox.health.stuck-threshold-seconds` (default 300) and reads `countPending`, `countPendingOlderThan(cutoff)`, `findOldestPendingCreatedAt`, `countInProgress`, `countInProgressOlderThan(cutoff - RECOVERY_SWEEP_PERIOD_MILLIS)` (the sweep gets one period to pick a row up), `findOldestInProgressUpdatedAt`, `countInProgressWithSendsAtLeast(slack.app.outbox.health.retrying-send-threshold)` (default 3); `DOWN` when either stuck count or the retrying count > 0. Details: `pendingCount`, `stuckPendingCount`, `stuckCount` (legacy alias of `stuckPendingCount`), `oldestPendingAgeSeconds`, `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`, `retryingSendThreshold` |
+| `OutboxHealthSnapshot.kt` | `data class OutboxHealthSnapshot(pendingCount, stuckPendingCount, oldestPendingAgeSeconds, inFlightCount, stuckInFlightCount, oldestInFlightAgeSeconds, retryingCount, stuckThresholdSeconds, retryingSendThreshold)` with `healthy` = no stuck pending, no stuck in-flight and no retrying row, and `MessageOutboxRepository.readOutboxHealth(clock, health: AppConfig.Outbox.Health)`, the single place that runs the seven reads below and picks the cutoffs. Ages clamp to 0 and a null timestamp reads as 0 |
+| `OutboxHealthIndicator.kt` | `@Component class OutboxHealthIndicator(outboxRepository, clock: Clock, appConfig = AppConfig()) : HealthIndicator`. `health()` = `readOutboxHealth(...)`, which computes `cutoff = now - slack.app.outbox.health.stuck-threshold-seconds` (default 300) and reads `countPending`, `countPendingOlderThan(cutoff)`, `findOldestPendingCreatedAt`, `countInProgress`, `countInProgressOlderThan(cutoff - RECOVERY_SWEEP_PERIOD_MILLIS)` (the sweep gets one period to pick a row up), `findOldestInProgressUpdatedAt`, `countInProgressWithSendsAtLeast(slack.app.outbox.health.retrying-send-threshold)` (default 3); `DOWN` when either stuck count or the retrying count > 0. Details: `pendingCount`, `stuckPendingCount`, `stuckCount` (legacy alias of `stuckPendingCount`), `oldestPendingAgeSeconds`, `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`, `retryingSendThreshold` |
 
 ## For AI Agents
 
@@ -38,8 +40,10 @@ recovery sweep keeps re-sending). A row that is only rate-limited is never `DOWN
   period counts.
 - The indicator is a hot path for liveness/readiness probes: seven repository calls per probe. Do not add
   queries that scan the table; every call it makes today is a covered count/min lookup.
-- Keep the report and `OpsStatusService.renderReport()` computing the same numbers from the same
-  repository methods — the chat reply and the health endpoint must never disagree.
+- The chat reply and the health endpoint must never disagree: both call `readOutboxHealth` and use its
+  `healthy`. Change a cutoff or a `DOWN` rule there, never in one caller. `OutboxHealthAgreementTest` pins the
+  contract over a repository that answers every query from one row list (the sweep-grace window, the retrying
+  counter, stuck and fresh pending, empty).
 - Thresholds come from `AppConfig.Outbox.Health`; do not read `@Value` here.
 
 ### Testing Requirements
@@ -54,8 +58,8 @@ in-flight branch when changing the `DOWN` rule.
 ### Common Patterns
 - `Health.up()` / `Health.down()` builder chosen first, then `.withDetail(...)` for every metric so
   the detail set is identical in both states.
-- `ageSeconds(at, now)` clamps to `0` and maps a null timestamp to `0` so JSON consumers never see a
-  negative or missing age.
+- `ageSeconds(at, now)` (in `OutboxHealthSnapshot.kt`) clamps to `0` and maps a null timestamp to `0` so JSON
+  consumers never see a negative or missing age.
 
 ## Dependencies
 
