@@ -11,6 +11,7 @@ import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.Runs
@@ -20,6 +21,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
@@ -59,11 +61,12 @@ class MeetingReminderSchedulingServiceTest :
             repo: MeetingReminderRepository,
             outboxRepo: MessageOutboxRepository,
             port: OutboundMessagePort = stubPort(),
+            transactionManager: PlatformTransactionManager = stubTransactionManager(),
         ) = MeetingReminderSchedulingService(
             reminderRepository = repo,
             outboxRepository = outboxRepo,
             outboundMessagePort = port,
-            transactionManager = stubTransactionManager(),
+            transactionManager = transactionManager,
             clock = clock,
             appConfig =
                 AppConfig(
@@ -237,26 +240,74 @@ class MeetingReminderSchedulingServiceTest :
                 }
             }
 
-            `when`("markReminderSent CAS returns false (recovery raced us)") {
+            `when`("markReminderSent CAS returns false (recovery raced us) on a real transaction manager") {
+                val dataSource = createH2DataSource()
+                val jdbc = JdbcTemplate(dataSource)
+                jdbc.execute("CREATE TABLE outbox_probe (event_id VARCHAR(64) PRIMARY KEY)")
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
-                val service = buildService(repo = repo, outboxRepo = outboxRepo)
-                val ready = readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
+                val service =
+                    buildService(
+                        repo = repo,
+                        outboxRepo = outboxRepo,
+                        transactionManager = createH2TransactionManager(dataSource = dataSource),
+                    )
+                val ready =
+                    readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A", "U_B"))
 
                 every { repo.resetStuckReminders(olderThan = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.claimReminder(reminderId = 42L, claimToken = any()) } returns true
-                every { outboxRepo.save(any()) } answers { firstArg() }
+                every { outboxRepo.save(any()) } answers {
+                    jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
+                    firstArg()
+                }
                 every { repo.markReminderSent(reminderId = 42L, claimToken = any(), sentAt = any()) } returns false
                 every { repo.markReminderFailed(reminderId = 42L, claimToken = any(), reason = any()) } returns true
 
                 service.sendDueReminders()
 
-                then("the tx rolls back and the reminder is recorded FAILED, never SENT") {
+                then("both DM rows written before the lost CAS roll back and the reminder is recorded FAILED") {
+                    jdbc.queryForObject("SELECT COUNT(*) FROM outbox_probe", Int::class.java) shouldBe 0
+                    verify(exactly = 2) { outboxRepo.save(any()) }
                     verify(exactly = 1) { repo.markReminderSent(reminderId = 42L, claimToken = any(), sentAt = any()) }
                     verify(exactly = 1) {
                         repo.markReminderFailed(reminderId = 42L, claimToken = any(), reason = any())
                     }
+                }
+            }
+
+            `when`("markReminderSent lands on a real transaction manager") {
+                val dataSource = createH2DataSource()
+                val jdbc = JdbcTemplate(dataSource)
+                jdbc.execute("CREATE TABLE outbox_probe (event_id VARCHAR(64) PRIMARY KEY)")
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service =
+                    buildService(
+                        repo = repo,
+                        outboxRepo = outboxRepo,
+                        transactionManager = createH2TransactionManager(dataSource = dataSource),
+                    )
+                val ready =
+                    readyReminderOf(reminderId = 43L, offsetMinutes = 15, attendingUserIds = listOf("U_A", "U_B"))
+
+                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.claimReminder(reminderId = 43L, claimToken = any()) } returns true
+                every { outboxRepo.save(any()) } answers {
+                    jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
+                    firstArg()
+                }
+                every { repo.markReminderSent(reminderId = 43L, claimToken = any(), sentAt = any()) } returns true
+
+                service.sendDueReminders()
+
+                then("both DM rows commit with the SENT mark and nothing is recorded FAILED") {
+                    jdbc.queryForObject("SELECT COUNT(*) FROM outbox_probe", Int::class.java) shouldBe 2
+                    verify(
+                        exactly = 0,
+                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any()) }
                 }
             }
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # test/kotlin/dev/notypie/application/service/standup
 
@@ -16,7 +16,7 @@ fallback, the summary post at cutoff, and the DM/nudge message builders. All eff
 | `StandupDispatchMessageBuilderTest.kt` | Plain Kotest `BehaviorSpec`, no mocks. `buildDmNotice` → `Approval` with `recipient = UserRef("U_TARGET")`, `routingExtras = [sessionUid, routineUid]`, `approval.idempotencyKey == sessionUid`, `STANDUP_PROMPT`, headline `Daily Standup — 2026-05-04`, buttons `Fill in standup`/`Skip`, target = command channel. `buildNudgeNotice` with cutoff 01:00Z in `Asia/Seoul` → text contains `*Daily Standup*`, `closes at 10:00`, `haven't responded yet`, `*Fill in standup*`; headline `Standup reminder`, `STANDUP_PROMPT`, plain `ChannelMessage`. |
 | `StandupRoutineSetupServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Valid `CreateStandupRoutineEvent` → captured `Routine` has name/creator/command/summary channels, `cutoffOffset = 90 min`, `routineTimezone = UTC`, members `{U_ALICE, U_BOB}` each adopting the routine zone; confirmation `Ephemeral` typed `STANDUP_SETUP_SUBMIT` whose markdown contains `Daily Standup` and `created`, `basicInfo.channel == C_COMMAND`, `publishEvent` once. Empty `questions` → no `createRoutine`, error ephemeral containing `Couldn't create the standup routine`, still published once. |
 | `StandupSchedulingServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK, 723 lines. `openSessionsForToday`: Monday routine with Seoul and LA members → `cutoffAt` = LA 10:00 + 1 h (latest member trigger), per-member `dmTriggerAt` in each zone; weekday mismatch → no `findSession`/`createSession`; existing session → skipped; `DataIntegrityViolationException` with `findSession` `returnsMany [null, mock]` → swallowed, two lookups; DIVE with no session → propagates; `RuntimeException` → propagates. `sendPendingDispatches`: claim won → `claimDispatch`/`save`/`markDispatchSent` once each with the same token in both slots, `Approval` DM to `U_A` (`STANDUP_PROMPT`, `subTitle = ""`, routing extras); claim lost → nothing; `toRow` throws → `markDispatchFailed(reason contains "Slack API error")`, no save; nothing pending → no `listActiveRoutines`; unknown routine → no claim. `detectCutoffs` → `ApplicationEventPublisher.publishEvent(StandupCutoffEvent(9L, …))`. `nudgeNonResponders`: sent `{U_A,U_B,U_C}`, answered `{U_C}` → `claimNudge(7L)` once, two saves, exact `⏰ Standup for *Daily Standup* closes at 12:10 — …` `ChannelMessage` per non-responder with `basicInfo.publisherId == channel == user`; all answered → no claim; claim lost → no save; `offsetMinutes = 0` → zero repository work; `offsetMinutes = 30` → captured window `[now, now + 30m]`. |
-| `StandupSummaryServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Cutoff for a collecting session → `toRow` with the exact `ChannelMessage(C_SUMMARY, MessageContent.StandupSummary(routineName, sessionDate, members, answers, questions))`, `save(summaryRow)`, `markSessionSummarized(7L, "outbox:EVT-SUMMARY")`; session missing → no save, no CAS; CAS returns false → only the attempt is asserted (rollback is via the relaxed `TransactionStatus`); `replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` → `replaceSummaryMessageTs(currentMessageTs = "outbox:$eventId", messageTs)`. |
+| `StandupSummaryServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Cutoff for a collecting session → `toRow` with the exact `ChannelMessage(C_SUMMARY, MessageContent.StandupSummary(routineName, sessionDate, members, answers, questions))`, `save(summaryRow)`, `markSessionSummarized(7L, "outbox:EVT-SUMMARY")`; session missing → no save, no CAS; on a real H2 `DataSourceTransactionManager` with a probe table that `save` writes through `JdbcTemplate`: the collecting-session case commits one row, and CAS returns false → the row written before the rejected CAS rolls back (0 rows); `replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` → `replaceSummaryMessageTs(currentMessageTs = "outbox:$eventId", messageTs)`. |
 
 ## For AI Agents
 
@@ -28,7 +28,9 @@ fallback, the summary post at cutoff, and the DM/nudge message builders. All eff
   `markDispatchSent(claimToken = capture(b))` and comparing `a.captured == b.captured`; the same idiom is in
   `meeting` and `cve/ai`.
 - `stubPort()` answers `toRow` with `createOutboxRow(UUID)`; `stubTransactionManager()` stubs
-  `getTransaction`/`commit`/`rollback` with `just Runs`. Both are file-local copies, not shared fixtures.
+  `getTransaction`/`commit`/`rollback` with `just Runs`. Both are file-local copies, not shared fixtures. A stub
+  manager cannot show a rollback, so the summary commit/rollback cases use `createH2DataSource` +
+  `createH2TransactionManager` from the meeting testFixtures instead.
 - Kotest accumulates `verify` counts across `when` blocks that share mocks, so the scheduling and summary
   specs create fresh mocks inside every `when`. The propagation cases use `try`/`catch` + `AssertionError`
   instead of `shouldThrow`.

@@ -52,6 +52,11 @@ _type: guide · updated: 2026-10-01_
 - `Unit` 반환 스텁은 `just Runs`. `CveNotificationDispatcherTest.stubTransactionManager()`가 정석이다:
   `getTransaction` → `mockk<TransactionStatus>(relaxed = true)`, `commit`/`rollback` → `just Runs`. `runInTx`를
   쓰는 서비스는 `TransactionTemplate(transactionManager)`를 직접 만들므로 이 스텁이 있어야 실제 `runInTx`가 돈다.
+- **스텁 매니저는 호출 순서만 보여 준다.** "롤백된다"·"함께 커밋된다"를 주장하는 케이스는
+  `createH2DataSource()` + `createH2TransactionManager()`(meeting testFixtures)로 실제 트랜잭션을 열고, 목 저장소가
+  `JdbcTemplate`으로 프로브 행을 쓰게 한 뒤(같은 `DataSource`라 서비스 트랜잭션에 합류한다) 남은 행 수를 단언한다.
+  예: `DailyAgendaSchedulingServiceTest`, `MeetingReminderSchedulingServiceTest`, `StandupSummaryServiceTest`,
+  `CveNotificationDispatcherTest`(2026-10-01). 저장 호출을 `runInTx` 밖으로 옮기면 이 케이스들이 실패한다.
 - 시간은 항상 고정한다. `Clock.fixed` 또는 `createFixedUtcClock()`(기본 `2026-04-28T12:00`)을 주입하고,
   `IdempotencyCreatorTest`처럼 `currentTimeMillis`를 명시해 `999` vs `1000` ms 경계를 핀한다.
 - 서비스 스펙은 Slack 페이로드가 아니라 **효과**를 단언한다: `verify(exactly = 1) { repo.markDispatchSent(...) }`,

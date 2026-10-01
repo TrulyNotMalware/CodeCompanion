@@ -1,6 +1,8 @@
 package dev.notypie.application.service.cve.notification
 
 import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.application.service.meeting.createH2DataSource
+import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.cve.CveDeliveryRepository
@@ -18,6 +20,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
@@ -60,13 +63,14 @@ class CveNotificationDispatcherTest :
             outboxRepository: MessageOutboxRepository = mockk(relaxed = true),
             clock: Clock = Clock.fixed(AFTER_SEND_AT, ZoneOffset.UTC),
             digestSummaryMaxLength: Int = 700,
+            transactionManager: PlatformTransactionManager = stubTransactionManager(),
         ): CveNotificationDispatcher {
             every { deliveryRepository.dbNow() } returns DB_NOW
             return CveNotificationDispatcher(
                 cveDeliveryRepository = deliveryRepository,
                 outboxRepository = outboxRepository,
                 outboundMessagePort = outboundMessagePort,
-                transactionManager = stubTransactionManager(),
+                transactionManager = transactionManager,
                 batchSize = 50,
                 digestSendAt = LocalTime.of(9, 0),
                 digestZone = ZoneOffset.UTC,
@@ -152,7 +156,12 @@ class CveNotificationDispatcherTest :
             }
         }
 
-        given("two immediate pairs where the first fails to enqueue") {
+        given("two immediate pairs where the first fails to enqueue, on a real transaction manager") {
+            val dataSource = createH2DataSource()
+            val jdbc = JdbcTemplate(dataSource)
+            jdbc.execute(
+                "CREATE TABLE delivery_claim (event_id BIGINT, user_id VARCHAR(32), PRIMARY KEY (event_id, user_id))",
+            )
             val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
             val outboundMessagePort = mockk<OutboundMessagePort>()
             val outboxRepository = mockk<MessageOutboxRepository>()
@@ -168,7 +177,13 @@ class CveNotificationDispatcherTest :
                     createUndeliveredCveEvent(eventId = 1L, userId = "U1"),
                     createUndeliveredCveEvent(eventId = 2L, userId = "U2"),
                 )
-            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } answers {
+                jdbc.update(
+                    "INSERT INTO delivery_claim (event_id, user_id) VALUES (?, ?)",
+                    firstArg<Long>(),
+                    secondArg<String>(),
+                ) == 1
+            }
             every { outboundMessagePort.toRow(message = any(), basicInfo = any()) } answers {
                 createOutboxRow(eventId = UUID.randomUUID().toString())
             }
@@ -182,10 +197,15 @@ class CveNotificationDispatcherTest :
                     deliveryRepository = deliveryRepository,
                     outboundMessagePort = outboundMessagePort,
                     outboxRepository = outboxRepository,
+                    transactionManager = createH2TransactionManager(dataSource = dataSource),
                 )
 
             `when`("the immediate tick runs") {
                 dispatcher.immediateTick()
+
+                then("the first pair's claim rolls back with its failed enqueue, so a later tick can claim it again") {
+                    jdbc.queryForList("SELECT user_id FROM delivery_claim", String::class.java) shouldBe listOf("U2")
+                }
 
                 then("the first pair's failure is isolated and the second pair is still claimed and enqueued") {
                     verify(exactly = 2) { outboxRepository.save(any()) }

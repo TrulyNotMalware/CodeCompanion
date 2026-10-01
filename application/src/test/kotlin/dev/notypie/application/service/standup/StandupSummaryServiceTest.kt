@@ -1,6 +1,8 @@
 package dev.notypie.application.service.standup
 
 import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.application.service.meeting.createH2DataSource
+import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -14,11 +16,13 @@ import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.LocalDate
@@ -37,6 +41,9 @@ class StandupSummaryServiceTest :
 
         given("postSummary") {
             `when`("a cutoff event is received for a collecting session") {
+                val dataSource = createH2DataSource()
+                val jdbc = JdbcTemplate(dataSource)
+                jdbc.execute("CREATE TABLE outbox_probe (event_id VARCHAR(64) PRIMARY KEY)")
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
                 val port = mockk<OutboundMessagePort>()
@@ -45,7 +52,7 @@ class StandupSummaryServiceTest :
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
                         outboundMessagePort = port,
-                        transactionManager = stubTransactionManager(),
+                        transactionManager = createH2TransactionManager(dataSource = dataSource),
                     )
                 val sessionUid = UUID.randomUUID()
                 val routineUid = UUID.randomUUID()
@@ -85,7 +92,10 @@ class StandupSummaryServiceTest :
                         basicInfo = any(),
                     )
                 } returns summaryRow
-                every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
+                every { outboxRepo.save(any<OutboxMessage>()) } answers {
+                    jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
+                    firstArg()
+                }
                 every {
                     repo.markSessionSummarized(sessionId = 7L, messageTs = "outbox:EVT-SUMMARY")
                 } returns true
@@ -100,7 +110,8 @@ class StandupSummaryServiceTest :
                         ),
                 )
 
-                then("a summary row is built to the channel, saved to the outbox and marked summarized") {
+                then("a summary row is built to the channel, saved to the outbox and committed with the mark") {
+                    jdbc.queryForObject("SELECT COUNT(*) FROM outbox_probe", Int::class.java) shouldBe 1
                     verify(exactly = 1) {
                         port.toRow(
                             message =
@@ -154,7 +165,10 @@ class StandupSummaryServiceTest :
                 }
             }
 
-            `when`("markSessionSummarized rejects the transition (already SUMMARIZED)") {
+            `when`("markSessionSummarized rejects the transition (already SUMMARIZED) on a real transaction manager") {
+                val dataSource = createH2DataSource()
+                val jdbc = JdbcTemplate(dataSource)
+                jdbc.execute("CREATE TABLE outbox_probe (event_id VARCHAR(64) PRIMARY KEY)")
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()
                 val port = mockk<OutboundMessagePort>()
@@ -163,7 +177,7 @@ class StandupSummaryServiceTest :
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
                         outboundMessagePort = port,
-                        transactionManager = stubTransactionManager(),
+                        transactionManager = createH2TransactionManager(dataSource = dataSource),
                     )
                 val sessionUid = UUID.randomUUID()
                 val routineUid = UUID.randomUUID()
@@ -186,7 +200,10 @@ class StandupSummaryServiceTest :
                 every { repo.findSession(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every { port.toRow(message = any(), basicInfo = any()) } returns createOutboxRow(eventId = "EVT-9")
-                every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
+                every { outboxRepo.save(any<OutboxMessage>()) } answers {
+                    jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
+                    firstArg()
+                }
                 every {
                     repo.markSessionSummarized(sessionId = 9L, messageTs = "outbox:EVT-9")
                 } returns false
@@ -201,7 +218,9 @@ class StandupSummaryServiceTest :
                         ),
                 )
 
-                then("the txn rolls back so neither the outbox row nor the marker survives") {
+                then("the txn rolls back so the summary row written before the rejected CAS does not survive") {
+                    jdbc.queryForObject("SELECT COUNT(*) FROM outbox_probe", Int::class.java) shouldBe 0
+                    verify(exactly = 1) { outboxRepo.save(any<OutboxMessage>()) }
                     verify(exactly = 1) {
                         repo.markSessionSummarized(sessionId = 9L, messageTs = "outbox:EVT-9")
                     }
