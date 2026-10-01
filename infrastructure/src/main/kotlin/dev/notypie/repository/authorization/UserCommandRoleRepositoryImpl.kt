@@ -20,7 +20,7 @@ open class UserCommandRoleRepositoryImpl(
         if (existing == null) {
             jpaUserCommandRoleRepository.save(UserCommandRoleSchema(userId = userId, role = role))
         } else if (existing.role != role) {
-            existing.role = role
+            existing.changeRole(role = role)
             jpaUserCommandRoleRepository.save(existing)
         }
     }

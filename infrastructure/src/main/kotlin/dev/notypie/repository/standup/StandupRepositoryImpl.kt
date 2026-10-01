@@ -8,8 +8,6 @@ import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.standup.schema.SessionDispatchSchema
-import dev.notypie.repository.standup.schema.StandupAnswerSchema
-import dev.notypie.repository.standup.schema.StandupSessionSchema
 import dev.notypie.repository.standup.schema.toDomainEntity
 import dev.notypie.repository.standup.schema.toRoutineDto
 import dev.notypie.repository.standup.schema.toSchema
@@ -92,15 +90,7 @@ open class StandupRepositoryImpl(
         val session =
             jpaStandupSessionRepository.findBySessionUid(sessionUid = sessionUid)
                 ?: return false
-        session.answers.removeIf { it.userId == userId }
-        session.answers.add(
-            StandupAnswerSchema(
-                session = session,
-                userId = userId,
-                responsesRaw = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER),
-                submittedAt = submittedAt,
-            ),
-        )
+        session.replaceAnswer(userId = userId, responses = responses, submittedAt = submittedAt)
         jpaStandupSessionRepository.save(session)
         return true
     }

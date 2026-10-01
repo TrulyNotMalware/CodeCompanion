@@ -71,6 +71,18 @@ class StandupSessionSchema(
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
 ) {
+    fun replaceAnswer(userId: String, responses: List<String>, submittedAt: Instant) {
+        answers.removeIf { it.userId == userId }
+        answers.add(
+            StandupAnswerSchema(
+                session = this,
+                userId = userId,
+                responsesRaw = responses.joinToString(separator = RESPONSE_DELIMITER),
+                submittedAt = submittedAt,
+            ),
+        )
+    }
+
     companion object {
         const val RESPONSE_DELIMITER: String = "" // ASCII Unit Separator — never appears in Slack text.
     }

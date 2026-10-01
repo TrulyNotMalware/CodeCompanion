@@ -81,6 +81,10 @@ class MeetingSchema(
     fun cancel() {
         isCanceled = true
     }
+
+    fun addParticipants(userIds: Collection<String>) {
+        userIds.forEach { participants.add(ParticipantsSchema(meeting = this, userId = it)) }
+    }
 }
 
 fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {

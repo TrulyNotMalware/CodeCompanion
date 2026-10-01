@@ -26,11 +26,13 @@ open class CveTopicRepositoryImpl(
         }
         if (matches(schema = existing, definition = definition)) return false
         // active is never overwritten here — a yaml reboot must not undo a chat activate|deactivate toggle.
-        existing.displayName = definition.displayName
-        existing.category = definition.category
-        existing.sourceType = definition.sourceType
-        existing.sourceConfig = definition.sourceConfig
-        existing.deliveryMode = definition.deliveryMode
+        existing.redefine(
+            displayName = definition.displayName,
+            category = definition.category,
+            sourceType = definition.sourceType,
+            sourceConfig = definition.sourceConfig,
+            deliveryMode = definition.deliveryMode,
+        )
         jpaCveTopicRepository.save(existing)
         return true
     }

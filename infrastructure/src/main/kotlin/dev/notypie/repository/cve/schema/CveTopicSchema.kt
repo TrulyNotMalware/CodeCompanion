@@ -35,25 +35,57 @@ class CveTopicSchema(
     val id: Long = 0,
     @field:Column(name = "topic_key", nullable = false, length = 64)
     val topicKey: String,
-    @field:Column(name = "display_name", nullable = false, length = 128)
-    var displayName: String,
-    @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "category", nullable = false, length = 16)
-    var category: CveTopicCategory,
-    @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "source_type", nullable = false, length = 32)
-    var sourceType: CveSourceType,
-    @field:Column(name = "source_config", columnDefinition = "TEXT")
-    var sourceConfig: String? = null,
-    @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "delivery_mode", nullable = false, length = 16)
-    var deliveryMode: CveDeliveryMode,
-    @field:Column(name = "active", nullable = false)
-    var active: Boolean = true,
+    displayName: String,
+    category: CveTopicCategory,
+    sourceType: CveSourceType,
+    sourceConfig: String? = null,
+    deliveryMode: CveDeliveryMode,
+    active: Boolean = true,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
     @field:UpdateTimestamp
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
-)
+) {
+    @field:Column(name = "display_name", nullable = false, length = 128)
+    var displayName: String = displayName
+        protected set
+
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "category", nullable = false, length = 16)
+    var category: CveTopicCategory = category
+        protected set
+
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "source_type", nullable = false, length = 32)
+    var sourceType: CveSourceType = sourceType
+        protected set
+
+    @field:Column(name = "source_config", columnDefinition = "TEXT")
+    var sourceConfig: String? = sourceConfig
+        protected set
+
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "delivery_mode", nullable = false, length = 16)
+    var deliveryMode: CveDeliveryMode = deliveryMode
+        protected set
+
+    @field:Column(name = "active", nullable = false)
+    var active: Boolean = active
+        protected set
+
+    fun redefine(
+        displayName: String,
+        category: CveTopicCategory,
+        sourceType: CveSourceType,
+        sourceConfig: String?,
+        deliveryMode: CveDeliveryMode,
+    ) {
+        this.displayName = displayName
+        this.category = category
+        this.sourceType = sourceType
+        this.sourceConfig = sourceConfig
+        this.deliveryMode = deliveryMode
+    }
+}

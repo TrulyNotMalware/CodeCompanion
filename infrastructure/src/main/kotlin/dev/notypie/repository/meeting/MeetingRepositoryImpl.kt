@@ -5,7 +5,6 @@ import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.meeting.schema.MeetingSchema
-import dev.notypie.repository.meeting.schema.ParticipantsSchema
 import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
@@ -141,7 +140,7 @@ open class MeetingRepositoryImpl(
                 meeting = schema.toMeetingDto(),
             )
         }
-        newUserIds.forEach { schema.participants.add(ParticipantsSchema(meeting = schema, userId = it)) }
+        schema.addParticipants(userIds = newUserIds)
         jpaMeetingRepository.saveAndFlush(schema)
         return AddParticipantResult(
             outcome = AddParticipantResult.Outcome.ADDED,

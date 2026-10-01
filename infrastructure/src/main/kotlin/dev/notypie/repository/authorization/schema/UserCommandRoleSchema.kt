@@ -27,13 +27,20 @@ class UserCommandRoleSchema(
     val id: Long = 0,
     @field:Column(name = "user_id", nullable = false, length = 64)
     val userId: String,
-    @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "role", nullable = false, length = 32)
-    var role: UserRole,
+    role: UserRole,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
     @field:UpdateTimestamp
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
-)
+) {
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "role", nullable = false, length = 32)
+    var role: UserRole = role
+        protected set
+
+    fun changeRole(role: UserRole) {
+        this.role = role
+    }
+}

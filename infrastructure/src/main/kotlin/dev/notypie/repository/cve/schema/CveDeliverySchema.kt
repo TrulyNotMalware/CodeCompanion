@@ -33,10 +33,13 @@ class CveDeliverySchema(
     val eventId: Long,
     @field:Column(name = "user_id", nullable = false, length = 64)
     val userId: String,
-    @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "status", nullable = false, length = 16)
-    var status: CveDeliveryStatus,
+    status: CveDeliveryStatus,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
-)
+) {
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "status", nullable = false, length = 16)
+    var status: CveDeliveryStatus = status
+        protected set
+}

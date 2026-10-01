@@ -18,7 +18,7 @@ class AgentSessionRepositoryImpl(
                 ),
             )
         } else if (existing.providerSessionId != providerSessionId) {
-            existing.providerSessionId = providerSessionId
+            existing.resumeAs(providerSessionId = providerSessionId)
             jpaAgentSessionRepository.save(existing)
         }
     }
