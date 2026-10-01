@@ -52,19 +52,24 @@ open class MeetingReminderRepositoryImpl(
             offsetMinutes = offsetMinutes,
         ) != null
 
-    override fun claimReminder(reminderId: Long, claimToken: String): Boolean =
-        jpaMeetingReminderRepository.claimReminder(id = reminderId, token = claimToken) == 1
+    override fun claimReminder(reminderId: Long, claimToken: String, now: Instant): Boolean =
+        jpaMeetingReminderRepository.claimReminder(id = reminderId, token = claimToken, now = now) == 1
 
     @Transactional
     override fun markReminderSent(reminderId: Long, claimToken: String, sentAt: Instant): Boolean =
         jpaMeetingReminderRepository.markSent(id = reminderId, token = claimToken, sentAt = sentAt) == 1
 
     @Transactional
-    override fun markReminderFailed(reminderId: Long, claimToken: String, reason: String): Boolean =
-        jpaMeetingReminderRepository.markFailed(id = reminderId, token = claimToken, reason = reason) == 1
+    override fun markReminderFailed(
+        reminderId: Long,
+        claimToken: String,
+        reason: String,
+        now: Instant,
+    ): Boolean =
+        jpaMeetingReminderRepository.markFailed(id = reminderId, token = claimToken, reason = reason, now = now) == 1
 
-    override fun resetStuckReminders(olderThan: Instant): Int =
-        jpaMeetingReminderRepository.resetStuckSending(olderThan = olderThan)
+    override fun resetStuckReminders(olderThan: Instant, now: Instant): Int =
+        jpaMeetingReminderRepository.resetStuckSending(olderThan = olderThan, now = now)
 
     @Transactional
     override fun deleteByMeetingId(meetingId: Long): Int =

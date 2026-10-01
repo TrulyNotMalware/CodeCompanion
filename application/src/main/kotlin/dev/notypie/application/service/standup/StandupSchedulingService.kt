@@ -111,7 +111,7 @@ class StandupSchedulingService(
     fun sendPendingDispatches() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
-        val reset = standupRepository.resetStuckDispatches(olderThan = stuckCutoff)
+        val reset = standupRepository.resetStuckDispatches(olderThan = stuckCutoff, now = now)
         if (reset > 0) log.warn { "Reset $reset stuck SENDING dispatch(es) to PENDING" }
 
         val ready = standupRepository.findPendingDispatchesBefore(before = now, limit = dispatchBatchSize)
@@ -138,7 +138,9 @@ class StandupSchedulingService(
         val userId = item.dispatch.userId
         val claimToken = UUID.randomUUID().toString()
 
-        if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken)) return
+        if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken, now = clock.instant())) {
+            return
+        }
 
         val outcome: Result<Unit> =
             transactionTemplate.runInTx<Unit> {
@@ -173,6 +175,7 @@ class StandupSchedulingService(
                     dispatchId = dispatchId,
                     claimToken = claimToken,
                     reason = ex.message ?: "unknown",
+                    now = clock.instant(),
                 )
             ) {
                 log.warn { "markDispatchFailed no-op for dispatch $dispatchId — recovery already reset or re-claimed." }

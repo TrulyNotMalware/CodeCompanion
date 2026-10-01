@@ -321,10 +321,11 @@ class StandupSchedulingServiceTest :
 
                 val claimedToken = slot<String>()
                 val sentToken = slot<String>()
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.claimDispatch(dispatchId = 42L, claimToken = capture(claimedToken)) } returns true
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = capture(claimedToken), now = any()) } returns
+                    true
                 every {
                     repo.markDispatchSent(dispatchId = 42L, claimToken = capture(sentToken), sentAt = any())
                 } returns true
@@ -333,12 +334,12 @@ class StandupSchedulingServiceTest :
                 service.sendPendingDispatches()
 
                 then("dispatch is claimed, outbox row persisted, markSent called") {
-                    verify(exactly = 1) { repo.claimDispatch(dispatchId = 42L, claimToken = any()) }
+                    verify(exactly = 1) { repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any()) }
                     verify(exactly = 1) { outboxRepo.save(any()) }
                     verify(exactly = 1) { repo.markDispatchSent(dispatchId = 42L, claimToken = any(), sentAt = any()) }
                     verify(
                         exactly = 0,
-                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
+                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any(), now = any()) }
                 }
 
                 then("the same claim token is threaded from claim through markDispatchSent") {
@@ -375,10 +376,10 @@ class StandupSchedulingServiceTest :
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns false
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any()) } returns false
 
                 service.sendPendingDispatches()
 
@@ -389,7 +390,7 @@ class StandupSchedulingServiceTest :
                     ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
                     verify(
                         exactly = 0,
-                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
+                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any(), now = any()) }
                 }
             }
 
@@ -411,11 +412,19 @@ class StandupSchedulingServiceTest :
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns true
-                every { repo.markDispatchFailed(dispatchId = 42L, claimToken = any(), reason = any()) } returns true
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any()) } returns true
+                every {
+                    repo.markDispatchFailed(
+                        dispatchId = 42L,
+                        claimToken = any(),
+                        reason = any(),
+                        now = any(),
+                    )
+                } returns
+                    true
 
                 service.sendPendingDispatches()
 
@@ -425,6 +434,7 @@ class StandupSchedulingServiceTest :
                             dispatchId = 42L,
                             claimToken = any(),
                             reason = match { it.contains("Slack API error") },
+                            now = any(),
                         )
                     }
                     verify(
@@ -446,14 +456,14 @@ class StandupSchedulingServiceTest :
                         clock = clock,
                         appConfig = AppConfig(),
                     )
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns emptyList()
 
                 service.sendPendingDispatches()
 
                 then("no work is done downstream") {
                     verify(exactly = 0) { repo.listActiveRoutines() }
-                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
                 }
             }
@@ -472,14 +482,14 @@ class StandupSchedulingServiceTest :
                     )
                 val ready = readyDispatchOf(dispatchId = 99L, userId = "U_A", triggerOffsetSeconds = -60L)
 
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns emptyList()
 
                 service.sendPendingDispatches()
 
                 then("the dispatch is skipped, no claim attempted") {
-                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
                 }
             }

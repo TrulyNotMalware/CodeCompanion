@@ -26,13 +26,18 @@ interface MeetingReminderRepository {
 
     fun reminderExists(meetingId: Long, offsetMinutes: Int): Boolean
 
-    fun claimReminder(reminderId: Long, claimToken: String): Boolean
+    fun claimReminder(reminderId: Long, claimToken: String, now: Instant): Boolean
 
     fun markReminderSent(reminderId: Long, claimToken: String, sentAt: Instant): Boolean
 
-    fun markReminderFailed(reminderId: Long, claimToken: String, reason: String): Boolean
+    fun markReminderFailed(
+        reminderId: Long,
+        claimToken: String,
+        reason: String,
+        now: Instant,
+    ): Boolean
 
-    fun resetStuckReminders(olderThan: Instant): Int
+    fun resetStuckReminders(olderThan: Instant, now: Instant): Int
 
     fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder>
 

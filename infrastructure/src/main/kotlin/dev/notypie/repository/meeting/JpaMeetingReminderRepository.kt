@@ -50,7 +50,7 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     @Query(
         value = """
             UPDATE meeting_reminder
-            SET status = 'SENDING', claim_token = :token, updated_at = CURRENT_TIMESTAMP
+            SET status = 'SENDING', claim_token = :token, updated_at = :now
             WHERE id = :id AND status = 'PENDING'
         """,
         nativeQuery = true,
@@ -58,6 +58,7 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     fun claimReminder(
         @Param("id") id: Long,
         @Param("token") token: String,
+        @Param("now") now: Instant,
     ): Int
 
     @Modifying
@@ -65,7 +66,7 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     @Query(
         value = """
             UPDATE meeting_reminder
-            SET status = 'SENT', sent_at = :sentAt, claim_token = NULL, updated_at = CURRENT_TIMESTAMP
+            SET status = 'SENT', sent_at = :sentAt, claim_token = NULL, updated_at = :sentAt
             WHERE id = :id AND status = 'SENDING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -81,8 +82,7 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     @Query(
         value = """
             UPDATE meeting_reminder
-            SET status = 'FAILED', failure_reason = :reason, claim_token = NULL,
-                updated_at = CURRENT_TIMESTAMP
+            SET status = 'FAILED', failure_reason = :reason, claim_token = NULL, updated_at = :now
             WHERE id = :id AND status = 'SENDING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -91,6 +91,7 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         @Param("id") id: Long,
         @Param("token") token: String,
         @Param("reason") reason: String,
+        @Param("now") now: Instant,
     ): Int
 
     @Modifying
@@ -98,13 +99,14 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     @Query(
         value = """
             UPDATE meeting_reminder
-            SET status = 'PENDING', claim_token = NULL, updated_at = CURRENT_TIMESTAMP
+            SET status = 'PENDING', claim_token = NULL, updated_at = :now
             WHERE status = 'SENDING' AND updated_at < :olderThan
         """,
         nativeQuery = true,
     )
     fun resetStuckSending(
         @Param("olderThan") olderThan: Instant,
+        @Param("now") now: Instant,
     ): Int
 
     @Modifying

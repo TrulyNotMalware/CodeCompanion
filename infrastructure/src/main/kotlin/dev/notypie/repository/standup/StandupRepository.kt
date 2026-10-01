@@ -53,13 +53,18 @@ interface StandupRepository {
         submittedAt: Instant,
     ): Boolean
 
-    fun claimDispatch(dispatchId: Long, claimToken: String): Boolean
+    fun claimDispatch(dispatchId: Long, claimToken: String, now: Instant): Boolean
 
     fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean
 
-    fun markDispatchFailed(dispatchId: Long, claimToken: String, reason: String): Boolean
+    fun markDispatchFailed(
+        dispatchId: Long,
+        claimToken: String,
+        reason: String,
+        now: Instant,
+    ): Boolean
 
-    fun resetStuckDispatches(olderThan: Instant): Int
+    fun resetStuckDispatches(olderThan: Instant, now: Instant): Int
 
     fun findPendingDispatchesBefore(before: Instant, limit: Int): List<ReadyDispatch>
 

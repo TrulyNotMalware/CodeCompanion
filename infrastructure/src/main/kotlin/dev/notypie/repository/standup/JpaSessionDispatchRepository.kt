@@ -33,7 +33,7 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     @Query(
         value = """
             UPDATE standup_session_dispatch
-            SET dm_status = 'SENDING', claim_token = :token, updated_at = CURRENT_TIMESTAMP
+            SET dm_status = 'SENDING', claim_token = :token, updated_at = :now
             WHERE id = :id AND dm_status = 'PENDING'
         """,
         nativeQuery = true,
@@ -41,6 +41,7 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     fun claimDispatch(
         @Param("id") id: Long,
         @Param("token") token: String,
+        @Param("now") now: Instant,
     ): Int
 
     @Modifying
@@ -48,7 +49,7 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     @Query(
         value = """
             UPDATE standup_session_dispatch
-            SET dm_status = 'SENT', dm_sent_at = :sentAt, claim_token = NULL, updated_at = CURRENT_TIMESTAMP
+            SET dm_status = 'SENT', dm_sent_at = :sentAt, claim_token = NULL, updated_at = :sentAt
             WHERE id = :id AND dm_status = 'SENDING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -64,8 +65,7 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     @Query(
         value = """
             UPDATE standup_session_dispatch
-            SET dm_status = 'FAILED', failure_reason = :reason, claim_token = NULL,
-                updated_at = CURRENT_TIMESTAMP
+            SET dm_status = 'FAILED', failure_reason = :reason, claim_token = NULL, updated_at = :now
             WHERE id = :id AND dm_status = 'SENDING' AND claim_token = :token
         """,
         nativeQuery = true,
@@ -74,6 +74,7 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         @Param("id") id: Long,
         @Param("token") token: String,
         @Param("reason") reason: String,
+        @Param("now") now: Instant,
     ): Int
 
     @Modifying
@@ -81,12 +82,13 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     @Query(
         value = """
             UPDATE standup_session_dispatch
-            SET dm_status = 'PENDING', claim_token = NULL, updated_at = CURRENT_TIMESTAMP
+            SET dm_status = 'PENDING', claim_token = NULL, updated_at = :now
             WHERE dm_status = 'SENDING' AND updated_at < :olderThan
         """,
         nativeQuery = true,
     )
     fun resetStuckSending(
         @Param("olderThan") olderThan: Instant,
+        @Param("now") now: Instant,
     ): Int
 }

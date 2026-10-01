@@ -93,7 +93,7 @@ class MeetingReminderSchedulingService(
     fun sendDueReminders() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
-        val reset = reminderRepository.resetStuckReminders(olderThan = stuckCutoff)
+        val reset = reminderRepository.resetStuckReminders(olderThan = stuckCutoff, now = now)
         if (reset > 0) log.warn { "Reset $reset stuck SENDING reminder(s) to PENDING" }
 
         val ready = reminderRepository.findDueBefore(before = now, limit = dispatchBatchSize)
@@ -108,7 +108,14 @@ class MeetingReminderSchedulingService(
         val reminderId = item.reminder.id
         val claimToken = UUID.randomUUID().toString()
 
-        if (!reminderRepository.claimReminder(reminderId = reminderId, claimToken = claimToken)) return
+        if (!reminderRepository.claimReminder(
+                reminderId = reminderId,
+                claimToken = claimToken,
+                now = clock.instant(),
+            )
+        ) {
+            return
+        }
 
         val outcome: Result<Unit> =
             transactionTemplate.runInTx<Unit> {
@@ -144,6 +151,7 @@ class MeetingReminderSchedulingService(
                     reminderId = reminderId,
                     claimToken = claimToken,
                     reason = ex.message ?: "unknown",
+                    now = clock.instant(),
                 )
             ) {
                 log.warn { "markReminderFailed no-op for reminder $reminderId — recovery already reset or re-claimed." }

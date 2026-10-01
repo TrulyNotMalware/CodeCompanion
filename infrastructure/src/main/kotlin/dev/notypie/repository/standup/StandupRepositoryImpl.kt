@@ -105,19 +105,24 @@ open class StandupRepositoryImpl(
         return true
     }
 
-    override fun claimDispatch(dispatchId: Long, claimToken: String): Boolean =
-        jpaSessionDispatchRepository.claimDispatch(id = dispatchId, token = claimToken) == 1
+    override fun claimDispatch(dispatchId: Long, claimToken: String, now: Instant): Boolean =
+        jpaSessionDispatchRepository.claimDispatch(id = dispatchId, token = claimToken, now = now) == 1
 
     @Transactional
     override fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean =
         jpaSessionDispatchRepository.markSent(id = dispatchId, token = claimToken, sentAt = sentAt) == 1
 
     @Transactional
-    override fun markDispatchFailed(dispatchId: Long, claimToken: String, reason: String): Boolean =
-        jpaSessionDispatchRepository.markFailed(id = dispatchId, token = claimToken, reason = reason) == 1
+    override fun markDispatchFailed(
+        dispatchId: Long,
+        claimToken: String,
+        reason: String,
+        now: Instant,
+    ): Boolean =
+        jpaSessionDispatchRepository.markFailed(id = dispatchId, token = claimToken, reason = reason, now = now) == 1
 
-    override fun resetStuckDispatches(olderThan: Instant): Int =
-        jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan)
+    override fun resetStuckDispatches(olderThan: Instant, now: Instant): Int =
+        jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan, now = now)
 
     @Transactional(readOnly = true)
     override fun findPendingDispatchesBefore(before: Instant, limit: Int): List<ReadyDispatch> =

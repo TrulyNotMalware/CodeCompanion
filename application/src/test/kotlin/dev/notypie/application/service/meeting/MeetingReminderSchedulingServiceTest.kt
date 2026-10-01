@@ -194,9 +194,10 @@ class MeetingReminderSchedulingServiceTest :
 
                 val claimedToken = slot<String>()
                 val sentToken = slot<String>()
-                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
-                every { repo.claimReminder(reminderId = 42L, claimToken = capture(claimedToken)) } returns true
+                every { repo.claimReminder(reminderId = 42L, claimToken = capture(claimedToken), now = any()) } returns
+                    true
                 every {
                     repo.markReminderSent(reminderId = 42L, claimToken = capture(sentToken), sentAt = any())
                 } returns true
@@ -205,12 +206,12 @@ class MeetingReminderSchedulingServiceTest :
                 service.sendDueReminders()
 
                 then("one outbox row is persisted per attending participant and markSent is called") {
-                    verify(exactly = 1) { repo.claimReminder(reminderId = 42L, claimToken = any()) }
+                    verify(exactly = 1) { repo.claimReminder(reminderId = 42L, claimToken = any(), now = any()) }
                     verify(exactly = 2) { outboxRepo.save(any()) }
                     verify(exactly = 1) { repo.markReminderSent(reminderId = 42L, claimToken = any(), sentAt = any()) }
                     verify(
                         exactly = 0,
-                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any()) }
+                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any()) }
                 }
 
                 then("the same claim token is threaded from claim through markReminderSent") {
@@ -255,15 +256,23 @@ class MeetingReminderSchedulingServiceTest :
                 val ready =
                     readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A", "U_B"))
 
-                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
-                every { repo.claimReminder(reminderId = 42L, claimToken = any()) } returns true
+                every { repo.claimReminder(reminderId = 42L, claimToken = any(), now = any()) } returns true
                 every { outboxRepo.save(any()) } answers {
                     jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
                     firstArg()
                 }
                 every { repo.markReminderSent(reminderId = 42L, claimToken = any(), sentAt = any()) } returns false
-                every { repo.markReminderFailed(reminderId = 42L, claimToken = any(), reason = any()) } returns true
+                every {
+                    repo.markReminderFailed(
+                        reminderId = 42L,
+                        claimToken = any(),
+                        reason = any(),
+                        now = any(),
+                    )
+                } returns
+                    true
 
                 service.sendDueReminders()
 
@@ -272,7 +281,7 @@ class MeetingReminderSchedulingServiceTest :
                     verify(exactly = 2) { outboxRepo.save(any()) }
                     verify(exactly = 1) { repo.markReminderSent(reminderId = 42L, claimToken = any(), sentAt = any()) }
                     verify(exactly = 1) {
-                        repo.markReminderFailed(reminderId = 42L, claimToken = any(), reason = any())
+                        repo.markReminderFailed(reminderId = 42L, claimToken = any(), reason = any(), now = any())
                     }
                 }
             }
@@ -292,9 +301,9 @@ class MeetingReminderSchedulingServiceTest :
                 val ready =
                     readyReminderOf(reminderId = 43L, offsetMinutes = 15, attendingUserIds = listOf("U_A", "U_B"))
 
-                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
-                every { repo.claimReminder(reminderId = 43L, claimToken = any()) } returns true
+                every { repo.claimReminder(reminderId = 43L, claimToken = any(), now = any()) } returns true
                 every { outboxRepo.save(any()) } answers {
                     jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
                     firstArg()
@@ -307,7 +316,7 @@ class MeetingReminderSchedulingServiceTest :
                     jdbc.queryForObject("SELECT COUNT(*) FROM outbox_probe", Int::class.java) shouldBe 2
                     verify(
                         exactly = 0,
-                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any()) }
+                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any()) }
                 }
             }
 
@@ -317,9 +326,9 @@ class MeetingReminderSchedulingServiceTest :
                 val service = buildService(repo = repo, outboxRepo = outboxRepo)
                 val ready = readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
 
-                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
-                every { repo.claimReminder(reminderId = 42L, claimToken = any()) } returns false
+                every { repo.claimReminder(reminderId = 42L, claimToken = any(), now = any()) } returns false
 
                 service.sendDueReminders()
 
@@ -330,7 +339,7 @@ class MeetingReminderSchedulingServiceTest :
                     ) { repo.markReminderSent(reminderId = any(), claimToken = any(), sentAt = any()) }
                     verify(
                         exactly = 0,
-                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any()) }
+                    ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any()) }
                 }
             }
 
@@ -344,10 +353,18 @@ class MeetingReminderSchedulingServiceTest :
                 val service = buildService(repo = repo, outboxRepo = outboxRepo, port = port)
                 val ready = readyReminderOf(reminderId = 42L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
 
-                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
-                every { repo.claimReminder(reminderId = 42L, claimToken = any()) } returns true
-                every { repo.markReminderFailed(reminderId = 42L, claimToken = any(), reason = any()) } returns true
+                every { repo.claimReminder(reminderId = 42L, claimToken = any(), now = any()) } returns true
+                every {
+                    repo.markReminderFailed(
+                        reminderId = 42L,
+                        claimToken = any(),
+                        reason = any(),
+                        now = any(),
+                    )
+                } returns
+                    true
 
                 service.sendDueReminders()
 
@@ -357,6 +374,7 @@ class MeetingReminderSchedulingServiceTest :
                             reminderId = 42L,
                             claimToken = any(),
                             reason = match { it.contains("Slack API error") },
+                            now = any(),
                         )
                     }
                     verify(
@@ -370,13 +388,13 @@ class MeetingReminderSchedulingServiceTest :
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
                 val service = buildService(repo = repo, outboxRepo = outboxRepo)
-                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns emptyList()
 
                 service.sendDueReminders()
 
                 then("no work is done downstream") {
-                    verify(exactly = 0) { repo.claimReminder(reminderId = any(), claimToken = any()) }
+                    verify(exactly = 0) { repo.claimReminder(reminderId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
                 }
             }
@@ -385,13 +403,13 @@ class MeetingReminderSchedulingServiceTest :
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
                 val service = buildService(repo = repo, outboxRepo = outboxRepo)
-                every { repo.resetStuckReminders(olderThan = any()) } returns 3
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 3
                 every { repo.findDueBefore(before = any(), limit = any()) } returns emptyList()
 
                 service.sendDueReminders()
 
                 then("the stuck rows are reset to PENDING before the due sweep runs") {
-                    verify(exactly = 1) { repo.resetStuckReminders(olderThan = any()) }
+                    verify(exactly = 1) { repo.resetStuckReminders(olderThan = any(), now = any()) }
                 }
             }
         }
