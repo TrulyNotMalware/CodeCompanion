@@ -340,6 +340,44 @@ class MeetingRescheduleServiceTest :
                 }
             }
 
+            `when`("the rescheduled meeting's title carries mrkdwn control sequences (review T21)") {
+                val localMeetingRepository = mockk<MeetingRepository>()
+                val localStager = mockk<OutboundMessageStager>()
+                val staged = mutableListOf<OutboundMessage>()
+                every {
+                    localMeetingRepository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        newStartAt = newStartAt,
+                    )
+                } returns
+                    RescheduleResult.Rescheduled(
+                        meeting =
+                            createMeetingDto(
+                                meetingId = meetingId,
+                                meetingUid = meetingUid,
+                                creator = requesterId,
+                                title = "<!channel> R&D <https://evil.example|docs>",
+                                startAt = newStartAt,
+                                participants = listOf(createMeetingParticipantDto(userId = "U_P1")),
+                            ),
+                    )
+                every { localStager.stage(message = capture(staged), basicInfo = any()) } returns ephemeralEvent
+
+                serviceCapturing(
+                    localMeetingRepository = localMeetingRepository,
+                    localReminderRepository = mockk(relaxed = true),
+                    localStager = localStager,
+                ).rescheduleMeeting(event = event)
+
+                then("the channel notice escapes the title but keeps its own participant mentions") {
+                    val notice = staged.filterIsInstance<OutboundMessage.ChannelMessage>().single()
+                    (notice.content as MessageContent.Text).markdown shouldBe
+                        "[Notice] <@U_P1> *&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;* " +
+                        "has been rescheduled to 2026-07-01 14:30."
+                }
+            }
+
             `when`("the write fails and the failure reply cannot be staged either (review M8)") {
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localStager = mockk<OutboundMessageStager>()

@@ -149,6 +149,11 @@ context. Repository write semantics
   writes), mapping failures to a user-facing ephemeral with `log.error` carrying `meetingUid`, `requesterId`,
   `idempotencyKey`.
 - `internal` top-level DM builders (`buildReminderDm`, `buildAgendaDm`) tested without the scheduler.
+- **Escape user text in a `MessageContent.Text` body** (review T21): it reaches Slack as mrkdwn and no template
+  escapes it, so a meeting title is passed through `escapeMrkdwn()` (`infrastructure/templates/SlackMrkdwn.kt`) at
+  the interpolation point — the reschedule notice, the reminder DM body, the agenda lines. The message's own
+  formatting (`*bold*`, `<@userId>` mentions) stays outside the escape. Headlines are not escaped: they render as
+  a `plain_text` header, where Slack parses no `<…>` sequence and an entity would show literally.
 - `AppConfig.meeting.reminder.*` (`offsetsMinutes`, `stuckSendingThresholdMinutes`, `dispatchBatchSize`,
   `materializeLookbackMinutes`) and `AppConfig.meeting.agenda.*` (`enabled`, `sendAt`, `timezone`).
 

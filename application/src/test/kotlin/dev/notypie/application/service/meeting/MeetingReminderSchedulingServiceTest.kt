@@ -2,6 +2,7 @@ package dev.notypie.application.service.meeting
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -372,6 +373,21 @@ class MeetingReminderSchedulingServiceTest :
                 then("the stuck rows are reset to PENDING before the due sweep runs") {
                     verify(exactly = 1) { repo.resetStuckReminders(olderThan = any()) }
                 }
+            }
+        }
+
+        given("buildReminderDm with a meeting title that carries mrkdwn control sequences (review T21)") {
+            val text =
+                buildReminderDm(
+                    meetingTitle = "<!here> R&D",
+                    offsetMinutes = 5,
+                    startAt = LocalDateTime.of(2026, 5, 4, 12, 5),
+                    commandBasicInfo = createCommandBasicInfo(),
+                ).content as MessageContent.Text
+
+            then("the mrkdwn body escapes it; the plain_text headline keeps it verbatim") {
+                text.markdown shouldBe "Your meeting *&lt;!here&gt; R&amp;D* starts in 5 minutes (at 2026-05-04 12:05)."
+                text.headline shouldBe "Meeting reminder — <!here> R&D"
             }
         }
     })

@@ -14,6 +14,7 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.RescheduleResult
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -114,8 +115,10 @@ class MeetingRescheduleService(
     ) {
         if (participantUserIds.isEmpty()) return
         val mentions = participantUserIds.joinToString(" ") { "<@$it>" }
+        // A MessageContent.Text body reaches Slack as mrkdwn and no template escapes it, so the host-typed title is
+        // escaped here (review T21); the mentions are this message's own `<@id>` formatting and stay as they are.
         val notice =
-            "[Notice] $mentions *$meetingTitle* has been rescheduled to " +
+            "[Notice] $mentions *${meetingTitle.escapeMrkdwn()}* has been rescheduled to " +
                 newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT) + "."
         outboundStager
             .stage(

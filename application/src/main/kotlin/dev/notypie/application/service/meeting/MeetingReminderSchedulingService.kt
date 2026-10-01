@@ -12,6 +12,7 @@ import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.meeting.ReminderCandidateMeeting
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -180,9 +181,11 @@ internal fun buildReminderDm(
         target = ConversationTarget(id = commandBasicInfo.channel),
         content =
             MessageContent.Text(
+                // The headline renders as a plain_text header, where Slack parses no `<…>` sequence; only the mrkdwn
+                // body needs the user's title escaped.
                 headline = "Meeting reminder — $meetingTitle",
                 markdown =
-                    "Your meeting *$meetingTitle* starts in $offsetMinutes minutes " +
+                    "Your meeting *${meetingTitle.escapeMrkdwn()}* starts in $offsetMinutes minutes " +
                         "(at ${startAt.format(REMINDER_TIME_FORMAT)}).",
             ),
         detailType = CommandDetailType.MEETING_REMINDER,
