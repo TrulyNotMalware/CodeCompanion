@@ -14,6 +14,7 @@ import java.time.ZoneOffset
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class SlackRetryDeduplicatorTest :
     BehaviorSpec({
@@ -123,14 +124,14 @@ class SlackRetryDeduplicatorTest :
                                 executor.submit(
                                     Callable {
                                         ready.countDown()
-                                        go.await()
+                                        check(go.await(5L, TimeUnit.SECONDS)) { "start signal not given" }
                                         deduplicator.admit(fingerprint = fingerprint, retryNum = retryNum)
                                     },
                                 )
                             }.also {
-                                ready.await()
+                                check(ready.await(5L, TimeUnit.SECONDS)) { "workers did not start" }
                                 go.countDown()
-                            }.map { it.get() }
+                            }.map { it.get(5L, TimeUnit.SECONDS) }
                     } finally {
                         executor.shutdownNow()
                     }
