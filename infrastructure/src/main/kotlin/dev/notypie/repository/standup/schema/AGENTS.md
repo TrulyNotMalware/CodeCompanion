@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/standup/schema
 
@@ -16,9 +16,12 @@ entities: the routine config with its member rows, and the session with its disp
 ## For AI Agents
 
 ### Working In This Directory
-- **`dispatches` is a `MutableSet` and `answers` a `MutableList`, and that asymmetry is required**: Hibernate
-  throws `MultipleBagFetchException` when `JOIN FETCH`-ing two bags (Lists) in one query, and every session
-  read fetches both. Do not "normalise" them to two Lists.
+- **`dispatches` and `answers` are both `MutableSet`s, and must stay Sets**: every session read `JOIN FETCH`es
+  both in one query, so the result has one row per (dispatch, answer) pair. A List (bag) keeps every repeated
+  row — `answers` was a List until 2026-10-01 and came back once per dispatch (3 dispatches x 2 answers loaded
+  6 answers, all copied into the summary payload) — and two Lists throw `MultipleBagFetchException`. A Set
+  collapses the repeats because the persistence context returns one instance per row id.
+  `JpaStandupSessionRepositoryTest` pins this.
 - **Encoded text columns**: questions are `\n`-joined (the domain rejects newlines inside a question),
   weekdays are comma-joined enum names, responses are joined by `RESPONSE_DELIMITER` (U+001F, never present
   in Slack `plain_text_input` values). Changing a delimiter is a data migration of every existing row.

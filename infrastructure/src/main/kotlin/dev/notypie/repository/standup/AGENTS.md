@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/standup
 
@@ -41,7 +41,7 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
   different calendar day than the routine zone are dispatched correctly; do not re-derive the date from
   the routine timezone in callers.
 - Every session read that maps the full DTO uses `LEFT JOIN FETCH` on both `dispatches` and `answers`;
-  `dispatches` is a `Set` precisely so Hibernate can fetch two collections in one query (see `schema/`).
+  both collections are `Set`s so the per-pair repeated rows collapse (see `schema/`).
 - `deactivateRoutine` is a soft delete (`is_active = false`) and every routine read filters on it; nothing
   hard-deletes routines or sessions.
 - Beans: `JpaConfiguration.standupRepository`. Consumers in `:application`: `StandupRoutineSetupService`,
@@ -53,8 +53,8 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.standup.*'
 ```
-**No spec exists for this lane in `:infrastructure`** — neither a `JpaStandup*RepositoryTest` on H2 nor a
-`StandupRepositoryImplTest`. The CAS guards and the routine / session mapping are only exercised from
+The only spec in `:infrastructure` is `JpaStandupSessionRepositoryTest` (H2), which pins that a session fetched
+with both collections maps each answer once; there is no `StandupRepositoryImplTest`. The CAS guards and the routine / session mapping are only exercised from
 `:application` specs that mock `StandupRepository`. The missing pair: a `@DataJpaTest` racing two
 `claimDispatch` calls (expect `1` then `0`), foreign-token `markSent` (expect `0`), `resetStuckSending`, and
 `claimNudge` twice; plus a mapping spec for `Routine.toSchema().toDomainEntity()` and the session round-trip.
