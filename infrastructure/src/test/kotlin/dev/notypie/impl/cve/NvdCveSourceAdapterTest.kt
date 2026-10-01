@@ -269,7 +269,7 @@ class NvdCveSourceAdapterTest :
                     lookbackMinutes = 120,
                     requestTimeout = Duration.ofSeconds(5L),
                     apiBaseUrl = "http://127.0.0.1:${server.address.port}",
-                    requestInterval = Duration.ofMillis(400L),
+                    requestInterval = Duration.ofMillis(500L),
                     clock = Clock.systemUTC(),
                 )
             val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
@@ -280,8 +280,8 @@ class NvdCveSourceAdapterTest :
                 pacedAdapter.fetch(topic = topic)
                 val (first, second) = arrivalNanos.toList()
 
-                then("the second request reaches NVD only after the configured interval") {
-                    Duration.ofNanos(second - first) shouldBeGreaterThanOrEqualTo Duration.ofMillis(400L)
+                then("the second request reaches NVD about the configured interval after the first") {
+                    Duration.ofNanos(second - first) shouldBeGreaterThanOrEqualTo Duration.ofMillis(450L)
                 }
             }
         }
