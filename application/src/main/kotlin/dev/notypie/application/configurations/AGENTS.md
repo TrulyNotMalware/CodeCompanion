@@ -71,8 +71,9 @@ is the map of what actually exists at runtime in a given profile.
 ```bash
 ./gradlew :application:test
 ```
-There is no Spring-context smoke test for this package; correctness is mostly proven by the behaviour
-specs of the beans it wires. When adding a `Condition`, unit-test it against a `MockEnvironment` and
+`ApplicationContextSmokeTest` boots the full context (polling and in-process modes only) and pins the
+scheduler, the relay executor qualifier and the single `Clock`; `configurations/SchedulingConfigTest` covers the
+scheduler under virtual threads. Otherwise correctness is proven by the behaviour specs of the beans it wires. When adding a `Condition`, unit-test it against a `MockEnvironment` and
 assert both branches. `CveTopicConfigCreator` in `src/testFixtures/kotlin/` builds `AppConfig.Cve`
 fixtures. After a wiring change, at minimum run the app locally with `--spring.profiles.active=local`
 and confirm it boots.

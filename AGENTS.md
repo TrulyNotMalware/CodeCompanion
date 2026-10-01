@@ -54,8 +54,8 @@ flow **application → infrastructure → domain** (and **application → domain
 - **Do not add dependencies to the root `subprojects` block** unless every module — `domain`
   included — should get them. Jackson is deliberately declared per-module for this reason.
 - Dependency versions live in the root `extra["…"] = "…"` declarations (`kotestVersion`,
-  `slackSdkVersion`, `mockkVersion`, `springBootVersion`, `jacksonVersion`, `kotlinLoggingVersion`,
-  `springAiVersion`). Bump them there, not in module build files. Build scripts read them as
+  `slackSdkVersion`, `mockkVersion`, `springMockkVersion`, `springBootVersion`, `jacksonVersion`,
+  `kotlinLoggingVersion`, `springAiVersion`). Bump them there, not in module build files. Build scripts read them as
   `val x = extra["x"] as String` (root) / `val x = rootProject.extra["x"] as String` (modules) — the
   `by extra` delegate is deprecated (Gradle 9.7.1 warns; removal scheduled for Gradle 10) — and reference them
   as plain `$x` string templates — keep both forms: Dependabot's Gradle parser resolves `$x` against

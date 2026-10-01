@@ -55,8 +55,12 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ```bash
 ./gradlew :application:test
 ```
-Specs mirror the package layout under `src/test/kotlin/`. Most are plain Kotest + MockK unit specs. There is
-no `@SpringBootTest` and no `src/test/resources`, but some specs run against an in-memory H2 with a real
+Specs mirror the package layout under `src/test/kotlin/`. Most are plain Kotest + MockK unit specs. The one
+`@SpringBootTest` is `ApplicationContextSmokeTest`, which boots the whole application on H2 (polling relay,
+in-process events, `MessageDispatcher` replaced by `@MockkBean`) and pins the wiring that unit specs cannot see:
+the Hikari pool size, the `ThreadPoolTaskScheduler`, the `relayTaskExecutor` qualifier, the single `Clock`, the
+`@Async` proxy on `AgentConverseService` and the BEFORE_COMMIT outbox write. There is no `src/test/resources`.
+Some other specs run against an in-memory H2 with a real
 transaction manager, built from testFixtures: `outbox/OutboxJpaTestContext.kt` (`createOutboxJpaContext()`, a
 small `AnnotationConfigApplicationContext` with `JpaTransactionManager`) and
 `service/meeting/MeetingTransactionFixtures.kt` (`createH2DataSource`, `createH2TransactionManager`,

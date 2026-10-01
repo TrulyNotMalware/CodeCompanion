@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-09-28_
+_type: guide · updated: 2026-10-01_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -72,7 +72,11 @@ _type: guide · updated: 2026-09-28_
   스펙이 있어야 한다.
 - `@SpringBootTest` + `@EmbeddedKafka`(KRaft)는 `impl/command/KafkaEventPublisherTest` 하나뿐이다. `configurations/`
   패키지의 `@Bean`이 잘못 엮이면 깨지는 유일한 스펙이 이것이다.
-- `:application`에는 `@SpringBootTest`도 `src/test/resources`도 없다. 대신 testFixtures가 인메모리 H2와 실제 트랜잭션 매니저를
+- `:application`의 `@SpringBootTest`는 `ApplicationContextSmokeTest` 하나다(2026-10-01). H2 위에 애플리케이션 전체를 띄워 단위 스펙이
+  볼 수 없는 배선 — Hikari 풀 크기, `ThreadPoolTaskScheduler`, `relayTaskExecutor` 주입, 단일 `Clock`, `AgentConverseService`의
+  `@Async` 프록시, BEFORE_COMMIT outbox 쓰기 — 를 고정한다. 이 테스트가 처음 생기면서 testFixtures의 `@Configuration`이 컴포넌트
+  스캔에 잡혀 저장소가 이중 등록되던 문제가 드러났으므로 testFixtures에는 스테레오타입을 붙이지 않는다. `src/test/resources`는 없고,
+  그 밖에 testFixtures가 인메모리 H2와 실제 트랜잭션 매니저를
   만든다: `outbox/OutboxJpaTestContext.kt`의 `createOutboxJpaContext()`(작은 `AnnotationConfigApplicationContext` +
   `JpaTransactionManager`, 아웃박스 복구 시나리오 스펙이 사용)와 `service/meeting/MeetingTransactionFixtures.kt`의
   `createH2DataSource`·`createH2TransactionManager`·`createBoundedH2DataSource`(회의 스펙이 `REQUIRES_NEW` 경계와 커넥션

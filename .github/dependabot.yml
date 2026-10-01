@@ -24,6 +24,7 @@ updates:
         patterns:
           - "io.kotest*"
           - "io.mockk*"
+          - "com.ninja-squad*"
 
   - package-ecosystem: "github-actions"
     directory: "/"

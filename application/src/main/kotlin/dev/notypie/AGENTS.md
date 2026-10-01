@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/src/main/kotlin/dev/notypie
 
@@ -39,9 +39,10 @@ tree. `CodeCompanion.kt` is the only file at this level. Its package placement i
 ```bash
 ./gradlew :application:test
 ```
-There is no Spring-context smoke test for the main class — every spec in this module is a plain Kotest
-`BehaviorSpec` with MockK. A scan or property-binding regression only shows up at boot, so after
-touching these annotations run the app with `--spring.profiles.active=local` and confirm it starts.
+`ApplicationContextSmokeTest` (`src/test/kotlin/dev/notypie/application/`) boots this class's context on H2.
+Anything on the test classpath under `dev.notypie` with a stereotype or `@Configuration` is scanned into it,
+so test fixtures must not carry those annotations. A profile-specific regression still only shows up at boot
+with that profile; run the app with `--spring.profiles.active=local` after touching these annotations.
 
 ### Common Patterns
 - One annotated, body-less application class plus a top-level `main` — the Kotlin Spring Boot idiom.

@@ -8,6 +8,11 @@ Root package of the module's specs. Each subpackage tests the production package
 `src/main/kotlin/dev/notypie/application/`. Run everything with `./gradlew :application:test`, or one
 package with `./gradlew :application:test --tests 'dev.notypie.application.<package>.*'`.
 
+## Key Files
+| File | Description |
+|------|-------------|
+| `ApplicationContextSmokeTest.kt` | `@SpringBootTest(webEnvironment = NONE)` of the real application on H2 with the default polling relay and in-process events; `MessageDispatcher` is a relaxed `@MockkBean` so the poller never calls Slack. Pins the Hikari pool size, the `ThreadPoolTaskScheduler` (4 threads under virtual threads), the `relayTaskExecutor` injection, the single `Clock` bean in the JVM zone, the `@Async` proxy on `AgentConverseService`, and that an `OutboundMessageEnqueued` published inside a transaction is written to the outbox at commit |
+
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|

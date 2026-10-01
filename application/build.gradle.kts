@@ -5,6 +5,7 @@ val springBootVersion = rootProject.extra["springBootVersion"] as String
 val jacksonVersion = rootProject.extra["jacksonVersion"] as String
 val slackSdkVersion = rootProject.extra["slackSdkVersion"] as String
 val springAiVersion = rootProject.extra["springAiVersion"] as String
+val springMockkVersion = rootProject.extra["springMockkVersion"] as String
 
 tasks.named<BootJar>("bootJar") {
     if (!jarName.isNullOrBlank()) {
@@ -31,6 +32,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.kotest:kotest-extensions-spring")
+    testImplementation("com.ninja-squad:springmockk:$springMockkVersion")
 
     implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("javax.websocket:javax.websocket-api:1.1")

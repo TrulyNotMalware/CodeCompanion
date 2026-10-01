@@ -9,7 +9,6 @@ import dev.notypie.repository.outbox.schema.OutboxMessage
 import jakarta.persistence.EntityManagerFactory
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder
@@ -27,7 +26,6 @@ import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 
-@Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(basePackageClasses = [MessageOutboxRepository::class])
 class OutboxJpaTestConfiguration {
