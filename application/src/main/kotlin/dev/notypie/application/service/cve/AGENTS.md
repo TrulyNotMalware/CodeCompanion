@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # application/service/cve
 
@@ -15,7 +15,7 @@ The whole lane is **feature-gated**: every bean here is declared conditionally i
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, validates every YAML-declared topic (non-blank key ≤ `KEY_MAX_LENGTH` 64 — the `topic_key` column, tighter than Slack's 150-char option value; non-blank display name ≤ `DISPLAY_NAME_MAX_LENGTH` 75 — Slack option text; keys unique ignoring case; at most `MAX_ACTIVE_TOPICS` 100 declared active — Slack select options), then upserts them into `cve_topic` (keyed by topic key). After the upsert it logs ERROR when `countActive()` exceeds 100 (chat toggles and rows absent from yaml are runtime state, so that is not a boot failure) |
+| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, validates every YAML-declared topic (non-blank key ≤ `KEY_MAX_LENGTH` 64 — the `topic_key` column, tighter than Slack's 150-char option value; non-blank display name ≤ `DISPLAY_NAME_MAX_LENGTH` 128 — the `display_name` column; the templates cut the option label to Slack's 75 characters, so a longer name is not a boot failure (N1); keys unique ignoring case; at most `MAX_ACTIVE_TOPICS` 100 declared active — Slack select options), then upserts them into `cve_topic` (keyed by topic key). After the upsert it logs ERROR when `countActive()` exceeds 100 (chat toggles and rows absent from yaml are runtime state, so that is not a boot failure; `ops/CveOpsService` refuses the 101st activation and the topic picker lists only the first 100) |
 
 ## Subdirectories
 | Directory | Purpose |

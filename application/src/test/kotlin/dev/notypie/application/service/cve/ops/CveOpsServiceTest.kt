@@ -129,6 +129,59 @@ class CveOpsServiceTest :
             }
         }
 
+        // V6: a 101st active topic would push the subscribe modal past Slack's 100-option select limit.
+        given("an ACTIVATE_TOPIC event for an inactive topic while 100 topics are already active") {
+            val topicRepository = mockk<CveTopicRepository>(relaxed = true)
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findAllTopics() } returns
+                listOf(createCveTopic(id = 1L, topicKey = "kotlin", displayName = "Kotlin", active = false))
+            every { topicRepository.countActive() } returns 100L
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stagedMessage = staged,
+                )
+
+            `when`("handled") {
+                service.handleCveOps(
+                    event = createCveOpsRequestEvent(action = CveOpsAction.ACTIVATE_TOPIC, topicKey = "kotlin"),
+                )
+
+                then("the flag is left alone and the reply explains the limit") {
+                    verify(exactly = 0) { topicRepository.setActive(topicKey = any(), active = any()) }
+                    staged.markdown() shouldContain "was not activated: 100 topics are already active"
+                }
+            }
+        }
+
+        given("an ACTIVATE_TOPIC event for an inactive topic while 99 topics are active") {
+            val topicRepository = mockk<CveTopicRepository>(relaxed = true)
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findAllTopics() } returns
+                listOf(createCveTopic(id = 1L, topicKey = "kotlin", displayName = "Kotlin", active = false))
+            every { topicRepository.countActive() } returns 99L
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stagedMessage = staged,
+                )
+
+            `when`("handled") {
+                service.handleCveOps(
+                    event = createCveOpsRequestEvent(action = CveOpsAction.ACTIVATE_TOPIC, topicKey = "kotlin"),
+                )
+
+                then("the 100th active topic is allowed") {
+                    verify(exactly = 1) { topicRepository.setActive(topicKey = "kotlin", active = true) }
+                    staged.markdown() shouldBe "Topic *Kotlin* (`kotlin`): inactive → active."
+                }
+            }
+        }
+
         given("an ACTIVATE_TOPIC event for an unknown key") {
             val topicRepository = mockk<CveTopicRepository>(relaxed = true)
             val eventRepository = mockk<CveEventRepository>()

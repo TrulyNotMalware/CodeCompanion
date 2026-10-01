@@ -1502,6 +1502,33 @@ class ModalTemplateBuilderTest :
                     option.value shouldBe "long-topic"
                 }
             }
+
+            // V6: 101 active topics (rows toggled in the DB past the bootstrap check) made views.open reject the
+            // modal for every user; the picker lists the first 100 instead.
+            `when`("more active topics exist than a select may hold") {
+                val json =
+                    templateBuilder.cveSubscribeModalViewJson(
+                        idempotencyKey = subscribeKey,
+                        topics =
+                            (1..SlackBlockLimits.MAX_OPTIONS + 1).map { TopicOption(key = "t$it", label = "T$it") },
+                    )
+                val options =
+                    (
+                        com.slack.api.util.json.GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                            .blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single()
+                            .element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    ).options
+
+                then("only the first 100 topics are offered") {
+                    options.size shouldBe SlackBlockLimits.MAX_OPTIONS
+                    options.first().value shouldBe "t1"
+                    options.last().value shouldBe "t${SlackBlockLimits.MAX_OPTIONS}"
+                }
+            }
         }
 
         given("cveUnsubscribeModalViewJson") {

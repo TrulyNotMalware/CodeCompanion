@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/cve/ops
 
@@ -12,7 +12,7 @@ topic's `active` flag, and re-queue dead-lettered events for summarization. `Cve
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveOpsService.kt` | `@Service class CveOpsService(appConfig, cveTopicRepository, cveEventRepository, outboundStager, eventPublisher)`; `maxRetries = appConfig.ai.maxRetries`. `@Transactional @EventListener handleCveOps(event)`: feature off → "The CVE feature is currently disabled."; else `LIST_TOPICS` → "CVE topics (N):" with `• *Name* (`key`) — digest|immediate, active|inactive, N event(s)` from `findAllTopics()` + `countEventsByTopic` (missing count → 0); `ACTIVATE_TOPIC` / `DEACTIVATE_TOPIC` → `setActive(topicKey, active)` and "Topic *Name* (`key`): active → inactive." or "No CVE topic with key `key`."; `RETRY_ALL` → `resetDeadLetters(maxRetries)` and "Re-queued N dead-letter event(s) for summarization."; `RETRY_EVENT` → `resetDeadLetter(id, maxRetries)` and "Re-queued event #id …" or "Event #id is not a dead-letter (…)". Reply: `ChannelMessage` to `payload.responseBasicInfo.channel`, headline `CodeCompanion — CVE operations`, published via `publishOne` |
+| `CveOpsService.kt` | `@Service class CveOpsService(appConfig, cveTopicRepository, cveEventRepository, outboundStager, eventPublisher)`; `maxRetries = appConfig.ai.maxRetries`. `@Transactional @EventListener handleCveOps(event)`: feature off → "The CVE feature is currently disabled."; else `LIST_TOPICS` → "CVE topics (N):" with `• *Name* (`key`) — digest|immediate, active|inactive, N event(s)` from `findAllTopics()` + `countEventsByTopic` (missing count → 0); `ACTIVATE_TOPIC` / `DEACTIVATE_TOPIC` → `setActive(topicKey, active)` and "Topic *Name* (`key`): active → inactive." or "No CVE topic with key `key`."; activating an inactive topic while `countActive()` is already `CveTopicBootstrap.MAX_ACTIVE_TOPICS` (100) leaves the flag alone and replies "… was not activated: N topics are already active …" (V6); `RETRY_ALL` → `resetDeadLetters(maxRetries)` and "Re-queued N dead-letter event(s) for summarization."; `RETRY_EVENT` → `resetDeadLetter(id, maxRetries)` and "Re-queued event #id …" or "Event #id is not a dead-letter (…)". Reply: `ChannelMessage` to `payload.responseBasicInfo.channel`, headline `CodeCompanion — CVE operations`, published via `publishOne` |
 
 ## For AI Agents
 
@@ -22,6 +22,9 @@ topic's `active` flag, and re-queue dead-lettered events for summarization. `Cve
   halves: the spec asserts zero repository traffic and exactly one publish.
 - `setActive` reads `findAllTopics()` (not `findActiveTopics()`) so an inactive topic can be found and
   re-activated; the old state in the reply comes from that read, the new one from the `active` argument.
+- The activation cap exists because the subscribe modal is one select and Slack rejects a select over 100
+  options for every user. The count is read inside the same transaction but not locked, so two concurrent
+  activations can still race past it; the template cutting the picker at 100 is the backstop, not this check.
 - The retry commands are the only way to revive a `FAILED` event past `maxRetries`; `resetDeadLetter`
   returns `0` for unknown ids and for rows that are not dead-lettered, and the reply says so instead of
   throwing. `slack.app.ai.max-retries` must match what `../ai/CveSummaryWorker` and
@@ -51,10 +54,10 @@ topicKey, targetEventId)` in the `domain` testFixtures (reply target is `TEST_CH
 - `domain/command/entity/event/` — `CveOpsRequestEvent`, `CveOpsAction`, `CveOpsPayload`, `publishOne`;
   `domain/command/outbound/` — `OutboundMessage.ChannelMessage`, `MessageContent.Text`,
   `OutboundMessageStager`
-- `infrastructure/repository/cve/` — `CveTopicRepository` (`findAllTopics`, `setActive`),
+- `infrastructure/repository/cve/` — `CveTopicRepository` (`findAllTopics`, `countActive`, `setActive`),
   `CveEventRepository` (`countEventsByTopic`, `resetDeadLetters`, `resetDeadLetter`), `CveTopic`
 - `application/service/cve/CveTopicBootstrap` — seeds the rows this service flips (it never re-syncs
-  `active`)
+  `active`) and owns `MAX_ACTIVE_TOPICS`
 
 ### External
 Spring `@Service` / `@Transactional` / `@EventListener`.

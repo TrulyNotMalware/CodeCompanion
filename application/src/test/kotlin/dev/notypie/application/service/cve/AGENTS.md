@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # test/kotlin/dev/notypie/application/service/cve
 
@@ -10,7 +10,7 @@ Specs for the CVE watch lane. This directory holds the boot-time topic sync; eac
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrapTest.kt` | `CveTopicBootstrap(topics, cveTopicRepository).bootstrapTopics()`: two declarations → `upsert` called twice, every `AppConfig.Cve.TopicDefinition` field mapped onto `CveTopicDefinition` (`topicKey`, `displayName`, `category`, `sourceType`, `sourceConfig`, `deliveryMode`, `active`); blank key or blank display name → `IllegalArgumentException` before any repository call; keys `springBoot` + `springboot` → `IllegalArgumentException`, no upsert; a 76-char display name, a 65-char key, or 101 declared active topics → `IllegalArgumentException`, no upsert; 100 active topics at exactly 64-char keys and 75-char names plus 5 inactive → all 105 upserted (`countActive()` stubbed, since the bootstrap reads it after the upsert); empty list → repository untouched. |
+| `CveTopicBootstrapTest.kt` | `CveTopicBootstrap(topics, cveTopicRepository).bootstrapTopics()`: two declarations → `upsert` called twice, every `AppConfig.Cve.TopicDefinition` field mapped onto `CveTopicDefinition` (`topicKey`, `displayName`, `category`, `sourceType`, `sourceConfig`, `deliveryMode`, `active`); blank key or blank display name → `IllegalArgumentException` before any repository call; keys `springBoot` + `springboot` → `IllegalArgumentException`, no upsert; a 128-char display name (past Slack's 75-char option text, within the `display_name` column) is upserted in full, since the template cuts the label (N1); a 129-char display name, a 65-char key, or 101 declared active topics → `IllegalArgumentException`, no upsert; 100 active topics at exactly 64-char keys and 128-char names plus 5 inactive → all 105 upserted (`countActive()` stubbed, since the bootstrap reads it after the upsert); empty list → repository untouched. |
 
 ## Subdirectories
 | Directory | Purpose |

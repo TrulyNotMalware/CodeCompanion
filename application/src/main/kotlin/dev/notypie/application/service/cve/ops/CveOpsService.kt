@@ -1,6 +1,7 @@
 package dev.notypie.application.service.cve.ops
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.cve.CveTopicBootstrap
 import dev.notypie.domain.command.entity.event.CveOpsAction
 import dev.notypie.domain.command.entity.event.CveOpsPayload
 import dev.notypie.domain.command.entity.event.CveOpsRequestEvent
@@ -83,6 +84,16 @@ class CveOpsService(
         val topic =
             cveTopicRepository.findAllTopics().firstOrNull { it.topicKey == topicKey }
                 ?: return "No CVE topic with key `$topicKey`."
+        // V6: a select holds at most 100 options, so the 101st active topic would break the subscribe modal for
+        // every user. Two concurrent activations can still race past this read; the template's cut is the backstop.
+        if (active && !topic.active) {
+            val liveActive = cveTopicRepository.countActive()
+            if (liveActive >= CveTopicBootstrap.MAX_ACTIVE_TOPICS) {
+                return "Topic *${topic.displayName}* (`$topicKey`) was not activated: $liveActive topics are " +
+                    "already active and the subscribe modal lists at most ${CveTopicBootstrap.MAX_ACTIVE_TOPICS}. " +
+                    "Deactivate one first."
+            }
+        }
         cveTopicRepository.setActive(topicKey = topicKey, active = active)
         val oldState = stateOf(topic = topic)
         val newState = if (active) "active" else "inactive"

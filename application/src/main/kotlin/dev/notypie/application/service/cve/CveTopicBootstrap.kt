@@ -35,9 +35,10 @@ class CveTopicBootstrap(
         }
     }
 
-    // Limits come from the subscribe modal (see templates): Slack caps an option's text at 75 chars and a
-    // select at 100 options; the key is the option value (150 chars in Slack) but cve_topic.topic_key is
-    // VARCHAR(64), the tighter bound. Failing the boot beats a modal that no user can open.
+    // Limits: the key is the subscribe modal's option value (150 chars in Slack) but cve_topic.topic_key is
+    // VARCHAR(64), the tighter bound. The display name is only bounded by cve_topic.display_name VARCHAR(128):
+    // the templates cut an option label to Slack's 75 characters, so a longer name renders and must not fail
+    // the boot. A select holds at most 100 options. Failing the boot beats a modal that no user can open.
     private fun toDefinition(topic: AppConfig.Cve.TopicDefinition): CveTopicDefinition {
         require(topic.key.isNotBlank()) { "CVE topic definition requires a non-blank key" }
         require(topic.key.length <= KEY_MAX_LENGTH) {
@@ -60,7 +61,7 @@ class CveTopicBootstrap(
 
     companion object {
         const val KEY_MAX_LENGTH = 64
-        const val DISPLAY_NAME_MAX_LENGTH = 75
+        const val DISPLAY_NAME_MAX_LENGTH = 128
         const val MAX_ACTIVE_TOPICS = 100
     }
 }

@@ -14,11 +14,14 @@ import dev.notypie.impl.command.RestRequester
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+private val log = KotlinLogging.logger {}
 
 class ModalTemplateBuilder(
     private val modalBlockBuilder: ModalBlockBuilder =
@@ -630,6 +633,14 @@ class ModalTemplateBuilder(
         submitText: String,
         topics: List<TopicOption>,
     ): String {
+        // A select over 100 options is rejected for every user as well. The bootstrap and `cve topic activate`
+        // keep the active count under it, but rows toggled in the DB can still pass it, so the cut is the backstop.
+        if (topics.size > SlackBlockLimits.MAX_OPTIONS) {
+            log.warn {
+                "CVE topic picker lists the first ${SlackBlockLimits.MAX_OPTIONS} of ${topics.size} topics: " +
+                    "callbackId=$callbackId"
+            }
+        }
         val view =
             modal {
                 callbackId(id = callbackId)
@@ -652,7 +663,7 @@ class ModalTemplateBuilder(
                         ) {
                             // Option text over 75 characters made views.open reject the modal for every user; the
                             // label is display-only (the key is the value), so cutting it is safe.
-                            topics.forEach { topic ->
+                            topics.take(n = SlackBlockLimits.MAX_OPTIONS).forEach { topic ->
                                 val label =
                                     topic.label.truncatePlainText(
                                         limit = SlackBlockLimits.OPTION_TEXT_MAX_LENGTH,

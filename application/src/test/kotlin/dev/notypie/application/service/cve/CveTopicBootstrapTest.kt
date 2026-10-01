@@ -8,6 +8,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 
 class CveTopicBootstrapTest :
@@ -94,11 +95,33 @@ class CveTopicBootstrapTest :
             }
         }
 
-        given("a display name at 76 characters, one past the Slack option text limit") {
+        // N1: the templates cut an option label to 75 characters, so a name the column holds must not fail the boot.
+        given("a display name at 128 characters, past the Slack option text limit but within the column") {
             val cveTopicRepository = mockk<CveTopicRepository>()
             val bootstrap =
                 CveTopicBootstrap(
-                    topics = listOf(createCveTopicConfigDefinition(displayName = "d".repeat(76))),
+                    topics = listOf(createCveTopicConfigDefinition(displayName = "d".repeat(128))),
+                    cveTopicRepository = cveTopicRepository,
+                )
+            every { cveTopicRepository.upsert(definition = any()) } returns true
+            every { cveTopicRepository.countActive() } returns 1L
+
+            `when`("the boot sync runs") {
+                bootstrap.bootstrapTopics()
+
+                then("the full name is upserted, leaving the cut to the template") {
+                    val definition = slot<CveTopicDefinition>()
+                    verify(exactly = 1) { cveTopicRepository.upsert(definition = capture(definition)) }
+                    definition.captured.displayName.length shouldBe 128
+                }
+            }
+        }
+
+        given("a display name at 129 characters, one past the display_name column") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            val bootstrap =
+                CveTopicBootstrap(
+                    topics = listOf(createCveTopicConfigDefinition(displayName = "d".repeat(129))),
                     cveTopicRepository = cveTopicRepository,
                 )
 
@@ -146,7 +169,7 @@ class CveTopicBootstrapTest :
             val cveTopicRepository = mockk<CveTopicRepository>()
             val declared =
                 (1..100).map {
-                    createCveTopicConfigDefinition(key = "t$it".padEnd(64, 'k'), displayName = "d".repeat(75))
+                    createCveTopicConfigDefinition(key = "t$it".padEnd(64, 'k'), displayName = "d".repeat(128))
                 } + (1..5).map { createCveTopicConfigDefinition(key = "off-$it", active = false) }
             val bootstrap = CveTopicBootstrap(topics = declared, cveTopicRepository = cveTopicRepository)
             every { cveTopicRepository.upsert(definition = any()) } returns true
