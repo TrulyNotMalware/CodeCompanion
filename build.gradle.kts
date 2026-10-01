@@ -97,7 +97,8 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        api(platform("io.kotest:kotest-bom:$kotestVersion"))
+        testImplementation(platform("io.kotest:kotest-bom:$kotestVersion"))
+        testFixturesImplementation(platform("io.kotest:kotest-bom:$kotestVersion"))
 
         implementation(kotlin("reflect"))
 
