@@ -65,7 +65,7 @@ allprojects {
         }
     }
 
-    tasks.withType<GenerateReportsTask> {
+    tasks.withType<GenerateReportsTask>().configureEach {
         reportsOutputDirectory.set(
             rootProject.layout.buildDirectory.dir(
                 "reports/ktlint/${project.name}",
@@ -75,7 +75,7 @@ allprojects {
 
     // CI sets testMaxHeap lower: two daemons plus one test JVM per module must fit a 16 GB runner.
     val testMaxHeap = providers.gradleProperty("testMaxHeap").getOrElse("4g")
-    tasks.withType<Test> {
+    tasks.withType<Test>().configureEach {
         useJUnitPlatform()
         jvmArgs(
             "-Xmx$testMaxHeap",
