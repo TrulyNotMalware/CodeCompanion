@@ -1,15 +1,16 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/configurations
 
 ## Purpose
-Builder for the `AppConfig.Cve.TopicDefinition` fragment that `CveTopicBootstrap` reads on startup. Keeps
-the seven-field constructor out of the spec body.
+Builders for `AppConfig` fragments: the `AppConfig.Cve.TopicDefinition` that `CveTopicBootstrap` reads on
+startup, and an `AppConfig` with every secret set, for the `toString()` masking spec.
 
 ## Key Files
 | File | Description |
 |------|-------------|
+| `AppConfigCreator.kt` | `createAppConfigWithSecrets(slackToken, slackAppToken, signingSecret, mcpSigningSecret, githubToken, nvdApiKey, sidecarBearerSecret)` — an `AppConfig` with every secret-bearing field set to a distinct fixture value, for the masking spec |
 | `CveTopicConfigCreator.kt` | `createCveTopicConfigDefinition(key = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)` |
 
 ## For AI Agents

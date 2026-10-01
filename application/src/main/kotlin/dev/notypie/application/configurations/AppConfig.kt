@@ -8,6 +8,10 @@ import org.springframework.context.annotation.Configuration
 
 const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
 
+private const val MASK = "****"
+
+private fun String.masked(): String = if (isEmpty()) "" else MASK
+
 enum class OutboxReaderStrategy {
     POLLING,
     CDC,
@@ -42,7 +46,11 @@ data class AppConfig(
         val appToken: String = "",
         val signingSecret: String = "",
         val requestTimestampToleranceSeconds: Long = 300,
-    )
+    ) {
+        override fun toString(): String =
+            "Api(token=${token.masked()}, appToken=${appToken.masked()}, signingSecret=${signingSecret.masked()}, " +
+                "requestTimestampToleranceSeconds=$requestTimestampToleranceSeconds)"
+    }
 
     data class Cdc(
         val topic: String = "",
@@ -130,7 +138,11 @@ data class AppConfig(
         val tokenTtlSeconds: Long = 300L,
         val clockSkewSeconds: Long = 30L,
         val allowRemote: Boolean = false,
-    )
+    ) {
+        override fun toString(): String =
+            "Mcp(enabled=$enabled, signingSecret=${signingSecret.masked()}, tokenTtlSeconds=$tokenTtlSeconds, " +
+                "clockSkewSeconds=$clockSkewSeconds, allowRemote=$allowRemote)"
+    }
 
     data class Cve(
         val enabled: Boolean = false,
@@ -153,7 +165,9 @@ data class AppConfig(
         data class Github(
             val token: String = "",
             val perPage: Int = 10,
-        )
+        ) {
+            override fun toString(): String = "Github(token=${token.masked()}, perPage=$perPage)"
+        }
 
         data class Nvd(
             val apiKey: String = "",
@@ -163,6 +177,10 @@ data class AppConfig(
             init {
                 require(requestIntervalMillis >= 0L) { "cve.nvd.request-interval-millis must not be negative" }
             }
+
+            override fun toString(): String =
+                "Nvd(apiKey=${apiKey.masked()}, lookbackMinutes=$lookbackMinutes, " +
+                    "requestIntervalMillis=$requestIntervalMillis)"
         }
 
         data class Collector(
@@ -208,7 +226,11 @@ data class AppConfig(
             val bearerSecret: String = "",
             // Keep above the sidecar's own TURN_TIMEOUT_SEC (90s) so the server-side timeout fires, not this.
             val requestTimeoutSeconds: Long = 120L,
-        )
+        ) {
+            override fun toString(): String =
+                "Sidecar(baseUrl=$baseUrl, bearerSecret=${bearerSecret.masked()}, " +
+                    "requestTimeoutSeconds=$requestTimeoutSeconds)"
+        }
     }
 }
 

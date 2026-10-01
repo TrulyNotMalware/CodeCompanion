@@ -10,7 +10,7 @@ wins: Boot auto-configuration plus one configuration class, started with `Applic
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AppConfigSecretsTest.kt` | `requireUsableSecrets()`: a Slack token or sidecar secret that kept its `${...}` placeholder → `IllegalStateException` naming the key and never the token value; a blank Slack token → failure; a set token with blank optional secrets → passes |
+| `AppConfigSecretsTest.kt` | `requireUsableSecrets()`: a Slack token or sidecar secret that kept its `${...}` placeholder → `IllegalStateException` naming the key and never the token value; a blank Slack token → failure; a set token with blank optional secrets → passes. `toString()` of `createAppConfigWithSecrets()` contains none of the seven secret values and exactly seven `=****` masks while still printing non-secret settings; a blank secret renders empty (`token=,`) |
 | `KafkaProducerConfigurationTest.kt` | `KafkaAutoConfiguration` + `KafkaEventPublisherConfiguration` with `event-publisher=KAFKA` and a `SimpleMeterRegistry` bean (the imported dead-letter recovery bean counts records): the `KafkaTemplate` uses the `ProducerFactory` bean (same instance), and `spring.kafka.producer.acks` and a `spring.kafka.properties.*` key reach the producer configuration. No broker is contacted |
 | `SchedulingConfigTest.kt` | With `spring.threads.virtual.enabled=true` and `spring.task.scheduling.pool.size=4`, the `TaskScheduler` is the `ThreadPoolTaskScheduler` from `SchedulingConfig` with a core pool of 4. Without that bean Boot creates `SimpleAsyncTaskScheduler`, which ignores `pool.size` and runs every fixedDelay job on one thread |
 
