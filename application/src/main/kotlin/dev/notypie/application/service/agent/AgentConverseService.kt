@@ -25,6 +25,7 @@ import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.TransactionTemplate
@@ -86,6 +87,13 @@ class AgentConverseService(
     }
 
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
+
+    // The AFTER_COMMIT listener runs in afterCompletion, where the committed transaction is still bound: a
+    // REQUIRED template would join it and its outbox write would never commit.
+    private val afterCompletionTemplate: TransactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     fun handleAgentConverse(event: AgentConverseRequestEvent) {
@@ -243,7 +251,7 @@ class AgentConverseService(
 
     private fun publishOverloaded(event: AgentConverseRequestEvent) {
         val basicInfo = event.payload.responseBasicInfo
-        transactionTemplate
+        afterCompletionTemplate
             .runInTx {
                 eventPublisher.publishOne(
                     event =

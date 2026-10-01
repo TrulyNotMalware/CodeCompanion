@@ -1,6 +1,7 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.createOutboxJpaContext
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_THREAD_TS
@@ -21,6 +22,8 @@ import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
+import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.schema.createOutboxMessage
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -35,11 +38,17 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.orm.jpa.JpaTransactionManager
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
 
@@ -66,6 +75,7 @@ class AgentConverseServiceTest :
             meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry(),
             scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
             turnExecutor: Executor = Executor { it.run() },
+            transactionManager: PlatformTransactionManager = stubTransactionManager(),
         ) = AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
@@ -73,7 +83,7 @@ class AgentConverseServiceTest :
             outboundStager = outboundStager,
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
-            transactionManager = stubTransactionManager(),
+            transactionManager = transactionManager,
             turnExecutor = turnExecutor,
             clock = createFixedUtcClock(now = fixedNow),
             scopedTurnTokenCodec = scopedTurnTokenCodec,
@@ -302,6 +312,49 @@ class AgentConverseServiceTest :
                 then("the sidecar is not called and the rejection is counted") {
                     verify(exactly = 0) { gateway.converse(request = any()) }
                     meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "rejected").count() shouldBe 1.0
+                }
+            }
+        }
+
+        given("a rejected turn whose AFTER_COMMIT listener runs as a real JPA transaction completes") {
+            val context = createOutboxJpaContext()
+            afterSpec { context.close() }
+            val transactionManager = context.getBean(JpaTransactionManager::class.java)
+            val outboxRepository = context.getBean(MessageOutboxRepository::class.java)
+            val jdbc = context.getBean(JdbcTemplate::class.java)
+            val noticeEventId = UUID.randomUUID().toString()
+            val eventPublisher = mockk<EventPublisher>()
+            every { eventPublisher.publishEvent(events = any()) } answers {
+                outboxRepository.save(createOutboxMessage(eventId = noticeEventId))
+                Unit
+            }
+            val service =
+                buildService(
+                    agentGateway = mockk(),
+                    outboundStager = stagerCapturing(stagedMessage = slot()),
+                    eventPublisher = eventPublisher,
+                    turnExecutor = Executor { throw RejectedExecutionException("full") },
+                    transactionManager = transactionManager,
+                )
+            val event = createAgentConverseRequestEvent()
+
+            `when`("the mention transaction commits and the listener fires in afterCompletion") {
+                TransactionTemplate(transactionManager).executeWithoutResult {
+                    TransactionSynchronizationManager.registerSynchronization(
+                        object : TransactionSynchronization {
+                            override fun afterCompletion(status: Int) {
+                                service.handleAgentConverse(event = event)
+                            }
+                        },
+                    )
+                }
+
+                then("the overload notice is committed to the outbox in its own transaction") {
+                    jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM outbox_message WHERE event_id = ?",
+                        Int::class.java,
+                        noticeEventId,
+                    ) shouldBe 1
                 }
             }
         }
