@@ -91,8 +91,9 @@ _type: guide · updated: 2026-09-28_
 - Kafka·Debezium 없이 orbstack MariaDB만 있으면 된다. `ngrok`/`cloudflared`로 9000 포트를 노출하고 Slack 앱의 Request URL
   세 개 — slash(`/api/slash/meet`, `/api/slash/standup`), Interactivity(`/api/slack/interaction`), Events(`/api/slack/events`)
   — 를 터널 주소로 잡는다. Events URL 검증(`url_verification`)은 앱이 먼저 떠 있어야 통과한다.
-- `SLACK_API_TOKEN`과 `SLACK_SIGNING_SECRET`(필수)으로 `bootRun --args='--spring.profiles.active=slack-live'`. 헬스는
-  `/api/actuator/health`. devtools의 restart classloader가 기동을 깨면 `--spring.devtools.restart.enabled=false`를 붙인다.
+- `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `DATABASE_USER_PWD`(모두 필수, 기본값 없음)로
+  `bootRun --args='--spring.profiles.active=slack-live'`. 터널로 공개되는 포트라 actuator는 `/api/actuator/health`만 연다
+  (2026-10-01: DB 비밀번호 기본값 제거, `metrics`·`info` 노출 제거). devtools의 restart classloader가 기동을 깨면 `--spring.devtools.restart.enabled=false`를 붙인다.
 - 기능별 시나리오, 시간 단축용 `--slack.app.meeting.reminder.offsets-minutes` 류 오버라이드, DB 조회 스니펫은 git-ignored
   `RealTestSetup.md`(로컬 전용)에 있다.
 

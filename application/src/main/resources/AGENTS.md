@@ -15,7 +15,7 @@ stand up change-data-capture locally and in-cluster.
 | `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true` |
 | `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics,prometheus` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
 | `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), actuator `health,info,metrics,prometheus` (scrape `/actuator/prometheus` in-cluster; never routed publicly), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
-| `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB defaults, port 9000, `SLACK_SIGNING_SECRET` required (no default), health `show-details: when_authorized` because the port is tunnelled to the internet |
+| `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB URL/user defaults but `DATABASE_USER_PWD` required (no committed default), port 9000, `SLACK_SIGNING_SECRET` required (no default); the port is tunnelled to the internet, so the actuator exposes `health` only, with `show-details: when_authorized`. `configurations/ProfileYamlTest` pins both |
 | `banner.txt` | Spring Boot startup banner |
 
 ## Subdirectories

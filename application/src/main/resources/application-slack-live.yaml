@@ -23,7 +23,8 @@ spring:
     driver-class-name: org.mariadb.jdbc.Driver
     url: ${DATABASE_URL:jdbc:mariadb://localhost:3306/code_companion}
     username: ${DATABASE_USER_NAME:root}
-    password: ${DATABASE_USER_PWD:root_password}
+    # No default: export DATABASE_USER_PWD. A committed default is a credential in the repository.
+    password: ${DATABASE_USER_PWD}
     hikari:
       transaction-isolation: TRANSACTION_REPEATABLE_READ
       maximum-pool-size: 20
@@ -55,7 +56,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        # Health only: the tunnel exposes the port publicly and nothing here authenticates.
+        include: health
       base-path: /api/actuator
 
 slack:
