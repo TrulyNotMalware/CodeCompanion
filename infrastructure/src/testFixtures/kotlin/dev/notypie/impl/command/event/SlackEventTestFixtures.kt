@@ -15,6 +15,7 @@ fun createPostEventPayloadContents(
     channel: String = TEST_CHANNEL_ID,
     idempotencyKey: UUID = UUID.randomUUID(),
     body: Map<String, Any> = mapOf(),
+    messageType: MessageType = toMessageTypeByTargetUser(targetUserId = targetUserId),
 ) = PostEventPayloadContents(
     apiAppId = appId,
     commandDetailType = commandDetailType,
@@ -22,7 +23,7 @@ fun createPostEventPayloadContents(
     publisherId = publisherId,
     channel = channel,
     eventId = UUID.randomUUID(),
-    messageType = toMessageTypeByTargetUser(targetUserId = targetUserId),
+    messageType = messageType,
     replaceOriginal = false,
     body = body,
 )

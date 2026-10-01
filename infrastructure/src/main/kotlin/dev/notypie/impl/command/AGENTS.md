@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/impl/command
 
@@ -57,10 +57,16 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     again; a larger or missing `Retry-After`, a second rate limit, or an interrupt during the wait (flag
     restored) returns `RateLimitedOutput(retryAfter)` at once (`isRateLimited()`, `retryAfter()`). The relay
     defers the row past `Retry-After`. The CDC listener thread must never sleep long.
-  - Transient — `IOException` (including the call timeout), `chat.*` HTTP 5xx, `response_url` 5xx, `ok=false`
-    with `internal_error` / `service_unavailable` → `RetryService` (3 attempts, the `TRANSIENT_EXCEPTIONS`
-    list); when they are spent, `failOutput(TRANSIENT_EXHAUSTED_REASON)` (`isTransientExhausted()`). The relay
-    leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to `outbox.polling.max-sends` sends.
+  - Transient — `chat.*` HTTP 5xx, `response_url` 5xx, `ok=false` with `internal_error` / `service_unavailable`,
+    and I/O failures that prove the request never reached Slack (`ConnectException`, `UnknownHostException`,
+    `NoRouteToHostException`, `SSLHandshakeException`) → `RetryService` (3 attempts); when they are spent,
+    `failOutput(TRANSIENT_EXHAUSTED_REASON)` (`isTransientExhausted()`). The relay leaves the row `IN_PROGRESS`
+    and the recovery sweep re-sends it, up to `outbox.polling.max-sends` sends. `chat.update` is idempotent, so
+    for it every `IOException` (including the call timeout) is transient.
+  - Outcome unknown — any other `IOException` (the call timeout, a reset after the request was written) on
+    `chat.postMessage`, `chat.postEphemeral` or `response_url` → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type>")`
+    and the relay writes `FAILURE`. Slack may already have posted the message and has no idempotency key, so
+    resending would duplicate it; the row and the warning log are the reconciliation record.
   - Permanent — any other `ok=false` (including `fatal_error`, which may have partly succeeded, and
     `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
     and `response_url` 3xx / 4xx / JSON `ok=false` → `failOutput(<error>)`, once. The relay writes `FAILURE`.

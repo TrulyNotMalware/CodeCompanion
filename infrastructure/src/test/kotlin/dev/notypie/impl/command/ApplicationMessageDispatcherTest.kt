@@ -5,6 +5,7 @@ import com.slack.api.SlackConfig
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createActionEventPayloadContents
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.retry.RetryService
@@ -306,35 +307,76 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("chat.* stalls longer than the call timeout on every attempt") {
+        fun impatientDispatcher(methodsEndpointUrlPrefix: String = "http://127.0.0.1:$port/api/") =
+            ApplicationMessageDispatcher(
+                botToken = "xoxb-test",
+                applicationEventPublisher = mockk(relaxed = true),
+                retryService = RetryService(),
+                slack =
+                    Slack.getInstance(
+                        SlackConfig().apply {
+                            this.methodsEndpointUrlPrefix = methodsEndpointUrlPrefix
+                            isPrettyResponseLoggingEnabled = false
+                            isStatsEnabled = false
+                            httpClientCallTimeoutMillis = 200
+                        },
+                    ),
+                okHttpClient = loopbackClient,
+            )
+
+        given("chat.postMessage stalls longer than the call timeout after the request was sent") {
             reset()
             val release = CountDownLatch(1)
             repeat(3) { responses.add { exchange -> release.await(5L, TimeUnit.SECONDS).also { exchange.close() } } }
-            val impatientSlack =
-                Slack.getInstance(
-                    SlackConfig().apply {
-                        methodsEndpointUrlPrefix = "http://127.0.0.1:$port/api/"
-                        isPrettyResponseLoggingEnabled = false
-                        isStatsEnabled = false
-                        httpClientCallTimeoutMillis = 200
-                    },
-                )
-            val impatient =
-                ApplicationMessageDispatcher(
-                    botToken = "xoxb-test",
-                    applicationEventPublisher = mockk(relaxed = true),
-                    retryService = RetryService(),
-                    slack = impatientSlack,
-                    okHttpClient = loopbackClient,
-                )
 
             `when`("a channel message is dispatched") {
-                val output = impatient.dispatch(event = channelMessage())
+                val output = impatientDispatcher().dispatch(event = channelMessage())
                 release.countDown()
 
-                then("each call is cut at the call timeout and the IOException ends as a transient outcome") {
+                then("it is not resent, because Slack may already have posted it") {
+                    output.ok shouldBe false
+                    output.isTransientExhausted() shouldBe false
+                    output.errorReason shouldStartWith OUTCOME_UNKNOWN_REASON
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update stalls longer than the call timeout on every attempt") {
+            reset()
+            val release = CountDownLatch(1)
+            repeat(3) { responses.add { exchange -> release.await(5L, TimeUnit.SECONDS).also { exchange.close() } } }
+
+            `when`("a message update is dispatched") {
+                val output =
+                    impatientDispatcher().dispatch(
+                        event =
+                            createPostEventPayloadContents(
+                                commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                                body = mapOf("text" to "hi", "ts" to "1700000000.000100"),
+                                messageType = MessageType.UPDATE_MESSAGE,
+                            ),
+                    )
+                release.countDown()
+
+                then("the idempotent update is retried and ends as a transient outcome") {
                     output.isTransientExhausted() shouldBe true
                     calls.get() shouldBe 3
+                }
+            }
+        }
+
+        given("Slack refuses the connection") {
+            reset()
+
+            `when`("a channel message is dispatched") {
+                val output =
+                    impatientDispatcher(methodsEndpointUrlPrefix = "http://127.0.0.1:1/api/").dispatch(
+                        event = channelMessage(),
+                    )
+
+                then("the unsent request is retried and ends as a transient outcome") {
+                    output.isTransientExhausted() shouldBe true
                 }
             }
         }

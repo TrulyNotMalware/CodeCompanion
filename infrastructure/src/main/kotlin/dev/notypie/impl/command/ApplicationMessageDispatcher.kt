@@ -35,10 +35,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.retry.RetryException
 import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.UnknownHostException
 import java.time.Duration
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import javax.net.ssl.SSLHandshakeException
 
 private val dispatcherLog = KotlinLogging.logger {}
 
@@ -50,11 +54,23 @@ private const val HTTPS_PORT = 443
 private const val MAX_RESPONSE_BODY_BYTES = 4_096L
 private const val MAX_FAILURE_REASON_CHARS = 200
 private val MAX_INLINE_RETRY_AFTER: Duration = Duration.ofSeconds(3L)
-private val TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
+private val IDEMPOTENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(IOException::class.java, SlackApiException::class.java, SlackTransientErrorException::class.java)
+
+// A post that times out after it was sent may already be on Slack; only retry failures that never reached it.
+private val NOT_SENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
+    listOf(
+        ConnectException::class.java,
+        UnknownHostException::class.java,
+        NoRouteToHostException::class.java,
+        SSLHandshakeException::class.java,
+        SlackApiException::class.java,
+        SlackTransientErrorException::class.java,
+    )
 val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
 const val RATE_LIMITED_REASON = "ratelimited"
 const val TRANSIENT_EXHAUSTED_REASON = "transient_exhausted"
+const val OUTCOME_UNKNOWN_REASON = "outcome_unknown"
 
 fun CommandOutput.isRateLimited(): Boolean = !ok && errorReason == RATE_LIMITED_REASON
 
@@ -118,19 +134,41 @@ class ApplicationMessageDispatcher(
                     "thread instead. idempotencyKey=${event.idempotencyKey}",
             )
         }
+        val transientExceptions = transientExceptionsFor(event = event)
         return try {
             withRateLimitRetry(event = event) {
-                retryService.execute(action = { dispatchOnce(event = event) }, exceptions = TRANSIENT_EXCEPTIONS)
+                retryService.execute(action = { dispatchOnce(event = event) }, exceptions = transientExceptions)
             }
         } catch (exception: RetryException) {
-            if (TRANSIENT_EXCEPTIONS.none { it.isInstance(exception.cause) }) throw exception
-            dispatcherLog.warn(exception) {
-                "Slack transient failure outlasted the retries for ${event.commandDetailType}; " +
-                    "leaving it to the outbox recovery sweep"
+            val cause = exception.cause
+            when {
+                transientExceptions.any { it.isInstance(cause) } -> {
+                    dispatcherLog.warn(exception) {
+                        "Slack transient failure outlasted the retries for ${event.commandDetailType}; " +
+                            "leaving it to the outbox recovery sweep"
+                    }
+                    failOutput(event = event, reason = TRANSIENT_EXHAUSTED_REASON)
+                }
+
+                cause is IOException -> {
+                    dispatcherLog.warn(exception) {
+                        "Slack call for ${event.commandDetailType} failed after it may have been sent; " +
+                            "not resending idempotencyKey=${event.idempotencyKey}"
+                    }
+                    failOutput(event = event, reason = "$OUTCOME_UNKNOWN_REASON: ${cause::class.java.simpleName}")
+                }
+
+                else -> throw exception
             }
-            failOutput(event = event, reason = TRANSIENT_EXHAUSTED_REASON)
         }
     }
+
+    private fun transientExceptionsFor(event: SlackEventPayload): List<Class<out Throwable>> =
+        if (event is PostEventPayloadContents && event.messageType == MessageType.UPDATE_MESSAGE) {
+            IDEMPOTENT_TRANSIENT_EXCEPTIONS
+        } else {
+            NOT_SENT_TRANSIENT_EXCEPTIONS
+        }
 
     private fun dispatchOnce(event: SlackEventPayload): CommandOutput =
         when (event) {
