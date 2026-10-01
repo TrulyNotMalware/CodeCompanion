@@ -54,7 +54,7 @@ testFixtures `createOutboxMessage` / `createPostEventPayloadContents`, and `serv
 
 ### Internal
 - `application/service/relay/*`, `application/configurations/AppConfig`, `KafkaConsumerConfiguration`
-  (`cdcDeadLetterRecoverer`, `CdcDeadLetterRecovery`, `CountingRecordRecoverer`, `DEAD_LETTER_RECORDS_METRIC`,
+  (`cdcDeadLetterRecoverer`, `CdcDeadLetterRecovery`, `CountingRecordRecoverer`, `DEAD_LETTER_HANDOFFS_METRIC`,
   `deadLetterBytesProducerFactory`)
 - `infrastructure/repository/outbox/MessageOutboxRepository`, `OutboundMessagePort`,
   `CodecOutboundMessagePort`, `Transport`, `schema/MessageStatus`, `dto/*`,

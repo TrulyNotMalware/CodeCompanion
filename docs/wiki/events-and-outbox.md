@@ -228,12 +228,13 @@ _type: architecture · updated: 2026-09-28_
   `/actuator`가 없다). 게이지는 스크레이프마다 같은 저장소 쿼리를 실행하고, 쿼리가 실패하면 `NaN`이 된다.
   - `outbox_messages{status="pending"|"in_progress"}`, `outbox_pending_oldest_age_seconds`(`created_at` 기준),
     `outbox_in_progress_oldest_claim_age_seconds`(`updated_at` = 마지막 claim·갱신 기준), `outbox_retrying_messages`
-  - `kafka_dead_letter_records_total{topic}`: 리스너 컨테이너의 recoverer가 레코드를 DLT로 넘긴 뒤 센다. 넘기다
-    예외가 나면 세지 않는다. `KafkaTemplate`이 없으면 DLT로 보낼 길이 없으므로 기동이 실패한다(2026-10-01, 이전에는
+  - `kafka_dead_letter_handoffs_total{topic}`: 리스너 컨테이너의 recoverer가 레코드를 DLT 발행기에 **넘긴** 수다.
+    `setFailIfSendResultIsError(false)`라 DLT 전송 실패(토픽 없음, ACL 거부)는 spring-kafka 로그에만 남고 여기서는
+    성공처럼 세어진다(래퍼는 동기 예외가 난 경우만 세지 않지만 실제 발행기는 던지지 않는다). `KafkaTemplate`이 없으면 DLT로 보낼 길이 없으므로 기동이 실패한다(2026-10-01, 이전에는
     로그만 남기고 버렸다).
 - 모든 레플리카가 같은 테이블을 세므로 알림은 `max()`로 건다. 권장(저장소에 프로비저닝되어 있지 않음):
   `max(outbox_pending_oldest_age_seconds) > 120` 10분 지속(커넥터 또는 폴러 정지 — 이때 전달은 stuck 임계 뒤
-  스윕이 맡아 조용히 늦어진다), `max(outbox_retrying_messages) > 0` 15분, `increase(kafka_dead_letter_records_total[15m]) > 0`.
+  스윕이 맡아 조용히 늦어진다), `max(outbox_retrying_messages) > 0` 15분, `increase(kafka_dead_letter_handoffs_total[15m]) > 0`.
 - Debezium 커넥터 상태(`/connectors/<name>/status`)는 앱이 볼 수 없다. 커넥터 등록 스크립트에
   `heartbeat.interval.ms: 10000`을 넣어, outbox 테이블이 조용해도 오프셋이 binlog 보존(7일) 밖으로 밀려나지 않게
   했다. 위치를 이미 잃었을 때의 복구 절차는 `application/src/main/resources/cdc/docker-compose/debezium/AGENTS.md`의

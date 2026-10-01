@@ -51,7 +51,7 @@ alerting reads. The first six counters also back the `@bot status` chat report i
 - Suggested alerts (not provisioned in this repository): `max(outbox_pending_oldest_age_seconds) > 120` for
   10 m (the CDC connector or the poller stopped; the recovery sweep then delivers PENDING rows only after the
   stuck threshold), `max(outbox_retrying_messages) > 0` for 15 m, and
-  `sum(increase(kafka_dead_letter_records_total[15m])) > 0` (a CDC record went to `<topic>-dlt`).
+  `sum(increase(kafka_dead_letter_handoffs_total[15m])) > 0` (a CDC record was handed to the `<topic>-dlt` publisher; whether the send succeeded is only in the spring-kafka log).
 
 ### Testing Requirements
 ```bash

@@ -2,7 +2,7 @@ package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.CdcDeadLetterRecovery
 import dev.notypie.application.configurations.CountingRecordRecoverer
-import dev.notypie.application.configurations.DEAD_LETTER_RECORDS_METRIC
+import dev.notypie.application.configurations.DEAD_LETTER_HANDOFFS_METRIC
 import dev.notypie.application.configurations.cdcDeadLetterRecoverer
 import dev.notypie.application.configurations.deadLetterBytesProducerFactory
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
@@ -466,14 +466,16 @@ class DebeziumLogTailingProcessorTest :
                 then("the delegate gets the consumer and the record is counted once by topic") {
                     verify(exactly = 1) { delegate.accept(record, consumer, exception) }
                     meterRegistry
-                        .get(DEAD_LETTER_RECORDS_METRIC)
+                        .get(DEAD_LETTER_HANDOFFS_METRIC)
                         .tags("topic", record.topic())
                         .counter()
                         .count() shouldBe 1.0
                 }
             }
 
-            `when`("the delegate throws, so the error handler will retry the recovery") {
+            `when`(
+                "a delegate throws synchronously (the wrapper contract; the production publisher logs send failures instead)",
+            ) {
                 val meterRegistry = SimpleMeterRegistry()
                 val delegate = mockk<ConsumerAwareRecordRecoverer>()
                 every { delegate.accept(record, consumer, exception) } throws KafkaException("send timed out")
@@ -481,7 +483,7 @@ class DebeziumLogTailingProcessorTest :
 
                 then("nothing is counted for the failed attempt") {
                     shouldThrow<KafkaException> { recoverer.accept(record, consumer, exception) }
-                    meterRegistry.find(DEAD_LETTER_RECORDS_METRIC).counter() shouldBe null
+                    meterRegistry.find(DEAD_LETTER_HANDOFFS_METRIC).counter() shouldBe null
                 }
             }
         }

@@ -35,7 +35,8 @@ import org.springframework.util.backoff.FixedBackOff
 
 private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
 
-const val DEAD_LETTER_RECORDS_METRIC = "kafka.dead.letter.records"
+// Counts hand-offs: with setFailIfSendResultIsError(false) the publisher only logs a failed dead-letter send.
+const val DEAD_LETTER_HANDOFFS_METRIC = "kafka.dead.letter.handoffs"
 
 internal fun deadLetterTopic(topic: String): String = "$topic$DEAD_LETTER_TOPIC_SUFFIX"
 
@@ -66,7 +67,7 @@ class CountingRecordRecoverer(
 ) : ConsumerAwareRecordRecoverer {
     override fun accept(record: ConsumerRecord<*, *>, consumer: Consumer<*, *>?, exception: Exception?) {
         delegate.accept(record, consumer, exception)
-        meterRegistry.counter(DEAD_LETTER_RECORDS_METRIC, "topic", record.topic()).increment()
+        meterRegistry.counter(DEAD_LETTER_HANDOFFS_METRIC, "topic", record.topic()).increment()
     }
 }
 
