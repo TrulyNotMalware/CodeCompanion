@@ -16,7 +16,7 @@ import org.springframework.util.StringUtils
 import org.springframework.web.filter.OncePerRequestFilter
 import java.util.concurrent.atomic.AtomicBoolean
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
@@ -48,7 +48,7 @@ class SlackRequestVerificationFilter(
         val signingSecret = appConfig.api.signingSecret
         if (signingSecret.isBlank()) {
             if (verificationDisabledLogged.compareAndSet(false, true)) {
-                logger.warn { "Slack request signature verification is disabled because signingSecret is blank" }
+                log.warn { "Slack request signature verification is disabled because signingSecret is blank" }
             }
             filterChain.doFilter(request, response)
             return
@@ -62,7 +62,7 @@ class SlackRequestVerificationFilter(
                 toleranceSeconds = appConfig.api.requestTimestampToleranceSeconds,
             )
         if (!headerCheck.valid) {
-            logger.warn { "Rejected Slack request headers: reason=${headerCheck.reason} path=$requestPath" }
+            log.warn { "Rejected Slack request headers: reason=${headerCheck.reason} path=$requestPath" }
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             return
         }
@@ -70,7 +70,7 @@ class SlackRequestVerificationFilter(
         val cachedRequest =
             CachedBodyHttpServletRequest.cacheWithinLimit(request = request)
                 ?: run {
-                    logger.warn { "Rejected oversized Slack request: path=$requestPath" }
+                    log.warn { "Rejected oversized Slack request: path=$requestPath" }
                     response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
                     return
                 }
@@ -84,7 +84,7 @@ class SlackRequestVerificationFilter(
             )
 
         if (!verification.valid) {
-            logger.warn { "Rejected Slack request: reason=${verification.reason} path=$requestPath" }
+            log.warn { "Rejected Slack request: reason=${verification.reason} path=$requestPath" }
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             return
         }
@@ -103,12 +103,12 @@ class SlackRequestVerificationFilter(
         val retryNum = cachedRequest.getHeader(SlackHeaders.RETRY_NUM)
         when (val admission = retryDeduplicator.admit(fingerprint = fingerprint, retryNum = retryNum)) {
             SlackRetryAdmission.RetryOfCompleted -> {
-                logger.info { "Acknowledged Slack retry of a completed request: retryNum=$retryNum" }
+                log.info { "Acknowledged Slack retry of a completed request: retryNum=$retryNum" }
                 response.status = HttpServletResponse.SC_OK
             }
 
             SlackRetryAdmission.RetryOfInFlight -> {
-                logger.info { "Deferred Slack retry of an in-flight request: retryNum=$retryNum" }
+                log.info { "Deferred Slack retry of an in-flight request: retryNum=$retryNum" }
                 deferredRetries.increment()
                 response.status = HttpServletResponse.SC_SERVICE_UNAVAILABLE
             }

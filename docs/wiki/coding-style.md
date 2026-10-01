@@ -1,6 +1,6 @@
 # 코딩 스타일 가이드
 
-_type: guide · updated: 2026-08-28_
+_type: guide · updated: 2026-10-01_
 
 > Kotlin답게, non-null 우선으로, 주석 대신 코드가 설명하게, 파일은 적게 — 그리고 리팩토링에는 반드시
 > 테스트가 따라온다.
@@ -31,7 +31,7 @@ _type: guide · updated: 2026-08-28_
 | 빈 등록 | 어댑터·서비스는 `@Component` 스캔보다 `configurations/`의 명시적 `@Bean`(named argument)으로 등록한다. `@ConditionalOnBean`과 스캔의 순서 의존을 피하기 위해 |
 | 설정 바인딩 | `@ConfigurationProperties` 클래스는 `application/.../configurations/`에, 메인 클래스의 `@ConfigurationPropertiesScan`이 잡는다 |
 | 시간 | 시간에 의존하는 서비스는 `Clock`을 주입받는다(기본 `Clock.systemDefaultZone()`). 테스트가 시각을 고정할 수 있어야 한다 |
-| 로깅 | 파일 수준 `private val logger = KotlinLogging.logger {}`, 호출은 람다 형태 `logger.info { ... }` |
+| 로깅 | 파일 수준 `private val log = KotlinLogging.logger {}`, 호출은 람다 형태 `log.info { ... }`. `logger`라는 이름은 쓰지 않는다 — `OncePerRequestFilter`·`ResponseEntityExceptionHandler`처럼 `protected logger`(commons-logging)를 가진 Spring 기반 클래스 안에서는 상속 멤버가 파일 수준 `logger`를 가려 `Log.warn(Object)`에 람다 객체가 넘어가고, 로그에는 사유 대신 `…$$Lambda@hash`가 찍힌다(2026-10-01 Slack 서명 필터에서 실제 발생) |
 | Jackson | 모듈 공용 `dev.notypie.common.jsonMapper` 하나를 import한다. 별도 인스턴스는 다른 설정이 꼭 필요한 곳(MCP 전송, 스코프 토큰 코덱)에만 |
 | 트랜잭션 | `@Transactional`은 Repository `Impl`에. 앰비언트 트랜잭션이 없는 스케줄러·비동기 경로는 `TransactionTemplate.runInTx`로 경계를 명시 |
 | 예외 | `CodeCompanionRuntimeException` + `ErrorCode` enum + `exceptionDetails {}` — [error-handling-and-validation.md](error-handling-and-validation.md) |
