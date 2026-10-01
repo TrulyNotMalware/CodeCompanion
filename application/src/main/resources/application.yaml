@@ -11,7 +11,8 @@ spring:
     scheduling:
       pool:
         # Spring's default scheduler pool is a single thread shared by every @Scheduled job; one
-        # slow job (e.g. the CVE collector's outbound HTTP) would starve all the others.
+        # slow job (e.g. the CVE collector's outbound HTTP) would starve all the others. Applies only
+        # because SchedulingConfig declares a ThreadPoolTaskScheduler (virtual threads ignore it).
         size: 4
 
 slack:

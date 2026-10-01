@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # application/configurations
 
@@ -19,7 +19,7 @@ is the map of what actually exists at runtime in a given profile.
 | `ConsumerConfig.kt` | Picks the outbox reader (`PollingMessageProcessor` vs `DebeziumLogTailingProcessor`), the `EventPublisher` (`AppEventPublisher` vs `KafkaEventPublisher`), and the mode-independent `ErrorBroadcaster` (`StdoutErrorBroadcaster`, `ErrorBroadcasterConfig`). Both readers take the context's single `Clock` bean, the same one the outbox schedulers use, and hand the CDC reader the `MessageRelayService` bean |
 | `KafkaConsumerConfiguration.kt` | `@EnableKafka`, container factory (`AckMode.RECORD`, takes the `consumerFactory` bean as a parameter because `KafkaConsumerConfiguration` is a lite `@Import`ed class and calling `consumerFactory()` would build a second instance), `ErrorHandlingDeserializer`, `DefaultErrorHandler(FixedBackOff(1s, 2))` → the `cdcDeadLetterRecovery` bean's recoverer (`CdcDeadLetterRecovery`: `cdcDeadLetterRecoverer` over the JSON template plus a bytes template on its own `deadLetterBytesProducerFactory`, which the bean closes in `destroy()`; log-only when no `KafkaTemplate` exists; `CdcRecordParseException` is not retried), Micrometer observation conventions. The recovery bean is deliberately not typed `ProducerFactory` / `KafkaTemplate`: a bean of either type would make Boot's `@ConditionalOnMissingBean` producer factory and template back off. `CdcConsumerConfiguration` also declares the `cdcDeadLetterTopic` `NewTopic` |
 | `AsyncConfig.kt` | `@EnableAsync` + `@Primary threadPoolTaskExecutor` (10 threads, queue 10 000) and the dedicated `relayTaskExecutor` (4 threads, queue = `outbox.polling.batch-size`, `CallerRunsPolicy`) that `SlackMessageRelayServiceImpl` takes by `@Qualifier`. Only the poller and `OutboxRecoveryScheduler` submit to it (the CDC listener dispatches on its own thread), so overflow runs on those scheduler threads. The bound keeps queue time short, but correctness no longer depends on it: a task that outlives the stuck threshold loses its claim to the recovery sweep and its `renewClaim` fails, so it never sends. Deliberately does **not** override the event multicaster |
-| `SchedulingConfig.kt` | Enables scheduling for the meeting/standup/CVE/outbox jobs |
+| `SchedulingConfig.kt` | Enables scheduling for the meeting/standup/CVE/outbox jobs and declares the `ThreadPoolTaskScheduler` (`taskScheduler`, built from Boot's `ThreadPoolTaskSchedulerBuilder`, so `spring.task.scheduling.pool.size` applies). Without it, virtual threads make Boot use `SimpleAsyncTaskScheduler`, which ignores the pool size and runs every fixedDelay job on one thread |
 | `AppConfig`-driven feature configs | `CveConfiguration.kt` (whole CVE lane), `AgentConfiguration.kt` (sidecar client + agent service), `McpServerConfiguration.kt` (MCP tools, gate, turn-token filter) |
 | `RestClientConfiguration.kt` | Shared `RestClient` used by Slack and source adapters |
 | `SlackRequestBuilderConfiguration.kt` | Slack request/template builder beans |

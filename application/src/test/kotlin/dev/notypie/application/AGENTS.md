@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # test/kotlin/dev/notypie/application
 
@@ -12,6 +12,7 @@ package with `./gradlew :application:test --tests 'dev.notypie.application.<pack
 | Directory | Purpose |
 |-----------|---------|
 | `common/` | `IdempotencyCreator` / `DefaultIdempotencyDataSerializer` (see `common/AGENTS.md`) |
+| `configurations/` | Bean selection that needs a Spring context: the `TaskScheduler` under virtual threads (see `configurations/AGENTS.md`) |
 | `exception/` | `ControllerAdvice` handler responses (see `exception/AGENTS.md`) |
 | `health/` | `OutboxHealthIndicator` actuator contributor (see `health/AGENTS.md`) |
 | `mcp/` | `McpToolGate` and `DomainReadTools` MCP tools (see `mcp/AGENTS.md`) |
