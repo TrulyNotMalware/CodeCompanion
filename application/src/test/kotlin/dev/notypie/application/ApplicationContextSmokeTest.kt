@@ -59,7 +59,6 @@ import kotlin.time.Duration.Companion.seconds
         "spring.datasource.url=jdbc:h2:mem:application-smoke;DB_CLOSE_DELAY=-1",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.threads.virtual.enabled=true",
-        "spring.task.scheduling.pool.size=4",
         "spring.datasource.hikari.maximum-pool-size=20",
         "slack.app.api.token=xoxb-smoke-test",
         "slack.app.api.signing-secret=smoke-test-signing-secret",
