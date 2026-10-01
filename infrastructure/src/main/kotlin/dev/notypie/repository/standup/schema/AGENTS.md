@@ -11,7 +11,7 @@ entities: the routine config with its member rows, and the session with its disp
 | File | Description |
 |------|-------------|
 | `RoutineSchema.kt` | `@Entity(name = "standup_routine")`: `routine_uid` (UUID, unique, 36), `name` (60), `creator_id`, `command_channel`, `summary_channel`, `questions` (`TEXT`, `\n`-joined as `questionsRaw`), `trigger_local_time: LocalTime`, `cutoff_offset_seconds: Long`, `weekdays` (80, comma-joined `DayOfWeek.name` as `weekdaysRaw`), `routine_timezone` (64, IANA id), `is_active`, `members` `@OneToMany(mappedBy, LAZY, orphanRemoval = true, cascade = ALL)`, timestamps; `QUESTION_DELIMITER = "\n"`, `WEEKDAY_DELIMITER = ","`. `@Entity(name = "standup_routine_member") RoutineMemberSchema`: `@ManyToOne(LAZY) routine`, `user_id`, `user_timezone` (64), `created_at`. Mappers `Routine.toSchema()`, `RoutineSchema.toDomainEntity()`, `RoutineSchema.toRoutineDto()` |
-| `StandupSessionSchema.kt` | `@Entity(name = "standup_session")`, `uk_standup_session_routine_date` on `(routine_uid, session_date)`, index on `cutoff_at`: `session_uid` (UUID, unique), `routine_uid` (UUID, plain column, no FK), `session_date: LocalDate`, `cutoff_at: Instant`, `status` `@Enumerated(STRING)` (16, default `COLLECTING`), `summary_message_ts?` (64), `nudged_at?: Instant`, `dispatches: MutableSet<SessionDispatchSchema>` and `answers: MutableList<StandupAnswerSchema>` (both `mappedBy`, LAZY, `orphanRemoval = true`, `cascade = ALL`), timestamps; `RESPONSE_DELIMITER` = ASCII Unit Separator (U+001F). `@Entity(name = "standup_session_dispatch") SessionDispatchSchema`: unique `(session_id, user_id)`, index `(dm_status, dm_trigger_at)`; `user_id`, `dm_trigger_at: Instant`, `dm_sent_at?`, `dm_status` `@Enumerated(STRING)` (16, default `PENDING`), `failure_reason?` (`TEXT`), `claim_token?` (36), timestamps. `@Entity(name = "standup_answer") StandupAnswerSchema`: unique `(session_id, user_id)`; `user_id`, `responses` (`TEXT`, delimiter-joined as `responsesRaw`), `submitted_at: Instant`. Mappers `StandupSession.toSchema()`, `StandupSessionSchema.toDomainEntity()`, `StandupSessionSchema.toStandupSessionDto()` |
+| `StandupSessionSchema.kt` | `@Entity(name = "standup_session")`, `uk_standup_session_routine_date` on `(routine_uid, session_date)`, index on `cutoff_at`: `session_uid` (UUID, unique), `routine_uid` (UUID, plain column, no FK), `session_date: LocalDate`, `cutoff_at: Instant`, `status` `@Enumerated(STRING)` (16, default `COLLECTING`), `summary_message_ts?` (64), `nudged_at?: Instant`, `dispatches: MutableSet<SessionDispatchSchema>` and `answers: MutableSet<StandupAnswerSchema>` (both `mappedBy`, LAZY, `orphanRemoval = true`, `cascade = ALL`), timestamps; `RESPONSE_DELIMITER` = ASCII Unit Separator (U+001F). `@Entity(name = "standup_session_dispatch") SessionDispatchSchema`: unique `(session_id, user_id)`, index `(dm_status, dm_trigger_at)`; `user_id`, `dm_trigger_at: Instant`, `dm_sent_at?`, `dm_status` `@Enumerated(STRING)` (16, default `PENDING`), `failure_reason?` (`TEXT`), `claim_token?` (36), timestamps. `@Entity(name = "standup_answer") StandupAnswerSchema`: unique `(session_id, user_id)`; `user_id`, `responses` (`TEXT`, delimiter-joined as `responsesRaw`), `submitted_at: Instant`. Mappers `StandupSession.toSchema()`, `StandupSessionSchema.toDomainEntity()`, `StandupSessionSchema.toStandupSessionDto()` |
 
 ## For AI Agents
 
@@ -30,8 +30,12 @@ entities: the routine config with its member rows, and the session with its disp
   maps to `Duration`.
 - **`routine_uid` on the session is a plain column**, not a relation to `standup_routine`; the scheduler
   resolves routine context separately (`ReadyDispatch` / `NudgeCandidateSession` in the parent package).
-- **Dispatch and answer entities are all `val`**; status / token / timestamps change only through the native
-  CAS statements in `JpaSessionDispatchRepository` and `JpaStandupSessionRepository`. `updated_at` is set
+- **Dispatch entities are all `val`**; status / token / timestamps change only through the native CAS statements
+  in `JpaSessionDispatchRepository` and `JpaStandupSessionRepository`. An answer's `responsesRaw` and
+  `submittedAt` are `protected set` and change only through `StandupSessionSchema.replaceAnswer`, which revises
+  the member's existing row in place: a remove-then-add persists the new row (IDENTITY ids insert immediately)
+  before the orphan delete runs at flush, so a second answer hit `uk_standup_answer_session_user` (reproduced on
+  H2 by `StandupRepositoryImplTest`, 2026-10-01). `updated_at` is set
   explicitly inside each CAS because native updates bypass `@UpdateTimestamp`, and `resetStuckSending` ages
   off that column.
 - `Routine.toSchema()` / `StandupSession.toSchema()` build the child rows pointing back at the parent and
@@ -43,9 +47,11 @@ entities: the routine config with its member rows, and the session with its disp
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.standup.*'
 ```
-No spec persists or maps these entities in `:infrastructure` (see `../AGENTS.md`). There are no schema
-builders for this lane under `src/testFixtures/kotlin/dev/notypie/schema/` either; add `createRoutineSchema`
-/ `createStandupSessionSchema` there before writing the missing `@DataJpaTest`.
+`JpaStandupSessionRepositoryTest` persists a session through `StandupSession.toSchema()` and maps it back
+(each answer once), `StandupRepositoryImplTest` records a member's answer twice (one row, latest responses), and
+`StandupDispatchSweepTest` covers the clock-bound stuck sweep. Sessions are built from the domain testFixtures
+(`createStandupSession`, `createSessionDispatch`, `createStandupAnswer`); there are no schema builders for this
+lane under `src/testFixtures/kotlin/dev/notypie/schema/`, and routines are not persisted by any spec.
 
 ### Common Patterns
 - Parent / child pairs in one file with the mappers as top-level extension functions.
