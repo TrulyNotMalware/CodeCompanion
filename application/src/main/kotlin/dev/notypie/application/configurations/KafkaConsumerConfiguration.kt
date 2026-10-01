@@ -151,18 +151,12 @@ class KafkaProducerConfiguration(
     @Bean
     @ConditionalOnMissingBean(ProducerFactory::class)
     fun producerFactory(): ProducerFactory<String, Any> =
-        DefaultKafkaProducerFactory(
-            mapOf(
-                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to kafkaProperties.bootstrapServers,
-                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to kafkaProperties.producer.keySerializer,
-                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to kafkaProperties.producer.valueSerializer,
-            ),
-        )
+        DefaultKafkaProducerFactory(kafkaProperties.buildProducerProperties())
 
     @Bean
     @ConditionalOnMissingBean(KafkaTemplate::class)
-    fun kafkaTemplate(): KafkaTemplate<String, Any> =
-        KafkaTemplate(producerFactory()).apply {
+    fun kafkaTemplate(producerFactory: ProducerFactory<String, Any>): KafkaTemplate<String, Any> =
+        KafkaTemplate(producerFactory).apply {
             setObservationEnabled(true)
             setMicrometerEnabled(false)
         }
