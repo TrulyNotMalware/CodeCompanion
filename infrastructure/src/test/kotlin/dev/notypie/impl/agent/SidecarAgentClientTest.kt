@@ -56,6 +56,26 @@ class SidecarAgentClientTest :
                 exchange.responseBody.use { it.write(bytes) }
             }
 
+        given("a turn requested on a thread that is being interrupted") {
+            respond = sseResponse(body = "")
+
+            `when`("converse runs") {
+                Thread.currentThread().interrupt()
+                val outcome =
+                    runCatching {
+                        client.converse(
+                            request = AgentTurnRequest(sessionKey = "C1:interrupt", prompt = "hi"),
+                        )
+                    }
+                val keptInterrupt = Thread.interrupted()
+
+                then("the interrupt propagates with its flag instead of becoming a transport failure") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
         given("a turn that completes with done") {
             respond =
                 sseResponse(

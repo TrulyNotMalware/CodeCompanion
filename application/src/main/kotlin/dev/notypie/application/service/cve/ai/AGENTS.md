@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/service/cve/ai
 
@@ -31,7 +31,8 @@ working (deterministically) with no LLM. Which implementation exists is decided 
   spec and `CveConfiguration.cveSummaryWorker`.
 - Busy is not failure. The sidecar serialises turns, so `AiSummarizerBusyException` re-schedules in
   2 minutes (`BUSY_RETRY_DELAY_MINUTES`) with `retryCount` untouched; only real exceptions consume the
-  `maxRetries` budget. `service/ops/OpsStatusService` and `service/cve/ops/CveOpsService` use the same
+  `maxRetries` budget. An interrupt is not a failure either: it is rethrown with the flag restored, the row
+  keeps its budget (`resetStuck` hands it back after `stuckMinutes`), and the tick stops. `service/ops/OpsStatusService` and `service/cve/ops/CveOpsService` use the same
   `slack.app.ai.max-retries` to classify dead letters and to `retry` them.
 - `CveConfiguration` enforces `stuckMinutes * 60 > sidecar.requestTimeoutSeconds` for the `sidecar`
   provider so `resetStuck` cannot reclaim a row whose summarize call is still in flight. Keep that

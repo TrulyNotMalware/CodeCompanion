@@ -30,15 +30,20 @@ abstract class Command<T : SubCommandDefinition>(
 
     internal abstract fun findSubCommandDefinition(): T
 
-    fun handleEvent() =
-        runCatching { executeCommand() }
-            .getOrElse { exception ->
-                CommandOutput.fail(
-                    basicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-                    commandDetailType = CommandDetailType.ERROR_RESPONSE,
-                    reason = exception.toString(),
-                )
-            }
+    // Exceptions become an error reply; an Error or an interrupt is not a command failure and propagates.
+    fun handleEvent(): CommandOutput =
+        try {
+            executeCommand()
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (exception: Exception) {
+            CommandOutput.fail(
+                basicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+                commandDetailType = CommandDetailType.ERROR_RESPONSE,
+                reason = exception.toString(),
+            )
+        }
 
     private fun executeCommand(): CommandOutput {
         val subCommand = createSubCommand()

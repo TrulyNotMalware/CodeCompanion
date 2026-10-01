@@ -56,6 +56,10 @@ class SidecarAgentClient(
     override fun converse(request: AgentTurnRequest): AgentTurnResult =
         runCatching { execute(request = request) }
             .getOrElse { exception ->
+                if (exception is InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw exception
+                }
                 log.error(exception) { "Sidecar converse transport failure sessionKey=${request.sessionKey}" }
                 AgentTurnResult.Failed(
                     code = ERROR_CODE_TRANSPORT,

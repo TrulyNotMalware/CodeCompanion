@@ -18,9 +18,10 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 ## For AI Agents
 
 ### Working In This Directory
-- **`fetch` must never throw**, with one exception: an interrupt while `NvdCveSourceAdapter` waits for its
-  pacing slot re-sets the interrupt flag and rethrows `InterruptedException`, so `CveCollector.tick()` can
-  stop on shutdown instead of sleeping through every remaining topic. Missing/invalid `source_config`, a
+- **`fetch` must never throw**, with one exception: an interrupt — while `NvdCveSourceAdapter` waits for its
+  pacing slot or while either adapter is inside `HttpClient.send` — re-sets the interrupt flag and rethrows
+  `InterruptedException`, so `CveCollector.tick()` can stop on shutdown instead of sleeping through every
+  remaining topic (before 2026-10-01 the send-time interrupt became `emptyList()` and cleared the flag). Missing/invalid `source_config`, a
   non-2xx status (rate limits included), invalid JSON, or a transport failure logs and returns `emptyList()`. `URI.create` on an unvalidated repo
   string would break that contract — that is why `REPO_PATTERN` exists.
 - **Every request has one deadline over headers and body.** Both adapters read through

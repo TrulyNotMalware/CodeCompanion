@@ -67,6 +67,10 @@ class NvdCveSourceAdapter(
             runCatching {
                 httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
             }.getOrElse { ex ->
+                if (ex is InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw ex
+                }
                 log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
                 return emptyList()
             }

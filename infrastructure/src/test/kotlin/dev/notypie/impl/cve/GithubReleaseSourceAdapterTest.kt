@@ -9,6 +9,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.LocalDateTime
@@ -52,6 +53,21 @@ class GithubReleaseSourceAdapterTest :
                 exchange.sendResponseHeaders(status, bytes.size.toLong())
                 exchange.responseBody.use { it.write(bytes) }
             }
+
+        given("a fetch on a thread that is being interrupted") {
+            respond = jsonResponse(status = 200, body = "[]")
+
+            `when`("fetch runs") {
+                Thread.currentThread().interrupt()
+                val outcome = runCatching { adapter(token = "").fetch(topic = githubTopic()) }
+                val keptInterrupt = Thread.interrupted()
+
+                then("the interrupt propagates with its flag instead of an empty result") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
 
         given("a repo with two releases") {
             respond =

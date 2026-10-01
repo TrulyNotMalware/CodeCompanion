@@ -42,7 +42,8 @@ new frame type or error code rather than mocking `HttpClient`.
 
 ### Common Patterns
 - Port and adapter side by side; result modelled as a sealed interface, consumed with exhaustive `when`.
-- `runCatching { ... }.getOrElse { ... }` at the transport boundary; `jsonMapper` (`common/`) for all JSON.
+- `runCatching { ... }.getOrElse { ... }` at the transport boundary, except that an `InterruptedException`
+  is rethrown with its flag restored instead of becoming a `transport` failure; `jsonMapper` (`common/`) for all JSON.
 
 ## Dependencies
 

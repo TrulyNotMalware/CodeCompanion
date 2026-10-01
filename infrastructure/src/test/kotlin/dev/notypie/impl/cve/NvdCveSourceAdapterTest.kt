@@ -314,6 +314,25 @@ class NvdCveSourceAdapterTest :
             }
         }
 
+        given("a fetch whose HTTP call is interrupted") {
+            respond = jsonResponse(status = 200, body = """{"vulnerabilities": []}""")
+
+            `when`("fetch runs on an interrupted thread with no pacing wait") {
+                arrivalNanos.clear()
+                Thread.currentThread().interrupt()
+                val outcome =
+                    runCatching {
+                        adapter(apiKey = "").fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+                    }
+                val keptInterrupt = Thread.interrupted()
+
+                then("the interrupt propagates with its flag, so the collector can stop the tick") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
         given("any adapter") {
             `when`("asked which source type it supports") {
                 val adapter = adapter(apiKey = "")

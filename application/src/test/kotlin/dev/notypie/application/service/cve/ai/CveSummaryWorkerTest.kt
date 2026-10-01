@@ -143,6 +143,35 @@ class CveSummaryWorkerTest :
             }
         }
 
+        given("an event whose summary call is interrupted, followed by another event") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val topicRepository = mockk<CveTopicRepository>()
+            val summarizer = mockk<AiSummarizer>()
+            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
+                listOf(
+                    createCveEvent(id = 1L, topicId = 10L, retryCount = 0),
+                    createCveEvent(id = 2L, topicId = 10L, retryCount = 0),
+                )
+            every { eventRepository.claimForSummary(id = any(), token = any(), now = any(), maxRetries = 5) } returns 1
+            every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
+            every { summarizer.summarize(request = any()) } throws InterruptedException("shutting down")
+            val worker = workerWith(eventRepository, topicRepository, summarizer)
+
+            `when`("the tick runs") {
+                worker.tick()
+                val keptInterrupt = Thread.interrupted()
+
+                then("the retry budget is not spent and the tick stops before the next event") {
+                    verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) }
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
         given("a tick with no claimable events") {
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             every { eventRepository.resetStuck(olderThan = any()) } returns 4

@@ -27,13 +27,20 @@ class CveSummaryWorker(
                 .findClaimable(now = LocalDateTime.now(), maxRetries = maxRetries, limit = batchSize)
                 .forEach { event -> summarizeOne(event = event) }
         }.onFailure { ex ->
-            log.error(ex) { "CVE summary worker tick failed" }
+            if (ex is InterruptedException) {
+                log.warn { "CVE summary worker interrupted; stopping this tick" }
+            } else {
+                log.error(ex) { "CVE summary worker tick failed" }
+            }
         }
     }
 
     private fun summarizeOne(event: CveEvent) {
         runCatching { dispatchOne(event = event) }
-            .onFailure { ex -> log.error(ex) { "CVE summary handling failed for event=${event.id}" } }
+            .onFailure { ex ->
+                if (ex is InterruptedException) throw ex
+                log.error(ex) { "CVE summary handling failed for event=${event.id}" }
+            }
     }
 
     private fun dispatchOne(event: CveEvent) {
@@ -66,6 +73,10 @@ class CveSummaryWorker(
             } catch (busy: AiSummarizerBusyException) {
                 releaseForBackpressure(event = event, token = token, cause = busy)
                 return
+            } catch (interrupted: InterruptedException) {
+                // Shutdown, not a summary failure: keep the retry budget and let resetStuck hand the row back.
+                Thread.currentThread().interrupt()
+                throw interrupted
             } catch (ex: Exception) {
                 recordFailure(event = event, token = token, cause = ex)
                 return
