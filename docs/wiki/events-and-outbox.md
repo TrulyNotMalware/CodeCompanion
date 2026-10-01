@@ -25,9 +25,11 @@ _type: architecture · updated: 2026-09-28_
    `SlackInteractionHandlerImpl.handleInteraction`)가 `@Transactional`이므로 도메인 쓰기와 row가 함께 커밋된다.
    - **리스너는 활성 트랜잭션이 있어야 동작한다.** `fallbackExecution`이 기본(false)이라 트랜잭션 밖에서 publish
      하면 이벤트가 조용히 버려진다. Codex 리뷰 1라운드의 "DM never sent"가 정확히 이 사고였다(`Handoff.md`).
-     트랜잭션이 없는 곳(`@Async` 리스너, 스케줄러)은 `TransactionTemplate.runInTx { }` 안에서 publish 하거나
+     트랜잭션이 없는 곳(executor 스레드, 스케줄러)은 `TransactionTemplate.runInTx { }` 안에서 publish 하거나
      (`AgentConverseService`), 리스너에 `@Transactional`을 명시하거나(`RoleManagementService`), 아래 2번 경로를 쓴다.
-     같은 이유로 `AsyncConfig`는 `ApplicationEventMulticaster`를 비동기로 바꾸지 않는다(느린 리스너만 `@Async` opt-in).
+     AFTER_COMMIT 리스너 안(`afterCompletion`)은 예외다: 커밋된 트랜잭션이 아직 묶여 있어 REQUIRED는 거기에 합류하고
+     아무것도 커밋되지 않으므로 `PROPAGATION_REQUIRES_NEW`를 쓴다(`AgentConverseService.publishOverloaded`, 2026-10-01).
+     같은 이유로 `AsyncConfig`는 `ApplicationEventMulticaster`를 비동기로 바꾸지 않는다(느린 일은 전용 executor에 직접 넘긴다).
 2. **스케줄러 경로(직접 저장)** — 요청 트랜잭션이 없는 tick에서는 `outboundMessagePort.toRow(...)`를
    `outboxRepository.save(...)`로 **직접** 저장하되, 반드시 `transactionTemplate.runInTx { }` 안에서 CAS 갱신과 한
    트랜잭션으로 묶는다. 구현: `StandupSchedulingService`, `DailyAgendaSchedulingService`,
