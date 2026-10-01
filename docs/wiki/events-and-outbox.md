@@ -44,7 +44,9 @@ _type: architecture · updated: 2026-09-28_
   같은 `SlackApiEventConstructor`를 쓰므로 출력이 byte 동일하다. 두 번째 렌더 지점을 만들지 않는다.
 - `OutboundMessage.OpenModal`은 `trigger_id`가 발급 후 3초에 만료되므로 아웃박스를 탈 수 없다.
   `SlackOutboundStager.stageModal`이 동기 렌더 → `OpenViewEvent` → `SlackViewOpenDispatcher`(`@EventListener`,
-  의도적으로 non-`@Async`) → `MessageDispatcher.dispatchImmediate`. 실패하면 예외 대신
+  의도적으로 non-`@Async`) → `MessageDispatcher.dispatchImmediate`. 단, 트랜잭션 경계를 가진 호출자(슬래시 컨트롤러,
+  Socket Mode, interaction 핸들러)는 `ViewOpenDeferral.afterBoundary { }`로 감싸므로 `views.open`은 그 트랜잭션이
+  커밋되고 커넥션을 돌려준 **뒤에** 같은 요청 스레드에서 호출된다(2026-10-01). 경계가 실패하면 열지 않는다. 실패하면 예외 대신
   `DeclineModalOpenFailedEvent`/`StandupModalOpenFailedEvent`를 발행해 폴백 안내를 보낸다.
   `ApplicationMessageDispatcher.dispatch`는 `OpenViewPayloadContents`를 받으면 `UnsupportedOperationException`.
 - 렌더 실패(코덱/스키마)는 재시도하지 않고 `MessagePublishFailedEvent`로 바로 `FAILURE` 처리한다. 재시도는
