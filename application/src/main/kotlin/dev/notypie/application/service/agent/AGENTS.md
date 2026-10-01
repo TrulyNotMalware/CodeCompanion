@@ -10,18 +10,22 @@ that `SlackIntentResolver` lifts from a free-text `@bot ...` mention, calls the 
 staged Slack reply in one transaction. Turns run on `agentTurnExecutor` (declared in
 `configurations/AgentConfiguration`, sized by `slack.app.agent.turns.*`: 4 concurrent turns, a queue of 20, 30 s
 shutdown wait), which the AFTER_COMMIT listener submits to directly rather than through `@Async`, so a full
-executor is seen: the requester gets `OVERLOADED_MESSAGE` at once and `agent.turns{outcome=rejected}` counts it.
+executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own transaction) and
+`agent.turns{outcome=rejected}` counts it.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, turnExecutor, clock, scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the class-level `@Async` still moves the turn off the committing thread) builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
+| `AgentConverseService.kt` | `class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, turnExecutor, clock, scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the listener hands `converse` to the bounded `turnExecutor`, so the turn leaves the committing thread) builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- The listener runs on `threadPoolTaskExecutor` (10 threads, queue 10 000) with no ambient
-  transaction, so every outcome's writes go through `transactionTemplate.runInTx { ... }`. That
+- `converse` runs on `agentTurnExecutor` (`slack.app.agent.turns.max-concurrent` threads, bounded queue) with no
+  ambient transaction, so every outcome's writes go through `transactionTemplate.runInTx { ... }`. The overload
+  notice is the exception: it is written on the committing thread inside `afterCompletion`, where the committed
+  transaction is still bound, so it uses a `PROPAGATION_REQUIRES_NEW` template (a REQUIRED one joined the finished
+  transaction and the notice never committed; pinned by a real `JpaTransactionManager` case in the spec). That
   boundary is what lets `SlackMessageRelayServiceImpl.saveOutboxMessage` (`BEFORE_COMMIT`) persist the
   staged reply; publishing outside it silently loses the message. `runInTx` swallows into a
   `Result` — failures are logged with `sessionKey` and `idempotencyKey`, never rethrown.
@@ -81,7 +85,7 @@ minting; build the request event with the domain testFixtures rather than inline
 - `domain/command/outbound/` — `OutboundMessage`, `MessageContent`, `ConversationTarget`, `UserRef`, `OutboundMessageStager`
 
 ### External
-Spring `@Async` / `@TransactionalEventListener`, Spring TX `TransactionTemplate`, Micrometer `MeterRegistry`,
+Spring `@TransactionalEventListener`, `ThreadPoolTaskExecutor`, Spring TX `TransactionTemplate`, Micrometer `MeterRegistry`,
 kotlin-logging.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
