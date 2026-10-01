@@ -19,7 +19,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 | `SlackOutboundStager.kt` | `OutboundMessageStager` impl. `OpenModal` → `stageModal` (seven `ModalForm` variants; blank `trigger_id` → `null` + warn; `StandupFill` loads routine and session via `StandupRepository`); every other family → `OutboundMessageEnqueued`, unrendered |
 | `OutboundRenderer.kt` | `OutboundRenderer` port + `SlackOutboundRenderer`: `OutboundMessage` → `SlackEventPayload` via the constructor; `OpenModal` / `DirectMessage` and not-yet-migrated `MessageContent`s hit `error(...)` |
 | `SlackApiEventConstructor.kt` | Builds `SendSlackMessageEvent` (message/ephemeral/action-response/`chat.update`) and `OpenViewEvent` (seven `open*ModalRequest`s) from `SlackTemplateBuilder` layouts. SDK requests become form maps via `RequestFormBuilder.toForm`; `buildRoutingText` writes `"<idempotencyKey>,<CommandDetailType>[,urlencoded extras…]"` into `message.text` |
-| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl. Constructor defaults are the production clients: `slack = slackClient()` (`SlackConfig` with `statsEnabled = false` and `httpClientCallTimeoutMillis = SLACK_CALL_TIMEOUT` = 6 s) and `okHttpClient = responseUrlClient(slack)` (the SDK's OkHttp builder with the same call timeout, `followRedirects(false)`, `followSslRedirects(false)`); specs pass their own `slack`, `okHttpClient` and `sleeper`. `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url`; `OpenViewPayloadContents` throws before any retry. `dispatchImmediate` runs `views.open` on the caller's thread and never throws: a rejection or exception publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` when the detail type has one, and returns `failOutput`. Also declares `RATE_LIMITED_REASON` / `isRateLimited()`, `TRANSIENT_EXHAUSTED_REASON` / `isTransientExhausted()`, `RateLimitedOutput(event, retryAfter)` and `retryAfter()`. Decision table below |
+| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl. Constructor defaults are the production clients: `slack = slackClient()` (`SlackConfig` with `statsEnabled = false` and `httpClientCallTimeoutMillis = SLACK_CALL_TIMEOUT` = 6 s) and `okHttpClient = responseUrlClient(slack)` (`slackOkHttpClient` with the same call timeout plus `followRedirects(false)`, `followSslRedirects(false)`); `slackClient(config = slackConfig())` hands the SDK the same `slackOkHttpClient` through `SlackHttpClient`; specs pass their own `slack`, `okHttpClient` and `sleeper`. `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url`; `OpenViewPayloadContents` throws before any retry. `dispatchImmediate` runs `views.open` on the caller's thread and never throws: a rejection or exception publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` when the detail type has one, and returns `failOutput`. Also declares `RATE_LIMITED_REASON` / `isRateLimited()`, `TRANSIENT_EXHAUSTED_REASON` / `isTransientExhausted()`, `RateLimitedOutput(event, retryAfter)` and `retryAfter()`. Decision table below |
 | `SlackViewOpenDispatcher.kt` | Also declares `ViewOpenDeferral`: a caller that owns a transaction boundary wraps it in `ViewOpenDeferral.afterBoundary { … }`, and every `views.open` staged inside runs after the block returns, i.e. after the transaction committed and released its pooled connection (a JPA transaction keeps the connection through `afterCommit`/`afterCompletion`, so an after-commit listener would not release it). A failed block opens nothing. Outside such a block the open runs immediately. Synchronous (non-`@Async`) `@EventListener` for `OpenViewEvent` → `dispatchImmediate` |
 | `KafkaEventPublisher.kt` | `EventPublisher`: `isInternal` → Spring bus, else `kafkaTemplate.send(destination, idempotencyKey, payload)` awaited `sendTimeoutMillis` (default 5000) — timeout / execution cause / interrupt are rethrown |
 | `AppEventPublisher.kt` | `EventPublisher` that publishes every event on the Spring bus (default `APPLICATION_EVENT` mode) |
@@ -57,16 +57,25 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     again; a larger or missing `Retry-After`, a second rate limit, or an interrupt during the wait (flag
     restored) returns `RateLimitedOutput(retryAfter)` at once (`isRateLimited()`, `retryAfter()`). The relay
     defers the row past `Retry-After`. The CDC listener thread must never sleep long.
-  - Transient — `chat.*` HTTP 5xx, `response_url` 5xx, `ok=false` with `internal_error` / `service_unavailable`,
-    and I/O failures that prove the request never reached Slack (`ConnectException`, `UnknownHostException`,
-    `NoRouteToHostException`, `SSLHandshakeException`) → `RetryService` (3 attempts); when they are spent,
-    `failOutput(TRANSIENT_EXHAUSTED_REASON)` (`isTransientExhausted()`). The relay leaves the row `IN_PROGRESS`
-    and the recovery sweep re-sends it, up to `outbox.polling.max-sends` sends. `chat.update` is idempotent, so
-    for it every `IOException` (including the call timeout) is transient.
-  - Outcome unknown — any other `IOException` (the call timeout, a reset after the request was written) on
-    `chat.postMessage`, `chat.postEphemeral` or `response_url` → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type>")`
-    and the relay writes `FAILURE`. Slack may already have posted the message and has no idempotency key, so
-    resending would duplicate it; the row and the warning log are the reconciliation record.
+  - **Was the request written?** Every production OkHttp client is built by `slackOkHttpClient(config)`:
+    `retryOnConnectionFailure(false)` (OkHttp would otherwise re-send a written form body after a reset on a
+    pooled connection, before the dispatcher sees anything) and `RequestProgressListener`, which records on the
+    calling thread whether the attempt reached `requestHeadersStart`. An `IOException` from an attempt that never
+    got there is rethrown as `SlackRequestNotSentException`, whatever OkHttp wrapped it in (a connect or DNS
+    failure that ends after the call timeout surfaces as `InterruptedIOException("timeout")` with the real error
+    as its cause). A client without the listener counts as "may have been written". Classification after the
+    retries walks the cause chain, as Spring's retry policy does.
+  - Transient — retried by `RetryService` (3 attempts), then `failOutput(TRANSIENT_EXHAUSTED_REASON)`
+    (`isTransientExhausted()`); the relay leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to
+    `outbox.polling.max-sends` sends. For `chat.postMessage`, `chat.postEphemeral` and `response_url`: a request
+    that was never written, `ok=false service_unavailable`, and HTTP 503. For the idempotent `chat.update`: also
+    every other `IOException` (the call timeout included), any HTTP 5xx and `internal_error`.
+  - Outcome unknown — on the three non-idempotent calls, an `IOException` after the request was written (call
+    timeout, reset, dropped connection), `ok=false internal_error` (Slack: "possible some aspect of the operation
+    succeeded"), and HTTP 5xx other than 503 → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type|code>")`, and
+    the relay writes `FAILURE`. Slack may already have posted the message and has no idempotency key, so
+    resending would duplicate it; the row and the warning log are the reconciliation record. Treating 503 as not
+    processed is a judgement from its HTTP meaning, not something Slack documents.
   - Permanent — any other `ok=false` (including `fatal_error`, which may have partly succeeded, and
     `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
     and `response_url` 3xx / 4xx / JSON `ok=false` → `failOutput(<error>)`, once. The relay writes `FAILURE`.

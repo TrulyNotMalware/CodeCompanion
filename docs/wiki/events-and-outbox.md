@@ -161,7 +161,10 @@ _type: architecture · updated: 2026-09-28_
   TTL 10분, in-memory이므로 **인스턴스별**이다.
 - **소비자 측**: CDC는 상태 필터(`PENDING`만), 폴링은 `claimPending` CAS. 상태 갱신 이벤트는 항상 **row의**
   `event_id`로 키를 잡는다 — 렌더러가 새로 발급하는 payload `eventId`는 버린다. Slack API에는 멱등 키가 없으므로
-  재전송은 그대로 중복 게시가 된다.
+  재전송은 그대로 중복 게시가 된다. 그래서 `chat.postMessage`·`chat.postEphemeral`·`response_url`은 요청이 쓰이기
+  전에 실패한 경우(OkHttp `EventListener`로 판정)와 `service_unavailable`·HTTP 503만 재시도하고, 쓰인 뒤의 I/O
+  실패·`internal_error`·그 밖의 5xx는 `outcome_unknown`으로 `FAILURE`를 남긴다. OkHttp 자체 재전송
+  (`retryOnConnectionFailure`)도 끈다(2026-10-01). 멱등인 `chat.update`만 모든 일시 오류를 재시도한다.
 
 ## 다중 인스턴스: 락 없이 DB 행 CAS
 

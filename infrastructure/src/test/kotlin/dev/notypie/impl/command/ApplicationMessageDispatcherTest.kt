@@ -1,7 +1,7 @@
 package dev.notypie.impl.command
 
 import com.slack.api.Slack
-import com.slack.api.SlackConfig
+import com.slack.api.util.http.SlackHttpClient
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -14,8 +14,13 @@ import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
 import io.mockk.mockk
+import okhttp3.Dns
+import okhttp3.OkHttpClient
 import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.UnknownHostException
 import java.time.Duration
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CountDownLatch
@@ -45,16 +50,20 @@ class ApplicationMessageDispatcherTest :
         val port = server.address.port
         val slackResponseUrl = "https://hooks.slack.com/actions/T0001/1234/token"
 
-        val slack =
-            Slack.getInstance(
-                SlackConfig().apply {
-                    methodsEndpointUrlPrefix = "http://127.0.0.1:$port/api/"
-                    isPrettyResponseLoggingEnabled = false
-                    isStatsEnabled = false
-                },
+        fun testSlack(
+            methodsEndpointUrlPrefix: String = "http://127.0.0.1:$port/api/",
+            callTimeout: Duration = SLACK_CALL_TIMEOUT,
+        ): Slack =
+            slackClient(
+                config =
+                    slackConfig(callTimeout = callTimeout).apply {
+                        this.methodsEndpointUrlPrefix = methodsEndpointUrlPrefix
+                        isPrettyResponseLoggingEnabled = false
+                    },
             )
-        val loopbackClient =
-            responseUrlClient(slack = slack)
+
+        fun toLoopback(client: OkHttpClient): OkHttpClient =
+            client
                 .newBuilder()
                 .addInterceptor { chain ->
                     val original = chain.request()
@@ -67,6 +76,9 @@ class ApplicationMessageDispatcherTest :
                             .build()
                     chain.proceed(original.newBuilder().url(rewritten).build())
                 }.build()
+
+        val slack = testSlack()
+        val loopbackClient = toLoopback(client = responseUrlClient(slack = slack))
         val sleeps = mutableListOf<Duration>()
 
         fun dispatcher(sleeper: (Duration) -> Unit = { sleeps.add(it) }) =
@@ -91,6 +103,20 @@ class ApplicationMessageDispatcherTest :
             createPostEventPayloadContents(
                 commandDetailType = CommandDetailType.SIMPLE_TEXT,
                 body = mapOf("text" to "hi"),
+            )
+
+        fun ephemeralMessage() =
+            createPostEventPayloadContents(
+                commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                body = mapOf("text" to "hi", "user" to "U1"),
+                messageType = MessageType.EPHEMERAL_MESSAGE,
+            )
+
+        fun messageUpdate() =
+            createPostEventPayloadContents(
+                commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                body = mapOf("text" to "hi", "ts" to "1700000000.000100"),
+                messageType = MessageType.UPDATE_MESSAGE,
             )
 
         fun actionResponse(responseUrl: String = slackResponseUrl) =
@@ -276,17 +302,61 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("chat.* keeps answering HTTP 500") {
+        given("chat.postMessage answers HTTP 500, which Slack may answer after posting") {
             reset()
             repeat(3) { responses.add(status(code = 500, body = "boom")) }
 
             `when`("a channel message is dispatched") {
                 val output = defaultDispatcher.dispatch(event = channelMessage())
 
-                then("the exhausted quick retries become a transient outcome the outbox retries later") {
+                then("it is not resent and ends as outcome unknown") {
+                    output.isTransientExhausted() shouldBe false
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: http_500"
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update keeps answering HTTP 500") {
+            reset()
+            repeat(3) { responses.add(status(code = 500, body = "boom")) }
+
+            `when`("a message update is dispatched") {
+                val output = defaultDispatcher.dispatch(event = messageUpdate())
+
+                then("the idempotent update is retried and ends as a transient outcome the outbox retries later") {
                     output.isTransientExhausted() shouldBe true
                     output.isRateLimited() shouldBe false
                     calls.get() shouldBe 3
+                }
+            }
+        }
+
+        given("chat.postMessage answers 200 ok=false internal_error, which may have partly succeeded") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+
+            `when`("a channel message is dispatched") {
+                val output = defaultDispatcher.dispatch(event = channelMessage())
+
+                then("it is not resent and ends as outcome unknown") {
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: internal_error"
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update answers 200 ok=false internal_error once and then succeeds") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+            responses.add(jsonOk())
+
+            `when`("a message update is dispatched") {
+                val output = defaultDispatcher.dispatch(event = messageUpdate())
+
+                then("the idempotent update is retried") {
+                    output.ok shouldBe true
+                    calls.get() shouldBe 2
                 }
             }
         }
@@ -307,22 +377,20 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        fun impatientDispatcher(methodsEndpointUrlPrefix: String = "http://127.0.0.1:$port/api/") =
-            ApplicationMessageDispatcher(
-                botToken = "xoxb-test",
-                applicationEventPublisher = mockk(relaxed = true),
-                retryService = RetryService(),
-                slack =
-                    Slack.getInstance(
-                        SlackConfig().apply {
-                            this.methodsEndpointUrlPrefix = methodsEndpointUrlPrefix
-                            isPrettyResponseLoggingEnabled = false
-                            isStatsEnabled = false
-                            httpClientCallTimeoutMillis = 200
-                        },
-                    ),
-                okHttpClient = loopbackClient,
-            )
+        fun impatientDispatcher(
+            methodsEndpointUrlPrefix: String = "http://127.0.0.1:$port/api/",
+            slack: Slack =
+                testSlack(methodsEndpointUrlPrefix = methodsEndpointUrlPrefix, callTimeout = Duration.ofMillis(200L)),
+        ) = ApplicationMessageDispatcher(
+            botToken = "xoxb-test",
+            applicationEventPublisher = mockk(relaxed = true),
+            retryService = RetryService(),
+            slack = slack,
+            okHttpClient = toLoopback(client = responseUrlClient(slack = slack)),
+        )
+
+        fun stallAfterRequest(release: CountDownLatch): (HttpExchange) -> Unit =
+            { exchange -> release.await(5L, TimeUnit.SECONDS).also { exchange.close() } }
 
         given("chat.postMessage stalls longer than the call timeout after the request was sent") {
             reset()
@@ -342,21 +410,107 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
+        given("chat.postEphemeral stalls longer than the call timeout after the request was sent") {
+            reset()
+            val release = CountDownLatch(1)
+            repeat(3) { responses.add(stallAfterRequest(release = release)) }
+
+            `when`("an ephemeral message is dispatched") {
+                val output = impatientDispatcher().dispatch(event = ephemeralMessage())
+                release.countDown()
+
+                then("it is not resent, because Slack may already have shown it") {
+                    output.errorReason shouldStartWith OUTCOME_UNKNOWN_REASON
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("a response_url stalls longer than the call timeout after the request was sent") {
+            reset()
+            val release = CountDownLatch(1)
+            repeat(3) { responses.add(stallAfterRequest(release = release)) }
+
+            `when`("an action response is dispatched") {
+                val output = impatientDispatcher().dispatch(event = actionResponse())
+                release.countDown()
+
+                then("it is not resent, because Slack may already have applied it") {
+                    output.errorReason shouldStartWith OUTCOME_UNKNOWN_REASON
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("DNS answers only after the call timeout, and then fails") {
+            reset()
+            val config =
+                slackConfig(callTimeout = Duration.ofMillis(200L)).apply {
+                    methodsEndpointUrlPrefix = "http://slack.invalid/api/"
+                    isPrettyResponseLoggingEnabled = false
+                }
+            val slowDns =
+                object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> {
+                        TimeUnit.MILLISECONDS.sleep(400L)
+                        throw UnknownHostException(hostname)
+                    }
+                }
+            val slowDnsSlack =
+                Slack.getInstance(
+                    config,
+                    SlackHttpClient(slackOkHttpClient(config = config).newBuilder().dns(slowDns).build()),
+                )
+
+            `when`("a channel message is dispatched") {
+                val output = impatientDispatcher(slack = slowDnsSlack).dispatch(event = channelMessage())
+
+                then("the timeout-wrapped failure is known to precede the request, so it is retried as never sent") {
+                    output.isTransientExhausted() shouldBe true
+                }
+            }
+        }
+
+        given("a server that reads the request and then drops the connection without answering") {
+            reset()
+            val accepted = AtomicInteger(0)
+            val dropper = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
+            val dropperThread =
+                Thread {
+                    while (!dropper.isClosed) {
+                        runCatching {
+                            dropper.accept().use { socket ->
+                                accepted.incrementAndGet()
+                                socket.getInputStream().read(ByteArray(8 * 1024))
+                            }
+                        }
+                    }
+                }.apply {
+                    isDaemon = true
+                    start()
+                }
+
+            `when`("a channel message is dispatched") {
+                val output =
+                    impatientDispatcher(methodsEndpointUrlPrefix = "http://127.0.0.1:${dropper.localPort}/api/")
+                        .dispatch(event = channelMessage())
+                dropper.close()
+                dropperThread.join(1_000L)
+
+                then("neither OkHttp nor the dispatcher sends it again, and the outcome is unknown") {
+                    output.errorReason shouldStartWith OUTCOME_UNKNOWN_REASON
+                    accepted.get() shouldBe 1
+                }
+            }
+        }
+
         given("chat.update stalls longer than the call timeout on every attempt") {
             reset()
             val release = CountDownLatch(1)
-            repeat(3) { responses.add { exchange -> release.await(5L, TimeUnit.SECONDS).also { exchange.close() } } }
+            repeat(3) { responses.add(stallAfterRequest(release = release)) }
 
             `when`("a message update is dispatched") {
-                val output =
-                    impatientDispatcher().dispatch(
-                        event =
-                            createPostEventPayloadContents(
-                                commandDetailType = CommandDetailType.SIMPLE_TEXT,
-                                body = mapOf("text" to "hi", "ts" to "1700000000.000100"),
-                                messageType = MessageType.UPDATE_MESSAGE,
-                            ),
-                    )
+                val output = impatientDispatcher().dispatch(event = messageUpdate())
                 release.countDown()
 
                 then("the idempotent update is retried and ends as a transient outcome") {
@@ -391,6 +545,11 @@ class ApplicationMessageDispatcherTest :
                 responseClient.callTimeoutMillis shouldBe SLACK_CALL_TIMEOUT.toMillis().toInt()
                 responseClient.followRedirects shouldBe false
                 responseClient.followSslRedirects shouldBe false
+            }
+
+            then("neither client lets OkHttp re-send a written request on its own") {
+                production.httpClient.okHttpClient.retryOnConnectionFailure shouldBe false
+                responseClient.retryOnConnectionFailure shouldBe false
             }
         }
 
@@ -495,9 +654,9 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("a response_url that answers 200 with a transient Slack error and then ok") {
+        given("a response_url that answers 200 with service_unavailable and then ok") {
             reset()
-            responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+            responses.add(status(code = 200, body = """{"ok":false,"error":"service_unavailable"}"""))
             responses.add(status(code = 200, body = "ok"))
 
             `when`("an action response is dispatched") {
@@ -506,6 +665,34 @@ class ApplicationMessageDispatcherTest :
                 then("the error code is classified like chat.* and retried") {
                     output.ok shouldBe true
                     calls.get() shouldBe 2
+                }
+            }
+        }
+
+        given("a response_url that answers 200 with internal_error") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+
+            `when`("an action response is dispatched") {
+                val output = defaultDispatcher.dispatch(event = actionResponse())
+
+                then("it may have been applied, so it is not resent") {
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: internal_error"
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("a response_url that answers HTTP 502") {
+            reset()
+            responses.add(status(code = 502, body = "bad gateway"))
+
+            `when`("an action response is dispatched") {
+                val output = defaultDispatcher.dispatch(event = actionResponse())
+
+                then("it may have been applied, so it is not resent") {
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: http_502"
+                    calls.get() shouldBe 1
                 }
             }
         }
