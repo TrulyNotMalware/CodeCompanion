@@ -30,9 +30,11 @@ class MeetingReminderRepositoryImplTest
                     jpaMeetingReminderRepository = jpaMeetingReminderRepository,
                 )
 
-            given("due reminders for a host-only meeting and two meetings with three participants each") {
+            given(
+                "due reminders for a meeting without participant rows and two meetings with three participants each",
+            ) {
                 `when`("the dispatcher asks for at most two of them") {
-                    then("the oldest two come back, including the meeting without participants") {
+                    then("the oldest two come back, including the one whose meeting has no participant rows") {
                         val base = Instant.parse("2030-01-01T00:00:00Z")
                         val hostOnly = jpaMeetingRepository.save(createMeetingSchema(member = 0, startIterator = 100))
                         val first = jpaMeetingRepository.save(createMeetingSchema(member = 3, startIterator = 200))

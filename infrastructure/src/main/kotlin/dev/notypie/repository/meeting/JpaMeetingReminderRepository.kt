@@ -30,7 +30,8 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         pageable: Pageable,
     ): List<Long>
 
-    // LEFT: a meeting whose only member is the host has no participant rows and must still be reminded.
+    // LEFT: a reminder whose meeting has no participant rows must still come back and be closed out; an inner
+    // fetch would drop it while findPendingIdsBefore keeps returning its id, holding a page slot forever.
     @Query(
         """
         SELECT r FROM meeting_reminder r
