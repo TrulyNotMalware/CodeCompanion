@@ -9,7 +9,6 @@ import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Duration
@@ -25,6 +24,7 @@ class NvdCveSourceAdapter(
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     private val clock: Clock = Clock.systemUTC(),
+    private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
 ) : SourceAdapter {
     private val httpClient: HttpClient =
         HttpClient
@@ -56,16 +56,17 @@ class NvdCveSourceAdapter(
                 .build()
 
         val response =
-            runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
-                    return emptyList()
-                }
-        if (response.statusCode() !in 200..299) {
-            log.warn { "NVD returned ${response.statusCode()} for topic=${topic.topicKey}" }
+            runCatching {
+                httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
+            }.getOrElse { ex ->
+                log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
+                return emptyList()
+            }
+        if (response.statusCode !in 200..299) {
+            log.warn { "NVD returned ${response.statusCode} for topic=${topic.topicKey}" }
             return emptyList()
         }
-        return parseVulnerabilities(body = response.body(), topic = topic)
+        return parseVulnerabilities(body = response.body, topic = topic)
     }
 
     private fun parseMatchParam(topic: CveTopic): String? {
@@ -149,6 +150,7 @@ class NvdCveSourceAdapter(
 
     companion object {
         const val DEFAULT_API_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        const val DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024
 
         // NVD expects ISO-8601 extended with milliseconds; a bare seconds form is rejected.
         private val NVD_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/impl/cve
 
@@ -21,6 +21,12 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 - **`fetch` must never throw.** Missing/invalid `source_config`, a non-2xx status (rate limits included),
   invalid JSON, or a transport failure logs and returns `emptyList()`. `URI.create` on an unvalidated repo
   string would break that contract — that is why `REPO_PATTERN` exists.
+- **Every request has one deadline over headers and body.** Both adapters read through
+  `HttpClient.sendWithinDeadline` (`SourceAdapter.kt`): `HttpRequest.timeout()` covers only the wait for
+  response headers, so a watchdog closes the body stream when `requestTimeout` runs out, and the body is read
+  up to `maxBodyBytes` (NVD 32 MiB, GitHub 8 MiB). A source that stalls mid-body would otherwise block
+  `CveCollector.tick()` and, on the shared scheduler, every other `@Scheduled` job. Both failures surface as
+  `IOException`s and follow the `fetch` contract above (log, `emptyList()`).
 - **Never log credentials.** Log lines carry only `topic.topicKey`, the status code, and the exception.
 - **The NVD window is derived in UTC from `clock.instant()`.** NVD reads offset-free timestamps as UTC; a
   zoned wall clock would shift the window and silently empty every response. Inject a fixed `Clock` in

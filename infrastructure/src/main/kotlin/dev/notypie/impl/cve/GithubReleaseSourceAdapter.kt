@@ -8,7 +8,6 @@ import tools.jackson.databind.JsonNode
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.time.Duration
 
 private val log = KotlinLogging.logger {}
@@ -18,6 +17,7 @@ class GithubReleaseSourceAdapter(
     private val perPage: Int,
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
+    private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
 ) : SourceAdapter {
     private val httpClient: HttpClient =
         HttpClient
@@ -40,16 +40,17 @@ class GithubReleaseSourceAdapter(
                 .build()
 
         val response =
-            runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "GitHub releases request failed for topic=${topic.topicKey}" }
-                    return emptyList()
-                }
-        if (response.statusCode() !in 200..299) {
-            log.warn { "GitHub releases returned ${response.statusCode()} for topic=${topic.topicKey}" }
+            runCatching {
+                httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
+            }.getOrElse { ex ->
+                log.warn(ex) { "GitHub releases request failed for topic=${topic.topicKey}" }
+                return emptyList()
+            }
+        if (response.statusCode !in 200..299) {
+            log.warn { "GitHub releases returned ${response.statusCode} for topic=${topic.topicKey}" }
             return emptyList()
         }
-        return parseReleases(body = response.body(), topic = topic)
+        return parseReleases(body = response.body, topic = topic)
     }
 
     private fun parseRepo(topic: CveTopic): String? {
@@ -103,6 +104,7 @@ class GithubReleaseSourceAdapter(
 
     companion object {
         const val DEFAULT_API_BASE_URL = "https://api.github.com"
+        const val DEFAULT_MAX_BODY_BYTES = 8 * 1024 * 1024
 
         private val REPO_PATTERN = Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     }

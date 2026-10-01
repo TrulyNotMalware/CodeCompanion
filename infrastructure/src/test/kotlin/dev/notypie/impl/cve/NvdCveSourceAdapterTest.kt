@@ -14,6 +14,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class NvdCveSourceAdapterTest :
     BehaviorSpec({
@@ -196,6 +198,57 @@ class NvdCveSourceAdapterTest :
                     ).fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
 
                 then("it returns an empty list rather than throwing") {
+                    events shouldBe emptyList()
+                }
+            }
+        }
+
+        given("a source that sends the headers and then stalls") {
+            val release = CountDownLatch(1)
+            respond = { exchange ->
+                exchange.responseHeaders.add("Content-Type", "application/json")
+                exchange.sendResponseHeaders(200, 0)
+                exchange.responseBody.write("""{"vulnerabilities": [""".toByteArray())
+                exchange.responseBody.flush()
+                release.await(10L, TimeUnit.SECONDS)
+                exchange.close()
+            }
+            val impatientAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(1L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                )
+
+            `when`("fetch") {
+                val startedAt = System.nanoTime()
+                val events = impatientAdapter.fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+                val elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
+                release.countDown()
+
+                then("it gives up within the request budget instead of blocking the scheduler") {
+                    events shouldBe emptyList()
+                    (elapsed < Duration.ofSeconds(5L)) shouldBe true
+                }
+            }
+        }
+
+        given("a response body larger than the configured limit") {
+            respond = jsonResponse(status = 200, body = oneVulnerability)
+            val smallLimitAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    maxBodyBytes = 64,
+                )
+
+            `when`("fetch") {
+                val events = smallLimitAdapter.fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+
+                then("it drops the response instead of buffering it") {
                     events shouldBe emptyList()
                 }
             }
