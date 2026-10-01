@@ -100,6 +100,31 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     @Modifying
     @Transactional
     @Query(
+        value = """
+            UPDATE meeting_reminder
+            SET scheduled_at = :scheduledAt, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND status = 'PENDING'
+        """,
+        nativeQuery = true,
+    )
+    fun realignPending(
+        @Param("id") id: Long,
+        @Param("scheduledAt") scheduledAt: Instant,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        value = "DELETE FROM meeting_reminder WHERE id = :id AND status = 'PENDING'",
+        nativeQuery = true,
+    )
+    fun discardPending(
+        @Param("id") id: Long,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
         value = "DELETE FROM meeting_reminder WHERE meeting_id = :meetingId",
         nativeQuery = true,
     )

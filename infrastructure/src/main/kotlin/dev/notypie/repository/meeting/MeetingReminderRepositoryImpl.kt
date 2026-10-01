@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.repository.meeting.schema.MeetingReminderSchema
 import dev.notypie.repository.meeting.schema.toMeetingReminderDto
 import org.springframework.data.domain.PageRequest
@@ -25,14 +26,21 @@ open class MeetingReminderRepositoryImpl(
                 )
             }
 
+    // A PENDING row armed from a start time that a reschedule has since replaced (materialize read the old start, the
+    // reschedule deleted the rows, then this insert landed) is moved to the current time instead of being kept: the
+    // (meeting_id, offset_minutes) unique key would otherwise leave the stale row as the only reminder for that offset.
     @Transactional
     override fun ensureReminder(meetingId: Long, offsetMinutes: Int, scheduledAt: Instant): Boolean {
-        if (jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
+        val existing =
+            jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
                 meetingId = meetingId,
                 offsetMinutes = offsetMinutes,
-            ) != null
-        ) {
-            return false
+            )
+        if (existing != null) {
+            if (existing.status != MeetingReminderStatus.PENDING || existing.scheduledAt.isSameSecond(scheduledAt)) {
+                return false
+            }
+            return jpaMeetingReminderRepository.realignPending(id = existing.id, scheduledAt = scheduledAt) == 1
         }
         val reminder =
             MeetingReminderSchema(
@@ -67,6 +75,10 @@ open class MeetingReminderRepositoryImpl(
     @Transactional
     override fun deleteByMeetingId(meetingId: Long): Int =
         jpaMeetingReminderRepository.deleteByMeetingId(meetingId = meetingId)
+
+    @Transactional
+    override fun discardReminder(reminderId: Long): Boolean =
+        jpaMeetingReminderRepository.discardPending(id = reminderId) == 1
 
     override fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder> =
         jpaMeetingReminderRepository

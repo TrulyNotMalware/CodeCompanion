@@ -75,7 +75,8 @@ class MeetingReminderSchedulingService(
                     )
                 ) {
                     log.info {
-                        "Meeting reminder materialized: meetingId=${meeting.meetingId} offset=$offsetMinutes"
+                        "Meeting reminder armed: meetingId=${meeting.meetingId} offset=$offsetMinutes " +
+                            "scheduledAt=$scheduledAt"
                     }
                 }
             } catch (ex: DataIntegrityViolationException) {
@@ -106,6 +107,17 @@ class MeetingReminderSchedulingService(
 
     private fun processReminder(item: ReadyReminder, sentAt: Instant) {
         val reminderId = item.reminder.id
+        if (!item.isArmedFor(zone = clock.zone)) {
+            // Armed from a start time a reschedule has since replaced: sending it would announce the new time at the
+            // old moment. Drop it; materializeReminders re-arms this offset for the current start on its next pass.
+            if (reminderRepository.discardReminder(reminderId = reminderId)) {
+                log.warn {
+                    "Discarded stale meeting reminder: reminderId=$reminderId meetingId=${item.meetingId} " +
+                        "scheduledAt=${item.reminder.scheduledAt} startAt=${item.startAt}"
+                }
+            }
+            return
+        }
         val claimToken = UUID.randomUUID().toString()
 
         if (!reminderRepository.claimReminder(reminderId = reminderId, claimToken = claimToken)) return

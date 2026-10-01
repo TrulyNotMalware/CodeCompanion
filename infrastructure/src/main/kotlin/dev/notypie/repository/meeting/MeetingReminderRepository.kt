@@ -1,8 +1,15 @@
 package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.dto.MeetingReminderDto
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+
+// scheduled_at is a second-precision DATETIME (V5): compare reminder instants at the precision a row can hold.
+internal fun Instant.isSameSecond(other: Instant): Boolean =
+    truncatedTo(ChronoUnit.SECONDS) == other.truncatedTo(ChronoUnit.SECONDS)
 
 data class ReadyReminder(
     val reminder: MeetingReminderDto,
@@ -11,7 +18,15 @@ data class ReadyReminder(
     val startAt: LocalDateTime,
     val isCanceled: Boolean,
     val attendingUserIds: List<String>,
-)
+) {
+    // False for a row armed from a start time a reschedule has since replaced (review M6): the materialize read the
+    // old start before the reschedule deleted the rows, and its insert landed after. `zone` must be the one the
+    // materialize used to turn startAt into scheduledAt.
+    fun isArmedFor(zone: ZoneId): Boolean =
+        reminder.scheduledAt.isSameSecond(
+            other = startAt.atZone(zone).toInstant().minus(Duration.ofMinutes(reminder.offsetMinutes.toLong())),
+        )
+}
 
 data class ReminderCandidateMeeting(
     val meetingId: Long,
@@ -37,4 +52,7 @@ interface MeetingReminderRepository {
     fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder>
 
     fun deleteByMeetingId(meetingId: Long): Int
+
+    // Deletes the row only while it is still PENDING; false when it was claimed, sent or removed meanwhile.
+    fun discardReminder(reminderId: Long): Boolean
 }

@@ -165,21 +165,51 @@ class MeetingReminderSchedulingServiceTest :
         }
 
         given("sendDueReminders") {
-            fun readyReminderOf(reminderId: Long, offsetMinutes: Int, attendingUserIds: List<String>): ReadyReminder =
+            // Armed the way materializeReminders arms it: scheduledAt = startAt - offset, due exactly now.
+            fun readyReminderOf(
+                reminderId: Long,
+                offsetMinutes: Int,
+                attendingUserIds: List<String>,
+                startAt: LocalDateTime = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(offsetMinutes.toLong()),
+            ): ReadyReminder =
                 ReadyReminder(
                     reminder =
                         createMeetingReminderDto(
                             id = reminderId,
                             meetingId = 7L,
                             offsetMinutes = offsetMinutes,
-                            scheduledAt = nowInstant.minusSeconds(60L),
+                            scheduledAt = nowInstant,
                         ),
                     meetingId = 7L,
                     meetingTitle = "Sprint Planning",
-                    startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(offsetMinutes.toLong()),
+                    startAt = startAt,
                     isCanceled = false,
                     attendingUserIds = attendingUserIds,
                 )
+
+            `when`("a due reminder was armed for a start time a reschedule has since replaced") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val movedLater =
+                    readyReminderOf(
+                        reminderId = 42L,
+                        offsetMinutes = 15,
+                        attendingUserIds = listOf("U_A"),
+                        startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusHours(2L),
+                    )
+                every { repo.resetStuckReminders(olderThan = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(movedLater)
+                every { repo.discardReminder(reminderId = 42L) } returns true
+
+                service.sendDueReminders()
+
+                then("it is discarded, never claimed or sent, so materialize can arm the offset for the new start") {
+                    verify(exactly = 1) { repo.discardReminder(reminderId = 42L) }
+                    verify(exactly = 0) { repo.claimReminder(reminderId = any(), claimToken = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
 
             `when`("a reminder is due and claim succeeds") {
                 val repo = mockk<MeetingReminderRepository>()

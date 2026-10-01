@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
@@ -63,6 +64,85 @@ class MeetingReminderRepositoryTest
                         scheduledAt = scheduledAt,
                     )
                 }
+
+            fun reminderOf(meeting: MeetingSchema, offsetMinutes: Int = 10) =
+                jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
+                    meetingId = meeting.id,
+                    offsetMinutes = offsetMinutes,
+                )
+
+            // Review M6: materialize read the old start, a reschedule deleted the rows, then the insert landed.
+            given("a PENDING reminder armed from a start time a reschedule has since replaced") {
+                val meeting =
+                    persistMeeting(
+                        name = "moved",
+                        startAt = LocalDateTime.of(2031, 2, 3, 15, 0),
+                        attending = listOf("U_M"),
+                    )
+                val staleAt = Instant.parse("2031-02-03T00:50:00Z")
+                val currentAt = Instant.parse("2031-02-03T05:50:00Z")
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = staleAt)
+
+                `when`("the next materialize pass arms the same offset for the current start") {
+                    val changed = arm(meeting = meeting, offsetMinutes = 10, scheduledAt = currentAt)
+                    val again = arm(meeting = meeting, offsetMinutes = 10, scheduledAt = currentAt)
+
+                    then("the row moves to the current time instead of the unique key keeping the stale one") {
+                        changed shouldBe true
+                        reminderOf(meeting = meeting)!!.scheduledAt shouldBe currentAt
+                        reminderOf(meeting = meeting)!!.status shouldBe MeetingReminderStatus.PENDING
+                    }
+
+                    then("arming it again for the same time changes nothing") {
+                        again shouldBe false
+                    }
+                }
+            }
+
+            given("a reminder that already left PENDING") {
+                val meeting =
+                    persistMeeting(
+                        name = "claimed",
+                        startAt = LocalDateTime.of(2031, 2, 4, 15, 0),
+                        attending = listOf("U_C"),
+                    )
+                val armedAt = Instant.parse("2031-02-04T05:50:00Z")
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = armedAt)
+                val reminderId = reminderOf(meeting = meeting)!!.id
+                repository.claimReminder(reminderId = reminderId, claimToken = "token-claimed") shouldBe true
+
+                `when`("materialize or the send-time check reaches it") {
+                    val realigned =
+                        arm(meeting = meeting, offsetMinutes = 10, scheduledAt = armedAt.plusSeconds(3_600L))
+                    val discarded = inTx { repository.discardReminder(reminderId = reminderId) }
+
+                    then("neither touches it: the claim owns the row") {
+                        realigned shouldBe false
+                        discarded shouldBe false
+                        reminderOf(meeting = meeting)!!.scheduledAt shouldBe armedAt
+                        reminderOf(meeting = meeting)!!.status shouldBe MeetingReminderStatus.SENDING
+                    }
+                }
+            }
+
+            given("a PENDING reminder the send-time check found stale") {
+                val meeting =
+                    persistMeeting(
+                        name = "stale",
+                        startAt = LocalDateTime.of(2031, 2, 5, 15, 0),
+                        attending = listOf("U_S"),
+                    )
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = Instant.parse("2031-02-05T00:50:00Z"))
+
+                `when`("it is discarded") {
+                    val discarded = inTx { repository.discardReminder(reminderId = reminderOf(meeting = meeting)!!.id) }
+
+                    then("the row is gone, so the next materialize pass can insert the offset again") {
+                        discarded shouldBe true
+                        repository.reminderExists(meetingId = meeting.id, offsetMinutes = 10) shouldBe false
+                    }
+                }
+            }
 
             given("more due reminders than one batch, spread over meetings with several participants") {
                 clearReminders()
