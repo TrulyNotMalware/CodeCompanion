@@ -7,8 +7,10 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.jdbc.core.JdbcTemplate
 import java.time.LocalDateTime
 
@@ -55,6 +57,24 @@ class MessageOutboxRepositoryTest
                     LocalDateTime::class.java,
                     eventId,
                 )!!
+
+            given("a freshly built row with its application-assigned event id") {
+                `when`("it is saved and read back") {
+                    val row = createOutboxMessage()
+                    val saved = repository.save(row)
+                    val loadedIsNew = repository.findByIdOrNull(row.eventId)?.isNew
+                    repository.deleteById(row.eventId)
+
+                    then("it is persisted as new instead of merged, so no SELECT precedes the INSERT") {
+                        saved shouldBeSameInstanceAs row
+                        saved.isNew shouldBe false
+                    }
+
+                    then("a row loaded back from the database is not new") {
+                        loadedIsNew shouldBe false
+                    }
+                }
+            }
 
             given("findPendingMessages") {
                 `when`("an older PENDING row was inserted after a newer one, next to a SUCCESS row") {

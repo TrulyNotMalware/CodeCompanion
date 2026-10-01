@@ -7,6 +7,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
+import org.springframework.data.domain.Persistable
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -69,7 +70,21 @@ class OutboxMessage(
         columnDefinition = "INT NOT NULL DEFAULT 0",
     )
     val sendCount: Int = 0,
-) {
+) : Persistable<String> {
+    // The id is assigned by the application, so without this save() would merge: a SELECT before every INSERT.
+    @field:Transient
+    private var newRow: Boolean = true
+
+    override fun getId(): String = eventId
+
+    override fun isNew(): Boolean = newRow
+
+    @PostPersist
+    @PostLoad
+    protected fun markPersisted() {
+        newRow = false
+    }
+
     @field:Version
     @field:Column(name = "version", nullable = false)
     var version: Long = 0L

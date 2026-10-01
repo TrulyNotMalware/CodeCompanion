@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox
 
@@ -17,7 +17,7 @@ Specs for main `repository/outbox/`: the codec (plain Kotest), the repository's 
 |-----------|---------|
 | `schema/` | `OutboxMessageTest` — `CodecOutboundMessagePort.toRow` and `updateMessageStatus` (see `schema/AGENTS.md`) |
 
-`MessageOutboxRepositoryTest.kt` (`@DataJpaTest`, H2) covers the native statements: `findPendingMessages` orders by `created_at`, not insertion (the older row is inserted second and aged with SQL, because `@CreationTimestamp` overwrites a constructor value); `claimPending` loses the second call, moves `attempt_count` to 1 and stores the caller's `now` — a claim stamped far in the future is not reclaimable against real time, which a `CURRENT_TIMESTAMP` write would be; `reclaimStuck` wins once, raises the attempt and loses on a stale attempt; a late worker on attempt 1 can neither `renewClaim` nor `completeClaim` over the attempt-2 owner's `SUCCESS`, and only the owner's renewal counts in `send_count`; `deferClaim` refunds the send, stores the caller's `updatedAt`, loses on a stale attempt and never takes `send_count` below 0; `abandonStuck` leaves a fresh claim alone and affects 0 rows with a token another sweep already moved past; `countInProgressWithSendsAtLeast` counts sends, not claims; `deleteTerminalOlderThan` purges aged SUCCESS/FAILURE only. Rows are aged and read back with `JdbcTemplate`.
+`MessageOutboxRepositoryTest.kt` (`@DataJpaTest`, H2) checks that `save()` of a fresh row returns the same instance (persist, not merge) and that a loaded row is not new (the probe row is deleted inside its container so it cannot leak into the table-wide assertions), and covers the native statements: `findPendingMessages` orders by `created_at`, not insertion (the older row is inserted second and aged with SQL, because `@CreationTimestamp` overwrites a constructor value); `claimPending` loses the second call, moves `attempt_count` to 1 and stores the caller's `now` — a claim stamped far in the future is not reclaimable against real time, which a `CURRENT_TIMESTAMP` write would be; `reclaimStuck` wins once, raises the attempt and loses on a stale attempt; a late worker on attempt 1 can neither `renewClaim` nor `completeClaim` over the attempt-2 owner's `SUCCESS`, and only the owner's renewal counts in `send_count`; `deferClaim` refunds the send, stores the caller's `updatedAt`, loses on a stale attempt and never takes `send_count` below 0; `abandonStuck` leaves a fresh claim alone and affects 0 rows with a token another sweep already moved past; `countInProgressWithSendsAtLeast` counts sends, not claims; `deleteTerminalOlderThan` purges aged SUCCESS/FAILURE only. Rows are aged and read back with `JdbcTemplate`.
 
 ## For AI Agents
 
