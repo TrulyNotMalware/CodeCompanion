@@ -80,11 +80,13 @@ class MessageOutboxRepositoryTest
                 `when`("an older PENDING row was inserted after a newer one, next to a SUCCESS row") {
                     val newer = repository.save(createOutboxMessage())
                     val older = repository.save(createOutboxMessage())
-                    ageCreatedAt(eventId = older.eventId, createdAt = LocalDateTime.now().minusMinutes(5L))
-                    repository.save(createOutboxMessage(status = MessageStatus.SUCCESS))
+                    val success = repository.save(createOutboxMessage(status = MessageStatus.SUCCESS))
+                    ageCreatedAt(eventId = newer.eventId, createdAt = LocalDateTime.of(2000, 1, 1, 0, 1))
+                    ageCreatedAt(eventId = older.eventId, createdAt = LocalDateTime.of(2000, 1, 1, 0, 0))
+                    ageCreatedAt(eventId = success.eventId, createdAt = LocalDateTime.of(1999, 1, 1, 0, 0))
 
                     then("only PENDING rows come back, by created_at rather than insertion order, capped by limit") {
-                        repository.findPendingMessages(limit = 10).map { it.eventId } shouldContainExactly
+                        repository.findPendingMessages(limit = 2).map { it.eventId } shouldContainExactly
                             listOf(older.eventId, newer.eventId)
                         repository.findPendingMessages(limit = 1).map { it.eventId } shouldContainExactly
                             listOf(older.eventId)
@@ -350,12 +352,12 @@ class MessageOutboxRepositoryTest
                     val oldPending = repository.save(createOutboxMessage(status = MessageStatus.PENDING))
                     val freshSuccess = repository.save(createOutboxMessage(status = MessageStatus.SUCCESS))
                     listOf(oldSuccess, oldFailure, oldPending).forEach {
-                        ageRow(eventId = it.eventId, updatedAt = LocalDateTime.now().minusDays(30L))
+                        ageRow(eventId = it.eventId, updatedAt = LocalDateTime.of(1990, 1, 1, 0, 0))
                     }
 
                     val deleted =
                         repository.deleteTerminalOlderThan(
-                            olderThan = LocalDateTime.now().minusDays(14L),
+                            olderThan = LocalDateTime.of(1990, 6, 1, 0, 0),
                             limit = 100,
                         )
 

@@ -29,7 +29,7 @@ Specs for main `repository/outbox/`: the codec (plain Kotest), the repository's 
   or `DirectMessage` to make it pass.
 - Whole-envelope `shouldBe` equality is the default assertion; drop to field-wise only for types whose
   `equals` is unreliable (today only `TimeScheduleInfo`) and say why in the case name.
-- `MessageOutboxRepositoryTest` rows persist across `given` blocks (no per-block rollback): keep
+- `MessageOutboxRepositoryTest` rows persist across `given` blocks (no per-block rollback), and the H2 is shared with every other `@DataJpaTest`. Table-wide queries (`findPendingMessages`, `deleteTerminalOlderThan`) therefore age their own rows to 1990/2000 and query below that, so rows other cases leave behind (now-dated) cannot change the result (2026-10-01). Keep
   `findPendingMessages` first, and never stamp a terminal row old enough for the purge case to count it.
 
 ### Testing Requirements
