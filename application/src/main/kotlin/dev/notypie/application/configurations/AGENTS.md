@@ -37,7 +37,8 @@ is the map of what actually exists at runtime in a given profile.
   transaction. That breaks `@TransactionalEventListener(phase = BEFORE_COMMIT)`, whose
   `TransactionSynchronization` must be registered on the publishing thread's active transaction for the
   transactional outbox to commit atomically with domain writes. Listeners that must not block the HTTP
-  thread opt in with `@Async` (routed to `threadPoolTaskExecutor`) instead.
+  thread submit to a dedicated bounded executor instead (`AgentConfiguration.agentTurnExecutor` for AI turns); no
+  `@Async` method remains, so `threadPoolTaskExecutor` runs nothing today.
 - **Mode selection is condition-based, not profile-based.** `slack.app.mode.outboxReadingStrategy`
   chooses `POLLING` or `CDC`; publisher mode chooses application-event vs Kafka publishing. Add a new
   mode by adding a `Condition` in `conditions/` and a `@Conditional` bean — do not scatter

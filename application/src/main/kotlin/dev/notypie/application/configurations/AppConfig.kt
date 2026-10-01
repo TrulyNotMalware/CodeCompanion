@@ -184,7 +184,20 @@ data class AppConfig(
 
     data class Agent(
         val sidecar: Sidecar = Sidecar(),
+        val turns: Turns = Turns(),
     ) {
+        data class Turns(
+            val maxConcurrent: Int = 4,
+            val queueCapacity: Int = 20,
+            val shutdownAwaitSeconds: Long = 30L,
+        ) {
+            init {
+                require(maxConcurrent > 0) { "agent.turns.max-concurrent must be positive" }
+                require(queueCapacity > 0) { "agent.turns.queue-capacity must be positive" }
+                require(shutdownAwaitSeconds > 0L) { "agent.turns.shutdown-await-seconds must be positive" }
+            }
+        }
+
         data class Sidecar(
             val baseUrl: String = "http://127.0.0.1:7300",
             val bearerSecret: String = "",

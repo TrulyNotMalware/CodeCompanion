@@ -39,6 +39,8 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 
 class AgentConverseServiceTest :
     BehaviorSpec({
@@ -62,6 +64,7 @@ class AgentConverseServiceTest :
             eventPublisher: EventPublisher = mockk(relaxed = true),
             meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry(),
             scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
+            turnExecutor: Executor = Executor { it.run() },
         ) = AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
@@ -70,6 +73,7 @@ class AgentConverseServiceTest :
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
             transactionManager = stubTransactionManager(),
+            turnExecutor = turnExecutor,
             clock = createFixedUtcClock(now = fixedNow),
             scopedTurnTokenCodec = scopedTurnTokenCodec,
         )
@@ -262,6 +266,41 @@ class AgentConverseServiceTest :
 
                 then("the turn is audited as BUSY") {
                     recordedTurn.captured.outcome shouldBe AgentTurnOutcome.BUSY
+                }
+            }
+        }
+
+        given("a turn arriving while every turn slot and queue entry is taken") {
+            val basicInfo = createCommandBasicInfo()
+            val gateway = mockk<AgentGateway>()
+            val stagedMessage = slot<OutboundMessage>()
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val meterRegistry = SimpleMeterRegistry()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                    turnExecutor = Executor { throw RejectedExecutionException("full") },
+                )
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(
+                    event = createAgentConverseRequestEvent(responseBasicInfo = basicInfo),
+                )
+
+                then("the requester is told at once to ask again instead of waiting in silence") {
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    staged.recipient?.id shouldBe basicInfo.publisherId
+                    val content = staged.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe AgentConverseService.OVERLOADED_MESSAGE
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("the sidecar is not called and the rejection is counted") {
+                    verify(exactly = 0) { gateway.converse(request = any()) }
+                    meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "rejected").count() shouldBe 1.0
                 }
             }
         }

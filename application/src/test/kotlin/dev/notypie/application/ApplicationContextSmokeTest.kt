@@ -2,7 +2,6 @@ package dev.notypie.application
 
 import com.ninjasquad.springmockk.MockkBean
 import com.zaxxer.hikari.HikariDataSource
-import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -24,10 +23,10 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
-import org.springframework.aop.support.AopUtils
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
@@ -98,10 +97,6 @@ class ApplicationContextSmokeTest
                     then("open-in-view is off, so lazy loads cannot hide outside a transaction") {
                         context.environment.getProperty("spring.jpa.open-in-view") shouldBe "false"
                     }
-
-                    then("AgentConverseService is proxied so @Async takes effect") {
-                        AopUtils.isAopProxy(context.getBean(AgentConverseService::class.java)) shouldBe true
-                    }
                 }
             }
 
@@ -130,9 +125,11 @@ class ApplicationContextSmokeTest
 
             given("AI turns requested from mention transactions") {
                 `when`("one transaction rolls back and the next one commits") {
-                    then("only the committed request reaches the agent") {
+                    then("only the committed request reaches the agent, on the bounded agent-turn executor") {
                         val prompts = ConcurrentLinkedQueue<String>()
+                        val threadNames = ConcurrentLinkedQueue<String>()
                         every { agentGateway.converse(request = any()) } answers {
+                            threadNames += Thread.currentThread().name
                             prompts += firstArg<AgentTurnRequest>().prompt
                             AgentTurnResult.Failed(code = "smoke", message = "smoke")
                         }
@@ -149,6 +146,7 @@ class ApplicationContextSmokeTest
 
                         eventually(5.seconds) { prompts.toList() shouldContain "committed" }
                         prompts.toList() shouldBe listOf("committed")
+                        threadNames.toList().single() shouldStartWith "agent-turn-"
                     }
                 }
             }

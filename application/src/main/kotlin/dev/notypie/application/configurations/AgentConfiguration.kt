@@ -10,13 +10,15 @@ import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Duration
+import java.util.concurrent.Executor
 
-// Explicit @Bean, not component-scanned — class-level @Async needs a CGLIB subclass proxy.
 @Configuration
 class AgentConfiguration(
     private val appConfig: AppConfig,
@@ -31,6 +33,18 @@ class AgentConfiguration(
         )
 
     @Bean
+    fun agentTurnExecutor(): ThreadPoolTaskExecutor =
+        ThreadPoolTaskExecutor().apply {
+            val turns = appConfig.agent.turns
+            corePoolSize = turns.maxConcurrent
+            maxPoolSize = turns.maxConcurrent
+            queueCapacity = turns.queueCapacity
+            setThreadNamePrefix("agent-turn-")
+            setWaitForTasksToCompleteOnShutdown(true)
+            setAwaitTerminationSeconds(turns.shutdownAwaitSeconds.toInt())
+        }
+
+    @Bean
     @ConditionalOnMissingBean(AgentConverseService::class)
     fun agentConverseService(
         agentGateway: AgentGateway,
@@ -40,6 +54,7 @@ class AgentConfiguration(
         eventPublisher: EventPublisher,
         meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
+        @Qualifier("agentTurnExecutor") agentTurnExecutor: Executor,
         scopedTurnTokenCodec: ObjectProvider<ScopedTurnTokenCodec>,
     ): AgentConverseService =
         AgentConverseService(
@@ -50,6 +65,7 @@ class AgentConfiguration(
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
             transactionManager = transactionManager,
+            turnExecutor = agentTurnExecutor,
             scopedTurnTokenCodec = scopedTurnTokenCodec.getIfAvailable(),
         )
 }

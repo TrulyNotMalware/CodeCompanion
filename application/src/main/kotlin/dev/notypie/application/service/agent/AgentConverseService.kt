@@ -24,7 +24,6 @@ import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
-import org.springframework.scheduling.annotation.Async
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -33,10 +32,11 @@ import java.time.Clock
 import java.time.Duration
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 
 private val log = KotlinLogging.logger {}
 
-@Async
 class AgentConverseService(
     private val agentGateway: AgentGateway,
     private val agentSessionRepository: AgentSessionRepository,
@@ -45,6 +45,7 @@ class AgentConverseService(
     private val eventPublisher: EventPublisher,
     private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
+    private val turnExecutor: Executor,
     private val clock: Clock = Clock.systemDefaultZone(),
     private val scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
 ) {
@@ -53,6 +54,8 @@ class AgentConverseService(
         internal const val BUSY_MESSAGE =
             "I'm still working on the previous request in this conversation — please wait for it to finish."
         internal const val FAILURE_MESSAGE = "Sorry — I couldn't process that request. Please try again later."
+        internal const val OVERLOADED_MESSAGE =
+            "I'm handling too many requests right now — please ask again in a minute."
         internal const val EMPTY_RESPONSE_MESSAGE = "_(the assistant returned an empty response)_"
 
         internal const val METRIC_TURNS = "agent.turns"
@@ -86,6 +89,16 @@ class AgentConverseService(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     fun handleAgentConverse(event: AgentConverseRequestEvent) {
+        try {
+            turnExecutor.execute { converse(event = event) }
+        } catch (rejected: RejectedExecutionException) {
+            log.warn(rejected) { "Agent turn rejected, every turn slot is busy idempotencyKey=${event.idempotencyKey}" }
+            meterRegistry.counter(METRIC_TURNS, "outcome", "rejected").increment()
+            publishOverloaded(event = event)
+        }
+    }
+
+    private fun converse(event: AgentConverseRequestEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
         val sessionKey = "${basicInfo.channel}:${payload.threadId ?: basicInfo.publisherId}"
@@ -224,6 +237,30 @@ class AgentConverseService(
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent busy notice idempotencyKey=${event.idempotencyKey}"
+                }
+            }
+    }
+
+    private fun publishOverloaded(event: AgentConverseRequestEvent) {
+        val basicInfo = event.payload.responseBasicInfo
+        transactionTemplate
+            .runInTx {
+                eventPublisher.publishOne(
+                    event =
+                        stageReply(
+                            message =
+                                OutboundMessage.Ephemeral(
+                                    target = ConversationTarget(id = basicInfo.channel),
+                                    recipient = UserRef(id = basicInfo.publisherId),
+                                    content = MessageContent.Text(headline = null, markdown = OVERLOADED_MESSAGE),
+                                    detailType = CommandDetailType.AGENT_CONVERSE,
+                                ),
+                            basicInfo = basicInfo,
+                        ),
+                )
+            }.onFailure { exception ->
+                log.error(exception) {
+                    "Failed to publish agent overload notice idempotencyKey=${event.idempotencyKey}"
                 }
             }
     }

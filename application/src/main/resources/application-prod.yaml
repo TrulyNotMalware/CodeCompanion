@@ -140,6 +140,12 @@ slack:
         base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
         bearer-secret: ${SIDECAR_BEARER_SECRET:}
         request-timeout-seconds: ${SIDECAR_REQUEST_TIMEOUT_SECONDS:120}
+      # Bounded so a burst of mentions gets an immediate "busy" reply instead of minutes of silence in an
+      # unbounded queue; the shutdown wait stays below the pod's termination grace period.
+      turns:
+        max-concurrent: ${AGENT_MAX_CONCURRENT_TURNS:4}
+        queue-capacity: ${AGENT_TURN_QUEUE_CAPACITY:20}
+        shutdown-await-seconds: 30
     # CVE summary provider. Operating choice is sidecar (reuse the agent lane), but the default
     # stays noop so summary traffic is opt-in via AI_PROVIDER once the collector rolls out.
     ai:

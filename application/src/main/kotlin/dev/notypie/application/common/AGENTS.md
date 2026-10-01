@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-26 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-01 -->
 
 # application/common
 
@@ -37,7 +37,7 @@ application context.
 - `runInTx` is for code that runs with no ambient transaction — the scheduling services driven by the
   `*Scheduler` wrappers (`StandupSchedulingService`, `StandupSummaryService`,
   `DailyAgendaSchedulingService`, `MeetingReminderSchedulingService`), the `@Scheduled`
-  `CveNotificationDispatcher`, and the class-level `@Async` `AgentConverseService`. It gives the outbox's
+  `CveNotificationDispatcher`, and `AgentConverseService` (whose turns run on `agentTurnExecutor`). It gives the outbox's
   `BEFORE_COMMIT` listener a transaction to bind to on that worker thread through an explicit boundary,
   instead of relying on `@Transactional` proxying of async or scheduled entry points. A failed `action`
   marks the transaction rollback-only and comes back as `Result.failure` — nothing is rethrown, so

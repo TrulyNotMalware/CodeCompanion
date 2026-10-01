@@ -7,14 +7,15 @@
 One AI-agent conversation turn. `AgentConverseService` listens for the `AgentConverseRequestEvent`
 that `SlackIntentResolver` lifts from a free-text `@bot ...` mention, calls the sidecar through
 `AgentGateway`, then commits the resumable session id, an `agent_turn_history` audit row, and the
-staged Slack reply in one transaction. It is the only class in the module annotated `@Async` at class
-level, and it is declared as an explicit `@Bean` in `configurations/AgentConfiguration` so the CGLIB
-proxy that `@Async` needs is guaranteed.
+staged Slack reply in one transaction. Turns run on `agentTurnExecutor` (declared in
+`configurations/AgentConfiguration`, sized by `slack.app.agent.turns.*`: 4 concurrent turns, a queue of 20, 30 s
+shutdown wait), which the AFTER_COMMIT listener submits to directly rather than through `@Async`, so a full
+executor is seen: the requester gets `OVERLOADED_MESSAGE` at once and `agent.turns{outcome=rejected}` counts it.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the class-level `@Async` still moves the turn off the committing thread) builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
+| `AgentConverseService.kt` | `class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, turnExecutor, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the class-level `@Async` still moves the turn off the committing thread) builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
 
 ## For AI Agents
 
@@ -43,8 +44,9 @@ proxy that `@Async` needs is guaranteed.
 - `scopedTurnTokenCodec` is null when MCP is off (`AgentConfiguration` uses `ObjectProvider`); the
   turn then carries no token and the model has no tools. `turnId` is the mention's `idempotencyKey`
   so tool audit rows join back to `agent_turn_history`.
-- A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds`; ten concurrent turns
-  saturate the async pool shared with every other `@Async` listener.
+- A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds` (120 s), longer than the 30 s shutdown
+  wait: a rolling deploy cuts turns still running after that wait. Keep `turns.queue-capacity` small; a deep queue
+  only converts an immediate "busy" reply into minutes of silence.
 - Metric names are `internal const` and dashboards depend on the `outcome` / `direction` tags.
 
 ### Testing Requirements
