@@ -85,10 +85,11 @@ class McpServerConfiguration {
     fun webMvcStreamableServerTransportProvider(
         properties: McpServerStreamableHttpProperties,
         scopedTurnTokenCodec: ScopedTurnTokenCodec,
+        jsonMapper: JsonMapper,
     ): WebMvcStreamableServerTransportProvider =
         WebMvcStreamableServerTransportProvider
             .builder()
-            .jsonMapper(JacksonMcpJsonMapper(JsonMapper.builder().build()))
+            .jsonMapper(JacksonMcpJsonMapper(jsonMapper))
             .mcpEndpoint(properties.mcpEndpoint)
             .disallowDelete(properties.isDisallowDelete)
             .apply { properties.keepAliveInterval?.let { keepAliveInterval(it) } }

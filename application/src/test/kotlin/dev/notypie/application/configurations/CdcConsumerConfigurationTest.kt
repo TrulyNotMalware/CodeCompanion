@@ -6,14 +6,10 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.springframework.boot.autoconfigure.AutoConfigurations
-import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
-
-@EnableConfigurationProperties(AppConfig::class)
-private class AppConfigBinding
 
 class CdcConsumerConfigurationTest :
     BehaviorSpec({

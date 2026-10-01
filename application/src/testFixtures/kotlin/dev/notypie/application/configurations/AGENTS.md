@@ -10,6 +10,7 @@ startup, and an `AppConfig` with every secret set, for the `toString()` masking 
 ## Key Files
 | File | Description |
 |------|-------------|
+| `AppConfigBinding.kt` | `@EnableConfigurationProperties(AppConfig::class) class AppConfigBinding` for `ApplicationContextRunner` specs: binds `slack.app.*` from the runner's properties. Not a `@Configuration`, so `ApplicationContextSmokeTest`'s component scan does not pick it up |
 | `AppConfigCreator.kt` | `createAppConfigWithSecrets(slackToken, slackAppToken, signingSecret, mcpSigningSecret, githubToken, nvdApiKey, sidecarBearerSecret)` — an `AppConfig` with every secret-bearing field set to a distinct fixture value, for the masking spec |
 | `CveTopicConfigCreator.kt` | `createCveTopicConfigDefinition(key = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)` |
 
