@@ -97,7 +97,10 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
   `scheduled_at` differs to the time it was asked for, and `sendDueReminders` drops (`discardReminder`, PENDING
   only) any due row for which `ReadyReminder.isArmedFor(clock.zone)` is false — `scheduledAt` is not
   `startAt - offset` — before claiming it; the next materialize pass re-arms the offset. Both compare at second
-  precision (`scheduled_at` is `DATETIME`), and the zone must stay the one materialize uses.
+  precision (`scheduled_at` is `DATETIME`), and the zone must stay the one materialize uses. **A cancel after the
+  due read** (review M7) is caught by the repository: `claimReminder` and `markReminderSent` only match a row whose
+  meeting is still active, so a cancel before the claim skips the reminder and one between claim and
+  `markReminderSent` rolls the DMs back and records the row FAILED.
 - **Daily agenda claim and DMs share one transaction.** `claim(agendaDate)`, the day read and every outbox
   write run in one `runInTx`; a failed write rolls the claim back, so the next tick claims the date again.
   Zero-participant meetings come back from the day read with no attending users and simply add no lines. The agenda scheduler uses

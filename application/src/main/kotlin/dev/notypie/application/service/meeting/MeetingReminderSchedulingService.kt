@@ -144,8 +144,12 @@ class MeetingReminderSchedulingService(
                         sentAt = sentAt,
                     )
                 ) {
-                    // Recovery already flipped this row out of SENDING — roll back or we'd double-deliver it.
-                    error("markReminderSent had no effect for reminder $reminderId — rolling back.")
+                    // Recovery already flipped this row out of SENDING, or the meeting was canceled after the claim —
+                    // roll back the DMs either way.
+                    error(
+                        "markReminderSent had no effect for reminder $reminderId (re-claimed, reset or meeting " +
+                            "canceled) — rolling back.",
+                    )
                 }
             }
 

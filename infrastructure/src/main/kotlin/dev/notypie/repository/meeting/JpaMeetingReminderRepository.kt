@@ -35,6 +35,8 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     ): List<MeetingReminderSchema>
 
     // Atomic UPDATE guarded by status = 'PENDING' — a derived find-then-save here would race and double-dispatch.
+    // Claim and markSent both re-check that the meeting is still active: the due read filters canceled meetings,
+    // but a cancel can commit after that read, and only markSent runs inside the outbox transaction (review M7).
     @Modifying
     @Transactional
     @Query(
@@ -42,6 +44,9 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
             UPDATE meeting_reminder
             SET status = 'SENDING', claim_token = :token, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id AND status = 'PENDING'
+              AND EXISTS (
+                  SELECT 1 FROM meetings m WHERE m.id = meeting_reminder.meeting_id AND m.is_canceled = FALSE
+              )
         """,
         nativeQuery = true,
     )
@@ -57,6 +62,9 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
             UPDATE meeting_reminder
             SET status = 'SENT', sent_at = :sentAt, claim_token = NULL, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id AND status = 'SENDING' AND claim_token = :token
+              AND EXISTS (
+                  SELECT 1 FROM meetings m WHERE m.id = meeting_reminder.meeting_id AND m.is_canceled = FALSE
+              )
         """,
         nativeQuery = true,
     )
