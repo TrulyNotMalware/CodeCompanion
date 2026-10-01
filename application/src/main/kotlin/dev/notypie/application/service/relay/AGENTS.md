@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/relay
 
@@ -87,7 +87,7 @@ H2 scenario `createOutboxJpaContext`, `MutableClock`, `ScriptedMessageDispatcher
 - Reader beans are plain classes wired in `ConsumerConfig.kt`, not component-scanned — so a profile
   or condition decides which one exists.
 - `runCatching { UUID.fromString(...) }.getOrElse { log; return }` for row-id parsing.
-- `retryService.execute(action = {...}, maxAttempts = n)` around the status write and the enqueue save.
+- `retryService.execute(action = {...}, maxAttempts = n)` around the terminal status write, which runs outside any caller transaction. Never around `saveOutboxMessage`'s `save`: it runs inside the command's transaction, a failure there already marks it rollback-only, and the INSERT only executes at the commit flush anyway.
 - Error logs carry `eventId` and `idempotencyKey` — keep that shape for outbox debugging.
 
 ## Dependencies

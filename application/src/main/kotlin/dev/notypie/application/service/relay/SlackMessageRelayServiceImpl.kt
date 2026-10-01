@@ -186,16 +186,11 @@ class SlackMessageRelayServiceImpl(
     // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun saveOutboxMessage(event: OutboundMessageEnqueued) {
-        retryService.execute(
-            action = {
-                val row =
-                    outboundMessagePort.toRow(
-                        message = event.payload.message,
-                        basicInfo = event.payload.basicInfo,
-                    )
-                outboxRepository.save(row)
-            },
-            maxAttempts = 3,
-        )
+        val row =
+            outboundMessagePort.toRow(
+                message = event.payload.message,
+                basicInfo = event.payload.basicInfo,
+            )
+        outboxRepository.save(row)
     }
 }

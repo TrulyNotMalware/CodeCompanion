@@ -49,7 +49,6 @@ class MeetingWriteJpaTransactionTest :
         val meetingService =
             MeetingServiceImpl(
                 meetingRepository = store.meetingRepository,
-                retryService = mockk(),
                 commandExecutor = mockk(),
                 outboundStager = stager,
                 eventPublisher = publisher,
@@ -278,7 +277,6 @@ class MeetingWriteJpaTransactionTest :
             val cancelingService =
                 MeetingServiceImpl(
                     meetingRepository = racingRepository,
-                    retryService = mockk(),
                     commandExecutor = mockk(),
                     outboundStager = stager,
                     eventPublisher = publisher,

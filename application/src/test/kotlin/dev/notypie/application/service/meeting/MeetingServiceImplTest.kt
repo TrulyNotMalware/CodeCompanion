@@ -25,25 +25,25 @@ import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
-import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.dao.CannotAcquireLockException
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.transaction.support.TransactionTemplate
 import java.util.UUID
 
 class MeetingServiceImplTest :
     BehaviorSpec({
         val meetingRepository = mockk<MeetingRepository>()
-        val retryService = mockk<RetryService>()
         val commandExecutor = mockk<CommandExecutor>()
         val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
@@ -52,16 +52,11 @@ class MeetingServiceImplTest :
         val service =
             MeetingServiceImpl(
                 meetingRepository = meetingRepository,
-                retryService = retryService,
                 commandExecutor = commandExecutor,
                 outboundStager = stager,
                 eventPublisher = eventPublisher,
                 transactionManager = createH2TransactionManager(),
             )
-
-        every { retryService.execute<Int>(action = any(), any(), any(), any(), any(), any(), any(), any()) } answers {
-            firstArg<() -> Int>().invoke()
-        }
 
         given("updateParticipantAttendance receives an UpdateMeetingAttendanceEvent") {
             val meetingKey = UUID.randomUUID()
@@ -128,6 +123,33 @@ class MeetingServiceImplTest :
                 then("the listener throws so the enclosing transaction rolls back") {
                     shouldThrow<IllegalStateException> {
                         service.updateParticipantAttendance(event = event)
+                    }
+                }
+            }
+
+            `when`("the UPDATE itself fails inside the caller's transaction") {
+                clearMocks(meetingRepository, answers = false)
+                val failure = DataAccessResourceFailureException("connection lost")
+                every {
+                    meetingRepository.updateParticipantAttendance(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = participantUserId,
+                        isAttending = false,
+                        absentReason = RejectReason.OTHER,
+                    )
+                } throws failure
+
+                then("the original failure propagates after one attempt, so the transaction rolls back") {
+                    shouldThrow<DataAccessResourceFailureException> {
+                        service.updateParticipantAttendance(event = event)
+                    } shouldBeSameInstanceAs failure
+                    verify(exactly = 1) {
+                        meetingRepository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = participantUserId,
+                            isAttending = false,
+                            absentReason = RejectReason.OTHER,
+                        )
                     }
                 }
             }
@@ -377,7 +399,6 @@ class MeetingServiceImplTest :
             val conflictedService =
                 MeetingServiceImpl(
                     meetingRepository = conflictedRepository,
-                    retryService = retryService,
                     commandExecutor = commandExecutor,
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,
@@ -570,7 +591,6 @@ class MeetingServiceImplTest :
             val boundedService =
                 MeetingServiceImpl(
                     meetingRepository = boundedRepository,
-                    retryService = retryService,
                     commandExecutor = commandExecutor,
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,

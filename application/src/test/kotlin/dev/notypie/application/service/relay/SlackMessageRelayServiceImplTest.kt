@@ -26,17 +26,20 @@ import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.assertions.throwables.shouldNotThrowAny
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataAccessResourceFailureException
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -74,6 +77,34 @@ class SlackMessageRelayServiceImplTest :
 
                 then("the port builds a transport-neutral row that is persisted") {
                     verify(exactly = 1) { port.toRow(message = message, basicInfo = basicInfo) }
+                    verify(exactly = 1) { outboxRepository.save(row) }
+                }
+            }
+
+            `when`("saving the row fails inside the command's transaction") {
+                val basicInfo = createCommandBasicInfo()
+                val message =
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = null, markdown = "hi"),
+                    )
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val port = mockk<OutboundMessagePort>()
+                every { port.toRow(message = message, basicInfo = basicInfo) } returns row
+                val failure = DataAccessResourceFailureException("connection lost")
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                every { outboxRepository.save(row) } throws failure
+                val service = createRelayService(outboxRepository = outboxRepository, outboundMessagePort = port)
+                val event =
+                    OutboundMessageEnqueued(
+                        idempotencyKey = basicInfo.idempotencyKey,
+                        payload = OutboundMessageEnqueuedPayload(message = message, basicInfo = basicInfo),
+                    )
+
+                then("the original failure propagates after one attempt, so the command rolls back") {
+                    shouldThrow<DataAccessResourceFailureException> {
+                        service.saveOutboxMessage(event = event)
+                    } shouldBeSameInstanceAs failure
                     verify(exactly = 1) { outboxRepository.save(row) }
                 }
             }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/impl/retry
 
@@ -29,8 +29,9 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
   nullable `T` falls back to rethrowing. `RetryServiceTest` pins this contract.
 - **Retries only on exceptions.** Callers decide what is retryable by throwing: the dispatcher throws for
   transient Slack errors and returns an `ok = false` `CommandOutput` for permanent ones.
-- Callers: `impl/command/ApplicationMessageDispatcher`, `:application` `MeetingServiceImpl`,
-  `SlackMessageRelayServiceImpl`. The bean comes from `configurations/RetryConfiguration.retryService`.
+- Callers: `impl/command/ApplicationMessageDispatcher` and `:application` `SlackMessageRelayServiceImpl` (terminal status
+  write only). Do not call it inside a caller's transaction: the first failure marks the shared transaction
+  rollback-only, so a retried "success" fails at commit. The bean comes from `configurations/RetryConfiguration.retryService`.
 
 ### Testing Requirements
 ```bash
