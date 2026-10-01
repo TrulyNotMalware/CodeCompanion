@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-01 -->
 
 # infrastructure/configurations
 
@@ -14,7 +14,7 @@ persistence and retry only.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource`; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository`, `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository`, `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references |
+| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository`, `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository`, `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references |
 | `RetryConfiguration.kt` | `@EnableResilientMethods @Configuration`. `retryService()` returns a parameterless `RetryService` (it builds its own per-policy templates; there is no `RetryTemplate` bean any more). The same file defines `enum class RetryOptions(internal val default: Long)`: `MAX_ATTEMPTS = 3`, `INITIAL_DELAY = 100`, `MULTIPLIER = 2`, `MAX_DELAY = 10000`, `JITTER = 10` (milliseconds) |
 
 ## For AI Agents
@@ -33,8 +33,11 @@ persistence and retry only.
 - **`LazyConnectionDataSourceProxy` must stay the `@Primary` `DataSource`.** It defers physical
   connection acquisition until the first statement, so transactions that never touch the database do not
   hold a pooled connection. The raw `HikariDataSource` is still a (non-primary) bean. Pool sizing and
-  isolation are not set here — they come from `spring.datasource.hikari.*` in the profile YAMLs
-  (`maximum-pool-size: 10`, `TRANSACTION_REPEATABLE_READ`, ...).
+  isolation come from `spring.datasource.hikari.*` in the profile YAMLs, and only because the bean method
+  carries `@ConfigurationProperties("spring.datasource.hikari")`: defining this bean makes Boot's own
+  Hikari bean (the one that binds that prefix) back off, and `initializeDataSourceBuilder()` copies only
+  driver, URL, user and password. Without the annotation the pool silently runs on Hikari defaults
+  (10 connections, 30 s connection timeout). `HikariDataSourceBindingTest` pins the binding.
 - **There is no `@EnableJpaAuditing` and no `@EntityScan`.** Entity discovery relies on the
   `@SpringBootApplication` root package (`dev.notypie`) covering `dev.notypie.repository`; the explicit
   `@EnableJpaRepositories` makes Boot's `JpaRepositoriesAutoConfiguration` back off in the full context.
@@ -52,7 +55,8 @@ persistence and retry only.
 ```bash
 ./gradlew :infrastructure:test
 ```
-No spec targets this package directly. `@DataJpaTest` slices under `repository/` filter out user
+`HikariDataSourceBindingTest` (`@SpringBootTest` via `TestApplication.kt`) asserts that
+`spring.datasource.hikari.*` reaches the pool. `@DataJpaTest` slices under `repository/` filter out user
 `@Configuration` classes, so they run on Boot's auto-configured H2 datasource and repository scanning, not
 on `JpaConfiguration`; the `*RepositoryImplTest` specs construct adapters by hand with MockK'd `Jpa*`
 repositories. The only test that boots this package is `impl/command/KafkaEventPublisherTest`

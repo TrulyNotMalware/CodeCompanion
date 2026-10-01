@@ -29,6 +29,7 @@ import dev.notypie.repository.standup.JpaRoutineRepository
 import dev.notypie.repository.standup.JpaSessionDispatchRepository
 import dev.notypie.repository.standup.JpaStandupSessionRepository
 import dev.notypie.repository.standup.StandupRepositoryImpl
+import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -43,6 +44,7 @@ const val JPA_ENTITY_PACKAGES = "dev.notypie.repository"
 @EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])
 class JpaConfiguration {
     @Bean
+    @ConfigurationProperties("spring.datasource.hikari")
     fun hikariDataSource(dataSourceProperties: DataSourceProperties): HikariDataSource =
         dataSourceProperties
             .initializeDataSourceBuilder()
