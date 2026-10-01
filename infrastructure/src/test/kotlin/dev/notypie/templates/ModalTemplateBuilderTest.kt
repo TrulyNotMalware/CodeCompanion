@@ -16,6 +16,8 @@ import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.domain.standup.createRoutineMemberDto
+import dev.notypie.domain.standup.createStandupAnswerDto
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createProfile
@@ -51,6 +53,68 @@ class ModalTemplateBuilderTest :
                 idempotencyKey = testIdempotencyKey,
                 reason = "Test Reason",
             )
+
+        given("standupSummaryTemplate for a routine larger than one Slack message") {
+            val questions = listOf("Yesterday?", "Today?", "Blockers?")
+            val members = (1..60).map { createRoutineMemberDto(userId = "U$it") }
+            val answers =
+                members.map { member ->
+                    createStandupAnswerDto(userId = member.userId, responses = List(size = 3) { "가".repeat(2_000) })
+                }
+
+            `when`("the summary is rendered") {
+                val blocks =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "Daily",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members = members,
+                            answers = answers,
+                            questions = questions,
+                        ).template
+                val texts = blocks.map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("it stays within Slack's 50 blocks and 3,000 characters per section") {
+                    blocks.size shouldBe 50
+                    texts.forEach { (it.length <= ModalTemplateBuilder.SLACK_SECTION_TEXT_MAX_CHARS) shouldBe true }
+                }
+
+                then("each shown member has a section and the rest are counted, not dropped silently") {
+                    texts[1] shouldContain "<@U1>"
+                    texts[48] shouldContain "<@U48>"
+                    texts.last() shouldContain "12 more members"
+                }
+            }
+
+            `when`("a small routine is rendered") {
+                val texts =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "Daily",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members =
+                                listOf(
+                                    createRoutineMemberDto(userId = "U1"),
+                                    createRoutineMemberDto(userId = "U2"),
+                                ),
+                            answers =
+                                listOf(
+                                    createStandupAnswerDto(userId = "U1", responses = listOf("shipped", "")),
+                                ),
+                            questions = listOf("Yesterday?", "Today?"),
+                        ).template
+                        .map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("a title section and one section per member, with blanks and missing answers marked") {
+                    texts shouldBe
+                        listOf(
+                            "*Daily — 2026-05-01*",
+                            "<@U1>\n• *Yesterday?* shipped\n• *Today?* (blank)",
+                            "<@U2> _(no response)_",
+                        )
+                }
+            }
+        }
 
         given("requestApprovalFormTemplate") {
             `when`("called with selection fields") {

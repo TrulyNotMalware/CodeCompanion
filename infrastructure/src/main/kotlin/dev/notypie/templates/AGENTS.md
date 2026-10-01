@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # infrastructure/templates
 
@@ -13,7 +13,7 @@ modal payloads — behind small type-safe DSLs.
 |------|-------------|
 | `SlackViewDsl.kt` | `modal { ... }` builder producing a `Map<String, Any>` view payload; preserves key order via `LinkedHashMap` |
 | `LayoutBlocksDsl.kt` | DSL for Block Kit layout blocks |
-| `ModalTemplateBuilder.kt` | Composes complete modals for each form (meeting request, reschedule, add participant, standup setup/fill, CVE subscription, decline reason); `approvalTemplate` names the publisher through `SlackUserProfileResolver` |
+| `ModalTemplateBuilder.kt` | Composes complete modals for each form (meeting request, reschedule, add participant, standup setup/fill, CVE subscription, decline reason); `approvalTemplate` names the publisher through `SlackUserProfileResolver`. `standupSummaryTemplate` renders a title section plus one section per member, each cut to `SLACK_SECTION_TEXT_MAX_CHARS` (3,000, Slack's section limit), at most `STANDUP_SUMMARY_MAX_MEMBER_SECTIONS` (48) members and an "…and N more members" section, so the message stays within Slack's 50 blocks; it used to be one section, which Slack rejects as `invalid_blocks` past 3,000 characters |
 | `SlackUserProfileResolver.kt` | `resolve(userId): PublisherView(displayName, thumbnailUrl?)` — `users.profile.get?user={user}` via `RestRequester.safeGet` with `userId` as a URI template variable (never interpolated), cached per user (30 min TTL); any failure or `ok = false` degrades to `<@userId>` with no thumbnail and is negative-cached for `failureTtl` (60 s), so a user whose lookup keeps failing costs one Tier 4 call per minute, not one per render. At `maxEntries` (5 000) a new user first drops expired entries, then the oldest tenth by insertion time — never the whole cache |
 | `ModalBlockBuilder.kt` | Block-level assembly used by the template builder |
 | `ModalElementBuilder.kt` | Element-level widgets: text inputs, selects, date/time pickers, checkboxes |

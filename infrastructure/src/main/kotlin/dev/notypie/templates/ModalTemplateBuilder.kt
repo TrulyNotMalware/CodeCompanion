@@ -38,6 +38,10 @@ class ModalTemplateBuilder(
         private val STANDUP_SESSION_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
+        // Slack: a section's text holds at most 3,000 characters and a message at most 50 blocks.
+        const val SLACK_SECTION_TEXT_MAX_CHARS = 3_000
+        const val STANDUP_SUMMARY_MAX_MEMBER_SECTIONS = 48
+
         // Must stay aligned with RescheduleMeetingSubmissionContext's DATE_PATTERN/TIME_PATTERN, which reads these.
         private val RESCHEDULE_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -608,11 +612,10 @@ class ModalTemplateBuilder(
         questions: List<String>,
     ): LayoutBlocks {
         val answersByUser = answers.associateBy { it.userId }
-        val body =
-            buildString {
-                append("*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*")
-                members.forEach { member ->
-                    append("\n\n<@${member.userId}>")
+        val memberSections =
+            members.map { member ->
+                buildString {
+                    append("<@${member.userId}>")
                     val answer = answersByUser[member.userId]
                     if (answer == null) {
                         append(" _(no response)_")
@@ -628,8 +631,32 @@ class ModalTemplateBuilder(
                     }
                 }
             }
-        return onlyTextTemplate(message = body, isMarkDown = true)
+        val hiddenMembers = memberSections.size - STANDUP_SUMMARY_MAX_MEMBER_SECTIONS
+        return layoutBlocks {
+            add(
+                block =
+                    modalBlockBuilder.simpleText(
+                        text = "*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*",
+                        isMarkDown = true,
+                    ),
+            )
+            memberSections.take(STANDUP_SUMMARY_MAX_MEMBER_SECTIONS).forEach { section ->
+                add(block = modalBlockBuilder.simpleText(text = section.fitSlackSection(), isMarkDown = true))
+            }
+            if (hiddenMembers > 0) {
+                add(
+                    block =
+                        modalBlockBuilder.simpleText(
+                            text = "_…and $hiddenMembers more members_",
+                            isMarkDown = true,
+                        ),
+                )
+            }
+        }
     }
+
+    private fun String.fitSlackSection(): String =
+        if (length <= SLACK_SECTION_TEXT_MAX_CHARS) this else "${take(SLACK_SECTION_TEXT_MAX_CHARS - 1)}…"
 
     override fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,

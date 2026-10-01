@@ -6,6 +6,7 @@ import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
@@ -17,6 +18,29 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
 private val summaryLog = KotlinLogging.logger {}
+
+// The outbox payload column is TEXT (65,535 bytes) and Korean text is 3 bytes a character, so the stored
+// summary is bounded; a member's whole answer also has to fit one 3,000-character Slack section when rendered.
+internal const val SUMMARY_MEMBER_RESPONSE_CHARS = 2_400
+internal const val SUMMARY_TOTAL_RESPONSE_CHARS = 18_000
+
+internal fun List<StandupAnswerDto>.boundedForSummary(): List<StandupAnswerDto> {
+    if (isEmpty()) return this
+    val perMember = minOf(SUMMARY_MEMBER_RESPONSE_CHARS, SUMMARY_TOTAL_RESPONSE_CHARS / size)
+    return map { answer ->
+        if (answer.responses.isEmpty()) {
+            answer
+        } else {
+            val perResponse = perMember / answer.responses.size
+            answer.copy(
+                responses =
+                    answer.responses.map { response ->
+                        if (response.length <= perResponse) response else "${response.take(perResponse - 1)}…"
+                    },
+            )
+        }
+    }
+}
 
 @Service
 class StandupSummaryService(
@@ -51,7 +75,7 @@ class StandupSummaryService(
                                 routineName = routine.name,
                                 sessionDate = session.sessionDate,
                                 members = routine.members,
-                                answers = session.answers,
+                                answers = session.answers.boundedForSummary(),
                                 questions = routine.questions,
                             ),
                     ),
