@@ -68,7 +68,7 @@ class SidecarAgentClient(
             HttpRequest
                 .newBuilder(URI.create("$baseUrl$CONVERSE_PATH"))
                 .timeout(requestTimeout)
-                .header("Authorization", "Bearer $bearerSecret")
+                .apply { if (bearerSecret.isNotBlank()) header("Authorization", "Bearer $bearerSecret") }
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream")
                 .apply { request.userId?.let { header("X-User-Id", it) } }

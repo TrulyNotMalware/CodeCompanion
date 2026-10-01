@@ -4,6 +4,7 @@ import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.cve.schema.CveTopicCategory
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.context.annotation.Configuration
 
 const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
 
@@ -196,4 +197,29 @@ data class AppConfig(
 enum class EventPublisherType {
     KAFKA,
     APPLICATION_EVENT,
+}
+
+private val UNRESOLVED_PLACEHOLDER = Regex("""\$\{[^}]*}""")
+
+fun AppConfig.requireUsableSecrets() {
+    val unresolved =
+        mapOf(
+            "slack.app.api.token" to api.token,
+            "slack.app.api.app-token" to api.appToken,
+            "slack.app.agent.sidecar.bearer-secret" to agent.sidecar.bearerSecret,
+            "slack.app.mcp.signing-secret" to mcp.signingSecret,
+            "slack.app.cve.github.token" to cve.github.token,
+            "slack.app.cve.nvd.api-key" to cve.nvd.apiKey,
+        ).filterValues { UNRESOLVED_PLACEHOLDER.containsMatchIn(it) }.keys
+    check(unresolved.isEmpty()) { "Unresolved placeholders, set their environment variables: $unresolved" }
+    check(api.token.isNotBlank()) { "slack.app.api.token is blank; set SLACK_API_TOKEN" }
+}
+
+@Configuration
+class AppConfigSecretsCheck(
+    appConfig: AppConfig,
+) {
+    init {
+        appConfig.requireUsableSecrets()
+    }
 }

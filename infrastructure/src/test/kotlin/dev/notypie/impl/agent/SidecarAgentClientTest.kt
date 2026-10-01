@@ -397,6 +397,29 @@ class SidecarAgentClientTest :
             }
         }
 
+        given("a client configured without a bearer secret") {
+            respond =
+                sseResponse(
+                    body =
+                        "event: session\ndata: {\"sessionId\":\"sess-open\"}\n\n" +
+                            "event: done\ndata: {\"finalText\":\"ok\",\"sessionId\":\"sess-open\"}\n\n",
+                )
+            val openClient =
+                SidecarAgentClient(
+                    baseUrl = "http://127.0.0.1:${server.address.port}",
+                    bearerSecret = "",
+                    requestTimeout = Duration.ofSeconds(5L),
+                )
+
+            `when`("converse") {
+                openClient.converse(request = AgentTurnRequest(sessionKey = "C1:x", prompt = "hi"))
+
+                then("it sends no Authorization header instead of an empty bearer token") {
+                    capturedAuthorization shouldBe null
+                }
+            }
+        }
+
         given("a sidecar that is not reachable") {
             val unreachableClient =
                 SidecarAgentClient(
