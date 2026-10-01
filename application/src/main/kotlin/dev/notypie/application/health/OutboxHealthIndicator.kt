@@ -14,7 +14,7 @@ import java.time.LocalDateTime
 class OutboxHealthIndicator(
     private val outboxRepository: MessageOutboxRepository,
     private val clock: Clock,
-    appConfig: AppConfig = AppConfig(),
+    appConfig: AppConfig,
 ) : HealthIndicator {
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.health.stuckThresholdSeconds)
     private val retryingSendThreshold: Int = appConfig.outbox.health.retryingSendThreshold

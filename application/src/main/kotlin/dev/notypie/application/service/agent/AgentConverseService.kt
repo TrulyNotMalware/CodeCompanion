@@ -46,7 +46,7 @@ class AgentConverseService(
     private val meterRegistry: MeterRegistry,
     transactionManager: PlatformTransactionManager,
     private val turnExecutor: Executor,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock,
     private val scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
 ) {
     companion object {

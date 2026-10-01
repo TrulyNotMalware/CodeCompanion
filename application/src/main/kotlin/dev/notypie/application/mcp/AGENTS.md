@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/mcp
 
@@ -18,7 +18,7 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
 | File | Description |
 |------|-------------|
 | `McpToolGate.kt` | `class McpToolGate(commandRoleResolver, mcpToolCallHistoryRepository)`. `execute(transportContext, toolName, requiredPermission, argumentsSummary = null, body: (ScopedTurnToken) -> String): CallToolResult` — reads the token under `SCOPED_TURN_TOKEN_CONTEXT_KEY` (missing → "Unauthenticated tool call." error), resolves `UserRole` via `CommandRoleResolver.resolve(userId)`, checks `role.grants(permission)`, runs `body`, and writes one `McpToolCallRecord` (`COMPLETED` / `DENIED` / `FAILED`, duration, `argumentsJson`) per call. Audit writes are `runCatching` — they never fail the tool |
-| `DomainReadTools.kt` | `class DomainReadTools(mcpToolGate, opsStatusService, roleManagementService, meetingRepository, clock = Clock.systemDefaultZone())`. `@McpTool get_status` (`OPERATIONS`) → `OpsStatusService.renderReport()`; `@McpTool list_meetings(daysAhead: Int?)` (`BASIC`, window coerced to `1..31`, default 7) → `meetingRepository.getMeetingsByUserIdInRange(userId = token.userId, ...)` rendered as `• title — yyyy-MM-dd HH:mm (host <@id>, N participant(s))`, canceled meetings dropped; `@McpTool list_roles` (`ADMINISTRATION`) → `RoleManagementService.renderGrants()` |
+| `DomainReadTools.kt` | `class DomainReadTools(mcpToolGate, opsStatusService, roleManagementService, meetingRepository, clock)`. `@McpTool get_status` (`OPERATIONS`) → `OpsStatusService.renderReport()`; `@McpTool list_meetings(daysAhead: Int?)` (`BASIC`, window coerced to `1..31`, default 7) → `meetingRepository.getMeetingsByUserIdInRange(userId = token.userId, ...)` rendered as `• title — yyyy-MM-dd HH:mm (host <@id>, N participant(s))`, canceled meetings dropped; `@McpTool list_roles` (`ADMINISTRATION`) → `RoleManagementService.renderGrants()` |
 
 ## For AI Agents
 

@@ -32,7 +32,7 @@ class CveNotificationDispatcher(
     private val digestZone: ZoneId,
     private val digestSummaryMaxLength: Int,
     private val deliveryHorizonDays: Long,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 

@@ -33,8 +33,8 @@ class OpsStatusService(
     private val cveTopicRepository: CveTopicRepository,
     private val cveEventRepository: CveEventRepository,
     private val cveCollectLedgerRepository: CveCollectLedgerRepository,
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
     private val stuckThresholdSeconds: Long = appConfig.outbox.health.stuckThresholdSeconds
     private val cveEnabled: Boolean = appConfig.cve.enabled

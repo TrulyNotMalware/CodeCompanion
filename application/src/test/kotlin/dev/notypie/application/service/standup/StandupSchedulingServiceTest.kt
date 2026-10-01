@@ -81,6 +81,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -138,6 +139,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 every { repo.listActiveRoutines() } returns
                     listOf(
@@ -165,6 +167,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -191,6 +194,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -220,6 +224,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -250,6 +255,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -309,6 +315,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
@@ -364,6 +371,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
@@ -399,6 +407,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
@@ -435,6 +444,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 every { repo.resetStuckDispatches(olderThan = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns emptyList()
@@ -458,6 +468,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 99L, userId = "U_A", triggerOffsetSeconds = -60L)
 
@@ -486,6 +497,7 @@ class StandupSchedulingServiceTest :
                         transactionManager = stubTransactionManager(),
                         applicationEventPublisher = publisher,
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val sessionUid = UUID.randomUUID()
                 val routineUid = UUID.randomUUID()
@@ -537,6 +549,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val candidate =
                     createNudgeCandidateSession(
@@ -595,6 +608,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val candidate =
                     createNudgeCandidateSession(
@@ -628,6 +642,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val candidate =
                     createNudgeCandidateSession(

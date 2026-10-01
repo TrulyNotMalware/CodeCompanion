@@ -21,7 +21,7 @@ class DomainReadTools(
     private val opsStatusService: OpsStatusService,
     private val roleManagementService: RoleManagementService,
     private val meetingRepository: MeetingRepository,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock,
 ) {
     @McpTool(
         name = "get_status",

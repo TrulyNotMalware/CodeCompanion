@@ -23,7 +23,7 @@ class StandupAnswerService(
     private val standupRepository: StandupRepository,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
-    private val clock: Clock = Clock.systemDefaultZone(),
+    private val clock: Clock,
 ) {
     @EventListener
     fun recordAnswer(event: RecordStandupAnswerEvent) {

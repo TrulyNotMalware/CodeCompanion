@@ -37,6 +37,7 @@ import io.mockk.slot
 import io.mockk.verify
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.Executor
@@ -529,6 +530,7 @@ class AgentConverseServiceTest :
                     signingSecret = "test-signing-secret",
                     tokenTtl = Duration.ofSeconds(300L),
                     clockSkew = Duration.ofSeconds(30L),
+                    clock = Clock.systemUTC(),
                 )
 
             val gateway = mockk<AgentGateway>()

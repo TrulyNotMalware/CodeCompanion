@@ -26,7 +26,7 @@ class NvdCveSourceAdapter(
     private val lookbackMinutes: Long,
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
     private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
     private val requestInterval: Duration = DEFAULT_REQUEST_INTERVAL,
 ) : SourceAdapter {

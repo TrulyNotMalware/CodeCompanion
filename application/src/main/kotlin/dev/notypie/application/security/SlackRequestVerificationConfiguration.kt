@@ -21,5 +21,5 @@ class SlackRequestVerificationConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun slackRetryDeduplicator(): SlackRetryDeduplicator = InMemorySlackRetryDeduplicator()
+    fun slackRetryDeduplicator(clock: Clock): SlackRetryDeduplicator = InMemorySlackRetryDeduplicator(clock = clock)
 }

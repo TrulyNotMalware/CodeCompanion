@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/ops
 
@@ -44,7 +44,7 @@ Spec under `application/src/test/kotlin/dev/notypie/application/service/ops/`. F
 published; build the service with an `AppConfig` whose `cve.enabled` toggles the CVE section.
 
 ### Common Patterns
-- Constructor-injected `Clock` with a `Clock.systemDefaultZone()` default; `AppConfig` fields copied into
+- Constructor-injected `Clock` and `AppConfig`, neither defaulted; `AppConfig` fields copied into
   `private val`s at construction.
 - `buildString { appendLine(...) }` for Slack markdown; bullets are `• *Label:* value`.
 - `runCatching { ... }.getOrElse { log.error(...); fallback }` for user-facing reports.

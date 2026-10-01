@@ -22,6 +22,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.time.Clock
 
 class RoleManagementServiceTest :
     BehaviorSpec({
@@ -36,6 +37,7 @@ class RoleManagementServiceTest :
                 CommandRoleResolver(
                     appConfig = AppConfig(authorization = AppConfig.Authorization(bootstrapAdmins = bootstrapAdmins)),
                     userCommandRoleRepository = roleRepository,
+                    clock = Clock.systemUTC(),
                 ),
         ): Pair<RoleManagementService, EventPublisher> {
             val stager = mockk<OutboundMessageStager>()
@@ -272,7 +274,11 @@ class RoleManagementServiceTest :
                     listOf(UserRole.ADMIN, UserRole.USER)
                 every { roleRepository.deleteRole(userId = targetUserId) } returns true
                 val resolver =
-                    CommandRoleResolver(appConfig = AppConfig(), userCommandRoleRepository = roleRepository)
+                    CommandRoleResolver(
+                        appConfig = AppConfig(),
+                        userCommandRoleRepository = roleRepository,
+                        clock = Clock.systemUTC(),
+                    )
                 val (service, _) =
                     serviceWith(
                         roleRepository = roleRepository,
@@ -311,7 +317,11 @@ class RoleManagementServiceTest :
                 every { roleRepository.findRole(userId = targetUserId) } returnsMany
                     listOf(UserRole.USER, UserRole.DEVELOPER)
                 val resolver =
-                    CommandRoleResolver(appConfig = AppConfig(), userCommandRoleRepository = roleRepository)
+                    CommandRoleResolver(
+                        appConfig = AppConfig(),
+                        userCommandRoleRepository = roleRepository,
+                        clock = Clock.systemUTC(),
+                    )
                 val (service, _) =
                     serviceWith(
                         roleRepository = roleRepository,

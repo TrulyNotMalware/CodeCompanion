@@ -16,7 +16,7 @@ private val log = KotlinLogging.logger {}
 class CommandRoleResolver(
     appConfig: AppConfig,
     private val userCommandRoleRepository: UserCommandRoleRepository,
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
 ) {
     companion object {
         val CACHE_TTL: Duration = Duration.ofSeconds(60)

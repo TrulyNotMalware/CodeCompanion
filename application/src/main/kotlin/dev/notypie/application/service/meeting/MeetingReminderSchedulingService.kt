@@ -35,8 +35,8 @@ class MeetingReminderSchedulingService(
     private val outboxRepository: MessageOutboxRepository,
     private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 

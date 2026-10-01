@@ -224,6 +224,7 @@ class NvdCveSourceAdapterTest :
                     lookbackMinutes = 120,
                     requestTimeout = Duration.ofSeconds(1L),
                     apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    clock = Clock.systemUTC(),
                 )
 
             `when`("fetch") {
@@ -248,6 +249,7 @@ class NvdCveSourceAdapterTest :
                     requestTimeout = Duration.ofSeconds(5L),
                     apiBaseUrl = "http://127.0.0.1:${server.address.port}",
                     maxBodyBytes = 64,
+                    clock = Clock.systemUTC(),
                 )
 
             `when`("fetch") {
@@ -268,6 +270,7 @@ class NvdCveSourceAdapterTest :
                     requestTimeout = Duration.ofSeconds(5L),
                     apiBaseUrl = "http://127.0.0.1:${server.address.port}",
                     requestInterval = Duration.ofMillis(400L),
+                    clock = Clock.systemUTC(),
                 )
             val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
 
@@ -292,6 +295,7 @@ class NvdCveSourceAdapterTest :
                     requestTimeout = Duration.ofSeconds(5L),
                     apiBaseUrl = "http://127.0.0.1:${server.address.port}",
                     requestInterval = Duration.ofSeconds(30L),
+                    clock = Clock.systemUTC(),
                 )
             val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
 

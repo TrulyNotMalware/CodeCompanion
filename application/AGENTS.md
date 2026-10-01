@@ -80,8 +80,9 @@ This module also consumes `testFixtures(project(":domain"))` and `testFixtures(p
   slow job (e.g. the CVE collector's outbound HTTP) starve every other job. The size applies only because
   `SchedulingConfig` declares a `ThreadPoolTaskScheduler`: with virtual threads on, Boot's default is
   `SimpleAsyncTaskScheduler`, which ignores `pool.size` and runs every fixedDelay job on a single thread.
-- `Clock` is injected into time-dependent services (default `Clock.systemDefaultZone()`) so specs can
-  pin time.
+- `Clock` is a required constructor parameter of every time-dependent bean (no default), and `@Bean` factories pass
+  the context's single `Clock` bean, so specs and the smoke test can pin time. `AppConfig` is likewise never defaulted
+  in a bean constructor.
 - Config binding via `@ConfigurationProperties` classes under `configurations/`, scanned by
   `@ConfigurationPropertiesScan` on the main class.
 

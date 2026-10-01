@@ -45,8 +45,8 @@ class StandupSchedulingService(
     private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
     private val applicationEventPublisher: ApplicationEventPublisher = ApplicationEventPublisher { },
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 

@@ -89,7 +89,7 @@ class CveConfiguration {
         )
 
     @Bean
-    fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter {
+    fun nvdCveSourceAdapter(appConfig: AppConfig, clock: Clock): SourceAdapter {
         val lookbackMinutes = appConfig.cve.nvd.lookbackMinutes
         val windowMinutes = appConfig.cve.collector.windowMinutes
         require(lookbackMinutes >= windowMinutes * 2) {
@@ -101,6 +101,7 @@ class CveConfiguration {
             lookbackMinutes = lookbackMinutes,
             requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
             requestInterval = Duration.ofMillis(appConfig.cve.nvd.requestIntervalMillis),
+            clock = clock,
         )
     }
 

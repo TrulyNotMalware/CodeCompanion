@@ -48,7 +48,7 @@ interface SlackRetryDeduplicator {
 }
 
 class InMemorySlackRetryDeduplicator(
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
     private val ttl: Duration = Duration.ofMinutes(10),
     private val maxEntries: Int = 10_000,
 ) : SlackRetryDeduplicator {

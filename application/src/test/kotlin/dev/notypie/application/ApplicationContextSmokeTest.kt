@@ -2,7 +2,15 @@ package dev.notypie.application
 
 import com.ninjasquad.springmockk.MockkBean
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.application.security.SlackRetryDeduplicator
+import dev.notypie.application.service.agent.AgentConverseService
+import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.meeting.DailyAgendaSchedulingService
+import dev.notypie.application.service.meeting.MeetingReminderSchedulingService
+import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
+import dev.notypie.application.service.standup.StandupAnswerService
+import dev.notypie.application.service.standup.StandupSchedulingService
 import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
@@ -94,6 +102,23 @@ class ApplicationContextSmokeTest
                         val clocks = context.getBeansOfType(Clock::class.java).values
                         clocks shouldHaveSize 1
                         clocks.single().zone shouldBe ZoneId.systemDefault()
+                    }
+
+                    then("every clock-dependent bean, factory-built ones included, holds that Clock bean") {
+                        val clock = context.getBean(Clock::class.java)
+                        listOf(
+                            SlackRetryDeduplicator::class.java,
+                            CommandRoleResolver::class.java,
+                            AgentConverseService::class.java,
+                            MeetingReminderSchedulingService::class.java,
+                            DailyAgendaSchedulingService::class.java,
+                            StandupSchedulingService::class.java,
+                            StandupAnswerService::class.java,
+                            OpsStatusService::class.java,
+                        ).forEach { type ->
+                            val bean = AopTestUtils.getUltimateTargetObject<Any>(context.getBean(type))
+                            ReflectionTestUtils.getField(bean, "clock") shouldBeSameInstanceAs clock
+                        }
                     }
 
                     then("open-in-view is off, so lazy loads cannot hide outside a transaction") {

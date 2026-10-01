@@ -220,7 +220,12 @@ class SlackRetryDeduplicatorTest :
 
             `when`("maxEntries is not positive") {
                 then("construction is rejected") {
-                    shouldThrow<IllegalArgumentException> { InMemorySlackRetryDeduplicator(maxEntries = 0) }
+                    shouldThrow<IllegalArgumentException> {
+                        InMemorySlackRetryDeduplicator(
+                            clock = Clock.systemUTC(),
+                            maxEntries = 0,
+                        )
+                    }
                 }
             }
         }

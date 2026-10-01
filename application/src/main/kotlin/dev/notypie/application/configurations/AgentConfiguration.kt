@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.transaction.PlatformTransactionManager
+import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.Executor
 
@@ -56,6 +57,7 @@ class AgentConfiguration(
         transactionManager: PlatformTransactionManager,
         @Qualifier("agentTurnExecutor") agentTurnExecutor: Executor,
         scopedTurnTokenCodec: ObjectProvider<ScopedTurnTokenCodec>,
+        clock: Clock,
     ): AgentConverseService =
         AgentConverseService(
             agentGateway = agentGateway,
@@ -67,5 +69,6 @@ class AgentConfiguration(
             transactionManager = transactionManager,
             turnExecutor = agentTurnExecutor,
             scopedTurnTokenCodec = scopedTurnTokenCodec.getIfAvailable(),
+            clock = clock,
         )
 }

@@ -15,7 +15,7 @@ token before the MCP protocol sees the request, and the transport provider's con
 | File | Description |
 |------|-------------|
 | `ScopedTurnToken.kt` | `const val SCOPED_TURN_TOKEN_CONTEXT_KEY = "dev.notypie.mcp.scoped-turn-token"` and `data class ScopedTurnToken(userId, sessionKey, turnId, expiresAt: Instant)`. Deliberately carries no role |
-| `ScopedTurnTokenCodec.kt` | `class ScopedTurnTokenCodec(signingSecret, tokenTtl, clockSkew, clock = Clock.systemUTC())`. `mint(userId, sessionKey, turnId)` → `v1.<b64url(json{sub,sk,tid,iat,exp})>.<b64url(HmacSHA256)>` (throws on a blank secret). `verify(token): ScopedTurnToken?` returns null on blank secret, wrong segment count or version, signature mismatch (`MessageDigest.isEqual`, constant time), unparsable payload, or `now > exp + clockSkew`. Owns a vanilla Jackson 3 `JsonMapper` |
+| `ScopedTurnTokenCodec.kt` | `class ScopedTurnTokenCodec(signingSecret, tokenTtl, clockSkew, clock)` (the bean factory passes the context `Clock``. `mint(userId, sessionKey, turnId)` → `v1.<b64url(json{sub,sk,tid,iat,exp})>.<b64url(HmacSHA256)>` (throws on a blank secret). `verify(token): ScopedTurnToken?` returns null on blank secret, wrong segment count or version, signature mismatch (`MessageDigest.isEqual`, constant time), unparsable payload, or `now > exp + clockSkew`. Owns a vanilla Jackson 3 `JsonMapper` |
 | `McpTurnTokenFilter.kt` | `class McpTurnTokenFilter(scopedTurnTokenCodec, allowRemote) : OncePerRequestFilter`. Rejects with `401` + `{"error":"unauthorized","reason":"..."}` where reason is `loopback-only` (while `allowRemote=false`: a non-loopback `remoteAddr`, or any `Forwarded` / `X-Forwarded-For` / `X-Real-IP` header — on Kubernetes Boot would otherwise let Jetty take `remoteAddr` from a client-supplied `X-Forwarded-For`, so a forged `127.0.0.1` passed; `server.forward-headers-strategy: none` in `application.yaml` turns that off as well), `missing token` (no `Bearer ` header) or `invalid token` (`verify` returned null). Registered by `McpServerConfiguration.mcpTurnTokenFilterRegistration` at `HIGHEST_PRECEDENCE + 20` for `${mcpEndpoint}` and `${mcpEndpoint}/*` |
 
 ## For AI Agents
@@ -53,7 +53,7 @@ spec; when adding one, drive `doFilterInternal` with `MockHttpServletRequest` (s
 `src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt`.
 
 ### Common Patterns
-- Constructor-injected `Clock` (`Clock.systemUTC()` default) for every time decision.
+- Constructor-injected `Clock` (no default; `McpServerConfiguration` passes the context bean) for every time decision.
 - `verify` returns `null` rather than throwing; callers treat null as "reject" and never log the token.
 - `OncePerRequestFilter` scoped by `FilterRegistrationBean.urlPatterns`, not by `shouldNotFilter`.
 

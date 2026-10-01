@@ -13,7 +13,7 @@ class ScopedTurnTokenCodec(
     private val signingSecret: String,
     private val tokenTtl: Duration,
     private val clockSkew: Duration,
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
 ) {
     companion object {
         private const val VERSION = "v1"
