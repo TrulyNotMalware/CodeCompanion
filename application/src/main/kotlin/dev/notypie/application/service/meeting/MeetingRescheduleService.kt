@@ -62,7 +62,10 @@ class MeetingRescheduleService(
                     "Failed to reschedule meeting meetingUid=${payload.meetingUid} " +
                         "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
-                replyTemplate.executeWithoutResult {
+                replyTemplate.replyToFailure(
+                    failure = exception,
+                    context = "reschedule meetingUid=${payload.meetingUid} idempotencyKey=${event.idempotencyKey}",
+                ) {
                     publishEphemeral(
                         message = "Failed to reschedule the meeting. Please try again later.",
                         basicInfo = basicInfo,

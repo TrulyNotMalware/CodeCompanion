@@ -160,7 +160,10 @@ class MeetingServiceImpl(
                     "Failed to cancel meeting meetingUid=${payload.meetingUid} " +
                         "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
-                replyTemplate.executeWithoutResult {
+                replyTemplate.replyToFailure(
+                    failure = exception,
+                    context = "cancel meetingUid=${payload.meetingUid} idempotencyKey=${event.idempotencyKey}",
+                ) {
                     publishCancelEphemeral(
                         message = "Failed to cancel the meeting. Please try again later.",
                         basicInfo = basicInfo,
@@ -217,7 +220,10 @@ class MeetingServiceImpl(
                     "Failed to add participants meetingUid=${payload.meetingUid} " +
                         "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
-                replyTemplate.executeWithoutResult {
+                replyTemplate.replyToFailure(
+                    failure = exception,
+                    context = "add meetingUid=${payload.meetingUid} idempotencyKey=${event.idempotencyKey}",
+                ) {
                     publishHostEphemeral(
                         message = "Failed to add participants. Please try again later.",
                         basicInfo = basicInfo,
@@ -349,6 +355,21 @@ internal fun TransactionTemplate.executeRetryingOnConflict(action: () -> Unit): 
     if (failure !is RuntimeException || !failure.isMeetingWriteConflict()) return firstAttempt
     return attempt(action = action)
 }
+
+// Stages the "Please try again later" reply after both attempts failed. Deferred, the interaction transaction has
+// already committed, so a reply that fails as well (the database is down) must not escape to the request as a 500
+// for an interaction that succeeded: it is attached to the write failure as suppressed and logged. Inline, the reply
+// joined the caller's transaction, which its failure has marked rollback-only, so the caller still fails at commit.
+internal fun TransactionTemplate.replyToFailure(failure: Throwable, context: String, reply: () -> Unit) {
+    try {
+        executeWithoutResult { reply() }
+    } catch (replyFailure: RuntimeException) {
+        failure.addSuppressed(replyFailure)
+        meetingWriteLog.error(failure) { "Failure reply could not be staged either, the requester gets none: $context" }
+    }
+}
+
+private val meetingWriteLog = KotlinLogging.logger {}
 
 private fun TransactionTemplate.attempt(action: () -> Unit): Result<Unit> =
     try {
