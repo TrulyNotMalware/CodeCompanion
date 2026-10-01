@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/service/agent
 
@@ -14,7 +14,7 @@ proxy that `@Async` needs is guaranteed.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
+| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the class-level `@Async` still moves the turn off the committing thread) builds `sessionKey = "$channel:${threadId ?: publisherId}"`, sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
 
 ## For AI Agents
 
@@ -79,7 +79,7 @@ minting; build the request event with the domain testFixtures rather than inline
 - `domain/command/outbound/` — `OutboundMessage`, `MessageContent`, `ConversationTarget`, `UserRef`, `OutboundMessageStager`
 
 ### External
-Spring `@Async` / `@EventListener`, Spring TX `TransactionTemplate`, Micrometer `MeterRegistry`,
+Spring `@Async` / `@TransactionalEventListener`, Spring TX `TransactionTemplate`, Micrometer `MeterRegistry`,
 kotlin-logging.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

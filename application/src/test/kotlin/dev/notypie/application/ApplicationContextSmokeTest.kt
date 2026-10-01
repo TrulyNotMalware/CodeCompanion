@@ -4,22 +4,29 @@ import com.ninjasquad.springmockk.MockkBean
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
+import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.impl.agent.AgentGateway
+import dev.notypie.impl.agent.AgentTurnRequest
+import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.mockk.every
 import org.springframework.aop.support.AopUtils
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -34,6 +41,8 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.time.Duration.Companion.seconds
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
@@ -57,6 +66,7 @@ class ApplicationContextSmokeTest
         private val transactionTemplate: TransactionTemplate,
         private val outboxRepository: MessageOutboxRepository,
         @MockkBean(relaxed = true) private val messageDispatcher: MessageDispatcher,
+        @MockkBean private val agentGateway: AgentGateway,
     ) : BehaviorSpec({
             given("the application context with polling relay and in-process events") {
                 `when`("it starts") {
@@ -114,6 +124,31 @@ class ApplicationContextSmokeTest
                         val rows = outboxRepository.findAll().filter { it.idempotencyKey == idempotencyKey }
                         rows shouldHaveSize 1
                         outboxRepository.deleteAll(rows)
+                    }
+                }
+            }
+
+            given("AI turns requested from mention transactions") {
+                `when`("one transaction rolls back and the next one commits") {
+                    then("only the committed request reaches the agent") {
+                        val prompts = ConcurrentLinkedQueue<String>()
+                        every { agentGateway.converse(request = any()) } answers {
+                            prompts += firstArg<AgentTurnRequest>().prompt
+                            AgentTurnResult.Failed(code = "smoke", message = "smoke")
+                        }
+
+                        runCatching {
+                            transactionTemplate.executeWithoutResult {
+                                eventPublisher.publishEvent(createAgentConverseRequestEvent(prompt = "rolled back"))
+                                error("mention handling failed")
+                            }
+                        }
+                        transactionTemplate.executeWithoutResult {
+                            eventPublisher.publishEvent(createAgentConverseRequestEvent(prompt = "committed"))
+                        }
+
+                        eventually(5.seconds) { prompts.toList() shouldContain "committed" }
+                        prompts.toList() shouldBe listOf("committed")
                     }
                 }
             }

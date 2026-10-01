@@ -24,9 +24,10 @@ import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
-import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Async
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.event.TransactionPhase
+import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Duration
@@ -83,7 +84,7 @@ class AgentConverseService(
 
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     fun handleAgentConverse(event: AgentConverseRequestEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
