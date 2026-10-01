@@ -73,6 +73,33 @@ class CveCollectorTest :
             }
         }
 
+        given("two topics, and the tick's thread is interrupted while the first one is fetched") {
+            val topicRepository = mockk<CveTopicRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            val ledgerRepository = mockk<CveCollectLedgerRepository>()
+            val adapter = mockk<SourceAdapter>()
+            val first = createCveTopic(id = 1L, topicKey = "first", sourceType = CveSourceType.NVD_CVE)
+            val second = createCveTopic(id = 2L, topicKey = "second", sourceType = CveSourceType.NVD_CVE)
+            every { topicRepository.findActiveTopics() } returns listOf(first, second)
+            every { adapter.supports(sourceType = CveSourceType.NVD_CVE) } returns true
+            every { ledgerRepository.claimWindow(topicId = any(), windowStart = any()) } returns true
+            every { adapter.fetch(topic = first) } answers {
+                Thread.currentThread().interrupt()
+                throw InterruptedException("shutting down")
+            }
+
+            `when`("tick runs") {
+                collectorWith(topicRepository, eventRepository, ledgerRepository, listOf(adapter)).tick()
+                val keptInterrupt = Thread.interrupted()
+
+                then("it stops before the second topic and leaves the interrupt set") {
+                    verify(exactly = 0) { ledgerRepository.claimWindow(topicId = 2L, windowStart = any()) }
+                    verify(exactly = 0) { adapter.fetch(topic = second) }
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
         given("a topic whose window a concurrent instance already claimed") {
             val topicRepository = mockk<CveTopicRepository>()
             val eventRepository = mockk<CveEventRepository>()

@@ -23,7 +23,11 @@ class CveCollector(
     fun tick() {
         val now = LocalDateTime.now()
         val windowStart = windowStart(now = now)
-        cveTopicRepository.findActiveTopics().forEach { topic ->
+        for (topic in cveTopicRepository.findActiveTopics()) {
+            if (Thread.currentThread().isInterrupted) {
+                log.warn { "CVE collection interrupted before topic=${topic.topicKey}; stopping this tick" }
+                return
+            }
             runCatching { collectTopic(topic = topic, windowStart = windowStart) }
                 .onFailure { ex -> log.error(ex) { "CVE collection failed for topic=${topic.topicKey}" } }
         }

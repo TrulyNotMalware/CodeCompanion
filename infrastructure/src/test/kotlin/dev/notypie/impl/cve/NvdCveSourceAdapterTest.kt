@@ -5,15 +5,18 @@ import com.sun.net.httpserver.HttpServer
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetSocketAddress
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -22,10 +25,12 @@ class NvdCveSourceAdapterTest :
         lateinit var respond: (HttpExchange) -> Unit
         var capturedUri = ""
         var capturedApiKey: String? = null
+        val arrivalNanos = ConcurrentLinkedQueue<Long>()
 
         val server =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
                 createContext("/") { exchange ->
+                    arrivalNanos += System.nanoTime()
                     capturedUri = exchange.requestURI.toString()
                     capturedApiKey = exchange.requestHeaders.getFirst("apiKey")
                     respond(exchange)
@@ -250,6 +255,57 @@ class NvdCveSourceAdapterTest :
 
                 then("it drops the response instead of buffering it") {
                     events shouldBe emptyList()
+                }
+            }
+        }
+
+        given("one adapter asked for two topics in a row") {
+            respond = jsonResponse(status = 200, body = """{"vulnerabilities": []}""")
+            val pacedAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    requestInterval = Duration.ofMillis(400L),
+                )
+            val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
+
+            `when`("both fetches run") {
+                arrivalNanos.clear()
+                pacedAdapter.fetch(topic = topic)
+                pacedAdapter.fetch(topic = topic)
+                val (first, second) = arrivalNanos.toList()
+
+                then("the second request reaches NVD only after the configured interval") {
+                    Duration.ofNanos(second - first) shouldBeGreaterThanOrEqualTo Duration.ofMillis(400L)
+                }
+            }
+        }
+
+        given("a paced adapter whose caller is interrupted while it waits for the next slot") {
+            respond = jsonResponse(status = 200, body = """{"vulnerabilities": []}""")
+            val pacedAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    requestInterval = Duration.ofSeconds(30L),
+                )
+            val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
+
+            `when`("the second fetch is interrupted") {
+                arrivalNanos.clear()
+                pacedAdapter.fetch(topic = topic)
+                Thread.currentThread().interrupt()
+                val outcome = runCatching { pacedAdapter.fetch(topic = topic) }
+                val keptInterrupt = Thread.interrupted()
+
+                then("it throws at once, keeps the interrupt for the caller and sends nothing") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                    arrivalNanos.size shouldBe 1
                 }
             }
         }

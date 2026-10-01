@@ -158,7 +158,12 @@ data class AppConfig(
         data class Nvd(
             val apiKey: String = "",
             val lookbackMinutes: Long = 120,
-        )
+            val requestIntervalMillis: Long = 6_000L,
+        ) {
+            init {
+                require(requestIntervalMillis >= 0L) { "cve.nvd.request-interval-millis must not be negative" }
+            }
+        }
 
         data class Collector(
             val requestTimeoutSeconds: Long = 30,

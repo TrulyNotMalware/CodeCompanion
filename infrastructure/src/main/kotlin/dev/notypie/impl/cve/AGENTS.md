@@ -13,13 +13,15 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 |------|-------------|
 | `SourceAdapter.kt` | `data class RawSourceEvent(externalId, title, rawContent, publishedAt: LocalDateTime?)`; `interface SourceAdapter { supports(CveSourceType): Boolean; fetch(CveTopic): List<RawSourceEvent> }`; `internal fun JsonNode.stringOrNull()` (blank folds to null); `internal fun parseSourceTimestamp(String?)` (offset or offset-free ISO, null on failure) |
 | `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com")`. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` |
-| `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC)`. `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
+| `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC, maxBodyBytes = 32 MiB, requestInterval = 6 s)`. Before each request it waits until `requestInterval` has passed since the previous one (a `ReentrantLock` serialises callers); 403/429/503 log as a refusal (rate limit or outage) and return empty. `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **`fetch` must never throw.** Missing/invalid `source_config`, a non-2xx status (rate limits included),
-  invalid JSON, or a transport failure logs and returns `emptyList()`. `URI.create` on an unvalidated repo
+- **`fetch` must never throw**, with one exception: an interrupt while `NvdCveSourceAdapter` waits for its
+  pacing slot re-sets the interrupt flag and rethrows `InterruptedException`, so `CveCollector.tick()` can
+  stop on shutdown instead of sleeping through every remaining topic. Missing/invalid `source_config`, a
+  non-2xx status (rate limits included), invalid JSON, or a transport failure logs and returns `emptyList()`. `URI.create` on an unvalidated repo
   string would break that contract — that is why `REPO_PATTERN` exists.
 - **Every request has one deadline over headers and body.** Both adapters read through
   `HttpClient.sendWithinDeadline` (`SourceAdapter.kt`): `HttpRequest.timeout()` covers only the wait for
@@ -35,7 +37,13 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
   releases (`"name": ""`).
 - **Adding a source = adding an adapter bean**, not editing `CveCollector`. `CveSourceType.RSS` exists
   in the schema and in `AppConfig` but has no adapter — the collector warns and skips such topics.
-- Adapters are stateless; overlapping windows are expected and deduplicated downstream by
+- **NVD calls are paced, per adapter instance (so per Pod).** Topics are fetched in a fixed order every tick,
+  so without spacing the topics past NVD's quota (5 requests per rolling 30 s without a key, 50 with one) were
+  refused on every tick and never collected; the lookback cannot heal a miss that repeats. The default 6 s is
+  NVD's own guidance. Replicas behind one egress IP without a key share the quota, so two Pods collecting at
+  the same time can still be refused; that miss is not systematic, and a later window's lookback re-reads it.
+  A tick takes about `topics x 6 s` on one scheduler thread.
+- Apart from the NVD pacing clock, adapters are stateless; overlapping windows are expected and deduplicated downstream by
   `unique(topic_id, external_id)`. Titles are truncated to 512 and raw content to 60 000 chars by
   `CveEventRepositoryImpl`, not here.
 - Beans are created behind the CVE feature gate in `application/configurations/CveConfiguration.kt`.

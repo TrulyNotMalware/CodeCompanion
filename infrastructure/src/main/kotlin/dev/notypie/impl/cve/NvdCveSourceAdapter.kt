@@ -15,6 +15,9 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 private val log = KotlinLogging.logger {}
 
@@ -25,7 +28,11 @@ class NvdCveSourceAdapter(
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     private val clock: Clock = Clock.systemUTC(),
     private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
+    private val requestInterval: Duration = DEFAULT_REQUEST_INTERVAL,
 ) : SourceAdapter {
+    private val pacing = ReentrantLock()
+    private var nextRequestAtNanos: Long = System.nanoTime()
+
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
@@ -55,6 +62,7 @@ class NvdCveSourceAdapter(
                 .GET()
                 .build()
 
+        awaitRequestSlot()
         val response =
             runCatching {
                 httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
@@ -62,11 +70,34 @@ class NvdCveSourceAdapter(
                 log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
                 return emptyList()
             }
+        if (response.statusCode in REFUSED_STATUSES) {
+            log.warn {
+                "NVD refused topic=${topic.topicKey} with ${response.statusCode} (rate limit or outage); " +
+                    "a later window's $lookbackMinutes-minute lookback re-reads this period"
+            }
+            return emptyList()
+        }
         if (response.statusCode !in 200..299) {
             log.warn { "NVD returned ${response.statusCode} for topic=${topic.topicKey}" }
             return emptyList()
         }
         return parseVulnerabilities(body = response.body, topic = topic)
+    }
+
+    // Topics are fetched in a fixed order each tick, so without spacing the same topics past the quota fail every time.
+    private fun awaitRequestSlot() {
+        pacing.withLock {
+            val waitNanos = nextRequestAtNanos - System.nanoTime()
+            if (waitNanos > 0L) {
+                try {
+                    TimeUnit.NANOSECONDS.sleep(waitNanos)
+                } catch (exception: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw exception
+                }
+            }
+            nextRequestAtNanos = System.nanoTime() + requestInterval.toNanos()
+        }
     }
 
     private fun parseMatchParam(topic: CveTopic): String? {
@@ -151,6 +182,10 @@ class NvdCveSourceAdapter(
     companion object {
         const val DEFAULT_API_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
         const val DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024
+
+        // NVD: 5 requests per rolling 30 s without an API key (50 with one); its guidance is 6 s between requests.
+        val DEFAULT_REQUEST_INTERVAL: Duration = Duration.ofSeconds(6L)
+        private val REFUSED_STATUSES = setOf(403, 429, 503)
 
         // NVD expects ISO-8601 extended with milliseconds; a bare seconds form is rejected.
         private val NVD_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")

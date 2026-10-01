@@ -100,6 +100,7 @@ class CveConfiguration {
             apiKey = appConfig.cve.nvd.apiKey,
             lookbackMinutes = lookbackMinutes,
             requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
+            requestInterval = Duration.ofMillis(appConfig.cve.nvd.requestIntervalMillis),
         )
     }
 
