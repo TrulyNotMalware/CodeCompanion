@@ -9,6 +9,9 @@ import java.net.InetAddress
 
 private const val BEARER_PREFIX = "Bearer "
 
+// A proxy adds these; a caller can also forge them to make Jetty report a loopback remoteAddr.
+private val FORWARDING_HEADERS = listOf("Forwarded", "X-Forwarded-For", "X-Real-IP")
+
 // Applies to every request uniformly — do not exempt initialize/tools/list from the token check.
 class McpTurnTokenFilter(
     private val scopedTurnTokenCodec: ScopedTurnTokenCodec,
@@ -19,7 +22,7 @@ class McpTurnTokenFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        if (!allowRemote && !isLoopback(remoteAddr = request.remoteAddr)) {
+        if (!allowRemote && (request.hasForwardingHeader() || !isLoopback(remoteAddr = request.remoteAddr))) {
             return reject(response = response, reason = "loopback-only")
         }
         val header = request.getHeader("Authorization") ?: return reject(response = response, reason = "missing token")
@@ -28,6 +31,8 @@ class McpTurnTokenFilter(
             ?: return reject(response = response, reason = "invalid token")
         filterChain.doFilter(request, response)
     }
+
+    private fun HttpServletRequest.hasForwardingHeader(): Boolean = FORWARDING_HEADERS.any { getHeader(it) != null }
 
     private fun isLoopback(remoteAddr: String): Boolean =
         runCatching { InetAddress.getByName(remoteAddr).isLoopbackAddress }.getOrDefault(false)

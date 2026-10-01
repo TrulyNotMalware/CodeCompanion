@@ -54,7 +54,7 @@ _type: decision · updated: 2026-10-01_
     이유: 부트스트랩 순환 문제 해소. 상태: 유지(2026-07-07, Phase 10). 근거: `Refactor.md` Phase 10,
     `README.md` Bot Commands & Roles.
 14. **MCP 서버는 사이드카가 아니라 앱 안에.** 이유: `CommandRoleResolver`·스테이저·기존 서비스를 재사용하고
-    사이드카는 도메인 무지로 유지. 바인드는 루프백 전용. 상태: 유지(1차 2026-07-13). 근거: `Refactor.md`
+    사이드카는 도메인 무지로 유지. 바인드는 루프백 전용 — 판정은 소켓의 `remoteAddr`로 하므로 `server.forward-headers-strategy: none`을 고정하고, 루프백 전용 모드에서는 forwarding 헤더가 붙은 요청을 거부한다(2026-10-01, Kubernetes에서 Boot가 `X-Forwarded-For`를 신뢰해 위조한 `127.0.0.1`이 통과할 수 있었음). 상태: 유지(1차 2026-07-13). 근거: `Refactor.md`
     "후속 플랜 — Agent lane MCP".
 15. **턴 단위 스코프 토큰 + 호출 시점 역할 재-resolve.** 이유: 사이드카의 사용자 사칭 방지, 대화 중 revoke
     즉시 반영. 채팅 명령과 **같은 `CommandPermission` 상수**를 공유해 두 경로의 drift를 막는다. 상태: 유지.

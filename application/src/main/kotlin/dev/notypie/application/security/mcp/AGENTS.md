@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/security/mcp
 
@@ -16,7 +16,7 @@ token before the MCP protocol sees the request, and the transport provider's con
 |------|-------------|
 | `ScopedTurnToken.kt` | `const val SCOPED_TURN_TOKEN_CONTEXT_KEY = "dev.notypie.mcp.scoped-turn-token"` and `data class ScopedTurnToken(userId, sessionKey, turnId, expiresAt: Instant)`. Deliberately carries no role |
 | `ScopedTurnTokenCodec.kt` | `class ScopedTurnTokenCodec(signingSecret, tokenTtl, clockSkew, clock = Clock.systemUTC())`. `mint(userId, sessionKey, turnId)` → `v1.<b64url(json{sub,sk,tid,iat,exp})>.<b64url(HmacSHA256)>` (throws on a blank secret). `verify(token): ScopedTurnToken?` returns null on blank secret, wrong segment count or version, signature mismatch (`MessageDigest.isEqual`, constant time), unparsable payload, or `now > exp + clockSkew`. Owns a vanilla Jackson 3 `JsonMapper` |
-| `McpTurnTokenFilter.kt` | `class McpTurnTokenFilter(scopedTurnTokenCodec, allowRemote) : OncePerRequestFilter`. Rejects with `401` + `{"error":"unauthorized","reason":"..."}` where reason is `loopback-only` (non-loopback `remoteAddr` while `allowRemote=false`), `missing token` (no `Bearer ` header) or `invalid token` (`verify` returned null). Registered by `McpServerConfiguration.mcpTurnTokenFilterRegistration` at `HIGHEST_PRECEDENCE + 20` for `${mcpEndpoint}` and `${mcpEndpoint}/*` |
+| `McpTurnTokenFilter.kt` | `class McpTurnTokenFilter(scopedTurnTokenCodec, allowRemote) : OncePerRequestFilter`. Rejects with `401` + `{"error":"unauthorized","reason":"..."}` where reason is `loopback-only` (while `allowRemote=false`: a non-loopback `remoteAddr`, or any `Forwarded` / `X-Forwarded-For` / `X-Real-IP` header — on Kubernetes Boot would otherwise let Jetty take `remoteAddr` from a client-supplied `X-Forwarded-For`, so a forged `127.0.0.1` passed; `server.forward-headers-strategy: none` in `application.yaml` turns that off as well), `missing token` (no `Bearer ` header) or `invalid token` (`verify` returned null). Registered by `McpServerConfiguration.mcpTurnTokenFilterRegistration` at `HIGHEST_PRECEDENCE + 20` for `${mcpEndpoint}` and `${mcpEndpoint}/*` |
 
 ## For AI Agents
 

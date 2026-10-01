@@ -1,5 +1,10 @@
 # Base defaults applied to every profile. Kept minimal on purpose — profile yamls own their
 # environment; only cross-profile safety defaults belong here.
+server:
+  # Never derive the client address from X-Forwarded-For: Boot trusts it by default on Kubernetes, and the MCP
+  # endpoint's loopback-only check reads the client address.
+  forward-headers-strategy: none
+
 spring:
   ai:
     mcp:

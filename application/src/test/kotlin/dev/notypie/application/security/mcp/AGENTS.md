@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # test/kotlin/dev/notypie/application/security/mcp
 
@@ -10,6 +10,7 @@ mints per AI turn and the MCP server verifies to learn which Slack user, session
 ## Key Files
 | File | Description |
 |------|-------------|
+| `McpTurnTokenFilterTest.kt` | `McpTurnTokenFilter` with a real `ScopedTurnTokenCodec` on a fixed clock and `MockHttpServletRequest`s. Loopback-only: a loopback caller with a valid token passes; the same request carrying `X-Forwarded-For`, `Forwarded` or `X-Real-IP` is rejected (`401`, `loopback-only`, chain not invoked); a `10.0.0.5` caller is rejected. With `allowRemote = true` a proxied request passes on the token alone |
 | `ScopedTurnTokenCodecTest.kt` | `ScopedTurnTokenCodec(signingSecret, tokenTtl = 300 s, clockSkew = 30 s, clock)`. `mint` → `verify` round-trips `userId`, `sessionKey`, `turnId`, `expiresAt = mintedAt + 300 s`; verify at +329 s passes (inside skew), +331 s → null; payload segment spliced from another token → null; last signature char flipped → null; different secret → null; malformed (`"garbage"`, `v2.` prefix, two segments, non-base64 payload, empty) → null without throwing; blank secret → `mint` throws `IllegalStateException`, `verify` returns null (fails closed). |
 
 ## For AI Agents
