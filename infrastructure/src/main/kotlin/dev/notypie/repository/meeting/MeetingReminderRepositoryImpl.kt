@@ -73,7 +73,10 @@ open class MeetingReminderRepositoryImpl(
     @Transactional(readOnly = true)
     override fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder> =
         jpaMeetingReminderRepository
-            .findPendingBefore(before = before, pageable = PageRequest.of(0, limit))
+            .findPendingIdsBefore(before = before, pageable = PageRequest.of(0, limit))
+            .takeIf { it.isNotEmpty() }
+            ?.let { ids -> jpaMeetingReminderRepository.findWithMeetingAndParticipantsByIdIn(ids = ids) }
+            .orEmpty()
             .map { schema ->
                 ReadyReminder(
                     reminder = schema.toMeetingReminderDto(),

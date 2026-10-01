@@ -3,8 +3,10 @@ package dev.notypie.schema
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.repository.meeting.schema.MeetingReminderSchema
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.repository.meeting.schema.ParticipantsSchema
+import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -78,3 +80,10 @@ fun createMeetingSchema(member: Int, startIterator: Int = 1): MeetingSchema {
     meeting.participants.addAll(participantsList)
     return meeting
 }
+
+fun createMeetingReminderSchema(meeting: MeetingSchema, scheduledAt: Instant, offsetMinutes: Int = 15) =
+    MeetingReminderSchema(
+        meeting = meeting,
+        offsetMinutes = offsetMinutes,
+        scheduledAt = scheduledAt,
+    )

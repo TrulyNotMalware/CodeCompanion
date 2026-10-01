@@ -14,21 +14,34 @@ import java.time.Instant
 interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Long> {
     fun findByMeetingIdAndOffsetMinutes(meetingId: Long, offsetMinutes: Int): MeetingReminderSchema?
 
-    // DISTINCT avoids the JOIN FETCH cartesian on participants — duplicates would also eat into the page limit.
+    // Ids first: paging a query that fetches the participants collection would page in memory (HHH90003004).
     @Query(
         """
-        SELECT DISTINCT r FROM meeting_reminder r
-        JOIN FETCH r.meeting m
-        JOIN FETCH m.participants
+        SELECT r.id FROM meeting_reminder r
+        JOIN r.meeting m
         WHERE r.status = dev.notypie.domain.meet.entity.enums.MeetingReminderStatus.PENDING
           AND r.scheduledAt <= :before
           AND m.isCanceled = false
         ORDER BY r.scheduledAt ASC
         """,
     )
-    fun findPendingBefore(
+    fun findPendingIdsBefore(
         @Param("before") before: Instant,
         pageable: Pageable,
+    ): List<Long>
+
+    // LEFT: a meeting whose only member is the host has no participant rows and must still be reminded.
+    @Query(
+        """
+        SELECT r FROM meeting_reminder r
+        JOIN FETCH r.meeting m
+        LEFT JOIN FETCH m.participants
+        WHERE r.id IN :ids
+        ORDER BY r.scheduledAt ASC
+        """,
+    )
+    fun findWithMeetingAndParticipantsByIdIn(
+        @Param("ids") ids: Collection<Long>,
     ): List<MeetingReminderSchema>
 
     // Atomic UPDATE guarded by status = 'PENDING' — a derived find-then-save here would race and double-dispatch.

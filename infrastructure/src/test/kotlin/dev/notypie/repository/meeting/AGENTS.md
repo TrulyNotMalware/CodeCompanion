@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/meeting
 
@@ -11,6 +11,7 @@ optimistic-lock races), one MockK mapping spec, and the plain unit spec of the w
 ## Key Files
 | File | Description |
 |------|-------------|
+| `MeetingReminderRepositoryImplTest.kt` | `@DataJpaTest` on `MeetingReminderRepositoryImpl.findDueBefore`: three due reminders (a host-only meeting with no participants, then two meetings with three participants), limit 2 → the oldest two in order, the host-only one with an empty attendee list, each reminder once. With the old single query the host-only reminder was missing |
 | `JpaMeetingRepositoryTest.kt` | `@DataJpaTest` on `JpaMeetingRepository`. Save with participants and fetch-join read; `findMeetingWithParticipants` present / missing; `findAllMeetingByUserId` as publisher, as participant, none; explicit `meetingUid` round-trip; `findMeetingsByUserIdAndDateRange` (window + publisher-or-participant filter, `startAt` ascending, empty window); `updateParticipantAttendance` writes `isAttending` / `absentReason` / `absentReasonDetail` and returns `0` for an unknown key; a zero-participant meeting found by all five reads (`LEFT JOIN FETCH`); `findActiveByStartAtBetween` excludes a canceled meeting and returns each active meeting once with its full participant list |
 | `MeetingRepositoryWriteTest.kt` | `@DataJpaTest` injecting `JpaMeetingRepository` + `PlatformTransactionManager`, constructing `MeetingRepositoryImpl` by hand and wrapping each call in a `TransactionTemplate` (the proxy-less instance has no `@Transactional`). `addParticipants`: new user only / host never inserted / version bumped to 1; first participant on a zero-participant meeting; non-host → `NOT_AUTHORIZED`, nothing persisted, version 0; started → `MEETING_STARTED`; 20 + 1 → `OVER_CAPACITY`. `rescheduleMeeting`: `Rescheduled`, duration preserved and version 1; inverted stored end → `endAt` null; resubmitted with the time it already has → `AlreadyAtRequestedTime`, times and version 1 unchanged; non-host / canceled / unknown → `NotAuthorized` with version 0. Resubmitted add of the same user → `NO_NEW_PARTICIPANTS`, version stays 1. `markMeetingCanceled`: flag + version 1, resubmitted call `false` with version still 1; non-host → unchanged, version 0; unknown → `false`. Races via `raceAfterBothRead` (both workers load the row, latch, then the first writes and commits before the second writes): add vs add at 19/20, reschedule vs reschedule, cancel vs add — the second always fails with `ObjectOptimisticLockingFailureException` and the first's state wins; add vs add of the **same** user — the second fails on the participant unique key with `DataIntegrityViolationException`, which `isMeetingWriteConflict()` classifies as retryable |
 | `MeetingWriteConflictTest.kt` | Plain `BehaviorSpec`. `isMeetingWriteConflict`: `ObjectOptimisticLockingFailureException`, `PessimisticLockingFailureException`, `CannotAcquireLockException` → `true`; `DataIntegrityViolationException` naming `uk_meeting_participants_meeting_user` in a cause (MariaDB wording) or in its own message (H2 wording) → `true`, a not-null violation → `false`; a non-integrity exception whose message names the key, and `IllegalStateException` → `false` |
@@ -34,7 +35,7 @@ optimistic-lock races), one MockK mapping spec, and the plain unit spec of the w
   because the writes mix a load, a guard, a cascade and a version check that a mock cannot pin.
   `OVER_CAPACITY` depends on `Meeting.MAX_PARTICIPANTS` in `:domain` (the fixture fills 20 rows first); a
   limit change breaks this spec by design.
-- **Not covered here**: `MeetingReminderRepository` (claim / mark / reset CAS, `findPendingBefore`) and
+- **Not covered here**: `MeetingReminderRepository`'s claim / mark / reset CAS and
   `AgendaDispatchRepository` (`claimAgenda`). `claimAgenda` is `INSERT IGNORE` and cannot run on H2, but the
   reminder CAS can and should get a `JpaMeetingReminderRepositoryTest`.
 - `updateParticipantAttendance` returning `0` for a no-op happens only on a MariaDB URL with
