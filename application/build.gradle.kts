@@ -24,7 +24,7 @@ dependencies {
     api(platform("tools.jackson:jackson-bom:$jacksonVersion"))
     implementation("tools.jackson.module:jackson-module-kotlin")
 
-    implementation("org.springframework.boot:spring-boot-starter-web") {
+    implementation("org.springframework.boot:spring-boot-starter-webmvc") {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
     }
     implementation("org.springframework.boot:spring-boot-starter-jetty")

@@ -55,6 +55,6 @@ with that profile; run the app with `--spring.profiles.active=local` after touch
 - `:infrastructure`, `:domain` — component-scanned through the shared `dev.notypie` root package
 
 ### External
-Spring Boot (`spring-boot-starter-web` on Jetty, `runApplication`).
+Spring Boot (`spring-boot-starter-webmvc` on Jetty, `runApplication`).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
