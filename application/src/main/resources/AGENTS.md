@@ -77,8 +77,9 @@ stand up change-data-capture locally and in-cluster.
   on the submitting thread) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + async-executor tasks that use the DB (`threadPoolTaskExecutor`, up to 10). Request threads are virtual,
   so the pool, not a thread limit, is what bounds concurrent interactions; a request that cannot get a connection
-  fails after `connection-timeout`. MariaDB must allow pool size x Pods: 2 replicas x 20 = 40, and 60 during a
-  rolling update's surge Pod, plus Debezium's connection and any operator sessions, within `max_connections`.
+  fails after `connection-timeout`. MariaDB must allow pool size x Pods: 2 replicas x 20 = 40 (the ceiling while
+  `k8s/deployment.yaml` keeps `strategy: Recreate`), 60 once that block is removed and a rolling update runs a
+  surge Pod, plus Debezium's connection and any operator sessions, within `max_connections`.
 - Every new `slack.app.*` property needs a matching default in
   `application/configurations/AppConfig.kt`, or binding silently falls back.
 

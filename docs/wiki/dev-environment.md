@@ -75,7 +75,8 @@ _type: guide · updated: 2026-09-30_
   산정식: 동시 interaction 수 + 릴레이 워커(`relayTaskExecutor` 4, 넘친 작업은 거절되고 제출 스레드에서 돌지 않음) + 스케줄러
   스레드(4) + CDC 리스너(1) + DB를 쓰는 async 작업(`threadPoolTaskExecutor` 최대 10). 요청 스레드는 가상 스레드라 동시 interaction을
   막는 것은 스레드 수가 아니라 풀이며, 커넥션을 못 얻은 요청은 `connection-timeout` 뒤 실패한다. MariaDB `max_connections`는
-  풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40, 롤링 업데이트 surge 중 60, 여기에 Debezium과 운영자 세션을 더한다.
+  풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40(`Recreate` 블록이 있는 동안의 상한), 블록을 지운 뒤 롤링 업데이트 surge 중 60,
+  여기에 Debezium과 운영자 세션을 더한다.
 
 ## 로컬 실행 레시피
 
