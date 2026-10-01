@@ -190,10 +190,12 @@ class SlackInteractionHandlerImplTest :
             }
 
             `when`("each write runs inside its interaction transaction, as before this change") {
+                val allWritesTried = CyclicBarrier(poolSize)
                 runConcurrently { allHoldAConnection ->
                     TransactionTemplate(transactionManager).executeWithoutResult {
                         allHoldAConnection.await(5L, TimeUnit.SECONDS)
                         meetingService.addParticipants(event = event)
+                        allWritesTried.await(10L, TimeUnit.SECONDS)
                     }
                 }
 

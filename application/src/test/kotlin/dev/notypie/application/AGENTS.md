@@ -11,7 +11,7 @@ package with `./gradlew :application:test --tests 'dev.notypie.application.<pack
 ## Key Files
 | File | Description |
 |------|-------------|
-| `ApplicationContextSmokeTest.kt` | `@SpringBootTest(webEnvironment = NONE)` of the real application on H2 with the default polling relay and in-process events; `MessageDispatcher` is a relaxed `@MockkBean` so the poller never calls Slack. Pins the Hikari pool size, the `ThreadPoolTaskScheduler` (4 threads under virtual threads), the `relayTaskExecutor` injection, the single `Clock` bean in the JVM zone, the `@Async` proxy on `AgentConverseService`, and that an `OutboundMessageEnqueued` published inside a transaction is written to the outbox at commit |
+| `ApplicationContextSmokeTest.kt` | `@SpringBootTest(webEnvironment = NONE)` with `@DirtiesContext` (its scheduled jobs stop when the spec ends) of the real application on H2 with the default polling relay and in-process events; `MessageDispatcher` is a relaxed `@MockkBean` so the poller never calls Slack. Pins the Hikari pool size, the `ThreadPoolTaskScheduler` (4 threads under virtual threads), the `relayTaskExecutor` injection, the single `Clock` bean in the JVM zone, the `@Async` proxy on `AgentConverseService`, and that an `OutboundMessageEnqueued` published inside a transaction is written to the outbox at commit |
 
 ## Subdirectories
 | Directory | Purpose |

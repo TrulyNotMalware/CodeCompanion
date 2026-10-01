@@ -26,6 +26,7 @@ import org.springframework.context.ApplicationContext
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
+import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.support.TransactionTemplate
@@ -44,6 +45,7 @@ import java.time.ZoneId
         "slack.app.api.signing-secret=smoke-test-signing-secret",
     ],
 )
+@DirtiesContext
 @ApplyExtension(extensions = [SpringExtension::class])
 class ApplicationContextSmokeTest
     @Autowired
