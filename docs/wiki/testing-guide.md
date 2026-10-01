@@ -96,7 +96,7 @@ _type: guide · updated: 2026-10-01_
 ./gradlew :application:test --tests '*Cve*' --tests '*Standup*'
 ```
 
-- 루트 `build.gradle.kts`가 모든 `Test` 태스크에 `-Xmx4g`, `-XX:+EnableDynamicAgentLoading`,
+- 루트 `build.gradle.kts`가 모든 `Test` 태스크에 `-Xmx<testMaxHeap>`(기본 `4g`, CI 프리셋 `2g`), `-XX:+EnableDynamicAgentLoading`,
   `--add-opens java.base/java.lang`·`java.base/java.util`(MockK 요구)을 건다. 모듈에서 덮어쓰지 않는다.
   버전은 `extra["kotestVersion"] = "6.2.5"`, `extra["mockkVersion"] = "1.14.11"`.
 - CI(`.github/workflows/simple_test_action.yaml`)는 `feature/*` 계열 푸시와 `main` 대상 모든 PR에서 **바뀐 모듈과 그 의존

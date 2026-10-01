@@ -14,8 +14,10 @@ _type: guide · updated: 2026-09-28_
   `gradle-config/gradle-{macos,linux}.properties` 중 하나를 루트로 복사하고, 프리셋이 없는 OS(Windows 등)와
   `apply.sh common`은 `gradle-common.properties`로 폴백한다. 공유 빌드 설정을 바꿀 때는 루트 파일이 아니라 프리셋을 고치고
   다시 적용한다. 재실행 시 남는 `gradle.properties.backup.*`도 git-ignored다. CI 테스트·배포 빌드는 같은 스크립트를
-  `apply.sh ci`로 돌려 16GB 러너용 `gradle-ci.properties`(Gradle 3g · Kotlin 3g 데몬, `workers.max=4`)를 쓴다 — Linux 프리셋의
-  8g + 6g 데몬에 포크 테스트 JVM(`-Xmx4g`)까지 얹으면 러너 메모리를 넘는다. `ci`는 OS 판별로는 절대 선택되지 않는다.
+  `apply.sh ci`로 돌려 16GB 러너용 `gradle-ci.properties`(Gradle 3g · Kotlin 3g 데몬, `workers.max=4`, `testMaxHeap=2g`)를
+  쓴다 — Linux 프리셋의 8g + 6g 데몬에 포크 테스트 JVM까지 얹으면 러너 메모리를 넘는다. 모듈 세 개의 테스트 JVM이 병렬로
+  뜨므로 기본 `-Xmx4g`면 3g + 3g + 3 x 4g = 18GB라, CI는 `testMaxHeap=2g`로 12GB 이내에 둔다(2026-10-01, 로컬에서 2g로
+  전체 스위트 통과 확인). `ci`는 OS 판별로는 절대 선택되지 않는다.
 - 프리셋 안의 `kotlin.version` 키는 어떤 빌드 스크립트도 읽지 않는 메타데이터다. 플러그인 버전과 맞춰 두되 원본으로 믿지 않는다.
 - ktlint 훅은 `./gradlew addKtlintCheckGitPreCommitHook`이 `.git/hooks/pre-commit`으로 설치한다. 스테이지된 `.kt`/`.kts`만
   검사하며, 검사 동안 **unstaged diff를 잠시 되돌렸다가 복원**한다(`git apply -R`). 포맷 규칙 원본은 `.editorconfig`(120 컬럼,

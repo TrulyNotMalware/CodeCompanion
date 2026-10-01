@@ -77,7 +77,7 @@ flow **application → infrastructure → domain** (and **application → domain
 ./gradlew ktlintFormat          # autofix
 ```
 Integration tests are self-contained: `EmbeddedKafka` + H2, no external infrastructure needed.
-Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.lang` and
+Tests run on JUnit Platform with `-Xmx` from the `testMaxHeap` Gradle property (default `4g`; the CI preset sets `2g`) and `--add-opens` for `java.base/java.lang` and
 `java.base/java.util` (MockK requirement) — configured once in the root build.
 
 ### Common Patterns

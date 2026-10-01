@@ -73,10 +73,12 @@ allprojects {
         )
     }
 
+    // CI sets testMaxHeap lower: two daemons plus one test JVM per module must fit a 16 GB runner.
+    val testMaxHeap = providers.gradleProperty("testMaxHeap").getOrElse("4g")
     tasks.withType<Test> {
         useJUnitPlatform()
         jvmArgs(
-            "-Xmx4g",
+            "-Xmx$testMaxHeap",
             "-Dfile.encoding=UTF-8",
             "-XX:+EnableDynamicAgentLoading",
             "--add-opens",

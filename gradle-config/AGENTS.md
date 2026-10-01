@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # gradle-config
 
@@ -14,7 +14,7 @@ settings stay shared without committing a machine-specific file.
 | `apply.sh` | Detects the OS (`Darwin` → macos, `Linux` → linux, `MINGW`/`CYGWIN`/`MSYS` → windows), prints system info, and writes `gradle.properties` at the repo root. Accepts `force`, `common`, `ci` or `--help`/`-h`; any other or extra argument prints usage and exits 2. Verification runs `./gradlew help` and prints its output when it fails |
 | `gradle-macos.properties` | 6 GB heap, ZGC, no Linux-only flags, `apple.awt.UIElement=true`; 4 GB Kotlin daemon. For 16 GB+ machines |
 | `gradle-linux.properties` | 8 GB heap, ZGC + large pages + transparent huge pages, string dedup, `workers.max=16`; 6 GB Kotlin daemon. For 16 GB+ servers |
-| `gradle-ci.properties` | CI runner preset, installed only by an explicit `./apply.sh ci` (never by OS detection): 3 GB heap, JVM default GC, `workers.max=4`, 3 GB Kotlin daemon, Kotlin daemon fallback enabled. Sized for 4 vCPU / 16 GB GitHub runners, where forked test JVMs (`-Xmx4g` each, root `build.gradle.kts`) run beside both daemons |
+| `gradle-ci.properties` | CI runner preset, installed only by an explicit `./apply.sh ci` (never by OS detection): 3 GB heap, JVM default GC, `workers.max=4`, 3 GB Kotlin daemon, Kotlin daemon fallback enabled. Sized for 4 vCPU / 16 GB GitHub runners, where up to three forked test JVMs (one per module) run beside both daemons; `testMaxHeap=2g` caps each of them (root `build.gradle.kts` defaults to `4g`), so the heaps add up to at most 12 GB. The full suite passed locally at `-PtestMaxHeap=2g` on 2026-10-01 |
 | `gradle-common.properties` | Portable fallback for `./apply.sh common` and unknown hosts: 4 GB heap, no GC selection, no experimental VM options, default worker count, Kotlin daemon fallback enabled |
 | `README.md` | Human-facing guide, including the documented `gradle-common.properties` cross-platform preset |
 
