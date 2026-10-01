@@ -10,6 +10,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.DynamicUpdate
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDateTime
 
@@ -19,6 +20,8 @@ enum class CveSourceType { GITHUB_RELEASE, NVD_CVE, RSS }
 
 enum class CveDeliveryMode { IMMEDIATE, DIGEST }
 
+// Only changed columns go into an UPDATE: a bootstrap upsert holding a stale row must not rewrite `active`.
+@DynamicUpdate
 @Entity(name = "cve_topic")
 @Table(
     uniqueConstraints = [

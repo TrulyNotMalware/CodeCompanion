@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/cve/schema
 
@@ -30,7 +30,8 @@ JPA entities and enums for the CVE lane. Every unique constraint here is load-be
   by `created_at`, `/latest`'s per-topic DONE read, `findClaimable`'s due-check). A new query shape usually
   needs a new index and a `V*` migration.
 - `CveTopicSchema` is the only entity whose business columns are `var`, because `upsert` mutates and re-saves
-  the managed instance. `active` is `var` too but is only written by `setActive`.
+  the managed instance. `active` is `var` too but is only written by `setActive`; `@DynamicUpdate` keeps an
+  upsert's UPDATE from carrying a stale `active` (only changed columns are written).
 - Tables: `V14__add_cve_bot_tables.sql` (`cve_topic`, `cve_event`, `cve_subscription`, `cve_delivery`),
   `V15__add_cve_collect_ledger_table.sql`; indexes in `V16` / `V17`.
 

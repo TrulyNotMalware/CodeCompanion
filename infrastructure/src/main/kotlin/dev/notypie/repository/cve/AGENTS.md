@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/cve
 
@@ -52,6 +52,9 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
   from `dbNow()`, never from `LocalDateTime.now()` — the DB (UTC) and JVM (KST) zones can differ by hours.
 - **`upsert` never syncs `active` after the first insert.** Chat toggles (`setActive`) own that flag; a yaml
   reboot must not reactivate what an admin deactivated, and a row differing only in `active` is a no-op.
+  Not writing the field is not enough on its own: Hibernate's default UPDATE sets every column, so an upsert
+  holding a row read before a concurrent `setActive` (rolling deploy) would write the stale `active` back.
+  `CveTopicSchema` is `@DynamicUpdate` for that reason (pinned by `JpaCveTopicRepositoryTest`).
 - **Native bulk updates bypass `@UpdateTimestamp`**, so every CAS sets `updated_at` explicitly. The
   dead-letter revives (`resetDeadLetters` / `resetDeadLetter`) deliberately do not — nothing reads
   `updated_at` on PENDING rows and the next claim re-stamps it.
