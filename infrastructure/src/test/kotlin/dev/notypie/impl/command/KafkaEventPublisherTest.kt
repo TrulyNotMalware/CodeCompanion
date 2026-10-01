@@ -9,6 +9,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.clearMocks
 import io.mockk.mockk
 import io.mockk.verify
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -62,6 +63,8 @@ class KafkaEventPublisherTest
                     kafkaTemplate = kafkaTemplate,
                     applicationEventPublisher = applicationEventPublisher,
                 )
+
+            beforeContainer { testCase -> if (testCase.parent == null) clearMocks(applicationEventPublisher) }
 
             fun createTestConsumer(): org.apache.kafka.clients.consumer.Consumer<String, Any> {
                 val consumerProps =

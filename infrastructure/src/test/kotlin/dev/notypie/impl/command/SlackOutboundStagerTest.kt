@@ -19,6 +19,7 @@ import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -34,6 +35,8 @@ class SlackOutboundStagerTest :
                 slackEventBuilder = slackEventBuilder,
                 standupRepository = standupRepository,
             )
+
+        beforeContainer { testCase -> if (testCase.parent == null) clearMocks(slackEventBuilder, standupRepository) }
 
         val basicInfo = createCommandBasicInfo()
         val target = ConversationTarget(id = basicInfo.channel)

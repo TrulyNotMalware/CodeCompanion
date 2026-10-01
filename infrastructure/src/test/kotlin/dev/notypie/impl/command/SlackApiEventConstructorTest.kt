@@ -14,6 +14,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -28,6 +29,8 @@ class SlackApiEventConstructorTest :
                 botToken = TEST_BOT_TOKEN,
                 templateBuilder = templateBuilder,
             )
+
+        beforeContainer { testCase -> if (testCase.parent == null) clearMocks(templateBuilder) }
 
         val commandBasicInfo = createCommandBasicInfo()
         val idempotencyKey = commandBasicInfo.idempotencyKey

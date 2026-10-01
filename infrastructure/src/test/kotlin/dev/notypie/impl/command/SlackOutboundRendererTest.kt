@@ -21,6 +21,7 @@ import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -33,6 +34,8 @@ class SlackOutboundRendererTest :
     BehaviorSpec({
         val slackEventBuilder = mockk<SlackApiEventConstructor>()
         val renderer = SlackOutboundRenderer(slackEventBuilder = slackEventBuilder)
+
+        beforeContainer { testCase -> if (testCase.parent == null) clearMocks(slackEventBuilder) }
 
         val basicInfo = createCommandBasicInfo()
         val stubEvent =

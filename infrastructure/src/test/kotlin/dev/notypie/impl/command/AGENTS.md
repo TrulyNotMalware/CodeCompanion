@@ -42,6 +42,10 @@ writers and the `view_submission` parser.
   `repository/outbox/`; a new `ModalForm` needs a `SlackOutboundStagerTest` case.
 - **Strict mocks are the assertion.** `SlackOutboundStagerTest` relies on an unstubbed builder throwing to
   prove non-modal messages never render; do not switch it to `relaxed = true`.
+- **Spec-level mocks are reset per top-level `given`** (`beforeContainer { if (it.parent == null) clearMocks(...) }`
+  in `SlackOutboundRendererTest`, `SlackOutboundStagerTest`, `SlackApiEventConstructorTest` and
+  `KafkaEventPublisherTest`), so a `verify` count or an unstubbed-call failure sees only its own case. Stub inside the
+  `given`, never at spec level, or the reset removes it.
 - `KafkaEventPublisherTest` is the only broker start in the module and takes seconds; add Kafka cases inside
   it rather than creating a second `@EmbeddedKafka` context.
 - `RestClientRequesterTest` is the module's only network-dependent spec; it fails offline and should not
