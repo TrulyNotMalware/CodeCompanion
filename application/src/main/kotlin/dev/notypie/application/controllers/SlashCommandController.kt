@@ -5,6 +5,7 @@ import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.standup.StandupSlashService
+import dev.notypie.impl.command.ViewOpenDeferral
 import org.springframework.http.MediaType
 import org.springframework.util.MultiValueMap
 import org.springframework.web.bind.annotation.*
@@ -23,11 +24,13 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        meetingService.handleMeeting(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            meetingService.handleMeeting(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
     @PostMapping(value = ["/standup"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
@@ -36,11 +39,13 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        standupSlashService.handleStandup(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            standupSlashService.handleStandup(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
     @PostMapping(value = ["/task"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
@@ -57,11 +62,13 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveSubscriptionSlashService.handleSubscribe(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveSubscriptionSlashService.handleSubscribe(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
     @PostMapping(value = ["/unsubscribe"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
@@ -70,11 +77,13 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveSubscriptionSlashService.handleUnsubscribe(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveSubscriptionSlashService.handleUnsubscribe(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
     @PostMapping(value = ["/subscriptions"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
@@ -83,11 +92,13 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveSubscriptionSlashService.handleSubscriptions(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveSubscriptionSlashService.handleSubscriptions(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
     @PostMapping(value = ["/latest"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
@@ -96,10 +107,12 @@ class SlashCommandController(
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveQuerySlashService.handleLatest(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveQuerySlashService.handleLatest(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 }

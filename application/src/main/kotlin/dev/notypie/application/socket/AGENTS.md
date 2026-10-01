@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/socket
 
@@ -23,7 +23,8 @@ is unchanged (Web API via the outbox relay). The bean exists only under the `loc
 - No signature verification runs on this path (the WebSocket is authenticated by the app-level token),
   and `noHeaders` is an empty `MultiValueMap`. Never widen the `@Profile` — enabling this bean in a
   deployed profile bypasses `security/SlackRequestVerificationFilter`.
-- The `when (payload.command)` branch list is the Socket Mode twin of `SlashCommandController`. A new
+- The `when (payload.command)` branch list (`dispatchSlash`) is the Socket Mode twin of `SlashCommandController` and, like it,
+  runs inside `ViewOpenDeferral.afterBoundary` so staged modals open after the service transaction released its connection. A new
   slash command needs a mapping here, a property in `AppConfig.Socket`, and the controller route; an
   unmapped command is only logged as a warning.
 - Failures are `runCatching` + `log.error` — there is no `ControllerAdvice` on this transport, so a

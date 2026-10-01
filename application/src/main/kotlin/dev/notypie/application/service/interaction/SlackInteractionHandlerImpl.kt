@@ -13,6 +13,7 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
+import dev.notypie.impl.command.ViewOpenDeferral
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.InteractionPayload
 import dev.notypie.impl.command.slack.isCanceled
@@ -53,7 +54,9 @@ class SlackInteractionHandlerImpl(
             return inInteractionTransaction { handle(payload = payload) }
         }
         val (ack, meetingWrites) =
-            MeetingWriteDeferral.collecting { inInteractionTransaction { handle(payload = payload) } }
+            MeetingWriteDeferral.collecting {
+                ViewOpenDeferral.afterBoundary { inInteractionTransaction { handle(payload = payload) } }
+            }
         meetingWrites.forEach { it() }
         return ack
     }

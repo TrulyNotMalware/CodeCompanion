@@ -12,6 +12,9 @@ import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.mention.AppMentionEventHandler
 import dev.notypie.application.service.standup.StandupSlashService
 import dev.notypie.common.jsonMapper
+import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.impl.command.ViewOpenDeferral
+import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.Profile
@@ -94,52 +97,56 @@ class SocketModeReceiver(
                     .entries
                     .associate { (key, value) -> key.toString() to value.toString() }
             val (payload, commandData) = parseRequestBodyData(headers = noHeaders, data = data)
-            when (payload.command) {
-                appConfig.socket.meetingCommand ->
-                    meetingService.handleMeeting(
-                        headers = noHeaders,
-                        payload = payload,
-                        commandData = commandData,
-                    )
-
-                appConfig.socket.standupCommand ->
-                    standupSlashService.handleStandup(
-                        headers = noHeaders,
-                        payload = payload,
-                        commandData = commandData,
-                    )
-
-                appConfig.socket.subscribeCommand ->
-                    cveSubscriptionSlashService.handleSubscribe(
-                        headers = noHeaders,
-                        payload = payload,
-                        commandData = commandData,
-                    )
-
-                appConfig.socket.unsubscribeCommand ->
-                    cveSubscriptionSlashService.handleUnsubscribe(
-                        headers = noHeaders,
-                        payload = payload,
-                        commandData = commandData,
-                    )
-
-                appConfig.socket.subscriptionsCommand ->
-                    cveSubscriptionSlashService.handleSubscriptions(
-                        headers = noHeaders,
-                        payload = payload,
-                        commandData = commandData,
-                    )
-
-                appConfig.socket.latestCommand ->
-                    cveQuerySlashService.handleLatest(
-                        headers = noHeaders,
-                        payload = payload,
-                        commandData = commandData,
-                    )
-
-                else -> log.warn { "Unmapped slash command over Socket Mode: ${payload.command}" }
-            }
+            ViewOpenDeferral.afterBoundary { dispatchSlash(payload = payload, commandData = commandData) }
         }.onFailure { log.error(it) { "Socket Mode slash-command handling failed." } }
+    }
+
+    private fun dispatchSlash(payload: SlashCommandRequestBody, commandData: InboundCommand) {
+        when (payload.command) {
+            appConfig.socket.meetingCommand ->
+                meetingService.handleMeeting(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.standupCommand ->
+                standupSlashService.handleStandup(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.subscribeCommand ->
+                cveSubscriptionSlashService.handleSubscribe(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.unsubscribeCommand ->
+                cveSubscriptionSlashService.handleUnsubscribe(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.subscriptionsCommand ->
+                cveSubscriptionSlashService.handleSubscriptions(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.latestCommand ->
+                cveQuerySlashService.handleLatest(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            else -> log.warn { "Unmapped slash command over Socket Mode: ${payload.command}" }
+        }
     }
 
     private fun handleInteractive(payloadJson: String): String? =

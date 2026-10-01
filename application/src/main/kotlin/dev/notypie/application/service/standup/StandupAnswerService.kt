@@ -13,6 +13,7 @@ import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 
 private val answerLog = KotlinLogging.logger {}
@@ -40,6 +41,7 @@ class StandupAnswerService(
     }
 
     @EventListener
+    @Transactional
     fun onStandupModalOpenFailed(event: StandupModalOpenFailedEvent) {
         answerLog.warn {
             "views.open fallback triggered for standup: userId=${event.userId} " +

@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -32,6 +33,7 @@ import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.ZoneId
+import java.util.UUID
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
@@ -89,6 +91,29 @@ class ApplicationContextSmokeTest
 
                     then("AgentConverseService is proxied so @Async takes effect") {
                         AopUtils.isAopProxy(context.getBean(AgentConverseService::class.java)) shouldBe true
+                    }
+                }
+            }
+
+            given("a decline modal that failed to open after the interaction transaction ended") {
+                `when`("its failure event is published outside any transaction") {
+                    then("the fallback notice still reaches the outbox in its own transaction") {
+                        val basicInfo = createCommandBasicInfo()
+                        eventPublisher.publishEvent(
+                            DeclineModalOpenFailedEvent(
+                                meetingIdempotencyKey = UUID.randomUUID(),
+                                participantUserId = basicInfo.publisherId,
+                                apiAppId = basicInfo.appId,
+                                channel = basicInfo.channel,
+                                idempotencyKey = basicInfo.idempotencyKey,
+                                reason = "expired_trigger_id",
+                            ),
+                        )
+
+                        val idempotencyKey = basicInfo.idempotencyKey.toString()
+                        val rows = outboxRepository.findAll().filter { it.idempotencyKey == idempotencyKey }
+                        rows shouldHaveSize 1
+                        outboxRepository.deleteAll(rows)
                     }
                 }
             }

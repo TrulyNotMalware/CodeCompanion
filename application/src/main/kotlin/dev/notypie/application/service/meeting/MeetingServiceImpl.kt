@@ -101,6 +101,7 @@ class MeetingServiceImpl(
 
     // Decline is already persisted elsewhere (OTHER); this only notifies, never re-publishes.
     @EventListener
+    @Transactional
     fun onDeclineModalOpenFailed(event: DeclineModalOpenFailedEvent) {
         log.warn {
             "views.open fallback triggered: meetingIdempotencyKey=${event.meetingIdempotencyKey} " +

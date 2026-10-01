@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/standup
 
@@ -16,7 +16,7 @@ is written back onto the session row once the relay has posted it.
 | `StandupSlashService.kt` | Interface `handleStandup(headers, payload: SlashCommandRequestBody, commandData)` — the dependency `SlashCommandController` and `SocketModeReceiver` take |
 | `StandupSlashServiceImpl.kt` | `@Service`, `@Transactional handleStandup`: `IdempotencyCreator.create(data = commandData)` → `SetupStandupCommand` → `CommandExecutor.execute` (the resolved intent is the synchronous `views.open` of the setup modal) |
 | `StandupRoutineSetupService.kt` | `@EventListener createRoutine(CreateStandupRoutineEvent)`: builds `Routine` + one `RoutineMember` per id (each member adopts the routine timezone), `StandupRepository.createRoutine`, then stages an `OutboundMessage.Ephemeral` confirmation or rejection (`STANDUP_SETUP_SUBMIT`) and `eventPublisher.publishOne`. `Routine.init` is the only validator; its throw becomes the rejection text |
-| `StandupAnswerService.kt` | `@EventListener recordAnswer(RecordStandupAnswerEvent)` → `StandupRepository.recordAnswer` (the transaction lives in the repository impl, not here); `@EventListener onStandupModalOpenFailed(StandupModalOpenFailedEvent)` stages an `Ephemeral` with `recipient = null` into the originating DM channel |
+| `StandupAnswerService.kt` | `@EventListener recordAnswer(RecordStandupAnswerEvent)` → `StandupRepository.recordAnswer` (the transaction lives in the repository impl, not here); `@EventListener @Transactional onStandupModalOpenFailed(StandupModalOpenFailedEvent)` (its own transaction, because modals now open after the caller's transaction ended and the outbox write is BEFORE_COMMIT) stages an `Ephemeral` with `recipient = null` into the originating DM channel |
 | `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, one `runCatching` around the whole tick |
 | `StandupSchedulingService.kt` | `@Service` owning the four phases, a `TransactionTemplate` built from the injected `PlatformTransactionManager`, and the `internal` builders `buildDmNotice` (`OutboundMessage.Approval`, buttons "Fill in standup" / "Skip", `STANDUP_PROMPT`, `routingExtras = [sessionUid, routineUid]`) and `buildNudgeNotice` (`ChannelMessage`). Publishes `StandupCutoffEvent` through a plain `ApplicationEventPublisher` |
 | `StandupSummaryService.kt` | `@EventListener postSummary(StandupCutoffEvent)`: builds a `MessageContent.StandupSummary` outbox row, then `runInTx { outboxRepository.save(row); markSessionSummarized(messageTs = "outbox:<eventId>") }` — a `false` from the CAS throws so the row rolls back. `@EventListener replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` swaps the marker for the real Slack `ts` |

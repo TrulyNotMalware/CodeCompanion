@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/interaction
 
@@ -36,6 +36,9 @@ persisting anything.
   `MeetingServiceImpl.updateParticipantAttendance` and `SlackMessageRelayServiceImpl.saveOutboxMessage`.
   `CommandExecutor` re-throws, so a failed intent resolution rolls back the decision *and* the outbox row.
   Every command keeps that atomicity; only the three meeting writes leave it.
+- **Modals open after the interaction commits** (`ViewOpenDeferral.afterBoundary` inside `MeetingWriteDeferral.collecting`), so
+  `views.open` (up to the 6 s Slack call timeout) never holds the interaction's pooled connection; they open before the
+  deferred meeting writes run, to stay inside `trigger_id`'s 3 s.
 - **Meeting writes run after the interaction commits** (`service/meeting/MeetingWriteDeferral`). Inside the
   interaction transaction they would need a second pooled connection per request (N concurrent interactions
   on a pool of N all time out — reproduced in the spec) and could commit their write and reply while the

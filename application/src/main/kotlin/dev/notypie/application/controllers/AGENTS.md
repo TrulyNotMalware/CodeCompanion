@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-01 -->
 
 # application/controllers
 
@@ -15,7 +15,7 @@ only.
 | File | Description |
 |------|-------------|
 | `SlackEventController.kt` | `@RequestMapping("/api/slack")`. `POST /events` (JSON body as `Map<String, Any>`, `produces` JSON): echoes the payload for `url_verification`, ACKs every non-`app_mention` event with an empty 200, otherwise returns the `CommandOutput` from `AppMentionEventHandler.handleEvent(headers, payload)`. `POST /interaction`: takes the form param `payload` (JSON string) and calls `InteractionHandler.handleInteraction(headers, payload): String?`; a non-null ack is returned as `application/json`, null becomes an empty-string 200 |
-| `SlashCommandController.kt` | `@RequestMapping("/api/slash")`. Every mapping declares `produces = APPLICATION_FORM_URLENCODED_VALUE`, takes `@RequestParam data: Map<String, String>`, parses via `parseRequestBodyData(headers, data)` and returns `Unit` (empty 200). `POST /meet` → `MeetingService.handleMeeting`; `/standup` → `StandupSlashService.handleStandup`; `/subscribe`, `/unsubscribe`, `/subscriptions` → `CveSubscriptionSlashService.handleSubscribe` / `handleUnsubscribe` / `handleSubscriptions`; `/latest` → `CveQuerySlashService.handleLatest`; `/task` (`requestTasks`) parses only — no service is wired |
+| `SlashCommandController.kt` | `@RequestMapping("/api/slash")`. Each service call runs inside `ViewOpenDeferral.afterBoundary { … }`, so a modal the command stages is opened only after the service's `@Transactional` method returned and released its connection. Every mapping declares `produces = APPLICATION_FORM_URLENCODED_VALUE`, takes `@RequestParam data: Map<String, String>`, parses via `parseRequestBodyData(headers, data)` and returns `Unit` (empty 200). `POST /meet` → `MeetingService.handleMeeting`; `/standup` → `StandupSlashService.handleStandup`; `/subscribe`, `/unsubscribe`, `/subscriptions` → `CveSubscriptionSlashService.handleSubscribe` / `handleUnsubscribe` / `handleSubscriptions`; `/latest` → `CveQuerySlashService.handleLatest`; `/task` (`requestTasks`) parses only — no service is wired |
 | `dto/CodeCompanionResponse.kt` | `data class CodeCompanionResponse(ok: Boolean = true, message: String)` — no current call sites |
 | `dto/ResponseDto.kt` | `EventResponseDto(message, event: Event, isAccepted)` and `Event(eventId: UUID, type: CommandDetailType, acceptedTime: Long)` — no current call sites |
 
