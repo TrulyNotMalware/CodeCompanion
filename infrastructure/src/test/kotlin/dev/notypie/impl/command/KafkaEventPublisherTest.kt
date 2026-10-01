@@ -69,6 +69,7 @@ class KafkaEventPublisherTest
                 consumerProps[ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java
                 consumerProps[ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG] = JacksonJsonDeserializer::class.java
                 consumerProps["spring.json.trusted.packages"] = "*"
+                consumerProps["spring.json.remove.type.headers"] = false
                 consumerProps[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "earliest"
                 val factory = DefaultKafkaConsumerFactory<String, Any>(consumerProps)
                 return factory.createConsumer()
@@ -93,13 +94,20 @@ class KafkaEventPublisherTest
                 `when`("publishing") {
                     publisher.publishEvent(events = events)
 
-                    then("kafka consumer should receive the message with correct key") {
+                    then("kafka consumer should receive the payload under the idempotency key with its type header") {
                         val records = KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10))
-                        records.count() shouldNotBe 0
+                        records.count() shouldBe 1
 
                         val record = records.first()
                         record.topic() shouldBe TEST_TOPIC
                         record.key() shouldBe idempotencyKey.toString()
+                        record.value() shouldBe externalEvent.payload
+                        record
+                            .headers()
+                            .lastHeader("__TypeId__")
+                            .value()
+                            .decodeToString() shouldBe
+                            TestKafkaPayload::class.java.name
                     }
 
                     then("should not publish via applicationEventPublisher") {
