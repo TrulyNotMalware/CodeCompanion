@@ -3,7 +3,6 @@ package dev.notypie.application.configurations
 import dev.notypie.application.configurations.conditions.OnCdcConsumer
 import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import dev.notypie.application.service.relay.CdcRecordParseException
-import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.admin.NewTopic
@@ -14,7 +13,6 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.beans.factory.DisposableBean
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.annotation.Bean
@@ -34,8 +32,6 @@ import org.springframework.kafka.support.micrometer.KafkaListenerObservationConv
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
 import org.springframework.util.backoff.FixedBackOff
-
-private val logger = KotlinLogging.logger { }
 
 private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
 
@@ -67,47 +63,31 @@ internal fun deadLetterBytesProducerFactory(
 class CountingRecordRecoverer(
     val delegate: ConsumerAwareRecordRecoverer,
     private val meterRegistry: MeterRegistry,
-    private val outcome: String,
 ) : ConsumerAwareRecordRecoverer {
     override fun accept(record: ConsumerRecord<*, *>, consumer: Consumer<*, *>?, exception: Exception?) {
         delegate.accept(record, consumer, exception)
-        meterRegistry.counter(DEAD_LETTER_RECORDS_METRIC, "topic", record.topic(), "outcome", outcome).increment()
+        meterRegistry.counter(DEAD_LETTER_RECORDS_METRIC, "topic", record.topic()).increment()
     }
 }
 
 class CdcDeadLetterRecovery(
-    jsonTemplate: KafkaTemplate<String, Any>?,
+    jsonTemplate: KafkaTemplate<String, Any>,
     meterRegistry: MeterRegistry,
-    private val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray>? =
-        jsonTemplate?.let { deadLetterBytesProducerFactory(jsonTemplate = it) },
+    private val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray> =
+        deadLetterBytesProducerFactory(jsonTemplate = jsonTemplate),
 ) : DisposableBean {
     val recoverer: CountingRecordRecoverer =
-        if (jsonTemplate == null || bytesProducerFactory == null) {
-            CountingRecordRecoverer(
-                delegate =
-                    ConsumerAwareRecordRecoverer { record, _, exception ->
-                        logger.error(exception) {
-                            "No KafkaTemplate for a dead-letter topic; dropping CDC record " +
-                                "topic=${record.topic()} partition=${record.partition()} offset=${record.offset()}"
-                        }
-                    },
-                meterRegistry = meterRegistry,
-                outcome = "dropped",
-            )
-        } else {
-            CountingRecordRecoverer(
-                delegate =
-                    cdcDeadLetterRecoverer(
-                        jsonTemplate = jsonTemplate,
-                        bytesTemplate = KafkaTemplate(bytesProducerFactory),
-                    ),
-                meterRegistry = meterRegistry,
-                outcome = "dead_lettered",
-            )
-        }
+        CountingRecordRecoverer(
+            delegate =
+                cdcDeadLetterRecoverer(
+                    jsonTemplate = jsonTemplate,
+                    bytesTemplate = KafkaTemplate(bytesProducerFactory),
+                ),
+            meterRegistry = meterRegistry,
+        )
 
     override fun destroy() {
-        bytesProducerFactory?.destroy()
+        bytesProducerFactory.destroy()
     }
 }
 
@@ -134,7 +114,6 @@ class KafkaEventPublisherConfiguration
 class KafkaConsumerConfiguration(
     private val convention: KafkaObservationConvention,
     private val kafkaProperties: KafkaProperties,
-    private val kafkaTemplateProvider: ObjectProvider<KafkaTemplate<String, Any>>,
 ) {
     // Without this, a bad record throws inside poll() and wedges the consumer on that offset forever.
     @Bean
@@ -152,9 +131,12 @@ class KafkaConsumerConfiguration(
         return DefaultKafkaConsumerFactory(properties)
     }
 
+    // Required: without a template a poison record could only be logged and dropped.
     @Bean
-    fun cdcDeadLetterRecovery(meterRegistry: MeterRegistry): CdcDeadLetterRecovery =
-        CdcDeadLetterRecovery(jsonTemplate = kafkaTemplateProvider.ifAvailable, meterRegistry = meterRegistry)
+    fun cdcDeadLetterRecovery(
+        kafkaTemplate: KafkaTemplate<String, Any>,
+        meterRegistry: MeterRegistry,
+    ): CdcDeadLetterRecovery = CdcDeadLetterRecovery(jsonTemplate = kafkaTemplate, meterRegistry = meterRegistry)
 
     // RECORD ack assumes `enable-auto-commit: false` in every CDC profile; auto-commit would commit in-flight records.
     @Bean

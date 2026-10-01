@@ -221,8 +221,9 @@ _type: architecture · updated: 2026-09-28_
   `/actuator`가 없다). 게이지는 스크레이프마다 같은 저장소 쿼리를 실행하고, 쿼리가 실패하면 `NaN`이 된다.
   - `outbox_messages{status="pending"|"in_progress"}`, `outbox_pending_oldest_age_seconds`(`created_at` 기준),
     `outbox_in_progress_oldest_claim_age_seconds`(`updated_at` = 마지막 claim·갱신 기준), `outbox_retrying_messages`
-  - `kafka_dead_letter_records_total{topic, outcome="dead_lettered"|"dropped"}`: 리스너 컨테이너의 recoverer가
-    레코드를 DLT로 넘긴 뒤(또는 템플릿이 없어 버린 뒤) 센다. 넘기다 예외가 나면 세지 않는다.
+  - `kafka_dead_letter_records_total{topic}`: 리스너 컨테이너의 recoverer가 레코드를 DLT로 넘긴 뒤 센다. 넘기다
+    예외가 나면 세지 않는다. `KafkaTemplate`이 없으면 DLT로 보낼 길이 없으므로 기동이 실패한다(2026-10-01, 이전에는
+    로그만 남기고 버렸다).
 - 모든 레플리카가 같은 테이블을 세므로 알림은 `max()`로 건다. 권장(저장소에 프로비저닝되어 있지 않음):
   `max(outbox_pending_oldest_age_seconds) > 120` 10분 지속(커넥터 또는 폴러 정지 — 이때 전달은 stuck 임계 뒤
   스윕이 맡아 조용히 늦어진다), `max(outbox_retrying_messages) > 0` 15분, `increase(kafka_dead_letter_records_total[15m]) > 0`.

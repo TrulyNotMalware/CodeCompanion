@@ -431,24 +431,6 @@ class DebeziumLogTailingProcessorTest :
                         ByteArraySerializer::class.java
                 }
             }
-
-            `when`("no KafkaTemplate exists") {
-                val meterRegistry = SimpleMeterRegistry()
-                val recovery = CdcDeadLetterRecovery(jsonTemplate = null, meterRegistry = meterRegistry)
-
-                then("records are logged, dropped and counted as dropped, and shutdown has nothing to close") {
-                    val record = createCdcConsumerRecord()
-                    shouldNotThrowAny {
-                        recovery.recoverer.accept(record, IllegalStateException("parse"))
-                        recovery.destroy()
-                    }
-                    meterRegistry
-                        .get(DEAD_LETTER_RECORDS_METRIC)
-                        .tags("topic", record.topic(), "outcome", "dropped")
-                        .counter()
-                        .count() shouldBe 1.0
-                }
-            }
         }
 
         given("a counting recoverer over a consumer-aware dead-letter publisher") {
@@ -460,20 +442,15 @@ class DebeziumLogTailingProcessorTest :
                 val meterRegistry = SimpleMeterRegistry()
                 val delegate = mockk<ConsumerAwareRecordRecoverer>()
                 every { delegate.accept(record, consumer, exception) } just runs
-                val recoverer =
-                    CountingRecordRecoverer(
-                        delegate = delegate,
-                        meterRegistry = meterRegistry,
-                        outcome = "dead_lettered",
-                    )
+                val recoverer = CountingRecordRecoverer(delegate = delegate, meterRegistry = meterRegistry)
 
                 recoverer.accept(record, consumer, exception)
 
-                then("the delegate gets the consumer and the record is counted once by topic and outcome") {
+                then("the delegate gets the consumer and the record is counted once by topic") {
                     verify(exactly = 1) { delegate.accept(record, consumer, exception) }
                     meterRegistry
                         .get(DEAD_LETTER_RECORDS_METRIC)
-                        .tags("topic", record.topic(), "outcome", "dead_lettered")
+                        .tags("topic", record.topic())
                         .counter()
                         .count() shouldBe 1.0
                 }
@@ -483,12 +460,7 @@ class DebeziumLogTailingProcessorTest :
                 val meterRegistry = SimpleMeterRegistry()
                 val delegate = mockk<ConsumerAwareRecordRecoverer>()
                 every { delegate.accept(record, consumer, exception) } throws KafkaException("send timed out")
-                val recoverer =
-                    CountingRecordRecoverer(
-                        delegate = delegate,
-                        meterRegistry = meterRegistry,
-                        outcome = "dead_lettered",
-                    )
+                val recoverer = CountingRecordRecoverer(delegate = delegate, meterRegistry = meterRegistry)
 
                 then("nothing is counted for the failed attempt") {
                     shouldThrow<KafkaException> { recoverer.accept(record, consumer, exception) }
