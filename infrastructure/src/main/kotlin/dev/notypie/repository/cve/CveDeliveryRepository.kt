@@ -30,5 +30,15 @@ interface CveDeliveryRepository {
         limit: Int,
     ): List<UndeliveredCveEvent>
 
+    // Same filter as findUndelivered for one user only, in event order: the rest of a digest day that a single
+    // subscriber's pairs pushed past a findUndeliveredByUser page.
+    fun findUndeliveredForUser(
+        deliveryMode: CveDeliveryMode,
+        userId: String,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent>
+
     fun dbNow(): LocalDateTime
 }

@@ -599,11 +599,13 @@ class CveNotificationDispatcherTest :
             }
         }
 
-        given("a full digest page held by a single user") {
+        // R4: a single user filling the page used to get their day in page-sized slices, a separate digest per tick.
+        given("a full digest page held by a single user with more pairs past the page") {
             val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
             val outboundMessagePort = mockk<OutboundMessagePort>()
             val outboxRepository = stubOutbox()
             val messages = mutableListOf<OutboundMessage>()
+            val claimed = mutableListOf<Long>()
             every {
                 deliveryRepository.findUndeliveredByUser(
                     deliveryMode = CveDeliveryMode.DIGEST,
@@ -616,7 +618,24 @@ class CveNotificationDispatcherTest :
                     createUndeliveredCveEvent(eventId = 1L, userId = "U1", topicDisplayName = "Alpha", title = "t1"),
                     createUndeliveredCveEvent(eventId = 2L, userId = "U1", topicDisplayName = "Alpha", title = "t2"),
                 )
-            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every {
+                deliveryRepository.findUndeliveredForUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    userId = "U1",
+                    since = DB_NOW.minusDays(7),
+                    doneBefore = any(),
+                    limit = 20,
+                )
+            } returns
+                (1L..3L).map { eventId ->
+                    createUndeliveredCveEvent(
+                        eventId = eventId,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t$eventId",
+                    )
+                }
+            every { deliveryRepository.claim(eventId = capture(claimed), userId = "U1") } returns true
             every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
                 createOutboxRow(eventId = UUID.randomUUID().toString())
             }
@@ -631,9 +650,55 @@ class CveNotificationDispatcherTest :
             `when`("the digest tick runs") {
                 dispatcher.digestTick()
 
-                then("the user is still served, or a heavy subscriber would starve") {
+                then("the rest of the day is read once more, bounded at ten pages, and sent as one digest") {
+                    claimed shouldBe listOf(1L, 2L, 3L)
                     messages.map { it.channelId() } shouldBe listOf("U1")
-                    verify(exactly = 2) { deliveryRepository.claim(eventId = any(), userId = "U1") }
+                    messages.single().channelText().headline shouldBe "CodeCompanion — CVE digest"
+                    messages.single().channelText().markdown shouldBe
+                        "*Alpha*\n• *t1*\nSample summary\n• *t2*\nSample summary\n• *t3*\nSample summary"
+                }
+            }
+        }
+
+        given("a full digest page held by a single user whose remaining day exceeds the bound") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val outboxRepository = stubOutbox()
+            val claimed = mutableListOf<Long>()
+            every {
+                deliveryRepository.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 1,
+                )
+            } returns listOf(createUndeliveredCveEvent(eventId = 1L, userId = "U1", title = "t1"))
+            every {
+                deliveryRepository.findUndeliveredForUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    userId = "U1",
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 10,
+                )
+            } returns (1L..10L).map { createUndeliveredCveEvent(eventId = it, userId = "U1", title = "t$it") }
+            every { deliveryRepository.claim(eventId = capture(claimed), userId = "U1") } returns true
+            every { outboundMessagePort.toRow(message = any(), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                    batchSize = 1,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("only the bounded read is claimed; the rest is left for a later tick") {
+                    claimed shouldBe (1L..10L).toList()
                 }
             }
         }

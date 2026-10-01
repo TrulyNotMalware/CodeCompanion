@@ -74,24 +74,35 @@ class CveNotificationDispatcher(
                 .atZone(digestZone)
                 .withZoneSameInstant(ZoneId.systemDefault())
                 .toLocalDateTime()
+        val since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays)
         val pairs =
             cveDeliveryRepository.findUndeliveredByUser(
                 deliveryMode = CveDeliveryMode.DIGEST,
-                since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays),
+                since = since,
                 doneBefore = doneBefore,
                 limit = batchSize,
             )
         if (pairs.isEmpty()) return
 
         val byUser = pairs.groupBy { it.userId }
-        // A full page may have cut its last user short; that user waits for the next tick so their day still goes
-        // out in one tick — unless they fill the page alone, or they would never be served.
-        val users = byUser.keys.toList().let { if (pairs.size >= batchSize && it.size > 1) it.dropLast(1) else it }
+        val bundles =
+            when {
+                pairs.size < batchSize -> byUser
+                // A full page may have cut its last user short; that user waits for the next tick so their day
+                // still goes out in one tick.
+                byUser.size > 1 -> byUser - byUser.keys.last()
+                // R4: a user who fills the page alone would otherwise get their day in page-sized slices, one
+                // separate digest per tick. Their remaining pairs are read once more, up to a bound, so the day
+                // goes out as one digest (split into parts as needed); only past the bound does it spill over.
+                else -> {
+                    val userId = byUser.keys.single()
+                    mapOf(userId to singleUserDay(userId = userId, since = since, doneBefore = doneBefore))
+                }
+            }
 
         var dispatchedUsers = 0
         var dispatchedEvents = 0
-        users.forEach { userId ->
-            val userPairs = byUser.getValue(userId)
+        bundles.forEach { (userId, userPairs) ->
             transactionTemplate
                 .runInTx { dispatchDigest(userId = userId, userPairs = userPairs) }
                 .onFailure { ex -> log.error(ex) { "CVE digest dispatch failed for user=$userId" } }
@@ -105,6 +116,26 @@ class CveNotificationDispatcher(
         if (dispatchedUsers > 0) {
             log.info { "CVE digest dispatch users=$dispatchedUsers events=$dispatchedEvents" }
         }
+    }
+
+    private fun singleUserDay(
+        userId: String,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+    ): List<UndeliveredCveEvent> {
+        val limit = batchSize * SINGLE_USER_DIGEST_PAGES
+        val day =
+            cveDeliveryRepository.findUndeliveredForUser(
+                deliveryMode = CveDeliveryMode.DIGEST,
+                userId = userId,
+                since = since,
+                doneBefore = doneBefore,
+                limit = limit,
+            )
+        if (day.size >= limit) {
+            log.warn { "CVE digest for user=$userId reached $limit events; the rest goes out in a later digest" }
+        }
+        return day
     }
 
     private fun dispatchImmediate(pair: UndeliveredCveEvent): Boolean {
@@ -184,5 +215,9 @@ class CveNotificationDispatcher(
         private const val DIGEST_HEADLINE = "CodeCompanion — CVE digest"
 
         private const val BODY_MAX_LENGTH = 2_900
+
+        // Bound on one user's single-tick digest, in pages of batchSize (500 pairs at the default 50): a day of a
+        // heavy subscription fits, while one claim transaction and its parts stay bounded.
+        private const val SINGLE_USER_DIGEST_PAGES = 10
     }
 }

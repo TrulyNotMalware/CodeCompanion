@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # test/kotlin/dev/notypie/application/service/cve/notification
 
@@ -12,7 +12,7 @@ Slack payload.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveNotificationDispatcherTest.kt` | Plain Kotest `BehaviorSpec` + MockK, no Spring context. Immediate: claim won → one `ChannelMessage` to `U1`, headline `CodeCompanion — CVE alert`, markdown `*Java CVE* — Boom\n\nPatch now`; claim lost → no `toRow`, no `save`; first of two pairs throws on `save` → second pair still claimed and saved, `verifyOrder` proves claim/save interleave pair by pair; 3,500-char summary → body capped at 2,887 `x` + `\n…(truncated)`; null summary → title-only `*Alpha* — t`; `R&D <team>` / `<!channel> v2.3.1` / a `<https://evil.example|Patch here>` summary → every piece escaped (`&amp;`, `&lt;`, `&gt;`); a 1,000-char `<` summary (under the cap raw, 4,000 escaped) → capped at `2900 + "\n…(truncated)".length` with no raw `<`; two digest events with 700-char `<` summaries → two parts (packed by escaped length), each ≤ 2,900, no marker. Digest: clock at 08:00Z with `digestSendAt = 09:00` → repository never queried; after send time → captured `doneBefore` equals 09:00Z converted through `ZoneId.systemDefault()`; three pairs over two users → two DMs, `U1` grouped as `*Alpha*\n• *t1*\ns1\n• *t2*\ns2`; one won and one lost claim → only the won event in the single DM; `digestSummaryMaxLength = 10` truncates each summary; a 3,500-char summary with `digestSummaryMaxLength = 5000` → only that line is capped at `2900 + "\n…(truncated)".length` and the next event starts a fresh part; six 700-char summaries (the Codex R3-01 / T15 repro) → every claimed `CVE-2026-000N` appears in a sent body, two parts headlined `(1/2)` / `(2/2)`, each ≤ 2,900 with no marker; a full page (`batchSize = 3`) over `U1`, `U1`, `U2` → only `U1` is served and `U2` is never claimed; a full page held by one user (`batchSize = 2`) → still served. Horizon: captured `since` equals `dbNow() - 7 days`. |
+| `CveNotificationDispatcherTest.kt` | Plain Kotest `BehaviorSpec` + MockK, no Spring context. Immediate: claim won → one `ChannelMessage` to `U1`, headline `CodeCompanion — CVE alert`, markdown `*Java CVE* — Boom\n\nPatch now`; claim lost → no `toRow`, no `save`; first of two pairs throws on `save` → second pair still claimed and saved, `verifyOrder` proves claim/save interleave pair by pair; 3,500-char summary → body capped at 2,887 `x` + `\n…(truncated)`; null summary → title-only `*Alpha* — t`; `R&D <team>` / `<!channel> v2.3.1` / a `<https://evil.example|Patch here>` summary → every piece escaped (`&amp;`, `&lt;`, `&gt;`); a 1,000-char `<` summary (under the cap raw, 4,000 escaped) → capped at `2900 + "\n…(truncated)".length` with no raw `<`; two digest events with 700-char `<` summaries → two parts (packed by escaped length), each ≤ 2,900, no marker. Digest: clock at 08:00Z with `digestSendAt = 09:00` → repository never queried; after send time → captured `doneBefore` equals 09:00Z converted through `ZoneId.systemDefault()`; three pairs over two users → two DMs, `U1` grouped as `*Alpha*\n• *t1*\ns1\n• *t2*\ns2`; one won and one lost claim → only the won event in the single DM; `digestSummaryMaxLength = 10` truncates each summary; a 3,500-char summary with `digestSummaryMaxLength = 5000` → only that line is capped at `2900 + "\n…(truncated)".length` and the next event starts a fresh part; six 700-char summaries (the Codex R3-01 / T15 repro) → every claimed `CVE-2026-000N` appears in a sent body, two parts headlined `(1/2)` / `(2/2)`, each ≤ 2,900 with no marker; a full page (`batchSize = 3`) over `U1`, `U1`, `U2` → only `U1` is served and `U2` is never claimed; a full page held by one user (`batchSize = 2`) → `findUndeliveredForUser(userId = "U1", since = dbNow() - 7 days, limit = 20)` is read once more and all three events are claimed and sent as one unnumbered digest (R4); with `batchSize = 1` the re-read asks for `limit = 10` and claims exactly what it returns. Horizon: captured `since` equals `dbNow() - 7 days`. |
 
 ## For AI Agents
 
@@ -45,7 +45,9 @@ Fixtures used: `application` testFixtures `outbox/OutboxTestFixtures.kt` (`creat
 ### Common Patterns
 - Immediate cases stub `findUndelivered`, digest cases stub `findUndeliveredByUser`; each spells out
   `deliveryMode`, `since = any()`, `doneBefore = any()`, `limit = N`, where `N` is `dispatcherWith`'s
-  `batchSize` (default 50; the hold-back cases pass 3 and 2).
+  `batchSize` (default 50; the hold-back cases pass 3, 2 and 1). The single-user cases also stub
+  `findUndeliveredForUser` at `limit = batchSize × 10`; the relaxed repository would otherwise return an
+  empty re-read and nothing would be sent.
 - Claim outcomes are stubbed per `(eventId, userId)`; mixing `returns true` and `returns false` for the same
   user is how the "won and lost" digest case is built.
 - Failure injection on `save` uses a counter inside `answers { ... }` to throw on the first call only.

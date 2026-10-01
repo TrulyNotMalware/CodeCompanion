@@ -273,6 +273,39 @@ class JpaCveDeliveryRepositoryTest
                 }
             }
 
+            // R4: the rest of a digest day for a subscriber who filled a whole user-major page alone.
+            given("three DIGEST events for two subscribers, one pair already delivered") {
+                val topicId = saveTopic(topicKey = "for-user", deliveryMode = CveDeliveryMode.DIGEST)
+                val first = saveEvent(topicId = topicId, externalId = "for-user-1")
+                val second = saveEvent(topicId = topicId, externalId = "for-user-2")
+                val third = saveEvent(topicId = topicId, externalId = "for-user-3")
+                subscribe(userId = "U_FORUSER_A", topicId = topicId)
+                subscribe(userId = "U_FORUSER_B", topicId = topicId)
+                deliveryRepository.saveAndFlush(createCveDeliverySchema(eventId = second, userId = "U_FORUSER_A"))
+
+                `when`("findUndeliveredForUser runs for one of them") {
+                    fun forA(pageable: Pageable) =
+                        deliveryRepository.findUndeliveredForUser(
+                            deliveryMode = CveDeliveryMode.DIGEST,
+                            userId = "U_FORUSER_A",
+                            since = since,
+                            doneBefore = doneBefore,
+                            pageable = pageable,
+                        )
+                    val result = forA(pageable = page)
+                    val limited = forA(pageable = PageRequest.of(0, 1))
+
+                    then("only that user's undelivered pairs come back, in event order") {
+                        result.map { it.userId }.toSet() shouldBe setOf("U_FORUSER_A")
+                        result.map { it.eventId } shouldContainExactly listOf(first, third)
+                    }
+
+                    then("the limit bounds the read") {
+                        limited.map { it.eventId } shouldContainExactly listOf(first)
+                    }
+                }
+            }
+
             given("the database clock read that anchors the delivery horizon") {
                 `when`("dbNow runs") {
                     val dbNow = deliveryRepository.dbNow()

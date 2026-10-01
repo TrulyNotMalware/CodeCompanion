@@ -61,6 +61,15 @@ interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
         pageable: Pageable,
     ): List<UndeliveredCveEvent>
 
+    @Query("$UNDELIVERED_SELECT AND s.userId = :userId ORDER BY e.id ASC")
+    fun findUndeliveredForUser(
+        @Param("deliveryMode") deliveryMode: CveDeliveryMode,
+        @Param("userId") userId: String,
+        @Param("since") since: LocalDateTime,
+        @Param("doneBefore") doneBefore: LocalDateTime,
+        pageable: Pageable,
+    ): List<UndeliveredCveEvent>
+
     // Must read the DB clock, not the app clock — DB is UTC, app JVM is KST; the delivery horizon depends on this.
     @Query(value = "SELECT LOCALTIMESTAMP(6)", nativeQuery = true)
     fun dbNow(): LocalDateTime

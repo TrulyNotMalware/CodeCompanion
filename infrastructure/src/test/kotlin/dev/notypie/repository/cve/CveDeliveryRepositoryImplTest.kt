@@ -108,6 +108,37 @@ class CveDeliveryRepositoryImplTest :
             }
         }
 
+        given("undelivered pairs requested for one user") {
+            val jpa = mockk<JpaCveDeliveryRepository>()
+            val repository = CveDeliveryRepositoryImpl(jpaCveDeliveryRepository = jpa)
+            val since = LocalDateTime.of(2026, 7, 7, 9, 0)
+            val doneBefore = LocalDateTime.of(2026, 7, 14, 9, 0)
+            every {
+                jpa.findUndeliveredForUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    userId = "U9",
+                    since = since,
+                    doneBefore = doneBefore,
+                    pageable = PageRequest.of(0, 500),
+                )
+            } returns listOf(createUndeliveredCveEvent(eventId = 9L, userId = "U9"))
+
+            `when`("querying with a limit") {
+                val pairs =
+                    repository.findUndeliveredForUser(
+                        deliveryMode = CveDeliveryMode.DIGEST,
+                        userId = "U9",
+                        since = since,
+                        doneBefore = doneBefore,
+                        limit = 500,
+                    )
+
+                then("the user and bounds are forwarded and the limit becomes a page request") {
+                    pairs.map { it.eventId } shouldContainExactly listOf(9L)
+                }
+            }
+        }
+
         given("the database clock") {
             val jpa = mockk<JpaCveDeliveryRepository>()
             val repository = CveDeliveryRepositoryImpl(jpaCveDeliveryRepository = jpa)
