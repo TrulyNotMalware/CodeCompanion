@@ -13,8 +13,8 @@ stand up change-data-capture locally and in-cluster.
 |------|-------------|
 | `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; `spring.jpa.open-in-view: false`; scheduler pool sized to 4 (effective through `SchedulingConfig`'s `ThreadPoolTaskScheduler`) |
 | `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true` |
-| `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
-| `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
+| `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics,prometheus` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
+| `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), actuator `health,info,metrics,prometheus` (scrape `/actuator/prometheus` in-cluster; never routed publicly), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
 | `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB defaults, port 9000, `SLACK_SIGNING_SECRET` required (no default), health `show-details: when_authorized` because the port is tunnelled to the internet |
 | `banner.txt` | Spring Boot startup banner |
 

@@ -23,9 +23,11 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.every
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -96,6 +98,14 @@ class ApplicationContextSmokeTest
 
                     then("open-in-view is off, so lazy loads cannot hide outside a transaction") {
                         context.environment.getProperty("spring.jpa.open-in-view") shouldBe "false"
+                    }
+
+                    then("the Prometheus registry scrapes the outbox gauges") {
+                        val scrape = context.getBean(PrometheusMeterRegistry::class.java).scrape()
+                        scrape shouldContain "outbox_messages{status=\"pending\"} 0.0"
+                        scrape shouldContain "outbox_pending_oldest_age_seconds 0.0"
+                        scrape shouldContain "outbox_in_progress_oldest_claim_age_seconds 0.0"
+                        scrape shouldContain "outbox_retrying_messages 0.0"
                     }
                 }
             }

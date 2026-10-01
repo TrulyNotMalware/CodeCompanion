@@ -21,6 +21,7 @@ read -r -d '' PAYLOAD << EOF
     "database.include.list": "code_companion",
     "table.include.list": "code_companion.outbox_message",
     "topic.prefix": "cdc",
+    "heartbeat.interval.ms": "10000",
     "schema.history.internal.kafka.bootstrap.servers": "kafka_host:port",
     "schema.history.internal.kafka.topic": "schema-history.code_companion.outbox_message",
     "column.propagate.source.type": "true",

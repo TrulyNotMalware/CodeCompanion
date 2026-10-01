@@ -1,6 +1,8 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.CdcDeadLetterRecovery
+import dev.notypie.application.configurations.CountingRecordRecoverer
+import dev.notypie.application.configurations.DEAD_LETTER_RECORDS_METRIC
 import dev.notypie.application.configurations.cdcDeadLetterRecoverer
 import dev.notypie.application.configurations.deadLetterBytesProducerFactory
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
@@ -19,10 +21,14 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
+import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.ByteArraySerializer
@@ -31,6 +37,7 @@ import org.springframework.kafka.KafkaException
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaOperations
 import org.springframework.kafka.core.KafkaTemplate
+import org.springframework.kafka.listener.ConsumerAwareRecordRecoverer
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
 import org.springframework.kafka.support.SendResult
 import java.util.Optional
@@ -402,11 +409,15 @@ class DebeziumLogTailingProcessorTest :
             `when`("it is built from the JSON template and the context shuts down") {
                 val bytesProducerFactory = mockk<DefaultKafkaProducerFactory<Any, ByteArray>>(relaxed = true)
                 val recovery =
-                    CdcDeadLetterRecovery(jsonTemplate = jsonTemplate, bytesProducerFactory = bytesProducerFactory)
+                    CdcDeadLetterRecovery(
+                        jsonTemplate = jsonTemplate,
+                        meterRegistry = SimpleMeterRegistry(),
+                        bytesProducerFactory = bytesProducerFactory,
+                    )
                 recovery.destroy()
 
                 then("it dead-letters through both templates and closes the producer it owns") {
-                    recovery.recoverer.shouldBeInstanceOf<DeadLetterPublishingRecoverer>()
+                    recovery.recoverer.delegate.shouldBeInstanceOf<DeadLetterPublishingRecoverer>()
                     verify(exactly = 1) { bytesProducerFactory.destroy() }
                 }
             }
@@ -422,13 +433,66 @@ class DebeziumLogTailingProcessorTest :
             }
 
             `when`("no KafkaTemplate exists") {
-                val recovery = CdcDeadLetterRecovery(jsonTemplate = null)
+                val meterRegistry = SimpleMeterRegistry()
+                val recovery = CdcDeadLetterRecovery(jsonTemplate = null, meterRegistry = meterRegistry)
 
-                then("records are logged and dropped, and shutdown has nothing to close") {
+                then("records are logged, dropped and counted as dropped, and shutdown has nothing to close") {
+                    val record = createCdcConsumerRecord()
                     shouldNotThrowAny {
-                        recovery.recoverer.accept(createCdcConsumerRecord(), IllegalStateException("parse"))
+                        recovery.recoverer.accept(record, IllegalStateException("parse"))
                         recovery.destroy()
                     }
+                    meterRegistry
+                        .get(DEAD_LETTER_RECORDS_METRIC)
+                        .tags("topic", record.topic(), "outcome", "dropped")
+                        .counter()
+                        .count() shouldBe 1.0
+                }
+            }
+        }
+
+        given("a counting recoverer over a consumer-aware dead-letter publisher") {
+            val record = createCdcConsumerRecord()
+            val consumer = mockk<Consumer<*, *>>()
+            val exception = IllegalStateException("parse")
+
+            `when`("the delegate hands the record to the dead-letter topic") {
+                val meterRegistry = SimpleMeterRegistry()
+                val delegate = mockk<ConsumerAwareRecordRecoverer>()
+                every { delegate.accept(record, consumer, exception) } just runs
+                val recoverer =
+                    CountingRecordRecoverer(
+                        delegate = delegate,
+                        meterRegistry = meterRegistry,
+                        outcome = "dead_lettered",
+                    )
+
+                recoverer.accept(record, consumer, exception)
+
+                then("the delegate gets the consumer and the record is counted once by topic and outcome") {
+                    verify(exactly = 1) { delegate.accept(record, consumer, exception) }
+                    meterRegistry
+                        .get(DEAD_LETTER_RECORDS_METRIC)
+                        .tags("topic", record.topic(), "outcome", "dead_lettered")
+                        .counter()
+                        .count() shouldBe 1.0
+                }
+            }
+
+            `when`("the delegate throws, so the error handler will retry the recovery") {
+                val meterRegistry = SimpleMeterRegistry()
+                val delegate = mockk<ConsumerAwareRecordRecoverer>()
+                every { delegate.accept(record, consumer, exception) } throws KafkaException("send timed out")
+                val recoverer =
+                    CountingRecordRecoverer(
+                        delegate = delegate,
+                        meterRegistry = meterRegistry,
+                        outcome = "dead_lettered",
+                    )
+
+                then("nothing is counted for the failed attempt") {
+                    shouldThrow<KafkaException> { recoverer.accept(record, consumer, exception) }
+                    meterRegistry.find(DEAD_LETTER_RECORDS_METRIC).counter() shouldBe null
                 }
             }
         }

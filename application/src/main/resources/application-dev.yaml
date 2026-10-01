@@ -72,7 +72,7 @@ management:
     web:
       exposure:
         # dev is reachable over HTTP without authentication: no heapdump, loggers (writable), threaddump.
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
       base-path: /api/actuator
       path-mapping:
         loggers: logs

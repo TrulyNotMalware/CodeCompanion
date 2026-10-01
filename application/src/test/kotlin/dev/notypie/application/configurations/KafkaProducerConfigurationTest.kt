@@ -3,6 +3,7 @@ package dev.notypie.application.configurations
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration
@@ -16,6 +17,7 @@ class KafkaProducerConfigurationTest :
             ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(KafkaAutoConfiguration::class.java))
                 .withUserConfiguration(KafkaEventPublisherConfiguration::class.java)
+                .withBean(SimpleMeterRegistry::class.java)
                 .withPropertyValues(
                     "slack.app.mode.event-publisher=KAFKA",
                     "spring.kafka.bootstrap-servers=127.0.0.1:1",

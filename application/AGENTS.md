@@ -15,7 +15,7 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ## Key Files
 | File | Description |
 |------|-------------|
-| `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator, AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
+| `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator with the Micrometer Prometheus registry (`/actuator/prometheus` in `dev`/`prod`), AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
 | `src/main/kotlin/dev/notypie/CodeCompanion.kt` | `@SpringBootApplication @ConfigurationPropertiesScan` entry point and `main()` |
 | `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs `java -XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul -jar /app.jar` (heap = 50% of the k8s memory limit; the Pod's memory request covers heap plus non-heap). Runs as root because it binds port 80 (open item in `src/main/resources/k8s/AGENTS.md`). Build context for the deploy workflow |
 
@@ -28,7 +28,7 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 | `src/main/kotlin/dev/notypie/application/configurations/` | Bean wiring, conditions, Kafka/async/scheduling config (see `src/main/kotlin/dev/notypie/application/configurations/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/mcp/` | `McpToolGate` + `DomainReadTools` — role-gated MCP tools exposed to the AI agent |
 | `src/main/kotlin/dev/notypie/application/socket/` | `SocketModeReceiver` — local-only WebSocket inbound transport (`local` profile) |
-| `src/main/kotlin/dev/notypie/application/health/` | `OutboxHealthIndicator` — Actuator health contribution reporting pending lag and stuck rows |
+| `src/main/kotlin/dev/notypie/application/health/` | `OutboxHealthIndicator` (Actuator health: pending lag and stuck rows) and `OutboxMetrics` (Prometheus gauges for the same numbers) (see `src/main/kotlin/dev/notypie/application/health/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/exception/` | `ControllerAdvice`, `PayloadParseException` (see `src/main/kotlin/dev/notypie/application/exception/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/common/` | `SlackRequestParser`, `IdempotencyCreator`, `TransactionTemplateExt` (see `src/main/kotlin/dev/notypie/application/common/AGENTS.md`) |
 | `src/main/resources/` | Profile YAML, hand-applied SQL migrations, k8s and CDC manifests (see `src/main/resources/AGENTS.md`) |
@@ -59,7 +59,8 @@ Specs mirror the package layout under `src/test/kotlin/`. Most are plain Kotest 
 `@SpringBootTest` is `ApplicationContextSmokeTest`, which boots the whole application on H2 (polling relay,
 in-process events, `MessageDispatcher` replaced by `@MockkBean`) and pins the wiring that unit specs cannot see:
 the Hikari pool size, the `ThreadPoolTaskScheduler`, the `relayTaskExecutor` qualifier, the single `Clock`, the
-`@Async` proxy on `AgentConverseService` and the BEFORE_COMMIT outbox write. There is no `src/test/resources`.
+outbox gauges in the Prometheus scrape, the AI turn running only after commit on the bounded `agent-turn-` executor
+and the BEFORE_COMMIT outbox write. There is no `src/test/resources`.
 Some other specs run against an in-memory H2 with a real
 transaction manager, built from testFixtures: `outbox/OutboxJpaTestContext.kt` (`createOutboxJpaContext()`, a
 small `AnnotationConfigApplicationContext` with `JpaTransactionManager`) and
@@ -91,7 +92,7 @@ This module also consumes `testFixtures(project(":domain"))` and `testFixtures(p
 - `:infrastructure` — Slack adapters, JPA repositories, Kafka publisher, AI sidecar client, templates
 
 ### External
-Spring Boot (Web on Jetty, Actuator, AOP/AspectJ, DevTools), Spring AI MCP server (WebMVC),
+Spring Boot (Web on Jetty, Actuator, AOP/AspectJ, DevTools), Micrometer Prometheus registry, Spring AI MCP server (WebMVC),
 Slack `slack-api-client` + tyrus WebSocket, Jackson 3 Kotlin module, Spring REST Docs (test fixtures).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

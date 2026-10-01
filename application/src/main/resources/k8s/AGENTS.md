@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # k8s
 
@@ -109,8 +109,9 @@ adds what an agent editing the manifests needs to know.
   in `deploy_action.yaml`. It never uses the public host: that host is fronted by a bearer-authenticating layer
   outside this repository (every probed path answered `401` on 2026-09-28), and what it forwards to the app has
   to be confirmed by whoever operates it.
-- **`/actuator` must never be routed publicly** (unauthenticated `metrics`/`info`, and `health` reports outbox
-  state). The samples in `route/` therefore forward only `/api/slack` and `/api/slash`; `/api` as a whole would
+- **`/actuator` must never be routed publicly** (unauthenticated `metrics`/`prometheus`/`info`, and `health`
+  reports outbox state). Prometheus scrapes `/actuator/prometheus` on the Pod port 80 from inside the cluster;
+  the Deployment carries no scrape annotations, so add whatever discovery the cluster's Prometheus uses. The samples in `route/` therefore forward only `/api/slack` and `/api/slash`; `/api` as a whole would
   expose `/api/actuator` if a sample were reused with the dev, local or slack-live profile.
 - **CI path filters treat these YAML files as source.** Only `**/*.md` is excluded, so a manifest-only push
   runs lint + `:application:test`, and a manifest-only PR merged to `main` builds and deploys a new image.

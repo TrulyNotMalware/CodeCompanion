@@ -54,7 +54,8 @@ _type: guide · updated: 2026-09-28_
   Slack 앱에 연결되는데 빈 시크릿이면 필터가 검증을 끈다. 기본값이 없다는 것만으로는 fail-fast가 아니다(Boot 바인더는 미해결
   플레이스홀더를 리터럴로 보존) — 기동 거부는 `local` 외 프로파일에서 빈 값·미해결 값을 거절하는 애플리케이션 검증이 맡는다.
   `local`만 빈 기본값을 유지한다(Socket Mode라 HTTP 수신이 없다).
-- actuator: `prod`와 `dev`는 `health,info,metrics` + `show-details: when_authorized`(Spring Security가 없어 상세는 항상 가려짐).
+- actuator: `prod`와 `dev`는 `health,info,metrics,prometheus` + `show-details: when_authorized`(Spring Security가 없어 상세는 항상
+  가려지므로 outbox 상태는 `/actuator/prometheus`의 게이지로 본다).
   `local`은 개발자 편의를 위해 `loggers`·`threaddump`·`mappings`·`conditions`까지 열고 `show-details: always`다 — 인증 없이 모든
   인터페이스에 바인드되므로 9000 포트를 네트워크에 노출하지 않는다. `heapdump`는 어느 프로파일에도 없다(덤프에 토큰이 실림).
   `run` 스크립트는 더 이상 `-Dmanagement.endpoints.web.exposure.include`로 YAML을 덮지 않는다.

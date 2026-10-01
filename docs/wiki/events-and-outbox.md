@@ -214,6 +214,23 @@ _type: architecture · updated: 2026-09-28_
 - `OutboxSchemaVersion` KDoc은 미지원 버전 행이 "stuck으로 드러난다"고 하지만 실제 경로는 렌더 실패 →
   `MessagePublishFailedEvent` → `FAILURE`다. 헬스에는 잡히지 않고 로그에만 남는다.
 
+## 메트릭과 알림 (2026-10-01)
+
+- 헬스 디테일은 `show-details: when_authorized`인데 Spring Security가 없어 아무에게도 보이지 않는다. 그래서 같은
+  숫자를 `health/OutboxMetrics`가 게이지로 내보내고 `dev`·`prod`가 `/actuator/prometheus`를 연다(공개 라우트에는
+  `/actuator`가 없다). 게이지는 스크레이프마다 같은 저장소 쿼리를 실행하고, 쿼리가 실패하면 `NaN`이 된다.
+  - `outbox_messages{status="pending"|"in_progress"}`, `outbox_pending_oldest_age_seconds`(`created_at` 기준),
+    `outbox_in_progress_oldest_claim_age_seconds`(`updated_at` = 마지막 claim·갱신 기준), `outbox_retrying_messages`
+  - `kafka_dead_letter_records_total{topic, outcome="dead_lettered"|"dropped"}`: 리스너 컨테이너의 recoverer가
+    레코드를 DLT로 넘긴 뒤(또는 템플릿이 없어 버린 뒤) 센다. 넘기다 예외가 나면 세지 않는다.
+- 모든 레플리카가 같은 테이블을 세므로 알림은 `max()`로 건다. 권장(저장소에 프로비저닝되어 있지 않음):
+  `max(outbox_pending_oldest_age_seconds) > 120` 10분 지속(커넥터 또는 폴러 정지 — 이때 전달은 stuck 임계 뒤
+  스윕이 맡아 조용히 늦어진다), `max(outbox_retrying_messages) > 0` 15분, `increase(kafka_dead_letter_records_total[15m]) > 0`.
+- Debezium 커넥터 상태(`/connectors/<name>/status`)는 앱이 볼 수 없다. 커넥터 등록 스크립트에
+  `heartbeat.interval.ms: 10000`을 넣어, outbox 테이블이 조용해도 오프셋이 binlog 보존(7일) 밖으로 밀려나지 않게
+  했다. 위치를 이미 잃었을 때의 복구 절차는 `application/src/main/resources/cdc/docker-compose/debezium/AGENTS.md`의
+  런북(`snapshot.mode: when_needed`로 재스냅샷, 스냅샷 읽기 이벤트는 상태 필터와 CAS를 그대로 거친다)에 있다.
+
 ## 함정
 
 - `OutboundMessage.DirectMessage`는 타입만 남아 있다: 코덱 미등록, 렌더러 `error(...)`. DM은
@@ -246,7 +263,7 @@ _type: architecture · updated: 2026-09-28_
   `entity/event/{EventPublisher,Event}.kt`, `dto/CommandBasicInfo.kt`
 - `application/src/main/kotlin/dev/notypie/application/` — `service/relay/*`, `configurations/{ConsumerConfig,
   SchedulingConfig,KafkaConsumerConfiguration,AsyncConfig,AppConfig,SlackRequestBuilderConfiguration}.kt`,
-  `configurations/conditions/Conditions.kt`, `health/OutboxHealthIndicator.kt`, `service/ops/OpsStatusService.kt`,
+  `configurations/conditions/Conditions.kt`, `health/{OutboxHealthIndicator,OutboxMetrics}.kt`, `service/ops/OpsStatusService.kt`,
   `common/{IdempotencyCreator,TransactionTemplateExt}.kt`, `security/{SlackRetryDeduplicator,
   SlackRequestVerificationFilter}.kt`, `service/command/{CommandExecutor,RoleManagementService}.kt`,
   `service/{standup/StandupSchedulingService,cve/notification/CveNotificationDispatcher,agent/AgentConverseService}.kt`

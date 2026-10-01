@@ -97,7 +97,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
       # Fixed: k8s/deployment.yaml probes and the deploy workflow health check hard-code /actuator.
       base-path: /actuator
       path-mapping:
