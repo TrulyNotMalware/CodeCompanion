@@ -119,6 +119,23 @@ class DebeziumLogTailingProcessorTest :
             }
         }
 
+        given("a PENDING after-image whose outbox row no longer exists") {
+            val eventId = UUID.randomUUID().toString()
+            val f = fixture()
+            every { f.outboxRepository.findById(eventId) } returns Optional.empty()
+
+            `when`("the record is consumed") {
+                f.processor.consume(envelope = createCdcEnvelope(after = createOutboxAfterImage(eventId = eventId)))
+
+                then("nothing is claimed or dispatched") {
+                    verify(exactly = 0) {
+                        f.outboxRepository.claimPending(eventId = any(), attemptCount = any(), now = any())
+                    }
+                    verify(exactly = 0) { f.dispatcher.dispatch(event = any()) }
+                }
+            }
+        }
+
         given("an after-image written before V20, without attempt_count") {
             val eventId = UUID.randomUUID().toString()
             val f = fixture()

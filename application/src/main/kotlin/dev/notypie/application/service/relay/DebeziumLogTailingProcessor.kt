@@ -5,6 +5,7 @@ import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.messaging.handler.annotation.Payload
 import java.time.Clock
@@ -58,7 +59,7 @@ class DebeziumLogTailingProcessor(
                     )
                 }
 
-        val current = outboxRepository.findById(eventId.toString()).orElse(null)
+        val current = outboxRepository.findByIdOrNull(eventId.toString())
         if (current == null) {
             logger.warn { "Outbox row missing for eventId=$eventId idempotencyKey=${snapshot.idempotencyKey}" }
             return

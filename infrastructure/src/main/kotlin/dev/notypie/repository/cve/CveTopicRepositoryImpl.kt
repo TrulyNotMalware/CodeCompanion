@@ -1,6 +1,7 @@
 package dev.notypie.repository.cve
 
 import dev.notypie.repository.cve.schema.CveTopicSchema
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.transaction.annotation.Transactional
 
 open class CveTopicRepositoryImpl(
@@ -43,8 +44,7 @@ open class CveTopicRepositoryImpl(
         jpaCveTopicRepository.findAllOrderByTopicKey().map { toRecord(schema = it) }
 
     @Transactional(readOnly = true)
-    override fun findById(id: Long): CveTopic? =
-        jpaCveTopicRepository.findById(id).map { toRecord(schema = it) }.orElse(null)
+    override fun findById(id: Long): CveTopic? = jpaCveTopicRepository.findByIdOrNull(id)?.let { toRecord(schema = it) }
 
     @Transactional(readOnly = true)
     override fun countActive(): Long = jpaCveTopicRepository.countActive()

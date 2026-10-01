@@ -10,6 +10,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.util.Optional
 
 class CveTopicRepositoryImplTest :
     BehaviorSpec({
@@ -89,6 +90,24 @@ class CveTopicRepositoryImplTest :
                     written shouldBe false
                     verify(exactly = 0) { jpaCveTopicRepository.save(any()) }
                     existing.active shouldBe false
+                }
+            }
+        }
+
+        given("findById") {
+            val jpaCveTopicRepository = mockk<JpaCveTopicRepository>()
+            val repository = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+            every { jpaCveTopicRepository.findById(3L) } returns
+                Optional.of(createCveTopicSchema(id = 3L, topicKey = "found-topic"))
+            every { jpaCveTopicRepository.findById(4L) } returns Optional.empty()
+
+            `when`("the id exists and when it does not") {
+                val found = repository.findById(id = 3L)
+                val missing = repository.findById(id = 4L)
+
+                then("an existing row maps to a topic and a missing one is null") {
+                    found?.topicKey shouldBe "found-topic"
+                    missing shouldBe null
                 }
             }
         }
