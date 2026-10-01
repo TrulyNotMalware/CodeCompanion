@@ -296,39 +296,17 @@ class MeetingServiceImpl(
     fun getMeetingListEvent(event: GetMeetingListEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        val target = ConversationTarget(id = basicInfo.channel)
+        // Not caught: the read joins the caller's transaction, so a failure leaves it rollback-only and no reply commits.
+        val meetings =
+            meetingRepository.getMeetingsByUserIdInRange(
+                userId = payload.publisherId,
+                startAt = payload.startDate,
+                endAt = payload.endDate,
+            )
         val message =
-            runCatching {
-                meetingRepository.getMeetingsByUserIdInRange(
-                    userId = payload.publisherId,
-                    startAt = payload.startDate,
-                    endAt = payload.endDate,
-                )
-            }.fold(
-                onSuccess = { meetings ->
-                    OutboundMessage.Ephemeral(
-                        target = target,
-                        content =
-                            MessageContent.MeetingList(
-                                meetings = meetings,
-                                currentUserId = basicInfo.publisherId,
-                            ),
-                    )
-                },
-                onFailure = { exception ->
-                    log.error(exception) {
-                        "Failed to fetch meeting list for publisherId=${payload.publisherId} idempotencyKey=${event.idempotencyKey}"
-                    }
-                    OutboundMessage.Ephemeral(
-                        target = target,
-                        content =
-                            MessageContent.Text(
-                                headline = null,
-                                markdown = "Failed to fetch your meetings. Please try again later.",
-                            ),
-                        detailType = CommandDetailType.ERROR_RESPONSE,
-                    )
-                },
+            OutboundMessage.Ephemeral(
+                target = ConversationTarget(id = basicInfo.channel),
+                content = MessageContent.MeetingList(meetings = meetings, currentUserId = basicInfo.publisherId),
             )
         outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }

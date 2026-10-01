@@ -29,10 +29,13 @@ class StandupRoutineSetupService(
     @EventListener
     fun createRoutine(event: CreateStandupRoutineEvent) {
         val payload = event.payload
+        // Only input validation is caught: a failed write has already marked the caller's transaction rollback-only.
         val message =
-            runCatching { persistRoutine(payload = payload) }
+            runCatching { buildRoutine(payload = payload) }
                 .fold(
-                    onSuccess = { routine -> confirmationMessage(routine = routine) },
+                    onSuccess = { routine ->
+                        confirmationMessage(routine = standupRepository.createRoutine(routine = routine))
+                    },
                     onFailure = { exception ->
                         setupLog.warn(exception) {
                             "Standup routine setup rejected: name=${payload.name} creatorId=${payload.creatorId} " +
@@ -55,7 +58,7 @@ class StandupRoutineSetupService(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    private fun persistRoutine(payload: CreateStandupRoutinePayload): Routine {
+    private fun buildRoutine(payload: CreateStandupRoutinePayload): Routine {
         val routine =
             Routine(
                 name = payload.name,
@@ -73,7 +76,7 @@ class StandupRoutineSetupService(
                 member = RoutineMember(userId = memberId, userTimezone = payload.timezone),
             )
         }
-        return standupRepository.createRoutine(routine = routine)
+        return routine
     }
 
     private fun confirmationMessage(routine: Routine): String {

@@ -30,6 +30,7 @@ import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.clearMocks
 import io.mockk.every
@@ -691,30 +692,22 @@ class MeetingServiceImplTest :
                 } throws RuntimeException("db down")
                 every { stager.stage(message = any(), basicInfo = any()) } returns ephemeralEvent
 
-                val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
-                every { eventPublisher.publishEvent(events = capture(captured)) } returns Unit
+                val failure = runCatching { service.getMeetingListEvent(event = event) }.exceptionOrNull()
 
-                service.getMeetingListEvent(event = event)
-
-                then("stages an ERROR_RESPONSE retry-later ephemeral and publishes it") {
-                    verify(exactly = 1) {
+                then(
+                    "the failure propagates and no reply is staged, since the caller's transaction cannot commit one",
+                ) {
+                    failure.shouldBeInstanceOf<RuntimeException>().message shouldBe "db down"
+                    verify(exactly = 0) {
                         stager.stage(
                             message =
-                                OutboundMessage.Ephemeral(
-                                    target = target,
-                                    content =
-                                        MessageContent.Text(
-                                            headline = null,
-                                            markdown = "Failed to fetch your meetings. Please try again later.",
-                                        ),
-                                    detailType = CommandDetailType.ERROR_RESPONSE,
-                                ),
-                            basicInfo = payload.responseBasicInfo,
+                                match {
+                                    it is OutboundMessage.Ephemeral &&
+                                        it.detailType == CommandDetailType.ERROR_RESPONSE
+                                },
+                            basicInfo = any(),
                         )
                     }
-                    val published = captured.captured.toList()
-                    published.size shouldBe 1
-                    published.single() shouldBe ephemeralEvent
                 }
             }
         }

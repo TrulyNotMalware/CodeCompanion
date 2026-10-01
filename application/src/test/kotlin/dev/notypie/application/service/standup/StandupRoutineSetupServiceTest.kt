@@ -12,6 +12,7 @@ import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -90,6 +91,31 @@ class StandupRoutineSetupServiceTest :
                         )
                     }
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            `when`("the routine is valid but the repository write fails") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                val eventPublisher = mockk<EventPublisher>(relaxed = true)
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = eventPublisher,
+                    )
+                every { repo.createRoutine(routine = any()) } throws IllegalStateException("db down")
+
+                val failure =
+                    runCatching {
+                        service.createRoutine(
+                            event = createCreateStandupRoutineEvent(),
+                        )
+                    }.exceptionOrNull()
+
+                then("the failure propagates instead of a reply the caller's transaction could not commit") {
+                    failure.shouldBeInstanceOf<IllegalStateException>().message shouldBe "db down"
+                    verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
                 }
             }
 

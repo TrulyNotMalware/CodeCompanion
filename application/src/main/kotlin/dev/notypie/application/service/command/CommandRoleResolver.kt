@@ -3,14 +3,11 @@ package dev.notypie.application.service.command
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.authorization.UserCommandRoleRepository
-import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-
-private val log = KotlinLogging.logger {}
 
 @Service
 class CommandRoleResolver(
@@ -38,13 +35,8 @@ class CommandRoleResolver(
         val now = clock.millis()
         cache[userId]?.takeIf { it.expiresAt > now }?.let { return it.role }
         val generationAtLookup = evictionGeneration.get()
-        val role =
-            try {
-                userCommandRoleRepository.findRole(userId = userId) ?: UserRole.USER
-            } catch (failure: Exception) {
-                log.warn(failure) { "Role lookup failed; falling back to USER for userId=$userId" }
-                return UserRole.USER
-            }
+        // A failed lookup propagates: the Slack handlers resolve inside their transaction, which it left rollback-only.
+        val role = userCommandRoleRepository.findRole(userId = userId) ?: UserRole.USER
         remember(userId = userId, role = role, now = now, generationAtLookup = generationAtLookup)
         return role
     }
