@@ -27,7 +27,7 @@ _type: guide · updated: 2026-10-01_
 | `this` 생략 | 불필요한 `this.`는 쓰지 않는다. 의도적인 스타일이며 ktlint 규칙이 아니다 |
 | 인터페이스 + `Impl` | 유스케이스와 어댑터는 `MeetingService` / `MeetingServiceImpl`처럼 짝을 이루고, 다른 코드는 인터페이스에만 의존한다 |
 | 스케줄러 분리 | `@Scheduled`는 얇은 `*Scheduler`에, 로직은 `*SchedulingService`에 — 로직을 스케줄러 없이 단위 테스트하기 위해 |
-| 리포지토리 3종 | `XxxRepository`(인터페이스 + DTO) / `JpaXxxRepository` / `XxxRepositoryImpl`(`open class`, 변이 메서드 `@Transactional`), 스키마는 `schema/XxxSchema` |
+| 리포지토리 3종 | `XxxRepository`(인터페이스 + DTO) / `JpaXxxRepository` / `XxxRepositoryImpl`(`open class`, 변이 메서드 `@Transactional`, 엔티티를 매핑하는 읽기 메서드 `@Transactional(readOnly = true)` — open-in-view를 껐으므로 매핑은 트랜잭션 안에서), 스키마는 `schema/XxxSchema` |
 | 빈 등록 | 어댑터·서비스는 `@Component` 스캔보다 `configurations/`의 명시적 `@Bean`(named argument)으로 등록한다. `@ConditionalOnBean`과 스캔의 순서 의존을 피하기 위해 |
 | 설정 바인딩 | `@ConfigurationProperties` 클래스는 `application/.../configurations/`에, 메인 클래스의 `@ConfigurationPropertiesScan`이 잡는다 |
 | 시간 | 시간에 의존하는 서비스는 `Clock`을 주입받는다(기본 `Clock.systemDefaultZone()`). 테스트가 시각을 고정할 수 있어야 한다 |

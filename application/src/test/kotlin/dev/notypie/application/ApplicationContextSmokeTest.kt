@@ -83,6 +83,10 @@ class ApplicationContextSmokeTest
                         clocks.single().zone shouldBe ZoneId.systemDefault()
                     }
 
+                    then("open-in-view is off, so lazy loads cannot hide outside a transaction") {
+                        context.environment.getProperty("spring.jpa.open-in-view") shouldBe "false"
+                    }
+
                     then("AgentConverseService is proxied so @Async takes effect") {
                         AopUtils.isAopProxy(context.getBean(AgentConverseService::class.java)) shouldBe true
                     }

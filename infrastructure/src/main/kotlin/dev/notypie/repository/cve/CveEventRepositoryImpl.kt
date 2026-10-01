@@ -25,6 +25,7 @@ open class CveEventRepositoryImpl(
             publishedAt = publishedAt,
         )
 
+    @Transactional(readOnly = true)
     override fun findClaimable(now: LocalDateTime, maxRetries: Int, limit: Int): List<CveEvent> =
         jpaCveEventRepository
             .findClaimable(now = now, maxRetries = maxRetries, pageable = PageRequest.of(0, limit))
@@ -59,16 +60,20 @@ open class CveEventRepositoryImpl(
 
     override fun countByStatus(status: CveSummaryStatus): Long = jpaCveEventRepository.countByStatus(status = status)
 
+    @Transactional(readOnly = true)
     override fun countFailedRetryable(maxRetries: Int): Long =
         jpaCveEventRepository.countFailedRetryable(maxRetries = maxRetries)
 
+    @Transactional(readOnly = true)
     override fun countDeadLetter(maxRetries: Int): Long = jpaCveEventRepository.countDeadLetter(maxRetries = maxRetries)
 
+    @Transactional(readOnly = true)
     override fun countEventsByTopic(topicIds: List<Long>): List<TopicEventCount> {
         if (topicIds.isEmpty()) return emptyList()
         return jpaCveEventRepository.countEventsByTopic(topicIds = topicIds.distinct())
     }
 
+    @Transactional(readOnly = true)
     override fun findRecentDoneEvents(topicIds: List<Long>, limit: Int): List<CveRecentEvent> {
         if (topicIds.isEmpty()) return emptyList()
         return jpaCveEventRepository.findRecentDoneEvents(

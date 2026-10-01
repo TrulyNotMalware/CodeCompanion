@@ -11,6 +11,7 @@ open class MeetingReminderRepositoryImpl(
     private val jpaMeetingRepository: JpaMeetingRepository,
     private val jpaMeetingReminderRepository: JpaMeetingReminderRepository,
 ) : MeetingReminderRepository {
+    @Transactional(readOnly = true)
     override fun findActiveMeetingsInWindow(from: LocalDateTime, to: LocalDateTime): List<ReminderCandidateMeeting> =
         jpaMeetingRepository
             .findActiveByStartAtBetween(startAt = from, endAt = to)
@@ -44,6 +45,7 @@ open class MeetingReminderRepositoryImpl(
         return true
     }
 
+    @Transactional(readOnly = true)
     override fun reminderExists(meetingId: Long, offsetMinutes: Int): Boolean =
         jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
             meetingId = meetingId,
@@ -68,6 +70,7 @@ open class MeetingReminderRepositoryImpl(
     override fun deleteByMeetingId(meetingId: Long): Int =
         jpaMeetingReminderRepository.deleteByMeetingId(meetingId = meetingId)
 
+    @Transactional(readOnly = true)
     override fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder> =
         jpaMeetingReminderRepository
             .findPendingBefore(before = before, pageable = PageRequest.of(0, limit))

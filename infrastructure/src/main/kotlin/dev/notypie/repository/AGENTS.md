@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # infrastructure/repository
 
@@ -65,6 +65,10 @@ Note that H2 will not catch MariaDB-specific native-SQL syntax — verify those 
 ### Common Patterns
 - Native queries for atomic CAS / `INSERT ... IGNORE`; derived or JPQL queries otherwise.
 - `@Modifying @Transactional` on state transitions, returning the affected row count.
+- In `*RepositoryImpl`, read overrides that load and map entities carry `@Transactional(readOnly = true)`.
+  `spring.jpa.open-in-view` is off (`application.yaml`), so a lazy association touched while mapping outside
+  a transaction throws in every caller, HTTP or scheduler alike. Only `open class` Impls can take method-level
+  annotations; `plugin.spring` does not open a class for them.
 - DTO projections (`dev.notypie.domain.*.dto`) cross the boundary outward; JPA schema classes never leak
   into `application` or `domain`.
 - `JPAJsonConverter` (in `infrastructure/common/`) for JSON columns; `PartitionKeyUtil` for Kafka

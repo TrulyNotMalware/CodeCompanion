@@ -23,18 +23,21 @@ open class MeetingRepositoryImpl(
                 meeting.toSchema(idempotencyKey = idempotencyKey, channel = channel),
             ).toDomainEntity()
 
+    @Transactional(readOnly = true)
     override fun getMeeting(meetingId: Long): MeetingDto =
         jpaMeetingRepository
             .findMeetingWithParticipants(meetingId)
             ?.toMeetingDto()
             .throwIfSchemaNotFound(fieldName = "id", fieldValue = meetingId)
 
+    @Transactional(readOnly = true)
     override fun getAllMeetingByUserId(userId: String): List<MeetingDto> =
         jpaMeetingRepository
             .findAllMeetingByUserId(userId = userId)
             .map { it.toMeetingDto() }
             .toList()
 
+    @Transactional(readOnly = true)
     override fun getMeetingsByUserIdInRange(
         userId: String,
         startAt: LocalDateTime,
@@ -46,6 +49,7 @@ open class MeetingRepositoryImpl(
             .toList()
 
     // FIXME direct select from participant table
+    @Transactional(readOnly = true)
     override fun getParticipants(meetingId: Long): List<String> =
         getMeeting(meetingId = meetingId).participants.map { it.userId }
 
@@ -65,6 +69,7 @@ open class MeetingRepositoryImpl(
             absentReasonDetail = absentReasonDetail,
         )
 
+    @Transactional(readOnly = true)
     override fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean =
         jpaMeetingRepository.existsParticipant(
             meetingIdempotencyKey = meetingIdempotencyKey,

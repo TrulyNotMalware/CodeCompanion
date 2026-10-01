@@ -12,6 +12,7 @@ open class CveDeliveryRepositoryImpl(
     override fun claim(eventId: Long, userId: String): Boolean =
         jpaCveDeliveryRepository.claim(eventId = eventId, userId = userId) == 1
 
+    @Transactional(readOnly = true)
     override fun findUndelivered(
         deliveryMode: CveDeliveryMode,
         since: LocalDateTime,
@@ -25,5 +26,6 @@ open class CveDeliveryRepositoryImpl(
             pageable = PageRequest.of(0, limit),
         )
 
+    @Transactional(readOnly = true)
     override fun dbNow(): LocalDateTime = jpaCveDeliveryRepository.dbNow()
 }

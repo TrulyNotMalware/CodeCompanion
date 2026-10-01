@@ -23,6 +23,7 @@ open class CveSubscriptionRepositoryImpl(
             .toInt()
     }
 
+    @Transactional(readOnly = true)
     override fun findSubscribedTopics(userId: String): List<CveTopic> {
         val topicIds = jpaCveSubscriptionRepository.findByUserId(userId = userId).map { it.topicId }
         if (topicIds.isEmpty()) return emptyList()

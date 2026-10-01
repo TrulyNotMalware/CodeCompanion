@@ -7,6 +7,11 @@ spring:
         # The MCP starter auto-configures an open /mcp endpoint when left at its default (true).
         # Off everywhere unless a profile opts in (prod does via MCP_ENABLED).
         enabled: false
+  jpa:
+    # Open-in-view keeps an EntityManager (and its first connection) for the whole HTTP request and lets lazy
+    # loads succeed there while the same code fails from schedulers. Repository reads map inside read-only
+    # transactions instead.
+    open-in-view: false
   task:
     scheduling:
       pool:

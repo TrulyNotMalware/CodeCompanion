@@ -14,5 +14,6 @@ open class CveCollectLedgerRepositoryImpl(
     override fun deleteOlderThan(cutoff: LocalDateTime): Int =
         jpaCveCollectLedgerRepository.deleteOlderThan(cutoff = cutoff)
 
+    @Transactional(readOnly = true)
     override fun latestWindowStart(): LocalDateTime? = jpaCveCollectLedgerRepository.findLatestWindowStart()
 }

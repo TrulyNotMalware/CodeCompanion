@@ -41,17 +41,20 @@ open class StandupRepositoryImpl(
             .save(routine.toSchema())
             .toDomainEntity()
 
+    @Transactional(readOnly = true)
     override fun getRoutine(routineUid: UUID): RoutineDto =
         jpaRoutineRepository
             .findByRoutineUid(routineUid = routineUid)
             ?.toRoutineDto()
             .throwIfSchemaNotFound(fieldName = "routineUid", fieldValue = routineUid)
 
+    @Transactional(readOnly = true)
     override fun findActiveRoutinesByChannel(commandChannel: String): List<RoutineDto> =
         jpaRoutineRepository
             .findActiveByCommandChannel(channel = commandChannel)
             .map { it.toRoutineDto() }
 
+    @Transactional(readOnly = true)
     override fun listActiveRoutines(): List<RoutineDto> =
         jpaRoutineRepository
             .findAllActive()
@@ -67,11 +70,13 @@ open class StandupRepositoryImpl(
             .save(session.toSchema())
             .toDomainEntity()
 
+    @Transactional(readOnly = true)
     override fun findSession(routineUid: UUID, sessionDate: LocalDate): StandupSessionDto? =
         jpaStandupSessionRepository
             .findByRoutineUidAndSessionDate(routineUid = routineUid, sessionDate = sessionDate)
             ?.toStandupSessionDto()
 
+    @Transactional(readOnly = true)
     override fun findSession(sessionUid: UUID): StandupSessionDto? =
         jpaStandupSessionRepository
             .findBySessionUid(sessionUid = sessionUid)
@@ -114,6 +119,7 @@ open class StandupRepositoryImpl(
     override fun resetStuckDispatches(olderThan: Instant): Int =
         jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan)
 
+    @Transactional(readOnly = true)
     override fun findPendingDispatchesBefore(before: Instant, limit: Int): List<ReadyDispatch> =
         jpaSessionDispatchRepository
             .findPendingBefore(before = before, pageable = PageRequest.of(0, limit))
@@ -129,6 +135,7 @@ open class StandupRepositoryImpl(
                 )
             }
 
+    @Transactional(readOnly = true)
     override fun findCollectingSessionsPastCutoff(before: Instant): List<StandupSessionDto> =
         jpaStandupSessionRepository
             .findCollectingPastCutoff(before = before)
@@ -137,6 +144,7 @@ open class StandupRepositoryImpl(
     override fun markSessionSummarized(sessionId: Long, messageTs: String): Boolean =
         jpaStandupSessionRepository.markSummarized(id = sessionId, messageTs = messageTs) == 1
 
+    @Transactional(readOnly = true)
     override fun findCollectingSessionsForNudge(now: Instant, nudgeWindowEnd: Instant): List<NudgeCandidateSession> =
         jpaStandupSessionRepository
             .findCollectingForNudge(now = now, nudgeWindowEnd = nudgeWindowEnd)

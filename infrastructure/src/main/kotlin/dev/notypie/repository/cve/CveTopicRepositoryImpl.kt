@@ -34,15 +34,19 @@ open class CveTopicRepositoryImpl(
         return true
     }
 
+    @Transactional(readOnly = true)
     override fun findActiveTopics(): List<CveTopic> =
         jpaCveTopicRepository.findByActiveTrueOrderByTopicKey().map { toRecord(schema = it) }
 
+    @Transactional(readOnly = true)
     override fun findAllTopics(): List<CveTopic> =
         jpaCveTopicRepository.findAllOrderByTopicKey().map { toRecord(schema = it) }
 
+    @Transactional(readOnly = true)
     override fun findById(id: Long): CveTopic? =
         jpaCveTopicRepository.findById(id).map { toRecord(schema = it) }.orElse(null)
 
+    @Transactional(readOnly = true)
     override fun countActive(): Long = jpaCveTopicRepository.countActive()
 
     @Transactional
