@@ -87,9 +87,11 @@ class SchedulingWiringSmokeTest :
                         val relay = context.getBean("relayTaskExecutor").shouldBeInstanceOf<ThreadPoolTaskExecutor>()
                         relay.threadPoolExecutor.prestartAllCoreThreads()
                         val release = CountDownLatch(1)
+                        val entered = AtomicInteger(0)
                         val dispatched = AtomicInteger(0)
                         val messageDispatcher = mockk<MessageDispatcher>()
                         every { messageDispatcher.dispatch(event = any()) } answers {
+                            entered.incrementAndGet()
                             release.await(5L, TimeUnit.SECONDS)
                             dispatched.incrementAndGet()
                             successOutput(
@@ -118,7 +120,9 @@ class SchedulingWiringSmokeTest :
                         val queued = service.reserveDispatchSlots(wanted = Int.MAX_VALUE)
                         service.batchPendingMessages(claims = claims(count = queued))
                         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5L)
-                        while (relay.activeCount < relay.maxPoolSize && System.nanoTime() < deadline) Thread.sleep(1L)
+                        // A worker gives its slot back when its task starts, before it reaches the dispatcher, so waiting
+                        // on the dispatcher (not on activeCount, which rises before the task body runs) sees every return.
+                        while (entered.get() < relay.maxPoolSize && System.nanoTime() < deadline) Thread.sleep(1L)
                         val running = service.reserveDispatchSlots(wanted = Int.MAX_VALUE)
                         service.batchPendingMessages(claims = claims(count = running))
                         release.countDown()
