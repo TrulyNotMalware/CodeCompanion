@@ -194,10 +194,28 @@ class ApplicationMessageDispatcherTest :
             `when`("a channel message is dispatched") {
                 val output = defaultDispatcher.dispatch(event = channelMessage())
 
-                then("the date is honoured instead of degrading to an immediate retry") {
+                then("the date is honoured instead of degrading to an immediate retry, capped at the outbox bound") {
                     output.isRateLimited() shouldBe true
+                    output.retryAfter() shouldBe MAX_RETRY_AFTER
                     sleeps shouldBe emptyList()
                     calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.* answers HTTP 429 with an absurd Retry-After in seconds") {
+            reset()
+            val values = listOf("99999999999999999", "999999999999999999999999")
+            values.forEach { value ->
+                responses.add(status(code = 429, body = RATE_LIMITED_JSON, headers = arrayOf("Retry-After" to value)))
+            }
+
+            `when`("a channel message is dispatched for each value") {
+                val outputs = values.map { defaultDispatcher.dispatch(event = channelMessage()) }
+
+                then("the wait is capped at the outbox bound when it is parsed") {
+                    outputs.map { it.retryAfter() } shouldBe listOf(MAX_RETRY_AFTER, MAX_RETRY_AFTER)
+                    calls.get() shouldBe 2
                 }
             }
         }
