@@ -13,6 +13,7 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.dto.RoutineDto
 import dev.notypie.domain.standup.entity.SessionDispatch
 import dev.notypie.domain.standup.entity.StandupSession
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.NudgeCandidateSession
@@ -125,15 +126,28 @@ class StandupSchedulingService(
         val routinesByUid = standupRepository.listActiveRoutines().associateBy { it.routineUid }
 
         ready.forEach { item ->
+            if (item.sessionStatus != SessionStatus.COLLECTING || !now.isBefore(item.cutoffAt)) {
+                skipDispatch(item = item, reason = "session closed before the DM was sent", now = now)
+                return@forEach
+            }
             val routine = routinesByUid[item.routineUid]
             if (routine == null) {
                 log.warn {
                     "Pending dispatch points at unknown/inactive routine: " +
                         "dispatchId=${item.dispatch.id} routineUid=${item.routineUid}"
                 }
+                skipDispatch(item = item, reason = "routine inactive", now = now)
                 return@forEach
             }
             processDispatch(item = item, routine = routine, sentAt = now)
+        }
+    }
+
+    private fun skipDispatch(item: ReadyDispatch, reason: String, now: Instant) {
+        if (standupRepository.markDispatchSkipped(dispatchId = item.dispatch.id, reason = reason, now = now)) {
+            log.info {
+                "Standup DM skipped: dispatchId=${item.dispatch.id} sessionUid=${item.sessionUid} reason=$reason"
+            }
         }
     }
 

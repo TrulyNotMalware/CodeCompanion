@@ -38,6 +38,11 @@ is written back onto the session row once the relay has posted it.
 - **Per-member timezone.** `dmTriggerAt` is `today@triggerLocalTime` in the *member's* zone; `cutoffAt` is
   the **latest** member trigger plus `cutoffOffset`, so a westward member still gets the full window.
   `sendPendingDispatches` queries by absolute instant across all sessions, never "today in routine zone".
+- **A ready dispatch that can no longer help is retired, not left `PENDING`.** A session that is not
+  `COLLECTING` or whose `cutoffAt` is not after now → `markDispatchSkipped("session closed before the DM was
+  sent")` (the DM would invite an answer that can no longer count); an unknown or inactive routine →
+  `markDispatchSkipped("routine inactive")`. Left `PENDING`, such rows kept winning
+  `ORDER BY dm_trigger_at` + the batch limit and starved every active routine's DMs.
 - **Dispatch CAS with a claim token.** `resetStuckDispatches(olderThan)` runs first. Then per row:
   `claimDispatch(dispatchId, claimToken)` commits in its own tx; `buildDmNotice` +
   `outboxRepository.save(outboundMessagePort.toRow(...))` + `markDispatchSent(claimToken)` run in one

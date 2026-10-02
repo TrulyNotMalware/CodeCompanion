@@ -2,6 +2,7 @@ package dev.notypie.repository.standup
 
 import dev.notypie.domain.standup.createSessionDispatch
 import dev.notypie.domain.standup.createStandupSession
+import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.domain.standup.entity.enums.SessionStatus
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.extensions.ApplyExtension
@@ -9,6 +10,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
@@ -272,6 +274,45 @@ class StandupRepositoryImplTest
                     then("the summary read waits for the answer's commit and includes it") {
                         answerResult.get() shouldBe AnswerRecordResult.RECORDED
                         summaryRead.answers.map { it.userId } shouldContainExactly listOf("U_A")
+                    }
+                }
+            }
+
+            given("markDispatchSkipped") {
+                `when`("a PENDING dispatch is skipped twice") {
+                    val sessionUid = openSession()
+                    val dispatchId =
+                        repository
+                            .findSession(sessionUid = sessionUid)!!
+                            .dispatches
+                            .single()
+                            .id
+                    val first =
+                        inTx {
+                            repository.markDispatchSkipped(
+                                dispatchId = dispatchId,
+                                reason = "closed",
+                                now = cutoffAt,
+                            )
+                        }
+                    val second =
+                        inTx {
+                            repository.markDispatchSkipped(
+                                dispatchId = dispatchId,
+                                reason = "again",
+                                now = cutoffAt,
+                            )
+                        }
+
+                    then("the row ends once, as FAILED with a skipped: reason the previous release can read") {
+                        first shouldBe true
+                        second shouldBe false
+                        val dispatch = repository.findSession(sessionUid = sessionUid)!!.dispatches.single()
+                        dispatch.dmStatus shouldBe DispatchStatus.FAILED
+                        dispatch.failureReason shouldBe "skipped: closed"
+                        repository
+                            .findPendingDispatchesBefore(before = Instant.parse("2100-01-01T00:00:00Z"), limit = 500)
+                            .map { it.dispatch.id } shouldNotContain dispatchId
                     }
                 }
             }

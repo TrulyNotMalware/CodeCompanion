@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # domain/standup/entity/enums
 
@@ -10,13 +10,13 @@ The two forward-only state machines of the standup aggregate: one per session, o
 | File | Description |
 |------|-------------|
 | `SessionStatus.kt` | `COLLECTING` (awaiting answers) `→ SUMMARIZED` (cutoff reached, summary posted, `summaryMessageTs` set) or `→ SKIPPED` (host cancelled / routine deactivated before cutoff — never summarized). Both end states are terminal |
-| `DispatchStatus.kt` | `PENDING → SENDING → SENT | FAILED` for one `SessionDispatch`; `SENT` means the outbox row exists, not that Slack acknowledged; `FAILED` is terminal and a retry is a new dispatch row |
+| `DispatchStatus.kt` | `PENDING → SENDING → SENT | FAILED` for one `SessionDispatch`; `SENT` means the outbox row exists, not that Slack acknowledged; `FAILED` is terminal and a retry is a new dispatch row. A dispatch that was never sent because it could no longer help (session closed or past cutoff, routine inactive) is also stored as `FAILED`, with a `failure_reason` starting `SKIPPED_REASON_PREFIX` (`"skipped: "`) — there is deliberately no `SKIPPED` dispatch status, because a release that does not know a new constant fails on it in `Enum.valueOf` (a rollback would stop every standup). Introducing one takes two releases: first one that reads it, then one that writes it |
 
 ## For AI Agents
 
 ### Working In This Directory
 - Transitions are compare-and-set SQL, not entity methods: `JpaSessionDispatchRepository.claimDispatch`
-  (`PENDING → SENDING` with `claim_token`), `markSent` / `markFailed`, `resetStuckSending`
+  (`PENDING → SENDING` with `claim_token`), `markSent` / `markFailed`, `markSkipped` (`PENDING → FAILED` with a `skipped:` reason), `resetStuckSending`
   (`SENDING` past a threshold `→ PENDING`); `JpaStandupSessionRepository.markSummarized`
   (`COLLECTING → SUMMARIZED`, writes `summary_message_ts`). Add a state by adding a query there.
 - Constants are referenced by fully-qualified name in JPQL (`WHERE d.dmStatus =

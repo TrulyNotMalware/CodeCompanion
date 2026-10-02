@@ -77,6 +77,23 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         @Param("now") now: Instant,
     ): Int
 
+    // Stored as FAILED + "skipped: " reason, not a new status: the previous release fails on an unknown enum value.
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            UPDATE standup_session_dispatch
+            SET dm_status = 'FAILED', failure_reason = :reason, updated_at = :now
+            WHERE id = :id AND dm_status = 'PENDING'
+        """,
+        nativeQuery = true,
+    )
+    fun markSkipped(
+        @Param("id") id: Long,
+        @Param("reason") reason: String,
+        @Param("now") now: Instant,
+    ): Int
+
     @Modifying
     @Transactional
     @Query(

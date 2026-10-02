@@ -72,6 +72,8 @@ interface StandupRepository {
         now: Instant,
     ): Boolean
 
+    fun markDispatchSkipped(dispatchId: Long, reason: String, now: Instant): Boolean
+
     fun resetStuckDispatches(olderThan: Instant, now: Instant): Int
 
     fun findPendingDispatchesBefore(before: Instant, limit: Int): List<ReadyDispatch>

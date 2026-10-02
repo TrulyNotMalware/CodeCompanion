@@ -554,10 +554,89 @@ class StandupSchedulingServiceTest :
                 every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns emptyList()
+                every { repo.markDispatchSkipped(dispatchId = 99L, reason = any(), now = any()) } returns true
 
                 service.sendPendingDispatches()
 
-                then("the dispatch is skipped, no claim attempted") {
+                then("no claim is attempted and the row is retired so it leaves the PENDING queue") {
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                    verify(exactly = 1) {
+                        repo.markDispatchSkipped(dispatchId = 99L, reason = "routine inactive", now = nowInstant)
+                    }
+                }
+            }
+
+            `when`("an inactive routine's stale dispatch sits ahead of an active routine's dispatch in the batch") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val stale =
+                    readyDispatchOf(dispatchId = 1L, userId = "U_OLD", triggerOffsetSeconds = -86_400L)
+                        .copy(routineUid = UUID.randomUUID())
+                val active = readyDispatchOf(dispatchId = 2L, userId = "U_A", triggerOffsetSeconds = -60L)
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(stale, active)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.markDispatchSkipped(dispatchId = 1L, reason = any(), now = any()) } returns true
+                every { repo.claimDispatch(dispatchId = 2L, claimToken = any(), now = any()) } returns true
+                every { repo.markDispatchSent(dispatchId = 2L, claimToken = any(), sentAt = any()) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.sendPendingDispatches()
+
+                then("the stale row is retired and the active routine's member is still DM'd in the same tick") {
+                    verify(exactly = 1) { repo.markDispatchSkipped(dispatchId = 1L, reason = any(), now = any()) }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = 1L, claimToken = any(), now = any()) }
+                    verify(exactly = 1) { repo.markDispatchSent(dispatchId = 2L, claimToken = any(), sentAt = any()) }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("a ready dispatch belongs to a session that is summarized or past its cutoff") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val summarized =
+                    readyDispatchOf(dispatchId = 3L, userId = "U_A", triggerOffsetSeconds = -60L)
+                        .copy(sessionStatus = SessionStatus.SUMMARIZED)
+                val pastCutoff =
+                    readyDispatchOf(dispatchId = 4L, userId = "U_A", triggerOffsetSeconds = -60L)
+                        .copy(cutoffAt = nowInstant)
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns
+                    listOf(summarized, pastCutoff)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.markDispatchSkipped(dispatchId = any(), reason = any(), now = any()) } returns true
+
+                service.sendPendingDispatches()
+
+                then("neither is DM'd: both are retired as skipped because their answer could no longer count") {
+                    listOf(3L, 4L).forEach { id ->
+                        verify(exactly = 1) {
+                            repo.markDispatchSkipped(
+                                dispatchId = id,
+                                reason = "session closed before the DM was sent",
+                                now = nowInstant,
+                            )
+                        }
+                    }
                     verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
                 }
