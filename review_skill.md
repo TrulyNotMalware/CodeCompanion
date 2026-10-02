@@ -255,6 +255,125 @@
 
 ---
 
+## 7. 반영 현황 (2026-10-02)
+
+같은 브랜치에 지적 하나당 커밋 하나로 반영했다(`27899d2..HEAD`). 각 수정은 새 테스트를 넣고 수정을 되돌리거나 변형했을 때 그 테스트가 실패하는 것을 확인했다. 예외는 "검증" 열에 적었다. 마지막 전체 `./gradlew build`(HEAD `2e76910e`) 결과는 domain 363, infrastructure 620, application 506건이고 실패는 0이다. 이 범위의 `7f2c45b0`(마크다운 이스케이프·Block Kit 한도 공통 함수)은 같은 체크아웃에서 돌던 다른 세션의 커밋이며 이 반영 작업에 속하지 않는다. 그 커밋의 테스트도 위 수에 들어 있다.
+
+**상태**: 적용 / 일부 적용(남은 부분 명시) / 결정으로 보류 / 해당 없음(지적이 틀림)
+
+### 높음·중간
+
+| ID | 상태 | 커밋 | 검증 · 남은 것 |
+|---|---|---|---|
+| H-1 | 적용 | `16892cb1` | 스모크 테스트가 풀 20을 단언 |
+| H-2 | 적용 | `47dd4131`, `8170b811` | `ThreadPoolTaskScheduler` 4스레드. **남음**: 느린 잡 4개가 동시에 걸리면 풀이 다시 찬다(리뷰 레인 지적) |
+| H-3 | 적용 | `f0181d06` | 본문 데드라인과 크기 상한 |
+| H-4 | 적용 | `ab65462a`, `30ff436b` | 답변 중복 제거, 요약을 멤버별 섹션(각 3000자 이하, 48명 + "…and N more")과 페이로드 상한으로 나눔 |
+| H-5 | 적용 | `92fac16a`, `55ca5466`, `6c376484`, `4e130f7c` | 보내지 않은 요청만 인라인 재시도. 보냈을 수 있는 실패는 outcome_unknown으로 처리하고, OkHttp 자체 재전송은 끔. "보냄"의 기준은 헤더 쓰기가 끝난 시점(`requestHeadersEnd`)이다(2차 리뷰 레인 지적으로 `requestHeadersStart`에서 옮김). Slack이 2xx로 답했는데 본문을 읽지 못한 경우(Gson 예외, 빈 본문 NPE)도 결과 불명으로 분류한다(Codex 지적). **판단**: 503을 "처리되지 않음"으로 본 것은 판단이며 실제 Slack 응답으로 검증하지 않았다. **남음**: 아래 2차 리뷰 레인 표 |
+| H-6 | 적용 | `61ba69d1`, `86d7ef16` | `@SpringBootTest` 스모크 |
+| M-1 | 적용 | `87e61e5d` | |
+| M-2 | 적용 | `045e9b49` | |
+| M-3 | 적용 | `cdb269fa` | |
+| M-4 | 적용 | `7eea7013` | |
+| M-5 | 적용 | `ada58ec7` | |
+| M-6 | 적용 | `9c2ba01e` | |
+| M-7 | 적용 | `a4b4edab`, `22d8b1da` | |
+| M-8 | 적용 | `53e35cc3` | |
+| M-9 | 적용(사용자 결정: 제한된 큐 + busy 회신) | `d1547f2c`, `a239ca8e`, `99dc0a32`, `cac82007` | 포화 안내는 AFTER_COMMIT 리스너 안에서 실행되므로 REQUIRES_NEW로 쓴다. 실 JpaTransactionManager로 확인했다. 그동안 커밋된 트랜잭션의 커넥션이 잡혀 있어 거절된 멘션 하나가 커넥션 두 개를 쓴다(H2 실측: 세션 2, 일반 트랜잭션 1). 풀 산정식에 넣었다 |
+| M-10 | 적용(사용자 결정: forwarded 헤더 차단) | `5ed9ddf2` | **실행 필요**: 클러스터 안 우회 시도 |
+| M-11 | 적용(사용자 결정: Prometheus까지) | `12995d31`, `a60b87ee` | 게이지와 DLT 핸드오프 카운터를 추가하고 Debezium heartbeat와 런북을 넣음. **실행 필요**: 실제 스크레이프와 알림 규칙, 커넥터 heartbeat |
+| M-12 | 일부 적용 | `04756fe1`, `f6014aa5` | 6초 페이싱과 403/429/503 거부 로그는 적용했다. ledger claim 반환은 **적용하지 않았다**. lookback(2 × window 이상)이 일회성 누락을 메우고, 반복 누락의 원인은 고정 순서와 무간격 호출이었기 때문이다. **남음**: 페이싱 동안 스케줄러 스레드 하나를 붙잡는다. 같은 egress IP를 쓰는 레플리카는 할당량을 나눠 쓴다 |
+| M-13 | 적용 | `be724ba5` | |
+
+### 낮음
+
+| 항목 | 상태 | 커밋 | 비고 |
+|---|---|---|---|
+| `AppConfig` toString 시크릿 | 적용 | `51eac7e0` | |
+| 빈 생성자 기본값, 팩토리의 `clock` 누락 | 적용 | `50f96841`, `13bdde51` | |
+| `CdcDeadLetterRecovery` nullable 템플릿 | 적용 | `645301d7` | |
+| Jackson이 Boot BOM을 덮어씀 | 결정으로 보류 | `d76a3348` | decision #35 |
+| kotest BOM `api` 노출 | 적용 | `282c0f64` | |
+| `spring-boot-starter-web` | 적용 | `faadc968` | |
+| CI 메모리 상한 | 적용 | `16d723bf` | 테스트 힙 2g |
+| `findById().orElse(null)` | 적용 | `e80b01f7` | |
+| MCP 자체 매퍼 | 적용 | `83fb79fd` | **실행 필요**: MCP 라이브 경로 |
+| eager 태스크 설정 | 적용 | `0cf93fde` | |
+| `slack-live` 비밀번호 기본값, metrics 노출 | 적용 | `4ee842fe` | **남음**: 지운 기본값은 git 이력에 남아 있다. 실제 비밀번호였다면 교체해야 한다 |
+| L-1 stuck 스윕 시계 | 적용 | `0dfd5a5d` | 쓰기와 비교가 모두 `Clock`으로 바인딩한 `:now`를 쓴다. 그래서 DB 세션 존과 무관하다 [읽기. MariaDB에서는 실행하지 않음] |
+| outbox merge + SELECT | 적용 | `e5defc16` | `Persistable` |
+| 트랜잭션 안에서 예외를 잡고 성공 응답 | 적용 | `b265a272` | |
+| `runInTx` 커밋 시점 실패 | 적용 | `5caf0545` | |
+| `cve_topic.active` 덮어쓰기 | 적용 | `3c46beb0` | `@DynamicUpdate` |
+| 엔티티 public setter | 적용 | `8b380a79` | |
+| 네이티브 SQL 상태 리터럴 | 다른 수단으로 적용 | `074cf0dc` | 바인딩 파라미터 대신 가드 테스트를 넣었다(아래 설명) |
+| non-null 타입 ↔ nullable 컬럼 | 일부 적용 | `701463d3` | 아래 설명 참고 |
+| checked 예외 커밋 경로 + 트랜잭션 안 Kafka 전송 | 일부 적용 | `5dd6edcf` | `KafkaPublishException`(unchecked)으로 롤백을 보장했다. 외부 이벤트를 outbox로 옮기는 일은 휴면 경로라서 문서에만 기록했다 |
+| 요청 경로 `findAll()`, 벽시계 | `Clock`은 적용, `findAll`은 해당 없음 | `13bdde51` | 역할 목록 명령은 모든 부여를 보여 줘야 한다 |
+| CDC `Envelope` 메타 필드 | 적용 | `be581fb7`, `bf6719cb` | |
+| 일시 오류가 DLT로 | 적용 | `b51580ff` | 파싱·역직렬화 실패만 DLT로 보낸다. 나머지는 로그를 남기고 ack하며 복구 스윕에 맡긴다 |
+| 종료 예산 | 일부 적용 | `c2d1770f`, `7e054dd8`, `00a9abe5` | `ShutdownBudgetTest`: 5 + 3×10 + 2×5 + 20 + 20 + 10 = 95초 ≤ 유예 100초. 처음에는 단계를 둘로 세어 75 ≤ 80으로 봤다. Kafka producer 종료(기본 30초, 단계 타임아웃 밖에서 동기로 닫힘)는 Codex가 찾았고 5초로 제한해 두 번을 넣었다. 실행 중인 잡이 있으면 스케줄러도 자기 단계에서 기다린다(프로브: 단계당 1초에서 close 1초→2초). 같은 poll의 나머지가 닫힌 풀에서 DLT로 가는 부분은 `stopImmediate`로 막았다. **남음**: 처리 중인 레코드는 단계 타임아웃(10초)까지만, 릴레이 executor 작업은 20초까지만 기다리는데 디스패치 하나는 최대 약 53초다. 그 사이 Slack이 이미 게시했다면 스윕이 다시 보내 중복 게시가 된다. 크래시·SIGKILL도 같다. 막으려면 단계별 타임아웃(`DefaultLifecycleProcessor.setTimeoutForShutdownPhase`)과 훨씬 긴 유예가 필요하다(결정 필요) |
+| outbox 헬스 쿼리 | 적용 | `5796442c` | 쿼리 타임아웃 힌트와 prod 캐시 10초. 재시도 행 하나에 DOWN이 되는 동작은 **설계대로 유지**한다(게이트에 쓰이지 않고, 알림은 `outbox_retrying_messages`로 보냄). **실행 필요**: 타임아웃 동작(H2로 재현 불가) |
+| CDC 스냅숏 시각 존·단위 | 적용 | `c766fd67` | UTC 기준이며 밀리·마이크로 단위를 구분한다. **실행 필요**: 실제 Debezium 레코드 |
+| 처리할 수 없는 이벤트에 500 | 적용 | `f49e4ed0`, `f026e232` | 400 + `X-Slack-No-Retry` |
+| 컨트롤러 응답 계약 | 적용 | `0248598b` | |
+| `RestClientRequester` 정적 빌더 | 적용 | `140d4c4d`, `13224091` | 이제 `http.client.requests`가 기록된다. `traceparent`는 tracing 브리지가 없어 원래 해당이 없다. 명시적 팩토리가 3s/10s 타임아웃을 고정하므로 `spring.http.clients.*`는 의도적으로 적용되지 않는다. 응답 변환이 Boot JSON 매퍼로 바뀌었으므로, DTO에 없는 키가 들어 있는 `users.profile.get` 본문이 `SlackUserProfileDto`로 읽히는지 스모크에서 확인한다(`fail-on-unknown-properties=true`이면 실패) |
+| 인터럽트를 삼키는 `runCatching` | 적용 | `f99098ff`, `76c1988e` | 처음에는 헤더 대기 중 인터럽트만 보존됐다. SSE 본문을 읽는 중의 인터럽트는 JDK 클라이언트가 `IOException`(플래그 유지)으로 알려 CVE 재시도를 썼다. 2차 리뷰 레인 지적으로 고침 |
+| 공유 H2 전역 단언 | outbox는 적용, `MeetingRepositoryWriteTest`는 해당 없음 | `060b2372` | 지적한 구간은 `meetingUid`로 다시 조회하는 단언이다 |
+| 스펙 수준 strict mock | 적용 | `68f8b5a4` | |
+| Kafka 테스트 단언 | 적용 | `9e32baf1` | |
+| 타임아웃 없는 래치 | 적용 | `02291b7e` | |
+| 문서 불일치(`no H2`) | 적용 | `690f741e` | |
+
+### 2차 리뷰 레인 (반영 커밋 `55ca5466^..`, code-reviewer)
+
+반영 커밋 26개를 따로 리뷰했다. 지적마다 소스를 다시 읽거나 실행해 판정했다.
+
+| 지적 | 판정 | 조치 |
+|---|---|---|
+| [중간] 과부하 안내가 커넥션을 하나 더 잡는다 | 확인(H2 실측) | `cac82007`. 산정식에 추가. 코드는 회의 쓰기와 같은 패턴이라 그대로 둠 |
+| [중간] 종료 예산이 처리 중인 CDC 레코드를 덮지 못한다 | 확인(spring-kafka 4.1.1 소스: 단계 대기 뒤 `stop()`은 `isRunning()`으로 막혀 아무것도 안 함) | `7e054dd8`. 단계 수 정정, 잘못된 주석 정정, 잔존 위험 명시. 위 표의 "종료 예산" |
+| [낮음] SSE 본문 중 인터럽트가 CVE 재시도를 쓴다 | 확인(되돌리면 새 케이스 실패) | `76c1988e` |
+| [낮음] HTTP/2에서 보내지 않은 요청이 "보냄"으로 집계된다 | 확인(OkHttp 4.12 소스: `requestHeadersStart` 뒤에 `newStream`) | `6c376484`. HTTP/2 서버로 실행하지는 않았다. 리스너 계약만 테스트로 고정 |
+| [낮음] 기록된 뒤의 비 I/O 실패(2xx 비 JSON 본문의 Gson 예외, 빈 본문 NPE)가 재전송으로 이어진다 | 확인(slack-api-client 1.51.0 소스, 새 케이스가 수정 전 실패). 반영 전부터 있던 동작 | 처음에는 조치하지 않았다가 Codex도 같은 지적(중간)을 해 `4e130f7c`로 고침 |
+| [질문] `restRequester`가 Boot 매퍼로 프로필 DTO를 읽는가 | 실행으로 확인: 읽는다 | `13224091`. 스모크에 고정 |
+
+### Codex 교차 리뷰 (`HEAD=7e054dd8` 기준, 읽기 전용)
+
+| 지적 | 판정 | 조치 |
+|---|---|---|
+| [중간] Slack 2xx 본문 파싱 실패가 중복 게시로 이어진다(H-5 불완전) | 확인. 위 2차 레인의 낮음 지적과 같은 경로 | `4e130f7c` |
+| [중간] 종료 예산에 Kafka producer close 대기(각 30초)가 빠졌다 | 확인(spring-kafka 4.1.1: `DefaultKafkaProducerFactory`는 `SmartLifecycle` 단계 `Integer.MIN_VALUE`에서 `stop()`이 `destroy()`를 동기로 부른다). 유예 초과는 브로커 장애 중 미전송 레코드가 있을 때의 추론 | `00a9abe5`. 5초로 제한하고 예산에 두 번 넣음 |
+| [낮음] 모달 지연 테스트가 호출부의 래핑 제거를 잡지 못한다 | 확인(래핑을 빼도 기존 테스트 통과) | `d6bd162f`. 슬래시 엔드포인트 6개와 interaction 핸들러에 호출부 테스트(래핑 제거 시 실패) |
+
+Codex는 트랜잭션 전파, Spring 빈 연결, 회의·스탠드업 저장, CDC 파싱·복구 분기, HTTP 본문 데드라인 산술에서는 결함을 찾지 못했다고 보고했다. `SocketModeReceiver`(local 전용)의 지연 래핑은 여전히 테스트가 없다.
+
+### 최종 리뷰 레인 (`7e054dd8..00a9abe5`, code-reviewer, 읽기 전용)
+
+| 지적 | 판정 | 조치 |
+|---|---|---|
+| [낮음] `4e130f7c`의 catch가 `dispatchOnce` 전체를 감싸 우리 코드의 NPE도 "본문을 읽지 못함"으로 분류한다. `{"ok":false}`(error 없음)이면 `failOutput(reason = result.error)`에서 NPE | 확인(새 케이스가 `reason`을 되돌리면 실패) | `bf66c722`. SDK 호출만 감싸고 `requestHeadersEnd` 이후로 한정, error 없는 거절은 `UNSPECIFIED_ERROR_REASON` |
+| [낮음] 지연 테스트가 리스너를 직접 불러 Spring 이벤트 전달 경로를 보지 않는다 | 확인 | `2e76910e`. 스모크에서 `ApplicationEventPublisher`로 발행(리스너가 바로 열면 실패) |
+| [낮음] DLT bytes factory 타임아웃 테스트가 사본을 본다 | 확인 | `2e76910e`. 빈이 쥔 팩토리를 단언 |
+| [낮음] controllers AGENTS의 "컨트롤러 스펙 없음" | 확인 | `2e76910e` |
+| [낮음] 종료 중 poison 레코드의 DLT 전송이 새 producer를 만들어 close가 한 번 더 생길 수 있다 | 추론(소스) | 문서에만 기록. 예산 여유 5초 안 |
+| [질문] HikariCP 종료 대기가 예산에 없다 | 추론(대기 지점은 소스로 확인, 시간은 추론) | 문서에만 기록. DB에 닿지 않을 때만 길어진다 |
+
+**같은 레인이 남긴 것**: `REFUSED_STREAM`은 헤더를 보낸 뒤라 여전히 "보냄"(outcome unknown)으로 분류된다. HTTP/2는 처리하지 않았음을 보장하므로 보수적인 쪽의 오차다. `retryOnConnectionFailure(false)`는 다른 경로(IP)로의 연결 재시도도 끈다. 자체 재시도가 없는 `views.open`은 연결 실패 시 바로 대체 안내로 간다.
+
+리뷰에 없던 결함 하나를 반영 중에 찾아 함께 고쳤다. 스탠드업 멤버가 두 번째 답변을 내면 unique key 위반이 났다(`cef26a78`, HEAD에서 재현).
+
+**네이티브 SQL 리터럴을 바인딩 대신 가드로 막은 이유.** enum 상수 이름을 바꾸면 저장된 행에는 옛 이름이 그대로 남는다. 그래서 바인딩 파라미터로 바꿔도 데이터를 마이그레이션하지 않으면 똑같이 0행이 된다. 리터럴에만 있는 위험은 SQL이 더 이상 없는 상수를 가리키는 경우다. `NativeQueryStatusLiteralTest`는 여섯 저장소의 네이티브 `@Query`에 들어 있는 따옴표 상수가 해당 컬럼 enum의 상수인지 검사한다. 클래스패스를 스캔해 매핑 없이 리터럴을 쓰는 새 저장소도 잡는다.
+
+**nullable 컬럼 지적이 일부 적용인 이유.** 두 프로퍼티는 테이블이 생길 때부터 non-null 기본값을 가졌다(`e33aba5e`, `42be2edb`). 앱의 쓰기 경로는 셋이고 어느 것도 NULL을 쓰지 않는다: 엔티티 insert, 파라미터 UPDATE, 리터럴 UPDATE. 그래서 NULL 행은 수동 SQL로만 생길 수 있다. 매핑에 `nullable = false`를 두어 Hibernate가 만드는 스키마(H2, 새 DB)가 이 계약을 강제한다. 기존 MariaDB 컬럼은 바뀌지 않는다. **실행 필요**: prod에서 아래 두 쿼리를 확인한 뒤 V23 패치를 결정한다.
+
+- `SELECT COUNT(*) FROM outbox_message WHERE status IS NULL`
+- `SELECT COUNT(*) FROM meeting_participants WHERE absent_reason IS NULL`
+
+`absent_reason`은 Hibernate가 만든 `enum(...)` 타입일 수 있으므로 `SHOW CREATE TABLE`을 먼저 본다. 그 전에는 컬럼 타입을 다시 쓰는 `MODIFY`를 하지 않는다.
+
+---
+
 ## 부록 A. 메인 세션 검증 기록
 
 scratch 경로는 `/private/tmp/claude-501/-Users-junho-workspace-CodeCompanion/339fa428-d11b-46d9-a0d8-071e21f0681d/scratchpad/`이고, 재부팅하면 사라진다.
