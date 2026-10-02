@@ -36,6 +36,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.internal.http2.ErrorCode
+import okhttp3.internal.http2.StreamResetException
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.retry.RetryException
 import java.io.IOException
@@ -137,7 +139,7 @@ fun responseUrlClient(slack: Slack): OkHttpClient =
 
 class SlackRequestNotSentException(
     cause: IOException,
-) : RuntimeException("Slack request failed before it was written: ${cause::class.java.simpleName}", cause)
+) : RuntimeException("Slack request failed before Slack processed it: ${cause::class.java.simpleName}", cause)
 
 class SlackResponseUnreadableException(
     cause: RuntimeException,
@@ -211,10 +213,15 @@ class ApplicationMessageDispatcher(
         return try {
             dispatchOnce(event = event, idempotent = idempotent)
         } catch (exception: IOException) {
-            if (RequestProgressListener.requestNeverWritten()) throw SlackRequestNotSentException(cause = exception)
+            if (RequestProgressListener.requestNeverWritten() || exception.isRefusedStream()) {
+                throw SlackRequestNotSentException(cause = exception)
+            }
             throw exception
         }
     }
+
+    private fun IOException.isRefusedStream(): Boolean =
+        this is StreamResetException && errorCode == ErrorCode.REFUSED_STREAM
 
     private fun dispatchOnce(event: SlackEventPayload, idempotent: Boolean): CommandOutput =
         when (event) {

@@ -66,8 +66,9 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     attempt that never got there is rethrown as `SlackRequestNotSentException`, whatever OkHttp wrapped it in (a connect or DNS
     failure that ends after the call timeout surfaces as `InterruptedIOException("timeout")` with the real error
     as its cause). A client without the listener counts as "may have been written". A stream the server resets with
-    `REFUSED_STREAM` after the headers went out still counts as written (outcome unknown), although HTTP/2 promises
-    it was not processed. A 2xx body the SDK cannot read (Gson `JsonParseException` for a non-JSON body, an
+    `REFUSED_STREAM` (OkHttp 4.12 `StreamResetException.errorCode`; a `GOAWAY` also fails every stream above its last
+    good id this way) is rethrown as `SlackRequestNotSentException` too, even after the headers went out: HTTP/2
+    guarantees the server did not process it. A 2xx body the SDK cannot read (Gson `JsonParseException` for a non-JSON body, an
     NPE for an empty one) becomes `SlackResponseUnreadableException`, an `IOException`: Slack has answered, so a post
     ends as outcome unknown and the idempotent `chat.update` is retried. The catch wraps only the SDK call and only
     after `requestHeadersEnd`, so an NPE in our own code (before sending, or while mapping the response) is not
@@ -76,7 +77,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   - Transient — retried by `RetryService` (3 attempts), then `failOutput(TRANSIENT_EXHAUSTED_REASON)`
     (`isTransientExhausted()`); the relay leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to
     `outbox.polling.max-sends` sends. For `chat.postMessage`, `chat.postEphemeral` and `response_url`: a request
-    that was never written, `ok=false service_unavailable`, and HTTP 503. For the idempotent `chat.update`: also
+    that was never written or whose stream was refused, `ok=false service_unavailable`, and HTTP 503. For the idempotent `chat.update`: also
     every other `IOException` (the call timeout included), any HTTP 5xx and `internal_error`.
   - Outcome unknown — on the three non-idempotent calls, an `IOException` after the request was written (call
     timeout, reset, dropped connection), `ok=false internal_error` (Slack: "possible some aspect of the operation

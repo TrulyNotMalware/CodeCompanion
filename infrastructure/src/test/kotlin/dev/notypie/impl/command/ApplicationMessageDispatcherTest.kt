@@ -18,6 +18,8 @@ import io.mockk.mockk
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.internal.http2.ErrorCode
+import okhttp3.internal.http2.StreamResetException
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -28,6 +30,7 @@ import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class ApplicationMessageDispatcherTest :
@@ -548,6 +551,56 @@ class ApplicationMessageDispatcherTest :
                 then("neither OkHttp nor the dispatcher sends it again, and the outcome is unknown") {
                     output.errorReason shouldStartWith OUTCOME_UNKNOWN_REASON
                     accepted.get() shouldBe 1
+                }
+            }
+        }
+
+        fun resettingDispatcher(errorCode: ErrorCode): ApplicationMessageDispatcher {
+            val config =
+                slackConfig().apply {
+                    methodsEndpointUrlPrefix = "http://127.0.0.1:$port/api/"
+                    isPrettyResponseLoggingEnabled = false
+                }
+            val resetOnce = AtomicBoolean(true)
+            val resettingClient =
+                slackOkHttpClient(config = config)
+                    .newBuilder()
+                    .addNetworkInterceptor { chain ->
+                        val response = chain.proceed(chain.request())
+                        if (resetOnce.getAndSet(false)) {
+                            response.close()
+                            throw StreamResetException(errorCode = errorCode)
+                        }
+                        response
+                    }.build()
+            return ApplicationMessageDispatcher(
+                botToken = "xoxb-test",
+                applicationEventPublisher = mockk(relaxed = true),
+                retryService = RetryService(),
+                slack = Slack.getInstance(config, SlackHttpClient(resettingClient)),
+                okHttpClient = loopbackClient,
+            )
+        }
+
+        given("an HTTP/2 server resets the stream after the request headers were written") {
+            `when`("the reset is REFUSED_STREAM") {
+                reset()
+                val output =
+                    resettingDispatcher(errorCode = ErrorCode.REFUSED_STREAM).dispatch(event = channelMessage())
+
+                then("it is retried as never processed and delivered") {
+                    output.ok shouldBe true
+                    calls.get() shouldBe 2
+                }
+            }
+
+            `when`("the reset is any other error code") {
+                reset()
+                val output = resettingDispatcher(errorCode = ErrorCode.CANCEL).dispatch(event = channelMessage())
+
+                then("it is not resent, because Slack may already have posted it") {
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: StreamResetException"
+                    calls.get() shouldBe 1
                 }
             }
         }
