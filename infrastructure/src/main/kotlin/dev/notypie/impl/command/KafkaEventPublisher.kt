@@ -11,6 +11,15 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
+// Unchecked on purpose: Spring commits a transaction on a checked exception, so a failed publish must not be one.
+class KafkaPublishException(
+    event: CommandEvent<EventPayload>,
+    cause: Throwable,
+) : RuntimeException(
+        "Kafka publish failed for destination=${event.destination} idempotencyKey=${event.idempotencyKey}",
+        cause,
+    )
+
 class KafkaEventPublisher(
     private val kafkaTemplate: KafkaTemplate<String, Any>,
     private val applicationEventPublisher: ApplicationEventPublisher,
@@ -45,18 +54,19 @@ class KafkaEventPublisher(
                 "Kafka send timed out after ${sendTimeoutMillis}ms for destination=${event.destination} " +
                     "idempotencyKey=${event.idempotencyKey}"
             }
-            throw e
+            throw KafkaPublishException(event = event, cause = e)
         } catch (e: ExecutionException) {
-            log.error(e.cause ?: e) {
+            val cause = e.cause ?: e
+            log.error(cause) {
                 "Kafka send failed for destination=${event.destination} idempotencyKey=${event.idempotencyKey}"
             }
-            throw e.cause ?: e
+            throw cause as? RuntimeException ?: KafkaPublishException(event = event, cause = cause)
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             log.error(e) {
                 "Kafka send interrupted for destination=${event.destination} idempotencyKey=${event.idempotencyKey}"
             }
-            throw e
+            throw KafkaPublishException(event = event, cause = e)
         }
     }
 }
