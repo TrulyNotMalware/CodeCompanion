@@ -56,12 +56,14 @@ class AgentConverseService(
         internal const val FAILURE_MESSAGE = "Sorry — I couldn't process that request. Please try again later."
         internal const val EMPTY_RESPONSE_MESSAGE = "_(the assistant returned an empty response)_"
 
-        // The reply renders as a header, a divider and at most MESSAGE_MAX_BLOCKS - 2 sections of SECTION_TEXT_BUDGET
-        // characters; the renderer drops the rest. Cutting the answer to that before staging loses nothing visible
-        // and bounds the outbox row: uncut, a long answer outgrew the payload column (TEXT before V23 — the reply
-        // rolled back and the requester got silence) and can outgrow the 1 MiB Kafka record in CDC mode (review H1).
-        internal const val MAX_ANSWER_LENGTH: Int =
-            (SlackBlockLimits.MESSAGE_MAX_BLOCKS - 2) * SlackBlockLimits.SECTION_TEXT_BUDGET
+        // Bounds the outbox row (review H1): uncut, a long answer outgrew the payload column (TEXT before V23 — the reply
+        // rolled back and the requester got silence). The cap is set by the CDC record, not by what the renderer could
+        // show (48 sections x 2,900 = 139,200): a Debezium update event carries the row twice, and the payload — already
+        // JSON — is JSON-escaped again inside the record, so a C0 control character costs about seven bytes per copy.
+        // At 139,200 such characters the record was 1.9 MB, past Kafka's 1 MiB default, which fails the connector and
+        // stops every outbound message. 40,000 characters (also Slack's limit for a message's `text`) keeps the worst
+        // case near 560 KB, and still renders as up to 14 sections.
+        internal const val MAX_ANSWER_LENGTH: Int = 40_000
         private const val ANSWER_TRUNCATION_SUFFIX = "\n${SlackBlockLimits.TRUNCATION_MARKER}"
 
         internal const val METRIC_TURNS = "agent.turns"

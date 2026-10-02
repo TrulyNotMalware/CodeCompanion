@@ -254,9 +254,9 @@ class AgentConverseServiceTest :
             }
         }
 
-        // H1: the renderer shows at most 48 sections of 2,900 characters; staging more only grew the outbox row past
-        // its column (TEXT, then a rolled-back reply) and toward the 1 MiB Kafka record.
-        given("a turn whose answer is longer than the renderer can show") {
+        // H1: staging an unbounded answer grew the outbox row past its column (TEXT, then a rolled-back reply) and past
+        // the 1 MiB Kafka record a CDC update carries it in; MAX_ANSWER_LENGTH bounds both.
+        given("a turn whose answer is longer than the staging cap") {
             // An emoji (a surrogate pair) straddles the cut, which must not split it.
             val cutAt = AgentConverseService.MAX_ANSWER_LENGTH - "\n…(truncated)".length
             val longAnswer = "a".repeat(n = cutAt - 1) + "😀" + "가".repeat(n = 50_000)

@@ -41,7 +41,9 @@ import java.util.UUID
 // An outbox row lives in `payload MEDIUMTEXT` (V23) and, in CDC mode, travels in a Debezium record that an update
 // event fills with the row twice (before and after) under the producer's default max.request.size of 1 MiB. TEXT's
 // 65,535 bytes used to reject the largest replies outright (review H1). This spec stages the biggest inputs the bot
-// produces through the real services and the real codec, and checks the bytes that would be written.
+// produces through the real services and the real codec, and checks the bytes that would be written. The payload is
+// already JSON, and the record JSON-escapes it again as a string column, so escape-heavy text (control characters,
+// backslashes) costs several bytes per character in the record — the record, not the column, sets the answer cap.
 private const val MEDIUMTEXT_MAX_BYTES = 16_777_215
 private const val TEXT_MAX_BYTES = 65_535
 private const val KAFKA_DEFAULT_MAX_REQUEST_BYTES = 1_048_576
@@ -51,8 +53,12 @@ private const val CDC_ENVELOPE_RESERVE_BYTES = 32_768
 
 private fun OutboxMessage.payloadBytes(): Int = payload.toByteArray(charset = Charsets.UTF_8).size
 
-// A CDC update record: the row before and after, plus the envelope.
-private fun OutboxMessage.cdcUpdateRecordBytes(): Int = 2 * payloadBytes() + CDC_ENVELOPE_RESERVE_BYTES
+// The payload column as it appears inside the record: a JSON string literal, escapes included.
+private fun OutboxMessage.cdcColumnBytes(): Int =
+    jsonMapper.writeValueAsString(payload).toByteArray(charset = Charsets.UTF_8).size
+
+// A CDC update record: the column before and after, plus the envelope.
+private fun OutboxMessage.cdcUpdateRecordBytes(): Int = 2 * cdcColumnBytes() + CDC_ENVELOPE_RESERVE_BYTES
 
 class OutboxPayloadSizeGuardTest :
     BehaviorSpec({
@@ -89,9 +95,9 @@ class OutboxPayloadSizeGuardTest :
             return port.toRow(message = message.captured, basicInfo = basicInfo.captured)
         }
 
-        given("an AI answer of 300,000 Korean characters, more than twice what the renderer can show") {
-            // Three UTF-8 bytes per UTF-16 unit is the most any character takes; a surrogate pair is four bytes for
-            // two units. Only C0 control characters JSON-escape longer (six bytes), checked against MEDIUMTEXT below.
+        given("an AI answer of 300,000 Korean characters, far over the staging cap") {
+            // Three UTF-8 bytes per UTF-16 unit is the most a printable character takes; a surrogate pair is four bytes
+            // for two units.
             val row = stagedAiAnswerRow(finalText = "가".repeat(n = 300_000))
 
             `when`("the staged reply is encoded into an outbox row") {
@@ -100,18 +106,34 @@ class OutboxPayloadSizeGuardTest :
                     row.payloadBytes() shouldBeLessThanOrEqual MEDIUMTEXT_MAX_BYTES
                 }
 
-                then("twice the payload plus the envelope fits one Kafka record at the default limit") {
+                then("the column twice, re-escaped, plus the envelope fits one Kafka record at the default limit") {
                     row.cdcUpdateRecordBytes() shouldBeLessThanOrEqual KAFKA_DEFAULT_MAX_REQUEST_BYTES
                 }
             }
         }
 
+        // The worst cases for the record: a C0 control character is \u00XX in the payload and \\u00XX in the record,
+        // and a backslash doubles at each level. At the renderer's 139,200 characters these overflowed 1 MiB.
         given("an AI answer made of control characters, the longest JSON escape per character") {
             val row = stagedAiAnswerRow(finalText = "\u0001".repeat(n = 300_000))
 
             `when`("the staged reply is encoded into an outbox row") {
-                then("it still fits MEDIUMTEXT, because the cap bounds characters before they are escaped") {
+                then("it fits MEDIUMTEXT, because the cap bounds characters before they are escaped") {
                     row.payloadBytes() shouldBeLessThanOrEqual MEDIUMTEXT_MAX_BYTES
+                }
+
+                then("its CDC update record still fits one Kafka record at the default limit") {
+                    row.cdcUpdateRecordBytes() shouldBeLessThanOrEqual KAFKA_DEFAULT_MAX_REQUEST_BYTES
+                }
+            }
+        }
+
+        given("an AI answer made of backslashes, as a pasted Windows path or regex is") {
+            val row = stagedAiAnswerRow(finalText = "\\".repeat(n = 300_000))
+
+            `when`("the staged reply is encoded into an outbox row") {
+                then("its CDC update record fits one Kafka record at the default limit") {
+                    row.cdcUpdateRecordBytes() shouldBeLessThanOrEqual KAFKA_DEFAULT_MAX_REQUEST_BYTES
                 }
             }
         }

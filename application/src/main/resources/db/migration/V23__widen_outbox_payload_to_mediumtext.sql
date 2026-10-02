@@ -9,10 +9,10 @@
 --   with no reply and no failure notice, and a full standup summary (30 members
 --   answering at the modal cap, up to ~260 KB in Korean) failed on every
 --   scheduler tick and was never posted. MEDIUMTEXT holds 16,777,215 bytes.
---   The application keeps rows far below that: it cuts an AI answer to what the
---   renderer can show (48 sections x 2,900 characters) before staging it, so the
---   largest row stays under the 1 MiB Kafka record default even for a CDC update
---   event, which carries the row twice (before and after).
+--   The application keeps rows far below that: it cuts an AI answer to 40,000
+--   characters before staging it, so the largest row stays under the 1 MiB Kafka
+--   record default even for a CDC update event, which carries the row twice
+--   (before and after) and JSON-escapes the already-JSON payload again.
 --
 -- Behaviour:
 --   - payload becomes MEDIUMTEXT NOT NULL; existing values are kept unchanged.
