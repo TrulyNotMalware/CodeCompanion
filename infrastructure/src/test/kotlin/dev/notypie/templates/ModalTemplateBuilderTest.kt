@@ -212,6 +212,84 @@ class ModalTemplateBuilderTest :
             }
         }
 
+        given("standupSummaryParts") {
+            val sessionDate = LocalDate.of(2026, 5, 4)
+
+            `when`("a full routine's answers do not fit one message") {
+                val questions = (1..8).map { index -> "Q$index " + "q".repeat(n = 196) }
+                val members = (1..30).map { createRoutineMemberDto(userId = "U0123456789$it") }
+                val answers =
+                    members.map { member ->
+                        createStandupAnswerDto(
+                            userId = member.userId,
+                            responses = questions.map { "b".repeat(n = 300) },
+                        )
+                    }
+                val parts =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = members,
+                        answers = answers,
+                        questions = questions,
+                    )
+
+                then("every part renders within the message block-text budget and block count") {
+                    (parts.size > 1) shouldBe true
+                    parts.forEach { part ->
+                        val blocks =
+                            templateBuilder
+                                .standupSummaryTemplate(
+                                    routineName = part.routineName,
+                                    sessionDate = part.sessionDate,
+                                    members = part.members,
+                                    answers = part.answers,
+                                    questions = part.questions,
+                                ).template
+                        blocks.size shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_MAX_BLOCKS
+                        blocks.sumOf {
+                            (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text.length
+                        } shouldBeLessThanOrEqual
+                            SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                    }
+                }
+
+                then(
+                    "members keep their order across parts, each carrying only its own answers, and parts are labelled",
+                ) {
+                    parts.flatMap { part -> part.members.map { it.userId } } shouldBe members.map { it.userId }
+                    parts.forEach { part -> part.answers.map { it.userId } shouldBe part.members.map { it.userId } }
+                    parts.mapIndexed { index, part -> part.routineName shouldBe "Daily (${index + 1}/${parts.size})" }
+                }
+            }
+
+            `when`("a small routine fits one message, or the routine has no members") {
+                val small =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = listOf(createRoutineMemberDto(userId = "U1"), createRoutineMemberDto(userId = "U2")),
+                        answers = listOf(createStandupAnswerDto(userId = "U1", responses = listOf("shipped"))),
+                        questions = listOf("Yesterday?"),
+                    )
+                val empty =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = emptyList(),
+                        answers = emptyList(),
+                        questions = listOf("Yesterday?"),
+                    )
+
+                then("there is exactly one part with the plain routine name") {
+                    small.map { it.routineName } shouldBe listOf("Daily")
+                    small.single().members.map { it.userId } shouldBe listOf("U1", "U2")
+                    empty.map { it.routineName } shouldBe listOf("Daily")
+                    empty.single().members shouldBe emptyList()
+                }
+            }
+        }
+
         given("requestApprovalFormTemplate") {
             `when`("called with selection fields") {
                 val selectionFields =

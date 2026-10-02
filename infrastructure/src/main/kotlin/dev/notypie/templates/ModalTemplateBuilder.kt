@@ -3,6 +3,7 @@ package dev.notypie.templates
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.dto.modals.*
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.RejectReason
@@ -65,6 +66,47 @@ class ModalTemplateBuilder(
                     append("\n• *${question.escapeMrkdwn()}* ${response.escapeMrkdwn()}")
                 }
             }.truncateSectionText(limit = SlackBlockLimits.SECTION_TEXT_BUDGET)
+
+        fun standupSummaryParts(
+            routineName: String,
+            sessionDate: LocalDate,
+            members: List<RoutineMemberDto>,
+            answers: List<StandupAnswerDto>,
+            questions: List<String>,
+        ): List<MessageContent.StandupSummary> {
+            val answersByUser = answers.associateBy { it.userId }
+            val budget =
+                SlackBlockLimits.MESSAGE_TEXT_BUDGET -
+                    standupSummaryHeader(routineName = "$routineName (99/99)", sessionDate = sessionDate).length
+            val groups = mutableListOf<MutableList<RoutineMemberDto>>()
+            var used = 0
+            members.forEach { member ->
+                val length =
+                    standupSummaryMemberSection(
+                        userId = member.userId,
+                        answer = answersByUser[member.userId],
+                        questions = questions,
+                    ).length
+                val current = groups.lastOrNull()
+                if (current == null || used + length > budget || current.size >= STANDUP_SUMMARY_MAX_MEMBER_SECTIONS) {
+                    groups += mutableListOf(member)
+                    used = length
+                } else {
+                    current += member
+                    used += length
+                }
+            }
+            val pages: List<List<RoutineMemberDto>> = groups.ifEmpty { listOf(emptyList()) }
+            return pages.mapIndexed { index, pageMembers ->
+                MessageContent.StandupSummary(
+                    routineName = if (pages.size == 1) routineName else "$routineName (${index + 1}/${pages.size})",
+                    sessionDate = sessionDate,
+                    members = pageMembers,
+                    answers = pageMembers.mapNotNull { answersByUser[it.userId] },
+                    questions = questions,
+                )
+            }
+        }
 
         private fun standupAnswerMaxLength(questions: List<String>): Int {
             val fixed =

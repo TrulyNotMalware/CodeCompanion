@@ -4,9 +4,7 @@ import dev.notypie.application.common.runInTx
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
-import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
-import dev.notypie.domain.standup.dto.RoutineMemberDto
 import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -20,7 +18,6 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import java.time.LocalDate
 
 private val summaryLog = KotlinLogging.logger {}
 
@@ -40,41 +37,6 @@ internal fun List<StandupAnswerDto>.boundedForSummary(): List<StandupAnswerDto> 
             )
         }
     }
-
-internal fun summaryPages(
-    routineName: String,
-    sessionDate: LocalDate,
-    members: List<RoutineMemberDto>,
-    answersByUser: Map<String, StandupAnswerDto>,
-    questions: List<String>,
-): List<List<RoutineMemberDto>> {
-    val header =
-        ModalTemplateBuilder.standupSummaryHeader(routineName = "$routineName (99/99)", sessionDate = sessionDate)
-    val budget = SlackBlockLimits.MESSAGE_TEXT_BUDGET - header.length
-    val pages = mutableListOf<MutableList<RoutineMemberDto>>()
-    var used = 0
-    members.forEach { member ->
-        val length =
-            ModalTemplateBuilder
-                .standupSummaryMemberSection(
-                    userId = member.userId,
-                    answer = answersByUser[member.userId],
-                    questions = questions,
-                ).length
-        val current = pages.lastOrNull()
-        if (current == null ||
-            used + length > budget ||
-            current.size >= ModalTemplateBuilder.STANDUP_SUMMARY_MAX_MEMBER_SECTIONS
-        ) {
-            pages += mutableListOf(member)
-            used = length
-        } else {
-            current += member
-            used += length
-        }
-    }
-    return pages.ifEmpty { listOf(emptyList()) }
-}
 
 @Service
 class StandupSummaryService(
@@ -104,17 +66,16 @@ class StandupSummaryService(
                     return@runInTx false
                 }
                 val routine = standupRepository.getRoutine(routineUid = event.routineUid)
-                val answersByUser = session.answers.boundedForSummary().associateBy { it.userId }
-                val pages =
-                    summaryPages(
+                val parts =
+                    ModalTemplateBuilder.standupSummaryParts(
                         routineName = routine.name,
                         sessionDate = session.sessionDate,
                         members = routine.members,
-                        answersByUser = answersByUser,
+                        answers = session.answers.boundedForSummary(),
                         questions = routine.questions,
                     )
                 val summaryRows =
-                    pages.mapIndexed { index, pageMembers ->
+                    parts.map { part ->
                         val commandBasicInfo =
                             CommandBasicInfo.forOutbound(
                                 publisherId = routine.creatorId,
@@ -124,19 +85,7 @@ class StandupSummaryService(
                             message =
                                 OutboundMessage.ChannelMessage(
                                     target = ConversationTarget(id = commandBasicInfo.channel),
-                                    content =
-                                        MessageContent.StandupSummary(
-                                            routineName =
-                                                if (pages.size == 1) {
-                                                    routine.name
-                                                } else {
-                                                    "${routine.name} (${index + 1}/${pages.size})"
-                                                },
-                                            sessionDate = session.sessionDate,
-                                            members = pageMembers,
-                                            answers = pageMembers.mapNotNull { answersByUser[it.userId] },
-                                            questions = routine.questions,
-                                        ),
+                                    content = part,
                                 ),
                             basicInfo = commandBasicInfo,
                         )
