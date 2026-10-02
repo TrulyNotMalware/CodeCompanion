@@ -86,6 +86,7 @@ class ApplicationMessageDispatcherTest :
         val loopbackClient = toLoopback(client = responseUrlClient(slack = slack))
         val sleeps = mutableListOf<Duration>()
         val unknownOutcomes = ConcurrentLinkedDeque<String>()
+        val accessBlocks = ConcurrentLinkedDeque<String>()
 
         fun dispatcher(sleeper: (Duration) -> Unit = { sleeps.add(it) }) =
             ApplicationMessageDispatcher(
@@ -93,6 +94,7 @@ class ApplicationMessageDispatcherTest :
                 applicationEventPublisher = mockk(relaxed = true),
                 retryService = RetryService(),
                 onOutcomeUnknown = { unknownOutcomes.add(it) },
+                onAccessBlocked = { accessBlocks.add(it) },
                 slack = slack,
                 okHttpClient = loopbackClient,
                 sleeper = sleeper,
@@ -104,6 +106,7 @@ class ApplicationMessageDispatcherTest :
             responses.clear()
             sleeps.clear()
             unknownOutcomes.clear()
+            accessBlocks.clear()
             calls.set(0)
         }
 
@@ -283,6 +286,54 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
+        given("chat.* refuses the bot token or the workspace as a whole") {
+            reset()
+            val codes =
+                listOf(
+                    "invalid_auth",
+                    "not_authed",
+                    "account_inactive",
+                    "token_revoked",
+                    "token_expired",
+                    "missing_scope",
+                    "not_allowed_token_type",
+                    "team_access_not_granted",
+                    "accesslimited",
+                    "org_login_required",
+                    "team_added_to_org",
+                )
+            codes.forEach { code -> responses.add(status(code = 200, body = """{"ok":false,"error":"$code"}""")) }
+
+            `when`("one channel message per error code is dispatched") {
+                val outputs = codes.map { defaultDispatcher.dispatch(event = channelMessage()) }
+
+                then("each is held as access-blocked, reported once with its code, and not retried here") {
+                    outputs.map { it.isAccessBlocked() } shouldBe codes.map { true }
+                    outputs.map { it.errorReason } shouldBe codes.map { ACCESS_BLOCKED_REASON }
+                    accessBlocks.toList() shouldBe codes
+                    calls.get() shouldBe codes.size
+                }
+            }
+        }
+
+        given("chat.* refuses a single channel or message") {
+            reset()
+            val codes =
+                listOf("ekm_access_denied", "no_permission", "not_in_channel", "is_archived", "restricted_action")
+            codes.forEach { code -> responses.add(status(code = 200, body = """{"ok":false,"error":"$code"}""")) }
+
+            `when`("one channel message per error code is dispatched") {
+                val outputs = codes.map { defaultDispatcher.dispatch(event = channelMessage()) }
+
+                then("each fails for good with its own code and nothing is held") {
+                    outputs.map { it.isAccessBlocked() } shouldBe codes.map { false }
+                    outputs.map { it.errorReason } shouldBe codes
+                    accessBlocks.toList() shouldBe emptyList()
+                    calls.get() shouldBe codes.size
+                }
+            }
+        }
+
         given("chat.* answers 200 ok=false fatal_error, which may have partially succeeded") {
             reset()
             responses.add(status(code = 200, body = """{"ok":false,"error":"fatal_error"}"""))
@@ -458,6 +509,7 @@ class ApplicationMessageDispatcherTest :
             applicationEventPublisher = mockk(relaxed = true),
             retryService = RetryService(),
             onOutcomeUnknown = { unknownOutcomes.add(it) },
+            onAccessBlocked = { accessBlocks.add(it) },
             slack = slack,
             okHttpClient = toLoopback(client = responseUrlClient(slack = slack)),
         )
@@ -600,6 +652,7 @@ class ApplicationMessageDispatcherTest :
                 applicationEventPublisher = mockk(relaxed = true),
                 retryService = RetryService(),
                 onOutcomeUnknown = { unknownOutcomes.add(it) },
+                onAccessBlocked = { accessBlocks.add(it) },
                 slack = Slack.getInstance(config, SlackHttpClient(resettingClient)),
                 okHttpClient = loopbackClient,
             )

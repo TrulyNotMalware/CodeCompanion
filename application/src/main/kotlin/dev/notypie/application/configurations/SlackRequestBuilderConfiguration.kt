@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 const val METRIC_OUTCOME_UNKNOWN = "codecompanion.slack.dispatch.outcome_unknown"
+const val METRIC_ACCESS_BLOCKED = "codecompanion.slack.dispatch.access_blocked"
 
 @Configuration
 class SlackRequestBuilderConfiguration(
@@ -41,6 +42,9 @@ class SlackRequestBuilderConfiguration(
         retryService = retryService,
         onOutcomeUnknown = { slackMethod ->
             meterRegistry.counter(METRIC_OUTCOME_UNKNOWN, "method", slackMethod).increment()
+        },
+        onAccessBlocked = { slackError ->
+            meterRegistry.counter(METRIC_ACCESS_BLOCKED, "error", slackError).increment()
         },
     )
 

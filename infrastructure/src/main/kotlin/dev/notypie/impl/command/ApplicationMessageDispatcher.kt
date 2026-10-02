@@ -52,6 +52,22 @@ private val dispatcherLog = KotlinLogging.logger {}
 // internal_error "may have partly succeeded" per Slack, so only an idempotent call retries it.
 private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "service_unavailable")
 private val NOT_SENT_SLACK_ERRORS = setOf("service_unavailable")
+
+// Token- or workspace-wide codes only: a channel-scoped code would hold its rows for 24 h and keep health DOWN.
+private val SLACK_ACCESS_ERRORS =
+    setOf(
+        "invalid_auth",
+        "not_authed",
+        "account_inactive",
+        "token_revoked",
+        "token_expired",
+        "missing_scope",
+        "not_allowed_token_type",
+        "team_access_not_granted",
+        "accesslimited",
+        "org_login_required",
+        "team_added_to_org",
+    )
 private val SLACK_RESPONSE_URL_HOSTS = setOf("hooks.slack.com", "hooks.slack-gov.com")
 private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR = 500
@@ -165,6 +181,7 @@ class ApplicationMessageDispatcher(
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val retryService: RetryService,
     private val onOutcomeUnknown: (slackMethod: String) -> Unit,
+    private val onAccessBlocked: (slackError: String) -> Unit,
     private val slack: Slack = slackClient(),
     private val okHttpClient: OkHttpClient = responseUrlClient(slack = slack),
     private val sleeper: (Duration) -> Unit = { Thread.sleep(it.toMillis()) },
@@ -544,6 +561,14 @@ class ApplicationMessageDispatcher(
             idempotent = idempotent,
         )
         if (error in TRANSIENT_SLACK_ERRORS) return outcomeUnknown(event = event, what = error)
+        if (error in SLACK_ACCESS_ERRORS) {
+            dispatcherLog.error {
+                "Slack refused the bot token or workspace for ${event.commandDetailType}: error=$error; " +
+                    "holding idempotencyKey=${event.idempotencyKey} until the configuration is fixed"
+            }
+            onAccessBlocked(error)
+            return failOutput(event = event, reason = ACCESS_BLOCKED_REASON)
+        }
         dispatcherLog.warn {
             "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
         }
