@@ -2,10 +2,16 @@ package dev.notypie.application.configurations
 
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.shouldBe
+import org.springframework.beans.factory.DisposableBean
 import org.springframework.boot.env.YamlPropertySourceLoader
+import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.io.ClassPathResource
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.yaml.snakeyaml.Yaml
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicReference
+import java.util.function.Supplier
 
 class ShutdownBudgetTest :
     BehaviorSpec({
@@ -58,6 +64,37 @@ class ShutdownBudgetTest :
                     "the grace period covers preStop, the three lifecycle phases, every executor wait and every producer close",
                 ) {
                     graceSeconds shouldBeGreaterThanOrEqual required
+                }
+            }
+        }
+
+        given("the relay executor and the EntityManagerFactory in one context") {
+            val executorShutDownWhenEmfCloses = AtomicReference<Boolean>()
+            val relayExecutor = AtomicReference<ThreadPoolTaskExecutor>()
+            val context =
+                AnnotationConfigApplicationContext().apply {
+                    registerBean(AppConfig::class.java, Supplier { AppConfig() })
+                    registerBean(
+                        "entityManagerFactory",
+                        DisposableBean::class.java,
+                        Supplier {
+                            DisposableBean {
+                                executorShutDownWhenEmfCloses.set(relayExecutor.get().threadPoolExecutor.isShutdown)
+                            }
+                        },
+                        { definition -> definition.isLazyInit = true },
+                    )
+                    register(AsyncConfig::class.java)
+                    refresh()
+                }
+            relayExecutor.set(context.getBean("relayTaskExecutor", ThreadPoolTaskExecutor::class.java))
+            context.getBean("entityManagerFactory")
+
+            `when`("the context closes") {
+                context.close()
+
+                then("the relay executor is shut down before the EntityManagerFactory closes") {
+                    executorShutDownWhenEmfCloses.get() shouldBe true
                 }
             }
         }

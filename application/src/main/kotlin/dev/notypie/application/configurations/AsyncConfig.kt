@@ -2,6 +2,7 @@ package dev.notypie.application.configurations
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.DependsOn
 import org.springframework.context.annotation.Primary
 import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.scheduling.annotation.EnableAsync
@@ -34,6 +35,7 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
 
     // Never CallerRunsPolicy: the callers are taskScheduler threads shared by every @Scheduled job.
     @Bean(name = ["relayTaskExecutor"])
+    @DependsOn("entityManagerFactory")
     fun relayTaskExecutor(appConfig: AppConfig): Executor =
         ThreadPoolTaskExecutor().apply {
             corePoolSize = 4
