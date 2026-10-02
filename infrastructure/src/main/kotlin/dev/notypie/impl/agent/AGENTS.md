@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/impl/agent
 
@@ -29,7 +29,8 @@ deliberately one blocking turn in, one terminal result out; `SidecarAgentClient`
   `tool_use` / `tool_result` frames are ignored (debug log). A stream that ends without a terminal frame
   yields `Failed(incomplete_stream)`; a final frame with no trailing blank line is still flushed.
 - **`converse` never throws an `Exception`.** Transport exceptions become `Failed(transport_error)`; an
-  `InterruptedException` (a shutting-down executor) becomes `Failed(interrupted)` **with the thread's interrupt flag
+  `InterruptedException` (an explicit cancellation or forced stop — the application's executors do not interrupt
+  on a graceful shutdown, they only wait) becomes `Failed(interrupted)` **with the thread's interrupt flag
   restored**, so the caller can see it and stop; an `Error` is not caught. The caller (`AgentConverseService`,
   `SidecarAiSummarizer`) branches on the sealed result.
 - Wired by `application/configurations/AgentConfiguration.kt`; the sidecar's `openapi.yaml` is the field-name
