@@ -142,10 +142,19 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
      authorizer checks is `code-companion-svc:80` (the `<service>:<port>` segment of the URL), not
      `code-companion-svc`. It also needs the API server to reach pod IPs, which is not guaranteed on every
      cluster network.
-  2. **pod exec** — `kubectl exec deploy/code-companion-deploy -c code-companion-deploy -- wget -qO- -T 10
+  2. **pod exec** — `kubectl exec <pod> -c code-companion-deploy -- wget -qO- -T 10
      http://localhost:80/actuator/health/readiness` (busybox `wget` in the alpine JRE image; the container
-     listens on 80). Needs RBAC `create` on `pods/exec` in `api-service`. `deploy/<name>` picks one Pod matching
-     the selector, which may briefly be a draining old Pod reporting DOWN; the loop retries.
+     listens on 80) on **every** Pod of the current revision: the step reads the Deployment's
+     `deployment.kubernetes.io/revision`, finds the ReplicaSet with the same revision annotation, lists Pods by
+     its `pod-template-hash` label and skips any with a `deletionTimestamp`. A Pod whose exec fails (a `503`
+     makes `wget` exit non-zero) fails the attempt, and a Pod that answers without `UP` is reported as the
+     body, so the loop retries until all of them are UP. It replaced `kubectl exec deploy/<name>`, which picks
+     one Pod by readiness and age and does not skip terminating ones, so right after `rollout status` it could
+     pick an old Pod still answering `UP` during its 5s `preStop` sleep and pass the gate on the old binary.
+     Needs RBAC `create` on `pods/exec`, `get` on `deployments`, `list` on `replicasets` and `pods` in
+     `api-service` (the last three are already needed by the backup, `rollout undo` and the Ready-pod count).
+     The service proxy path checks only the Pod the Service routes to; terminating Pods are already out of its
+     endpoints.
   The aggregate `/actuator/health` is fetched once after readiness passes, for the log only: it includes
   `OutboxHealthIndicator`, which can be DOWN for reasons unrelated to the release (connector lag, a looping
   message, rows orphaned by the rollout itself), and gating on it would roll back the very release meant to fix

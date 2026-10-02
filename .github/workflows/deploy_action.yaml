@@ -311,12 +311,40 @@ jobs:
               return 0
             fi
             echo "  service proxy failed: $(cat "$err_file")"
-            if body=$(kubectl exec "deploy/${{ env.K8S_DEPLOYMENT_NAME }}" -n ${{ env.K8S_NAMESPACE }} -c ${{ env.K8S_CONTAINER_NAME }} --request-timeout=20s -- wget -qO- -T 10 "http://localhost:80$1" 2> "$err_file"); then
-              method="pod exec"
-              return 0
+            fetch_from_new_pods "$1"
+          }
+
+          # Every non-terminating Pod of the current revision: `kubectl exec deploy/<name>` may pick an old Pod that
+          # still answers UP during its preStop sleep. Explicit checks: errexit is off inside a function called from `if`.
+          fetch_from_new_pods() {
+            local revision pod_hash pods pod
+            if ! revision=$(kubectl get deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} -o json 2> "$err_file" \
+                | jq -er '.metadata.annotations["deployment.kubernetes.io/revision"]'); then
+              echo "  pod exec failed: no Deployment revision: $(cat "$err_file")"
+              return 1
             fi
-            echo "  pod exec failed: $(cat "$err_file")"
-            return 1
+            if ! pod_hash=$(kubectl get replicasets -n ${{ env.K8S_NAMESPACE }} -l app=${{ env.K8S_DEPLOYMENT_NAME }} -o json 2> "$err_file" \
+                | jq -er --arg rev "$revision" 'first(.items[] | select(.metadata.annotations["deployment.kubernetes.io/revision"] == $rev) | .metadata.labels["pod-template-hash"])'); then
+              echo "  pod exec failed: no ReplicaSet for revision $revision: $(cat "$err_file")"
+              return 1
+            fi
+            if ! pods=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l "app=${{ env.K8S_DEPLOYMENT_NAME }},pod-template-hash=$pod_hash" -o json 2> "$err_file" \
+                | jq -r '.items[] | select(.metadata.deletionTimestamp == null) | .metadata.name') || [ -z "$pods" ]; then
+              echo "  pod exec failed: no live Pod with pod-template-hash $pod_hash: $(cat "$err_file")"
+              return 1
+            fi
+            for pod in $pods; do
+              if ! body=$(kubectl exec "$pod" -n ${{ env.K8S_NAMESPACE }} -c ${{ env.K8S_CONTAINER_NAME }} --request-timeout=20s -- wget -qO- -T 10 "http://localhost:80$1" 2> "$err_file"); then
+                echo "  pod exec on $pod failed: $(cat "$err_file")"
+                return 1
+              fi
+              method="pod exec ($pod, revision $revision)"
+              if ! jq -e '.status == "UP"' > /dev/null 2>&1 <<< "$body"; then
+                return 0
+              fi
+            done
+            method="pod exec (every Pod of revision $revision: ${pods//$'\n'/ })"
+            return 0
           }
 
           deadline=$((SECONDS + 120))
