@@ -49,7 +49,11 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   **only** active profile (Socket Mode, no inbound HTTP from Slack). `local` combined with anything else
   (`slack-live,local`, `prod,local`) fails, because `local`'s empty `${SLACK_SIGNING_SECRET:}` default would
   otherwise switch verification off on a network-exposed instance. Only `local` alone disables verification,
-  with one warning.
+  with one warning, and `application-local.yaml` binds HTTP to `server.address: 127.0.0.1`, so that instance
+  (and its unauthenticated actuator endpoints) is unreachable from the network even when `./run app.jar` is
+  started without `-e` (the script's default environment is `local`). Socket Mode is an outbound WebSocket and
+  the local sidecar calls back on loopback, so nothing needs the port from outside. The filter spec pins the
+  binding.
 - **Cheap rejection first — against scanners, not against an attacker.** Header presence, timestamp freshness
   and signature shape are checked before the body is read, so requests without plausible Slack headers cost no
   buffering. The check is not authentication: the format is public (current epoch seconds + `v0=` + any 64

@@ -47,6 +47,7 @@ spring:
         max.poll.interval.ms: 300000
 
 server:
+  address: 127.0.0.1
   port: 9000
   servlet:
     session:
@@ -66,8 +67,8 @@ management:
   endpoints:
     web:
       exposure:
-        # Unauthenticated and bound to every interface: keep port 9000 off the network. No heapdump,
-        # because a dump carries the Slack token and DB password.
+        # Unauthenticated; reachable only on loopback (server.address above). No heapdump, because a
+        # dump carries the Slack token and DB password.
         include: health,loggers,metrics,mappings,threaddump,conditions,info
       base-path: /api/actuator
       path-mapping:
