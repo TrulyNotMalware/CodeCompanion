@@ -14,7 +14,9 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveRecentEvent
 import dev.notypie.repository.cve.CveSubscriptionRepository
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.escapeMrkdwn
+import dev.notypie.templates.truncateSectionText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -36,6 +38,9 @@ class CveLatestQueryService(
         private const val LATEST_LIMIT = 5
         private const val SUMMARY_MAX_LENGTH = 700
         private const val BODY_MAX_LENGTH = 2_900
+
+        // The first BODY_MAX_LENGTH characters plus "\n…(truncated)": still under Slack's 3,000.
+        private val CAPPED_BODY_MAX_LENGTH = BODY_MAX_LENGTH + 1 + SlackBlockLimits.TRUNCATION_MARKER.length
     }
 
     @Transactional
@@ -95,7 +100,8 @@ class CveLatestQueryService(
         if (recent.isEmpty()) return emptyMessage
         // render() escapes, so this cap measures the body Slack will actually receive.
         val body = recent.joinToString(separator = "\n\n") { render(event = it) }
-        return if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
+        // The cut never splits an escaped entity (`&am`) or a surrogate pair.
+        return body.truncateSectionText(limit = CAPPED_BODY_MAX_LENGTH)
     }
 
     // Feed titles and summaries are upstream text; escape them so `<!channel>` or `<url|label>` stays literal.

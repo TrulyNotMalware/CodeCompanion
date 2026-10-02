@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/cve/query
 
@@ -14,7 +14,7 @@ pure DB read — the AI summary was produced once by `../ai/CveSummaryWorker`, n
 |------|-------------|
 | `CveQuerySlashService.kt` | Interface: `handleLatest(headers, payload: SlashCommandRequestBody, commandData: InboundCommand)`. Called from `controllers/SlashCommandController` and `socket/SocketModeReceiver` |
 | `CveQuerySlashServiceImpl.kt` | `@Transactional handleLatest`: feature off → `log.warn` and return; else `CveLatestSlashCommand(idempotencyKey, commandData, topicKey = extractTopicKey(commandData.subCommands))`. `internal fun extractTopicKey(subCommands)` in the companion: first non-blank argument, lower-cased; `null` when there is none |
-| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently. No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey.equals(key, ignoreCase = true) }` or "Topic `key` is not available." (key escaped). `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700), every piece passed through `escapeMrkdwn()`; the joined (escaped) body is cut at `BODY_MAX_LENGTH` (2 900) with `…(truncated)`. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` |
+| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently. No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey.equals(key, ignoreCase = true) }` or "Topic `key` is not available." (key escaped). `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700), every piece passed through `escapeMrkdwn()`; the joined (escaped) body keeps at most its first `BODY_MAX_LENGTH` (2 900) characters plus `\n…(truncated)` through `templates/truncateSectionText`, which backs off an `&lt;`-style entity or a surrogate pair at the cut instead of splitting it (H4). DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` |
 
 ## For AI Agents
 
@@ -45,7 +45,8 @@ pure DB read — the AI summary was produced once by `../ai/CveSummaryWorker`, n
 `CveLatestQueryServiceTest` and `CveQuerySlashServiceImplTest` (Kotest `BehaviorSpec`, MockK). Events
 from `createCveLatestRequestEvent(topicKey)` (`domain` testFixtures; target is `TEST_USER_ID`), rows from
 `createCveTopic(...)` and `createCveRecentEvent(topicDisplayName, title, aiSummary)` (`infrastructure`
-testFixtures). The truncation case asserts `markdown.length == 2900 + "\n…(truncated)".length`.
+testFixtures). The truncation cases assert `markdown.length == 2900 + "\n…(truncated)".length` when the cut
+lands between entities and one character per backed-off entity less when it would split one.
 
 ### Common Patterns
 - `stagerCapturing(slot)` helper returning a MockK `OutboundMessageStager` whose `stage` captures the

@@ -10,7 +10,9 @@ import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.escapeMrkdwn
+import dev.notypie.templates.truncateSectionText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.transaction.PlatformTransactionManager
@@ -198,9 +200,9 @@ class CveNotificationDispatcher(
         return parts
     }
 
-    // Oversized body would be rejected by Slack post-claim and retry forever — capping prevents that.
-    private fun capBody(body: String): String =
-        if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
+    // An oversized body is rejected by Slack (`invalid_blocks`) after the claim committed, a permanent failure that
+    // loses the DM for good — capping prevents that. The cut never splits an escaped entity or a surrogate pair.
+    private fun capBody(body: String): String = body.truncateSectionText(limit = CAPPED_BODY_MAX_LENGTH)
 
     // digestSummaryMaxLength trims the raw text (a readability knob, and never splits an entity); the section
     // limit is enforced on the escaped line by digestParts.
@@ -215,6 +217,9 @@ class CveNotificationDispatcher(
         private const val DIGEST_HEADLINE = "CodeCompanion — CVE digest"
 
         private const val BODY_MAX_LENGTH = 2_900
+
+        // The first BODY_MAX_LENGTH characters plus "\n…(truncated)": still under Slack's 3,000.
+        private val CAPPED_BODY_MAX_LENGTH = BODY_MAX_LENGTH + 1 + SlackBlockLimits.TRUNCATION_MARKER.length
 
         // Bound on one user's single-tick digest, in pages of batchSize (500 pairs at the default 50): a day of a
         // heavy subscription fits, while one claim transaction and its parts stay bounded.

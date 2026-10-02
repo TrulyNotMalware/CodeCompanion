@@ -840,10 +840,13 @@ class CveNotificationDispatcherTest :
             `when`("the immediate tick runs") {
                 dispatcher.immediateTick()
 
-                then("the cap is measured on the escaped body") {
+                // H4: 2,887 escaped characters after the 13-character head end three characters into an `&lt;`; the
+                // bare take() used to leave a stray `&lt` behind, exactly 2,900 characters long.
+                then("the cap is measured on the escaped body and never splits an entity") {
                     val markdown = messages.single().channelText().markdown
-                    markdown.length shouldBe 2900 + "\n…(truncated)".length
+                    markdown.length shouldBe 2897 + "\n…(truncated)".length
                     markdown shouldNotContain "<"
+                    markdown.removeSuffix("\n…(truncated)") shouldEndWith "&lt;"
                 }
             }
         }

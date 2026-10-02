@@ -53,8 +53,11 @@ internal fun splitSectionText(
     return if (truncated) balanced.dropLast(n = 1) + (balanced.last() + TRUNCATION_SUFFIX) else balanced
 }
 
-/** Cuts a single section's text to [limit] characters, ending it with [SlackBlockLimits.TRUNCATION_MARKER]. */
-internal fun String.truncateSectionText(limit: Int = SlackBlockLimits.SECTION_TEXT_MAX_LENGTH): String =
+/**
+ * Cuts a single section's text to [limit] characters, ending it with [SlackBlockLimits.TRUNCATION_MARKER]. Public so
+ * the application-layer CVE bodies cut the same way instead of a bare `take()` that splits an entity or a pair.
+ */
+fun String.truncateSectionText(limit: Int = SlackBlockLimits.SECTION_TEXT_MAX_LENGTH): String =
     if (length <= limit) this else takeSafely(limit = limit - TRUNCATION_SUFFIX.length) + TRUNCATION_SUFFIX
 
 /** Cuts plain text to [limit] characters (option labels, headers), ending it with an ellipsis. */
@@ -101,12 +104,18 @@ private fun String.hardWrap(maxLength: Int): List<String> {
 
 private fun balanceFences(chunks: List<String>, closeLast: Boolean): List<String> {
     var open = false
-    return chunks.mapIndexed { index, chunk ->
+    return chunks.mapIndexedNotNull { index, chunk ->
         val reopen = open
         if (chunk.countFences() % 2 == 1) open = !open
+        // A chunk that starts on the open block's closing fence needs no re-opened block: prefixing one rendered an
+        // empty code block. The previous chunk already closed the block, so that leading fence is dropped instead,
+        // and a chunk that was nothing but the fence disappears rather than becoming an empty section.
+        val closesFirst = reopen && chunk.startsWith(CODE_FENCE)
+        val body = if (closesFirst) chunk.removePrefix(CODE_FENCE).removePrefix("\n") else chunk
+        if (body.isBlank()) return@mapIndexedNotNull null
         buildString {
-            if (reopen) append(FENCE_REOPEN)
-            append(chunk)
+            if (reopen && !closesFirst) append(FENCE_REOPEN)
+            append(body)
             if (open && (index < chunks.lastIndex || closeLast)) append(FENCE_CLOSE)
         }
     }

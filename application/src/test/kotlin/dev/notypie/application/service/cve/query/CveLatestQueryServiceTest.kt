@@ -17,6 +17,7 @@ import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.CapturingSlot
@@ -249,6 +250,34 @@ class CveLatestQueryServiceTest :
                     val markdown = staged.markdown()
                     markdown.length shouldBe 2900 + "\n…(truncated)".length
                     markdown shouldNotContain "<"
+                }
+            }
+        }
+
+        // H4: one more title character moves the 2,900-character cut two characters into an `&lt;` (a stray `&l`).
+        given("recent events whose escaped body would be cut inside an entity") {
+            val subscriptionRepository = mockk<CveSubscriptionRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            every { subscriptionRepository.findSubscribedTopics(userId = TEST_USER_ID) } returns
+                listOf(createCveTopic(id = 11L, topicKey = "kotlin", displayName = "Kotlin"))
+            every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns
+                List(2) { createCveRecentEvent(topicDisplayName = "Kotlin", title = "tt", aiSummary = "<".repeat(700)) }
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = subscriptionRepository,
+                    topicRepository = mockk(),
+                    eventRepository = eventRepository,
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled") {
+                service.handleCveLatest(event = createCveLatestRequestEvent())
+
+                then("the cut backs off to the entity boundary instead of leaving a stray `&l`") {
+                    val markdown = staged.markdown()
+                    markdown.length shouldBe 2898 + "\n…(truncated)".length
+                    markdown.removeSuffix("\n…(truncated)") shouldEndWith "&lt;"
                 }
             }
         }

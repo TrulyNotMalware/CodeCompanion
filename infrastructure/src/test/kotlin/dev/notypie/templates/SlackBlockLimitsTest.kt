@@ -79,6 +79,30 @@ class SlackBlockLimitsTest :
                 }
             }
 
+            // H4: the reviewer's probe — a boundary right before the closing fence made the next chunk "```\n```\n…",
+            // an empty code block.
+            `when`("a chunk boundary falls right before a code block's closing fence") {
+                val smallBudget = 40
+                val text = "```\n" + "a".repeat(n = 27) + "\n```\nafter"
+                val chunks =
+                    splitSectionText(text = text, maxSections = 5, balanceCodeFences = true, budget = smallBudget)
+
+                then("the continuation starts after the fence instead of re-opening an empty block") {
+                    chunks shouldBe listOf("```\n" + "a".repeat(n = 27) + "\n```", "after")
+                }
+            }
+
+            `when`("a chunk is nothing but the closing fence") {
+                val smallBudget = 40
+                val text = "```\n" + "a".repeat(n = 27) + "\n```\n" + "b".repeat(n = 31)
+                val chunks =
+                    splitSectionText(text = text, maxSections = 5, balanceCodeFences = true, budget = smallBudget)
+
+                then("it is dropped rather than sent as an empty section") {
+                    chunks shouldBe listOf("```\n" + "a".repeat(n = 27) + "\n```", "b".repeat(n = 31))
+                }
+            }
+
             `when`("the truncation point falls inside an open code block") {
                 val code = (1..2_000).joinToString(separator = "\n") { "println($it) // ${"d".repeat(n = 30)}" }
                 val chunks = splitSectionText(text = "```\n$code\n```", maxSections = 2, balanceCodeFences = true)
