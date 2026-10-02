@@ -22,7 +22,7 @@ class RestClientRequester(
     companion object {
         const val SLACK_API_BASE_URL = "https://slack.com/api/"
         val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(3L)
-        val DEFAULT_READ_TIMEOUT: Duration = Duration.ofSeconds(10L)
+        val DEFAULT_READ_TIMEOUT: Duration = SLACK_CALL_TIMEOUT
         const val DEFAULT_CONTENT_TYPE = "application/json; charset=utf-8"
         const val BEARER_PREFIX = "Bearer "
     }
