@@ -13,7 +13,7 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 90`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 100`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
 | `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
@@ -65,11 +65,14 @@ adds what an agent editing the manifests needs to know.
   `spring.lifecycle.timeout-per-shutdown-phase` (10s) in `application-prod.yaml` for each of three phases, one after
   another: the `ThreadPoolTaskScheduler` while a job runs (it does not set `await-termination`, so it waits in its
   own phase; measured 2026-10-02, a running job doubled a 1s-per-phase close to 2s), the Kafka container stop and
-  the web server drain. Then the destroy-time executor waits run one after another: relay 20s
-  (`RELAY_SHUTDOWN_AWAIT_SECONDS`), agent turns 20s (`slack.app.agent.turns.shutdown-await-seconds`), default 10s.
-  `terminationGracePeriodSeconds` (90) must cover 5 + 3 x 10 + 20 + 20 + 10 = 85; `configurations/ShutdownBudgetTest`
-  reads this manifest and the prod profile and fails when it does not (80 counted only two phases; 45 was the value
-  before 2026-10-02). The CDC container stops after the record in hand (`stopImmediate`), not after the rest of its
+  the web server drain. Two Kafka producer closes are not bounded by the phase timeout (the JSON producer factory
+  closes synchronously in its own `stop()`, the dead-letter bytes producer in `CdcDeadLetterRecovery.destroy()`) and
+  wait for unsent records, so both are capped at `PRODUCER_CLOSE_TIMEOUT_SECONDS` (5s) instead of spring-kafka's 30s.
+  Then the destroy-time executor waits run one after another: relay 20s (`RELAY_SHUTDOWN_AWAIT_SECONDS`), agent turns
+  20s (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (100) must cover
+  5 + 3 x 10 + 2 x 5 + 20 + 20 + 10 = 95; `configurations/ShutdownBudgetTest` reads this manifest and the prod profile
+  and fails when it does not (90 left out the producer closes, 80 counted only two phases; 45 was the value before
+  2026-10-02). The CDC container stops after the record in hand (`stopImmediate`), not after the rest of its
   poll, but waits for that record only up to the phase timeout, and the relay executor only 20s, while one dispatch
   can take about 53s (`application/src/main/resources/AGENTS.md`). A dispatch still running then is cut when the
   context closes: if Slack had already posted, its completion never lands and the recovery sweep re-sends the

@@ -15,6 +15,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.kafka.autoconfigure.DefaultKafkaProducerFactoryCustomizer
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Conditional
@@ -41,6 +42,9 @@ private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
 // Counts hand-offs: with setFailIfSendResultIsError(false) the publisher only logs a failed dead-letter send.
 const val DEAD_LETTER_HANDOFFS_METRIC = "kafka.dead.letter.handoffs"
 
+// Producer.close waits this long for unsent records (30s by default); ShutdownBudgetTest counts two closes.
+const val PRODUCER_CLOSE_TIMEOUT_SECONDS = 5
+
 internal fun deadLetterTopic(topic: String): String = "$topic$DEAD_LETTER_TOPIC_SUFFIX"
 
 internal fun cdcDeadLetterRecoverer(
@@ -58,10 +62,10 @@ internal fun cdcDeadLetterRecoverer(
 internal fun deadLetterBytesProducerFactory(
     jsonTemplate: KafkaTemplate<String, Any>,
 ): DefaultKafkaProducerFactory<Any, ByteArray> =
-    DefaultKafkaProducerFactory(
+    DefaultKafkaProducerFactory<Any, ByteArray>(
         jsonTemplate.producerFactory.configurationProperties +
             (ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to ByteArraySerializer::class.java),
-    )
+    ).apply { setPhysicalCloseTimeout(PRODUCER_CLOSE_TIMEOUT_SECONDS) }
 
 // Consumer-aware so DeadLetterPublishingRecoverer still receives the consumer (original group-id header).
 class CountingRecordRecoverer(
@@ -167,6 +171,11 @@ class KafkaConsumerConfiguration(
         return DefaultKafkaConsumerFactory(properties)
     }
 
+    // Applies to Boot's producer factory, which backs the template when the Kafka event publisher is off.
+    @Bean
+    fun producerCloseTimeoutCustomizer(): DefaultKafkaProducerFactoryCustomizer =
+        DefaultKafkaProducerFactoryCustomizer { it.setPhysicalCloseTimeout(PRODUCER_CLOSE_TIMEOUT_SECONDS) }
+
     // Required: without a template a poison record could only be logged and dropped.
     @Bean
     fun cdcDeadLetterRecovery(
@@ -203,7 +212,9 @@ class KafkaProducerConfiguration(
     @Bean
     @ConditionalOnMissingBean(ProducerFactory::class)
     fun producerFactory(): ProducerFactory<String, Any> =
-        DefaultKafkaProducerFactory(kafkaProperties.buildProducerProperties())
+        DefaultKafkaProducerFactory<String, Any>(kafkaProperties.buildProducerProperties()).apply {
+            setPhysicalCloseTimeout(PRODUCER_CLOSE_TIMEOUT_SECONDS)
+        }
 
     @Bean
     @ConditionalOnMissingBean(KafkaTemplate::class)
