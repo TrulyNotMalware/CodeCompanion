@@ -1208,6 +1208,52 @@ class ModalTemplateBuilderTest :
                     maxLengths.first() shouldBeLessThanOrEqual SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH
                 }
             }
+
+            // H10: eight 199-character questions of `&` escape to 995 characters each, more than the section budget,
+            // and the computed cap fell to 1 — a one-character answer box.
+            `when`("the questions escape to more than the whole section budget") {
+                val questions = (1..8).map { "&".repeat(n = 199) }
+                val json =
+                    templateBuilder.standupModalViewJson(
+                        routineName = "Daily",
+                        sessionDate = LocalDate.of(2026, 5, 4),
+                        sessionUid = sessionUid,
+                        userId = "U_STANDUP",
+                        noticeChannel = "D_NOTICE",
+                        noticeMessageTs = "1700000000.000400",
+                        questions = questions,
+                    )
+
+                then("each answer keeps the usable floor instead of collapsing to one character") {
+                    standupAnswerMaxLengths(json = json).distinct() shouldBe
+                        listOf(ModalTemplateBuilder.STANDUP_ANSWER_MIN_LENGTH)
+                }
+
+                then("a member answering at that floor is cut to the section budget by the summary instead") {
+                    val text =
+                        templateBuilder
+                            .standupSummaryTemplate(
+                                routineName = "Daily",
+                                sessionDate = LocalDate.of(2026, 5, 4),
+                                members = listOf(createRoutineMemberDto(userId = "U_MEMBER")),
+                                answers =
+                                    listOf(
+                                        createStandupAnswerDto(
+                                            userId = "U_MEMBER",
+                                            responses =
+                                                questions.map {
+                                                    "a".repeat(n = ModalTemplateBuilder.STANDUP_ANSWER_MIN_LENGTH)
+                                                },
+                                        ),
+                                    ),
+                                questions = questions,
+                            ).template
+                            .last()
+                            .let { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
+                    text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    text shouldContain SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
         }
 
         given("standupSummaryTemplate") {

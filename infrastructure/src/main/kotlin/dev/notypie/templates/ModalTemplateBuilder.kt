@@ -79,6 +79,7 @@ class ModalTemplateBuilder(
         // never lets one member's section outgrow the section budget.
         private const val STANDUP_MEMBER_LINE_RESERVE: Int = 32
         private const val STANDUP_QUESTION_LINE_OVERHEAD: Int = 6 // "\n• *" + "* "
+        internal const val STANDUP_ANSWER_MIN_LENGTH: Int = 50
     }
 
     // Every MessageContent.Text reply renders through these two, so a long body (an AI answer, a digest) is
@@ -505,11 +506,16 @@ class ModalTemplateBuilder(
     // answer is at the cap: the budget minus the member line and every question line, split across the answers.
     // Questions are measured as rendered (escaped). Routine's worst case (8 questions × 200 characters) still leaves
     // about 150 characters per answer; answers heavy in `&<>` grow when escaped, and the per-section cut covers that.
+    // Questions heavy in `&<>` (escaped up to five times longer) can leave nothing, and the old floor of 1 allowed a
+    // one-character answer (review H10); the floor keeps a usable field and leaves the overflow to that same cut.
     private fun standupAnswerMaxLength(questions: List<String>): Int {
         val fixed =
             STANDUP_MEMBER_LINE_RESERVE + questions.sumOf { it.escapeMrkdwn().length + STANDUP_QUESTION_LINE_OVERHEAD }
         return ((SlackBlockLimits.SECTION_TEXT_BUDGET - fixed) / questions.size.coerceAtLeast(minimumValue = 1))
-            .coerceIn(minimumValue = 1, maximumValue = SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH)
+            .coerceIn(
+                minimumValue = STANDUP_ANSWER_MIN_LENGTH,
+                maximumValue = SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH,
+            )
     }
 
     override fun standupSetupModalViewJson(idempotencyKey: UUID, creatorId: String, commandChannel: String): String {
