@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/standup
 
@@ -42,8 +42,9 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
 - **`ReadyDispatch` carries the session's own `sessionDate`** so members whose local trigger time falls on a
   different calendar day than the routine zone are dispatched correctly; do not re-derive the date from
   the routine timezone in callers.
-- Every session read that maps the full DTO uses `LEFT JOIN FETCH` on both `dispatches` and `answers`;
-  `dispatches` is a `Set` precisely so Hibernate can fetch two collections in one query (see `schema/`).
+- Every session read that maps the full DTO uses `LEFT JOIN FETCH` on both `dispatches` and `answers`, and
+  both are `Set`s so the cross product of the join collapses back to one element per row: with `answers` as a
+  List every answer came back once per dispatch (review G1; see `schema/`).
 - `deactivateRoutine` is a soft delete (`is_active = false`) and every routine read filters on it; nothing
   hard-deletes routines or sessions.
 - Beans: `JpaConfiguration.standupRepository`. Consumers in `:application`: `StandupRoutineSetupService`,

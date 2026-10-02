@@ -1,6 +1,7 @@
 package dev.notypie.repository.standup
 
 import dev.notypie.domain.standup.createSessionDispatch
+import dev.notypie.domain.standup.createStandupAnswer
 import dev.notypie.domain.standup.createStandupSession
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.domain.standup.entity.enums.SessionStatus
@@ -10,6 +11,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
@@ -17,6 +19,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 // Real Hibernate + H2 so SQL ordering (IDENTITY inserts vs. orphan deletes) is what production sees.
@@ -68,6 +71,41 @@ class StandupRepositoryImplJpaTest
 
             afterSpec {
                 jpaStandupSessionRepository.deleteAll()
+            }
+
+            given("a session with several dispatches and several answers (G1 / G12)") {
+                `when`("each read that maps the whole session graph loads it") {
+                    val routineUid = UUID.randomUUID()
+                    val sessionDate = LocalDate.of(2026, 5, 4)
+                    val sessionUid =
+                        inTx {
+                            repository
+                                .createSession(
+                                    session =
+                                        createStandupSession(
+                                            routineUid = routineUid,
+                                            sessionDate = sessionDate,
+                                            cutoffAt = cutoffAt,
+                                            dispatches =
+                                                listOf("U_A", "U_B", "U_C").map { createSessionDispatch(userId = it) },
+                                            answers = listOf("U_A", "U_B").map { createStandupAnswer(userId = it) },
+                                        ),
+                                ).sessionUid
+                        }
+
+                    then("every answer comes back once, not once per dispatch row of the join") {
+                        val bySessionUid = repository.findSession(sessionUid = sessionUid)!!
+                        bySessionUid.dispatches.size shouldBe 3
+                        bySessionUid.answers.map { it.userId } shouldContainExactlyInAnyOrder listOf("U_A", "U_B")
+                        repository
+                            .findSession(routineUid = routineUid, sessionDate = sessionDate)!!
+                            .answers.size shouldBe 2
+                        repository
+                            .findCollectingSessionsPastCutoff(before = cutoffAt.plusSeconds(1L))
+                            .single { it.sessionUid == sessionUid }
+                            .answers.size shouldBe 2
+                    }
+                }
             }
 
             given("recordAnswer for a member who already answered (T9)") {

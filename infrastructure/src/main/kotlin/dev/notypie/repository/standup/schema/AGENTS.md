@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/standup/schema
 
@@ -11,14 +11,17 @@ entities: the routine config with its member rows, and the session with its disp
 | File | Description |
 |------|-------------|
 | `RoutineSchema.kt` | `@Entity(name = "standup_routine")`, index `idx_standup_routine_active_channel` on `(is_active, command_channel)`: `routine_uid` (UUID, unique, 36), `name` (60), `creator_id`, `command_channel`, `summary_channel`, `questions` (`TEXT`, `\n`-joined as `questionsRaw`), `trigger_local_time: LocalTime`, `cutoff_offset_seconds: Long`, `weekdays` (80, comma-joined `DayOfWeek.name` as `weekdaysRaw`), `routine_timezone` (64, IANA id), `is_active`, `members` `@OneToMany(mappedBy, LAZY, orphanRemoval = true, cascade = ALL)`, timestamps; `QUESTION_DELIMITER = "\n"`, `WEEKDAY_DELIMITER = ","`. `@Entity(name = "standup_routine_member") RoutineMemberSchema`: `@ManyToOne(LAZY) routine`, `user_id`, `user_timezone` (64), `created_at`. Mappers `Routine.toSchema()`, `RoutineSchema.toDomainEntity()`, `RoutineSchema.toRoutineDto()` |
-| `StandupSessionSchema.kt` | `@Entity(name = "standup_session")`, `uk_standup_session_routine_date` on `(routine_uid, session_date)`, index on `cutoff_at`: `session_uid` (UUID, unique), `routine_uid` (UUID, plain column, no FK), `session_date: LocalDate`, `cutoff_at: Instant`, `status` `@Enumerated(STRING)` (16, default `COLLECTING`), `summary_message_ts?` (64), `nudged_at?: Instant`, `dispatches: MutableSet<SessionDispatchSchema>` and `answers: MutableList<StandupAnswerSchema>` (both `mappedBy`, LAZY, `orphanRemoval = true`, `cascade = ALL`), timestamps; `RESPONSE_DELIMITER` = ASCII Unit Separator (U+001F). `@Entity(name = "standup_session_dispatch") SessionDispatchSchema`: unique `(session_id, user_id)`, index `(dm_status, dm_trigger_at)`; `user_id`, `dm_trigger_at: Instant`, `dm_sent_at?`, `dm_status` `@Enumerated(STRING)` (16, default `PENDING`), `failure_reason?` (`TEXT`), `claim_token?` (36), timestamps. `@Entity(name = "standup_answer") StandupAnswerSchema`: unique `(session_id, user_id)`; `user_id`, `responses` (`TEXT`, delimiter-joined as `responsesRaw`, `var`), `submitted_at: Instant` (`var`) — the two `var`s let a resubmission update the row in place (T9). Mappers `StandupSession.toSchema()`, `StandupSessionSchema.toDomainEntity()`, `StandupSessionSchema.toStandupSessionDto()` |
+| `StandupSessionSchema.kt` | `@Entity(name = "standup_session")`, `uk_standup_session_routine_date` on `(routine_uid, session_date)`, index on `cutoff_at`: `session_uid` (UUID, unique), `routine_uid` (UUID, plain column, no FK), `session_date: LocalDate`, `cutoff_at: Instant`, `status` `@Enumerated(STRING)` (16, default `COLLECTING`), `summary_message_ts?` (64), `nudged_at?: Instant`, `dispatches: MutableSet<SessionDispatchSchema>` and `answers: MutableSet<StandupAnswerSchema>` (both `mappedBy`, LAZY, `orphanRemoval = true`, `cascade = ALL`), timestamps; `RESPONSE_DELIMITER` = ASCII Unit Separator (U+001F). `@Entity(name = "standup_session_dispatch") SessionDispatchSchema`: unique `(session_id, user_id)`, index `(dm_status, dm_trigger_at)`; `user_id`, `dm_trigger_at: Instant`, `dm_sent_at?`, `dm_status` `@Enumerated(STRING)` (16, default `PENDING`), `failure_reason?` (`TEXT`), `claim_token?` (36), timestamps. `@Entity(name = "standup_answer") StandupAnswerSchema`: unique `(session_id, user_id)`; `user_id`, `responses` (`TEXT`, delimiter-joined as `responsesRaw`, `var`), `submitted_at: Instant` (`var`) — the two `var`s let a resubmission update the row in place (T9). Mappers `StandupSession.toSchema()`, `StandupSessionSchema.toDomainEntity()`, `StandupSessionSchema.toStandupSessionDto()` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **`dispatches` is a `MutableSet` and `answers` a `MutableList`, and that asymmetry is required**: Hibernate
-  throws `MultipleBagFetchException` when `JOIN FETCH`-ing two bags (Lists) in one query, and every session
-  read fetches both. Do not "normalise" them to two Lists.
+- **`dispatches` and `answers` are both `MutableSet`s, and must stay Sets**: every session read `JOIN FETCH`es
+  both in one query, whose SQL result is their cross product. Two bags (Lists) throw
+  `MultipleBagFetchException`; a Set beside a bag does not throw but keeps each bag element once per row of the
+  other collection — `answers` as a List came back with every answer once per dispatch (3 × 2 → 6), and the
+  standup summary stored that duplicated list in its outbox payload (review G1). The entities keep identity
+  `equals`, which is what a Set needs here: one persistence context yields one instance per row.
 - **Encoded text columns**: questions are `\n`-joined (the domain rejects newlines inside a question),
   weekdays are comma-joined enum names, responses are joined by `RESPONSE_DELIMITER` (U+001F, never present
   in Slack `plain_text_input` values). Changing a delimiter is a data migration of every existing row.
@@ -44,9 +47,10 @@ entities: the routine config with its member rows, and the session with its disp
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.standup.*'
 ```
-No spec persists or maps these entities in `:infrastructure` (see `../AGENTS.md`). There are no schema
-builders for this lane under `src/testFixtures/kotlin/dev/notypie/schema/` either; add `createRoutineSchema`
-/ `createStandupSessionSchema` there before writing the missing `@DataJpaTest`.
+`StandupRepositoryImplJpaTest` (H2, real Hibernate) persists sessions through `StandupSession.toSchema()` and
+reads them back through `toStandupSessionDto()`, with three dispatches and two answers so a duplicating fetch
+fails (G1). The routine mapping still has no spec, and there are no schema builders for this lane under
+`src/testFixtures/kotlin/dev/notypie/schema/`.
 
 ### Common Patterns
 - Parent / child pairs in one file with the mappers as top-level extension functions.
