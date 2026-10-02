@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-02 -->
 
 # domain/common
 
@@ -15,6 +15,7 @@ outside itself — only `java.time`, `java.io` and `java.util` (identity sets fo
 |------|-------------|
 | `Validation.kt` | `ValidationBuilder` plus two entrypoints: public `validate(className = "", block)` (throws) and `internal validateAndReturn(className = "", block)` (returns `List<ExceptionArgument>`). Full operator inventory under Common Patterns |
 | `IdempotencyData.kt` | `IdempotencyData : java.io.Serializable` marker. Implemented by `command/inbound/InboundCommand`; `application/common/IdempotencyCreator` turns it into the idempotency `UUID` |
+| `MarkupEscape.kt` | `String.escapeMarkup()`: replaces `&`, `<`, `>` with `&amp;`, `&lt;`, `&gt;` (ampersand first) so user- or upstream-supplied text interpolated into outbound markdown cannot become a broadcast mention or a disguised link. Canonical implementation: `infrastructure/templates/escapeMrkdwn()` delegates to it so domain-built and template-built markdown escape identically. Stdlib only, named transport-neutrally |
 | `error/Errors.kt` | `ErrorCode` (`message` only — transport-neutral); `internal enum CommonErrorCode` (only `VALIDATION_FAILED`); `ExceptionArgument(fieldName, value, reason = "")`; `exceptionDetails {}` with `ExceptionDetailsBuilder` / `ReasonBuilder`; `abstract CodeCompanionRuntimeException(val errorCode, val details)`; `internal ValidationException` and `internal ValidationExceptionWithName(className, ...)` |
 
 ## Subdirectories

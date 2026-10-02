@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # infrastructure/templates
 
@@ -16,6 +16,8 @@ modal payloads — behind small type-safe DSLs.
 | `ModalTemplateBuilder.kt` | Composes complete modals for each form (meeting request, reschedule, add participant, standup setup/fill, CVE subscription, decline reason); `approvalTemplate` names the publisher through `SlackUserProfileResolver`. `standupSummaryTemplate` renders a title section plus one section per member, each cut to `SLACK_SECTION_TEXT_MAX_CHARS` (3,000, Slack's section limit), at most `STANDUP_SUMMARY_MAX_MEMBER_SECTIONS` (48) members and an "…and N more members" section, so the message stays within Slack's 50 blocks; it used to be one section, which Slack rejects as `invalid_blocks` past 3,000 characters |
 | `SlackUserProfileResolver.kt` | `resolve(userId): PublisherView(displayName, thumbnailUrl?)` — `users.profile.get?user={user}` via `RestRequester.safeGet` with `userId` as a URI template variable (never interpolated), cached per user (30 min TTL); any failure or `ok = false` degrades to `<@userId>` with no thumbnail and is negative-cached for `failureTtl` (60 s), so a user whose lookup keeps failing costs one Tier 4 call per minute, not one per render. At `maxEntries` (5 000) a new user first drops expired entries, then the oldest tenth by insertion time — never the whole cache |
 | `ModalBlockBuilder.kt` | Block-level assembly used by the template builder |
+| `SlackBlockLimits.kt` | `object SlackBlockLimits`: Block Kit caps this module renders against (section text 3,000 with a 2,900 working budget, section field 2,000, 50 blocks, header 150, option text 75, 100 options, `plain_text_input` 3,000) and `MESSAGE_TEXT_BUDGET` (12,000): total block text per message, kept under the undocumented ~13,200-character point where `chat.postMessage` returns `msg_blocks_too_long`. `splitSectionText(text, maxSections, balanceCodeFences)` packs lines into chunks within the budget, keeps at most `maxSections` and ends the last with `TRUNCATION_MARKER`, and closes/re-opens a code block cut by a boundary. `truncateSectionText` (public) / `truncatePlainText` cut one value. No cut splits a surrogate pair or an `&amp;`-style entity |
+| `SlackMrkdwn.kt` | `String.escapeMrkdwn()` delegates to `domain/common/escapeMarkup()`; apply it at the interpolation site of user- or externally-supplied text, not to whole template strings (`verbatim` does not stop explicit `<…>` markup). `String.neutralizeBroadcastMentions()` is for AI output, which keeps links, emphasis and `<@user>` mentions: it escapes the angle brackets of every `<!…>` sequence except `<!date^…>` |
 | `ModalElementBuilder.kt` | Element-level widgets: text inputs, selects, date/time pickers, checkboxes |
 | `SlackTemplateBuilder.kt` | Non-modal message templates |
 | `InteractiveIds.kt` | Canonical `action_id` / `block_id` / `callback_id` constants |
