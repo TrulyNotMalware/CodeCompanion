@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.DisposableBean
+import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor
 import org.springframework.boot.env.YamlPropertySourceLoader
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.io.ClassPathResource
@@ -68,33 +69,38 @@ class ShutdownBudgetTest :
             }
         }
 
-        given("the relay executor and the EntityManagerFactory in one context") {
-            val executorShutDownWhenEmfCloses = AtomicReference<Boolean>()
-            val relayExecutor = AtomicReference<ThreadPoolTaskExecutor>()
+        given("the relay and agent-turn executors and the EntityManagerFactory in one context") {
+            val executorsShutDownWhenEmfCloses = AtomicReference<List<Boolean>>()
+            val executors = AtomicReference<List<ThreadPoolTaskExecutor>>()
             val context =
                 AnnotationConfigApplicationContext().apply {
+                    addBeanFactoryPostProcessor(LazyInitializationBeanFactoryPostProcessor())
                     registerBean(AppConfig::class.java, Supplier { AppConfig() })
                     registerBean(
                         "entityManagerFactory",
                         DisposableBean::class.java,
                         Supplier {
                             DisposableBean {
-                                executorShutDownWhenEmfCloses.set(relayExecutor.get().threadPoolExecutor.isShutdown)
+                                val shutDown = executors.get().map { it.threadPoolExecutor.isShutdown }
+                                executorsShutDownWhenEmfCloses.set(shutDown)
                             }
                         },
-                        { definition -> definition.isLazyInit = true },
                     )
-                    register(AsyncConfig::class.java)
+                    register(AsyncConfig::class.java, AgentConfiguration::class.java)
                     refresh()
                 }
-            relayExecutor.set(context.getBean("relayTaskExecutor", ThreadPoolTaskExecutor::class.java))
+            executors.set(
+                listOf("relayTaskExecutor", "agentTurnExecutor").map {
+                    context.getBean(it, ThreadPoolTaskExecutor::class.java)
+                },
+            )
             context.getBean("entityManagerFactory")
 
             `when`("the context closes") {
                 context.close()
 
-                then("the relay executor is shut down before the EntityManagerFactory closes") {
-                    executorShutDownWhenEmfCloses.get() shouldBe true
+                then("both executors are shut down before the EntityManagerFactory closes") {
+                    executorsShutDownWhenEmfCloses.get() shouldBe listOf(true, true)
                 }
             }
         }

@@ -76,7 +76,8 @@ adds what an agent editing the manifests needs to know.
   closes synchronously in its own `stop()`, the two dead-letter producers, JSON and bytes, in
   `CdcDeadLetterRecovery.destroy()`) and wait for unsent records, so each is capped at `PRODUCER_CLOSE_TIMEOUT_SECONDS`
   (5s) instead of spring-kafka's 30s.
-  Then the destroy-time executor waits run one after another: relay 20s (`RELAY_SHUTDOWN_AWAIT_SECONDS`), agent turns
+  Then the destroy-time executor waits run one after another, all before the EntityManagerFactory and the DataSource
+  close (`@DependsOn("entityManagerFactory")` on the relay and agent-turn executors): relay 20s (`RELAY_SHUTDOWN_AWAIT_SECONDS`), agent turns
   20s (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (100) must cover
   5 + 3 x 10 + 3 x 5 + 20 + 20 + 10 = 100; `configurations/ShutdownBudgetTest` reads this manifest and the prod profile
   and fails when it does not (90 left out the producer closes, 80 counted only two phases; 45 was the value before
