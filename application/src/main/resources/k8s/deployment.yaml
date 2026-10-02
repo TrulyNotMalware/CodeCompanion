@@ -7,8 +7,9 @@ spec:
   # Recreate while a pre-V20 revision may still serve or be rolled back to: it re-dispatches IN_PROGRESS rows it does
   # not own, so old and new Pods must never overlap, and a `rollout undo` keeps the strategy (it is not in the pod
   # template). Cost: every deploy is an outage — the old Pods' shutdown (at most the 180s grace below) plus the new
-  # Pod's startup (at most 180s) and first readiness check (10s). Remove the block, and with it the outage, once no
-  # pre-V20 revision is wanted; `rollingUpdate: null` clears the defaulted block the API server rejects next to it.
+  # Pod's startup (at most 180s) and first readiness check (10s). For this release only: a follow-up PR deletes the
+  # block, and with it the outage, once every Pod runs V20+ and no rollback to a pre-V20 revision is wanted.
+  # `rollingUpdate: null` clears the defaulted block the API server rejects next to it.
   strategy:
     type: Recreate
     rollingUpdate: null

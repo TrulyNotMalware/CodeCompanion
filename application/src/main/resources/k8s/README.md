@@ -44,8 +44,8 @@ Defines the application deployment with:
   the DB/Kafka: check `kubectl logs` before touching the probes
 - Resources: 250m CPU / 1536Mi memory requested, 2Gi memory limit (the JVM heap is 50% of the limit; the
   request covers heap plus non-heap memory)
-- Strategy: `Recreate` for the current release (see "One-time" below). A rollout stops both Pods before starting
-  new ones, so every deploy, a rollback included, is an outage: the old Pods' shutdown (normally seconds, at most
+- Strategy: `Recreate` for this release only; a follow-up PR deletes the block once every Pod runs V20+ (see
+  "One-time" below). A rollout stops both Pods before starting new ones, so every deploy, a rollback included, is an outage: the old Pods' shutdown (normally seconds, at most
   the 180s grace) plus the new Pod's startup (at most the startup probe's 180s) and first readiness check (10s),
   about 6 minutes in the worst case plus scheduling and image pull. It needs only 2 × 1536Mi of requests. Once
   that block is removed, the default rolling update briefly runs 3 Pods (2 replicas + 1 surge) and needs
@@ -288,8 +288,8 @@ k8s/
 - `/actuator/health/liveness`·`/actuator/health/readiness` 기반 startup/readiness/liveness 프로브(startup은 3분 허용).
   파드가 Ready가 되지 않으면 대개 프로퍼티 바인딩 실패나 DB/Kafka 연결 실패이므로 프로브를 고치기 전에 `kubectl logs`부터 확인
 - 리소스: CPU 250m / 메모리 1536Mi 요청, 메모리 limit 2Gi (JVM 힙은 limit의 50%, 요청값은 힙 + 비힙 메모리를 포함)
-- 전략: 현재 릴리스는 `Recreate`입니다(아래 "1회성" 참고). 롤아웃이 파드 두 개를 모두 멈춘 뒤 새 파드를 띄우므로 롤백을 포함한
-  모든 배포가 중단을 냅니다: 이전 파드 종료(보통 몇 초, 최대 유예 180초) + 새 파드 기동(최대 startup 프로브 180초) + 첫
+- 전략: 이번 릴리스에만 `Recreate`입니다. 모든 파드가 V20 이상이 되면 후속 PR에서 블록을 지웁니다(아래 "1회성" 참고).
+  롤아웃이 파드 두 개를 모두 멈춘 뒤 새 파드를 띄우므로 롤백을 포함한 모든 배포가 중단을 냅니다: 이전 파드 종료(보통 몇 초, 최대 유예 180초) + 새 파드 기동(최대 startup 프로브 180초) + 첫
   readiness 확인(10초), 최악 약 6분에 스케줄링·이미지 풀 시간이 더해집니다. 요청은 2 × 1536Mi만 있으면 됩니다. 그 블록을 지운
   뒤의 기본 롤링 업데이트는 롤아웃 중 파드 3개(레플리카 2 + surge 1)를 띄우므로 요청 기준 3 × 1536Mi = 4.5Gi가 동시에 들어갈
   자리가 있어야 합니다(사전 요구사항 참고)

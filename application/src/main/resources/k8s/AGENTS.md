@@ -95,7 +95,8 @@ adds what an agent editing the manifests needs to know.
   cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is
   sized for heap + non-heap; a request equal to the heap would leave the Pod above its request and first in line
   for node-pressure eviction. Change the request, the limit and the percentage together.
-- **Strategy `Recreate`, on purpose and temporarily.** The outbox claim-token release (V20) must never run beside a
+- **Strategy `Recreate`, on purpose and for this release only** (a follow-up PR deletes the block once every Pod
+  runs V20+ and no pre-V20 rollback is wanted). The outbox claim-token release (V20) must never run beside a
   pre-V20 Pod, which re-dispatches `IN_PROGRESS` rows it does not own, so `deployment.yaml` sets
   `strategy.type: Recreate` (with `rollingUpdate: null`, which clears the API server's defaulted block). Every
   rollout and every `rollout undo` stops the old Pods before the first new one starts, and the PDB does not apply
