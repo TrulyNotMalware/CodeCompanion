@@ -113,12 +113,15 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   each HTTP call ≤ `SLACK_CALL_TIMEOUT` 6 s (OkHttp `callTimeout` spans DNS, connect, write, server time and
   the whole body); one `RetryService` run is 3 calls + backoff ≤ 0.1 + 0.2 s + 2 × 10 ms jitter = 18.32 s; with
   the single inline rate-limit wait (≤ 3 s) and the second run, `dispatch` ≤ 18.32 + 3 + 18.32 = 39.64 s.
+  `SLACK_DISPATCH_TIME_BOUND` (end of `ApplicationMessageDispatcher.kt`, built from `retryTimeBound`) holds that
+  value in code; the relay's `RELAY_RECORD_TIME_BOUND`, its shutdown wait and the pod's grace period follow it.
   Render adds at most one `users.profile.get` (`RestClientRequester` read timeout = `SLACK_CALL_TIMEOUT` 6 s; Spring's
   `JdkClientHttpRequest` starts that timer right after `sendAsync` and closes the body stream when it fires, so it
   bounds connect, headers and body together and the 3 s connect timeout sits inside it): ≤ 45.64 s of HTTP per
-  record. The CDC consumer runs `max-poll-records: 5` under `max.poll.interval.ms: 300000`, i.e. 60 s per record,
-  which leaves ≥ 14 s for the claim, renew and completion SQL. Raising `SLACK_CALL_TIMEOUT`, the retry attempts,
-  the inline wait or `max-poll-records` must keep this sum below 60 s.
+  record. The CDC consumer runs `max-poll-records: 5` under `max.poll.interval.ms: 300000`, i.e. 60 s per record;
+  the SQL around the dispatch is budgeted in `application/.../service/relay/AGENTS.md` ("Per-record time budget"),
+  and with the Hikari pool exhausted it can push a record past its 60 s (a rebalance and redelivery, not a double
+  send). Raising `SLACK_CALL_TIMEOUT`, the retry attempts, the inline wait or `max-poll-records` means redoing both.
 - **`response_url` is validated before any request**: `https`, port 443 and a host in `SLACK_RESPONSE_URL_HOSTS`
   (`hooks.slack.com`, GovSlack `hooks.slack-gov.com`), checked on the parsed `HttpUrl` that is then sent, so
   userinfo (`https://hooks.slack.com@evil.example/…`) and a trailing dot are rejected and upper case is

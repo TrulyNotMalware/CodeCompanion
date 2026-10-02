@@ -84,21 +84,20 @@ _type: pattern · updated: 2026-10-02_
 ## 재시도: `RetryService` / `RetryOptions`
 
 - `RetryService.execute(action, recoveryCallBack?, maxAttempts = 3, initialDelay = 100ms, multiplier = 2.0,
-  maxDelay = 10s, jitter = 10ms, exceptions = [Exception])`가 호출마다 `RetryPolicy`를 새로 만든다. 기본값은
-  `RetryOptions` enum(`internal val default`)에 있고 `RetryConfiguration.retryTemplate()`도 같은 값으로 빈을 만든다.
-- **함정 1 — 공유 템플릿의 정책을 갈아끼운다.** `retryTemplate.retryPolicy = policy`는 `@ConditionalOnMissingBean`으로
-  등록된 싱글턴 `RetryTemplate`을 변경한다. `SlackMessageRelayServiceImpl.updateMessage`가 `maxAttempts = 5`로 부르면
-  동시에 실행 중인 `MeetingServiceImpl`/`ApplicationMessageDispatcher` 호출도 그 정책을 볼 수 있고, `RetryConfiguration`의
-  기본 정책은 첫 호출에서 덮인다. Spring 문서는 `RetryTemplate`을 호출마다 가볍게 생성하라고 하므로 고칠 때는
-  `RetryTemplate(policy)`를 호출 단위로 만든다.
-- **함정 2 — `maxAttempts`는 사실 `maxRetries`다.** 인자가 그대로 `RetryPolicy.Builder.maxRetries`에 들어가는데, Spring
-  Framework 7의 `maxRetries`는 최초 시도 이후의 재시도 횟수다. 총 시도는 `maxAttempts + 1`(기본 4회, 릴레이 6회).
-  `RetryServiceTest`는 `maxAttempts = maxFailures + 1`을 주기 때문에 이 off-by-one을 잡지 못한다.
+  maxDelay = 10s, jitter = 10ms, exceptions = [Exception])`. 기본값은 `RetryOptions` enum(`internal val default`)에
+  있고, 빈은 `RetryConfiguration.retryService()` 하나다.
+- **정책마다 템플릿 하나(예전 함정, 해소됨).** `RetryTemplate.retryPolicy`는 바꿀 수 있는 공유 상태라, 예전처럼
+  싱글턴 템플릿의 정책을 호출마다 갈아끼우면 다른 스레드의 호출이 그 정책을 본다. 지금 `RetryService`는 정책 키(시도 수·
+  지연·배수·상한·jitter·예외 목록)마다 템플릿을 `ConcurrentHashMap`에 하나씩 두고, `RetryServiceTest`가 서로 다른 정책의
+  동시 호출이 섞이지 않음을 고정한다.
+- **`maxAttempts`는 총 실행 횟수다.** Spring Framework 7의 `maxRetries`는 최초 시도 뒤의 재실행 횟수라 `RetryService`가
+  `maxAttempts - 1`을 넘긴다(예전 off-by-one은 고쳐졌고 `RetryServiceTest`가 고정). 기본 3회, 릴레이 상태 기록도
+  `STATUS_WRITE_ATTEMPTS` = 3회다(시도마다 한 트랜잭션, 연쇄 발송의 다음 조각 저장 포함). 최악 소요는
+  `retryTimeBound(attemptTimeout, maxAttempts)`가 코드로 계산한다.
 - `recoveryCallBack`은 재시도가 소진돼 `RetryException`이 났을 때만 실행되고, 없으면 그 `RetryException`(마지막 원인을 감쌈)이
   전파된다. 기본 `includes(Exception)`은 `DataIntegrityViolationException`·검증 예외처럼 재시도해도 소용없는 실패까지
   재시도하므로 비일시적 실패가 섞이는 호출은 `exceptions`를 명시한다.
-- `@EnableResilientMethods`는 켜져 있지만 저장소에 `@Retryable`은 없다. `createFixedBackOffPolicy`는 미사용 private이다.
-  `RetryServiceTest`는 맨 `RetryTemplate()`로 돌아 `RetryConfiguration`의 기본 정책은 어떤 스펙도 보지 않는다.
+- `@EnableResilientMethods`는 켜져 있지만 저장소에 `@Retryable`은 없다.
 
 ## 알려진 공백
 
