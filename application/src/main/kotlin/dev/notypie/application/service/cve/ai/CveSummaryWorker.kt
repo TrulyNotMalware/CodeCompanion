@@ -25,7 +25,18 @@ class CveSummaryWorker(
     fun tick() {
         runCatching {
             val now = LocalDateTime.now(clock)
-            cveEventRepository.resetStuck(olderThan = now.minusMinutes(stuckMinutes), now = now)
+            val reset =
+                cveEventRepository.resetStuck(
+                    olderThan = now.minusMinutes(stuckMinutes),
+                    nextAttemptAt = now.plusMinutes(backoffMinutes),
+                    now = now,
+                )
+            if (reset > 0) {
+                log.warn {
+                    "Reset $reset CVE summary claim(s) stuck over ${stuckMinutes}m; each spent one retry and waits " +
+                        "${backoffMinutes}m"
+                }
+            }
             cveEventRepository
                 .findClaimable(now = now, maxRetries = maxRetries, limit = batchSize)
                 .forEach { event -> summarizeOne(event = event) }
@@ -77,7 +88,7 @@ class CveSummaryWorker(
                 releaseForBackpressure(event = event, token = token, cause = busy)
                 return
             } catch (interrupted: InterruptedException) {
-                // Shutdown, not a summary failure: keep the retry budget and let resetStuck hand the row back.
+                // Shutdown: leave the claim to resetStuck instead of recording a summary failure here.
                 Thread.currentThread().interrupt()
                 throw interrupted
             } catch (ex: Exception) {

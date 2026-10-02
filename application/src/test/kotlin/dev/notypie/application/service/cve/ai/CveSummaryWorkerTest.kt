@@ -42,7 +42,7 @@ class CveSummaryWorkerTest :
             val summarizer = mockk<AiSummarizer>()
             val claimToken = slot<String>()
             val doneToken = slot<String>()
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every {
@@ -60,7 +60,9 @@ class CveSummaryWorkerTest :
                 worker.tick()
 
                 then("stuck rows are reset once and the batch is claimed with the configured knobs") {
-                    verify(exactly = 1) { eventRepository.resetStuck(olderThan = any(), now = any()) }
+                    verify(
+                        exactly = 1,
+                    ) { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) }
                     verify(exactly = 1) { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) }
                 }
 
@@ -80,7 +82,7 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>(relaxed = true)
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 0
@@ -108,7 +110,7 @@ class CveSummaryWorkerTest :
             val summarizer = mockk<AiSummarizer>()
             val failToken = slot<String>()
             val nextAttemptAt = slot<LocalDateTime>()
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(
                     createCveEvent(id = 1L, topicId = 10L, retryCount = 2),
@@ -160,7 +162,7 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>()
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(
                     createCveEvent(id = 1L, topicId = 10L, retryCount = 0),
@@ -191,16 +193,22 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val fixedNow = LocalDateTime.of(2030, 3, 4, 5, 6)
             val clock = Clock.fixed(fixedNow.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault())
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns emptyList()
 
             `when`("the tick runs") {
                 workerWith(eventRepository = eventRepository, clock = clock).tick()
 
-                then("the stuck cutoff and the claim horizon come from that clock") {
+                then("the stuck cutoff, the reset backoff and the claim horizon come from that clock") {
                     verify(
                         exactly = 1,
-                    ) { eventRepository.resetStuck(olderThan = fixedNow.minusMinutes(stuckMinutes), now = fixedNow) }
+                    ) {
+                        eventRepository.resetStuck(
+                            olderThan = fixedNow.minusMinutes(stuckMinutes),
+                            nextAttemptAt = fixedNow.plusMinutes(backoffMinutes),
+                            now = fixedNow,
+                        )
+                    }
                     verify(exactly = 1) { eventRepository.findClaimable(now = fixedNow, maxRetries = 5, limit = 10) }
                 }
             }
@@ -212,7 +220,7 @@ class CveSummaryWorkerTest :
             val summarizer = mockk<AiSummarizer>()
             val fixedNow = LocalDateTime.of(2030, 3, 4, 5, 6)
             val clock = Clock.fixed(fixedNow.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault())
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L), createCveEvent(id = 2L, topicId = 10L))
             every { eventRepository.claimForSummary(id = any(), token = any(), now = any(), maxRetries = 5) } returns 1
@@ -259,7 +267,7 @@ class CveSummaryWorkerTest :
 
         given("a tick with no claimable events") {
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 4
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 4
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns emptyList()
             val worker = workerWith(eventRepository)
 
@@ -267,7 +275,9 @@ class CveSummaryWorkerTest :
                 worker.tick()
 
                 then("stuck recovery still runs exactly once") {
-                    verify(exactly = 1) { eventRepository.resetStuck(olderThan = any(), now = any()) }
+                    verify(
+                        exactly = 1,
+                    ) { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) }
                 }
             }
         }
@@ -275,7 +285,7 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>()
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L, retryCount = 3))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 1
@@ -306,7 +316,7 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>()
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any(), now = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 1

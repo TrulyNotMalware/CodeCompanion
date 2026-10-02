@@ -64,7 +64,7 @@ interface CveEventRepository {
         now: LocalDateTime,
     ): Int
 
-    fun resetStuck(olderThan: LocalDateTime, now: LocalDateTime): Int
+    fun resetStuck(olderThan: LocalDateTime, nextAttemptAt: LocalDateTime, now: LocalDateTime): Int
 
     fun countByStatus(status: CveSummaryStatus): Long
 

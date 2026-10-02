@@ -133,13 +133,15 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
     @Query(
         value = """
             UPDATE cve_event
-            SET summary_status = 'PENDING', claim_token = NULL, updated_at = :now
+            SET summary_status = 'FAILED', retry_count = retry_count + 1, next_attempt_at = :nextAttemptAt,
+                claim_token = NULL, updated_at = :now
             WHERE summary_status = 'SUMMARIZING' AND updated_at < :olderThan
         """,
         nativeQuery = true,
     )
     fun resetStuck(
         @Param("olderThan") olderThan: LocalDateTime,
+        @Param("nextAttemptAt") nextAttemptAt: LocalDateTime,
         @Param("now") now: LocalDateTime,
     ): Int
 

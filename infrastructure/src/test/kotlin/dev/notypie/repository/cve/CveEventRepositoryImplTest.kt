@@ -3,6 +3,7 @@ package dev.notypie.repository.cve
 import dev.notypie.schema.createCveEventSchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -138,6 +139,45 @@ class CveEventRepositoryImplTest :
             }
         }
 
+        given("markDone with a summary over the TEXT column's byte limit") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            val stored = slot<String>()
+            every { jpa.markDone(id = 7L, token = "tok", summary = capture(stored), now = now) } returns 1
+
+            `when`("the cut would land inside a four-byte emoji") {
+                repository.markDone(
+                    id = 7L,
+                    token = "tok",
+                    summary = "a".repeat(n = CveEventRepositoryImpl.AI_SUMMARY_MAX_BYTES - 2) + "😀",
+                    now = now,
+                )
+
+                then("the emoji is dropped whole and the stored summary fits the byte limit") {
+                    stored.captured shouldBe "a".repeat(n = CveEventRepositoryImpl.AI_SUMMARY_MAX_BYTES - 2)
+                }
+            }
+
+            `when`("Hangul fills the column at three bytes per character") {
+                repository.markDone(id = 7L, token = "tok", summary = "가".repeat(n = 30_000), now = now)
+
+                then("the summary is cut to the byte limit, not the character count") {
+                    stored.captured.toByteArray(Charsets.UTF_8).size shouldBeLessThanOrEqual
+                        CveEventRepositoryImpl.AI_SUMMARY_MAX_BYTES
+                    stored.captured.length shouldBe CveEventRepositoryImpl.AI_SUMMARY_MAX_BYTES / 3
+                }
+            }
+
+            `when`("the summary is exactly at the byte limit") {
+                val exact = "a".repeat(n = CveEventRepositoryImpl.AI_SUMMARY_MAX_BYTES)
+                repository.markDone(id = 7L, token = "tok", summary = exact, now = now)
+
+                then("it is stored unchanged") {
+                    stored.captured shouldBe exact
+                }
+            }
+        }
+
         given("markFailed") {
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
@@ -160,14 +200,17 @@ class CveEventRepositoryImplTest :
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
             val olderThan = now.minusMinutes(15)
-            every { jpa.resetStuck(olderThan = olderThan, now = now) } returns 3
+            val nextAttemptAt = now.plusMinutes(10)
+            every { jpa.resetStuck(olderThan = olderThan, nextAttemptAt = nextAttemptAt, now = now) } returns 3
 
             `when`("resetting stuck rows") {
-                val reset = repository.resetStuck(olderThan = olderThan, now = now)
+                val reset = repository.resetStuck(olderThan = olderThan, nextAttemptAt = nextAttemptAt, now = now)
 
                 then("it delegates and returns the reset count") {
                     reset shouldBe 3
-                    verify(exactly = 1) { jpa.resetStuck(olderThan = olderThan, now = now) }
+                    verify(
+                        exactly = 1,
+                    ) { jpa.resetStuck(olderThan = olderThan, nextAttemptAt = nextAttemptAt, now = now) }
                 }
             }
         }
