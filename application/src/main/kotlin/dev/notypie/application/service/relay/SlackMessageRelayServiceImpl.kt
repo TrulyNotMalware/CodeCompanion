@@ -237,19 +237,17 @@ class SlackMessageRelayServiceImpl(
 
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
-    // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it.
+    // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it. Saved once, with no
+    // RetryService (review G9, the same call as the meeting listeners in T22): a failed save has already marked the
+    // shared transaction rollback-only, so an in-place retry would only sleep with the connection held and then
+    // replace the original exception with a RetryException. The whole command is the unit of retry.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun saveOutboxMessage(event: OutboundMessageEnqueued) {
-        retryService.execute(
-            action = {
-                val row =
-                    outboundMessagePort.toRow(
-                        message = event.payload.message,
-                        basicInfo = event.payload.basicInfo,
-                    )
-                outboxRepository.save(row)
-            },
-            maxAttempts = 3,
-        )
+        val row =
+            outboundMessagePort.toRow(
+                message = event.payload.message,
+                basicInfo = event.payload.basicInfo,
+            )
+        outboxRepository.save(row)
     }
 }

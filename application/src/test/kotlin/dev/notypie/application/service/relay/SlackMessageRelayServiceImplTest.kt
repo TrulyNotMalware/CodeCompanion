@@ -29,6 +29,7 @@ import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.assertions.throwables.shouldNotThrowAny
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
@@ -40,6 +41,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import java.time.Duration
 import java.time.LocalDateTime
@@ -82,6 +84,34 @@ class SlackMessageRelayServiceImplTest :
 
                 then("the port builds a transport-neutral row that is persisted") {
                     verify(exactly = 1) { port.toRow(message = message, basicInfo = basicInfo) }
+                    verify(exactly = 1) { outboxRepository.save(row) }
+                }
+            }
+
+            `when`("the save fails inside the command's transaction") {
+                val basicInfo = createCommandBasicInfo()
+                val message =
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = null, markdown = "hi"),
+                    )
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val port = mockk<OutboundMessagePort>()
+                every { port.toRow(message = message, basicInfo = basicInfo) } returns row
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                val failure = DataIntegrityViolationException("duplicate idempotency key")
+                every { outboxRepository.save(row) } throws failure
+                val service = createRelayService(outboxRepository = outboxRepository, outboundMessagePort = port)
+                val event =
+                    OutboundMessageEnqueued(
+                        idempotencyKey = basicInfo.idempotencyKey,
+                        payload = OutboundMessageEnqueuedPayload(message = message, basicInfo = basicInfo),
+                    )
+
+                val thrown = shouldThrow<DataIntegrityViolationException> { service.saveOutboxMessage(event = event) }
+
+                then("it is saved once and the original exception rolls the command back, with no in-place retry") {
+                    thrown shouldBe failure
                     verify(exactly = 1) { outboxRepository.save(row) }
                 }
             }
