@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/service/agent
 
@@ -25,7 +25,9 @@ executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own tr
   ambient transaction, so every outcome's writes go through `transactionTemplate.runInTx { ... }`. The overload
   notice is the exception: it is written on the committing thread inside `afterCompletion`, where the committed
   transaction is still bound, so it uses a `PROPAGATION_REQUIRES_NEW` template (a REQUIRED one joined the finished
-  transaction and the notice never committed; pinned by a real `JpaTransactionManager` case in the spec). That
+  transaction and the notice never committed; pinned by a real `JpaTransactionManager` case in the spec). The
+  committed transaction still holds its connection there, so each rejected mention takes two pool connections at
+  once; the Hikari sizing rule in `src/main/resources/AGENTS.md` counts them. That
   boundary is what lets `SlackMessageRelayServiceImpl.saveOutboxMessage` (`BEFORE_COMMIT`) persist the
   staged reply; publishing outside it silently loses the message. `runInTx` swallows into a
   `Result` — failures are logged with `sessionKey` and `idempotencyKey`, never rethrown.

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # application/resources
 
@@ -56,8 +56,11 @@ stand up change-data-capture locally and in-cluster.
   records are redelivered; an already-claimed row is no longer PENDING, so the CDC processor skips it.
 - **Hikari pool** (`maximum-pool-size: 20` in every profile). A meeting cancel/reschedule/add-participant holds
   two connections at once (the outer interaction transaction plus the `REQUIRES_NEW` write from
-  `isolatedWriteTemplate`), and the relay executor, the schedulers and the CDC listener share the same pool. Size
-  it as: concurrent meeting interactions x 2 + relay workers (`relayTaskExecutor`, 4, plus the submitting thread
+  `isolatedWriteTemplate`), and so does an `@bot` mention that a full `agentTurnExecutor` rejects: its overload
+  notice is a `REQUIRES_NEW` write inside `afterCompletion`, while the committed mention transaction still holds its
+  connection (measured on H2: two sessions there, one in a plain transaction). The relay executor, the schedulers and
+  the CDC listener share the same pool. Size it as: (concurrent meeting interactions + mentions rejected at the same
+  moment) x 2 + relay workers (`relayTaskExecutor`, 4, plus the submitting thread
   under `CallerRunsPolicy`) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + AI turns that use the DB (`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent`, 4). Request threads are virtual,
   so the pool, not a thread limit, is what bounds concurrent interactions; a request that cannot get a connection
