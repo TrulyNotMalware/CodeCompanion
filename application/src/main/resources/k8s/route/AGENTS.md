@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # k8s/route
 
@@ -34,7 +34,8 @@ applied by CI.
   `/mcp`, on the same port, and none of them may be reachable from outside. A new public controller path needs a
   new entry in both files. The production host is not served by these samples:
   it is fronted by a bearer-authenticating layer outside this repository (on 2026-09-28 every probed path, nonexistent
-  ones included, answered `401` with `WWW-Authenticate: Bearer`), so which paths it forwards to the app is unknown
+  ones included, answered `401` with `WWW-Authenticate: Bearer`, except `GET /actuator/health`, which answered a
+  `404` JSON body that is not this application's error format), so which paths it forwards to the app is unknown
   from outside and has to be confirmed by whoever operates it.
 - The backend name and port are hard-coded to `code-companion-svc` / `80`; renaming the Service in
   `../service.yaml` breaks both files silently (the objects apply fine and return 503).
@@ -46,7 +47,8 @@ applied by CI.
   `ResolvedRefs=True` after applying.
 - The deploy workflow's health check goes through the API server's service proxy, not through these routes,
   so it does not prove external reachability. A signed Slack request that shows up in the app's logs does; a `401`
-  from outside does not, because the edge in front of the production host answers `401` for any path.
+  from outside does not, because the edge in front of the production host answered `401` for every probed path
+  but one (`GET /actuator/health`, a `404` that did not come from this app either).
 
 ### Common Patterns
 - Placeholders are lower-case `your-*` / `your.uri`; keep that convention so README's "Configure:" lists
