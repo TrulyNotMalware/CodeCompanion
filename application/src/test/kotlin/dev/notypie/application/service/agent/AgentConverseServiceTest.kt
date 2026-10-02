@@ -24,10 +24,14 @@ import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.schema.createOutboxMessage
+import dev.notypie.templates.SlackBlockLimits
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -233,6 +237,88 @@ class AgentConverseServiceTest :
                     verify(exactly = 0) {
                         sessionRepository.saveProviderSessionId(sessionKey = any(), providerSessionId = any())
                     }
+                }
+            }
+        }
+
+        given("a turn whose answer is longer than one Slack message") {
+            val answer = (1..1_000).joinToString(separator = "\n") { "line $it of a long explanation" }
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = answer)
+
+            val stagedMessages = mutableListOf<OutboundMessage>()
+            val outboundStager = mockk<OutboundMessageStager>()
+            every { outboundStager.stage(message = capture(stagedMessages), basicInfo = any()) } returns stubStagedEvent
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val service =
+                buildService(agentGateway = gateway, outboundStager = outboundStager, eventPublisher = eventPublisher)
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS))
+                val parts = stagedMessages.map { it.shouldBeInstanceOf<OutboundMessage.ChannelMessage>() }
+
+                then("the answer is posted in order as several numbered messages in the same thread") {
+                    parts.size shouldBeGreaterThan 1
+                    parts.forEach { it.threadId shouldBe TEST_THREAD_TS }
+                    parts.mapIndexed { index, part ->
+                        part.content.shouldBeInstanceOf<MessageContent.Text>().headline shouldBe
+                            "${AgentConverseService.RESPONSE_HEADLINE} (${index + 1}/${parts.size})"
+                    }
+                    verify(exactly = parts.size) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("each message body fits one Slack message and together they carry the whole answer") {
+                    val bodies = parts.map { it.content.shouldBeInstanceOf<MessageContent.Text>().markdown }
+                    bodies.forEach { it.length shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_BODY_BUDGET }
+                    bodies.joinToString(separator = "\n") shouldBe answer
+                }
+            }
+        }
+
+        given("a turn whose answer is longer than the answer cap") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "word ".repeat(n = 20_000))
+
+            val stagedMessages = mutableListOf<OutboundMessage>()
+            val outboundStager = mockk<OutboundMessageStager>()
+            every { outboundStager.stage(message = capture(stagedMessages), basicInfo = any()) } returns stubStagedEvent
+            val service = buildService(agentGateway = gateway, outboundStager = outboundStager)
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent())
+                val bodies =
+                    stagedMessages.map {
+                        it
+                            .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                            .markdown
+                    }
+
+                then("the answer is cut at the cap and the last message says so") {
+                    bodies.sumOf { it.length } shouldBeLessThanOrEqual AgentConverseService.MAX_ANSWER_LENGTH
+                    bodies.last() shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+        }
+
+        given("capAnswer") {
+            `when`("the cut would land inside a surrogate pair") {
+                val text = "a".repeat(n = AgentConverseService.MAX_ANSWER_LENGTH - 14) + "😀".repeat(n = 10)
+                val capped = AgentConverseService.capAnswer(text = text)
+
+                then("the pair is kept whole and the result stays within the cap") {
+                    capped.length shouldBeLessThanOrEqual AgentConverseService.MAX_ANSWER_LENGTH
+                    capped.removeSuffix("\n${SlackBlockLimits.TRUNCATION_MARKER}").last().isHighSurrogate() shouldBe
+                        false
+                }
+            }
+
+            `when`("the answer fits") {
+                then("it is unchanged") {
+                    AgentConverseService.capAnswer(text = "short") shouldBe "short"
                 }
             }
         }

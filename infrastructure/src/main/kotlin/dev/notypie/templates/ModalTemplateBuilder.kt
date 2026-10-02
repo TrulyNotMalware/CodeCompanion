@@ -77,15 +77,17 @@ class ModalTemplateBuilder(
 
     override fun onlyTextTemplate(message: String, isMarkDown: Boolean): LayoutBlocks =
         layoutBlocks {
-            add(block = modalBlockBuilder.simpleText(text = message, isMarkDown = isMarkDown))
+            modalBlockBuilder.textSections(text = message, isMarkDown = isMarkDown).forEach { add(block = it) }
         }
 
-    override fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks =
-        layoutBlocks {
+    override fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks {
+        if (headLineText.isBlank()) return onlyTextTemplate(message = body, isMarkDown = isMarkDown)
+        return layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
-            add(block = modalBlockBuilder.simpleText(text = body, isMarkDown = isMarkDown))
+            modalBlockBuilder.textSections(text = body, isMarkDown = isMarkDown).forEach { add(block = it) }
         }
+    }
 
     override fun simpleScheduleNoticeTemplate(headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks =
         layoutBlocks {

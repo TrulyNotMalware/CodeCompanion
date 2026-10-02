@@ -22,6 +22,8 @@ import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
+import dev.notypie.templates.SlackBlockLimits
+import dev.notypie.templates.splitMessageText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.transaction.PlatformTransactionManager
@@ -58,6 +60,9 @@ class AgentConverseService(
         internal const val OVERLOADED_MESSAGE =
             "I'm handling too many requests right now — please ask again in a minute."
         internal const val EMPTY_RESPONSE_MESSAGE = "_(the assistant returned an empty response)_"
+        internal const val MAX_ANSWER_LENGTH: Int = 40_000
+        internal const val MAX_ANSWER_MESSAGES: Int = 8
+        private const val ANSWER_TRUNCATION_SUFFIX = "\n${SlackBlockLimits.TRUNCATION_MARKER}"
 
         internal const val METRIC_TURNS = "agent.turns"
         internal const val METRIC_TOKENS = "agent.tokens"
@@ -78,6 +83,14 @@ class AgentConverseService(
                 .trim()
                 .takeWithinCodePoints(maxLength = MAX_CONTEXT_NAME_LENGTH)
                 .trim()
+
+        internal fun capAnswer(text: String): String =
+            if (text.length <= MAX_ANSWER_LENGTH) {
+                text
+            } else {
+                text.takeWithinCodePoints(maxLength = MAX_ANSWER_LENGTH - ANSWER_TRUNCATION_SUFFIX.length) +
+                    ANSWER_TRUNCATION_SUFFIX
+            }
 
         private fun String.takeWithinCodePoints(maxLength: Int): String {
             if (length <= maxLength) return this
@@ -206,9 +219,21 @@ class AgentConverseService(
                             outputTokens = result.outputTokens,
                         ),
                 )
-                eventPublisher.publishOne(
-                    event = answerEvent(event = event, text = result.finalText.ifBlank { EMPTY_RESPONSE_MESSAGE }),
-                )
+                val parts =
+                    splitMessageText(
+                        text = capAnswer(text = result.finalText).ifBlank { EMPTY_RESPONSE_MESSAGE },
+                        maxMessages = MAX_ANSWER_MESSAGES,
+                    )
+                parts.forEachIndexed { index, part ->
+                    eventPublisher.publishOne(
+                        event =
+                            answerEvent(
+                                event = event,
+                                headline = answerHeadline(index = index, count = parts.size),
+                                text = part,
+                            ),
+                    )
+                }
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent answer sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
@@ -291,7 +316,9 @@ class AgentConverseService(
                             errorCode = result.code,
                         ),
                 )
-                eventPublisher.publishOne(event = answerEvent(event = event, text = FAILURE_MESSAGE))
+                eventPublisher.publishOne(
+                    event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
+                )
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent failure notice idempotencyKey=${event.idempotencyKey}"
@@ -341,12 +368,19 @@ class AgentConverseService(
         }
     }
 
-    private fun answerEvent(event: AgentConverseRequestEvent, text: String): CommandEvent<EventPayload> =
+    private fun answerHeadline(index: Int, count: Int): String =
+        if (count == 1) RESPONSE_HEADLINE else "$RESPONSE_HEADLINE (${index + 1}/$count)"
+
+    private fun answerEvent(
+        event: AgentConverseRequestEvent,
+        headline: String,
+        text: String,
+    ): CommandEvent<EventPayload> =
         stageReply(
             message =
                 OutboundMessage.ChannelMessage(
                     target = ConversationTarget(id = event.payload.responseBasicInfo.channel),
-                    content = MessageContent.Text(headline = RESPONSE_HEADLINE, markdown = text),
+                    content = MessageContent.Text(headline = headline, markdown = text),
                     detailType = CommandDetailType.AGENT_CONVERSE,
                     threadId = event.payload.threadId,
                 ),

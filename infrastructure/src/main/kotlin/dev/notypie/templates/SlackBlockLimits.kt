@@ -7,6 +7,7 @@ object SlackBlockLimits {
 
     // Undocumented: chat.postMessage fails with msg_blocks_too_long near 13,200 characters of block text in total.
     const val MESSAGE_TEXT_BUDGET: Int = 12_000
+    const val MESSAGE_BODY_BUDGET: Int = MESSAGE_TEXT_BUDGET - 1_000
     const val MESSAGE_MAX_BLOCKS: Int = 50
     const val HEADER_TEXT_MAX_LENGTH: Int = 150
     const val OPTION_TEXT_MAX_LENGTH: Int = 75
@@ -43,6 +44,14 @@ internal fun splitSectionText(
     val balanced = if (balanceCodeFences) balanceFences(chunks = kept, closeLast = truncated) else kept
     return if (truncated) balanced.dropLast(n = 1) + (balanced.last() + TRUNCATION_SUFFIX) else balanced
 }
+
+fun splitMessageText(text: String, maxMessages: Int): List<String> =
+    splitSectionText(
+        text = text,
+        maxSections = maxMessages,
+        balanceCodeFences = true,
+        budget = SlackBlockLimits.MESSAGE_BODY_BUDGET,
+    )
 
 fun String.truncateSectionText(limit: Int = SlackBlockLimits.SECTION_TEXT_MAX_LENGTH): String =
     if (length <= limit) this else takeSafely(limit = limit - TRUNCATION_SUFFIX.length) + TRUNCATION_SUFFIX

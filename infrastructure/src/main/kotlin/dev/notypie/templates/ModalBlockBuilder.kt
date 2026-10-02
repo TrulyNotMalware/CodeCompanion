@@ -116,12 +116,28 @@ class ModalBlockBuilder(
 
     fun simpleText(text: String, isMarkDown: Boolean = false): SectionBlock =
         section {
+            val safeText = text.truncateSectionText()
             if (isMarkDown) {
-                it.text(modalElementBuilder.markdownTextObject(markdownText = text))
+                it.text(modalElementBuilder.markdownTextObject(markdownText = safeText))
             } else {
-                it.text(modalElementBuilder.plainTextObject(text = text))
+                it.text(modalElementBuilder.plainTextObject(text = safeText))
             }
         }
+
+    fun textSections(text: String, isMarkDown: Boolean): List<SectionBlock> {
+        val body =
+            splitSectionText(
+                text = text,
+                maxSections = 1,
+                balanceCodeFences = isMarkDown,
+                budget = SlackBlockLimits.MESSAGE_BODY_BUDGET,
+            ).single()
+        return splitSectionText(
+            text = body,
+            maxSections = SlackBlockLimits.MESSAGE_MAX_BLOCKS - 2,
+            balanceCodeFences = isMarkDown,
+        ).map { chunk -> simpleText(text = chunk, isMarkDown = isMarkDown) }
+    }
 
     fun textBlock(vararg texts: String, isMarkDown: Boolean = false): SectionBlock =
         section {

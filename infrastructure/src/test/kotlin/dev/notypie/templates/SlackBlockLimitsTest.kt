@@ -130,6 +130,43 @@ class SlackBlockLimitsTest :
             }
         }
 
+        given("splitMessageText") {
+            `when`("a 40,000-character answer with a code block crossing a boundary is split") {
+                val code = (1..400).joinToString(separator = "\n") { "val line$it = compute($it)" }
+                val prose = (1..600).joinToString(separator = "\n") { "Paragraph $it explains the next step." }
+                val answer = "$prose\n```\n$code\n```\n$prose".take(n = 40_000)
+                val parts = splitMessageText(text = answer, maxMessages = 8)
+
+                then("every part fits one message body and keeps its code fences balanced") {
+                    parts.size shouldBeGreaterThan 1
+                    parts.forEach { part ->
+                        part.length shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_BODY_BUDGET
+                        (part.split("```").size - 1) % 2 shouldBe 0
+                        part shouldNotContain SlackBlockLimits.TRUNCATION_MARKER
+                    }
+                }
+            }
+
+            `when`("an answer without code blocks is split") {
+                val answer = (1..3_000).joinToString(separator = "\n") { "line $it of the answer" }
+                val parts = splitMessageText(text = answer, maxMessages = 8)
+
+                then("the parts rejoin to the answer") {
+                    parts.joinToString(separator = "\n") shouldBe answer
+                }
+            }
+
+            `when`("the answer needs more parts than allowed") {
+                val answer = (1..3_000).joinToString(separator = "\n") { "line $it of the answer" }
+                val parts = splitMessageText(text = answer, maxMessages = 2)
+
+                then("it keeps that many and ends with the marker") {
+                    parts shouldHaveSize 2
+                    parts.last() shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+        }
+
         given("truncateSectionText") {
             `when`("the text is over the limit") {
                 val truncated = "z".repeat(n = 5_000).truncateSectionText()

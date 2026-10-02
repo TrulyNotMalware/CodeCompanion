@@ -25,8 +25,12 @@ import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
@@ -343,6 +347,81 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, and text blocks") {
                     result.template.size shouldBe 3
+                }
+            }
+
+            `when`("the body is longer than one section") {
+                val body = (1..200).joinToString(separator = "\n") { "- step $it: ${"detail ".repeat(n = 5)}" }
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(headLineText = "Title", body = body, isMarkDown = true)
+                val sectionTexts = result.template.drop(n = 2).map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("the body is split into sections within the budget, in order, with nothing dropped") {
+                    sectionTexts.size shouldBeGreaterThan 1
+                    sectionTexts.forEach { it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                    sectionTexts.joinToString(separator = "\n") shouldBe body
+                }
+            }
+
+            `when`("the headline is blank") {
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(headLineText = "", body = "Body", isMarkDown = true)
+
+                then("no header or divider is rendered, only the body section") {
+                    result.template shouldHaveSize 1
+                    result.template.single().shouldBeInstanceOf<SectionBlock>()
+                }
+            }
+
+            `when`("each part of a split 40,000-character answer is rendered") {
+                val answer =
+                    buildString {
+                        var index = 0
+                        while (length < 40_000) {
+                            append("Step $index: see <https://example.com/$index|docs> and run `make $index`\n")
+                            if (index % 40 == 0) append("```\n").append("x".repeat(n = 2_000)).append("\n```\n")
+                            index++
+                        }
+                    }.take(n = 40_000)
+                val parts = splitMessageText(text = answer, maxMessages = 8)
+                val rendered =
+                    parts.mapIndexed { index, part ->
+                        templateBuilder.simpleTextResponseTemplate(
+                            headLineText = "CodeCompanion — AI assistant (${index + 1}/${parts.size})",
+                            body = part,
+                            isMarkDown = true,
+                        )
+                    }
+
+                then("every message keeps its whole part and stays within the message text budget") {
+                    parts.size shouldBeGreaterThan 1
+                    rendered.forEach { layout ->
+                        val texts =
+                            layout.template.mapNotNull { block ->
+                                when (block) {
+                                    is HeaderBlock -> block.text.text
+                                    is SectionBlock -> block.text.text
+                                    else -> null
+                                }
+                            }
+                        texts.sumOf { it.length } shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                        texts.forEach { it shouldNotContain SlackBlockLimits.TRUNCATION_MARKER }
+                    }
+                }
+            }
+        }
+
+        given("onlyTextTemplate with a body longer than one section") {
+            `when`("the message is rendered") {
+                val message = (1..300).joinToString(separator = "\n") { "entry $it ${"z".repeat(n = 30)}" }
+                val result = templateBuilder.onlyTextTemplate(message = message, isMarkDown = true)
+
+                then("it renders as several sections within the budget and no other blocks") {
+                    result.template.size shouldBeGreaterThan 1
+                    result.template.forEach { block ->
+                        val text = block.shouldBeInstanceOf<SectionBlock>().text.text
+                        text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    }
                 }
             }
         }
