@@ -24,9 +24,10 @@ class CveSummaryWorker(
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
         runCatching {
-            cveEventRepository.resetStuck(olderThan = LocalDateTime.now(clock).minusMinutes(stuckMinutes))
+            val now = LocalDateTime.now(clock)
+            cveEventRepository.resetStuck(olderThan = now.minusMinutes(stuckMinutes), now = now)
             cveEventRepository
-                .findClaimable(now = LocalDateTime.now(clock), maxRetries = maxRetries, limit = batchSize)
+                .findClaimable(now = now, maxRetries = maxRetries, limit = batchSize)
                 .forEach { event -> summarizeOne(event = event) }
         }.onFailure { ex ->
             if (ex is InterruptedException) {
@@ -93,8 +94,10 @@ class CveSummaryWorker(
     }
 
     private fun releaseForBackpressure(event: CveEvent, token: String, cause: AiSummarizerBusyException) {
-        val nextAttemptAt = LocalDateTime.now(clock).plusMinutes(BUSY_RETRY_DELAY_MINUTES)
-        val released = cveEventRepository.releaseClaim(id = event.id, token = token, nextAttemptAt = nextAttemptAt)
+        val now = LocalDateTime.now(clock)
+        val nextAttemptAt = now.plusMinutes(BUSY_RETRY_DELAY_MINUTES)
+        val released =
+            cveEventRepository.releaseClaim(id = event.id, token = token, nextAttemptAt = nextAttemptAt, now = now)
         if (released == 0) {
             log.warn { "Busy release for event=${event.id} lost its claim; leaving row to its new owner" }
             return
@@ -104,8 +107,11 @@ class CveSummaryWorker(
 
     private fun recordFailure(event: CveEvent, token: String, cause: Exception) {
         val attempt = event.retryCount + 1
-        val nextAttemptAt = LocalDateTime.now(clock).plusMinutes(backoffMinutes * attempt)
-        if (cveEventRepository.markFailed(id = event.id, token = token, nextAttemptAt = nextAttemptAt) == 0) {
+        val now = LocalDateTime.now(clock)
+        val nextAttemptAt = now.plusMinutes(backoffMinutes * attempt)
+        val marked =
+            cveEventRepository.markFailed(id = event.id, token = token, nextAttemptAt = nextAttemptAt, now = now)
+        if (marked == 0) {
             log.warn { "Failure mark for event=${event.id} lost its claim; leaving row to its new owner" }
             return
         }

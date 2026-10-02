@@ -70,7 +70,13 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("markFailed runs with the owning token") {
-                    val marked = repository.markFailed(id = id, token = "owner", nextAttemptAt = now.plusMinutes(10))
+                    val marked =
+                        repository.markFailed(
+                            id = id,
+                            token = "owner",
+                            nextAttemptAt = now.plusMinutes(10),
+                            now = now.plusMinutes(1),
+                        )
 
                     then("the retry budget is consumed and the next attempt is scheduled") {
                         marked shouldBe 1
@@ -79,6 +85,7 @@ class JpaCveEventRepositoryTest
                         row.retryCount shouldBe 1
                         row.nextAttemptAt shouldBe now.plusMinutes(10)
                         row.claimToken.shouldBeNull()
+                        row.updatedAt shouldBe now.plusMinutes(1)
                     }
                 }
             }
@@ -88,7 +95,13 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("releaseClaim runs with the owning token") {
-                    val released = repository.releaseClaim(id = id, token = "owner", nextAttemptAt = now.plusMinutes(2))
+                    val released =
+                        repository.releaseClaim(
+                            id = id,
+                            token = "owner",
+                            nextAttemptAt = now.plusMinutes(2),
+                            now = now.plusMinutes(1),
+                        )
 
                     then("the row returns to PENDING with its retry budget intact") {
                         released shouldBe 1
@@ -97,6 +110,7 @@ class JpaCveEventRepositoryTest
                         row.retryCount shouldBe 0
                         row.nextAttemptAt shouldBe now.plusMinutes(2)
                         row.claimToken.shouldBeNull()
+                        row.updatedAt shouldBe now.plusMinutes(1)
                     }
                 }
             }
@@ -164,11 +178,13 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = live, token = "working", now = now.minusMinutes(1), maxRetries = 5)
 
                 `when`("resetStuck runs with a 15-minute threshold") {
-                    val reset = repository.resetStuck(olderThan = now.minusMinutes(15))
+                    val reset = repository.resetStuck(olderThan = now.minusMinutes(15), now = now)
 
                     then("only the stale row returns to PENDING; the live claim keeps its token") {
                         reset shouldBe 1
-                        repository.findById(stale).orElseThrow().summaryStatus shouldBe CveSummaryStatus.PENDING
+                        val staleRow = repository.findById(stale).orElseThrow()
+                        staleRow.summaryStatus shouldBe CveSummaryStatus.PENDING
+                        staleRow.updatedAt shouldBe now
                         val liveRow = repository.findById(live).orElseThrow()
                         liveRow.summaryStatus shouldBe CveSummaryStatus.SUMMARIZING
                         liveRow.claimToken.shouldNotBeNull()

@@ -48,15 +48,24 @@ open class CveEventRepositoryImpl(
     ): Int = jpaCveEventRepository.markDone(id = id, token = token, summary = summary, now = now)
 
     @Transactional
-    override fun markFailed(id: Long, token: String, nextAttemptAt: LocalDateTime): Int =
-        jpaCveEventRepository.markFailed(id = id, token = token, nextAttemptAt = nextAttemptAt)
+    override fun markFailed(
+        id: Long,
+        token: String,
+        nextAttemptAt: LocalDateTime,
+        now: LocalDateTime,
+    ): Int = jpaCveEventRepository.markFailed(id = id, token = token, nextAttemptAt = nextAttemptAt, now = now)
 
     @Transactional
-    override fun releaseClaim(id: Long, token: String, nextAttemptAt: LocalDateTime): Int =
-        jpaCveEventRepository.releaseClaim(id = id, token = token, nextAttemptAt = nextAttemptAt)
+    override fun releaseClaim(
+        id: Long,
+        token: String,
+        nextAttemptAt: LocalDateTime,
+        now: LocalDateTime,
+    ): Int = jpaCveEventRepository.releaseClaim(id = id, token = token, nextAttemptAt = nextAttemptAt, now = now)
 
     @Transactional
-    override fun resetStuck(olderThan: LocalDateTime): Int = jpaCveEventRepository.resetStuck(olderThan = olderThan)
+    override fun resetStuck(olderThan: LocalDateTime, now: LocalDateTime): Int =
+        jpaCveEventRepository.resetStuck(olderThan = olderThan, now = now)
 
     override fun countByStatus(status: CveSummaryStatus): Long = jpaCveEventRepository.countByStatus(status = status)
 
