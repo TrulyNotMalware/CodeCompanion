@@ -20,12 +20,7 @@ class CommandRoleResolver(
         private const val MAX_CACHED_USERS = 10_000
     }
 
-    private data class CachedRole(
-        val role: UserRole,
-        val expiresAt: Long,
-    )
-
-    private val cache = ConcurrentHashMap<String, CachedRole>()
+    private val cachedUserExpiries = ConcurrentHashMap<String, Long>()
     private val evictionGeneration = AtomicLong(0L)
 
     val bootstrapAdmins: Set<String> = appConfig.authorization.bootstrapAdmins.toSet()
@@ -33,11 +28,11 @@ class CommandRoleResolver(
     fun resolve(userId: String): UserRole {
         if (isBootstrapAdmin(userId = userId)) return UserRole.ADMIN
         val now = clock.millis()
-        cache[userId]?.takeIf { it.expiresAt > now }?.let { return it.role }
+        cachedUserExpiries[userId]?.takeIf { expiresAt -> expiresAt > now }?.let { return UserRole.USER }
         val generationAtLookup = evictionGeneration.get()
         // A failed lookup propagates: the Slack handlers resolve inside their transaction, which it left rollback-only.
         val role = userCommandRoleRepository.findRole(userId = userId) ?: UserRole.USER
-        remember(userId = userId, role = role, now = now, generationAtLookup = generationAtLookup)
+        if (role == UserRole.USER) rememberUser(userId = userId, now = now, generationAtLookup = generationAtLookup)
         return role
     }
 
@@ -45,23 +40,16 @@ class CommandRoleResolver(
 
     fun evict(userId: String) {
         evictionGeneration.incrementAndGet()
-        cache.remove(userId)
+        cachedUserExpiries.remove(userId)
     }
 
-    private fun remember(
-        userId: String,
-        role: UserRole,
-        now: Long,
-        generationAtLookup: Long,
-    ) {
-        if (cache.size >= MAX_CACHED_USERS) cache.entries.removeIf { (_, cached) -> cached.expiresAt <= now }
-        if (cache.size >= MAX_CACHED_USERS) return
-        cache.compute(userId) { _, existing ->
-            if (evictionGeneration.get() == generationAtLookup) {
-                CachedRole(role = role, expiresAt = now + CACHE_TTL.toMillis())
-            } else {
-                existing
-            }
+    private fun rememberUser(userId: String, now: Long, generationAtLookup: Long) {
+        if (cachedUserExpiries.size >= MAX_CACHED_USERS) {
+            cachedUserExpiries.entries.removeIf { (_, expiresAt) -> expiresAt <= now }
+        }
+        if (cachedUserExpiries.size >= MAX_CACHED_USERS) return
+        cachedUserExpiries.compute(userId) { _, existing ->
+            if (evictionGeneration.get() == generationAtLookup) now + CACHE_TTL.toMillis() else existing
         }
     }
 }

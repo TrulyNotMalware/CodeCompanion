@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # application/security
 
@@ -80,11 +80,11 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   MCP server. It is registered through a `FilterRegistrationBean` scoped to the endpoint path and only
   when MCP is enabled. Keep it ahead of protocol handling.
 - **The token is not the authority on role.** `McpToolGate` re-resolves the caller's role through
-  `CommandRoleResolver` on every tool call. The resolver caches DB roles for 60 s; `RoleManagementService`
-  evicts the user after the grant/revoke commits, and a lookup that was already reading the old role cannot
-  re-cache it. On that replica every lookup that starts after the commit sees the new role (a call already in
-  flight at commit time may still answer with the old one); on the other replica it takes up to 60 s. Never
-  move role decisions into the token claims.
+  `CommandRoleResolver` on every tool call. The resolver caches only `USER` answers, for 60 s, and reads an
+  elevated role from the DB every time, so a revoke applies to the next call on every replica (a call already
+  in flight at commit time may still answer with the old role). A grant reaches a replica that still caches the
+  user as `USER` within 60 s; `RoleManagementService` evicts the user on the committing replica after the
+  commit. Never move role decisions into the token claims.
 - Token format is wire-compat checked by `scripts/mcp-smoke.sh`, which mints a token exactly the way
   `ScopedTurnTokenCodec` does. Change the format and that script must change with it.
 
