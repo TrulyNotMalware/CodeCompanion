@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.LocalDateTime
 
 @Repository
 interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Long> {
@@ -108,6 +109,43 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
     fun resetStuckSending(
         @Param("olderThan") olderThan: Instant,
         @Param("now") now: Instant,
+    ): Int
+
+    // CAS on the value read and the current start: a pass that read a pre-reschedule start must not undo a re-arm.
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            UPDATE meeting_reminder
+            SET scheduled_at = :scheduledAt, updated_at = :now
+            WHERE id = :id AND status = 'PENDING' AND scheduled_at = :observedAt
+              AND EXISTS (
+                  SELECT 1 FROM meetings m WHERE m.id = meeting_reminder.meeting_id AND m.start_at = :startAt
+              )
+        """,
+        nativeQuery = true,
+    )
+    fun realignPending(
+        @Param("id") id: Long,
+        @Param("observedAt") observedAt: Instant,
+        @Param("scheduledAt") scheduledAt: Instant,
+        @Param("startAt") startAt: LocalDateTime,
+        @Param("now") now: Instant,
+    ): Int
+
+    // Conditional on the value read: a row another replica realigned since is correct and must survive.
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            DELETE FROM meeting_reminder
+            WHERE id = :id AND status = 'PENDING' AND scheduled_at = :observedAt
+        """,
+        nativeQuery = true,
+    )
+    fun discardPending(
+        @Param("id") id: Long,
+        @Param("observedAt") observedAt: Instant,
     ): Int
 
     @Modifying

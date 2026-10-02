@@ -73,10 +73,13 @@ class MeetingReminderSchedulingService(
                         meetingId = meeting.meetingId,
                         offsetMinutes = offsetMinutes,
                         scheduledAt = scheduledAt,
+                        startAt = meeting.startAt,
+                        now = now,
                     )
                 ) {
                     log.info {
-                        "Meeting reminder materialized: meetingId=${meeting.meetingId} offset=$offsetMinutes"
+                        "Meeting reminder armed: meetingId=${meeting.meetingId} offset=$offsetMinutes " +
+                            "scheduledAt=$scheduledAt"
                     }
                 }
             } catch (ex: DataIntegrityViolationException) {
@@ -107,6 +110,15 @@ class MeetingReminderSchedulingService(
 
     private fun processReminder(item: ReadyReminder, sentAt: Instant) {
         val reminderId = item.reminder.id
+        if (!item.isArmedFor(zone = clock.zone)) {
+            if (reminderRepository.discardReminder(reminderId = reminderId, scheduledAt = item.reminder.scheduledAt)) {
+                log.warn {
+                    "Discarded stale meeting reminder: reminderId=$reminderId meetingId=${item.meetingId} " +
+                        "scheduledAt=${item.reminder.scheduledAt} startAt=${item.startAt}"
+                }
+            }
+            return
+        }
         val claimToken = UUID.randomUUID().toString()
 
         if (!reminderRepository.claimReminder(

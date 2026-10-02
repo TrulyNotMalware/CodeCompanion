@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.repository.meeting.schema.MeetingReminderSchema
 import dev.notypie.repository.meeting.schema.toMeetingReminderDto
 import org.springframework.data.domain.PageRequest
@@ -26,14 +27,31 @@ open class MeetingReminderRepositoryImpl(
                 )
             }
 
+    // Moved, not kept: the (meeting_id, offset_minutes) unique key would leave the stale PENDING row as the only one.
     @Transactional
-    override fun ensureReminder(meetingId: Long, offsetMinutes: Int, scheduledAt: Instant): Boolean {
-        if (jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
+    override fun ensureReminder(
+        meetingId: Long,
+        offsetMinutes: Int,
+        scheduledAt: Instant,
+        startAt: LocalDateTime,
+        now: Instant,
+    ): Boolean {
+        val existing =
+            jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
                 meetingId = meetingId,
                 offsetMinutes = offsetMinutes,
-            ) != null
-        ) {
-            return false
+            )
+        if (existing != null) {
+            if (existing.status != MeetingReminderStatus.PENDING || existing.scheduledAt.isSameSecond(scheduledAt)) {
+                return false
+            }
+            return jpaMeetingReminderRepository.realignPending(
+                id = existing.id,
+                observedAt = existing.scheduledAt,
+                scheduledAt = scheduledAt,
+                startAt = startAt,
+                now = now,
+            ) == 1
         }
         val reminder =
             MeetingReminderSchema(
@@ -74,6 +92,10 @@ open class MeetingReminderRepositoryImpl(
     @Transactional
     override fun deleteByMeetingId(meetingId: Long): Int =
         jpaMeetingReminderRepository.deleteByMeetingId(meetingId = meetingId)
+
+    @Transactional
+    override fun discardReminder(reminderId: Long, scheduledAt: Instant): Boolean =
+        jpaMeetingReminderRepository.discardPending(id = reminderId, observedAt = scheduledAt) == 1
 
     @Transactional(readOnly = true)
     override fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder> =

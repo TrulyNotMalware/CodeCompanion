@@ -1,8 +1,14 @@
 package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.dto.MeetingReminderDto
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+
+internal fun Instant.isSameSecond(other: Instant): Boolean =
+    truncatedTo(ChronoUnit.SECONDS) == other.truncatedTo(ChronoUnit.SECONDS)
 
 data class ReadyReminder(
     val reminder: MeetingReminderDto,
@@ -11,7 +17,12 @@ data class ReadyReminder(
     val startAt: LocalDateTime,
     val isCanceled: Boolean,
     val attendingUserIds: List<String>,
-)
+) {
+    fun isArmedFor(zone: ZoneId): Boolean =
+        reminder.scheduledAt.isSameSecond(
+            other = startAt.atZone(zone).toInstant().minus(Duration.ofMinutes(reminder.offsetMinutes.toLong())),
+        )
+}
 
 data class ReminderCandidateMeeting(
     val meetingId: Long,
@@ -22,7 +33,13 @@ data class ReminderCandidateMeeting(
 interface MeetingReminderRepository {
     fun findActiveMeetingsInWindow(from: LocalDateTime, to: LocalDateTime): List<ReminderCandidateMeeting>
 
-    fun ensureReminder(meetingId: Long, offsetMinutes: Int, scheduledAt: Instant): Boolean
+    fun ensureReminder(
+        meetingId: Long,
+        offsetMinutes: Int,
+        scheduledAt: Instant,
+        startAt: LocalDateTime,
+        now: Instant,
+    ): Boolean
 
     fun reminderExists(meetingId: Long, offsetMinutes: Int): Boolean
 
@@ -42,4 +59,6 @@ interface MeetingReminderRepository {
     fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder>
 
     fun deleteByMeetingId(meetingId: Long): Int
+
+    fun discardReminder(reminderId: Long, scheduledAt: Instant): Boolean
 }
