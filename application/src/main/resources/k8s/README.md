@@ -45,9 +45,10 @@ Defines the application deployment with:
 - Resources: 250m CPU / 1536Mi memory requested, 2Gi memory limit (the JVM heap is 50% of the limit; the
   request covers heap plus non-heap memory). With the default rolling update a rollout briefly runs 3 Pods
   (2 replicas + 1 surge), so the nodes need 3 × 1536Mi = 4.5Gi of requestable memory at once; see Prerequisites
-- Shutdown: a 5s `preStop` sleep, then Spring's graceful shutdown (10s per phase, three phases: scheduler, Kafka
-  containers, web server), three Kafka producer closes (5s each) and the executor waits (20s + 20s + 10s), within a
-  100s `terminationGracePeriodSeconds`
+- Shutdown: a 5s `preStop` sleep, then Spring's graceful shutdown (scheduler and web server phases 10s each, the
+  Kafka listener phase up to one dispatch, 50s, so a record in hand finishes), three Kafka producer closes (5s each)
+  and the executor waits (relay up to one dispatch, 50s; AI turns 20s; default 10s), plus a 10s margin, within a
+  180s `terminationGracePeriodSeconds`
 - Container `securityContext` with `allowPrivilegeEscalation: false` (the container still runs as root to bind port 80)
 - PodDisruptionBudget ensuring at least 1 pod remains available during disruptions
 
@@ -286,7 +287,7 @@ k8s/
 - 리소스: CPU 250m / 메모리 1536Mi 요청, 메모리 limit 2Gi (JVM 힙은 limit의 50%, 요청값은 힙 + 비힙 메모리를 포함).
   기본 롤링 업데이트는 롤아웃 중 파드 3개(레플리카 2 + surge 1)를 띄우므로 노드에 요청 기준 3 × 1536Mi = 4.5Gi가
   동시에 들어갈 자리가 있어야 합니다(사전 요구사항 참고)
-- 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(단계당 10초, 스케줄러·Kafka 컨테이너·웹 서버 세 단계), Kafka producer 종료 세 번(각 5초), executor 대기(20초 + 20초 + 10초), 전체 `terminationGracePeriodSeconds` 100초
+- 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(스케줄러·웹 서버 단계 각 10초, 처리 중인 레코드를 끝내도록 Kafka 리스너 단계는 디스패치 하나 50초), Kafka producer 종료 세 번(각 5초), executor 대기(릴레이 디스패치 하나 50초, AI 턴 20초, 기본 10초), 여유 10초, 전체 `terminationGracePeriodSeconds` 180초
 - 컨테이너 `securityContext` `allowPrivilegeEscalation: false` (80 포트 바인딩 때문에 여전히 root로 실행)
 - 중단 시 최소 1개의 파드를 유지하는 PodDisruptionBudget
 

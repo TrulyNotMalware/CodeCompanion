@@ -75,7 +75,11 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   rebalance and redelivery, not a double send, because the listener claims only `PENDING`; (b) the renew →
   complete window (HTTP bound + 3 × `connection-timeout` + 0.32 s) must stay well below
   `stuck-in-progress-seconds` (300 s), or the sweep reclaims a row mid-send. Raising `connection-timeout` or
-  `STATUS_WRITE_ATTEMPTS` means redoing (b).
+  `STATUS_WRITE_ATTEMPTS` means redoing (b). (c) Shutdown waits one record with a healthy pool: `RELAY_RECORD_TIME_BOUND`
+  (in `SlackMessageRelayServiceImpl.kt`) is computed from `RestClientRequester.DEFAULT_READ_TIMEOUT` (the profile
+  lookup's whole-call bound), `SLACK_DISPATCH_TIME_BOUND` and `retryTimeBound` of the status write, and
+  `configurations/AsyncConfig.kt`'s `RECORD_SHUTDOWN_WAIT` rounds it up for the Kafka listener phase and the relay
+  executor's wait; change any of those timeouts and the shutdown budget follows (`ShutdownBudgetTest`).
 - **An outcome event is published only by the owner that recorded it.** `completeClaim` returning 0 means
   another owner has the row and will publish its own outcome.
 - **`MessagePublishSuccessEvent` has a downstream consumer:** `service/standup/StandupSummaryService`

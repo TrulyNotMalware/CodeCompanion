@@ -27,6 +27,7 @@ import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.impl.retry.retryTimeBound
 import io.github.oshai.kotlinlogging.KotlinLogging
 import okhttp3.Call
 import okhttp3.EventListener
@@ -575,3 +576,7 @@ class ApplicationMessageDispatcher(
         return failOutput(event = event, reason = error.ifEmpty { UNSPECIFIED_ERROR_REASON })
     }
 }
+
+// Two RetryService runs of whole-call-bounded Slack calls around at most one inline rate-limit wait.
+val SLACK_DISPATCH_TIME_BOUND: Duration =
+    retryTimeBound(attemptTimeout = SLACK_CALL_TIMEOUT).multipliedBy(2L).plus(MAX_INLINE_RETRY_AFTER)

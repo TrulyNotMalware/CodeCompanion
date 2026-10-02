@@ -68,28 +68,28 @@ adds what an agent editing the manifests needs to know.
   `.gitleaks.toml` allowlists only the CDC MariaDB sample Secret, not this one — the `YOUR_*` placeholders
   pass, but realistic-looking sample values would trip the `secret-scan` job.
 - **Probes and the shutdown budget go together.** On deletion the `preStop` hook sleeps 5s (endpoint removal
-  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown, bounded by
-  `spring.lifecycle.timeout-per-shutdown-phase` (10s) in `application-prod.yaml` for each of three phases, one after
-  another: the `ThreadPoolTaskScheduler` while a job runs (it does not set `await-termination`, so it waits in its
-  own phase; measured 2026-10-02, a running job doubled a 1s-per-phase close to 2s), the Kafka container stop and
-  the web server drain. Three Kafka producer closes are not bounded by the phase timeout (the JSON producer factory
-  closes synchronously in its own `stop()`, the two dead-letter producers, JSON and bytes, in
-  `CdcDeadLetterRecovery.destroy()`) and wait for unsent records, so each is capped at `PRODUCER_CLOSE_TIMEOUT_SECONDS`
-  (5s) instead of spring-kafka's 30s.
-  Then the destroy-time executor waits run one after another, all before the EntityManagerFactory and the DataSource
-  close (`@DependsOn("entityManagerFactory")` on the relay and agent-turn executors): relay 20s (`RELAY_SHUTDOWN_AWAIT_SECONDS`), agent turns
-  20s (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (100) must cover
-  5 + 3 x 10 + 3 x 5 + 20 + 20 + 10 = 100; `configurations/ShutdownBudgetTest` reads this manifest and the prod profile
-  and fails when it does not (90 left out the producer closes, 80 counted only two phases; 45 was the value before
-  2026-10-02). Not counted, and only inferred from source: a poison record still in its retry back-off when the
-  container phase times out can create a new producer for its dead-letter send, which costs one more close at
-  destroy time; HikariCP's pool shutdown can wait several seconds when the database is unreachable. Both come out
-  of the grace, which the counted sum already fills (100 of 100). The CDC container stops after the record in hand (`stopImmediate`), not after the rest of its
-  poll, but waits for that record only up to the phase timeout, and the relay executor only 20s, while one dispatch
-  can take about 53s (`application/src/main/resources/AGENTS.md`). A dispatch still running then is cut when the
-  context closes: if Slack had already posted, its completion never lands and the recovery sweep re-sends the
-  `IN_PROGRESS` row after `stuck-in-progress-seconds`, so a deploy during a slow Slack call can post twice. A crash or
-  SIGKILL does the same at any time; covering the 53s would need a per-phase timeout and a much longer grace period. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
+  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown. The relay stops
+  first and drains its queue (queued claims stay `IN_PROGRESS` for another pod's sweep). Then the lifecycle phases run
+  one after another: the Kafka listener phase waits for the record in hand for `RECORD_SHUTDOWN_WAIT`
+  (`configurations/AsyncConfig.kt`: one dispatch, `RELAY_RECORD_TIME_BOUND` rounded up — derived in code from the
+  profile lookup's whole-call timeout, `SLACK_DISPATCH_TIME_BOUND` and the status write's retry backoff, 50s today;
+  the CDC-mode `lifecycleProcessor` bean sets that phase alone), while the web server drain and the
+  `ThreadPoolTaskScheduler` with a running job keep `spring.lifecycle.timeout-per-shutdown-phase` (10s in
+  `application-prod.yaml`). Three Kafka producer closes are not bounded by any phase timeout (the JSON producer
+  factory closes synchronously in its own `stop()`, the two dead-letter producers, JSON and bytes, in
+  `CdcDeadLetterRecovery.destroy()`) and wait for unsent records, so each is capped at
+  `PRODUCER_CLOSE_TIMEOUT_SECONDS` (5s) instead of spring-kafka's 30s. Then the destroy-time executor waits run one
+  after another, all before the EntityManagerFactory and the DataSource close (`@DependsOn("entityManagerFactory")` on
+  the relay and agent-turn executors): relay `RECORD_SHUTDOWN_WAIT`, agent turns 20s
+  (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (180) must cover
+  5 + 2 x 10 + 50 + 3 x 5 + 50 + 20 + 10 + a 10s margin = 180; `configurations/ShutdownBudgetTest` recomputes every
+  term from code, this manifest and the prod profile and fails when the grace is short. So a dispatch running at
+  SIGTERM, on the listener thread or a relay thread, finishes and records its status before the DataSource closes,
+  with a healthy pool; a starved pool adds a `connection-timeout` per statement that the budget does not cover
+  (`service/relay/AGENTS.md`, "Per-record time budget"). Not counted, and only inferred from source: a poison record
+  in its retry back-off can create one more dead-letter producer to close, and HikariCP's pool shutdown can wait
+  several seconds when the database is unreachable; both come out of the margin. A crash or SIGKILL still cuts a
+  dispatch, and the sweep can then post it twice. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
   `/actuator/health/{liveness,readiness}` exist. The startup probe allows 36 × 5s = 3 minutes.
 - **Memory:** the Dockerfile's `-XX:MaxRAMPercentage=50.0` makes the heap 1Gi of the 2Gi limit. Metaspace, code
   cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is

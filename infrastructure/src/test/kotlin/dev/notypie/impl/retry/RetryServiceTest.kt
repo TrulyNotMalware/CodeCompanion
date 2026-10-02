@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import org.springframework.core.retry.RetryException
 import java.io.IOException
+import java.time.Duration
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -138,6 +139,15 @@ class RetryServiceTest :
                     attemptsA.get() shouldBe 5
                     attemptsB.get() shouldBe 2
                 }
+            }
+        }
+
+        given("the longest a run can take when every attempt fails") {
+            then("it is every attempt at its timeout plus each backoff at its jitter maximum") {
+                retryTimeBound(attemptTimeout = Duration.ofSeconds(6L)) shouldBe Duration.ofMillis(18_320L)
+                retryTimeBound(attemptTimeout = Duration.ZERO, maxAttempts = 3L) shouldBe Duration.ofMillis(320L)
+                retryTimeBound(attemptTimeout = Duration.ofSeconds(6L), maxAttempts = 1L) shouldBe
+                    Duration.ofSeconds(6L)
             }
         }
     })

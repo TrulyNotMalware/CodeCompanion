@@ -60,3 +60,12 @@ class RetryService {
             .includes(key.exceptions.toList())
             .build()
 }
+
+fun retryTimeBound(attemptTimeout: Duration, maxAttempts: Long = RetryOptions.MAX_ATTEMPTS.default): Duration {
+    val attempts = maxAttempts.coerceAtLeast(1L)
+    val backoffMillis =
+        generateSequence(RetryOptions.INITIAL_DELAY.default) { it * RetryOptions.MULTIPLIER.default }
+            .take((attempts - 1L).toInt())
+            .sumOf { minOf(it + RetryOptions.JITTER.default, RetryOptions.MAX_DELAY.default) }
+    return attemptTimeout.multipliedBy(attempts).plusMillis(backoffMillis)
+}

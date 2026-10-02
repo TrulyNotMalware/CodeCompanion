@@ -2,6 +2,8 @@ package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.relayQueueCapacity
+import dev.notypie.impl.command.RestClientRequester
+import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.isAccessBlocked
@@ -9,6 +11,7 @@ import dev.notypie.impl.command.isRateLimited
 import dev.notypie.impl.command.isTransientExhausted
 import dev.notypie.impl.command.retryAfter
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.impl.retry.retryTimeBound
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
@@ -43,6 +46,12 @@ internal val ACCESS_BLOCKED_DEFER: Duration = Duration.ofMinutes(15L)
 
 // Each attempt can wait a full Hikari connection-timeout; the per-record budget in relay AGENTS.md counts three.
 private const val STATUS_WRITE_ATTEMPTS = 3L
+
+// One dispatch with a healthy pool: render's profile lookup, the Slack calls, the status write's retries.
+val RELAY_RECORD_TIME_BOUND: Duration =
+    RestClientRequester.DEFAULT_READ_TIMEOUT
+        .plus(SLACK_DISPATCH_TIME_BOUND)
+        .plus(retryTimeBound(attemptTimeout = Duration.ZERO, maxAttempts = STATUS_WRITE_ATTEMPTS))
 
 // A held row is invisible to every outbox count (defer takes its send back and moves updated_at), so health reads this.
 @Component

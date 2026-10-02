@@ -204,10 +204,14 @@ _type: guide · updated: 2026-10-02_
   롤백은 apply·rollout·verify·health 단계가 실패했을 때만 돌고, 배포 전 백업과 비교해 파드 템플릿 해시나 리비전이 달라졌으면
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
-- 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(단계당 10초, 실행 중인 잡이 있는 스케줄러·Kafka 컨테이너·
-  웹 서버 드레인 세 단계) → Kafka producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기(릴레이 20초,
-  AI 턴 20초, 기본 10초) = 100초 ⊂ `terminationGracePeriodSeconds` 100초(`ShutdownBudgetTest`). 단계 대기보다 오래 걸린 디스패치는 끊기고, Slack이 이미 게시했다면 복구 스윕이 `IN_PROGRESS` 행을
-  다시 보내 두 번 게시될 수 있다. 메모리는
+- 파드 종료 예산: `preStop` 5초 sleep → 릴레이 정지(큐에 남은 claim은 보내지 않고 `IN_PROGRESS`로 둠) → Spring graceful
+  shutdown(Kafka 리스너 단계는 처리 중인 레코드 하나를 `RECORD_SHUTDOWN_WAIT`만큼 기다림 — 프로필 조회·Slack 재시도·상태 기록
+  백오프 상수에서 코드로 계산한 디스패치 하나, 지금 50초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초) → Kafka
+  producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기
+  (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 기본 10초) + 여유 10초 = 180초 ⊂ `terminationGracePeriodSeconds` 180초
+  (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더한다). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
+  끝까지 보내고 상태를 기록한다. 풀이 고갈되면 문장마다 `connection-timeout`이 더해져 예산을 넘을 수 있고, 크래시·SIGKILL은
+  여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 기본 롤링 업데이트(surge 1)라 롤아웃 중에는 요청 기준 3 × 1536Mi = 4.5Gi가
   동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가 Pending → 타임아웃 → 롤백). 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
 - `run`은 **빌드된 jar를 손으로 띄우는** 스크립트다(`./run [-e local|dev|prod] <jar>`). 환경별 힙·GC(local/dev G1, prod ZGC) ·

@@ -1,17 +1,29 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
+import dev.notypie.impl.command.RestClientRequester
+import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.every
+import io.mockk.mockk
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor
+import org.springframework.boot.autoconfigure.context.LifecycleProperties
 import org.springframework.boot.env.YamlPropertySourceLoader
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
+import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.io.ClassPathResource
+import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
+import org.springframework.test.util.ReflectionTestUtils
 import org.yaml.snakeyaml.Yaml
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
@@ -25,6 +37,44 @@ class ShutdownBudgetTest :
     BehaviorSpec({
         @Suppress("UNCHECKED_CAST")
         fun Any?.at(key: String): Any? = (this as Map<String, Any?>)[key]
+
+        given("the record budget derived from the timeouts in code") {
+            then("it is the profile lookup, two Slack retry runs around one inline wait, and the status backoff") {
+                SLACK_DISPATCH_TIME_BOUND shouldBe Duration.ofMillis(39_640L)
+                RELAY_RECORD_TIME_BOUND shouldBe RestClientRequester.DEFAULT_READ_TIMEOUT.plusMillis(39_960L)
+            }
+        }
+
+        given("the CDC listener container and the lifecycle processor of CDC mode") {
+            val factory =
+                KafkaConsumerConfiguration(
+                    convention = KafkaObservationConvention(),
+                    kafkaProperties = KafkaProperties(),
+                ).concurrentKafkaListenerContainerFactory(
+                    consumerFactory = mockk(relaxed = true),
+                    cdcDeadLetterRecovery = mockk(relaxed = true),
+                )
+            val phase = Duration.ofSeconds(10L)
+            val processor =
+                CdcConsumerConfiguration().lifecycleProcessor(
+                    lifecycleProperties =
+                        mockk {
+                            every { getIfAvailable(any()) } returns
+                                LifecycleProperties().apply { timeoutPerShutdownPhase = phase }
+                        },
+                )
+
+            fun timeoutOf(phase: Int): Long =
+                ReflectionTestUtils.invokeMethod<Long>(processor, "determineShutdownTimeout", phase)!!
+
+            then("the listener stops after the record in hand and its phase alone waits one record") {
+                factory.containerProperties.isStopImmediate shouldBe true
+                factory.containerProperties.shutdownTimeout shouldBe RECORD_SHUTDOWN_WAIT.toMillis()
+                timeoutOf(phase = AbstractMessageListenerContainer.DEFAULT_PHASE) shouldBe
+                    RECORD_SHUTDOWN_WAIT.toMillis()
+                timeoutOf(phase = SmartLifecycle.DEFAULT_PHASE) shouldBe phase.toMillis()
+            }
+        }
 
         given("the production profile and the Kubernetes Deployment") {
             val prod = YamlPropertySourceLoader().load("prod", ClassPathResource("application-prod.yaml")).single()
@@ -59,18 +109,29 @@ class ShutdownBudgetTest :
                             "slack.app.agent.turns.shutdown-await-seconds",
                         ).toString()
                         .toInt()
-                // Each waits up to the phase timeout, one after another: the scheduler (a running job), the Kafka
-                // listener containers (the record in hand) and the web server drain.
-                val lifecyclePhases = 3
-
+                val relayAwaitSeconds =
+                    (
+                        ReflectionTestUtils.getField(
+                            AsyncConfig().relayTaskExecutor(appConfig = AppConfig()),
+                            "awaitTerminationMillis",
+                        ) as Long
+                    ) / 1_000L
+                val recordSeconds = RECORD_SHUTDOWN_WAIT.seconds.toInt()
                 val producerCloses = 3
+                val margin = 10
+                val lifecyclePhases = 2 * phaseSeconds + recordSeconds
+                val executorWaits =
+                    relayAwaitSeconds.toInt() + agentTurnSeconds + DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS
                 val required =
-                    preStopSeconds + lifecyclePhases * phaseSeconds + RELAY_SHUTDOWN_AWAIT_SECONDS + agentTurnSeconds +
-                        DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS + producerCloses * PRODUCER_CLOSE_TIMEOUT_SECONDS
+                    preStopSeconds + lifecyclePhases + producerCloses * PRODUCER_CLOSE_TIMEOUT_SECONDS + executorWaits +
+                        margin
 
-                then(
-                    "the grace period covers preStop, the three lifecycle phases, every executor wait and every producer close",
-                ) {
+                then("a dispatch running at shutdown may finish: the listener phase and the relay wait cover one") {
+                    relayAwaitSeconds shouldBeGreaterThanOrEqual RELAY_RECORD_TIME_BOUND.seconds
+                    RECORD_SHUTDOWN_WAIT shouldBeGreaterThanOrEqualTo RELAY_RECORD_TIME_BOUND
+                }
+
+                then("the grace period covers every wait in the serial shutdown plus a margin") {
                     graceSeconds shouldBeGreaterThanOrEqual required
                 }
             }

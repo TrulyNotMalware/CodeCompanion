@@ -15,17 +15,22 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.beans.factory.DisposableBean
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.autoconfigure.context.LifecycleProperties
 import org.springframework.boot.kafka.autoconfigure.DefaultKafkaProducerFactoryCustomizer
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
+import org.springframework.context.support.AbstractApplicationContext
+import org.springframework.context.support.DefaultLifecycleProcessor
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
 import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.*
+import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.kafka.listener.ConsumerAwareRecordRecoverer
 import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
@@ -197,6 +202,16 @@ class CdcConsumerConfiguration {
     @Bean
     fun cdcDeadLetterTopic(appConfig: AppConfig): NewTopic =
         TopicBuilder.name(deadLetterTopic(topic = appConfig.mode.cdc.topic)).build()
+
+    // Replaces Boot's processor, which gives every phase spring.lifecycle.timeout-per-shutdown-phase.
+    @Bean(name = [AbstractApplicationContext.LIFECYCLE_PROCESSOR_BEAN_NAME])
+    fun lifecycleProcessor(lifecycleProperties: ObjectProvider<LifecycleProperties>): DefaultLifecycleProcessor =
+        DefaultLifecycleProcessor().apply {
+            setTimeoutPerShutdownPhase(
+                lifecycleProperties.getIfAvailable { LifecycleProperties() }.timeoutPerShutdownPhase.toMillis(),
+            )
+            setTimeoutForShutdownPhase(AbstractMessageListenerContainer.DEFAULT_PHASE, RECORD_SHUTDOWN_WAIT.toMillis())
+        }
 }
 
 @Configuration
@@ -251,9 +266,9 @@ class KafkaConsumerConfiguration(
         containerProperties.isObservationEnabled = true
         containerProperties.isMicrometerEnabled = false
         containerProperties.ackMode = ContainerProperties.AckMode.RECORD
-        // Stop after the record in hand, not after the rest of the poll. Shutdown waits for it only up to the phase
-        // timeout; a slower dispatch is cut, and its IN_PROGRESS row is re-sent by the recovery sweep.
+        // Stop after the record in hand, not after the rest of the poll; the listener phase waits for that record.
         containerProperties.isStopImmediate = true
+        containerProperties.shutdownTimeout = RECORD_SHUTDOWN_WAIT.toMillis()
         setCommonErrorHandler(
             DefaultErrorHandler(cdcDeadLetterRecovery.recoverer, FixedBackOff(1_000L, 2L)).apply {
                 addNotRetryableExceptions(CdcRecordParseException::class.java)
