@@ -321,21 +321,17 @@ class SlackInteractionHandlerImplTest :
 
             `when`("the interactions go through handleInteraction") {
                 val executor = mockk<CommandExecutor>()
+                val allHoldAConnection = CyclicBarrier(poolSize)
                 every { executor.execute(command = any<Command<*>>()) } answers {
+                    allHoldAConnection.await(5L, TimeUnit.SECONDS)
                     meetingService.addParticipants(event = event)
                     CommandOutput.empty()
-                }
-                val roleResolver = mockk<CommandRoleResolver>()
-                val allHoldAConnection = CyclicBarrier(poolSize)
-                every { roleResolver.resolve(userId = any()) } answers {
-                    allHoldAConnection.await(5L, TimeUnit.SECONDS)
-                    UserRole.USER
                 }
                 val poolHandler =
                     isolatedHandler(
                         transactionManager = transactionManager,
                         executor = executor,
-                        roleResolver = roleResolver,
+                        roleResolver = commandRoleResolver,
                     )
 
                 runConcurrently {

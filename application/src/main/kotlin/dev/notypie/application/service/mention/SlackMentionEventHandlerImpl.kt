@@ -16,7 +16,8 @@ import dev.notypie.impl.command.slack.SlackEventCallBackRequest
 import dev.notypie.impl.command.slack.SlackEventType
 import dev.notypie.impl.command.slack.toMentionInboundCommand
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.MultiValueMap
 import java.util.UUID
 
@@ -24,14 +25,16 @@ import java.util.UUID
 class SlackMentionEventHandlerImpl(
     private val commandExecutor: CommandExecutor,
     private val commandRoleResolver: CommandRoleResolver,
+    transactionManager: PlatformTransactionManager,
 ) : AppMentionEventHandler {
     companion object {
         const val SLACK_APPID_KEY_NAME = "api_app_id"
         const val SLACK_APP_NAME = "CodeCompanion"
     }
 
+    private val transactionTemplate = TransactionTemplate(transactionManager)
+
     // FIXME Remove AppMention Events.
-    @Transactional
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
         val commandData = parseAppMentionEvent(headers = headers, payload = payload)
         return handleEvent(commandData = commandData)
@@ -61,11 +64,10 @@ class SlackMentionEventHandlerImpl(
             actorRole = commandRoleResolver.resolve(userId = commandData.actorId),
         )
 
-    @Transactional
     override fun handleEvent(commandData: InboundCommand): CommandOutput {
         val idempotencyKey = IdempotencyCreator.create(data = commandData)
         val command = buildCommand(idempotencyKey = idempotencyKey, commandData = commandData)
-        return commandExecutor.execute(command = command)
+        return checkNotNull(transactionTemplate.execute { commandExecutor.execute(command = command) })
     }
 
     private fun resolveAppId(payload: Map<String, Any>) =

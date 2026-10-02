@@ -6,6 +6,7 @@ import dev.notypie.application.exception.PayloadParseErrorCode
 import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_CHANNEL_ID
@@ -26,6 +27,7 @@ class SlackMentionEventHandlerImplTest :
             SlackMentionEventHandlerImpl(
                 commandExecutor = commandExecutor,
                 commandRoleResolver = commandRoleResolver,
+                transactionManager = createH2TransactionManager(),
             )
 
         val testHeaders =

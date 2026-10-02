@@ -41,11 +41,13 @@ single source of truth for a user's `UserRole`, and `RoleManagementService` appl
   `RoleManagementService` is the only writer of `user_command_role`; another writer must call
   `CommandRoleResolver.evict` after its commit the same way. Do not evict from an event listener: with
   `fallbackExecution` it ran before the write when no transaction was active.
-- **A failed lookup propagates** (2026-10-01; it used to degrade to `USER`). The interaction and mention
-  handlers resolve inside their transaction, and the repository's `readOnly` transaction joins it, so a
-  failed query had already marked that transaction rollback-only: the `USER` fallback could only end in an
-  `UnexpectedRollbackException` at commit. `McpToolGate` catches the failure itself and fails closed. Cache
-  hits never touch the DB.
+- **A failed lookup degrades to `USER`** (logged at `WARN`, not cached), so a role-table hiccup denies elevated
+  commands instead of failing every interaction and mention. That is only safe because both handlers resolve
+  **before** they open their transaction: inside one, the repository's `readOnly` transaction joins it and the
+  failed query marks it rollback-only, so the fallback would still end in `UnexpectedRollbackException` (500) at
+  commit (`RoleLookupJpaTransactionTest` shows this on a real `JpaTransactionManager`). A new caller must resolve
+  outside its transaction too. `McpToolGate` therefore sees `USER` and denies elevated tools. Cache hits never
+  touch the DB.
 - `handleRoleManage` is `@Transactional` because the staged reply is only persisted by the
   `BEFORE_COMMIT` listener in `service/relay`; the role write and the confirmation must share one
   transaction even though the event arrives via `EventPublisher` from `CommandExecutor`.

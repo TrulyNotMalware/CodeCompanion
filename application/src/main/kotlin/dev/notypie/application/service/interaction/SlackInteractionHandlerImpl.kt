@@ -6,6 +6,7 @@ import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.meeting.MeetingWriteDeferral
 import dev.notypie.application.service.mention.SlackMentionEventHandlerImpl.Companion.SLACK_APP_NAME
 import dev.notypie.common.jsonMapper
+import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
@@ -50,15 +51,22 @@ class SlackInteractionHandlerImpl(
     }
 
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String): String? {
+        val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
+
+        // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
+        declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
+
+        val command = commandFor(interactionPayload = interactionPayload) ?: return null
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            return inInteractionTransaction { handle(payload = payload) }
+            inInteractionTransaction { execute(command = command) }
+            return null
         }
-        val (ack, meetingWrites) =
+        val (_, meetingWrites) =
             MeetingWriteDeferral.collecting {
-                ViewOpenDeferral.afterBoundary { inInteractionTransaction { handle(payload = payload) } }
+                ViewOpenDeferral.afterBoundary { inInteractionTransaction { execute(command = command) } }
             }
         meetingWrites.forEach { it() }
-        return ack
+        return null
     }
 
     private fun <T> inInteractionTransaction(block: () -> T): T {
@@ -78,31 +86,28 @@ class SlackInteractionHandlerImpl(
         return result
     }
 
-    private fun handle(payload: String): String? {
-        val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
-
-        // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
-        declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
-
+    private fun commandFor(interactionPayload: InteractionPayload): Command<*>? {
         val commandData = interactionPayload.toInboundCommand()
         val idempotencyKey = IdempotencyCreator.create(data = commandData)
+        return when {
+            shouldUseLegacyReject(payload = interactionPayload) ->
+                rejectCommand(
+                    idempotencyKey = idempotencyKey,
+                    commandData = commandData,
+                    responseUrl = interactionPayload.responseUrl,
+                )
 
-        if (shouldUseLegacyReject(payload = interactionPayload)) {
-            commandExecutor.execute(
-                command =
-                    rejectCommand(
-                        idempotencyKey = idempotencyKey,
-                        commandData = commandData,
-                        responseUrl = interactionPayload.responseUrl,
-                    ),
-            )
-        } else if (interactionPayload.isPrimary() || interactionPayload.isCanceled()) {
-            val command = buildCommand(idempotencyKey = idempotencyKey, commandData = commandData)
-            val result = commandExecutor.execute(command = command)
-            // FIXME Event publisher
-            result.takeIf { it.ok }?.let { applicationEventPublisher.publishEvent(it) }
+            interactionPayload.isPrimary() || interactionPayload.isCanceled() ->
+                buildCommand(idempotencyKey = idempotencyKey, commandData = commandData)
+
+            else -> null
         }
-        return null
+    }
+
+    private fun execute(command: Command<*>) {
+        val result = commandExecutor.execute(command = command)
+        // FIXME Event publisher
+        if (command is InteractionCommand) result.takeIf { it.ok }?.let { applicationEventPublisher.publishEvent(it) }
     }
 
     private fun declineDetailErrorOrNull(payload: InteractionPayload): String? {

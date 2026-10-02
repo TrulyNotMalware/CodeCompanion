@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # application/service/mention
 
@@ -13,7 +13,7 @@ domain context sees it.
 | File | Description |
 |------|-------------|
 | `AppMentionEventHandler.kt` | Interface: `parseAppMentionEvent(headers, payload): InboundCommand`, `handleEvent(commandData): CommandOutput`, `handleEvent(headers, payload): CommandOutput`. Taken by `SlackEventController` and `SocketModeReceiver` |
-| `SlackMentionEventHandlerImpl.kt` | `@Service`. Constants `SLACK_APPID_KEY_NAME = "api_app_id"` and `SLACK_APP_NAME = "CodeCompanion"` (the latter is reused by `SlackInteractionHandlerImpl`). Parse: `resolveAppId` (throws `AppIdNotFoundException` / `APP_ID_NOT_FOUND`), `jsonMapper.convertValue(payload, SlackEventCallBackRequest)`, `resolveCommandType` validates `SlackEventType.valueOf(type.uppercase())` (throws `UnsupportedSlackCommandTypeException` / `UNSUPPORTED_SLACK_COMMAND_TYPE`), then `toMentionInboundCommand(appId, channelName, actorName)`. Both `handleEvent` overloads are `@Transactional`; `buildCommand` sets `actorRole = commandRoleResolver.resolve(userId = commandData.actorId)` |
+| `SlackMentionEventHandlerImpl.kt` | `@Service`. Constants `SLACK_APPID_KEY_NAME = "api_app_id"` and `SLACK_APP_NAME = "CodeCompanion"` (the latter is reused by `SlackInteractionHandlerImpl`). Parse: `resolveAppId` (throws `AppIdNotFoundException` / `APP_ID_NOT_FOUND`), `jsonMapper.convertValue(payload, SlackEventCallBackRequest)`, `resolveCommandType` validates `SlackEventType.valueOf(type.uppercase())` (throws `UnsupportedSlackCommandTypeException` / `UNSUPPORTED_SLACK_COMMAND_TYPE`), then `toMentionInboundCommand(appId, channelName, actorName)`. Takes the `PlatformTransactionManager`; neither `handleEvent` overload is `@Transactional`. `handleEvent(commandData)` builds the command first (`buildCommand` sets `actorRole = commandRoleResolver.resolve(userId = commandData.actorId)`, outside any transaction, so a failed role query degrades to `USER` without leaving the mention transaction rollback-only) and then runs only `commandExecutor.execute` in a `TransactionTemplate` (rolls back on any `Throwable`) |
 
 ## For AI Agents
 
@@ -21,10 +21,11 @@ domain context sees it.
 - **Role is resolved per call** through `CommandRoleResolver.resolve(userId = commandData.actorId)`
   (bootstrap-admins config → `user_command_role` row → `USER`). Never cache it on the bean; a
   mid-conversation revoke must apply to the next mention.
-- **One transaction.** `handleEvent(headers, payload)` calls `handleEvent(commandData)` on `this`, so the
-  inner `@Transactional` is not re-proxied — the outer call is the boundary. `BEFORE_COMMIT` listeners
+- **One transaction, around the execution only.** Parsing and the role lookup run before it; the
+  `TransactionTemplate` in `handleEvent(commandData)` is the boundary. `BEFORE_COMMIT` listeners
   (`MeetingServiceImpl.createNewMeeting`, `SlackMessageRelayServiceImpl.saveOutboxMessage`) attach to it,
-  and `CommandExecutor` re-throws so a publish failure rolls the whole mention back.
+  and `CommandExecutor` re-throws so a publish failure rolls the whole mention back. Do not put the role
+  lookup back inside it.
 - **Idempotency** comes from `IdempotencyCreator.create(data = commandData)`; a Slack retry of the same
   event yields the same key, which is what the outbox and the domain contexts dedupe on.
 - `channel_name` / `user_name` do not exist on an `app_mention` callback (they are slash-command form
@@ -66,6 +67,6 @@ key) and the thrown `AppIdNotFoundException` / `UnsupportedSlackCommandTypeExcep
   `domain/command/dto/response/CommandOutput`, `domain/common/error/exceptionDetails`
 
 ### External
-Spring `@Service` / `@Transactional`, `MultiValueMap`.
+Spring `@Service`, `PlatformTransactionManager` / `TransactionTemplate`, `MultiValueMap`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

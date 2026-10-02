@@ -5,7 +5,6 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.authorization.UserCommandRoleRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -159,14 +158,11 @@ class CommandRoleResolverTest :
             val resolver = resolverWith(roleRepository = roleRepository)
 
             `when`("the repository throws") {
-                val failure = runCatching { resolver.resolve(userId = grantedDeveloperId) }.exceptionOrNull()
+                val degraded = resolver.resolve(userId = grantedDeveloperId)
                 val recovered = resolver.resolve(userId = grantedDeveloperId)
 
-                then("the failure propagates instead of a USER fallback the caller's transaction could not commit") {
-                    failure.shouldBeInstanceOf<IllegalStateException>()
-                }
-
-                then("the failure is not cached, so the next lookup sees the stored role") {
+                then("the user degrades to USER and the failure is not cached") {
+                    degraded shouldBe UserRole.USER
                     recovered shouldBe UserRole.DEVELOPER
                 }
             }
