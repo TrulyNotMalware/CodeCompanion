@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # domain/standup/entity
 
@@ -20,7 +20,7 @@ itself in `init`, and the same constructors are used when `infrastructure` rehyd
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `enums/` | `SessionStatus` (`COLLECTING → SUMMARIZED | SKIPPED`) and `DispatchStatus` (`PENDING → SENDING → SENT | FAILED`, `PENDING → SKIPPED`) (see `enums/AGENTS.md`) |
+| `enums/` | `SessionStatus` (`COLLECTING → SUMMARIZED | SKIPPED`) and `DispatchStatus` (`PENDING → SENDING → SENT`; `PENDING → FAILED` for a skip, reason `skipped: …` — the claim path no longer writes `FAILED` since T18; `SKIPPED` is readable, written from the next release, review G2) (see `enums/AGENTS.md`) |
 
 ## For AI Agents
 

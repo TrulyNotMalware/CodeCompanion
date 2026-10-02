@@ -59,13 +59,14 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         @Param("sentAt") sentAt: Instant,
     ): Int
 
-    // Guarded by dm_status = 'PENDING' so a row another tick already claimed or sent is never overwritten.
+    // Guarded by dm_status = 'PENDING' so a row another tick already claimed or sent is never overwritten. Writes
+    // FAILED (the caller passes a "skipped: " reason), not SKIPPED, which the previous release cannot read (G2).
     @Modifying
     @Transactional
     @Query(
         value = """
             UPDATE standup_session_dispatch
-            SET dm_status = 'SKIPPED', failure_reason = :reason, updated_at = CURRENT_TIMESTAMP
+            SET dm_status = 'FAILED', failure_reason = :reason, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id AND dm_status = 'PENDING'
         """,
         nativeQuery = true,

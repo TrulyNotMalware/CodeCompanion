@@ -204,7 +204,8 @@ _type: architecture · updated: 2026-09-30_
   (`ddl-auto: none`)에서 깨질 뻔한 지적 — 새 컬럼은 반드시 `V*` 스크립트가 따라가야 한다.
 - 트랜잭션 구조(`StandupSchedulingService.processDispatch`): claim + 메시지 빌드 + `outboxRepository.save` +
   `markDispatchSent`를 한 트랜잭션에서 실행한다(`markDispatchSent`가 no-op이면 `error()`로 롤백). 실패하면 claim도
-  롤백돼 `PENDING`으로 남고 다음 틱이 재시도하며, 마감이 지나면 `SKIPPED`로 끝난다. 예전에는 claim을 먼저 커밋하고
+  롤백돼 `PENDING`으로 남고 다음 틱이 재시도하며, 마감이 지나면 건너뜀으로 끝난다(이번 릴리스는 이전 바이너리가 읽을 수 있게
+  `FAILED` + `skipped: …` 사유로 저장, `SKIPPED` 쓰기는 다음 릴리스 — review G2). 예전에는 claim을 먼저 커밋하고
   실패 시 `markDispatchFailed`로 종단 `FAILED`를 기록해 일시 오류 한 번에 그날 DM이 사라졌다(리뷰 T18, 12.2 N1과
   같은 패턴). 넛지도 `claimNudge`를 저장 트랜잭션에 합류시킨다. `CveNotificationDispatcher`는 claim과
   outbox save를 한 트랜잭션에 넣는다(claim 쪽 `@Transactional`이 REQUIRED라 join) — "저장 안 된 배송을 ledger가

@@ -36,14 +36,16 @@ is written back onto the session row once the relay has posted it.
   the **latest** member trigger plus `cutoffOffset`, so a westward member still gets the full window.
   `sendPendingDispatches` queries by absolute instant across all sessions, never "today in routine zone".
 - **Closed sessions get no DM.** A ready dispatch whose session is not `COLLECTING` or whose `cutoffAt` has
-  passed is marked `SKIPPED` (`markDispatchSkipped`) instead of sending a "Fill in" DM (review T19).
-  A dispatch whose routine is inactive / unknown is marked `SKIPPED` too: left `PENDING`, such rows kept
+  passed is skipped (`markDispatchSkipped`) instead of sending a "Fill in" DM (review T19).
+  A dispatch whose routine is inactive / unknown is skipped too: left `PENDING`, such rows kept
   winning `ORDER BY dm_trigger_at` + `dispatchBatchSize` and starved every active routine (review T28).
+  A skip is terminal and is stored as `FAILED` with a `skipped: <reason>` `failure_reason`, not as
+  `DispatchStatus.SKIPPED`, so an automatic rollback to the previous release can still read the rows (G2).
 - **Dispatch CAS with a claim token.** `resetStuckDispatches(olderThan)` runs first. Then per row:
   `claimDispatch(dispatchId, claimToken)`, `buildDmNotice` + `outboxRepository.save(outboundMessagePort.toRow(...))`
   and `markDispatchSent(claimToken)` run in **one** `runInTx` (the daily agenda's N1 fix). Any failure rolls
   the claim back to `PENDING` and the next tick retries; the retries are bounded by cutoff, where the
-  closed-session rule above marks the row `SKIPPED`. Before this, the claim committed first and one
+  closed-session rule above skips the row. Before this, the claim committed first and one
   transient error ended the member's day in terminal `FAILED` (review T18). The claim `UPDATE ... WHERE
   dm_status = 'PENDING'` row-locks, so a concurrent tick blocks and then matches nothing — no double DM.
 - **Nudge is at-most-once, and the claim joins the enqueue.** `claimNudge(sessionId)` is taken only when

@@ -125,9 +125,14 @@ open class StandupRepositoryImpl(
     override fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean =
         jpaSessionDispatchRepository.markSent(id = dispatchId, token = claimToken, sentAt = sentAt) == 1
 
+    // Stored as FAILED + "skipped: <reason>", which every deployed binary reads, not as DispatchStatus.SKIPPED: an
+    // automatic rollback to the previous release would fail on SKIPPED in Enum.valueOf and stop its standups (G2).
     @Transactional
     override fun markDispatchSkipped(dispatchId: Long, reason: String): Boolean =
-        jpaSessionDispatchRepository.markSkipped(id = dispatchId, reason = reason) == 1
+        jpaSessionDispatchRepository.markSkipped(
+            id = dispatchId,
+            reason = DispatchStatus.SKIPPED_REASON_PREFIX + reason,
+        ) == 1
 
     override fun resetStuckDispatches(olderThan: Instant): Int =
         jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan)

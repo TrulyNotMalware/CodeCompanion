@@ -133,7 +133,7 @@ class StandupSchedulingService(
             val routine = routinesByUid[item.routineUid]
             if (routine == null) {
                 // Left PENDING, these rows kept winning ORDER BY dm_trigger_at + limit and starved every active
-                // routine's DMs; a terminal SKIPPED takes them out of the queue (review T28).
+                // routine's DMs; a terminal skip takes them out of the queue (review T28).
                 log.warn {
                     "Pending dispatch points at unknown/inactive routine: " +
                         "dispatchId=${item.dispatch.id} routineUid=${item.routineUid}"
@@ -145,6 +145,7 @@ class StandupSchedulingService(
         }
     }
 
+    // Terminal; stored as FAILED with a "skipped: " reason until the release after this one (see DispatchStatus, G2).
     private fun skipDispatch(item: ReadyDispatch, reason: String) {
         if (standupRepository.markDispatchSkipped(dispatchId = item.dispatch.id, reason = reason)) {
             log.info {
@@ -155,7 +156,7 @@ class StandupSchedulingService(
 
     // Claim, outbox save and markSent share one tx (same fix as the daily agenda's N1): a failed enqueue rolls the
     // claim back to PENDING so the next tick retries, instead of a committed claim ending in terminal FAILED after
-    // one transient error. Retries stop at cutoff, where sendPendingDispatches marks the row SKIPPED (review T18).
+    // one transient error. Retries stop at cutoff, where sendPendingDispatches skips the row (review T18).
     private fun processDispatch(item: ReadyDispatch, routine: RoutineDto, sentAt: Instant) {
         val dispatchId = item.dispatch.id
         val userId = item.dispatch.userId

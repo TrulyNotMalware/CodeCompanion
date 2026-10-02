@@ -17,6 +17,7 @@ import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -45,6 +46,7 @@ class StandupRepositoryImplJpaTest
         private val jpaRoutineRepository: JpaRoutineRepository,
         private val jpaStandupSessionRepository: JpaStandupSessionRepository,
         private val jpaSessionDispatchRepository: JpaSessionDispatchRepository,
+        private val jdbcTemplate: JdbcTemplate,
         transactionManager: PlatformTransactionManager,
     ) : BehaviorSpec({
             val repository =
@@ -303,7 +305,7 @@ class StandupRepositoryImplJpaTest
                 }
             }
 
-            given("markDispatchSkipped (T19 / T28)") {
+            given("markDispatchSkipped (T19 / T28, stored rollback-safe per G2)") {
                 `when`("a PENDING dispatch is skipped") {
                     val sessionUid = openSession()
                     val dispatchId =
@@ -315,15 +317,37 @@ class StandupRepositoryImplJpaTest
                     val first = inTx { repository.markDispatchSkipped(dispatchId = dispatchId, reason = "closed") }
                     val second = inTx { repository.markDispatchSkipped(dispatchId = dispatchId, reason = "again") }
 
-                    then("the row turns SKIPPED once, keeps the first reason, and leaves the pending queue") {
+                    then("the row ends once, as FAILED with a skipped: reason the previous release can read") {
                         first shouldBe true
                         second shouldBe false
                         val dispatch = repository.findSession(sessionUid = sessionUid)!!.dispatches.single()
-                        dispatch.dmStatus shouldBe DispatchStatus.SKIPPED
-                        dispatch.failureReason shouldBe "closed"
+                        dispatch.dmStatus shouldBe DispatchStatus.FAILED
+                        dispatch.failureReason shouldBe "skipped: closed"
                         repository
                             .findPendingDispatchesBefore(before = Instant.parse("2100-01-01T00:00:00Z"), limit = 500)
                             .map { it.dispatch.id } shouldNotContain dispatchId
+                    }
+                }
+
+                `when`("a row holds SKIPPED, as the next release will write it, and this release reads it back") {
+                    val sessionUid = openSession()
+                    val dispatchId =
+                        repository
+                            .findSession(sessionUid = sessionUid)!!
+                            .dispatches
+                            .single()
+                            .id
+                    jdbcTemplate.update(
+                        "UPDATE standup_session_dispatch SET dm_status = 'SKIPPED' WHERE id = ?",
+                        dispatchId,
+                    )
+
+                    then("it maps without failing, so a rollback from the next release to this one stays safe") {
+                        repository
+                            .findSession(sessionUid = sessionUid)!!
+                            .dispatches
+                            .single()
+                            .dmStatus shouldBe DispatchStatus.SKIPPED
                     }
                 }
             }
