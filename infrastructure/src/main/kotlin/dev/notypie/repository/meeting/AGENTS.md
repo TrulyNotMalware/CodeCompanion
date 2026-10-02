@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/meeting
 
@@ -19,9 +19,9 @@ retry uses.
 | `RescheduleResult.kt` | `sealed interface RescheduleResult`: `Rescheduled(meeting: MeetingDto)` (the row after the write, participants included), `data object AlreadyAtRequestedTime` (resubmit no-op), `data object NotAuthorized` (missing, not the host, or canceled) |
 | `MeetingWriteConflict.kt` | `RuntimeException.isMeetingWriteConflict()`: `true` for any `ConcurrencyFailureException` (optimistic, pessimistic, `CannotAcquireLockException`) and for a `DataIntegrityViolationException` whose cause chain (≤ 16 levels) mentions `PARTICIPANT_UNIQUE_KEY` case-insensitively (MariaDB `for key 'uk_…'`, H2 `UK_…_INDEX_n`) — two concurrent adds of the same user; `false` for everything else |
 | `AddParticipantResult.kt` | `data class AddParticipantResult(outcome, addedUserIds = [], meeting: MeetingDto? = null)`; `enum Outcome { ADDED, NO_NEW_PARTICIPANTS, OVER_CAPACITY, MEETING_STARTED, NOT_AUTHORIZED, MEETING_NOT_FOUND }`. `addedUserIds` is non-empty only for `ADDED` |
-| `MeetingReminderRepository.kt` | `data class ReadyReminder(reminder: MeetingReminderDto, meetingId, meetingTitle, startAt, isCanceled, attendingUserIds)` with `isArmedFor(zone)` (`scheduledAt` equals `startAt - offset` at second precision; false for a row armed for a start a reschedule replaced), `internal Instant.isSameSecond`, `data class ReminderCandidateMeeting(meetingId, startAt, attendingUserIds)`; port `findActiveMeetingsInWindow(from, to)`, `ensureReminder(meetingId, offsetMinutes, scheduledAt: Instant): Boolean`, `reminderExists(meetingId, offsetMinutes)`, `claimReminder(reminderId, claimToken): Boolean`, `markReminderSent(reminderId, claimToken, sentAt)`, `markReminderFailed(reminderId, claimToken, reason)`, `resetStuckReminders(olderThan: Instant): Int`, `findDueBefore(before: Instant, limit): List<ReadyReminder>`, `deleteByMeetingId(meetingId): Int`, `discardReminder(reminderId): Boolean` (deletes only a PENDING row) |
-| `MeetingReminderRepositoryImpl.kt` | `ensureReminder` is find-then-save using `getReferenceById(meetingId)` for the FK proxy; an existing PENDING row with a different `scheduled_at` (second precision) is re-aligned through `realignPending` and reports `true`, any other existing row `false`; CAS methods map affected rows `== 1`; `findDueBefore` projects `ReadyReminder` from the fetched meeting graph, keeping only `isAttending` participants |
-| `JpaMeetingReminderRepository.kt` | Derived `findByMeetingIdAndOffsetMinutes`; JPQL `findPendingBefore(before, pageable)` (`JOIN FETCH` meeting, `LEFT JOIN FETCH` participants, no `DISTINCT`, `PENDING`, `scheduledAt <= :before`, meeting not canceled, `scheduledAt` ascending — the `LIMIT` stays in SQL, see Common Patterns); native CAS `claimReminder(id, token)` (PENDING→SENDING), `markSent(id, token, sentAt)`, `markFailed(id, token, reason)` (both `WHERE status = 'SENDING' AND claim_token = :token`; `claimReminder` and `markSent` also require `EXISTS` an uncanceled `meetings` row, review M7), `resetStuckSending(olderThan)`; native `realignPending(id, scheduledAt)` and `discardPending(id)` (both `WHERE id = :id AND status = 'PENDING'`); native `deleteByMeetingId` |
+| `MeetingReminderRepository.kt` | `data class ReadyReminder(reminder: MeetingReminderDto, meetingId, meetingTitle, startAt, isCanceled, attendingUserIds)` with `isArmedFor(zone)` (`scheduledAt` equals `startAt - offset` at second precision; false for a row armed for a start a reschedule replaced), `internal Instant.isSameSecond`, `data class ReminderCandidateMeeting(meetingId, startAt, attendingUserIds)`; port `findActiveMeetingsInWindow(from, to)`, `ensureReminder(meetingId, offsetMinutes, scheduledAt: Instant, startAt: LocalDateTime): Boolean` (`startAt` = the meeting start `scheduledAt` was computed from), `reminderExists(meetingId, offsetMinutes)`, `claimReminder(reminderId, claimToken): Boolean`, `markReminderSent(reminderId, claimToken, sentAt)`, `markReminderFailed(reminderId, claimToken, reason)`, `resetStuckReminders(olderThan: Instant): Int`, `findDueBefore(before: Instant, limit): List<ReadyReminder>`, `deleteByMeetingId(meetingId): Int`, `discardReminder(reminderId, scheduledAt: Instant): Boolean` (deletes only a row still PENDING at the `scheduledAt` the caller read) |
+| `MeetingReminderRepositoryImpl.kt` | `ensureReminder` is find-then-save using `getReferenceById(meetingId)` for the FK proxy; an existing PENDING row with a different `scheduled_at` (second precision) is re-aligned through `realignPending(observedAt = the row's read value, startAt)` and reports `true` when the CAS hits, any other existing row `false`; CAS methods map affected rows `== 1`; `findDueBefore` projects `ReadyReminder` from the fetched meeting graph, keeping only `isAttending` participants |
+| `JpaMeetingReminderRepository.kt` | Derived `findByMeetingIdAndOffsetMinutes`; JPQL `findPendingBefore(before, pageable)` (`JOIN FETCH` meeting, `LEFT JOIN FETCH` participants, no `DISTINCT`, `PENDING`, `scheduledAt <= :before`, meeting not canceled, `scheduledAt` ascending — the `LIMIT` stays in SQL, see Common Patterns); native CAS `claimReminder(id, token)` (PENDING→SENDING), `markSent(id, token, sentAt)`, `markFailed(id, token, reason)` (both `WHERE status = 'SENDING' AND claim_token = :token`; `claimReminder` and `markSent` also require `EXISTS` an uncanceled `meetings` row, review M7), `resetStuckSending(olderThan)`; native `realignPending(id, observedAt, scheduledAt, startAt)` and `discardPending(id, observedAt)` (both `WHERE id = :id AND status = 'PENDING' AND scheduled_at = :observedAt`; the realign also requires `EXISTS` a `meetings` row whose `start_at = :startAt`, review N2 / G10); native `deleteByMeetingId` |
 | `AgendaDispatchRepository.kt` | `data class AgendaCandidateMeeting(meetingId, title, startAt, attendingUserIds)`; port `claim(agendaDate: LocalDate): Boolean`, `findAttendingMeetingsForDay(from, to)` |
 | `AgendaDispatchRepositoryImpl.kt` | `claim` = `claimAgenda == 1`; the day read reuses `JpaMeetingRepository.findActiveByStartAtBetween` |
 | `JpaAgendaDispatchRepository.kt` | `JpaRepository<AgendaDispatchSchema, LocalDate>`; native `INSERT IGNORE INTO agenda_dispatch (agenda_date, created_at)` as `claimAgenda(date): Int` |
@@ -70,7 +70,10 @@ retry uses.
   next materialisation tick sees exactly one row. Reschedule uses `deleteByMeetingId` and re-materialises
   rather than updating rows in place. Because a materialise pass can insert a row from a start it read before a
   reschedule committed, `ensureReminder` re-aligns a PENDING row to the time it is asked for (review M6); it never
-  touches a row that is SENDING, SENT or FAILED — the claim owns it.
+  touches a row that is SENDING, SENT or FAILED — the claim owns it. Both writes on a PENDING row are CAS on the
+  `scheduled_at` the caller read: a discard must not delete a row another replica re-aligned since (N2), and a
+  re-align only lands while the meeting still starts at the `startAt` it was computed from, so a pass that read
+  the meeting before a reschedule cannot move a correctly re-armed row back to the old time (G10).
 - **`agenda_dispatch` has no token and no status**: the `LocalDate` PK plus `INSERT IGNORE` is the entire
   once-per-day guarantee. `INSERT IGNORE` is MariaDB-only and cannot be exercised on H2.
 - `MAX_PARTICIPANTS` lives on the domain `Meeting` aggregate; `addParticipants` compares against that
@@ -97,9 +100,11 @@ cancel vs add), the same-user add race that loses on the unique key and is class
 resubmits of all three writes leaving the version alone; `MeetingWriteConflictTest` is the classifier's unit
 spec; `MeetingRepositoryImplTest` is the MockK mapping spec; `MeetingReminderRepositoryTest` (`@DataJpaTest`
 with in-memory collection paging turned into an error) covers `findDueBefore` — SQL-paged batch in `scheduledAt`
-order with full attending lists, canceled and not-yet-due rows excluded, a participant-less meeting included.
-**`AgendaDispatchRepository` has no spec in this module**, and the reminder claim race, foreign token and
-`resetStuckSending` are covered only through `:application` scheduler specs with mocked ports.
+order with full attending lists, canceled and not-yet-due rows excluded, a participant-less meeting included —
+plus the M6 re-align / discard (a claimed row is left alone), the N2 / G10 CAS cases, and the M7 canceled-meeting
+guards on `claimReminder` / `markReminderSent`. **`AgendaDispatchRepository` has no spec in this module**, and the
+reminder claim race between two ticks, a foreign token and `resetStuckSending` are covered only through
+`:application` scheduler specs with mocked ports.
 
 ### Common Patterns
 - Port + `open class *Impl` + `Jpa*Repository`; `@Transactional` on writes; boolean = `rowCount == 1`.

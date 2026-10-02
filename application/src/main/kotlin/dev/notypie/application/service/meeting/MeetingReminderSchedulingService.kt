@@ -73,6 +73,7 @@ class MeetingReminderSchedulingService(
                         meetingId = meeting.meetingId,
                         offsetMinutes = offsetMinutes,
                         scheduledAt = scheduledAt,
+                        startAt = meeting.startAt,
                     )
                 ) {
                     log.info {
@@ -111,7 +112,12 @@ class MeetingReminderSchedulingService(
         if (!item.isArmedFor(zone = clock.zone)) {
             // Armed from a start time a reschedule has since replaced: sending it would announce the new time at the
             // old moment. Drop it; materializeReminders re-arms this offset for the current start on its next pass.
-            if (reminderRepository.discardReminder(reminderId = reminderId)) {
+            // Conditional on the scheduledAt this pass read: a row another replica realigned since is correct now.
+            if (reminderRepository.discardReminder(
+                    reminderId = reminderId,
+                    scheduledAt = item.reminder.scheduledAt,
+                )
+            ) {
                 log.warn {
                     "Discarded stale meeting reminder: reminderId=$reminderId meetingId=${item.meetingId} " +
                         "scheduledAt=${item.reminder.scheduledAt} startAt=${item.startAt}"

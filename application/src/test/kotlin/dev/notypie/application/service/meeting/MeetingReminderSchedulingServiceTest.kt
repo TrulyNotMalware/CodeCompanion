@@ -83,17 +83,28 @@ class MeetingReminderSchedulingServiceTest :
                         attendingUserIds = listOf("U_A", "U_B"),
                     )
                 every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns listOf(meeting)
-                every { repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any()) } returns
-                    true
+                every {
+                    repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any(), startAt = any())
+                } returns true
 
                 service.materializeReminders()
 
-                then("ensureReminder is called once per configured offset") {
+                then("ensureReminder is called once per configured offset, with the start it was computed from") {
                     verify(exactly = 1) {
-                        repo.ensureReminder(meetingId = 7L, offsetMinutes = 15, scheduledAt = any())
+                        repo.ensureReminder(
+                            meetingId = 7L,
+                            offsetMinutes = 15,
+                            scheduledAt = any(),
+                            startAt = meeting.startAt,
+                        )
                     }
                     verify(exactly = 1) {
-                        repo.ensureReminder(meetingId = 7L, offsetMinutes = 5, scheduledAt = any())
+                        repo.ensureReminder(
+                            meetingId = 7L,
+                            offsetMinutes = 5,
+                            scheduledAt = any(),
+                            startAt = meeting.startAt,
+                        )
                     }
                 }
             }
@@ -113,7 +124,12 @@ class MeetingReminderSchedulingServiceTest :
 
                 then("no reminder rows are materialized") {
                     verify(exactly = 0) {
-                        repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any())
+                        repo.ensureReminder(
+                            meetingId = any(),
+                            offsetMinutes = any(),
+                            scheduledAt = any(),
+                            startAt = any(),
+                        )
                     }
                 }
             }
@@ -128,7 +144,9 @@ class MeetingReminderSchedulingServiceTest :
                         attendingUserIds = listOf("U_A"),
                     )
                 every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns listOf(meeting)
-                every { repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any()) } throws
+                every {
+                    repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any(), startAt = any())
+                } throws
                     DataIntegrityViolationException("uk_meeting_reminder_meeting_offset violated")
                 every { repo.reminderExists(meetingId = any(), offsetMinutes = any()) } returns true
 
@@ -150,7 +168,9 @@ class MeetingReminderSchedulingServiceTest :
                         attendingUserIds = listOf("U_A"),
                     )
                 every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns listOf(meeting)
-                every { repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any()) } throws
+                every {
+                    repo.ensureReminder(meetingId = any(), offsetMinutes = any(), scheduledAt = any(), startAt = any())
+                } throws
                     DataIntegrityViolationException("FK violation on meeting_id")
                 every { repo.reminderExists(meetingId = any(), offsetMinutes = any()) } returns false
 
@@ -201,12 +221,12 @@ class MeetingReminderSchedulingServiceTest :
                     )
                 every { repo.resetStuckReminders(olderThan = any()) } returns 0
                 every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(movedLater)
-                every { repo.discardReminder(reminderId = 42L) } returns true
+                every { repo.discardReminder(reminderId = 42L, scheduledAt = nowInstant) } returns true
 
                 service.sendDueReminders()
 
                 then("it is discarded, never claimed or sent, so materialize can arm the offset for the new start") {
-                    verify(exactly = 1) { repo.discardReminder(reminderId = 42L) }
+                    verify(exactly = 1) { repo.discardReminder(reminderId = 42L, scheduledAt = nowInstant) }
                     verify(exactly = 0) { repo.claimReminder(reminderId = any(), claimToken = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
                 }

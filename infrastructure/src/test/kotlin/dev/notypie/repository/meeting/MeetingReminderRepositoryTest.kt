@@ -56,14 +56,20 @@ class MeetingReminderRepositoryTest
                 return jpaMeetingRepository.save(meeting)
             }
 
-            fun arm(meeting: MeetingSchema, offsetMinutes: Int, scheduledAt: Instant) =
-                inTx {
-                    repository.ensureReminder(
-                        meetingId = meeting.id,
-                        offsetMinutes = offsetMinutes,
-                        scheduledAt = scheduledAt,
-                    )
-                }
+            // `startAt` defaults to the meeting's own start, as a materialize pass that read it after any reschedule.
+            fun arm(
+                meeting: MeetingSchema,
+                offsetMinutes: Int,
+                scheduledAt: Instant,
+                startAt: LocalDateTime = meeting.startAt,
+            ) = inTx {
+                repository.ensureReminder(
+                    meetingId = meeting.id,
+                    offsetMinutes = offsetMinutes,
+                    scheduledAt = scheduledAt,
+                    startAt = startAt,
+                )
+            }
 
             fun reminderOf(meeting: MeetingSchema, offsetMinutes: Int = 10) =
                 jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
@@ -114,7 +120,7 @@ class MeetingReminderRepositoryTest
                 `when`("materialize or the send-time check reaches it") {
                     val realigned =
                         arm(meeting = meeting, offsetMinutes = 10, scheduledAt = armedAt.plusSeconds(3_600L))
-                    val discarded = inTx { repository.discardReminder(reminderId = reminderId) }
+                    val discarded = inTx { repository.discardReminder(reminderId = reminderId, scheduledAt = armedAt) }
 
                     then("neither touches it: the claim owns the row") {
                         realigned shouldBe false
@@ -132,14 +138,90 @@ class MeetingReminderRepositoryTest
                         startAt = LocalDateTime.of(2031, 2, 5, 15, 0),
                         attending = listOf("U_S"),
                     )
-                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = Instant.parse("2031-02-05T00:50:00Z"))
+                val staleAt = Instant.parse("2031-02-05T00:50:00Z")
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = staleAt)
 
-                `when`("it is discarded") {
-                    val discarded = inTx { repository.discardReminder(reminderId = reminderOf(meeting = meeting)!!.id) }
+                `when`("it is discarded at the time the check read") {
+                    val discarded =
+                        inTx {
+                            repository.discardReminder(
+                                reminderId = reminderOf(meeting = meeting)!!.id,
+                                scheduledAt = staleAt,
+                            )
+                        }
 
                     then("the row is gone, so the next materialize pass can insert the offset again") {
                         discarded shouldBe true
                         repository.reminderExists(meetingId = meeting.id, offsetMinutes = 10) shouldBe false
+                    }
+                }
+            }
+
+            // Review N2: replica A read the row at the stale time, replica B realigned it, then A discarded it.
+            given("a stale PENDING reminder that another replica realigns after the send-time check read it") {
+                val meeting =
+                    persistMeeting(
+                        name = "realigned",
+                        startAt = LocalDateTime.of(2031, 2, 6, 15, 0),
+                        attending = listOf("U_R"),
+                    )
+                val staleAt = Instant.parse("2031-02-06T00:50:00Z")
+                val currentAt = Instant.parse("2031-02-06T05:50:00Z")
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = staleAt)
+                val reminderId = reminderOf(meeting = meeting)!!.id
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = currentAt) shouldBe true
+
+                `when`("the first replica discards it at the time it read") {
+                    val discarded = inTx { repository.discardReminder(reminderId = reminderId, scheduledAt = staleAt) }
+
+                    then("nothing is deleted: the realigned row is correct and stays armed") {
+                        discarded shouldBe false
+                        reminderOf(meeting = meeting)!!.scheduledAt shouldBe currentAt
+                        reminderOf(meeting = meeting)!!.status shouldBe MeetingReminderStatus.PENDING
+                    }
+                }
+            }
+
+            // Review G10: a pass read the old start, the reschedule committed, another replica armed the new time.
+            given("a PENDING reminder already armed for the meeting's current start") {
+                val meeting =
+                    persistMeeting(
+                        name = "rescheduled",
+                        startAt = LocalDateTime.of(2031, 2, 7, 15, 0),
+                        attending = listOf("U_T"),
+                    )
+                val currentAt = Instant.parse("2031-02-07T05:50:00Z")
+                arm(meeting = meeting, offsetMinutes = 10, scheduledAt = currentAt)
+
+                `when`("a pass that read the old start tries to arm the old time") {
+                    val moved =
+                        arm(
+                            meeting = meeting,
+                            offsetMinutes = 10,
+                            scheduledAt = Instant.parse("2031-02-07T00:50:00Z"),
+                            startAt = LocalDateTime.of(2031, 2, 7, 10, 0),
+                        )
+
+                    then("the row is not moved back: only the meeting's current start may realign it") {
+                        moved shouldBe false
+                        reminderOf(meeting = meeting)!!.scheduledAt shouldBe currentAt
+                    }
+                }
+
+                `when`("a realign observed a different value than the row now holds") {
+                    val updated =
+                        inTx {
+                            jpaMeetingReminderRepository.realignPending(
+                                id = reminderOf(meeting = meeting)!!.id,
+                                observedAt = currentAt.minusSeconds(60L),
+                                scheduledAt = currentAt.plusSeconds(60L),
+                                startAt = meeting.startAt,
+                            )
+                        }
+
+                    then("the CAS misses and the row keeps its value") {
+                        updated shouldBe 0
+                        reminderOf(meeting = meeting)!!.scheduledAt shouldBe currentAt
                     }
                 }
             }

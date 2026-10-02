@@ -37,7 +37,14 @@ data class ReminderCandidateMeeting(
 interface MeetingReminderRepository {
     fun findActiveMeetingsInWindow(from: LocalDateTime, to: LocalDateTime): List<ReminderCandidateMeeting>
 
-    fun ensureReminder(meetingId: Long, offsetMinutes: Int, scheduledAt: Instant): Boolean
+    // `startAt` is the meeting start `scheduledAt` was computed from; an existing PENDING row is realigned only while
+    // the meeting still starts then.
+    fun ensureReminder(
+        meetingId: Long,
+        offsetMinutes: Int,
+        scheduledAt: Instant,
+        startAt: LocalDateTime,
+    ): Boolean
 
     fun reminderExists(meetingId: Long, offsetMinutes: Int): Boolean
 
@@ -53,6 +60,7 @@ interface MeetingReminderRepository {
 
     fun deleteByMeetingId(meetingId: Long): Int
 
-    // Deletes the row only while it is still PENDING; false when it was claimed, sent or removed meanwhile.
-    fun discardReminder(reminderId: Long): Boolean
+    // Deletes the row only while it is still PENDING at the `scheduledAt` the caller read; false when it was claimed,
+    // sent, removed or realigned meanwhile.
+    fun discardReminder(reminderId: Long, scheduledAt: Instant): Boolean
 }

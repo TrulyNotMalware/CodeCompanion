@@ -29,8 +29,15 @@ open class MeetingReminderRepositoryImpl(
     // A PENDING row armed from a start time that a reschedule has since replaced (materialize read the old start, the
     // reschedule deleted the rows, then this insert landed) is moved to the current time instead of being kept: the
     // (meeting_id, offset_minutes) unique key would otherwise leave the stale row as the only reminder for that offset.
+    // The move is a CAS on the row as read and on `startAt` still being the meeting's start, so a pass that read the
+    // meeting before a reschedule cannot move a correctly re-armed row back to the old time (review G10).
     @Transactional
-    override fun ensureReminder(meetingId: Long, offsetMinutes: Int, scheduledAt: Instant): Boolean {
+    override fun ensureReminder(
+        meetingId: Long,
+        offsetMinutes: Int,
+        scheduledAt: Instant,
+        startAt: LocalDateTime,
+    ): Boolean {
         val existing =
             jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
                 meetingId = meetingId,
@@ -40,7 +47,12 @@ open class MeetingReminderRepositoryImpl(
             if (existing.status != MeetingReminderStatus.PENDING || existing.scheduledAt.isSameSecond(scheduledAt)) {
                 return false
             }
-            return jpaMeetingReminderRepository.realignPending(id = existing.id, scheduledAt = scheduledAt) == 1
+            return jpaMeetingReminderRepository.realignPending(
+                id = existing.id,
+                observedAt = existing.scheduledAt,
+                scheduledAt = scheduledAt,
+                startAt = startAt,
+            ) == 1
         }
         val reminder =
             MeetingReminderSchema(
@@ -77,8 +89,8 @@ open class MeetingReminderRepositoryImpl(
         jpaMeetingReminderRepository.deleteByMeetingId(meetingId = meetingId)
 
     @Transactional
-    override fun discardReminder(reminderId: Long): Boolean =
-        jpaMeetingReminderRepository.discardPending(id = reminderId) == 1
+    override fun discardReminder(reminderId: Long, scheduledAt: Instant): Boolean =
+        jpaMeetingReminderRepository.discardPending(id = reminderId, observedAt = scheduledAt) == 1
 
     override fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder> =
         jpaMeetingReminderRepository

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/meeting
 
@@ -27,9 +27,9 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
 
 ### Working In This Directory
 - **`BEFORE_COMMIT` listeners ride the caller's transaction.** `createNewMeeting` and
-  `updateParticipantAttendance` run inside the `@Transactional` boundary of `handleMeeting` or
-  `SlackInteractionHandlerImpl.handleInteraction`; `fallbackExecution = false` means they never run outside
-  one. A throw there rolls back the whole command — that is how an unrecorded decision is refused.
+  `updateParticipantAttendance` run inside the `@Transactional` boundary of `handleMeeting` or the manual
+  transaction `SlackInteractionHandlerImpl.handleInteraction` opens (`transactionManager.getTransaction`, then an
+  explicit commit / rollback); `fallbackExecution = false` means they never run outside one. A throw there rolls back the whole command — that is how an unrecorded decision is refused.
   **Never wrap them in `RetryService`** (review T22): the failed statement has already marked the shared
   transaction rollback-only and left the Hibernate session unusable, so an in-place retry only sleeps on the
   request thread with the connection held and then fails again (or ends in `UnexpectedRollbackException`), and
@@ -97,8 +97,10 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
   materialize pass** (review M6): the pass reads the old start, the reschedule deletes the rows, then the pass
   inserts a row for the old time. Two checks keep that row from being sent at the old moment or blocking the new
   one through the `(meeting_id, offset_minutes)` unique key: `ensureReminder` moves a PENDING row whose
-  `scheduled_at` differs to the time it was asked for, and `sendDueReminders` drops (`discardReminder`, PENDING
-  only) any due row for which `ReadyReminder.isArmedFor(clock.zone)` is false — `scheduledAt` is not
+  `scheduled_at` differs to the time it was asked for (passing the `startAt` it computed from, so a pass that read
+  the old start cannot move a row already re-armed for the new one — review G10), and `sendDueReminders` drops
+  (`discardReminder(reminderId, scheduledAt as read)`, PENDING at that time only, so a row another replica
+  re-aligned since survives — review N2) any due row for which `ReadyReminder.isArmedFor(clock.zone)` is false — `scheduledAt` is not
   `startAt - offset` — before claiming it; the next materialize pass re-arms the offset. Both compare at second
   precision (`scheduled_at` is `DATETIME`), and the zone must stay the one materialize uses. **A cancel after the
   due read** (review M7) is caught by the repository: `claimReminder` and `markReminderSent` only match a row whose

@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.LocalDateTime
 
 @Repository
 interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Long> {
@@ -105,29 +106,43 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         @Param("olderThan") olderThan: Instant,
     ): Int
 
+    // CAS on both the value the caller read and the start it computed from (review N2 / G10): a replica that read the
+    // meeting before a reschedule must not move a row another replica already armed for the new start back to the
+    // old time. Only the start the meeting has now may set the row.
     @Modifying
     @Transactional
     @Query(
         value = """
             UPDATE meeting_reminder
             SET scheduled_at = :scheduledAt, updated_at = CURRENT_TIMESTAMP
-            WHERE id = :id AND status = 'PENDING'
+            WHERE id = :id AND status = 'PENDING' AND scheduled_at = :observedAt
+              AND EXISTS (
+                  SELECT 1 FROM meetings m WHERE m.id = meeting_reminder.meeting_id AND m.start_at = :startAt
+              )
         """,
         nativeQuery = true,
     )
     fun realignPending(
         @Param("id") id: Long,
+        @Param("observedAt") observedAt: Instant,
         @Param("scheduledAt") scheduledAt: Instant,
+        @Param("startAt") startAt: LocalDateTime,
     ): Int
 
+    // The send-time check read the row at observedAt and found it stale; if another replica realigned it since, the
+    // row is now correct and must survive (review N2).
     @Modifying
     @Transactional
     @Query(
-        value = "DELETE FROM meeting_reminder WHERE id = :id AND status = 'PENDING'",
+        value = """
+            DELETE FROM meeting_reminder
+            WHERE id = :id AND status = 'PENDING' AND scheduled_at = :observedAt
+        """,
         nativeQuery = true,
     )
     fun discardPending(
         @Param("id") id: Long,
+        @Param("observedAt") observedAt: Instant,
     ): Int
 
     @Modifying
