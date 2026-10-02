@@ -14,6 +14,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -102,6 +103,39 @@ class StandupRoutineSetupServiceTest :
                         )
                     }
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            // G3: a MessageContent.Text body is not escaped downstream, so the creator-chosen name is escaped here.
+            `when`("the routine name carries a disguised link and an ampersand") {
+                val repo = mockk<StandupRepository>()
+                val stager = mockk<OutboundMessageStager>()
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = mockk(relaxed = true),
+                    )
+                val routineSlot = slot<Routine>()
+                every { repo.createRoutine(routine = capture(routineSlot)) } answers { routineSlot.captured }
+                val staged = slot<OutboundMessage>()
+                every { stager.stage(message = capture(staged), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+
+                service.createRoutine(
+                    event =
+                        createCreateStandupRoutineEvent(
+                            name = "<https://evil.example|Fill in standup> & co",
+                            memberIds = listOf("U_ALICE"),
+                        ),
+                )
+
+                then("the confirmation shows the name as literal text while the member mention stays markup") {
+                    val ephemeral = staged.captured as OutboundMessage.Ephemeral
+                    val markdown = (ephemeral.content as MessageContent.Text).markdown
+                    markdown shouldContain "*&lt;https://evil.example|Fill in standup&gt; &amp; co*"
+                    markdown shouldNotContain "<https://evil.example"
+                    markdown shouldContain "<@U_ALICE>"
                 }
             }
 

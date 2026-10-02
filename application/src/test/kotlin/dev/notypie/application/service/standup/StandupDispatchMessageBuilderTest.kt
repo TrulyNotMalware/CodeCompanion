@@ -8,6 +8,7 @@ import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -84,6 +85,23 @@ class StandupDispatchMessageBuilderTest :
                 then("it builds a plain-text ChannelMessage typed STANDUP_PROMPT — no interactive buttons") {
                     channelMessage.detailType shouldBe CommandDetailType.STANDUP_PROMPT
                     text.headline shouldBe "Standup reminder"
+                }
+            }
+
+            // G3: the nudge goes to every non-responder; an unescaped name rendered as a disguised link in each DM.
+            `when`("the routine name carries a disguised link and an ampersand") {
+                val text =
+                    buildNudgeNotice(
+                        routineName = "<https://evil.example|Fill in standup> & co",
+                        cutoffAt = Instant.parse("2026-05-04T01:00:00Z"),
+                        routineTimezone = ZoneId.of("Asia/Seoul"),
+                        commandBasicInfo = createCommandBasicInfo(),
+                    ).content as MessageContent.Text
+
+                then("the name is escaped inside the bold, and the template's own *bold* stays markup") {
+                    text.markdown shouldContain "*&lt;https://evil.example|Fill in standup&gt; &amp; co*"
+                    text.markdown shouldNotContain "<https://evil.example"
+                    text.markdown shouldContain "*Fill in standup* button"
                 }
             }
         }

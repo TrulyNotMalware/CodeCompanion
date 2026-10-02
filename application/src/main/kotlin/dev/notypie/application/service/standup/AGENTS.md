@@ -61,6 +61,11 @@ is written back onto the session row once the relay has posted it.
 - **Summary marker.** `summary_message_ts` holds `outbox:<eventId>` until the relay posts; the write-back
   `UPDATE` is keyed on that marker, so it is a cheap no-op for every non-standup
   `MessagePublishSuccessEvent`. Do not add a `commandDetailType` to the relay event to short-circuit it.
+- **Escape creator-chosen text in `MessageContent.Text` bodies.** Nothing downstream escapes a `Text` body, so
+  the nudge (`buildNudgeNotice`) and the setup confirmation wrap the routine name in `escapeMrkdwn()`
+  (`infrastructure/templates/SlackMrkdwn.kt`); the `*bold*` and `<@id>` mentions the code adds stay outside it.
+  Unescaped, a name like `<https://evil|Fill in standup>` reached every non-responder's DM as a disguised link
+  (review G3).
 - **Two outbound styles, on purpose.** Scheduler phases write outbox rows directly with
   `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` (a tick has no request context or
   `trigger_id`). Event-driven services go through `OutboundMessageStager.stage(...)?.let {

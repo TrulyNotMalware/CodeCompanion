@@ -762,10 +762,11 @@ class StandupSchedulingServiceTest :
 
         given("nudgeNonResponders") {
             val routineUid = UUID.randomUUID()
+            // `<`, `>` and `&` in the name pin the escaping of the creator-chosen text in the DM body (review G3).
             val routine =
                 createRoutineDto(
                     routineUid = routineUid,
-                    name = "Daily Standup",
+                    name = "Daily <Standup> & Sync",
                     routineTimezone = seoul,
                 )
 
@@ -815,8 +816,8 @@ class StandupSchedulingServiceTest :
                                             MessageContent.Text(
                                                 headline = "Standup reminder",
                                                 markdown =
-                                                    "⏰ Standup for *Daily Standup* closes at 12:10 — " +
-                                                        "you haven't responded yet. " +
+                                                    "⏰ Standup for *Daily &lt;Standup&gt; &amp; Sync* " +
+                                                        "closes at 12:10 — you haven't responded yet. " +
                                                         "Tap the *Fill in standup* button in your DM.",
                                             ),
                                         detailType = CommandDetailType.STANDUP_PROMPT,

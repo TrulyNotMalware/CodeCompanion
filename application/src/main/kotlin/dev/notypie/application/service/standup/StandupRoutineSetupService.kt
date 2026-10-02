@@ -12,6 +12,7 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.RoutineMember
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -91,7 +92,8 @@ class StandupRoutineSetupService(
                 .sortedBy { it.value }
                 .joinToString(", ") { day -> day.name.lowercase().replaceFirstChar { it.uppercase() } }
         val triggerTime = routine.triggerLocalTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-        return "Standup routine *${routine.name}* created — ${routine.questions.size} questions, " +
+        // Escaped like every user-supplied value in a Text body (review G3); the `<@id>` mentions above are ours.
+        return "Standup routine *${routine.name.escapeMrkdwn()}* created — ${routine.questions.size} questions, " +
             "members $members, weekdays $weekdays, daily at $triggerTime."
     }
 }
