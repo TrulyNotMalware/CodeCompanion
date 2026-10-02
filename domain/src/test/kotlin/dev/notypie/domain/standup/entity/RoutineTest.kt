@@ -162,5 +162,20 @@ class RoutineTest :
                     }
                 }
             }
+
+            `when`("a routine already at MAX_MEMBERS re-adds one of its existing members") {
+                val routine = createRoutine()
+                (1..Routine.MAX_MEMBERS).forEach { idx ->
+                    routine.addMember(
+                        member = createRoutineMember(userId = "U_$idx", userTimezone = ZoneId.of("UTC")),
+                    )
+                }
+                routine.addMember(member = createRoutineMember(userId = "U_1", userTimezone = ZoneId.of("Asia/Tokyo")))
+
+                then("the duplicate replaces the entry instead of failing the capacity check") {
+                    routine.memberSnapshot().size shouldBe Routine.MAX_MEMBERS
+                    routine.memberSnapshot().single { it.userId == "U_1" }.userTimezone shouldBe ZoneId.of("Asia/Tokyo")
+                }
+            }
         }
     })

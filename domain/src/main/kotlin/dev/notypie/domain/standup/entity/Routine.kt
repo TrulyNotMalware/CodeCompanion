@@ -72,8 +72,9 @@ class Routine(
     }
 
     fun addMember(member: RoutineMember) {
+        val othersCount = members.count { it.userId != member.userId }
         validate(className = this.javaClass.simpleName) {
-            "members" of (members.size + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
+            "members" of (othersCount + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
         }
         members.removeIf { it.userId == member.userId }
         members.add(member)
