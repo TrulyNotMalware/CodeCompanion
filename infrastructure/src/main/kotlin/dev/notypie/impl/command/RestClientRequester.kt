@@ -14,6 +14,7 @@ val logger = KotlinLogging.logger { }
 
 class RestClientRequester(
     val baseUrl: String,
+    restClientBuilder: RestClient.Builder = RestClient.builder(),
     private val authorization: String? = null,
     private val connectTimeout: Duration = DEFAULT_CONNECT_TIMEOUT,
     private val readTimeout: Duration = DEFAULT_READ_TIMEOUT,
@@ -26,10 +27,10 @@ class RestClientRequester(
         const val BEARER_PREFIX = "Bearer "
     }
 
+    // The explicit factory pins these timeouts; Boot's builder (the bean passes it) adds the observation customizer,
+    // so calls are recorded as http.client.requests.
     private val restClient: RestClient =
-        RestClient
-            .builder()
-            // The static builder ignores spring.http.client.*, so without this factory a stalled call never times out.
+        restClientBuilder
             .requestFactory(
                 JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(connectTimeout).build())
                     .apply { setReadTimeout(readTimeout) },

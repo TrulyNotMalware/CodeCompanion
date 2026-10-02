@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # application
 
@@ -15,7 +15,7 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ## Key Files
 | File | Description |
 |------|-------------|
-| `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator with the Micrometer Prometheus registry (`/actuator/prometheus` in `dev`/`prod`), AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `-PjarName=` override for `bootJar` |
+| `build.gradle.kts` | Spring Boot BOM, Jetty (Tomcat excluded), Actuator with the Micrometer Prometheus registry (`/actuator/prometheus` in `dev`/`prod`), AOP/AspectJ, Spring AI MCP server (declared as its four modules, not the `spring-ai-starter-mcp-server-webmvc` starter, which re-imports `starter-web` and leaks Tomcat past the exclude), Slack Socket Mode client + tyrus, `spring-boot-starter-restclient` (Boot's observed `RestClient.Builder` for the `restRequester` bean), `-PjarName=` override for `bootJar` |
 | `src/main/kotlin/dev/notypie/CodeCompanion.kt` | `@SpringBootApplication @ConfigurationPropertiesScan` entry point and `main()` |
 | `Dockerfile` | `eclipse-temurin:25.0.4_7-jre-alpine`; copies `build/libs/$JAR_FILE_NAME.jar`, runs `java -XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=$PROFILE -Duser.timezone=Asia/Seoul -jar /app.jar` (heap = 50% of the k8s memory limit; the Pod's memory request covers heap plus non-heap). Runs as root because it binds port 80 (open item in `src/main/resources/k8s/AGENTS.md`). Build context for the deploy workflow |
 

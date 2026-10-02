@@ -1,6 +1,7 @@
 package dev.notypie.application
 
 import com.ninjasquad.springmockk.MockkBean
+import com.sun.net.httpserver.HttpServer
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.application.security.SlackRetryDeduplicator
 import dev.notypie.application.service.agent.AgentConverseService
@@ -20,6 +21,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
+import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
@@ -31,11 +33,13 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.every
 import org.springframework.beans.factory.annotation.Autowired
@@ -48,6 +52,7 @@ import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.support.TransactionTemplate
+import java.net.InetSocketAddress
 import java.time.Clock
 import java.time.ZoneId
 import java.util.UUID
@@ -120,6 +125,36 @@ class ApplicationContextSmokeTest
                             val bean = AopTestUtils.getUltimateTargetObject<Any>(context.getBean(type))
                             ReflectionTestUtils.getField(bean, "clock") shouldBeSameInstanceAs clock
                         }
+                    }
+
+                    then(
+                        "the Slack REST requester is built from Boot's RestClient.Builder, so its calls are observed",
+                    ) {
+                        val server =
+                            HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+                                createContext("/") { exchange ->
+                                    val body = "{}".toByteArray()
+                                    exchange.sendResponseHeaders(200, body.size.toLong())
+                                    exchange.responseBody.use { it.write(body) }
+                                }
+                                start()
+                            }
+                        try {
+                            context.getBean(RestRequester::class.java).safeGet(
+                                uri = "http://127.0.0.1:${server.address.port}/probe",
+                                authorizationHeader = null,
+                                responseType = String::class.java,
+                                uriVariables = emptyMap(),
+                            )
+                        } finally {
+                            server.stop(0)
+                        }
+                        context
+                            .getBean(
+                                MeterRegistry::class.java,
+                            ).find("http.client.requests")
+                            .timer()
+                            .shouldNotBeNull()
                     }
 
                     then("open-in-view is off, so lazy loads cannot hide outside a transaction") {
