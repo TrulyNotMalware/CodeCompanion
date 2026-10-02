@@ -122,6 +122,24 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     @Query(
         """
         UPDATE outbox_message
+        SET status = 'FAILURE', updated_at = :now
+        WHERE event_id = :eventId
+          AND status = 'PENDING'
+          AND attempt_count = :attemptCount
+    """,
+        nativeQuery = true,
+    )
+    fun abandonPending(
+        @Param("eventId") eventId: String,
+        @Param("attemptCount") attemptCount: Int,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        UPDATE outbox_message
         SET send_count = send_count + 1, updated_at = :now
         WHERE event_id = :eventId
           AND status = 'IN_PROGRESS'

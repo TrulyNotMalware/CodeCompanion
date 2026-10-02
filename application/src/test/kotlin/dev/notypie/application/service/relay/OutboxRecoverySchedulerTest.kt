@@ -119,6 +119,31 @@ class OutboxRecoverySchedulerTest :
             }
         }
 
+        given("stale PENDING rows, one of them older than the give-up window") {
+            val repository = mockk<MessageOutboxRepository>()
+            val relay = relayWithSlots(slots = 0)
+            every { repository.findStuckInProgress(olderThan = any(), limit = any()) } returns emptyList()
+            every { repository.findStalePending(olderThan = cutoff, limit = 100) } returns
+                listOf(
+                    createOutboxRow(eventId = "expired", createdAt = DEFAULT_TEST_NOW.minusHours(25L)),
+                    createOutboxRow(eventId = "live", createdAt = DEFAULT_TEST_NOW.minusHours(1L)),
+                )
+            every { repository.abandonPending(eventId = "expired", attemptCount = 0, now = DEFAULT_TEST_NOW) } returns 1
+
+            `when`("the sweep runs while the relay has no free slot") {
+                val count = scheduler(repository = repository, relay = relay).recoverOnce()
+
+                then("the expired row is abandoned to FAILURE without a claim or a send, the live one stays PENDING") {
+                    count shouldBe 0
+                    verify(exactly = 1) {
+                        repository.abandonPending(eventId = "expired", attemptCount = 0, now = DEFAULT_TEST_NOW)
+                    }
+                    verify(exactly = 0) { repository.claimPending(eventId = any(), attemptCount = any(), now = any()) }
+                    verify(exactly = 0) { relay.batchPendingMessages(claims = any()) }
+                }
+            }
+        }
+
         given("a row that has been IN_PROGRESS longer than the give-up window") {
             val repository = mockk<MessageOutboxRepository>()
             val relay = relayWithSlots()

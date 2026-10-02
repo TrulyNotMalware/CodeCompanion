@@ -53,7 +53,20 @@ class OutboxRecoveryScheduler(
                 }
             }
         }
-        val stalePending = outboxRepository.findStalePending(olderThan = cutoff, limit = batchSize)
+        val (expired, stalePending) =
+            outboxRepository
+                .findStalePending(olderThan = cutoff, limit = batchSize)
+                .partition { it.createdAt < giveUpBefore }
+        expired.forEach { row ->
+            val abandonedNow =
+                outboxRepository.abandonPending(eventId = row.eventId, attemptCount = row.attemptCount, now = now) == 1
+            if (abandonedNow) {
+                log.error {
+                    "Outbox row eventId=${row.eventId} idempotencyKey=${row.idempotencyKey} abandoned to FAILURE " +
+                        "unsent: still PENDING past the give-up window, created at ${row.createdAt}"
+                }
+            }
+        }
         val claims =
             messageRelayService.claimWithReservedSlots(wanted = stuck.size + stalePending.size) { slots ->
                 val reclaimed =
