@@ -218,12 +218,8 @@ class ModalTemplateBuilder(
         }
 
     private fun renderMeetingSection(meeting: MeetingDto): String {
-        val titleLine =
-            if (meeting.isCanceled) {
-                "*${meeting.title}* *[CANCELED]*"
-            } else {
-                "*${meeting.title}*"
-            }
+        val title = meeting.title.escapeMrkdwn()
+        val titleLine = if (meeting.isCanceled) "*$title* *[CANCELED]*" else "*$title*"
         val timeLine =
             buildString {
                 append(meeting.startAt.format(MEETING_LIST_TIMESTAMP_FORMAT))
@@ -247,7 +243,7 @@ class ModalTemplateBuilder(
                 append("\n• <@${participant.userId}> — ${participant.absentReason.showMessage}")
                 participant.absentReasonDetail
                     ?.takeIf { it.isNotBlank() }
-                    ?.let { detail -> append(" (_${detail}_)") }
+                    ?.let { detail -> append(" (_${detail.escapeMrkdwn()}_)") }
             }
         }
     }

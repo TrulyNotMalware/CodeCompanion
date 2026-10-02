@@ -608,6 +608,36 @@ class ModalTemplateBuilderTest :
                 }
             }
 
+            `when`("the title and a decline detail carry Slack control sequences") {
+                val meeting =
+                    createMeetingDto(
+                        title = "<!channel> R&D",
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(
+                                    userId = "U2",
+                                    isAttending = false,
+                                    absentReason = RejectReason.OTHER,
+                                    absentReasonDetail = "<https://evil.example|agenda>",
+                                ),
+                            ),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("both are escaped while the template's own emphasis and mentions stay markup") {
+                    val text = (result.template[2] as SectionBlock).text.text
+                    text shouldContain "*&lt;!channel&gt; R&amp;D*"
+                    text shouldContain
+                        "<@U2> — ${RejectReason.OTHER.showMessage} (_&lt;https://evil.example|agenda&gt;_)"
+                }
+            }
+
             `when`("meeting has no participants") {
                 val meeting =
                     createMeetingDto(
