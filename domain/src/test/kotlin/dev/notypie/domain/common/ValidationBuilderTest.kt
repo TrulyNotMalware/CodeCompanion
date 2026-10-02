@@ -161,6 +161,42 @@ class ValidationBuilderTest :
                 }
             }
 
+            `when`("the field failed before an AND block whose inner OR is satisfied") {
+                val validationResult =
+                    validateAndReturn {
+                        ("x" of 3).shouldSatisfy("must be even") { it % 2 == 0 } and {
+                            it shouldBeGreaterThan 100 or { right -> right shouldBeGreaterThan 0 }
+                        }
+                    }
+                then("the inner OR clears only its own left operand, so p1 AND (p2 OR p3) stays false") {
+                    validationResult.map { it.reason } shouldBe listOf("must be even")
+                }
+            }
+
+            `when`("the field failed before an ifNotNull block whose inner OR passes on both sides") {
+                val nullable: Int? = 3
+                val validationResult =
+                    validateAndReturn {
+                        val x = ("x" of nullable).shouldSatisfy("must be even") { it != null && it % 2 == 0 }
+                        x ifNotNull { it shouldBeGreaterThan 0 or { right -> right shouldBeLessThan 100 } }
+                    }
+                then("the earlier error of the same field is kept") {
+                    validationResult.map { it.reason } shouldBe listOf("must be even")
+                }
+            }
+
+            `when`("the field failed before a shouldNotBeNullAnd block whose inner OR is satisfied") {
+                val nullable: Int? = 3
+                val validationResult =
+                    validateAndReturn {
+                        val x = ("x" of nullable).shouldSatisfy("must be even") { it != null && it % 2 == 0 }
+                        x shouldNotBeNullAnd { it shouldBeGreaterThan 100 or { right -> right shouldBeGreaterThan 0 } }
+                    }
+                then("the earlier error of the same field is kept") {
+                    validationResult.map { it.reason } shouldBe listOf("must be even")
+                }
+            }
+
             `when`("assert OR operations with validate") {
                 then("should throw validationExceptions") {
                     shouldThrowExactly<ValidationException> {
