@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # domain/command/entity/parsers
 
@@ -26,7 +26,9 @@ is a thin lookup from `CommandDetailType` to context.
 - The permission check runs before the `when`, so a denied `grant` never reaches the argument checks.
   Usage errors after the gate are `TextResponseContext` **channel** messages, not ephemerals.
 - The agent prompt comes from `mention.text` (the restored whole message) so links, code blocks and other
-  people's mentions reach the model; `ask` strips the leading keyword, the `UNKNOWN` fallback keeps all of it
+  people's mentions reach the model; `ask` strips the keyword's first whole-word occurrence (with the spaces
+  after it) wherever it sits — the restored text can lead with another mention or a link, e.g. `@bot @alice ask …`
+  restores as `<@alice> ask …`, which a prefix check missed (H8) — and the `UNKNOWN` fallback keeps all of it
   ("what does status mean" must not lose "what"). Blank `text` falls back to joining `commandTokens` the same
   way. `threadId` is `(thread ?: message)?.raw` — a top-level mention anchors a
   new thread at itself.

@@ -185,8 +185,11 @@ internal class AppMentionContextParser(
             return tokens.joinToString(separator = " ")
         }
         if (!dropCommandWord) return text
-        val commandWord = mention.commandTokens.first()
-        return if (text.startsWith(commandWord)) text.removePrefix(commandWord).trim() else text
+        // The command word is the first text token, but the restored text may lead with another mention or a link
+        // (`@bot @alice ask …` restores as `<@alice> ask …`), so a prefix check left "ask" in the prompt. Drop its
+        // first whole-word occurrence instead, with the spaces after it; everything around it stays.
+        val commandWord = Regex("(?<!\\S)${Regex.escape(mention.commandTokens.first())}(?!\\S)[ \\t]*")
+        return commandWord.replaceFirst(input = text, replacement = "").trim()
     }
 
     private fun agentChatContext(prompt: String): AgentChatContext =

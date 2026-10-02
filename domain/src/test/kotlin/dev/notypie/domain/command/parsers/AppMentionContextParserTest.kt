@@ -186,6 +186,33 @@ class AppMentionContextParserTest :
                 }
             }
 
+            // H8: `@bot @alice ask …` restores as `<@U_ALICE> ask …`; the prefix check missed it and "ask" stayed.
+            `when`("command is 'ask' and the restored text leads with another person's mention") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            MentionInvocation(
+                                mentionedUserIds = listOf("U_ALICE"),
+                                commandTokens = listOf("ask", "why", "is", "the", "task", "red?"),
+                                hasCommandStructure = true,
+                                message = MessageHandle(raw = TEST_MESSAGE_TS),
+                                text = "<@U_ALICE> ask why is the task red?\n> ask later",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("only the command word's first whole-word occurrence is removed; the mention stays") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "<@U_ALICE> why is the task red?\n> ask later"
+                }
+            }
+
             `when`("free text arrives with the restored message text") {
                 val fallbackIntents = createIntentQueue()
                 val parser =
