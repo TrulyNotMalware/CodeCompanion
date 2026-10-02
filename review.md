@@ -24,6 +24,7 @@
 12. [교차 검증 종합 · 최종 우선순위 (2026-09-22)](#12-교차-검증-종합--최종-우선순위-2026-09-22)
 13. [2차 교차 검증 — 브랜치 반영 결과 재검수 (2026-09-24)](#13-2차-교차-검증--브랜치-반영-결과-재검수-2026-09-24)
 14. [3차 교차 검증 — 커밋된 브랜치 전수 재검수 (2026-09-28)](#14-3차-교차-검증--커밋된-브랜치-전수-재검수-2026-09-28)
+15. [14장 반영 — 수정 브랜치 `feature/review-round3-fixes` (2026-09-30 ~ 10-02)](#15-14장-반영--수정-브랜치-featurereview-round3-fixes-2026-09-30--10-02)
 - [부록 A: 재현용 확인 명령](#부록-재현용-확인-명령)
 - [부록 B: 레인별 기여 요약](#부록-b-레인별-기여-요약)
 
@@ -2040,6 +2041,166 @@ grep 'SlackRequestVerificationFilter\$\$Lambda' <부팅 로그>
 # T2: Instant 오버플로
 printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(1000000000000000L))\n/exit\n' | jshell -q
 ```
+
+---
+
+## 15. 14장 반영 — 수정 브랜치 `feature/review-round3-fixes` (2026-09-30 ~ 10-02)
+
+> **브랜치**: `feature/review-critical-fixes`의 `b9c261a`(14장 커밋)에서 분기. 항목별 커밋 105개(`b9c261a..e0bace7`, 이 장을 남기는 문서 커밋 제외), push하지 않았습니다.
+> **방법**
+> 1. **1차 수정**: Opus 5.5 워커 8개가 영역별로 격리된 git worktree에서 항목별로 커밋했습니다. 메모리(16GB)를 고려해 2회차로 나눴고, 메인 세션이 cherry-pick으로 통합하며 충돌을 풀었습니다(74커밋).
+> 2. **1차 검수**: Opus 리뷰어 3개(읽기 전용)와 Codex 독립 리뷰가 수정분을 재판정했습니다. 그 결과 새 결함·잔여 결함 30여 건이 나왔습니다(15.3).
+> 3. **2차 수정**: Opus 워커 3개가 15.3 항목을 고쳤습니다(28커밋).
+> 4. **2차 검수**: Codex가 2차 수정분을 다시 리뷰했습니다. 사용량 한도로 중간에 끊겼고, 남긴 판단 중 2건을 메인 세션이 고쳤습니다(15.6).
+> 5. **메인 세션 몫**: 통합, 교차 정리 커밋 4개, Codex 2차 지적 수정 2개, 전체 빌드, 부팅·종료 실측(15.1), 이 장 작성.
+>
+> **결과**: `./gradlew build --rerun-tasks` 통과. 56개 작업이 모두 실제 실행됐고, 테스트는 1,323개에서 **1,653개**(domain 382 · infrastructure 684 · application 587)로 늘었으며 실패·건너뜀 0입니다.
+> **산출물**: `.omc/artifacts/review-2026-09-28-r3/`의 `fixrev1-outbox-dispatch-deploy.md`, `fixrev2-security-meeting-standup.md`, `fixrev3-cve-templates.md`, `fixrev-codex.md`(1차 검수), 빌드 로그.
+
+### 15.1 실측으로 확인한 것
+
+통합본 부트 jar를 H2 인메모리와 도달 불가능한 Kafka 주소로 띄워 확인했습니다. 외부 호출은 하지 않았고, 복구 스윕이 Slack으로 보내기 전(300초)에 종료했습니다.
+
+| 항목 | 14장 상태 | 수정 후 실측 |
+|---|---|---|
+| T1 스케줄러 | `SimpleAsyncTaskScheduler` 선택, fixed-delay 직렬 | Boot 기본 빈이 물러나고 `scheduling-1`~`4` 스레드 풀 |
+| T27 거부 로그 | `…$$Lambda/0x…@1683cb1` | `Rejected Slack request headers: reason=MISSING_TIMESTAMP path=/api/slack/events` |
+| T25 OSIV | 부팅 WARN `open-in-view is enabled by default` | WARN 사라짐. 서명된 `/meetup list`·`/standup list` 200, `LazyInitializationException` 0건(회의 데이터 없는 상태). 정적 전수 확인으로 트랜잭션 밖 LAZY 접근 0건(리뷰어2) |
+| A6 우회 입력(회귀 확인) | 21종 차단 | 여전히 전부 401/400 |
+| W7 local 바인드 | 모든 인터페이스 | 커넥터 `127.0.0.1:19000` |
+| F6 access_blocked | 헬스에 신호 없음 | `/actuator/health`의 outbox에 `accessBlocked`·`lastAccessBlockedAt`·`accessBlockedWindowSeconds` |
+| F1/T12 종료 경로 | 정지 중 큐 작업 신규 발송, 대기 직렬 합 > grace | SIGTERM → relay 정지("0 queued claims left IN_PROGRESS") → Kafka 컨슈머 → 웹 graceful → EntityManagerFactory → Hikari 순서. 유휴 상태 1초 |
+| prod 프로파일 | — | 샘플 configmap/secret 키로 기동, readiness UP(OSIV 끔·종료 단계 60초·forward headers 끔 반영본) |
+| 간헐 실패 보고된 `SlackInteractionHandlerImplTest` | — | 5회 반복 모두 통과(각 17건) |
+
+### 15.2 14장 항목별 반영 현황
+
+"반영" = 수정 + 회귀 테스트, "부분" = 일부만 또는 설계상 잔여, "제외" = 제품 결정·별도 PR. 커밋은 이 브랜치의 SHA이고, `+` 뒤는 2차 검수에서 보강한 커밋입니다.
+
+| 14장 | 상태 | 커밋 | 비고 |
+|---|---|---|---|
+| T1 스케줄러 단일 스레드 | 반영 | `e07184f` + `d43ea56`, `ab30730` | `ThreadPoolTaskScheduler` 명시, relay AbortPolicy + 원자적 슬롯 예약(F2~F4), Spring 배선 스모크 테스트 |
+| T2 cutoff 하나로 스탠드업 전체 정지 | 반영 | `a04efe8` | 1–1440분 검증, 루틴·세션·단계 단위 격리, 결함 고정 테스트 반전 |
+| T3 AI 답변 3,000자 | 반영 | `830448f` + `f31eb05`, `1e16395`, `238811f` | section 분할(50블록), 스테이징 전 40,000자 상한(CDC 레코드 기준), 빈 header 결함도 함께 수정 |
+| T4 스탠드업 요약 section 하나 | 반영 | `970ac12` + `1a0554c`, `f31eb05`, `ab855ca` | 멤버별 section, 답변 중복 fetch 제거(G1), payload MEDIUMTEXT(H1) |
+| T5 setup 회신 채널 `""` | 반영 | `0cf0d71` | 커맨드 채널로, 픽스처를 운영과 같게. 모달 안 오류 표시는 제외(15.4) |
+| T6 타임아웃 재시도 중복 | 반영 | `4bc8d3f` + `8eb3844` | `RequestSendTracker`로 전송 후 실패는 `outcome_unknown`(종단), OkHttp `retryOnConnectionFailure` 끔 |
+| T7 동시 기동 금지 미강제 | 반영 | `542b31f` + `02ea62e`, `3c909da` | `strategy: Recreate`, 롤아웃 타임아웃 480초 |
+| T8 마이그레이션 체크리스트 | 반영 | `c8b31c3` + `f31eb05` | V18 → V19 + V23 → V20 → V22 → 배포 → V21 |
+| T9 답변 재제출 유니크 위반 | 반영 | `2fc9d9c` + `181ecc8` | 동시 최초 제출까지 네이티브 upsert |
+| T10 역할 캐시 회수 지연 | 반영 | `e9b954d` | USER만 캐시 → 회수는 다음 호출에 즉시 반영 |
+| T11 USER 강등이 tx 안에서 무효 | 반영 | `16fca45` | 역할 조회를 트랜잭션 시작 전으로, 실제 `JpaTransactionManager` 회귀 테스트 |
+| T12 종료 예산 | 반영 | `4e18067` + `3c909da` | relay `SmartLifecycle`로 정지 시 큐 비우기, grace 150 = 직렬 합, `ShutdownBudgetTest`가 합계 검사 |
+| T13 `internal_error` 재시도 | 반영 | `2382132` | 비멱등은 `outcome_unknown` |
+| T14 토큰 전역 오류 대량 유실 | 반영 | `bd79872` + `5455699` | 15분 보류(24시간 상한), 헬스·`@bot status` DOWN 신호 |
+| T15 digest 절단 후 전달 완료 | 반영 | `7db238c` + `dc1a010` | 여러 outbox 행으로 분할, 엔티티 경계 절단 |
+| T16 digest 여러 통 | 반영 | `7db238c` + `9f7e0da` | 사용자 우선 페이징, 단일 사용자 초과분도 한 digest |
+| T17 신규 구독 백필 | **제외** | — | 의도 여부가 제품 결정 |
+| T18 DM FAILED 종단·넛지 선커밋 | 반영 | `865ba20` | claim을 저장 tx에 합류, cutoff까지 재시도 |
+| T19 마감 뒤 답변 | 반영 | `77768ae` + `43f9492`, `b49d16e` | 세션 행 `PESSIMISTIC_WRITE`로 답변·요약 직렬화(두 tx 경합 테스트) |
+| T20 스레드 세션 공유 | 반영 | `e9941e9` | 세션 키 `채널:스레드:요청자` |
+| T21 mrkdwn 이스케이프 0건 | 반영 | `a3e462f`, `ee8382e`, `fa862c4`, `813c51d` + `9c02c3d`, `0befb64` | 정본 `domain/common/MarkupEscape.kt`, AI 출력은 브로드캐스트만 무력화 |
+| T22 거절 사유 255자 | 반영 | `c53cb38`, `712fa27` + `9ea9712` | 입력 `max_length`, 도메인 검증(코드포인트), BEFORE_COMMIT 재시도 제거 |
+| T23 MCP XFF 우회 | 반영 | `fbf79e9` + `bdeb68d` | `forward-headers-strategy: none`, 실제 Jetty 커넥터 테스트 |
+| T24 멘션 rich_text 누락 | 반영 | `4f179ce` + `79df70b` | 요소 전체 복원, 굵게·인라인 코드 멘션의 역직렬화 실패(`Element.style`)도 수정 |
+| T25 OSIV | 반영 | `1cec748` | `open-in-view: false` 명시, OSIV 대조 테스트 |
+| T26 CVE 요약 무한 재시도 | 반영 | `0fb5210` + `58e9114` | FAILED + retry+1, 백오프 |
+| T27 필터 로거 섀도잉 | 반영 | `6896b0e` | 로그 캡처 테스트 |
+| T28 비활성 루틴이 큐 막음 | 반영 | `97f9daf` + `aed80bf` | 건너뜀 종결(이번 릴리스는 `FAILED` + `skipped:` 사유로 기록 — 15.5) |
+
+**Low 항목**: O2 `b5ba092` · O3 `201354e`·`b31fab6`·`7fcb543` · O4 `3951079` · O6 `d68e9c9` · O7 `f1b336e` · O8 `40f7db9` · D4 `27ced49` · D5 `936f365` · D6 `f0c66ef`·`ef152bc` · D7 `e4ecf9a` · A3(프로필 6초) `9be51fa` · A2 계열 CVE 시계 `a44314e` · P3 `64c008a` · P4 `4be810a` · P5 `125f7ea` · W3 `a202d76` · W4 `7cc1852` · W5 `813d15e`(문서만) · W6 `1b4149b` · W7 `e73b203` · R3-S20 `da9aaca` · R3-07 `0220334`(interactive만) · V5 `d5ee5e7` · V6 `c63a5da`·`62b50cb`·`c1f45bc` · V7 `1fb4203`·`2e111ab`(5페이지 상한 경고·메트릭) · V8 `8c4d5de`(경고만) · V10 `36493cd` · U6·U8 `a04efe8`·`e522cc4` · A9 `7634167`·`acc2594` · M6 `1f012ff`·`1721fed` · M7 `16f6f2c` · M8 `16fca45`·`144de7c` · **M5는 수정 불필요로 판정** — Hibernate 7.4.5는 컬렉션 fetch + `Pageable`을 SQL 파생 테이블로 페이징함(실측), 대신 `fail_on_pagination_over_collection_fetch=true` 회귀 테스트 `1f8e3e2` · 14.6 문서 드리프트 `3a60242`·`da7d23a`·`a1a0611`·`5c2b8e0`·`058f94a`·`7c70c5d`.
+
+### 15.3 수정 브랜치 1차 검수에서 나온 결함과 처리
+
+Opus 리뷰어 3개(F·G·H 계열)와 Codex(R·N 계열)가 독립적으로 찾은 것입니다. 같은 결함을 여러 곳이 짚은 경우는 묶었습니다.
+
+| 지적 | 심각도 | 내용 | 처리 |
+|---|---|---|---|
+| R2 / F1 | High | relay 실행기가 종료 정지 단계 내내 큐의 claim을 새로 발송하고, 대기가 직렬로 더해져 grace 90을 넘음 → SIGKILL 후 스윕 재발송(중복) | `3c909da` (15.1에서 종료 순서 실측) |
+| R1 / F5 | High | OkHttp `retryOnConnectionFailure`(기본 true)가 추적기를 우회해 POST를 재전송(Codex·워커 모두 로컬 서버로 재현) | `8eb3844` |
+| N1 | High | CVE 부트스트랩이 75자 초과 표시 이름으로 기동 실패(DB 128자, 템플릿은 이미 절단) | `c1f45bc` (+ 옵션 100개 절단, `activate` 상한) |
+| G1 | High (main 기존) | 스탠드업 세션 조회가 Set + List(bag)를 한 쿼리로 fetch → 답변이 dispatch 수만큼 중복 → payload 비대화 | `1a0554c` (`answers`를 Set으로, dispatch 3 × 답변 2 회귀 테스트) |
+| H1 | Medium | outbox `payload TEXT`(64KB)라 긴 한국어 AI 답변·꽉 찬 요약이 strict 모드에서 롤백 | `f31eb05` (V23 MEDIUMTEXT + 스테이징 상한 + payload 크기 가드), 상한은 Codex 2차 지적으로 `238811f`에서 40,000자로 |
+| R5 / G5 | Medium | 답변 접수와 마감 요약이 직렬화되지 않음 | `43f9492` |
+| R3 / F6 | Medium | access_blocked 보류가 헬스·`@bot status`에 안 보임 | `5455699` |
+| R4 | Medium | 혼자 페이지를 채운 사용자의 digest가 여러 통 | `9f7e0da` |
+| R6 / G3 / G8 / H2 | Medium | 넛지·셋업 회신의 루틴 이름, 거절 사유 상세(도메인), ops 에코 미이스케이프 | `9c02c3d`, `0befb64` |
+| N2 / G10 | Medium | 리마인더 폐기·재정렬에 관찰 시각 조건이 없어 다른 복제본 결과를 덮음 | `1721fed` |
+| G2 | Low~Medium | 새 enum `SKIPPED`를 이전 바이너리가 못 읽어 자동 롤백 시 스탠드업 정지 | `aed80bf` (이번 릴리스는 `FAILED` + 사유, `SKIPPED`는 읽기만) |
+| F2 · F3 · F4 | Low | 슬롯 과대 계산, 폴러·스윕 동시 과다 claim, 캐스트 실패 시 fail-open | `d43ea56` (원자적 예약으로 통합) |
+| G4 · G7 · G9 | Low | 동시 최초 제출, 세션 없음 공지, outbox 저장 BEFORE_COMMIT 재시도 | `181ecc8`, `b49d16e`, `c8ed6bf` |
+| H4~H10 | Low | 빈 코드블록·엔티티 절단, 봇 멘션 과잉 무시, CVE 리셋 백오프, NVD 인터럽트·페이지 상한, ask 접두어, 255자 단위, `max_length` 하한 | `dc1a010`, `acc2594`, `58e9114`, `2e111ab`, `79df70b`, `9ea9712`, `ab855ca` |
+| H11 · G11 · G12 | Low(테스트) | 가드 테스트 범위, 아무것도 검증하지 않던 XFF 테스트, bag 중복을 못 잡던 픽스처 | `1e16395`(가드가 빈 header 실결함 발견), `bdeb68d`, `1a0554c` |
+| 문서 모순 | — | 리뷰어별 D 목록 | `7fcb543`, `84a3535`, `3acc063` 외 각 커밋 |
+| (통합 중 발견) | Low(테스트) | 슬롯 스모크 테스트가 `activeCount`를 기다려 전체 빌드 부하에서 간헐 실패 | `ab30730` (디스패처 진입 수로 대기) |
+
+**판정이 갈린 곳**
+- **DLT 전송 실패**(Codex 1차 R3-03, 2차 "S9 REGRESSED"): 14.5의 근거대로 Low로 유지했습니다. outbox 행은 PENDING으로 남아 스윕이 복구합니다. 대신 `f1b336e`로 DLT 발행 실패를 메트릭·ERROR 로그로 드러냈습니다.
+- **G2 처리 방식**: 리뷰어는 "문서화 또는 FAILED+사유"를 제시했습니다. Recreate의 자동 `rollout undo` 경로와 겹치므로 문서화만으로는 부족하다고 보고 FAILED+사유로 바꿨습니다.
+
+### 15.4 의도적으로 하지 않은 것
+
+- **제품 결정이 필요한 것**
+  - T17(신규 구독 백필, GitHub 첫 수집의 과거 릴리스)
+  - U7(루틴 비활성화·수정 기능)
+  - N3(주최자 알림 포함)
+  - 복제본 간 dedup 공유(결정 #34)
+  - V8의 prod 토큰 필수화(경고만 추가)
+- **별도 PR**
+  - C6(툴체인·컴파일러 옵션 이동)
+  - `SlashCommandGate`, detekt/JaCoCo
+  - R2→R1 God-class 분해
+  - S16(g) non-root(80번 포트와 함께 바꿔야 함)
+- **구조상 보류**
+  - A11(대체 `text`가 라우팅 토큰): 파서가 메시지 버튼의 라우팅을 `message.text`에서 읽어 하위 호환 설계가 필요합니다.
+  - T5의 모달 안 오류 표시: 검증이 ack 이후 이벤트 리스너에서 돕니다.
+  - R3-07의 slash/event 선 ACK: Slack 3초 규칙 때문이며 local 전용입니다.
+  - W5 게이트웨이 속도 제한: 문서 권고만 했습니다.
+  - Codex R5 부수 지적(DM 발송의 마감 재검사): 늦은 DM에 답해도 이제 "closed" 안내를 받습니다.
+
+### 15.5 배포 전 체크리스트 (갱신)
+
+1. **마이그레이션 수동 적용 순서**: V18(중복 참가자 사전 점검 쿼리 → 정리) → V19 + V23 → V20 → V22 → 배포 → 모든 파드가 새 바이너리가 된 뒤 V21.
+   - 번호와 적용 순서가 다릅니다. 정본은 `db/migration/AGENTS.md`와 `k8s/README.md`의 One-time 절입니다.
+   - V23(`payload` MEDIUMTEXT)은 테이블 재작성이 일어날 수 있으니 한산한 때 적용합니다.
+   - readiness는 스키마 누락을 잡지 못하므로 `SHOW COLUMNS`로 미리 확인합니다.
+2. **`deployment.yaml`의 `strategy: Recreate`**: 이 블록이 있는 동안 모든 배포(롤백 포함)는 중단을 동반합니다. 중단 시간은 최대 구 파드 종료 150초 + startup 180초입니다. 모든 파드가 V20 이상이 된 뒤 후속 PR에서 블록을 지웁니다.
+3. **롤백 호환성**
+   - 건너뛴 스탠드업 dispatch는 `FAILED` + `skipped:` 사유로 기록되므로 이전 바이너리로 롤백해도 읽힙니다.
+   - `SKIPPED` 저장은 다음 릴리스에서 시작합니다.
+   - V23 MEDIUMTEXT는 롤백에 영향이 없습니다.
+4. **배포 수치**: `terminationGracePeriodSeconds` 150, `DEPLOYMENT_ROLLOUT_TIMEOUT` 480초, 배포 job 25분.
+5. **새 설정 키**: `slack.app.outbox.health.access-blocked-window-seconds`(기본 1200). 보류가 최근 20분 안에 있으면 헬스 DOWN입니다(readiness 그룹에는 포함하지 않음).
+6. **13.5에서 이어지는 확인 항목**: 배포 계정 RBAC(`services/proxy` get 또는 `pods/exec` create), configmap/secret 새 키, Kafka `<topic>-dlt` 생성 권한, 노드 메모리 여유.
+7. **`main`이 `c2947fa`(#22)로 앞서 있습니다.** 이 브랜치와 `feature/review-critical-fixes`는 그 전 `main` 기준이므로 머지 전에 rebase 또는 merge로 충돌을 해소해야 합니다.
+
+### 15.6 Codex 2차 수정분 리뷰
+
+> Codex가 `7c70c5d..HEAD`를 리뷰하던 중 사용량 한도(18:38 이후 재시도 안내)로 **최종 표 없이 중단**됐습니다. 원문은 `.omc/artifacts/ask/codex-you-are-a-senior-engineer-reviewing-the-second-fix-round-on--2026-10-02T05-45-18-673Z.md`입니다.
+> 중단 전에 application 테스트 281개와 domain·infrastructure 선택 테스트를 실행해 통과를 확인했습니다. 종료 처리는 "큐 차단·DB 파기 순서가 개선됐다"고 판정했고, 아래 5건의 판단을 남겼습니다. 한도가 풀린 뒤 전체 판정을 다시 받는 것을 권합니다.
+
+| Codex 판단 | 메인 판정 | 처리 |
+|---|---|---|
+| AI 답변 상한(139,200자)을 적용해도 CDC 갱신 레코드가 1 MiB를 넘음 — 역슬래시 입력 1,114,270바이트, 제어문자 입력 1,949,392바이트(재현). 가드 테스트는 실제 이중 직렬화 대신 `payload × 2`로 계산 | **채택(Medium)**. 레코드가 `max.request.size`를 넘으면 Debezium 커넥터가 실패해 모든 발송이 멈춤 | `238811f`: 상한 40,000자(Slack 메시지 `text` 한도와 같음, 최악 입력 약 560 KB), 가드가 payload를 JSON 문자열로 다시 인코딩해 계산하고 제어문자·역슬래시 입력도 단언. 옛 상한에서 이 두 단언이 실패하는 것을 확인 |
+| OkHttp가 `503 + Retry-After: 0`을 내부에서 재전송 | Codex 스스로 결함에서 제외(디스패처도 503은 Slack이 처리하지 않은 응답으로 보고 재시도) — **동의** | — |
+| CVE 표시 이름 상한을 UTF-16 길이로 셈 → 이모지 76자 이름도 거부 | **채택(Low)**. utf8mb4 `VARCHAR(128)`은 문자 단위 | `e0bace7`: 코드포인트로 판정, 이모지 128자 통과·129자 실패 테스트 |
+| ask 접두어 제거가 앞선 링크 라벨의 단어를 지울 수 있음 | 수용(Low). 워커가 잔여 위험으로 문서화 | — |
+| `ShutdownBudgetTest`가 웹 graceful·스케줄러 정지 단계를 합산하지 않음 | 수용(Low). 그 단계들은 정지 전에 시작된 발송이 레코드 예산을 다 쓴 뒤에 오므로 보통 수 초임(워커 문서화). MCP SSE 장기 연결이 웹 단계를 길게 쥐는지는 미검증 | 15.7 |
+
+### 15.7 남은 위험과 미검증
+
+- **실행 환경이 없어 확인하지 못한 것**
+  - 실제 MariaDB에서의 동작: V18~V23 적용, `PESSIMISTIC_WRITE`의 InnoDB 동작, `INSERT … ON DUPLICATE KEY UPDATE`, strict `sql_mode`.
+  - Kafka 브로커 왕복(DLT, MEDIUMTEXT 크기 행의 CDC 레코드).
+  - 클러스터 배포·롤백·RBAC.
+- **Slack 측 동작**
+  - 48 section × 2,900자 메시지가 `msg_blocks_too_long`에 걸리는지.
+  - OkHttp 재전송을 끈 뒤 `outcome_unknown`(유실)이 실제로 얼마나 자주 생기는지.
+  - 봇 게시물 안의 `<!channel>`이 실제로 알림을 울리는지.
+- **설계상 잔여**
+  - access_blocked 신호는 복제본별 메모리라 재시작하면 사라집니다.
+  - 종료가 시작된 뒤 CDC가 claim한 레코드는 약 300초 뒤 스윕이 보냅니다.
+  - Codex 2차 리뷰는 중간에 끊겼습니다. 한도가 풀린 뒤 `7c70c5d..HEAD` 전체 판정을 다시 받는 것을 권합니다.
 
 ---
 
