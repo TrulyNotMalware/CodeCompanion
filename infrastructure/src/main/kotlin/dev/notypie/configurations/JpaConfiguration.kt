@@ -37,6 +37,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy
+import org.springframework.transaction.PlatformTransactionManager
 import java.time.Clock
 
 const val PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"
@@ -109,8 +110,10 @@ class JpaConfiguration {
 
     @Bean
     @Primary
-    fun cveTopicRepository(jpaCveTopicRepository: JpaCveTopicRepository) =
-        CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+    fun cveTopicRepository(
+        jpaCveTopicRepository: JpaCveTopicRepository,
+        transactionManager: PlatformTransactionManager,
+    ) = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository, transactionManager = transactionManager)
 
     @Bean
     @Primary

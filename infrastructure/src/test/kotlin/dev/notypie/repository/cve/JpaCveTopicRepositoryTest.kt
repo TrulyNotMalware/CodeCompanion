@@ -1,5 +1,6 @@
 package dev.notypie.repository.cve
 
+import dev.notypie.repository.cve.schema.CveTopicSchema
 import dev.notypie.schema.createCveTopicDefinition
 import dev.notypie.schema.createCveTopicSchema
 import io.kotest.core.extensions.ApplyExtension
@@ -10,6 +11,9 @@ import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.TransactionTemplate
 
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
@@ -18,7 +22,19 @@ class JpaCveTopicRepositoryTest
     constructor(
         private val repository: JpaCveTopicRepository,
         private val jdbcTemplate: JdbcTemplate,
+        private val transactionManager: PlatformTransactionManager,
     ) : BehaviorSpec({
+            val committed =
+                TransactionTemplate(transactionManager).apply {
+                    propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+                }
+
+            afterSpec {
+                committed.executeWithoutResult {
+                    jdbcTemplate.update("DELETE FROM cve_topic WHERE topic_key = ?", "replica-race")
+                }
+            }
+
             given("a bootstrap upsert holding a topic read before an admin deactivated it") {
                 `when`("the upsert renames the topic after the deactivation committed") {
                     then("its UPDATE writes only the changed columns, so the deactivation survives") {
@@ -26,7 +42,10 @@ class JpaCveTopicRepositoryTest
                         repository.findByTopicKey(topicKey = "race-topic")
                         jdbcTemplate.update("UPDATE cve_topic SET active = FALSE WHERE topic_key = ?", "race-topic")
 
-                        CveTopicRepositoryImpl(jpaCveTopicRepository = repository).upsert(
+                        CveTopicRepositoryImpl(
+                            jpaCveTopicRepository = repository,
+                            transactionManager = transactionManager,
+                        ).upsert(
                             definition = createCveTopicDefinition(topicKey = "race-topic", displayName = "Renamed"),
                         )
                         repository.flush()
@@ -41,6 +60,42 @@ class JpaCveTopicRepositoryTest
                             String::class.java,
                             "race-topic",
                         ) shouldBe "Renamed"
+                    }
+                }
+            }
+
+            given("two replicas booting together, the other one committing the topic between the read and the insert") {
+                `when`("this replica's insert loses the unique key") {
+                    then("the bootstrap transaction survives and syncs the committed row, keeping its active flag") {
+                        committed.executeWithoutResult {
+                            repository.saveAndFlush(createCveTopicSchema(topicKey = "replica-race", active = false))
+                        }
+                        val readBeforeTheOtherCommit =
+                            object : JpaCveTopicRepository by repository {
+                                override fun findByTopicKey(topicKey: String): CveTopicSchema? = null
+                            }
+
+                        val written =
+                            CveTopicRepositoryImpl(
+                                jpaCveTopicRepository = readBeforeTheOtherCommit,
+                                transactionManager = transactionManager,
+                            ).upsert(
+                                definition =
+                                    createCveTopicDefinition(topicKey = "replica-race", displayName = "Renamed"),
+                            )
+                        repository.flush()
+
+                        written shouldBe true
+                        jdbcTemplate.queryForObject(
+                            "SELECT display_name FROM cve_topic WHERE topic_key = ?",
+                            String::class.java,
+                            "replica-race",
+                        ) shouldBe "Renamed"
+                        jdbcTemplate.queryForObject(
+                            "SELECT active FROM cve_topic WHERE topic_key = ?",
+                            Boolean::class.java,
+                            "replica-race",
+                        ) shouldBe false
                     }
                 }
             }
