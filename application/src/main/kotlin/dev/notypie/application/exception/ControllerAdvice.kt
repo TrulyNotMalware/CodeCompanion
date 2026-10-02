@@ -1,6 +1,7 @@
 package dev.notypie.application.exception
 
 import dev.notypie.application.security.SlackHeaders
+import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.exception.meeting.DatabaseException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpStatus
@@ -33,6 +34,16 @@ class ControllerAdvice : ResponseEntityExceptionHandler() {
             .status(HttpStatus.BAD_REQUEST)
             .header(SlackHeaders.NO_RETRY, "1")
             .body(mapOf("error" to "unsupported_command_type"))
+    }
+
+    // Slack resends a 5xx up to three times; a payload that cannot be read will not read on the retry either.
+    @ExceptionHandler(value = [AppIdNotFoundException::class, InvalidEventPayloadException::class])
+    fun handleUnreadablePayload(e: CodeCompanionRuntimeException): ResponseEntity<Map<String, String>> {
+        log.warn(e) { "Rejected a Slack payload that cannot be read: ${e.errorCode.message}" }
+        return ResponseEntity
+            .status(HttpStatus.BAD_REQUEST)
+            .header(SlackHeaders.NO_RETRY, "1")
+            .body(mapOf("error" to "invalid_payload"))
     }
 
     @ExceptionHandler(value = [Exception::class])

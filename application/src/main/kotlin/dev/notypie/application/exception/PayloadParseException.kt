@@ -13,6 +13,9 @@ enum class PayloadParseErrorCode(
     UNSUPPORTED_SLACK_COMMAND_TYPE(
         message = "Unsupported Slack command type in payload.",
     ),
+    INVALID_EVENT_PAYLOAD(
+        message = "Slack event payload does not have the expected shape.",
+    ),
 }
 
 class AppIdNotFoundException(
@@ -31,3 +34,16 @@ class UnsupportedSlackCommandTypeException(
         errorCode = errorCode,
         details = details,
     )
+
+class InvalidEventPayloadException(
+    errorCode: ErrorCode,
+    details: List<ExceptionArgument>,
+    cause: Throwable,
+) : CodeCompanionRuntimeException(
+        errorCode = errorCode,
+        details = details,
+    ) {
+    init {
+        initCause(cause)
+    }
+}

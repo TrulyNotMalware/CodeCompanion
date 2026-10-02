@@ -1,6 +1,8 @@
 package dev.notypie.application.service.mention
 
 import dev.notypie.application.exception.AppIdNotFoundException
+import dev.notypie.application.exception.InvalidEventPayloadException
+import dev.notypie.application.exception.PayloadParseErrorCode
 import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.command.CommandRoleResolver
@@ -55,6 +57,18 @@ class SlackMentionEventHandlerImplTest :
                     shouldThrow<AppIdNotFoundException> {
                         handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
                     }
+                }
+            }
+
+            `when`("the event body is missing a field the callback model requires") {
+                val payload = createAppMentionPayload() - "event"
+
+                then("it is an unreadable payload, which the advice answers with 400 and no retry") {
+                    val exception =
+                        shouldThrow<InvalidEventPayloadException> {
+                            handler.parseAppMentionEvent(headers = testHeaders, payload = payload)
+                        }
+                    exception.errorCode shouldBe PayloadParseErrorCode.INVALID_EVENT_PAYLOAD
                 }
             }
 

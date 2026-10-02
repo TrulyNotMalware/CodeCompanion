@@ -2,6 +2,7 @@ package dev.notypie.application.service.mention
 
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.exception.AppIdNotFoundException
+import dev.notypie.application.exception.InvalidEventPayloadException
 import dev.notypie.application.exception.PayloadParseErrorCode
 import dev.notypie.application.exception.UnsupportedSlackCommandTypeException
 import dev.notypie.application.service.command.CommandExecutor
@@ -88,6 +89,17 @@ class SlackMentionEventHandlerImpl(
                 )
             }
 
-    private fun convertBodyData(payload: Map<String, Any>) =
-        jsonMapper.convertValue(payload, SlackEventCallBackRequest::class.java)
+    private fun convertBodyData(payload: Map<String, Any>): SlackEventCallBackRequest =
+        runCatching { jsonMapper.convertValue(payload, SlackEventCallBackRequest::class.java) }
+            .getOrElse { cause ->
+                throw InvalidEventPayloadException(
+                    errorCode = PayloadParseErrorCode.INVALID_EVENT_PAYLOAD,
+                    details =
+                        exceptionDetails {
+                            "event" value "" because
+                                (cause.message ?: cause::class.java.simpleName)
+                        },
+                    cause = cause,
+                )
+            }
 }

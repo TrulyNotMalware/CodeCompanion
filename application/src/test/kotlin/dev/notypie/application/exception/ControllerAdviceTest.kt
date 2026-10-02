@@ -85,6 +85,30 @@ class ControllerAdviceTest :
             }
         }
 
+        given("a Slack payload that cannot be read") {
+            val unreadable =
+                listOf(
+                    AppIdNotFoundException(errorCode = PayloadParseErrorCode.APP_ID_NOT_FOUND, details = emptyList()),
+                    InvalidEventPayloadException(
+                        errorCode = PayloadParseErrorCode.INVALID_EVENT_PAYLOAD,
+                        details = emptyList(),
+                        cause = IllegalArgumentException("missing event.user"),
+                    ),
+                )
+
+            `when`("the advice handles it") {
+                val responses = unreadable.map { advice.handleUnreadablePayload(e = it) }
+
+                then("it answers 400 with X-Slack-No-Retry so Slack does not resend the same payload three times") {
+                    responses.forEach { response ->
+                        response.statusCode shouldBe HttpStatus.BAD_REQUEST
+                        response.headers.getFirst(SlackHeaders.NO_RETRY) shouldBe "1"
+                        response.body shouldBe mapOf("error" to "invalid_payload")
+                    }
+                }
+            }
+        }
+
         given("the exception handler resolver built from the advice") {
             val resolver = ExceptionHandlerMethodResolver(ControllerAdvice::class.java)
 
@@ -119,6 +143,20 @@ class ControllerAdviceTest :
 
                 then("the dedicated handler is chosen") {
                     method.shouldNotBeNull().name shouldBe "handleUnsupportedSlackCommandType"
+                }
+            }
+
+            `when`("an unreadable-payload exception is raised") {
+                val method =
+                    resolver.resolveMethod(
+                        AppIdNotFoundException(
+                            errorCode = PayloadParseErrorCode.APP_ID_NOT_FOUND,
+                            details = emptyList(),
+                        ),
+                    )
+
+                then("the 400 handler is chosen, not the 500 catch-all") {
+                    method.shouldNotBeNull().name shouldBe "handleUnreadablePayload"
                 }
             }
         }
