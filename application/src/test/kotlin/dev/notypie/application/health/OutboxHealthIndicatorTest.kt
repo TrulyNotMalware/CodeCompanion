@@ -7,6 +7,7 @@ import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRepositoryOver
 import dev.notypie.application.outbox.stubOutboxStatus
 import dev.notypie.application.service.ops.OpsStatusService
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.core.spec.style.BehaviorSpec
@@ -27,6 +28,7 @@ class OutboxHealthIndicatorTest :
                 OutboxHealthIndicator(
                     outboxRepository = repository,
                     clock = clock,
+                    accessBlockedTracker = AccessBlockedTracker(),
                     appConfig =
                         AppConfig(
                             outbox =
@@ -178,6 +180,41 @@ class OutboxHealthIndicatorTest :
             }
         }
 
+        given("the relay held rows because Slack refused the bot's access") {
+            val clock = createFixedUtcClock()
+            val repository = mockk<MessageOutboxRepository>()
+            repository.stubOutboxStatus()
+
+            fun healthAfterHoldAgo(seconds: Long) =
+                OutboxHealthIndicator(
+                    outboxRepository = repository,
+                    clock = clock,
+                    accessBlockedTracker =
+                        AccessBlockedTracker().apply { record(at = clock.instant().minusSeconds(seconds)) },
+                    appConfig = AppConfig(),
+                ).health()
+
+            `when`("the last hold is inside the window") {
+                val health = healthAfterHoldAgo(seconds = 600L)
+
+                then("the indicator is DOWN and says so, although no outbox count moved") {
+                    health.status shouldBe Status.DOWN
+                    health.details["accessBlocked"] shouldBe true
+                    health.details["lastAccessBlockedAt"] shouldBe clock.instant().minusSeconds(600L).toString()
+                    health.details["accessBlockedWindowSeconds"] shouldBe 1_200L
+                }
+            }
+
+            `when`("the last hold is older than the window") {
+                val health = healthAfterHoldAgo(seconds = 1_800L)
+
+                then("the indicator is UP again") {
+                    health.status shouldBe Status.UP
+                    health.details["accessBlocked"] shouldBe false
+                }
+            }
+        }
+
         given("outbox states on either side of every DOWN rule") {
             val states =
                 mapOf(
@@ -208,14 +245,23 @@ class OutboxHealthIndicatorTest :
                     "a fresh PENDING row" to listOf(OutboxStatusRow(status = MessageStatus.PENDING)),
                 )
 
-            states.forEach { (name, rows) ->
+            val clock = createFixedUtcClock()
+            val accessBlocked = AccessBlockedTracker().apply { record(at = clock.instant().minusSeconds(600L)) }
+            val cases =
+                states.map { (name, rows) -> Triple(name, rows, AccessBlockedTracker()) } +
+                    Triple("no rows, but a Slack access block 10 minutes ago", emptyList(), accessBlocked)
+
+            cases.forEach { (name, rows, tracker) ->
                 `when`("the outbox holds $name") {
                     val repository = createOutboxRepositoryOver(rows = rows)
-                    val clock = createFixedUtcClock()
                     val appConfig = AppConfig()
                     val health =
-                        OutboxHealthIndicator(outboxRepository = repository, clock = clock, appConfig = appConfig)
-                            .health()
+                        OutboxHealthIndicator(
+                            outboxRepository = repository,
+                            clock = clock,
+                            accessBlockedTracker = tracker,
+                            appConfig = appConfig,
+                        ).health()
                     val report =
                         OpsStatusService(
                             outboxRepository = repository,
@@ -224,6 +270,7 @@ class OutboxHealthIndicatorTest :
                             cveTopicRepository = mockk(),
                             cveEventRepository = mockk(),
                             cveCollectLedgerRepository = mockk(),
+                            accessBlockedTracker = tracker,
                             clock = clock,
                             appConfig = appConfig,
                         ).renderReport()
@@ -231,6 +278,7 @@ class OutboxHealthIndicatorTest :
                     OutboxMetrics(
                         outboxRepository = repository,
                         clock = clock,
+                        accessBlockedTracker = tracker,
                         appConfig = appConfig,
                         meterRegistry = registry,
                     )
@@ -249,6 +297,8 @@ class OutboxHealthIndicatorTest :
                         gauge(OUTBOX_MESSAGES_METRIC, "status", "pending") shouldBe detail("pendingCount")
                         gauge(OUTBOX_MESSAGES_METRIC, "status", "in_progress") shouldBe detail("inFlightCount")
                         gauge(OUTBOX_RETRYING_METRIC) shouldBe detail("retryingCount")
+                        gauge(OUTBOX_ACCESS_BLOCKED_METRIC) shouldBe
+                            (if (health.details["accessBlocked"] == true) 1.0 else 0.0)
                         registry
                             .get(OUTBOX_IN_PROGRESS_OLDEST_CLAIM_AGE_METRIC)
                             .timeGauge()

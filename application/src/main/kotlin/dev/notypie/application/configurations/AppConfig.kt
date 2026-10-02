@@ -96,10 +96,15 @@ data class AppConfig(
         data class Health(
             val stuckThresholdSeconds: Long = 300L,
             val retryingSendThreshold: Int = 3,
+            // Longer than a held row takes to come back (15 min wait + 2 min spread + one sweep), or DOWN flaps.
+            val accessBlockedWindowSeconds: Long = 1_200L,
         ) {
             init {
                 require(stuckThresholdSeconds > 0L) { "outbox.health.stuck-threshold-seconds must be positive" }
                 require(retryingSendThreshold > 0) { "outbox.health.retrying-send-threshold must be positive" }
+                require(accessBlockedWindowSeconds > 0L) {
+                    "outbox.health.access-blocked-window-seconds must be positive"
+                }
             }
         }
 

@@ -260,6 +260,7 @@ class OutboxRecoverySchedulerTest :
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Polling(giveUpAfterHours = 0L) }
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(retryingSendThreshold = 0) }
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(stuckThresholdSeconds = 0L) }
+                shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(accessBlockedWindowSeconds = 0L) }
             }
         }
 

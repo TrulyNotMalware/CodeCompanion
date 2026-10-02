@@ -63,7 +63,9 @@ _type: architecture · updated: 2026-10-02_
   소진(`TRANSIENT_EXHAUSTED_REASON`: 5xx, `IOException`·call timeout, `internal_error`/`service_unavailable`가 짧은
   재시도를 다 쓴 경우) → 아무것도 쓰지 않고 `IN_PROGRESS`로 둬 stuck 임계 뒤 스윕이 재발송한다. 예전에는 ③이
   예외로 올라가 `FAILURE`가 되어 1초짜리 Slack 장애에도 메시지를 잃었다. dispatcher가 예상 밖 예외를 던져도 ③과
-  같이 다룬다.
+  같이 다룬다. ④ 접근 차단(`isAccessBlocked()`: 토큰·스코프·워크스페이스 전역 거부, 분류는 dispatcher) → 행 단위
+  `FAILURE` 대신 ②와 같은 `deferClaim`으로 `ACCESS_BLOCKED_DEFER`(15분) 뒤로 미루고(24시간 상한까지 보류),
+  `AccessBlockedTracker`에 시각을 남긴다. 토큰을 고치면 보류된 행이 다음 회수 때 나간다.
 - **한 번의 dispatch는 시간 상한이 있다.** Slack SDK 클라이언트와 `response_url` 클라이언트 모두 OkHttp
   `callTimeout` 6초(`SLACK_CALL_TIMEOUT`), SDK stats는 끈다(stats가 켜져 있으면 SDK가 `Retry-After`를
   `Long.valueOf`로 먼저 읽어 HTTP-date에서 예외가 나고, 팀 ID 해석용 `auth.test`를 호출마다 추가로 부른다).
@@ -227,10 +229,15 @@ _type: architecture · updated: 2026-10-02_
   발송이 거듭 실패하는 행을 가리킨다. rate limit만 맞은 행은 유예 중이고 `send_count`도 돌려받으므로 DOWN을 만들지
   않는다. 디테일 키: `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`,
   `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`,
-  `retryingSendThreshold`.
+  `retryingSendThreshold`, `accessBlocked`, `lastAccessBlockedAt`, `accessBlockedWindowSeconds`.
+- 접근 차단으로 보류된 행은 어떤 카운트에도 잡히지 않는다(`deferClaim`이 발송을 돌려받고 `updated_at`을 stuck 임계 너머로
+  옮긴다). 그래서 릴레이가 보류할 때마다 `AccessBlockedTracker`(메모리, 레플리카별)에 시각을 남기고, 마지막 보류가
+  `slack.app.outbox.health.access-blocked-window-seconds`(기본 1200, 15분 대기 + 2분 분산 + 스윕 한 주기보다 길게)
+  안이면 DOWN이다. 재시작한 레플리카는 첫 보류 전까지 UP이다. 게이지 `outbox_access_blocked`(0/1)와 `@bot status`의
+  "*Slack access blocked:*" 줄이 같은 값을 보인다. 이 인디케이터는 readiness 그룹에 없으므로 배포 게이트를 막지 않는다.
 - 헬스 인디케이터, Prometheus 게이지, `OpsStatusService.renderReport`(`@bot status` 답장과 MCP `get_status`)가 모두
   `readOutboxHealth`가 만든 `OutboxHealthSnapshot` 하나를 읽는다. 판정(stuck PENDING, 임계 + 스윕 주기를 넘긴 in-flight,
-  retrying 행)도 한 곳에만 있어 채팅과 actuator가 다른 결론을 내지 않는다. 게이지 다섯 개는 한 스크레이프에서 스냅샷
+  retrying 행)도 한 곳에만 있어 채팅과 actuator가 다른 결론을 내지 않는다. 게이지 여섯 개는 한 스크레이프에서 스냅샷
   하나를 함께 쓴다(1초 재사용).
 - 미지원 `schema_version` 행은 `IN_PROGRESS`로 남지만 헬스에는 잡히지 않는다: 회수할 때마다 `updated_at`이 갱신되고
   `send_count`는 0이다. ERROR 로그(`not in [...]; leaving it IN_PROGRESS unsent`)로 본다.

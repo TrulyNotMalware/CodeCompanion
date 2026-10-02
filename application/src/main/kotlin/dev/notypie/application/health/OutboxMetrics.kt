@@ -1,6 +1,7 @@
 package dev.notypie.application.health
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -13,6 +14,7 @@ const val OUTBOX_MESSAGES_METRIC = "outbox.messages"
 const val OUTBOX_PENDING_OLDEST_AGE_METRIC = "outbox.pending.oldest.age"
 const val OUTBOX_IN_PROGRESS_OLDEST_CLAIM_AGE_METRIC = "outbox.in.progress.oldest.claim.age"
 const val OUTBOX_RETRYING_METRIC = "outbox.retrying.messages"
+const val OUTBOX_ACCESS_BLOCKED_METRIC = "outbox.access.blocked"
 
 private val SNAPSHOT_REUSE_NANOS: Long = TimeUnit.SECONDS.toNanos(1L)
 
@@ -20,6 +22,7 @@ private val SNAPSHOT_REUSE_NANOS: Long = TimeUnit.SECONDS.toNanos(1L)
 class OutboxMetrics(
     private val outboxRepository: MessageOutboxRepository,
     private val clock: Clock,
+    private val accessBlockedTracker: AccessBlockedTracker,
     appConfig: AppConfig,
     meterRegistry: MeterRegistry,
 ) {
@@ -55,11 +58,19 @@ class OutboxMetrics(
             .description(
                 "IN_PROGRESS rows already sent at least slack.app.outbox.health.retrying-send-threshold times",
             ).register(meterRegistry)
+        Gauge
+            .builder(OUTBOX_ACCESS_BLOCKED_METRIC) { if (snapshot().accessBlocked) 1.0 else 0.0 }
+            .description(
+                "1 while this replica held a row for a Slack access error within " +
+                    "slack.app.outbox.health.access-blocked-window-seconds, else 0",
+            ).register(meterRegistry)
     }
 
     private fun snapshot(): OutboxHealthSnapshot {
         val now = System.nanoTime()
         last?.let { (readAt, snapshot) -> if (now - readAt < SNAPSHOT_REUSE_NANOS) return snapshot }
-        return outboxRepository.readOutboxHealth(clock = clock, health = healthConfig).also { last = now to it }
+        return outboxRepository
+            .readOutboxHealth(clock = clock, health = healthConfig, accessBlockedTracker = accessBlockedTracker)
+            .also { last = now to it }
     }
 }

@@ -4,6 +4,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.relayQueueCapacity
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
+import dev.notypie.impl.command.isAccessBlocked
 import dev.notypie.impl.command.isRateLimited
 import dev.notypie.impl.command.isTransientExhausted
 import dev.notypie.impl.command.retryAfter
@@ -20,24 +21,40 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.SmartLifecycle
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
+import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
 
 private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
-private val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
+internal val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
+internal val ACCESS_BLOCKED_DEFER: Duration = Duration.ofMinutes(15L)
 
 // Each attempt can wait a full Hikari connection-timeout; the per-record budget in relay AGENTS.md counts three.
 private const val STATUS_WRITE_ATTEMPTS = 3L
+
+// A held row is invisible to every outbox count (defer takes its send back and moves updated_at), so health reads this.
+@Component
+class AccessBlockedTracker {
+    private val lastBlockedAt = AtomicReference<Instant?>(null)
+
+    fun record(at: Instant) {
+        lastBlockedAt.updateAndGet { previous -> if (previous == null || at > previous) at else previous }
+    }
+
+    fun lastBlockedAt(): Instant? = lastBlockedAt.get()
+}
 
 @Service
 class SlackMessageRelayServiceImpl(
@@ -49,6 +66,7 @@ class SlackMessageRelayServiceImpl(
     private val applicationEventPublisher: ApplicationEventPublisher,
     @Qualifier("relayTaskExecutor") private val relayTaskExecutor: Executor,
     private val clock: Clock,
+    private val accessBlockedTracker: AccessBlockedTracker,
     appConfig: AppConfig,
 ) : MessageRelayService,
     SmartLifecycle {
@@ -176,7 +194,17 @@ class SlackMessageRelayServiceImpl(
                 return
             }
         when {
-            result.isRateLimited() -> defer(claim = claim, retryAfter = result.retryAfter())
+            result.isRateLimited() ->
+                defer(
+                    claim = claim,
+                    retryAfter = result.retryAfter(),
+                    reason = "Slack rate limit (Retry-After=${result.retryAfter()?.toSeconds()}s)",
+                )
+            result.isAccessBlocked() -> {
+                logger.error { "Slack refused the bot's access; holding eventId=$eventId until it is fixed" }
+                accessBlockedTracker.record(at = clock.instant())
+                defer(claim = claim, retryAfter = ACCESS_BLOCKED_DEFER, reason = "Slack access blocked")
+            }
             result.isTransientExhausted() ->
                 logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
             else -> complete(claim = claim, updateEvent = result.toOutboxUpdateEvent(eventId = eventId))
@@ -201,7 +229,7 @@ class SlackMessageRelayServiceImpl(
         return renewed == 1
     }
 
-    private fun defer(claim: OutboxClaim, retryAfter: Duration?) {
+    private fun defer(claim: OutboxClaim, retryAfter: Duration?, reason: String) {
         val wait = minOf(retryAfter ?: DEFAULT_RATE_LIMIT_WAIT, giveUpAfter) + spreadOf(claim = claim)
         val eligibleAt = minOf(now().plus(wait), claim.row.createdAt.plus(giveUpAfter))
         val deferred =
@@ -213,12 +241,13 @@ class SlackMessageRelayServiceImpl(
                 )
             }.getOrElse { exception ->
                 logger.error(exception) {
-                    "Deferring rate-limited eventId=${claim.row.eventId} failed; the sweep retries it on its own clock"
+                    "Deferring eventId=${claim.row.eventId} after \"$reason\" failed; " +
+                        "the sweep retries it on its own clock"
                 }
                 return
             }
         logger.warn {
-            "Slack rate limit (Retry-After=${retryAfter?.toSeconds()}s); eventId=${claim.row.eventId} " +
+            "$reason; eventId=${claim.row.eventId} " +
                 (if (deferred == 1) "deferred until $eligibleAt" else "was taken over while deferring")
         }
     }

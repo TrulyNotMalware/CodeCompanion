@@ -2,6 +2,7 @@ package dev.notypie.application.service.ops
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.health.readOutboxHealth
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
@@ -33,6 +34,7 @@ class OpsStatusService(
     private val cveTopicRepository: CveTopicRepository,
     private val cveEventRepository: CveEventRepository,
     private val cveCollectLedgerRepository: CveCollectLedgerRepository,
+    private val accessBlockedTracker: AccessBlockedTracker,
     private val clock: Clock,
     appConfig: AppConfig,
 ) {
@@ -69,7 +71,12 @@ class OpsStatusService(
     }
 
     internal fun renderReport(): String {
-        val health = outboxRepository.readOutboxHealth(clock = clock, health = healthConfig)
+        val health =
+            outboxRepository.readOutboxHealth(
+                clock = clock,
+                health = healthConfig,
+                accessBlockedTracker = accessBlockedTracker,
+            )
         val healthLine = if (health.healthy) "*Health:* :large_green_circle: UP" else "*Health:* :red_circle: DOWN"
 
         return buildString {
@@ -81,6 +88,8 @@ class OpsStatusService(
                     "• *In-flight:* $inFlightCount (oldest ${oldestInFlightAgeSeconds}s ago, stuck $stuckInFlightCount)",
                 )
                 appendLine("• *Retrying:* $retryingCount (sent at least ${retryingSendThreshold}x, still in flight)")
+                val accessLine = if (accessBlocked) "rows held, last at $lastAccessBlockedAt" else "none held"
+                appendLine("• *Slack access blocked:* $accessLine (window ${accessBlockedWindowSeconds}s)")
                 appendLine("• Stuck threshold: ${stuckThresholdSeconds}s")
             }
             append(healthLine)

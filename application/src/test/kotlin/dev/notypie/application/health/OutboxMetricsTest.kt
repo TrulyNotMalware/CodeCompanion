@@ -4,6 +4,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.stubOutboxStatus
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.doubles.shouldBeNaN
@@ -24,6 +25,7 @@ class OutboxMetricsTest :
                 OutboxMetrics(
                     outboxRepository = repository,
                     clock = createFixedUtcClock(now = now),
+                    accessBlockedTracker = AccessBlockedTracker(),
                     appConfig =
                         AppConfig(
                             outbox = AppConfig.Outbox(health = AppConfig.Outbox.Health(retryingSendThreshold = 4)),
@@ -55,6 +57,7 @@ class OutboxMetricsTest :
                     registry.ageSeconds(OUTBOX_PENDING_OLDEST_AGE_METRIC) shouldBe 420.0
                     registry.ageSeconds(OUTBOX_IN_PROGRESS_OLDEST_CLAIM_AGE_METRIC) shouldBe 75.0
                     registry.gaugeValue(OUTBOX_RETRYING_METRIC) shouldBe 1.0
+                    registry.gaugeValue(OUTBOX_ACCESS_BLOCKED_METRIC) shouldBe 0.0
                     verify { repository.countInProgressWithSendsAtLeast(sends = 4) }
                 }
             }
