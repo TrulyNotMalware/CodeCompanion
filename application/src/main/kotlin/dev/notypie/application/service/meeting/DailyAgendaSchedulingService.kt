@@ -11,6 +11,7 @@ import dev.notypie.repository.meeting.AgendaCandidateMeeting
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
@@ -127,7 +128,7 @@ internal fun buildAgendaDm(
         meetings
             .sortedBy { it.startAt }
             .joinToString(separator = "\n") { item ->
-                "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title}"
+                "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title.escapeMrkdwn()}"
             }
     return OutboundMessage.ChannelMessage(
         target = ConversationTarget(id = commandBasicInfo.channel),

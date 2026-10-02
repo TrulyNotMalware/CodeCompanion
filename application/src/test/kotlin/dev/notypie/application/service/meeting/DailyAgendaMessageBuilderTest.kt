@@ -48,5 +48,24 @@ class DailyAgendaMessageBuilderTest :
                     channelMessage.target shouldBe ConversationTarget(id = basicInfo.channel)
                 }
             }
+
+            `when`("a meeting title carries mrkdwn control sequences") {
+                val text =
+                    buildAgendaDm(
+                        agendaDate = LocalDate.of(2026, 5, 4),
+                        meetings =
+                            listOf(
+                                createAgendaItem(
+                                    startAt = LocalDateTime.of(2026, 5, 4, 9, 0),
+                                    title = "<!channel> R&D <https://evil.example|docs>",
+                                ),
+                            ),
+                        commandBasicInfo = createCommandBasicInfo(),
+                    ).content as MessageContent.Text
+
+                then("the title is escaped, so it can neither ping the channel nor render a disguised link") {
+                    text.markdown shouldBe "• 09:00 — &lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;"
+                }
+            }
         }
     })
