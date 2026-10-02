@@ -24,31 +24,36 @@ class SlackEventController(
 ) {
     companion object {
         private const val APP_MENTION_EVENT_TYPE = "app_mention"
+        private const val CHALLENGE_KEY = "challenge"
     }
 
+    // Slack needs only a 2xx: the ack carries no body, so a failed command's errorReason never leaves the server.
     @PostMapping(value = ["/events"], produces = [MediaType.APPLICATION_JSON_VALUE])
     fun handleAppMentionEvents(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestBody payload: Map<String, Any>,
-    ): ResponseEntity<*> {
-        if (isChallengeRequest(payload = payload)) return ResponseEntity.ok().body(payload) // FIXME logging.
+    ): ResponseEntity<Map<String, Any>> {
+        if (isChallengeRequest(payload = payload)) {
+            return ResponseEntity.ok(mapOf(CHALLENGE_KEY to payload[CHALLENGE_KEY].toString()))
+        }
 
         // Some event types lack event.user and would crash deserialization; only app_mention is processed.
         val eventType = extractEventType(payload = payload)
         if (eventType != APP_MENTION_EVENT_TYPE) {
             logger.debug { "Ignoring non-app_mention Slack event: type=$eventType" }
-            return ResponseEntity.ok().build<Unit>()
+            return ResponseEntity.ok().build()
         }
 
-        val commandData = eventHandler.handleEvent(headers = headers, payload = payload)
-        return ResponseEntity.ok().body(commandData)
+        val output = eventHandler.handleEvent(headers = headers, payload = payload)
+        if (!output.ok) logger.warn { "app_mention command failed: ${output.errorReason}" }
+        return ResponseEntity.ok().build()
     }
 
     @PostMapping(value = ["/interaction"])
     fun handleInteractions(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam payload: String,
-    ): ResponseEntity<*> {
+    ): ResponseEntity<String> {
         val ackBody = interactionHandler.handleInteraction(headers = headers, payload = payload)
         return if (ackBody != null) {
             ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(ackBody)

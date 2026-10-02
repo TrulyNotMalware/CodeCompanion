@@ -18,7 +18,7 @@ class SlashCommandController(
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
     private val cveQuerySlashService: CveQuerySlashService,
 ) {
-    @PostMapping(value = ["/meet"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/meet"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestMeeting(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -33,7 +33,7 @@ class SlashCommandController(
         }
     }
 
-    @PostMapping(value = ["/standup"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/standup"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun setupStandup(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -48,7 +48,7 @@ class SlashCommandController(
         }
     }
 
-    @PostMapping(value = ["/task"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/task"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestTasks(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -56,7 +56,7 @@ class SlashCommandController(
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
     }
 
-    @PostMapping(value = ["/subscribe"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/subscribe"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun subscribe(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -71,7 +71,7 @@ class SlashCommandController(
         }
     }
 
-    @PostMapping(value = ["/unsubscribe"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/unsubscribe"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun unsubscribe(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -86,7 +86,7 @@ class SlashCommandController(
         }
     }
 
-    @PostMapping(value = ["/subscriptions"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/subscriptions"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun subscriptions(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -101,7 +101,7 @@ class SlashCommandController(
         }
     }
 
-    @PostMapping(value = ["/latest"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/latest"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun latest(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,

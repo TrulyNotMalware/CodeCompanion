@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application
 
@@ -18,6 +18,7 @@ package with `./gradlew :application:test --tests 'dev.notypie.application.<pack
 |-----------|---------|
 | `common/` | `IdempotencyCreator` / `DefaultIdempotencyDataSerializer` (see `common/AGENTS.md`) |
 | `configurations/` | Bean selection that needs a Spring context: the `TaskScheduler` under virtual threads (see `configurations/AGENTS.md`) |
+| `controllers/` | Standalone `MockMvc` HTTP contract of the Slack controllers (see `controllers/AGENTS.md`) |
 | `exception/` | `ControllerAdvice` handler responses (see `exception/AGENTS.md`) |
 | `health/` | `OutboxHealthIndicator` actuator contributor and `OutboxMetrics` gauges (see `health/AGENTS.md`) |
 | `mcp/` | `McpToolGate` and `DomainReadTools` MCP tools (see `mcp/AGENTS.md`) |

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application
 
@@ -10,6 +10,7 @@ inputs of the matching service, configuration or security component.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
+| `controllers/` | `createSlashCommandForm` for the controller specs (see `controllers/AGENTS.md`) |
 | `configurations/` | `createCveTopicConfigDefinition` for `AppConfig.Cve.TopicDefinition` (see `configurations/AGENTS.md`) |
 | `outbox/` | Fixed UTC clock, relaxed `OutboxMessage` rows, wired `PollingMessageProcessor`, outbox-status stubs (see `outbox/AGENTS.md`) |
 | `security/` | `mcp/` — `createScopedTurnToken` (see `security/AGENTS.md`) |
