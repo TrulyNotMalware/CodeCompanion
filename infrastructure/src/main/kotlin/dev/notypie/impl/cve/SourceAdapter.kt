@@ -5,6 +5,7 @@ import dev.notypie.repository.cve.schema.CveSourceType
 import tools.jackson.databind.JsonNode
 import java.io.IOException
 import java.net.http.HttpClient
+import java.net.http.HttpHeaders
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
@@ -30,6 +31,7 @@ interface SourceAdapter {
 
 internal data class SourceResponse(
     val statusCode: Int,
+    val headers: HttpHeaders,
     val body: String,
 )
 
@@ -69,7 +71,11 @@ internal fun HttpClient.sendWithinDeadline(
     try {
         val bytes = stream.use { it.readNBytes(maxBodyBytes + 1) }
         if (bytes.size > maxBodyBytes) throw SourceBodyTooLargeException(maxBodyBytes = maxBodyBytes)
-        return SourceResponse(statusCode = response.statusCode(), body = bytes.decodeToString())
+        return SourceResponse(
+            statusCode = response.statusCode(),
+            headers = response.headers(),
+            body = bytes.decodeToString(),
+        )
     } catch (exception: IOException) {
         if (timedOut.get()) throw SourceBodyTimeoutException(deadline = deadline, cause = exception)
         throw exception

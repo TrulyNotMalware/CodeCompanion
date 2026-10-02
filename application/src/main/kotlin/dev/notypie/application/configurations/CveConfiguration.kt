@@ -16,8 +16,10 @@ import dev.notypie.repository.cve.CveCollectLedgerRepository
 import dev.notypie.repository.cve.CveDeliveryRepository
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
@@ -29,6 +31,10 @@ import java.time.LocalTime
 import java.time.ZoneId
 
 internal const val METRIC_NVD_PAGE_CAP_REACHED = "cve.nvd.page.cap.reached"
+
+private const val COLLECTOR_TICK_MINUTES = 5L
+
+private val log = KotlinLogging.logger {}
 
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
@@ -86,12 +92,20 @@ class CveConfiguration {
         )
 
     @Bean
-    fun githubReleaseSourceAdapter(appConfig: AppConfig): SourceAdapter =
-        GithubReleaseSourceAdapter(
-            token = appConfig.cve.github.token,
-            perPage = appConfig.cve.github.perPage,
-            requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
-        )
+    fun githubReleaseSourceAdapter(appConfig: AppConfig): SourceAdapter {
+        val adapter =
+            GithubReleaseSourceAdapter(
+                token = appConfig.cve.github.token,
+                perPage = appConfig.cve.github.perPage,
+                requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
+            )
+        val githubTopics = appConfig.cve.topics.count { it.active && it.sourceType == CveSourceType.GITHUB_RELEASE }
+        val perTopicPerHour = 60L / maxOf(appConfig.cve.collector.windowMinutes, COLLECTOR_TICK_MINUTES)
+        adapter
+            .anonymousLimitWarning(topicCount = githubTopics, requestsPerTopicPerHour = perTopicPerHour)
+            ?.let { warning -> log.warn { warning } }
+        return adapter
+    }
 
     @Bean
     fun nvdCveSourceAdapter(appConfig: AppConfig, clock: Clock, meterRegistry: MeterRegistry): SourceAdapter {
