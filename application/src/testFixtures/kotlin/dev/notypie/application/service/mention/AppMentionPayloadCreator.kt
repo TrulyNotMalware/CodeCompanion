@@ -22,6 +22,7 @@ fun createAppMentionPayload(
     channel: String = TEST_CHANNEL_ID,
     eventType: String = "app_mention",
     botId: String? = null,
+    botAppId: String = appId ?: TEST_APP_ID,
 ): Map<String, Any> =
     buildMap {
         appId?.let { put("api_app_id", it) }
@@ -57,7 +58,7 @@ fun createAppMentionPayload(
                 put("event_ts", 1234567890.123)
                 put("blocks", emptyList<Any>())
                 botId?.let {
-                    put("app_id", appId ?: TEST_APP_ID)
+                    put("app_id", botAppId)
                     put("bot_id", it)
                     put("channel_type", "channel")
                     put(
@@ -67,7 +68,7 @@ fun createAppMentionPayload(
                             "name" to "TestBot",
                             "deleted" to false,
                             "updated" to 1234567890L,
-                            "app_id" to (appId ?: TEST_APP_ID),
+                            "app_id" to botAppId,
                             "user_id" to publisherId,
                             "team_id" to teamId,
                             "icons" to
@@ -82,3 +83,7 @@ fun createAppMentionPayload(
             },
         )
     }
+
+@Suppress("UNCHECKED_CAST")
+fun Map<String, Any>.withoutEventKeys(vararg keys: String): Map<String, Any> =
+    this + ("event" to ((this["event"] as Map<String, Any>) - keys.toSet()))

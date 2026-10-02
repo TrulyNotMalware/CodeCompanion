@@ -15,11 +15,14 @@ import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.impl.command.slack.SlackEventCallBackRequest
 import dev.notypie.impl.command.slack.SlackEventType
 import dev.notypie.impl.command.slack.toMentionInboundCommand
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.MultiValueMap
 import java.util.UUID
+
+private val log = KotlinLogging.logger {}
 
 @Service
 class SlackMentionEventHandlerImpl(
@@ -36,8 +39,20 @@ class SlackMentionEventHandlerImpl(
 
     // FIXME Remove AppMention Events.
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
+        if (isIgnoredMention(payload = payload)) {
+            log.debug { "Ignoring app_mention posted by this app or without a user (workflow)." }
+            return CommandOutput.empty()
+        }
         val commandData = parseAppMentionEvent(headers = headers, payload = payload)
         return handleEvent(commandData = commandData)
+    }
+
+    private fun isIgnoredMention(payload: Map<String, Any>): Boolean {
+        val event = payload["event"] as? Map<*, *> ?: return false
+        if ((event["user"] as? String).isNullOrBlank()) return true
+        val ownAppId = payload[SLACK_APPID_KEY_NAME] as? String ?: return false
+        val botProfile = event["bot_profile"] as? Map<*, *>
+        return event["app_id"] == ownAppId || botProfile?.get("app_id") == ownAppId
     }
 
     override fun parseAppMentionEvent(

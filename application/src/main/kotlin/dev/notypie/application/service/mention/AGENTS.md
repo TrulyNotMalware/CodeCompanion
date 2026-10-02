@@ -26,6 +26,15 @@ domain context sees it.
   (`MeetingServiceImpl.createNewMeeting`, `SlackMessageRelayServiceImpl.saveOutboxMessage`) attach to it,
   and `CommandExecutor` re-throws so a publish failure rolls the whole mention back. Do not put the role
   lookup back inside it.
+- **Our own messages and user-less mentions are dropped** (`isIgnoredMention`: no `event.user`, or `event.app_id`
+  / `event.bot_profile.app_id` equals the envelope's `api_app_id`). `handleEvent(headers, payload)` returns
+  `CommandOutput.empty()` — a 200 no-op, so Slack does not retry — before parsing, resolving a role or opening the
+  transaction. Our own AI answer can echo `<@bot>`, and a reply must never start another turn (a self-reply
+  loop); a workflow post has no human actor (and no `user`, which also failed `EventCallbackData`
+  deserialization with a 500 that Slack retried three times), and workflow-triggered commands would need an
+  explicit allow-list decision first. `bot_id` alone is **not** a reason: a person posting through another app
+  (a user-token integration) carries that app's `bot_id` next to their own `user`. `SlackEventController` still
+  logs the ignored output's `ok = false` at `WARN`.
 - **Idempotency** comes from `IdempotencyCreator.create(data = commandData)`; a Slack retry of the same
   event yields the same key, which is what the outbox and the domain contexts dedupe on.
 - `channel_name` / `user_name` do not exist on an `app_mention` callback (they are slash-command form
