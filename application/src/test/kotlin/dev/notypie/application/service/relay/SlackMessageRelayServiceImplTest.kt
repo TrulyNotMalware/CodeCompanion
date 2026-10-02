@@ -373,6 +373,33 @@ class SlackMessageRelayServiceImplTest :
                 }
             }
 
+            `when`("the Retry-After is too large for date arithmetic") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val deferredTo = slot<LocalDateTime>()
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every {
+                    outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = capture(deferredTo))
+                } returns 1
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher =
+                            dispatcherReturning(
+                                output =
+                                    RateLimitedOutput(
+                                        event = payload(),
+                                        retryAfter = Duration.ofSeconds(Long.MAX_VALUE),
+                                    ),
+                            ),
+                    )
+
+                then("the row is still deferred to the 24 h bound instead of the dispatch throwing") {
+                    shouldNotThrowAny { service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1)) }
+                    deferredTo.captured shouldBe DEFAULT_TEST_NOW.plusHours(24L).minusSeconds(300L)
+                }
+            }
+
             `when`("Slack rate-limits the send without a Retry-After") {
                 val row = createOutboxRow(eventId = UUID.randomUUID().toString())
                 val deferredTo = slot<LocalDateTime>()

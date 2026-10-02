@@ -167,7 +167,7 @@ class SlackMessageRelayServiceImpl(
     }
 
     private fun defer(claim: OutboxClaim, retryAfter: Duration?) {
-        val wait = (retryAfter ?: DEFAULT_RATE_LIMIT_WAIT) + spreadOf(claim = claim)
+        val wait = minOf(retryAfter ?: DEFAULT_RATE_LIMIT_WAIT, giveUpAfter) + spreadOf(claim = claim)
         val eligibleAt = minOf(now().plus(wait), claim.row.createdAt.plus(giveUpAfter))
         val deferred =
             runCatching {
