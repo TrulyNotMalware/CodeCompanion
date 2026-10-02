@@ -174,14 +174,17 @@ _type: architecture · updated: 2026-10-02_
   재시도는 다른 키이며, `idempotency_key`가 유니크가 아니므로 아웃박스가 중복을 막아 주지도 않는다.
 - **Slack 재시도**: `SlackRequestVerificationFilter`는 `/api/slack/events` 경로에만 `InMemorySlackRetryDeduplicator`를
   적용한다. fingerprint는 (method, 요청 경로, 본문 SHA-256 해시)이고, 항목은 in-flight → completed 상태를 가진다.
-  `X-Slack-Retry-Num`이 붙은 재시도가 처리 중인 원본과 같으면 503(Slack이 다시 시도하게), 이미 완료된 원본과 같으면
-  본문 처리 없이 200을 돌려준다. 원본 처리가 실패하면 항목을 지워(forget) 다음 재시도가 새로 처리된다.
+  같은 fingerprint가 다시 오면 `X-Slack-Retry-Num` 헤더 유무와 무관하게 기존 항목 상태로 판정한다: 처리 중인 원본과
+  같으면 503(Slack이 다시 시도하게), 이미 완료된 원본과 같으면 본문 처리 없이 200을 돌려준다. Slack은 같은 본문(`event_id`
+  고유)을 헤더 없이 다시 보내지 않으므로 헤더 없는 사본은 캡처한 서명 요청의 재생이고, 예전처럼 새 요청으로 처리하면 명령이
+  다시 실행됐다. 원본 처리가 실패하면 항목을 지워(forget) 다음 재시도가 새로 처리된다.
   TTL 10분, in-memory이므로 **인스턴스별**이다.
 - **소비자 측**: CDC는 상태 필터(`PENDING`만), 폴링은 `claimPending` CAS. 상태 갱신 이벤트는 항상 **row의**
   `event_id`로 키를 잡는다 — 렌더러가 새로 발급하는 payload `eventId`는 버린다. Slack API에는 멱등 키가 없으므로
   재전송은 그대로 중복 게시가 된다. 그래서 `chat.postMessage`·`chat.postEphemeral`·`response_url`은 요청이 쓰이기
-  전에 실패한 경우(OkHttp `EventListener`로 판정)와 `service_unavailable`·HTTP 503만 재시도하고, 쓰인 뒤의 I/O
-  실패·`internal_error`·그 밖의 5xx는 `outcome_unknown`으로 `FAILURE`를 남긴다. OkHttp 자체 재전송
+  전에 실패한 경우(OkHttp `EventListener`로 판정), HTTP/2 `REFUSED_STREAM`(서버가 처리 전에 거절했음을 RFC 9113이 보장),
+  `service_unavailable`·HTTP 503만 재시도하고, 쓰인 뒤의 I/O 실패·`internal_error`·그 밖의 5xx는 `outcome_unknown`으로
+  `FAILURE`를 남기며 메서드별 카운터 `codecompanion_slack_dispatch_outcome_unknown_total{method}`를 올린다. OkHttp 자체 재전송
   (`retryOnConnectionFailure`)도 끈다(2026-10-01). 멱등인 `chat.update`만 모든 일시 오류를 재시도한다.
 
 ## 다중 인스턴스: 락 없이 DB 행 CAS
@@ -249,6 +252,9 @@ _type: architecture · updated: 2026-10-02_
   `/actuator`가 없다). 게이지는 스크레이프마다 같은 저장소 쿼리를 실행하고, 쿼리가 실패하면 `NaN`이 된다.
   - `outbox_messages{status="pending"|"in_progress"}`, `outbox_pending_oldest_age_seconds`(`created_at` 기준),
     `outbox_in_progress_oldest_claim_age_seconds`(`updated_at` = 마지막 claim·갱신 기준), `outbox_retrying_messages`
+  - `codecompanion_slack_dispatch_outcome_unknown_total{method}`: 보냈을 수도 있어 다시 보내지 않고 `FAILURE`로 남긴 발송 수
+    (게시됐는지 모름). `codecompanion_slack_dispatch_access_blocked_total{error}`: 토큰·스코프·워크스페이스 전역 거부(행은
+    보류). 둘 다 디스패처 훅에서 올라가며 레플리카별이다.
   - `kafka_dead_letter_handoffs_total{topic}`: 리스너 컨테이너의 recoverer가 레코드를 DLT 발행기에 **넘긴** 수다.
     `setFailIfSendResultIsError(false)`라 DLT 전송 실패(토픽 없음, ACL 거부)는 여기서는 성공처럼 세어지고, 대신
   - `kafka_dead_letter_publish_failures_total{topic}`: DLT 전송이 동기 예외로 실패하거나 나중에 실패한 수(ERROR 로그 함께).
@@ -257,7 +263,9 @@ _type: architecture · updated: 2026-10-02_
     로그만 남기고 버렸다).
 - 모든 레플리카가 같은 테이블을 세므로 알림은 `max()`로 건다. 권장(저장소에 프로비저닝되어 있지 않음):
   `max(outbox_pending_oldest_age_seconds) > 120` 10분 지속(커넥터 또는 폴러 정지 — 이때 전달은 stuck 임계 뒤
-  스윕이 맡아 조용히 늦어진다), `max(outbox_retrying_messages) > 0` 15분, `increase(kafka_dead_letter_handoffs_total[15m]) > 0`, `increase(kafka_dead_letter_publish_failures_total[15m]) > 0`.
+  스윕이 맡아 조용히 늦어진다), `max(outbox_retrying_messages) > 0` 15분, `increase(kafka_dead_letter_handoffs_total[15m]) > 0`, `increase(kafka_dead_letter_publish_failures_total[15m]) > 0`,
+  `sum(increase(codecompanion_slack_dispatch_outcome_unknown_total[15m])) > 0`(Slack 채널에서 게시 여부를 손으로 확인),
+  `sum(increase(codecompanion_slack_dispatch_access_blocked_total[5m])) > 0`(토큰·스코프를 고칠 때까지 행이 최대 24시간 보류).
 - Debezium 커넥터 상태(`/connectors/<name>/status`)는 앱이 볼 수 없다. 커넥터 등록 스크립트에
   `heartbeat.interval.ms: 10000`을 넣어, outbox 테이블이 조용해도 오프셋이 binlog 보존(7일) 밖으로 밀려나지 않게
   했다. 위치를 이미 잃었을 때의 복구 절차는 `application/src/main/resources/cdc/docker-compose/debezium/AGENTS.md`의
