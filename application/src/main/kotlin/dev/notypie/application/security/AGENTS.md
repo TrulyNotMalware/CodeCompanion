@@ -62,7 +62,10 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   First attempt → IN_FLIGHT; chain completes below 500 → COMPLETED; 5xx or any `Throwable` → forgotten.
   A retry that hits IN_FLIGHT gets **503** (Slack keeps retrying — answering 200 there lost the event when the
   original later failed); a retry that hits COMPLETED gets 200 without dispatch; a retry with no entry is
-  processed and tracked. An identical body without a retry number is processed untracked. Entries expire after
+  processed and tracked. An identical body without a retry number is judged by the entry the same way (503 while
+  in flight, 200 without dispatch once completed): Slack never resends a body (its `event_id` is unique) without
+  `X-Slack-Retry-Num`, so such a copy is a replay of a captured request and must not run the command or AI turn
+  again. `admit` therefore no longer reads `retryNum`; the filter still logs it. Entries expire after
   the TTL (amortised sweep every TTL/2). At `maxEntries` the oldest COMPLETED entries are trimmed to 90% of
   the cap in one pass under a `tryLock`; IN_FLIGHT entries are never trimmed, but they still expire after the TTL
   like any other entry. When the map is still full (all in flight), a new fingerprint is answered `Untracked`:

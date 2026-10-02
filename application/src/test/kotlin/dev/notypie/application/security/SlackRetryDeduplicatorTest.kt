@@ -89,15 +89,25 @@ class SlackRetryDeduplicatorTest :
                 }
             }
 
-            `when`("an identical body arrives again without a retry number") {
+            `when`("an identical body arrives again without a retry number after the original completed") {
                 val deduplicator = InMemorySlackRetryDeduplicator(clock = Clock.fixed(start, ZoneOffset.UTC))
 
-                then("it is processed without taking over the tracked entry") {
+                then("it is a replay and is absorbed like a retry of the completed request") {
                     deduplicator.markCompleted(ticket = deduplicator.firstAttempt(fingerprint = fingerprint))
                     deduplicator.admit(fingerprint = fingerprint, retryNum = null) shouldBe
-                        SlackRetryAdmission.Untracked
+                        SlackRetryAdmission.RetryOfCompleted
                     deduplicator.admit(fingerprint = fingerprint, retryNum = "1") shouldBe
                         SlackRetryAdmission.RetryOfCompleted
+                }
+            }
+
+            `when`("an identical body arrives again without a retry number while the original is running") {
+                val deduplicator = InMemorySlackRetryDeduplicator(clock = Clock.fixed(start, ZoneOffset.UTC))
+
+                then("it is deferred like a retry of the in-flight request instead of running twice") {
+                    deduplicator.firstAttempt(fingerprint = fingerprint)
+                    deduplicator.admit(fingerprint = fingerprint, retryNum = null) shouldBe
+                        SlackRetryAdmission.RetryOfInFlight
                 }
             }
 

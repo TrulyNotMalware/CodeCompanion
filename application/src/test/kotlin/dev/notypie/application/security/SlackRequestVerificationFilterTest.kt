@@ -225,6 +225,22 @@ class SlackRequestVerificationFilterTest :
                 }
             }
 
+            `when`("a captured signed request is replayed without a retry number") {
+                val underTest = filter()
+                val firstChain = CountingFilterChain()
+                underTest.doFilter(signed(), MockHttpServletResponse(), firstChain)
+
+                val replayResponse = MockHttpServletResponse()
+                val replayChain = CountingFilterChain()
+                underTest.doFilter(signed(), replayResponse, replayChain)
+
+                then("the replay is acknowledged with 200 and the handlers run only once") {
+                    firstChain.invocationCount shouldBe 1
+                    replayResponse.status shouldBe 200
+                    replayChain.invocationCount shouldBe 0
+                }
+            }
+
             `when`("the retry arrives while the original attempt is still running") {
                 val meterRegistry = SimpleMeterRegistry()
                 val underTest = filter(meterRegistry = meterRegistry)

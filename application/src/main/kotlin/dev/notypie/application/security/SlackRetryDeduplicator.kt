@@ -89,11 +89,6 @@ class InMemorySlackRetryDeduplicator(
                     Entry(state = State.IN_FLIGHT, recordedAt = now, generation = ticket.generation)
                 }
 
-                retryNum == null -> {
-                    admission = SlackRetryAdmission.Untracked
-                    existing
-                }
-
                 existing.state == State.IN_FLIGHT -> {
                     admission = SlackRetryAdmission.RetryOfInFlight
                     existing
