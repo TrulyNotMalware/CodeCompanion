@@ -54,24 +54,22 @@ class SidecarAgentClient(
             .build()
 
     override fun converse(request: AgentTurnRequest): AgentTurnResult =
-        runCatching { execute(request = request) }
-            .getOrElse { exception ->
-                if (exception is InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw exception
-                }
-                // The JDK client reports an interrupt during the body read as an IOException and leaves the flag set.
-                if (Thread.currentThread().isInterrupted) {
-                    throw InterruptedException("Sidecar turn interrupted while streaming").apply {
-                        initCause(exception)
-                    }
-                }
-                log.error(exception) { "Sidecar converse transport failure sessionKey=${request.sessionKey}" }
-                AgentTurnResult.Failed(
-                    code = ERROR_CODE_TRANSPORT,
-                    message = exception.message ?: exception::class.java.simpleName,
-                )
+        try {
+            execute(request = request)
+        } catch (exception: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw exception
+        } catch (exception: Exception) {
+            // The JDK client reports an interrupt during the body read as an IOException and leaves the flag set.
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Sidecar turn interrupted while streaming").apply { initCause(exception) }
             }
+            log.error(exception) { "Sidecar converse transport failure sessionKey=${request.sessionKey}" }
+            AgentTurnResult.Failed(
+                code = ERROR_CODE_TRANSPORT,
+                message = exception.message ?: exception::class.java.simpleName,
+            )
+        }
 
     private fun execute(request: AgentTurnRequest): AgentTurnResult {
         val httpRequest =

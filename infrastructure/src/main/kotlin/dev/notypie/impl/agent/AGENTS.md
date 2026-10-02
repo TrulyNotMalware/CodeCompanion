@@ -28,8 +28,10 @@ deliberately one blocking turn in, one terminal result out; `SidecarAgentClient`
 - **`done.finalText` is authoritative;** accumulated `text` deltas are only the fallback when it is blank.
   `tool_use` / `tool_result` frames are ignored (debug log). A stream that ends without a terminal frame
   yields `Failed(incomplete_stream)`; a final frame with no trailing blank line is still flushed.
-- **`converse` never throws.** Transport exceptions become `Failed(transport_error)`; the caller
-  (`AgentConverseService`, `SidecarAiSummarizer`) branches on the sealed result.
+- **`converse` throws only an interrupt or an `Error`.** Every other `Exception` becomes
+  `Failed(transport_error)`; the caller (`AgentConverseService`, `SidecarAiSummarizer`) branches on the sealed
+  result. An `Error` (`OutOfMemoryError`, `StackOverflowError`) propagates instead of being reported as a transport
+  failure.
 - Wired by `application/configurations/AgentConfiguration.kt`; the sidecar's `openapi.yaml` is the field-name
   source of truth (camelCase: `sessionKey`, `sessionId`, `appendSystemPrompt`, `finalText`, `inputTokens`).
 
@@ -42,7 +44,8 @@ new frame type or error code rather than mocking `HttpClient`.
 
 ### Common Patterns
 - Port and adapter side by side; result modelled as a sealed interface, consumed with exhaustive `when`.
-- `runCatching { ... }.getOrElse { ... }` at the transport boundary, except that an interrupt is rethrown as an
+- `try { ... } catch (exception: Exception)` at the transport boundary (not `runCatching`, which would also catch
+  an `Error`), except that an interrupt is rethrown as an
   `InterruptedException` with its flag set instead of becoming a `transport` failure. That covers the wait for
   headers (an `InterruptedException`) and the body read, which the JDK client reports as an `IOException` with the
   flag still set; `jsonMapper` (`common/`) for all JSON.

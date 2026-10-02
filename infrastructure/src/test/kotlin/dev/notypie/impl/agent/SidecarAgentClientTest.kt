@@ -8,6 +8,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.every
+import io.mockk.spyk
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
@@ -473,6 +475,20 @@ class SidecarAgentClientTest :
 
                 then("it sends no Authorization header instead of an empty bearer token") {
                     capturedAuthorization shouldBe null
+                }
+            }
+        }
+
+        given("a turn that fails with an Error rather than an Exception") {
+            val failing = spyk(objToCopy = client, recordPrivateCalls = true)
+            every { failing["execute"](any<AgentTurnRequest>()) } throws StackOverflowError("deep")
+
+            `when`("converse runs") {
+                val outcome =
+                    runCatching { failing.converse(request = AgentTurnRequest(sessionKey = "C1:err", prompt = "hi")) }
+
+                then("the Error propagates instead of becoming a transport failure") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<StackOverflowError>()
                 }
             }
         }
