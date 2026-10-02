@@ -10,18 +10,17 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
-import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
-import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 
-@DataJpaTest
+@DataJpaTest(properties = ["spring.jpa.properties.hibernate.query.fail_on_pagination_over_collection_fetch=true"])
 @ApplyExtension(extensions = [SpringExtension::class])
 class MeetingReminderRepositoryImplTest
     @Autowired
@@ -41,9 +40,18 @@ class MeetingReminderRepositoryImplTest
 
             fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }!!
 
-            fun persistMeeting(name: String, startAt: LocalDateTime, attending: List<String>): MeetingSchema {
-                val meeting = createMeetingSchema(name = name, startAt = startAt)
+            fun persistMeeting(
+                name: String,
+                startAt: LocalDateTime,
+                attending: List<String>,
+                declined: List<String> = emptyList(),
+                isCanceled: Boolean = false,
+            ): MeetingSchema {
+                val meeting = createMeetingSchema(name = name, startAt = startAt, isCanceled = isCanceled)
                 attending.forEach { meeting.participants.add(createParticipants(meeting = meeting, userId = it)) }
+                declined.forEach {
+                    meeting.participants.add(createParticipants(meeting = meeting, userId = it, isAttending = false))
+                }
                 return jpaMeetingRepository.save(meeting)
             }
 
@@ -285,29 +293,55 @@ class MeetingReminderRepositoryImplTest
                 }
             }
 
-            given(
-                "due reminders for a meeting without participant rows and two meetings with three participants each",
-            ) {
-                `when`("the dispatcher asks for at most two of them") {
-                    then("the oldest two come back, including the one whose meeting has no participant rows") {
-                        val base = Instant.parse("2030-01-01T00:00:00Z")
-                        val hostOnly = jpaMeetingRepository.save(createMeetingSchema(member = 0, startIterator = 100))
-                        val first = jpaMeetingRepository.save(createMeetingSchema(member = 3, startIterator = 200))
-                        val second = jpaMeetingRepository.save(createMeetingSchema(member = 3, startIterator = 300))
-                        listOf(hostOnly to base, first to base.plusSeconds(60), second to base.plusSeconds(120))
-                            .forEach { (meeting, scheduledAt) ->
-                                jpaMeetingReminderRepository.save(
-                                    createMeetingReminderSchema(meeting = meeting, scheduledAt = scheduledAt),
-                                )
-                            }
-                        entityManager.flush()
-                        entityManager.clear()
+            given("more due reminders than one batch, spread over meetings with several participants") {
+                inTx { jpaMeetingReminderRepository.deleteAllInBatch() }
+                val start = LocalDateTime.of(2031, 1, 6, 10, 0)
+                val first = persistMeeting(name = "first", startAt = start, attending = listOf("U_A1", "U_A2"))
+                val second =
+                    persistMeeting(
+                        name = "second",
+                        startAt = start.plusHours(1L),
+                        attending = listOf("U_B1", "U_B2", "U_B3"),
+                        declined = listOf("U_B4"),
+                    )
+                val third = persistMeeting(name = "third", startAt = start.plusHours(2L), attending = listOf("U_C1"))
+                val canceled =
+                    persistMeeting(name = "canceled", startAt = start, attending = listOf("U_X"), isCanceled = true)
+                val solo = persistMeeting(name = "solo", startAt = start.plusHours(3L), attending = emptyList())
+                val notDue = persistMeeting(name = "later", startAt = start, attending = listOf("U_L"))
+                val base = Instant.parse("2031-01-06T00:00:00Z")
+                arm(meeting = third, scheduledAt = base.plusSeconds(3_000L))
+                arm(meeting = first, scheduledAt = base.plusSeconds(1_000L))
+                arm(meeting = canceled, scheduledAt = base)
+                arm(meeting = second, scheduledAt = base.plusSeconds(2_000L))
+                arm(meeting = solo, scheduledAt = base.plusSeconds(4_000L))
+                arm(meeting = notDue, scheduledAt = base.plusSeconds(90_000L))
+                val before = base.plusSeconds(10_000L)
 
-                        val due = repository.findDueBefore(before = base.plus(Duration.ofMinutes(10)), limit = 2)
+                `when`("a batch smaller than the backlog is requested") {
+                    val due = repository.findDueBefore(before = before, limit = 2)
 
-                        due.map { it.meetingId } shouldContainExactly listOf(hostOnly.id, first.id)
-                        due.first().attendingUserIds.shouldBeEmpty()
-                        due.last().attendingUserIds shouldHaveSize 3
+                    then("the earliest two come back, each with its meeting's full attending list") {
+                        due.map { it.meetingTitle } shouldContainExactly listOf("first", "second")
+                        due[0].attendingUserIds shouldContainExactlyInAnyOrder listOf("U_A1", "U_A2")
+                        due[1].attendingUserIds shouldContainExactlyInAnyOrder listOf("U_B1", "U_B2", "U_B3")
+                    }
+                }
+
+                `when`("the whole backlog fits the batch") {
+                    val due = repository.findDueBefore(before = before, limit = 10)
+
+                    then(
+                        "canceled and not-yet-due reminders stay out; a meeting with no participant rows is included",
+                    ) {
+                        due.map { it.meetingTitle } shouldContainExactly listOf("first", "second", "third", "solo")
+                        due.last().attendingUserIds.shouldBeEmpty()
+                    }
+                }
+
+                `when`("nothing is due yet") {
+                    then("no reminder comes back") {
+                        repository.findDueBefore(before = base.minusSeconds(1L), limit = 10).shouldBeEmpty()
                     }
                 }
             }

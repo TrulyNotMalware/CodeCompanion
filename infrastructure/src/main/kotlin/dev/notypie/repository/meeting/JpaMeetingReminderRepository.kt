@@ -15,7 +15,6 @@ import java.time.LocalDateTime
 interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Long> {
     fun findByMeetingIdAndOffsetMinutes(meetingId: Long, offsetMinutes: Int): MeetingReminderSchema?
 
-    // Ids first: paging a query that fetches the participants collection would page in memory (HHH90003004).
     @Query(
         """
         SELECT r.id FROM meeting_reminder r
