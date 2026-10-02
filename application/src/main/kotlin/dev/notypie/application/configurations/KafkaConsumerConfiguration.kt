@@ -110,7 +110,7 @@ class PoisonOnlyDeadLetterRecoverer(
 class CdcDeadLetterRecovery(
     jsonTemplate: KafkaTemplate<String, Any>,
     meterRegistry: MeterRegistry,
-    private val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray> =
+    internal val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray> =
         deadLetterBytesProducerFactory(jsonTemplate = jsonTemplate),
 ) : DisposableBean {
     val recoverer: PoisonOnlyDeadLetterRecoverer =

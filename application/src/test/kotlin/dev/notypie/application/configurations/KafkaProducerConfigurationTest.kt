@@ -42,9 +42,10 @@ class KafkaProducerConfigurationTest :
                         val factory = context.getBean(ProducerFactory::class.java)
                         factory.shouldBeInstanceOf<DefaultKafkaProducerFactory<*, *>>().physicalCloseTimeout shouldBe
                             Duration.ofSeconds(PRODUCER_CLOSE_TIMEOUT_SECONDS.toLong())
-                        deadLetterBytesProducerFactory(
-                            jsonTemplate = context.getBean(KafkaTemplate::class.java) as KafkaTemplate<String, Any>,
-                        ).physicalCloseTimeout shouldBe Duration.ofSeconds(PRODUCER_CLOSE_TIMEOUT_SECONDS.toLong())
+                        context
+                            .getBean(CdcDeadLetterRecovery::class.java)
+                            .bytesProducerFactory
+                            .physicalCloseTimeout shouldBe Duration.ofSeconds(PRODUCER_CLOSE_TIMEOUT_SECONDS.toLong())
                     }
                 }
 

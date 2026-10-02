@@ -57,10 +57,12 @@ only.
 ```bash
 ./gradlew :application:test
 ```
-There are no controller specs today; behaviour is covered by the service specs
-(`SlackMentionEventHandlerImplTest`, `SlackInteractionHandlerImplTest`, `MeetingServiceImplTest`,
-`CveSubscriptionSlashServiceImplTest`, `CveQuerySlashServiceImplTest`) and the filter specs under
-`security/`. When adding one, use a `@WebMvcTest` slice with MockK-backed service interfaces
+`test/.../controllers/SlackControllersTest` is a standalone `MockMvc` spec with mocked services: the response
+contract (empty ack body, challenge-only echo, `consumes` selection, 415) and, for every slash endpoint, that
+`views.open` waits until the service has returned (`ViewOpenDeferral.afterBoundary`). Use cases are covered by the
+service specs (`SlackMentionEventHandlerImplTest`, `SlackInteractionHandlerImplTest`, `MeetingServiceImplTest`,
+`CveSubscriptionSlashServiceImplTest`, `CveQuerySlashServiceImplTest`) and the filter specs under `security/`.
+When adding a controller case, use a `@WebMvcTest` slice or the same standalone setup with MockK-backed service interfaces
 (`spring-boot-starter-test` and `spring-restdocs-mockmvc` are on the test classpath;
 `src/testFixtures/kotlin/dev/notypie/docs/` holds the REST Docs DSL). Assert that a non-`app_mention`
 event returns 200 without calling `AppMentionEventHandler`, that a `url_verification` body is echoed,

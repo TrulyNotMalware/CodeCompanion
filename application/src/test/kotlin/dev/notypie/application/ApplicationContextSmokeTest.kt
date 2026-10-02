@@ -22,11 +22,13 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.command.RestRequester
+import dev.notypie.impl.command.ViewOpenDeferral
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createUserProfileResponseJson
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
+import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.assertions.nondeterministic.eventually
@@ -44,6 +46,7 @@ import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.every
+import io.mockk.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
@@ -176,6 +179,19 @@ class ApplicationContextSmokeTest
                         scrape shouldContain "outbox_pending_oldest_age_seconds 0.0"
                         scrape shouldContain "outbox_in_progress_oldest_claim_age_seconds 0.0"
                         scrape shouldContain "outbox_retrying_messages 0.0"
+                    }
+                }
+            }
+
+            given("a views.open published through Spring's event multicaster inside a deferral boundary") {
+                `when`("the boundary block publishes the event") {
+                    then("the dispatcher runs it only after the block has returned") {
+                        val event = createOpenViewEvent()
+                        ViewOpenDeferral.afterBoundary {
+                            eventPublisher.publishEvent(event)
+                            verify(exactly = 0) { messageDispatcher.dispatchImmediate(event = event.payload) }
+                        }
+                        verify(exactly = 1) { messageDispatcher.dispatchImmediate(event = event.payload) }
                     }
                 }
             }
