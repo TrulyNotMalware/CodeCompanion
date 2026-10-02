@@ -54,6 +54,9 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
             UPDATE meeting_reminder
             SET status = 'SENDING', claim_token = :token, updated_at = :now
             WHERE id = :id AND status = 'PENDING'
+              AND EXISTS (
+                  SELECT 1 FROM meetings m WHERE m.id = meeting_reminder.meeting_id AND m.is_canceled = FALSE
+              )
         """,
         nativeQuery = true,
     )
@@ -70,6 +73,9 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
             UPDATE meeting_reminder
             SET status = 'SENT', sent_at = :sentAt, claim_token = NULL, updated_at = :sentAt
             WHERE id = :id AND status = 'SENDING' AND claim_token = :token
+              AND EXISTS (
+                  SELECT 1 FROM meetings m WHERE m.id = meeting_reminder.meeting_id AND m.is_canceled = FALSE
+              )
         """,
         nativeQuery = true,
     )

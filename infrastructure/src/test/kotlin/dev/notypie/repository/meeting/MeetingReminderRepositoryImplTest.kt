@@ -203,6 +203,88 @@ class MeetingReminderRepositoryImplTest
                 }
             }
 
+            fun cancel(meeting: MeetingSchema) =
+                inTx {
+                    val managed = jpaMeetingRepository.findById(meeting.id).get()
+                    managed.cancel()
+                    jpaMeetingRepository.saveAndFlush(managed)
+                }
+
+            given("a due reminder whose meeting is canceled before the claim") {
+                val meeting =
+                    persistMeeting(
+                        name = "gone",
+                        startAt = LocalDateTime.of(2031, 3, 3, 15, 0),
+                        attending = listOf("U_G"),
+                    )
+                arm(meeting = meeting, scheduledAt = Instant.parse("2031-03-03T05:50:00Z"))
+                val reminderId = reminderOf(meeting = meeting)!!.id
+                cancel(meeting = meeting)
+
+                `when`("the scheduler tries to claim it") {
+                    val claimed =
+                        repository.claimReminder(
+                            reminderId = reminderId,
+                            claimToken = "token-gone",
+                            now = now,
+                        )
+
+                    then("the claim fails and the row stays PENDING, so no DM is built") {
+                        claimed shouldBe false
+                        reminderOf(meeting = meeting)!!.status shouldBe MeetingReminderStatus.PENDING
+                    }
+                }
+            }
+
+            given("a reminder claimed while its meeting was active") {
+                val canceledLater =
+                    persistMeeting(
+                        name = "late",
+                        startAt = LocalDateTime.of(2031, 3, 4, 15, 0),
+                        attending = listOf("U_L"),
+                    )
+                val active =
+                    persistMeeting(
+                        name = "kept",
+                        startAt = LocalDateTime.of(2031, 3, 4, 16, 0),
+                        attending = listOf("U_K"),
+                    )
+                arm(meeting = canceledLater, scheduledAt = Instant.parse("2031-03-04T05:50:00Z"))
+                arm(meeting = active, scheduledAt = Instant.parse("2031-03-04T06:50:00Z"))
+                val canceledId = reminderOf(meeting = canceledLater)!!.id
+                val activeId = reminderOf(meeting = active)!!.id
+                repository.claimReminder(reminderId = canceledId, claimToken = "token-late", now = now) shouldBe true
+                repository.claimReminder(reminderId = activeId, claimToken = "token-kept", now = now) shouldBe true
+                cancel(meeting = canceledLater)
+                val sentAt = Instant.parse("2031-03-04T05:50:30Z")
+
+                `when`("the outbox transaction marks them sent") {
+                    val canceledSent =
+                        inTx {
+                            repository.markReminderSent(
+                                reminderId = canceledId,
+                                claimToken = "token-late",
+                                sentAt = sentAt,
+                            )
+                        }
+                    val activeSent =
+                        inTx {
+                            repository.markReminderSent(
+                                reminderId = activeId,
+                                claimToken = "token-kept",
+                                sentAt = sentAt,
+                            )
+                        }
+
+                    then("the canceled meeting's CAS fails, which rolls its DMs back; the active one is SENT") {
+                        canceledSent shouldBe false
+                        reminderOf(meeting = canceledLater)!!.status shouldBe MeetingReminderStatus.SENDING
+                        activeSent shouldBe true
+                        reminderOf(meeting = active)!!.status shouldBe MeetingReminderStatus.SENT
+                    }
+                }
+            }
+
             given(
                 "due reminders for a meeting without participant rows and two meetings with three participants each",
             ) {
