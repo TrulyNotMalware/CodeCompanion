@@ -22,6 +22,8 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.command.RestRequester
+import dev.notypie.impl.command.dto.SlackUserProfileDto
+import dev.notypie.impl.command.dto.createUserProfileResponseJson
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
@@ -128,27 +130,34 @@ class ApplicationContextSmokeTest
                     }
 
                     then(
-                        "the Slack REST requester is built from Boot's RestClient.Builder, so its calls are observed",
+                        "the Slack REST requester uses Boot's RestClient.Builder: calls are observed, profiles decode",
                     ) {
                         val server =
                             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
                                 createContext("/") { exchange ->
-                                    val body = "{}".toByteArray()
+                                    val body = createUserProfileResponseJson(displayName = "smoke-user").toByteArray()
+                                    exchange.responseHeaders.add("Content-Type", "application/json")
                                     exchange.sendResponseHeaders(200, body.size.toLong())
                                     exchange.responseBody.use { it.write(body) }
                                 }
                                 start()
                             }
-                        try {
-                            context.getBean(RestRequester::class.java).safeGet(
-                                uri = "http://127.0.0.1:${server.address.port}/probe",
-                                authorizationHeader = null,
-                                responseType = String::class.java,
-                                uriVariables = emptyMap(),
-                            )
-                        } finally {
-                            server.stop(0)
-                        }
+                        val profile =
+                            try {
+                                context.getBean(RestRequester::class.java).safeGet(
+                                    uri = "http://127.0.0.1:${server.address.port}/users.profile.get",
+                                    authorizationHeader = null,
+                                    responseType = SlackUserProfileDto::class.java,
+                                    uriVariables = emptyMap(),
+                                )
+                            } finally {
+                                server.stop(0)
+                            }
+                        profile
+                            .getOrThrow()
+                            .body
+                            ?.profile
+                            ?.displayName shouldBe "smoke-user"
                         context
                             .getBean(
                                 MeterRegistry::class.java,
