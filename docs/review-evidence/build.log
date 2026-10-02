@@ -1,0 +1,378 @@
+Calculating task graph as no cached configuration is available for tasks: build
+
+
+[2A[1m]9;4;1;0│[0;32;1m···············[0;39;1m│ 0% CONFIGURING [74ms][m[49D[1B[1m> root project > Resolve dependencies of classpath[m[50D[1B[2A[1m]9;4;1;0│[0;32;1m···············[0;39;1m│ 0% CONFIGURING [176ms][m[50D[1B[1m> root project[m[0K[14D[1B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [276ms][m[54D[1B[1m> Building task graph of root build[m[35D[1B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [376ms][m[54D[1B[1m> Building task graph of root build > Extracting toolchain metadata from '/User[m[79D[1B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [476ms][m[54D[2B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [576ms][m[54D[2B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [676ms][m[54D[2B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [776ms][m[54D[1B[1m> Building task graph of root build > Extracting toolchain metadata from '/Libr[m[79D[1B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [876ms][m[54D[2B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [976ms][m[54D[2B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [1s][m[0K[51D[2B[1A[1m> Building task graph of root build > Extracting toolchain metadata from '/User[m[79D[1B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [2s][m[51D[2B[2A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [3s][m[51D[2B[1A[1m> Building task graph of root build[m[0K[35D[1B[1A[1m> Storing configuration cache state > : > Resolve dependencies of :compileClass[m[79D[1B[1A[1m> Storing configuration cache state > : > Resolve files of configuration ':ktli[m[79D[1B[1A[1m> Storing configuration cache state > : > Resolve dependencies of :application:[m[79D[1B[1A[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[1B
+
+
+[3A[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[1B[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[1B[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[1B  (2 lines not showing)[23D  (4 lines not showing)[23D[5A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [4s][m[51D[5B  (3 lines not showing)[23D[4A> IDLE[0K[6D[2B> IDLE[0K[6D[2B  (1 line not showing)[0K[22D[3A> IDLE[0K[6D[2B[1m> Storing configuration cache state > : > Resolve dependencies of :application:[m[79D[1B[0K[3A[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[2B[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[1B[5A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [5s][m[51D[2B> IDLE[0K[6D[2B[1m> Storing configuration cache state > : > Resolve dependencies of :application:[m[79D[1B[1A[1m> Storing configuration cache state > : > Resolve files of configuration ':appl[m[79D[1B[1A[1m> Storing configuration cache state > :[m[0K[39D[1B[1A[1m> Storing configuration cache state > : > Resolve dependencies of :infrastructu[m[79D[1B[5A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% CONFIGURING [6s][m[51D[5B[1A[1m> Storing configuration cache state[m[0K[35D[1B[5A[1m]9;4;1;0│[0;32;1m···············[0;39;1m│ 0% EXECUTING [6s][m[0K[45D[4B> IDLE[0K[6D[1B[5A[1m> Task :domain:checkKotlinGradlePluginConfigurationErrors[m[33m SKIPPED[39m[0K
+[1m> Task :infrastructure:checkKotlinGradlePluginConfigurationErrors[m[33m SKIPPED[39m[0K
+[1m> Task :checkKotlinGradlePluginConfigurationErrors[m[33m SKIPPED[39m[0K
+[1m> Task :application:checkKotlinGradlePluginConfigurationErrors[m[33m SKIPPED[39m[0K
+[1m> Task :processTestFixturesResources[m[33m NO-SOURCE[39m[0K
+[1m> Task :processTestResources[m[33m NO-SOURCE[39m
+[1m> Task :compileKotlin[m[33m NO-SOURCE[39m
+[1m> Task :processResources[m[33m NO-SOURCE[39m
+[1m> Task :domain:processResources[m[33m NO-SOURCE[39m
+[1m> Task :application:processTestFixturesResources[m[33m NO-SOURCE[39m
+[1m> Task :application:processTestResources[m[33m NO-SOURCE[39m
+[1m> Task :infrastructure:processResources[m[33m NO-SOURCE[39m
+[1m> Task :infrastructure:processTestFixturesResources[m[33m NO-SOURCE[39m
+[1m> Task :domain:processTestFixturesResources[m[33m NO-SOURCE[39m
+[1m> Task :domain:processTestResources[m[33m NO-SOURCE[39m
+[1m> Task :compileJava[m[33m NO-SOURCE[39m
+[1m> Task :classes[m[33m UP-TO-DATE[39m
+[1m> Task :infrastructure:processTestResources[m
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;15│[0;32;1m██▎············[0;39;1m│ 15% EXECUTING [6s][m[47D[1B[1m> :application:loadKtlintReporters[m[34D[1B[1m> :domain:compileKotlin > Cleaning stale outputs[m[48D[1B[1m> :loadKtlintReporters[m[22D[1B[1m> :application:processResources[m[31D[1B  (3 lines not showing)[23D[5A[1m> Task :jar[m[0K
+[1m> Task :assemble[m[0K
+[1m> Task :compileTestFixturesKotlin[m[33m NO-SOURCE[39m[0K
+[1m> Task :compileTestFixturesJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :testFixturesClasses[m[33m UP-TO-DATE[39m[0K
+[1m> Task :application:processResources[m[0K
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;20│[0;32;1m███············[0;39;1m│ 20% EXECUTING [6s][m[47D[1B[1m> :application:loadKtlintReporters[m[34D[1B[1m> :domain:compileKotlin[m[23D[1B[1m> :loadKtlintReporters[m[22D[1B[1m> :infrastructure:loadKtlintReporters[m[37D[1B  (2 lines not showing)[23D[5A[1m> Task :testFixturesJar[m[0K
+[1m> Task :compileTestKotlin[m[33m NO-SOURCE[39m[0K
+[1m> Task :compileTestJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :testClasses[m[33m UP-TO-DATE[39m[0K
+[1m> Task :test[m[33m NO-SOURCE[39m[0K
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;24│[0;32;1m███▋···········[0;39;1m│ 24% EXECUTING [7s][m[47D[1B[1m> :application:loadKtlintReporters[m[34D[1B[1m> :domain:compileKotlin[m[23D[1B[1m> :loadKtlintReporters[m[22D[1B[1m> :infrastructure:loadKtlintReporters[m[37D[1B  (1 line not showing)[22D[5A[1m]9;4;1;24│[0;32;1m███▋···········[0;39;1m│ 24% EXECUTING [8s][m[47D[5B[3A[1m> :domain:compileKotlin > ClasspathEntrySnapshotTransform kotlin-reflect-2.4.10[m[79D[3B  (4 lines not showing)[23D  (2 lines not showing)[23D[5A[1m]9;4;1;24│[0;32;1m███▋···········[0;39;1m│ 24% EXECUTING [9s][m[47D[2B[1m> :domain:compileKotlin > Packing build cache entry[m[0K[51D[3B[3A> IDLE[0K[6D[3B[3A[1m> :domain:compileKotlin[m[23D[3B  (1 line not showing)[0K[22D[5A[1m> Task :infrastructure:loadKtlintReporters[m[0K
+[1m> Task :loadKtlintReporters[m[0K
+[1m> Task :domain:loadKtlintReporters[m[0K
+[1m> Task :application:loadKtlintReporters[m[0K
+[1m> Task :runKtlintCheckOverTestSourceSet[m[33m NO-SOURCE[39m[0K
+[1m> Task :runKtlintCheckOverTestFixturesSourceSet[m[33m NO-SOURCE[39m[0K
+[1m> Task :runKtlintCheckOverMainSourceSet[m[33m NO-SOURCE[39m
+[1m> Task :ktlintTestSourceSetCheck[m[33m SKIPPED[39m
+[1m> Task :ktlintMainSourceSetCheck[m[33m SKIPPED[39m
+[1m> Task :ktlintTestFixturesSourceSetCheck[m[33m SKIPPED[39m
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;33│[0;32;1m████▉··········[0;39;1m│ 33% EXECUTING [9s][m[47D[1B[1m> :runKtlintCheckOverKotlinScripts[m[34D[1B[1m> :domain:compileKotlin[m[23D[1B[1m> :infrastructure:runKtlintCheckOverKotlinScripts[m[49D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (4 lines not showing)[23D[5A[1m]9;4;1;33│[0;32;1m████▉··········[0;39;1m│ 33% EXECUTING [10s][m[48D[5B[5A[1m]9;4;1;33│[0;32;1m████▉··········[0;39;1m│ 33% EXECUTING [11s][m[48D[5BWARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/f[5A[1m]9;4;1;33│[0;32;1m████▉··········[0;39;1m│ 33% EXECUTING [12s][m[48D[5B[5A[1m> Task :infrastructure:runKtlintCheckOverKotlinScripts[m[0K
+[4B[0K
+[5A[1m]9;4;1;33│[0;32;1m█████··········[0;39;1m│ 33% EXECUTING [12s][m[48D[1B[1m> :runKtlintCheckOverKotlinScripts[m[34D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverKotlinScripts[m[0K[46D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (4 lines not showing)[23D[5A[1m> Task :domain:runKtlintCheckOverKotlinScripts[m[0K
+[1m> Task :application:runKtlintCheckOverKotlinScripts[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;35│[0;32;1m█████▎·········[0;39;1m│ 35% EXECUTING [12s][m[48D[1B[1m> :runKtlintCheckOverKotlinScripts[m[0K[34D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestFixturesSourceSet[m[54D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (3 lines not showing)[23D[5A[1m> Task :domain:ktlintKotlinScriptCheck[m[0K
+[1m> Task :application:ktlintKotlinScriptCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;37│[0;32;1m█████▌·········[0;39;1m│ 37% EXECUTING [12s][m[48D[1B[1m> :runKtlintCheckOverKotlinScripts[m[0K[34D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestFixturesSourceSet[m[54D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (4 lines not showing)[23D[5A[1m> Task :runKtlintCheckOverKotlinScripts[m[0K
+[1m> Task :ktlintKotlinScriptCheck[m[0K
+[1m> Task :check[m[0K
+[1m> Task :build[m[0K
+[1B[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;40│[0;32;1m██████·········[0;39;1m│ 40% EXECUTING [12s][m[0K[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[46D[1B[1m> :domain:compileKotlin[m[23D[1B[1m> :application:runKtlintCheckOverTestFixturesSourceSet[m[54D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (4 lines not showing)[23D[5A[1m]9;4;1;40│[0;32;1m██████·········[0;39;1m│ 40% EXECUTING [13s][m[48D[5B[5A[1m> Task :application:runKtlintCheckOverTestFixturesSourceSet[m[0K
+[1m> Task :application:ktlintTestFixturesSourceSetCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;42│[0;32;1m██████▎········[0;39;1m│ 42% EXECUTING [13s][m[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[0K[46D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (4 lines not showing)[23D[5A[1m> Task :infrastructure:ktlintKotlinScriptCheck[m[0K
+[4B[0K
+[5A[1m]9;4;1;43│[0;32;1m██████▍········[0;39;1m│ 43% EXECUTING [13s][m[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[46D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[0K[46D[1B[1m> :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[57D[1B  (4 lines not showing)[23D[5A[1m]9;4;1;43│[0;32;1m██████▍········[0;39;1m│ 43% EXECUTING [14s][m[48D[5B[5A[1m> Task :infrastructure:runKtlintCheckOverTestFixturesSourceSet[m[0K
+[1m> Task :infrastructure:ktlintTestFixturesSourceSetCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;44│[0;32;1m██████▋········[0;39;1m│ 44% EXECUTING [14s][m[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[46D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :domain:runKtlintCheckOverTestFixturesSourceSet[m[49D[1B  (4 lines not showing)[23D[5A[1m> Task :domain:runKtlintCheckOverTestFixturesSourceSet[m[0K
+[1m> Task :domain:ktlintTestFixturesSourceSetCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;46│[0;32;1m██████▉········[0;39;1m│ 46% EXECUTING [14s][m[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[46D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :domain:runKtlintCheckOverTestSourceSet[m[41D[1B  (3 lines not showing)[23D[5A[1m]9;4;1;46│[0;32;1m██████▉········[0;39;1m│ 46% EXECUTING [15s][m[48D[5B[5A[1m]9;4;1;46│[0;32;1m██████▉········[0;39;1m│ 46% EXECUTING [16s][m[48D[5B[5A[1m> Task :domain:runKtlintCheckOverMainSourceSet[m[0K
+[4B[0K
+[5A[1m]9;4;1;47│[0;32;1m███████········[0;39;1m│ 47% EXECUTING [16s][m[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[46D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :domain:runKtlintCheckOverTestSourceSet[m[41D[1B  (3 lines not showing)[23D[5A[1m> Task :domain:ktlintMainSourceSetCheck[m[0K
+[4B[0K
+[5A[1m]9;4;1;48│[0;32;1m███████▏·······[0;39;1m│ 48% EXECUTING [17s][m[48D[1B[1m> :application:runKtlintCheckOverMainSourceSet[m[46D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :domain:runKtlintCheckOverTestSourceSet[m[41D[1B  (2 lines not showing)[23D[5A[1m> Task :application:runKtlintCheckOverMainSourceSet[m[0K
+[1m> Task :application:ktlintMainSourceSetCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;50│[0;32;1m███████▌·······[0;39;1m│ 50% EXECUTING [17s][m[48D[1B[1m> :infrastructure:runKtlintCheckOverMainSourceSet[m[49D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :domain:runKtlintCheckOverTestSourceSet[m[41D[1B  (1 line not showing)[22D[5A[1m> Task :domain:runKtlintCheckOverTestSourceSet[m[0K
+[4B[0K
+[5A[1m]9;4;1;50│[0;32;1m███████▋·······[0;39;1m│ 50% EXECUTING [17s][m[0K[48D[1B[1m> :infrastructure:runKtlintCheckOverMainSourceSet[m[49D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :infrastructure:runKtlintCheckOverTestSourceSet[m[49D[1B  (1 line not showing)[22D[5A[1m> Task :domain:ktlintTestSourceSetCheck[m[0K
+[4B[0K
+[5A[1m]9;4;1;51│[0;32;1m███████▊·······[0;39;1m│ 51% EXECUTING [17s][m[0K[48D[1B[1m> :infrastructure:runKtlintCheckOverMainSourceSet[m[49D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[0K[46D[1B[1m> :infrastructure:runKtlintCheckOverTestSourceSet[m[49D[1B[5A[1m]9;4;1;51│[0;32;1m███████▊·······[0;39;1m│ 51% EXECUTING [18s][m[48D[5B[5A[1m> Task :infrastructure:runKtlintCheckOverMainSourceSet[m[0K
+[1m> Task :infrastructure:ktlintMainSourceSetCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;53│[0;32;1m████████·······[0;39;1m│ 53% EXECUTING [18s][m[48D[1B> IDLE[0K[6D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B[1m> :infrastructure:runKtlintCheckOverTestSourceSet[m[49D[1B[5A[1m]9;4;1;53│[0;32;1m████████·······[0;39;1m│ 53% EXECUTING [19s][m[48D[5B[5A[1m> Task :infrastructure:runKtlintCheckOverTestSourceSet[m[0K
+[4B[0K
+[5A[1m]9;4;1;54│[0;32;1m████████▏······[0;39;1m│ 54% EXECUTING [19s][m[48D[1B> IDLE[0K[6D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[0K[46D[1B[1m> :infrastructure:ktlintTestSourceSetCheck[m[42D[1B[5A[1m> Task :infrastructure:ktlintTestSourceSetCheck[m[0K
+[4B[0K
+[5A[1m]9;4;1;55│[0;32;1m████████▎······[0;39;1m│ 55% EXECUTING [19s][m[48D[1B> IDLE[0K[6D[1B[1m> :domain:compileKotlin[m[0K[23D[1B[1m> :application:runKtlintCheckOverTestSourceSet[m[46D[1B> IDLE[6D[1B[5A[1m> Task :application:runKtlintCheckOverTestSourceSet[m[0K
+[1m> Task :application:ktlintTestSourceSetCheck[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [19s][m[48D[1B> IDLE[0K[6D[1B[1m> :domain:compileKotlin[m[23D[1B> IDLE[6D[1B> IDLE[6D[1B[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [20s][m[48D[5B[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [21s][m[48D[5B[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [22s][m[48D[5B[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [23s][m[48D[5B[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [24s][m[48D[5B[5A[1m]9;4;1;56│[0;32;1m████████▌······[0;39;1m│ 56% EXECUTING [25s][m[48D[5B[3A[1m> :domain:compileKotlin > Packing build cache entry[m[51D[3B[5A[1m> Task :domain:compileKotlin[m[0K
+[1m> Task :domain:compileJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :domain:classes[m[33m UP-TO-DATE[39m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;59│[0;32;1m████████▉······[0;39;1m│ 59% EXECUTING [25s][m[48D[1B> IDLE[6D[1B[1m> :domain:jar[m[13D[1B[1m> :domain:resolveMainClassName[m[30D[1B[1m> :infrastructure:compileKotlin > Cleaning stale outputs[m[56D[1B[5A[1m> Task :domain:resolveMainClassName[m[0K
+[1m> Task :domain:bootJar[m[33m SKIPPED[39m[0K
+[1m> Task :domain:jar[m[0K
+[1m> Task :domain:assemble[m[0K
+[1B[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;62│[0;32;1m█████████▍·····[0;39;1m│ 62% EXECUTING [25s][m[0K[48D[1B> IDLE[6D[1B[1m> :domain:compileTestFixturesKotlin[m[35D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform jackson-modul[m[79D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform main[m[70D[1B[4A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform jackson-core-[m[79D[1B[1m> :domain:compileTestFixturesKotlin > ClasspathEntrySnapshotTransform mockk-dsl[m[79D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform jackson-datab[m[79D[1B> IDLE[0K[6D[1B[4A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform slack-api-cli[m[79D[1B[1m> :domain:compileTestFixturesKotlin[m[0K[35D[3B[2A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-web-7.[m[79D[2B[4A[1m> :infrastructure:compileKotlin > Packing build cache entry[m[0K[59D[1B[1m> :domain:compileTestFixturesKotlin > ClasspathEntrySnapshotTransform byte-budd[m[79D[2B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform slack-api-mod[m[79D[1B  (1 line not showing)[22D[4A> IDLE[0K[6D[2B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-boot-j[m[79D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-data-j[m[79D[1B[0K[2A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-boot-4[m[79D[2B[5A[1m]9;4;1;62│[0;32;1m█████████▍·····[0;39;1m│ 62% EXECUTING [26s][m[48D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-aspect[m[79D[1B[1m> :domain:compileTestFixturesKotlin[m[0K[35D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-data-c[m[79D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-aop-7.[m[79D[1B[4A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-beans-[m[79D[2B[1m> :infrastructure:compileKotlin > Packing build cache entry[m[0K[59D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-messag[m[79D[1B[4A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform aspectjweaver[m[79D[2B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform gson-2.13.2.j[m[79D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform spring-core-7[m[79D[1B[4A[1m> :infrastructure:compileKotlin[m[0K[31D[2B> IDLE[0K[6D[1B> IDLE[0K[6D[1B[4A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform hibernate-cor[m[79D[4B[2A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform logback-core-[m[79D[1B[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform kafka-clients[m[79D[1B  (1 line not showing)[22D[5A[1m]9;4;1;62│[0;32;1m█████████▍·····[0;39;1m│ 62% EXECUTING [27s][m[48D[5B[2A[1m> :infrastructure:compileKotlin > ClasspathEntrySnapshotTransform antlr4-runtim[m[79D[2B  (2 lines not showing)[23D[2A> IDLE[0K[6D[2B[0K[1A[1m> :infrastructure:compileKotlin > Packing build cache entry[m[0K[59D[1B[1A> IDLE[0K[6D[1B[4A[1m> :infrastructure:compileKotlin[m[0K[31D[4B[3A[1m> :domain:compileTestFixturesKotlin > Packing build cache entry[m[63D[3B[5A[1m> Task :domain:compileTestFixturesKotlin[m[0K
+[1m> Task :domain:compileTestFixturesJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :domain:testFixturesClasses[m[33m UP-TO-DATE[39m[0K
+[1m> Task :domain:testFixturesJar[m[0K
+[1B[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [27s][m[48D[1B[1m> :infrastructure:compileKotlin[m[31D[1B[1m> :domain:compileTestKotlin > Cleaning stale outputs[m[52D[1B> IDLE[6D[1B> IDLE[6D[1B[3A[1m> :domain:compileTestKotlin[m[0K[27D[3B[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [28s][m[48D[2B[1m> :domain:compileTestKotlin > ClasspathEntrySnapshotTransform kotest-assertions[m[79D[1B[1m> :domain:compileTestKotlin > ClasspathEntrySnapshotTransform kotlinx-coroutine[m[79D[1B[1m> :domain:compileTestKotlin > ClasspathEntrySnapshotTransform kotest-framework-[m[79D[1B[3A[1m> :domain:compileTestKotlin > Packing build cache entry[m[0K[55D[3B[3A> IDLE[0K[6D[1B[1m> :domain:compileTestKotlin[m[0K[27D[1B> IDLE[0K[6D[1B[2A[1m> :domain:compileTestKotlin > Packing build cache entry[m[55D[2B[2A[1m> :domain:compileTestKotlin[m[0K[27D[2B[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [29s][m[48D[5B[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [30s][m[48D[5B[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [31s][m[48D[5B[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [32s][m[48D[5B[5A[1m]9;4;1;66│[0;32;1m█████████▉·····[0;39;1m│ 66% EXECUTING [33s][m[48D[5B[4A[1m> :infrastructure:compileKotlin > Packing build cache entry[m[59D[4B[5A[1m> Task :infrastructure:compileKotlin[m[0K
+[1m> Task :infrastructure:compileJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :infrastructure:classes[m[33m UP-TO-DATE[39m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;68│[0;32;1m██████████▎····[0;39;1m│ 68% EXECUTING [33s][m[48D[1B[1m> :application:compileKotlin > Cleaning stale outputs[m[53D[1B[1m> :infrastructure:resolveMainClassName[m[38D[1B[1m> :domain:compileTestKotlin[m[27D[1B[1m> :infrastructure:jar[m[21D[1B[5A[1m> Task :infrastructure:resolveMainClassName[m[0K
+[1m> Task :infrastructure:bootJar[m[33m SKIPPED[39m[0K
+[1m> Task :infrastructure:jar[m[0K
+[1m> Task :infrastructure:assemble[m[0K
+[1B[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;72│[0;32;1m██████████▊····[0;39;1m│ 72% EXECUTING [34s][m[48D[1B[1m> :application:compileKotlin[m[28D[1B> IDLE[6D[1B[1m> :domain:compileTestKotlin[m[27D[1B[1m> :infrastructure:compileTestFixturesKotlin[m[43D[1B[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform spring-ai-model-[m[79D[1B[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform spring-boot-star[m[79D[3B  (1 line not showing)[22D[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform mcp-core-2.0.0.j[m[79D[1B[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform jetty-ee11-webso[m[79D[2B[1m> :infrastructure:compileTestFixturesKotlin > ClasspathEntrySnapshotTransform b[m[79D[1B[0K[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform jetty-plus-12.1.[m[79D[1B> IDLE[0K[6D[3B[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform jetty-util-12.1.[m[79D[4B[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform micrometer-core-[m[79D[4B[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform spring-webmvc-7.[m[79D[1B[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform spring-boot-heal[m[79D[2B[1m> :infrastructure:compileTestFixturesKotlin[m[0K[43D[1B  (1 line not showing)[22D[4A[1m> :application:compileKotlin > ClasspathEntrySnapshotTransform reactor-core-3.8[m[79D[1B> IDLE[0K[6D[3B[0K[3A[1m> :application:compileKotlin > Packing build cache entry[m[56D[3B[5A[0K
+[1m> Task :domain:compileTestKotlin[m[0K
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)[0K
+  Kotlin compiler warning[0K
+    No cast needed.[0K
+    Location: domain/src/test/kotlin/dev/notypie/domain/command/SubmissionPipelineCharacterizationTest.kt line 289
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: domain/src/test/kotlin/dev/notypie/domain/command/context/SubmissionContextsTest.kt line 134
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;72│[0;32;1m██████████▊····[0;39;1m│ 72% EXECUTING [34s][m[48D[1B[1m> :application:compileKotlin[m[28D[1B> IDLE[6D[1B[1m> :domain:compileTestKotlin[m[27D[1B[1m> :infrastructure:compileTestFixturesKotlin[m[43D[1B[5A[1m]9;4;1;72│[0;32;1m██████████▊····[0;39;1m│ 72% EXECUTING [35s][m[48D[5B[2A[1m> :domain:compileTestKotlin > Packing build cache entry[m[55D[2B[5A[0K
+[1m> Task :domain:compileTestJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :domain:testClasses[m[33m UP-TO-DATE[39m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;74│[0;32;1m███████████▏···[0;39;1m│ 74% EXECUTING [35s][m[0K[48D[1B[1m> :application:compileKotlin[m[0K[28D[1B> IDLE[6D[1B[1m> :domain:test > Cleaning stale outputs[m[39D[1B[1m> :infrastructure:compileTestFixturesKotlin[m[43D[1B[2A[1m> :domain:test[m[0K[14D[2B[5A[1m> Task :infrastructure:compileTestFixturesKotlin[m[0K
+[1m> Task :infrastructure:compileTestFixturesJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :infrastructure:testFixturesClasses[m[33m UP-TO-DATE[39m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;77│[0;32;1m███████████▌···[0;39;1m│ 77% EXECUTING [35s][m[48D[1B[1m> :application:compileKotlin[m[0K[28D[1B> IDLE[6D[1B[1m> :domain:test[m[14D[1B[1m> :infrastructure:testFixturesJar[m[33D[1B[5A[1m> Task :infrastructure:testFixturesJar[m[0K
+[4B[0K
+[5A[1m]9;4;1;77│[0;32;1m███████████▋···[0;39;1m│ 77% EXECUTING [35s][m[48D[1B[1m> :application:compileKotlin[m[28D[1B> IDLE[0K[6D[1B[1m> :domain:test[m[0K[14D[1B[1m> :infrastructure:compileTestKotlin > Cleaning stale outputs[m[60D[1B[1A[1m> :infrastructure:compileTestKotlin[m[0K[35D[1B[5A[1m]9;4;1;77│[0;32;1m███████████▋···[0;39;1m│ 77% EXECUTING [36s][m[48D[2B[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform junit-jup[m[79D[1B[1m> :domain:test > 0 tests completed[m[34D[1B[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform assertj-c[m[79D[1B[3A[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform awaitilit[m[79D[2B[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform spring-te[m[79D[1B[3A> IDLE[0K[6D[2B[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform kafka_2.1[m[79D[1B[3A[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform kafka-str[m[79D[2B> IDLE[0K[6D[1B[3A[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform asm-9.7.1[m[79D[3B[3A[1m> :infrastructure:compileTestKotlin[m[0K[35D[3B[3A[1m> :infrastructure:compileTestKotlin > ClasspathEntrySnapshotTransform scala-lib[m[79D[3B[3A[1m> :infrastructure:compileTestKotlin[m[0K[35D[3B[5A[1m]9;4;1;77│[0;32;1m███████████▋···[0;39;1m│ 77% EXECUTING [37s][m[48D[5B[1A[1m> :domain:test > Executing test dev.notypie.domain.architecture.DomainLayeringG[m[79D[1B[2A[1m> :domain:test > 4 tests completed[m[34D[1B[1m> :domain:test > Executing test dev.notypie.domain.architecture.EnvelopeCastGua[m[79D[1B[2A[1m> :domain:test > 7 tests completed[m[34D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.CommandSetTest[m[0K[73D[1B[2A[1m> :domain:test > 21 tests completed[m[35D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.SubCommandDefinition[m[79D[1B[2A[1m> :domain:test > 38 tests completed[m[35D[1B[1m> :domain:test > Executing test dev...command.SubmissionPipelineCharacterizatio[m[79D[1B[5A[1m]9;4;1;77│[0;32;1m███████████▋···[0;39;1m│ 77% EXECUTING [38s][m[48D[3B[1m> :domain:test > 57 tests completed[m[35D[1B[1m> :domain:test > Executing test dev.notypie...context.AbstractReactionCommandCo[m[79D[1B[2A[1m> :domain:test > 93 tests completed[m[35D[1B[1m> :domain:test > Executing test dev.notypie...command.context.DetailErrorAlertC[m[79D[1B[2A[1m> :domain:test > 111 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie...context.MeetingApprovalResponseCo[m[79D[1B[2A[1m> :domain:test > 123 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.context.MeetingConte[m[79D[1B[2A[1m> :domain:test > 133 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.context.NoticeContex[m[79D[1B[2A[1m> :domain:test > 137 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.context.ParsedSubmis[m[79D[1B[2A[1m> :domain:test > 153 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.context.ReplaceMessa[m[79D[1B[2A[1m> :domain:test > 180 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.context.SubmissionCo[m[79D[1B[2A[1m> :domain:test > 206 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.entity.slash.Meeting[m[79D[1B[2A[1m> :domain:test > 241 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie...command.parsers.AppMentionContext[m[79D[1B[5A[1m]9;4;1;77│[0;32;1m███████████▋···[0;39;1m│ 77% EXECUTING [39s][m[48D[3B[1m> :domain:test > 287 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.command.parsers.SubmissionRo[m[79D[1B[2A[1m> :domain:test > 309 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.common.ValidationBuilderTest[m[79D[1B[2A[1m> :domain:test > 344 tests completed[m[36D[1B[1m> :domain:test > Executing test dev.notypie.domain.standup.entity.RoutineTest[m[0K[77D[1B[2A[1m> :domain:test[m[0K[14D[1B> IDLE[0K[6D[1B[2A[1m> :domain:test > Packing build cache entry[m[42D[2B[5A[1m> Task :domain:test[m[0K
+[1m> Task :domain:check[m[0K
+[1m> Task :domain:build[m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;80│[0;32;1m████████████···[0;39;1m│ 80% EXECUTING [39s][m[48D[1B[1m> :application:compileKotlin[m[28D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B> IDLE[6D[1B> IDLE[6D[1B[5A[1m]9;4;1;80│[0;32;1m████████████···[0;39;1m│ 80% EXECUTING [40s][m[48D[5B[5A[1m]9;4;1;80│[0;32;1m████████████···[0;39;1m│ 80% EXECUTING [41s][m[48D[5B[5A[0K
+[1m> Task :application:compileKotlin[m[0K
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)[0K
+  Kotlin compiler warning[0K
+    Elvis operator (?:) always returns the left operand of non-nullable type 'Result<T (of fun <T> TransactionTemplate.runInTx)>'.[0K
+    Location: application/src/main/kotlin/dev/notypie/application/common/TransactionTemplateExt.kt line 9
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;80│[0;32;1m████████████···[0;39;1m│ 80% EXECUTING [41s][m[48D[1B[1m> :application:compileKotlin[m[28D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B> IDLE[6D[1B> IDLE[6D[1B[4A[1m> :application:compileKotlin > Packing build cache entry[m[56D[4B[5A[0K
+[1m> Task :application:compileJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :application:classes[m[0K
+[1m> Task :application:resolveMainClassName[m[0K
+[1B[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;83│[0;32;1m████████████▌··[0;39;1m│ 83% EXECUTING [41s][m[48D[1B[1m> :application:jar[m[18D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B[1m> :application:bootJar[m[22D[1B> IDLE[6D[1B[5A[1m> Task :application:jar[m[0K
+[4B[0K
+[5A[1m]9;4;1;84│[0;32;1m████████████▋··[0;39;1m│ 84% EXECUTING [41s][m[48D[1B[1m> :application:compileTestFixturesKotlin > ClasspathEntrySnapshotTransform main[m[79D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B[1m> :application:bootJar[m[22D[1B[1m> :application:compileTestFixturesKotlin > ClasspathEntrySnapshotTransform spri[m[79D[1B[4A[1m> :application:compileTestFixturesKotlin[m[0K[40D[3B> IDLE[0K[6D[1B[5A[1m]9;4;1;84│[0;32;1m████████████▋··[0;39;1m│ 84% EXECUTING [42s][m[48D[5B[5A[0K
+[1m> Task :application:compileTestFixturesKotlin[m[0K
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)[0K
+  Kotlin compiler warning[0K
+    Unnecessary non-null assertion (!!) on a non-null receiver of type 'T (of fun <T : Any> inNewTransaction)'.[0K
+    Location: application/src/testFixtures/kotlin/dev/notypie/application/service/meeting/MeetingTransactionFixtures.kt line 118
+
+[1m> Task :application:compileTestFixturesJava[m[33m NO-SOURCE[39m
+[1m> Task :application:testFixturesClasses[m[33m UP-TO-DATE[39m
+[1m> Task :application:testFixturesJar[m
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;88│[0;32;1m█████████████▏·[0;39;1m│ 88% EXECUTING [42s][m[48D[1B[1m> :application:compileTestKotlin > Cleaning stale outputs[m[57D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B[1m> :application:bootJar[m[22D[1B> IDLE[6D[1B[4A[1m> :application:compileTestKotlin[m[0K[32D[4B[5A[1m]9;4;1;88│[0;32;1m█████████████▏·[0;39;1m│ 88% EXECUTING [43s][m[48D[5B[5A[1m]9;4;1;88│[0;32;1m█████████████▏·[0;39;1m│ 88% EXECUTING [44s][m[48D[5B[5A[1m]9;4;1;88│[0;32;1m█████████████▏·[0;39;1m│ 88% EXECUTING [45s][m[48D[5B[5A[1m> Task :application:bootJar[m[0K
+[1m> Task :application:assemble[m[0K
+[3B[0K
+[0K
+[5A[1m]9;4;1;89│[0;32;1m█████████████▍·[0;39;1m│ 89% EXECUTING [45s][m[48D[1B[1m> :application:compileTestKotlin[m[32D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B> IDLE[6D[1B> IDLE[6D[1B[5A[1m]9;4;1;89│[0;32;1m█████████████▍·[0;39;1m│ 89% EXECUTING [46s][m[48D[5B[5A[1m]9;4;1;89│[0;32;1m█████████████▍·[0;39;1m│ 89% EXECUTING [47s][m[48D[5B[5A[1m]9;4;1;89│[0;32;1m█████████████▍·[0;39;1m│ 89% EXECUTING [48s][m[48D[5B[5A[0K
+[1m> Task :infrastructure:compileTestKotlin[m[0K
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)[0K
+  Kotlin compiler warning[0K
+    No cast needed.[0K
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 71
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 98
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 126
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 165
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 191
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 225
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Unnecessary non-null assertion (!!) on a non-null receiver of type 'T (of fun <T : Any> inTx)'.
+    Location: infrastructure/src/test/kotlin/dev/notypie/repository/meeting/MeetingRepositoryWriteTest.kt line 40
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;89│[0;32;1m█████████████▍·[0;39;1m│ 89% EXECUTING [48s][m[48D[1B[1m> :application:compileTestKotlin[m[32D[1B[1m> :infrastructure:compileTestKotlin[m[35D[1B> IDLE[6D[1B> IDLE[6D[1B[5A[1m]9;4;1;89│[0;32;1m█████████████▍·[0;39;1m│ 89% EXECUTING [49s][m[48D[2B[1m> :infrastructure:compileTestKotlin > Packing build cache entry[m[63D[3B[5A[0K
+[1m> Task :infrastructure:compileTestJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :infrastructure:testClasses[m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;92│[0;32;1m█████████████▊·[0;39;1m│ 92% EXECUTING [49s][m[48D[1B[1m> :application:compileTestKotlin[m[32D[1B[1m> :infrastructure:test > Cleaning stale outputs[m[47D[1B> IDLE[6D[1B> IDLE[6D[1B[3A[1m> :infrastructure:test[m[0K[22D[3B[5A[1m]9;4;1;92│[0;32;1m█████████████▊·[0;39;1m│ 92% EXECUTING [50s][m[48D[5B[5A[1m]9;4;1;92│[0;32;1m█████████████▊·[0;39;1m│ 92% EXECUTING [51s][m[48D[5B[3A[1m> :infrastructure:test > 0 tests completed[m[42D[3B[5A[1m]9;4;1;92│[0;32;1m█████████████▊·[0;39;1m│ 92% EXECUTING [52s][m[48D[5B[2A[1m> :infrastructure:test > Executing test dev.notypie.common.JPAJsonConverterTest[m[79D[2B[5A[0K
+[1m> Task :application:compileTestKotlin[m[0K
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)[0K
+  Kotlin compiler warning[0K
+    Condition is always 'true'.[0K
+    Location: application/src/test/kotlin/dev/notypie/application/service/interaction/SlackInteractionHandlerImplTest.kt line 261
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;92│[0;32;1m█████████████▊·[0;39;1m│ 92% EXECUTING [52s][m[48D[1B[1m> :application:compileTestKotlin[m[32D[1B[1m> :infrastructure:test > 0 tests completed[m[42D[1B[1m> :infrastructure:test > Executing test dev.notypie.common.JPAJsonConverterTest[m[79D[1B> IDLE[6D[1B[3A[1m> :infrastructure:test > 1 test completed[m[0K[41D[3B[4A[1m> :application:compileTestKotlin > Packing build cache entry[m[60D[4B[5A[1m]9;4;1;92│[0;32;1m█████████████▊·[0;39;1m│ 92% EXECUTING [53s][m[48D[2B[1m> :infrastructure:test > 21 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.agent.SidecarAgentClie[m[79D[2B[5A[0K
+[1m> Task :application:compileTestJava[m[33m NO-SOURCE[39m[0K
+[1m> Task :application:testClasses[m[33m UP-TO-DATE[39m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [53s][m[0K[48D[1B[1m> :application:test > Cleaning stale outputs[m[44D[1B[1m> :infrastructure:test > 21 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.agent.SidecarAgentClie[m[79D[1B> IDLE[6D[1B[4A[1m> :application:test > 0 tests completed[m[0K[39D[4B[3A[1m> :infrastructure:test > 34 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 36 tests completed[m[43D[3B[1A[1m> :application:test > Executing test dev.notypie.application.common.Idempotency[m[79D[1B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [54s][m[48D[1B[1m> :application:test > 5 tests completed[m[39D[4B[4A[1m> :application:test > 8 tests completed[m[39D[4B[4A[1m> :application:test > 15 tests completed[m[40D[1B[1m> :infrastructure:test > 38 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.ApplicationMes[m[79D[2B[4A[1m> :application:test > 17 tests completed[m[40D[3B[1m> :application:test > Executing test dev.notypie.application.exception.Controll[m[79D[1B[4A[1m> :application:test > 23 tests completed[m[40D[3B[1m> :application:test > Executing test dev.notypie.application.health.OutboxHealt[m[79D[1B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [55s][m[48D[2B[1m> :infrastructure:test > 44 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 47 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 48 tests completed[m[43D[3B[4A[1m> :application:test > 31 tests completed[m[40D[1B[1m> :infrastructure:test > 49 tests completed[m[43D[2B[1m> :application:test > Executing test dev.notypie.application.mcp.DomainReadTool[m[79D[1B[4A[1m> :application:test > 32 tests completed[m[40D[4Biles-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff[4A[1m> :application:test > 33 tests completed[m[40D[1B[1m> :infrastructure:test > 51 tests completed[m[43D[3B[4A[1m> :application:test > 47 tests completed[m[40D[3B[1m> :application:test > Executing test dev.notypie...security.CachedBodyHttpServl[m[79D[1B[4A[1m> :application:test > 63 tests completed[m[40D[3B[1m> :application:test > Executing test dev.notypie...security.SlackRequestVerific[m[79D[1B[4A[1m> :application:test > 111 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...security.mcp.ScopedTurnToken[m[79D[1B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [56s][m[48D[1B[1m> :application:test > 120 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.agent.AgentConverseS[m[79D[1B[4A[1m> :application:test > 133 tests completed[m[41D[4B[4A[1m> :application:test > 145 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie.application.service.command.Co[m[79D[1B[4A[1m> :application:test > 157 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.command.RoleManageme[m[79D[1B[4A[1m> :application:test > 175 tests completed[m[41D[1B[1m> :infrastructure:test > 52 tests completed[m[43D[2B[1m> :application:test > Executing test dev.notypie.application.service.cve.ai.Cve[m[79D[1B[4A[1m> :application:test > 182 tests completed[m[41D[1B[1m> :infrastructure:test > 59 tests completed[m[43D[3B[4A[1m> :application:test > 196 tests completed[m[41D[1B[1m> :infrastructure:test > 60 tests completed[m[43D[2B[1m> :application:test > Executing test dev.notypie.application...cve.collector.Cv[m[79D[1B[4A[1m> :application:test > 201 tests completed[m[41D[1B[1m> :infrastructure:test > 64 tests completed[m[43D[2B[1m> :application:test > Executing test dev.notypie...notification.CveNotification[m[79D[1B[4A[1m> :application:test > 212 tests completed[m[41D[1B[1m> :infrastructure:test > 65 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.KafkaEventPubl[m[79D[2B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [57s][m[48D[1B[1m> :application:test > 224 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...cve.query.CveLatestQueryServ[m[79D[1B[4A[1m> :application:test > 227 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...cve.query.CveQuerySlashServi[m[79D[1B[4A[1m> :application:test > 245 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...interaction.SlackInteraction[m[79D[1B[4A[1m> :application:test > 247 tests completed[m[41D[4B[4A[1m> :application:test > 256 tests completed[m[41D[4B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [58s][m[48D[1B[1m> :application:test > 268 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...meeting.DailyAgendaSchedulin[m[79D[1B[4A[1m> :application:test > 272 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...meeting.MeetingReminderSched[m[79D[1B[4A[1m> :application:test > 280 tests completed[m[41D[4B[4A[1m> :application:test > 293 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.meeting.MeetingResch[m[79D[1B[4A[1m> :application:test > 300 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.meeting.MeetingServi[m[79D[1B[4A[1m> :application:test > 313 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...meeting.MeetingWriteJpaTrans[m[79D[1B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [59s][m[48D[5B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m][m[0K[47D[5B[4A[1m> :application:test > 315 tests completed[m[41D[4B[4A[1m> :application:test > 320 tests completed[m[41D[4B[4A[1m> :application:test > 321 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...mention.SlackMentionEventHan[m[79D[1B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m 1s][m[50D[5B[4A[1m> :application:test > 329 tests completed[m[41D[4B[4A[1m> :application:test > 335 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie.application.service.ops.OpsSta[m[79D[1B[4A[1m> :application:test > 336 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.relay.DebeziumLogTai[m[79D[1B[4A[1m> :application:test > 341 tests completed[m[41D[4B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m 2s][m[50D[5B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m 3s][m[50D[5B[3A[1m> :infrastructure:test > 66 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 67 tests completed[m[43D[3B[4A[1m> :application:test > 349 tests completed[m[41D[4B[4A[1m> :application:test > 352 tests completed[m[41D[4B[4A[1m> :application:test > 355 tests completed[m[41D[1B[1m> :infrastructure:test > 70 tests completed[m[43D[2B[1m> :application:test > Executing test dev.notypie...service.relay.OutboxPayloadR[m[79D[1B[4A[1m> :application:test > 361 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.relay.OutboxRecovery[m[79D[1B[4A[1m> :application:test > 364 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.relay.OutboxRelayRec[m[79D[1B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m 4s][m[50D[5B[4A[1m> :application:test > 368 tests completed[m[41D[1B[1m> :infrastructure:test > 71 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.RestClientRequ[m[79D[1B[1m> :application:test > Executing test dev.notypie...service.relay.OutboxRetentio[m[79D[1B[4A[1m> :application:test > 377 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...relay.SlackMessageRelayServi[m[79D[1B[4A[1m> :application:test > 384 tests completed[m[41D[4B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m 5s][m[50D[5B[3A[1m> :infrastructure:test > 72 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 73 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 74 tests completed[m[43D[3B[5A[1m]9;4;1;94│[0;32;1m██████████████▏[0;39;1m│ 94% EXECUTING [1m 6s][m[50D[1B[1m> :application:test > 386 tests completed[m[41D[4B[4A[1m> :application:test > 397 tests completed[m[41D[1B[1m> :infrastructure:test > 75 tests completed[m[43D[2B[1m> :application:test > Executing test dev.notypie...standup.StandupRoutineSetupS[m[79D[1B[4A[1m> :application:test > 402 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.standup.StandupSched[m[79D[1B[4A[1m> :application:test > 416 tests completed[m[41D[1B[1m> :infrastructure:test > 76 tests completed[m[43D[3B[4A[1m> :application:test > 424 tests completed[m[41D[3B[1m> :application:test > Executing test dev.notypie...service.standup.StandupSumma[m[79D[1B[4A[1m> :application:test[m[0K[19D[1B[1m> :infrastructure:test > 77 tests completed[m[43D[2B> IDLE[0K[6D[1B[3A[1m> :infrastructure:test > 78 tests completed[m[43D[3B[4A[1m> :application:test > Packing build cache entry[m[47D[4B[3A[1m> :infrastructure:test > 79 tests completed[m[43D[3B[5A[1m> Task :application:test[m[0K
+[1m> Task :application:check[m[0K
+[1m> Task :application:build[m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 7s][m[0K[50D[1B> IDLE[6D[1B[1m> :infrastructure:test > 79 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.RestClientRequ[m[79D[1B> IDLE[6D[1B[3A[1m> :infrastructure:test > 80 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 81 tests completed[m[43D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.SlackApiEventC[m[79D[2B[3A[1m> :infrastructure:test > 91 tests completed[m[43D[3B[3A[1m> :infrastructure:test > 119 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.SlackInteracti[m[79D[2B[3A[1m> :infrastructure:test > 158 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 159 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.SlackOutboundR[m[79D[2B[3A[1m> :infrastructure:test > 174 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 182 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.SlackOutboundS[m[79D[2B[3A[1m> :infrastructure:test > 188 tests completed[m[44D[3B[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 8s][m[50D[2B[1m> :infrastructure:test > 196 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev...command.ViewSubmissionChannelRout[m[79D[2B[3A[1m> :infrastructure:test > 217 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.command.slack.SlackMen[m[79D[2B[3A[1m> :infrastructure:test > 255 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.impl.retry.RetryServiceTest[m[79D[2B[3A[1m> :infrastructure:test > 257 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 258 tests completed[m[44D[3B[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 9s][m[50D[5B[3A[1m> :infrastructure:test > 260 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 261 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie...cve.CveCollectLedgerRepos[m[79D[2B[3A[1m> :infrastructure:test > 263 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 267 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.CveDeliveryR[m[79D[2B85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$Cr[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 10s][m[51D[5B[3A[1m> :infrastructure:test > 269 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.CveEventRepo[m[79D[2B[3A[1m> :infrastructure:test > 279 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.CveSubscript[m[79D[2B[3A[1m> :infrastructure:test > 285 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.CveTopicRepo[m[79D[2B[3A[1m> :infrastructure:test > 292 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.JpaCveCollec[m[79D[2B[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 11s][m[51D[5B[3A[1m> :infrastructure:test > 295 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 296 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.JpaCveDelive[m[79D[2B[3A[1m> :infrastructure:test > 301 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 304 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.JpaCveEventR[m[79D[2B[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 12s][m[51D[2B[1m> :infrastructure:test > 308 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 314 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 317 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.cve.JpaCveTopicR[m[79D[2B[3A[1m> :infrastructure:test > 319 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.meeting.JpaMeeti[m[79D[2B[3A[1m> :infrastructure:test > 326 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 334 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 343 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.meeting.MeetingR[m[79D[2B[3A[1m> :infrastructure:test > 358 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 364 tests completed[m[44D[3B[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 13s][m[51D[2B[1m> :infrastructure:test > 368 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 376 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 383 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.outbox.MessageOu[m[79D[2B[3A[1m> :infrastructure:test > 391 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 397 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.repository.outbox.OutboundM[m[79D[2B[3A[1m> :infrastructure:test > 404 tests completed[m[44D[3B[3A[1m> :infrastructure:test > 442 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.templates.ModalElementBuild[m[79D[2B[3A[1m> :infrastructure:test > 531 tests completed[m[44D[1B[1m> :infrastructure:test > Executing test dev.notypie.templates.ModalTemplateBuil[m[79D[2B[3A[1m> :infrastructure:test > 539 tests completed[m[44D[1B> IDLE[0K[6D[2B[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 14s][m[51D[5B[5AHibernate: drop table if exists agenda_dispatch cascade [0K
+Hibernate: drop table if exists agent_session cascade [0K
+Hibernate: drop table if exists agent_turn_history cascade [0K
+Hibernate: drop table if exists cve_collect_ledger cascade [0K
+Hibernate: drop table if exists cve_delivery cascade [0K
+Hibernate: drop table if exists cve_event cascade 
+Hibernate: drop table if exists cve_subscription cascade 
+Hibernate: drop table if exists cve_topic cascade 
+Hibernate: drop table if exists mcp_tool_call_history cascade 
+Hibernate: drop table if exists meeting_participants cascade 
+Hibernate: drop table if exists meeting_reminder cascade 
+Hibernate: drop table if exists meetings cascade 
+Hibernate: drop table if exists outbox_message cascade 
+Hibernate: drop table if exists standup_answer cascade 
+Hibernate: drop table if exists standup_routine cascade 
+Hibernate: drop table if exists standup_routine_member cascade 
+Hibernate: drop table if exists standup_session cascade 
+Hibernate: drop table if exists standup_session_dispatch cascade 
+Hibernate: drop table if exists user_command_role cascade 
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;97│[0;32;1m██████████████▌[0;39;1m│ 97% EXECUTING [1m 14s][m[51D[1B> IDLE[6D[1B[1m> :infrastructure:test[m[22D[1B> IDLE[6D[1B> IDLE[6D[1B[3A[1m> :infrastructure:test > Packing build cache entry[m[50D[3B[5A[1m> Task :infrastructure:test[m[0K
+[1m> Task :infrastructure:check[m[0K
+[1m> Task :infrastructure:build[m[0K
+[2B[0K
+[0K
+[0K
+[5A[1m]9;4;1;100│[0;32;1m███████████████[0;39;1m│ 100% EXECUTING [1m 14s][m[53D[1B> IDLE[6D[1B> IDLE[6D[1B> IDLE[6D[1B> IDLE[6D[1B[5AKotlin build report is written to file://build/reports/kotlin-build/CodeCompanion-build-2026-09-28-17-38-09-0.txt[0K
+[0K
+[Incubating] Problems report is available at: file://build/reports/problems/problems-report.html[0K
+[0K
+[32;1mBUILD SUCCESSFUL[0;39m in 1m 15s[0K
+56 actionable tasks: 56 executed
+Configuration cache entry stored.
+[0K
+[0K
+[0K
+[0K
+[0K
+[5A[1m]9;4;1;0│[0;32;1m···············[0;39;1m│ 0% WAITING[m[38D[1B> IDLE[6D[1B> IDLE[6D[1B> IDLE[6D[1B> IDLE[6D[1BeationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[5A[2K[1B[2K[1B[2K[1B[2K[1B[2K[1B[2K[5A]9;4;0EXIT=0

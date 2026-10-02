@@ -1,0 +1,172 @@
+Starting a Gradle Daemon, 1 incompatible and 14 stopped Daemons could not be reused, use --status for details
+Reusing configuration cache.
+> Task :checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :domain:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :infrastructure:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :application:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :processTestResources NO-SOURCE
+> Task :processResources NO-SOURCE
+> Task :processTestFixturesResources NO-SOURCE
+> Task :compileKotlin NO-SOURCE
+> Task :domain:processResources NO-SOURCE
+> Task :infrastructure:processResources NO-SOURCE
+> Task :domain:processTestFixturesResources NO-SOURCE
+> Task :infrastructure:processTestFixturesResources NO-SOURCE
+> Task :compileJava NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :application:processTestFixturesResources NO-SOURCE
+> Task :application:processTestResources NO-SOURCE
+> Task :domain:processTestResources NO-SOURCE
+> Task :infrastructure:processTestResources UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestFixturesKotlin NO-SOURCE
+> Task :compileTestFixturesJava NO-SOURCE
+> Task :testFixturesClasses UP-TO-DATE
+> Task :testFixturesJar UP-TO-DATE
+> Task :compileTestKotlin NO-SOURCE
+> Task :domain:loadKtlintReporters UP-TO-DATE
+> Task :application:loadKtlintReporters UP-TO-DATE
+> Task :infrastructure:loadKtlintReporters UP-TO-DATE
+> Task :loadKtlintReporters UP-TO-DATE
+> Task :compileTestJava NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :runKtlintCheckOverMainSourceSet NO-SOURCE
+> Task :ktlintMainSourceSetCheck SKIPPED
+> Task :runKtlintCheckOverTestSourceSet NO-SOURCE
+> Task :runKtlintCheckOverTestFixturesSourceSet NO-SOURCE
+> Task :ktlintTestFixturesSourceSetCheck SKIPPED
+> Task :ktlintTestSourceSetCheck SKIPPED
+> Task :test NO-SOURCE
+> Task :application:runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :domain:runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :ktlintKotlinScriptCheck UP-TO-DATE
+> Task :check UP-TO-DATE
+> Task :build UP-TO-DATE
+> Task :application:ktlintKotlinScriptCheck UP-TO-DATE
+> Task :domain:ktlintKotlinScriptCheck UP-TO-DATE
+> Task :domain:runKtlintCheckOverTestFixturesSourceSet UP-TO-DATE
+> Task :domain:ktlintTestFixturesSourceSetCheck UP-TO-DATE
+> Task :domain:runKtlintCheckOverMainSourceSet UP-TO-DATE
+> Task :domain:ktlintMainSourceSetCheck UP-TO-DATE
+> Task :application:runKtlintCheckOverTestFixturesSourceSet FROM-CACHE
+> Task :domain:runKtlintCheckOverTestSourceSet UP-TO-DATE
+> Task :infrastructure:runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :domain:ktlintTestSourceSetCheck UP-TO-DATE
+> Task :infrastructure:ktlintKotlinScriptCheck UP-TO-DATE
+> Task :infrastructure:runKtlintCheckOverTestFixturesSourceSet UP-TO-DATE
+> Task :infrastructure:ktlintTestFixturesSourceSetCheck UP-TO-DATE
+> Task :application:processResources
+> Task :application:ktlintTestFixturesSourceSetCheck
+> Task :domain:compileKotlin UP-TO-DATE
+> Task :domain:compileJava NO-SOURCE
+> Task :domain:classes UP-TO-DATE
+> Task :domain:resolveMainClassName UP-TO-DATE
+> Task :domain:jar UP-TO-DATE
+> Task :domain:bootJar SKIPPED
+> Task :domain:assemble UP-TO-DATE
+> Task :domain:compileTestFixturesKotlin UP-TO-DATE
+> Task :domain:compileTestFixturesJava NO-SOURCE
+> Task :domain:testFixturesClasses UP-TO-DATE
+> Task :domain:testFixturesJar UP-TO-DATE
+> Task :domain:compileTestKotlin UP-TO-DATE
+> Task :domain:compileTestJava NO-SOURCE
+> Task :domain:testClasses UP-TO-DATE
+> Task :domain:test UP-TO-DATE
+> Task :domain:check UP-TO-DATE
+> Task :domain:build UP-TO-DATE
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+> Task :application:runKtlintCheckOverMainSourceSet
+> Task :application:ktlintMainSourceSetCheck
+> Task :infrastructure:runKtlintCheckOverMainSourceSet
+> Task :infrastructure:ktlintMainSourceSetCheck
+> Task :infrastructure:runKtlintCheckOverTestSourceSet
+> Task :infrastructure:ktlintTestSourceSetCheck
+> Task :application:runKtlintCheckOverTestSourceSet
+> Task :application:ktlintTestSourceSetCheck
+> Task :infrastructure:compileKotlin
+> Task :infrastructure:compileJava NO-SOURCE
+> Task :infrastructure:classes UP-TO-DATE
+> Task :infrastructure:resolveMainClassName
+> Task :infrastructure:bootJar SKIPPED
+> Task :infrastructure:jar
+> Task :infrastructure:assemble
+> Task :infrastructure:compileTestFixturesKotlin
+> Task :infrastructure:compileTestFixturesJava NO-SOURCE
+> Task :infrastructure:testFixturesClasses UP-TO-DATE
+> Task :infrastructure:testFixturesJar UP-TO-DATE
+> Task :infrastructure:compileTestKotlin
+> Task :infrastructure:compileTestJava NO-SOURCE
+> Task :infrastructure:testClasses UP-TO-DATE
+> Task :application:compileKotlin
+> Task :application:compileJava NO-SOURCE
+> Task :application:classes
+> Task :application:resolveMainClassName
+> Task :application:jar
+> Task :application:bootJar
+> Task :application:assemble
+> Task :application:compileTestFixturesKotlin
+> Task :application:compileTestFixturesJava NO-SOURCE
+> Task :application:testFixturesClasses UP-TO-DATE
+> Task :application:testFixturesJar
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+> Task :application:compileTestKotlin
+> Task :application:compileTestJava NO-SOURCE
+> Task :application:testClasses UP-TO-DATE
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+> Task :application:test
+> Task :application:check
+> Task :application:build
+Hibernate: drop table if exists agenda_dispatch cascade 
+Hibernate: drop table if exists agent_session cascade 
+Hibernate: drop table if exists agent_turn_history cascade 
+Hibernate: drop table if exists cve_collect_ledger cascade 
+Hibernate: drop table if exists cve_delivery cascade 
+Hibernate: drop table if exists cve_event cascade 
+Hibernate: drop table if exists cve_subscription cascade 
+Hibernate: drop table if exists cve_topic cascade 
+Hibernate: drop table if exists mcp_tool_call_history cascade 
+Hibernate: drop table if exists meeting_participants cascade 
+Hibernate: drop table if exists meeting_reminder cascade 
+Hibernate: drop table if exists meetings cascade 
+Hibernate: drop table if exists outbox_message cascade 
+Hibernate: drop table if exists standup_answer cascade 
+Hibernate: drop table if exists standup_routine cascade 
+Hibernate: drop table if exists standup_routine_member cascade 
+Hibernate: drop table if exists standup_session cascade 
+Hibernate: drop table if exists standup_session_dispatch cascade 
+Hibernate: drop table if exists user_command_role cascade 
+> Task :infrastructure:test
+> Task :infrastructure:check
+> Task :infrastructure:build
+Kotlin build report is written to file://build/reports/kotlin-build/CodeCompanion-build-2026-09-30-15-25-47-0.txt
+
+BUILD SUCCESSFUL in 47s
+56 actionable tasks: 24 executed, 1 from cache, 31 up-to-date
+Configuration cache entry reused.
+EXIT=0

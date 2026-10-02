@@ -1,0 +1,130 @@
+Reusing configuration cache.
+> Task :checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :application:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :domain:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :processTestFixturesResources NO-SOURCE
+> Task :infrastructure:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :processTestResources NO-SOURCE
+> Task :application:processResources UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :loadKtlintReporters UP-TO-DATE
+> Task :infrastructure:processResources NO-SOURCE
+> Task :domain:processResources NO-SOURCE
+> Task :application:loadKtlintReporters UP-TO-DATE
+> Task :compileKotlin NO-SOURCE
+> Task :application:processTestFixturesResources NO-SOURCE
+> Task :application:processTestResources NO-SOURCE
+> Task :runKtlintCheckOverMainSourceSet NO-SOURCE
+> Task :runKtlintCheckOverTestFixturesSourceSet NO-SOURCE
+> Task :ktlintTestFixturesSourceSetCheck SKIPPED
+> Task :runKtlintCheckOverTestSourceSet NO-SOURCE
+> Task :ktlintMainSourceSetCheck SKIPPED
+> Task :ktlintTestSourceSetCheck SKIPPED
+> Task :domain:processTestFixturesResources NO-SOURCE
+> Task :application:runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :infrastructure:processTestFixturesResources NO-SOURCE
+> Task :compileJava NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :application:ktlintKotlinScriptCheck UP-TO-DATE
+> Task :domain:processTestResources NO-SOURCE
+> Task :application:runKtlintCheckOverTestFixturesSourceSet UP-TO-DATE
+> Task :runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :jar UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :compileTestFixturesKotlin NO-SOURCE
+> Task :domain:loadKtlintReporters UP-TO-DATE
+> Task :application:runKtlintCheckOverTestSourceSet UP-TO-DATE
+> Task :application:ktlintTestFixturesSourceSetCheck UP-TO-DATE
+> Task :ktlintKotlinScriptCheck UP-TO-DATE
+> Task :application:ktlintTestSourceSetCheck UP-TO-DATE
+> Task :compileTestFixturesJava NO-SOURCE
+> Task :testFixturesClasses UP-TO-DATE
+> Task :domain:compileKotlin UP-TO-DATE
+> Task :application:runKtlintCheckOverMainSourceSet UP-TO-DATE
+> Task :domain:compileJava NO-SOURCE
+> Task :infrastructure:processTestResources UP-TO-DATE
+> Task :infrastructure:loadKtlintReporters UP-TO-DATE
+> Task :domain:classes UP-TO-DATE
+> Task :application:ktlintMainSourceSetCheck UP-TO-DATE
+> Task :domain:runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :domain:runKtlintCheckOverTestFixturesSourceSet UP-TO-DATE
+> Task :domain:jar UP-TO-DATE
+> Task :domain:resolveMainClassName UP-TO-DATE
+> Task :domain:bootJar SKIPPED
+> Task :domain:assemble UP-TO-DATE
+> Task :domain:ktlintKotlinScriptCheck UP-TO-DATE
+> Task :testFixturesJar UP-TO-DATE
+> Task :domain:ktlintTestFixturesSourceSetCheck UP-TO-DATE
+> Task :compileTestKotlin NO-SOURCE
+> Task :compileTestJava NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :domain:compileTestFixturesKotlin UP-TO-DATE
+> Task :test NO-SOURCE
+> Task :domain:compileTestFixturesJava NO-SOURCE
+> Task :check UP-TO-DATE
+> Task :domain:runKtlintCheckOverMainSourceSet UP-TO-DATE
+> Task :domain:testFixturesClasses UP-TO-DATE
+> Task :build UP-TO-DATE
+> Task :infrastructure:runKtlintCheckOverTestFixturesSourceSet UP-TO-DATE
+> Task :domain:ktlintMainSourceSetCheck UP-TO-DATE
+> Task :domain:testFixturesJar UP-TO-DATE
+> Task :infrastructure:ktlintTestFixturesSourceSetCheck UP-TO-DATE
+> Task :infrastructure:runKtlintCheckOverKotlinScripts UP-TO-DATE
+> Task :domain:runKtlintCheckOverTestSourceSet UP-TO-DATE
+> Task :infrastructure:ktlintKotlinScriptCheck UP-TO-DATE
+> Task :domain:ktlintTestSourceSetCheck UP-TO-DATE
+> Task :infrastructure:runKtlintCheckOverMainSourceSet UP-TO-DATE
+> Task :infrastructure:ktlintMainSourceSetCheck UP-TO-DATE
+> Task :infrastructure:compileKotlin UP-TO-DATE
+> Task :infrastructure:runKtlintCheckOverTestSourceSet UP-TO-DATE
+> Task :infrastructure:compileJava NO-SOURCE
+> Task :infrastructure:ktlintTestSourceSetCheck UP-TO-DATE
+> Task :infrastructure:classes UP-TO-DATE
+> Task :infrastructure:jar UP-TO-DATE
+> Task :infrastructure:resolveMainClassName UP-TO-DATE
+> Task :infrastructure:bootJar SKIPPED
+> Task :infrastructure:assemble UP-TO-DATE
+> Task :infrastructure:compileTestFixturesKotlin UP-TO-DATE
+> Task :infrastructure:compileTestFixturesJava NO-SOURCE
+> Task :infrastructure:testFixturesClasses UP-TO-DATE
+> Task :infrastructure:testFixturesJar UP-TO-DATE
+> Task :domain:compileTestKotlin UP-TO-DATE
+> Task :domain:compileTestJava NO-SOURCE
+> Task :domain:testClasses UP-TO-DATE
+> Task :application:compileKotlin UP-TO-DATE
+> Task :application:compileJava NO-SOURCE
+> Task :application:classes UP-TO-DATE
+> Task :application:jar UP-TO-DATE
+> Task :application:resolveMainClassName UP-TO-DATE
+> Task :application:compileTestFixturesKotlin UP-TO-DATE
+> Task :application:compileTestFixturesJava NO-SOURCE
+> Task :application:testFixturesClasses UP-TO-DATE
+> Task :application:testFixturesJar UP-TO-DATE
+> Task :application:compileTestKotlin UP-TO-DATE
+> Task :application:compileTestJava NO-SOURCE
+> Task :application:testClasses UP-TO-DATE
+> Task :infrastructure:compileTestKotlin UP-TO-DATE
+> Task :infrastructure:compileTestJava NO-SOURCE
+> Task :infrastructure:testClasses UP-TO-DATE
+> Task :domain:test UP-TO-DATE
+> Task :domain:check UP-TO-DATE
+> Task :domain:build UP-TO-DATE
+> Task :infrastructure:test UP-TO-DATE
+> Task :infrastructure:check UP-TO-DATE
+> Task :infrastructure:build UP-TO-DATE
+> Task :application:bootJar UP-TO-DATE
+> Task :application:assemble UP-TO-DATE
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+> Task :application:test
+> Task :application:check
+> Task :application:build
+Kotlin build report is written to file://build/reports/kotlin-build/CodeCompanion-build-2026-10-02-14-26-53-0.txt
+
+BUILD SUCCESSFUL in 13s
+56 actionable tasks: 1 executed, 55 up-to-date
+Configuration cache entry reused.
+EXIT=0

@@ -5,6 +5,7 @@
 > **범위**: 전체 레포 — `domain` / `infrastructure` / `application` 3개 모듈, 빌드·CI·설정·운영 스크립트·문서
 > **규모**: Kotlin 450파일 / 46,267줄 (main 20,458줄)
 > **스택**: Kotlin 2.4.10 · Spring Boot 4.1.1 · Java 25 · Gradle 9.7.1 · Kotest 6.2.5 · Slack SDK 1.51.0 · Jackson 3.2.2 · Spring AI 2.0.1
+> **근거 원문**: 리뷰 레인·수정 검수 보고서, Codex 리뷰, 빌드 로그는 [`docs/review-evidence/`](docs/review-evidence/)에 있습니다. 목록과 출처는 `docs/review-evidence/AGENTS.md`에 정리했습니다.
 
 ---
 
@@ -1390,7 +1391,7 @@ Flyway·CI 축에서는 **정반대였습니다.** `docs/wiki/decisions.md:78`�
 
 ## 10. Codex 독립 리뷰
 
-> 위 분석에 앵커링되지 않도록 **findings를 공유하지 않은 상태**에서 `omc ask codex`(gpt-6-astra, reasoning effort high)로 동일 코드베이스를 독립 리뷰하도록 했습니다. 산출물: `.omc/artifacts/ask/codex-final-independent-senior-engineer-code-review-*.md`
+> 위 분석에 앵커링되지 않도록 **findings를 공유하지 않은 상태**에서 `omc ask codex`(gpt-6-astra, reasoning effort high)로 동일 코드베이스를 독립 리뷰하도록 했습니다. 산출물: [`docs/review-evidence/codex-2026-09-22-final-independent.md`](docs/review-evidence/codex-2026-09-22-final-independent.md). 이보다 하루 앞선 Codex 독립 리뷰는 [`codex-2026-09-21-final-independent.md`](docs/review-evidence/codex-2026-09-21-final-independent.md)입니다.
 
 Codex는 15건(High 7 / Medium 7 / Low 1)을 보고했습니다. **대부분이 위 분석과 독립적으로 일치**했고(C1·C2·C5·H1·H5·H14·C3·R7), 아래 4건은 **제가 놓친 신규 발견**입니다. 전부 직접 재검증했습니다.
 
@@ -1525,7 +1526,7 @@ V1__outbox_pk_event_id.sql:35:CREATE INDEX IF NOT EXISTS idx_outbox_idempotency_
 ## 12. 교차 검증 종합 · 최종 우선순위 (2026-09-22)
 
 > **방법**: 이 문서(1~11장)를 입력으로, ① Codex(gpt-6-astra, reasoning high)가 전 항목을 소스와 대조·심각도 재판정·누락 결함 탐색, ② Claude 검증 에이전트 3개(C1–C8 / H1–H11·X1–X4 / H12–H21·주요 M)가 인용 라인을 직접 열어 재검증, ③ "즉시 수정 8건"과 신규 결함 N1–N3는 메인 세션이 직접 재확인했습니다.
-> 산출물: `.omc/artifacts/ask/codex-you-are-a-senior-reviewer-auditing-a-code-review-document-no-2026-09-22T02-26-40-509Z.md`
+> 산출물: Codex 문서 감사 원문 (원문 미보존).
 >
 > **결론**: 결함이 실재하지 않는 항목은 3건(H18·M14·H4-OFFSET)뿐이지만, **심각도 과대평가**와 **수정안 자체가 틀린 항목**이 여럿입니다. 수정 스니펫을 그대로 적용하면 안 되는 항목 5건(C3·H3·H4-UNIQUE·H14·H18)은 12.1에 명시했습니다.
 
@@ -1642,7 +1643,7 @@ C8(`or`만 수정/삭제) · H7(`reason = "must not be blank"`) · H10(`val erro
 ## 13. 2차 교차 검증 — 브랜치 반영 결과 재검수 (2026-09-24)
 
 > **방법**: `feature/review-critical-fixes`(3커밋, 125파일)를 대상으로 ① 영역별 Claude 리뷰 레인 5개(outbox·relay / Slack dispatch·retry / meeting·JPA·migration / web·security·domain / CI·k8s·ops) + 보안 전용 레인 1개(각각 소스 직접 열람, 관련 테스트 실행), ② Codex(gpt-6-astra)가 독립적으로 전 항목 재판정(테스트 3모듈 재실행, Hibernate·Boot 바인딩 재현 포함), ③ 메인 세션이 상위 주장을 직접 재현(Jetty 12.1.12 임베디드 프로브, 프로덕션 호스트 GET/POST 프로브, `spring-kafka-4.1.1.jar` 바이트코드 확인).
-> 산출물: `.omc/artifacts/review-2026-09-24/` (`lane-*.md` 6개, `codex-final.md`), Codex 전문 `.omc/artifacts/ask/codex-you-are-a-senior-reviewer-doing-an-independent-second-pass-a-2026-09-24T04-47-24-049Z.md`.
+> 산출물: 레인 보고서 6개(`lane-*.md`)와 `codex-final.md`, Codex 전문 (원문 미보존). 이 장의 표가 그 내용을 옮긴 것입니다.
 > 빌드: `./gradlew build` 통과(2026-09-24).
 >
 > **결론**: 12.3의 "완료" 주장 중 **NOT RESOLVED 1(M15) · REGRESSED 1(C8) · PARTIAL 14**. 브랜치가 새로 만든 결함 중 High 이상이 6건이며, 그중 4건은 같은 뿌리(outbox 소유권·시계·재전달)에서 나온다. 머지 전 필수 항목은 13.3 Tier A.
@@ -1728,7 +1729,7 @@ C8(`or`만 수정/삭제) · H7(`reason = "must not be blank"`) · H10(`val erro
 
 ### 13.5 반영 현황 (2026-09-28, 작업 트리 미커밋)
 
-> **방법**: 영역별 구현 워커(1차 5레인 → 재검수 → 2차 4레인), 재검수 레인 4개(코드 리뷰 3 + 보안 1), Codex 교차 검증 1회, 메인 세션의 최종 코드 품질 검수. 산출물: `.omc/artifacts/review-2026-09-28/` (`fix-*.md`, `fix2-*.md`, `rev2-*.md`, `codex-final2.md`).
+> **방법**: 영역별 구현 워커(1차 5레인 → 재검수 → 2차 4레인), 재검수 레인 4개(코드 리뷰 3 + 보안 1), Codex 교차 검증 1회, 메인 세션의 최종 코드 품질 검수. 산출물: `fix-*.md`, `fix2-*.md`, `rev2-*.md`, `codex-final2.md` (원문 미보존).
 > **검증**: `./gradlew build --rerun-tasks` 통과 — domain 358 · infrastructure 539 · application 426 테스트, 실패 0, 건너뜀 0, ktlint 통과. **실행하지 못한 것**: 실제 MariaDB(V20·V21·V22, REPEATABLE_READ, 중복 키 메시지), 실제 Kafka 브로커의 DLT 왕복, 부팅된 Spring 컨텍스트(새 생성자 파라미터 `Environment`·`MeterRegistry`·`PlatformTransactionManager`·`Clock` 배선), 클러스터에서의 배포 워크플로, actionlint·gitleaks.
 
 | 13.3 항목 | 상태 | 구현 요지 |
@@ -1769,7 +1770,7 @@ C8(`or`만 수정/삭제) · H7(`reason = "must not be blank"`) · H10(`val erro
 >    - 2차(09-30)는 이 장과 레인 산출물을 읽지 말라는 조건으로 다시 돌려 완주했습니다. 13.5 판정과 신규 결함 7건을 냈고, 메인 세션이 소스로 대조해 반영했습니다(14.5).
 > 3. **메인 세션 검수**: 전체 빌드를 돌렸습니다. 이전 회차가 "실행하지 못한 것"으로 남긴 **Spring 컨텍스트 부팅을 실제로 수행**했습니다(14.1). 레인·Codex의 상위 주장은 인용 라인을 직접 열어 재판정했습니다.
 >
-> **산출물**: `.omc/artifacts/review-2026-09-28-r3/`에 `lane1-outbox.md` … `lane7-mcp-command.md`와 `build.log`가 있습니다. Codex 원문은 `.omc/artifacts/ask/` 아래 `codex-you-are-a-senior-engineer-doing-an-independent-third-pass-co-2026-09-28T08-53-43-642Z.md`(1차, 중단)와 `…-2026-09-30T01-19-11-938Z.md`(2차, 완주)입니다.
+> **산출물**: [`docs/review-evidence/`](docs/review-evidence/)에 `lane1-outbox.md` … `lane7-mcp-command.md`와 `build.log`가 있습니다. Codex 원문은 [`codex-2026-09-28-third-pass-interrupted.md`](docs/review-evidence/codex-2026-09-28-third-pass-interrupted.md)(1차, 중단)와 [`codex-2026-09-30-third-pass.md`](docs/review-evidence/codex-2026-09-30-third-pass.md)(2차, 완주)입니다.
 > **빌드**: `./gradlew build --rerun-tasks` 통과. 테스트는 domain 358 · infrastructure 539 · application 426, 실패·건너뜀 0, ktlint 통과로 13.5 수치와 일치합니다.
 >
 > **결론**
@@ -2055,7 +2056,7 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
 > 5. **메인 세션 몫**: 통합, 교차 정리 커밋 4개, Codex 2차 지적 수정 2개, 전체 빌드, 부팅·종료 실측(15.1), 이 장 작성.
 >
 > **결과**: `./gradlew build --rerun-tasks` 통과. 56개 작업이 모두 실제 실행됐고, 테스트는 1,323개에서 **1,653개**(domain 382 · infrastructure 684 · application 587)로 늘었으며 실패·건너뜀 0입니다.
-> **산출물**: `.omc/artifacts/review-2026-09-28-r3/`의 `fixrev1-outbox-dispatch-deploy.md`, `fixrev2-security-meeting-standup.md`, `fixrev3-cve-templates.md`, `fixrev-codex.md`(1차 검수), 빌드 로그.
+> **산출물**: [`docs/review-evidence/`](docs/review-evidence/)의 `fixrev1-outbox-dispatch-deploy.md`, `fixrev2-security-meeting-standup.md`, `fixrev3-cve-templates.md`, [`codex-2026-10-01-fix-review.md`](docs/review-evidence/codex-2026-10-01-fix-review.md)(1차 검수, 작업 중에는 `fixrev-codex.md`로 불렀습니다), 빌드 로그(`build-wave*.log`, `build-round2.log`, `build-final-rerun.log`, `flaky-check.log`).
 
 ### 15.1 실측으로 확인한 것
 
@@ -2176,7 +2177,7 @@ Opus 리뷰어 3개(F·G·H 계열)와 Codex(R·N 계열)가 독립적으로 찾
 
 ### 15.6 Codex 2차 수정분 리뷰
 
-> Codex가 `7c70c5d..HEAD`를 리뷰하던 중 사용량 한도(18:38 이후 재시도 안내)로 **최종 표 없이 중단**됐습니다. 원문은 `.omc/artifacts/ask/codex-you-are-a-senior-engineer-reviewing-the-second-fix-round-on--2026-10-02T05-45-18-673Z.md`입니다.
+> Codex가 `7c70c5d..HEAD`를 리뷰하던 중 사용량 한도(18:38 이후 재시도 안내)로 **최종 표 없이 중단**됐습니다. 원문은 [`docs/review-evidence/codex-2026-10-02-second-fix-round-partial.md`](docs/review-evidence/codex-2026-10-02-second-fix-round-partial.md)입니다.
 > 중단 전에 application 테스트 281개와 domain·infrastructure 선택 테스트를 실행해 통과를 확인했습니다. 종료 처리는 "큐 차단·DB 파기 순서가 개선됐다"고 판정했고, 아래 5건의 판단을 남겼습니다. 한도가 풀린 뒤 전체 판정을 다시 받는 것을 권합니다.
 
 | Codex 판단 | 메인 판정 | 처리 |

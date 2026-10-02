@@ -1,0 +1,291 @@
+Reusing configuration cache.
+> Task :checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :infrastructure:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :application:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :domain:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :processResources NO-SOURCE
+> Task :infrastructure:processResources NO-SOURCE
+> Task :domain:processResources NO-SOURCE
+> Task :processTestFixturesResources NO-SOURCE
+> Task :processTestResources NO-SOURCE
+> Task :compileKotlin NO-SOURCE
+> Task :application:processTestFixturesResources NO-SOURCE
+> Task :application:processTestResources NO-SOURCE
+> Task :domain:processTestFixturesResources NO-SOURCE
+> Task :compileJava NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :infrastructure:processTestFixturesResources NO-SOURCE
+> Task :domain:processTestResources NO-SOURCE
+> Task :jar
+> Task :assemble
+> Task :compileTestFixturesKotlin NO-SOURCE
+> Task :compileTestFixturesJava NO-SOURCE
+> Task :testFixturesClasses UP-TO-DATE
+> Task :infrastructure:processTestResources
+> Task :application:loadKtlintReporters
+> Task :domain:loadKtlintReporters
+> Task :testFixturesJar
+> Task :compileTestKotlin NO-SOURCE
+> Task :loadKtlintReporters
+> Task :infrastructure:loadKtlintReporters
+> Task :runKtlintCheckOverMainSourceSet NO-SOURCE
+> Task :ktlintMainSourceSetCheck SKIPPED
+> Task :runKtlintCheckOverTestSourceSet NO-SOURCE
+> Task :ktlintTestSourceSetCheck SKIPPED
+> Task :runKtlintCheckOverTestFixturesSourceSet NO-SOURCE
+> Task :ktlintTestFixturesSourceSetCheck SKIPPED
+> Task :compileTestJava NO-SOURCE
+> Task :testClasses UP-TO-DATE
+> Task :test NO-SOURCE
+> Task :application:processResources
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by org.jetbrains.kotlin.com.intellij.util.containers.Unsafe (file:~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar)
+WARNING: Please consider reporting this to the maintainers of class org.jetbrains.kotlin.com.intellij.util.containers.Unsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+> Task :domain:runKtlintCheckOverKotlinScripts
+> Task :domain:ktlintKotlinScriptCheck
+> Task :application:runKtlintCheckOverKotlinScripts
+> Task :application:ktlintKotlinScriptCheck
+> Task :runKtlintCheckOverKotlinScripts
+> Task :ktlintKotlinScriptCheck
+> Task :check
+> Task :build
+> Task :infrastructure:runKtlintCheckOverKotlinScripts
+> Task :infrastructure:ktlintKotlinScriptCheck
+> Task :application:runKtlintCheckOverTestFixturesSourceSet
+> Task :application:ktlintTestFixturesSourceSetCheck
+> Task :domain:runKtlintCheckOverTestFixturesSourceSet
+> Task :domain:ktlintTestFixturesSourceSetCheck
+> Task :infrastructure:runKtlintCheckOverTestFixturesSourceSet
+> Task :infrastructure:ktlintTestFixturesSourceSetCheck
+> Task :domain:runKtlintCheckOverMainSourceSet
+> Task :domain:ktlintMainSourceSetCheck
+> Task :domain:compileKotlin
+> Task :domain:compileJava NO-SOURCE
+> Task :domain:classes UP-TO-DATE
+> Task :domain:resolveMainClassName
+> Task :domain:bootJar SKIPPED
+> Task :domain:jar
+> Task :domain:assemble
+> Task :application:runKtlintCheckOverMainSourceSet
+> Task :application:ktlintMainSourceSetCheck
+> Task :domain:runKtlintCheckOverTestSourceSet
+> Task :domain:ktlintTestSourceSetCheck
+> Task :domain:compileTestFixturesKotlin
+> Task :domain:compileTestFixturesJava NO-SOURCE
+> Task :domain:testFixturesClasses UP-TO-DATE
+> Task :domain:testFixturesJar
+> Task :infrastructure:runKtlintCheckOverMainSourceSet
+> Task :infrastructure:ktlintMainSourceSetCheck
+> Task :infrastructure:runKtlintCheckOverTestSourceSet
+> Task :infrastructure:ktlintTestSourceSetCheck
+> Task :application:runKtlintCheckOverTestSourceSet
+> Task :application:ktlintTestSourceSetCheck
+> Task :infrastructure:compileKotlin
+> Task :infrastructure:compileJava NO-SOURCE
+> Task :infrastructure:classes UP-TO-DATE
+> Task :infrastructure:resolveMainClassName
+> Task :infrastructure:bootJar SKIPPED
+> Task :infrastructure:jar
+> Task :infrastructure:assemble
+
+> Task :domain:compileTestKotlin
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: domain/src/test/kotlin/dev/notypie/domain/command/SubmissionPipelineCharacterizationTest.kt line 291
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: domain/src/test/kotlin/dev/notypie/domain/command/context/SubmissionContextsTest.kt line 136
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: domain/src/test/kotlin/dev/notypie/domain/command/context/SubmissionContextsTest.kt line 173
+
+> Task :domain:compileTestJava NO-SOURCE
+> Task :domain:testClasses UP-TO-DATE
+> Task :infrastructure:compileTestFixturesKotlin
+> Task :infrastructure:compileTestFixturesJava NO-SOURCE
+> Task :infrastructure:testFixturesClasses UP-TO-DATE
+> Task :infrastructure:testFixturesJar
+> Task :domain:test
+> Task :domain:check
+> Task :domain:build
+
+> Task :application:compileKotlin
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Elvis operator (?:) always returns the left operand of non-nullable type 'Result<T (of fun <T> TransactionTemplate.runInTx)>'.
+    Location: application/src/main/kotlin/dev/notypie/application/common/TransactionTemplateExt.kt line 9
+
+> Task :application:compileJava NO-SOURCE
+> Task :application:classes
+> Task :application:resolveMainClassName
+> Task :application:jar
+> Task :application:bootJar
+> Task :application:assemble
+
+> Task :application:compileTestFixturesKotlin
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Unnecessary non-null assertion (!!) on a non-null receiver of type 'T (of fun <T : Any> inNewTransaction)'.
+    Location: application/src/testFixtures/kotlin/dev/notypie/application/service/meeting/MeetingTransactionFixtures.kt line 119
+
+> Task :application:compileTestFixturesJava NO-SOURCE
+> Task :application:testFixturesClasses UP-TO-DATE
+> Task :application:testFixturesJar
+
+> Task :infrastructure:compileTestKotlin
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Return in function with expression body and without explicit return type. Use block body '{...}' or add an explicit return type. This will become an error in language version 2.5. See https://youtrack.jetbrains.com/issue/KTLC-288.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/ApplicationMessageDispatcherTest.kt line 917
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Return in function with expression body and without explicit return type. Use block body '{...}' or add an explicit return type. This will become an error in language version 2.5. See https://youtrack.jetbrains.com/issue/KTLC-288.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/ApplicationMessageDispatcherTest.kt line 919
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 71
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 98
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 126
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 165
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 191
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    No cast needed.
+    Location: infrastructure/src/test/kotlin/dev/notypie/impl/command/SlackApiEventConstructorTest.kt line 225
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Unnecessary non-null assertion (!!) on a non-null receiver of type 'T (of fun <T : Any> inTx)'.
+    Location: infrastructure/src/test/kotlin/dev/notypie/repository/meeting/MeetingReminderRepositoryTest.kt line 38
+Problem found: Kotlin compiler warning (id: kotlin:compiler:warning:compiler-warning)
+  Kotlin compiler warning
+    Unnecessary non-null assertion (!!) on a non-null receiver of type 'T (of fun <T : Any> inTx)'.
+    Location: infrastructure/src/test/kotlin/dev/notypie/repository/meeting/MeetingRepositoryWriteTest.kt line 40
+
+> Task :infrastructure:compileTestJava NO-SOURCE
+> Task :infrastructure:testClasses
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+> Task :application:compileTestKotlin
+> Task :application:compileTestJava NO-SOURCE
+> Task :application:testClasses UP-TO-DATE
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+> Task :application:test
+> Task :application:check
+> Task :application:build
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction (file:~/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.18.11/8fcc3779ff85fae5164cd1b977798ca1af388e06/byte-buddy-1.18.11.jar)
+WARNING: Please consider reporting this to the maintainers of class net.bytebuddy.dynamic.loading.ClassInjector$UsingUnsafe$Dispatcher$CreationAction
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+Hibernate: drop table if exists agenda_dispatch cascade 
+Hibernate: drop table if exists agent_session cascade 
+Hibernate: drop table if exists agent_turn_history cascade 
+Hibernate: drop table if exists cve_collect_ledger cascade 
+Hibernate: drop table if exists cve_delivery cascade 
+Hibernate: drop table if exists cve_event cascade 
+Hibernate: drop table if exists cve_subscription cascade 
+Hibernate: drop table if exists cve_topic cascade 
+Hibernate: drop table if exists mcp_tool_call_history cascade 
+Hibernate: drop table if exists meeting_participants cascade 
+Hibernate: drop table if exists meeting_reminder cascade 
+Hibernate: drop table if exists meetings cascade 
+Hibernate: drop table if exists outbox_message cascade 
+Hibernate: drop table if exists standup_answer cascade 
+Hibernate: drop table if exists standup_routine cascade 
+Hibernate: drop table if exists standup_routine_member cascade 
+Hibernate: drop table if exists standup_session cascade 
+Hibernate: drop table if exists standup_session_dispatch cascade 
+Hibernate: drop table if exists user_command_role cascade 
+Hibernate: drop table if exists agenda_dispatch cascade 
+Hibernate: drop table if exists agent_session cascade 
+Hibernate: drop table if exists agent_turn_history cascade 
+Hibernate: drop table if exists cve_collect_ledger cascade 
+Hibernate: drop table if exists cve_delivery cascade 
+Hibernate: drop table if exists cve_event cascade 
+Hibernate: drop table if exists cve_subscription cascade 
+Hibernate: drop table if exists cve_topic cascade 
+Hibernate: drop table if exists mcp_tool_call_history cascade 
+Hibernate: drop table if exists meeting_participants cascade 
+Hibernate: drop table if exists meeting_reminder cascade 
+Hibernate: drop table if exists meetings cascade 
+Hibernate: drop table if exists outbox_message cascade 
+Hibernate: drop table if exists standup_answer cascade 
+Hibernate: drop table if exists standup_routine cascade 
+Hibernate: drop table if exists standup_routine_member cascade 
+Hibernate: drop table if exists standup_session cascade 
+Hibernate: drop table if exists standup_session_dispatch cascade 
+Hibernate: drop table if exists user_command_role cascade 
+Hibernate: drop table if exists agenda_dispatch cascade 
+Hibernate: drop table if exists agent_session cascade 
+Hibernate: drop table if exists agent_turn_history cascade 
+Hibernate: drop table if exists cve_collect_ledger cascade 
+Hibernate: drop table if exists cve_delivery cascade 
+Hibernate: drop table if exists cve_event cascade 
+Hibernate: drop table if exists cve_subscription cascade 
+Hibernate: drop table if exists cve_topic cascade 
+Hibernate: drop table if exists mcp_tool_call_history cascade 
+Hibernate: drop table if exists meeting_participants cascade 
+Hibernate: drop table if exists meeting_reminder cascade 
+Hibernate: drop table if exists meetings cascade 
+Hibernate: drop table if exists outbox_message cascade 
+Hibernate: drop table if exists standup_answer cascade 
+Hibernate: drop table if exists standup_routine cascade 
+Hibernate: drop table if exists standup_routine_member cascade 
+Hibernate: drop table if exists standup_session cascade 
+Hibernate: drop table if exists standup_session_dispatch cascade 
+Hibernate: drop table if exists user_command_role cascade 
+> Task :infrastructure:test
+> Task :infrastructure:check
+> Task :infrastructure:build
+Kotlin build report is written to file://build/reports/kotlin-build/CodeCompanion-build-2026-10-02-14-50-40-0.txt
+
+[Incubating] Problems report is available at: file://build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 58s
+56 actionable tasks: 56 executed
+Configuration cache entry reused.
+EXIT=0
