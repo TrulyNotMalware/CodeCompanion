@@ -46,21 +46,20 @@ stand up change-data-capture locally and in-cluster.
 - **`k8s/deployment.yaml` is templated with `envsubst '${IMAGE_NAME}'`** by `.github/workflows/deploy_action.yaml`.
   Keep the placeholder syntax intact or the deploy breaks.
 - **Kafka consumer sizing** (`local`, `dev`, `prod`): `max-poll-records: 5` and `max.poll.interval.ms: 300000`,
-  i.e. 300s for a batch of 5, 60s per record on average. A PENDING-row record costs one Slack dispatch: up to 3
-  `RetryService` attempts, plus, after a 429 with `Retry-After` <= 3s, that wait and a second round of up to 3.
-  Every Slack call (SDK and `response_url`) shares the SDK client's call timeout, `SLACK_CALL_TIMEOUT` (6s) in
-  `ApplicationMessageDispatcher`, so one dispatch is bounded by 2 x (3 x 6s + retry backoff) + 3s, about 40s; rendering
-  adds at most one profile lookup (3s connect + 10s read), about 53s in total, which leaves about 7s of the 60s
-  for the claim, renew and completion SQL. Redo this arithmetic whenever that timeout, the retry policy or these two values change,
-  and before adding any wait inside the listener. If a batch does overrun, the consumer leaves the group and the
+  i.e. 300s for a batch of 5, 60s per record on average. What one PENDING-row record costs is budgeted in one
+  place: the Slack HTTP bound (render's profile lookup plus the dispatch retries) only in
+  `infrastructure/src/main/kotlin/dev/notypie/impl/command/AGENTS.md`, and the claim, renew and completion SQL in
+  `kotlin/dev/notypie/application/service/relay/AGENTS.md` ("Per-record time budget"). Do not copy those totals
+  here; redo them there whenever these two values change, and before adding any wait inside the listener. If a batch does overrun, the consumer leaves the group and the
   records are redelivered; an already-claimed row is no longer PENDING, so the CDC processor skips it.
-- **Hikari pool** (`maximum-pool-size: 20` in every profile). A meeting cancel/reschedule/add-participant holds
-  two connections at once (the outer interaction transaction plus the `REQUIRES_NEW` write from
-  `isolatedWriteTemplate`), and so does an `@bot` mention that a full `agentTurnExecutor` rejects: its overload
-  notice is a `REQUIRES_NEW` write inside `afterCompletion`, while the committed mention transaction still holds its
-  connection (measured on H2: two sessions there, one in a plain transaction). The relay executor, the schedulers and
-  the CDC listener share the same pool. Size it as: (concurrent meeting interactions + mentions rejected at the same
-  moment) x 2 + relay workers (`relayTaskExecutor`, 4) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
+- **Hikari pool** (`maximum-pool-size: 20` in every profile). A meeting cancel/reschedule/add-participant takes
+  one connection at a time: the handler defers the `REQUIRES_NEW` write from `isolatedWriteTemplate` until the
+  interaction transaction has committed and released its connection (`service/meeting/AGENTS.md`; only an inline
+  caller outside the handler still holds two). An `@bot` mention that a full `agentTurnExecutor` rejects does hold
+  two: its overload notice is a `REQUIRES_NEW` write inside `afterCompletion`, while the committed mention
+  transaction still holds its connection (measured on H2: two sessions there, one in a plain transaction). The relay executor, the schedulers and
+  the CDC listener share the same pool. Size it as: concurrent meeting interactions + mentions rejected at the same
+  moment x 2 + relay workers (`relayTaskExecutor`, 4) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + AI turns that use the DB (`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent`, 4). Request threads are virtual,
   so the pool, not a thread limit, is what bounds concurrent interactions; a request that cannot get a connection
   fails after `connection-timeout`. MariaDB must allow pool size x Pods: 2 replicas x 20 = 40, and 60 during a

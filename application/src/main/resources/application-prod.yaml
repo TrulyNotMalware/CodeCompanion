@@ -13,7 +13,7 @@ spring:
   datasource:
     hikari:
       transaction-isolation: ${SQL_PROD_ISOLATION_LEVEL}
-      # Meeting writes and overload notices hold two connections (outer tx + REQUIRES_NEW); rule in resources/AGENTS.md.
+      # A rejected mention's overload notice holds two connections (committed tx + REQUIRES_NEW); rule in resources/AGENTS.md.
       maximum-pool-size: 20
 #      minimum-idle: 10
       connection-timeout: ${SQL_PROD_CONNECTION_TIMEOUT}
