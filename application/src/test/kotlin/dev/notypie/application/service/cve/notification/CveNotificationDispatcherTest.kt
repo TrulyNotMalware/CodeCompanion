@@ -10,11 +10,14 @@ import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.schema.createUndeliveredCveEvent
+import dev.notypie.templates.SlackBlockLimits
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -650,10 +653,65 @@ class CveNotificationDispatcherTest :
             }
         }
 
-        given("a digest bundle whose aggregate body exceeds the Slack section limit") {
+        given("a digest bundle larger than one message body") {
             val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
             val outboundMessagePort = mockk<OutboundMessagePort>()
-            val outboxRepository = stubOutbox()
+            val messages = mutableListOf<OutboundMessage>()
+            val claimed = mutableListOf<Long>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                (10L..29L).map { eventId ->
+                    createUndeliveredCveEvent(
+                        eventId = eventId,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "CVE-2026-00$eventId",
+                        aiSummary = "x".repeat(n = 700),
+                    )
+                }
+            every { deliveryRepository.claim(eventId = capture(claimed), userId = "U1") } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = stubOutbox(),
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("every claimed event's identifier reaches a sent body") {
+                    claimed shouldBe (10L..29L).toList()
+                    val sent = messages.joinToString(separator = "\n") { it.channelText().markdown }
+                    claimed.forEach { eventId -> sent shouldContain "CVE-2026-00$eventId" }
+                }
+
+                then("the digest is split into numbered parts within the message body budget, each under its topic") {
+                    messages.size shouldBe 2
+                    messages.map { it.channelText().headline } shouldBe
+                        listOf("CodeCompanion — CVE digest (1/2)", "CodeCompanion — CVE digest (2/2)")
+                    messages.forEach { message ->
+                        val markdown = message.channelText().markdown
+                        markdown.length shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_BODY_BUDGET
+                        markdown shouldStartWith "*Alpha*\n"
+                        markdown shouldNotContain "(truncated)"
+                    }
+                }
+            }
+        }
+
+        given("a digest event whose single line alone is longer than a message body") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
             val messages = mutableListOf<OutboundMessage>()
             every {
                 deliveryRepository.findUndelivered(
@@ -663,15 +721,22 @@ class CveNotificationDispatcherTest :
                     limit = 50,
                 )
             } returns
-                (1L..5L).map { eventId ->
+                listOf(
                     createUndeliveredCveEvent(
-                        eventId = eventId,
+                        eventId = 1L,
                         userId = "U1",
                         topicDisplayName = "Alpha",
-                        title = "t$eventId",
-                        aiSummary = "x".repeat(700),
-                    )
-                }
+                        title = "t1",
+                        aiSummary = "x".repeat(n = 12_000),
+                    ),
+                    createUndeliveredCveEvent(
+                        eventId = 2L,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t2",
+                        aiSummary = "s2",
+                    ),
+                )
             every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
             every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
                 createOutboxRow(eventId = UUID.randomUUID().toString())
@@ -680,16 +745,20 @@ class CveNotificationDispatcherTest :
                 dispatcherWith(
                     deliveryRepository = deliveryRepository,
                     outboundMessagePort = outboundMessagePort,
-                    outboxRepository = outboxRepository,
+                    outboxRepository = stubOutbox(),
+                    digestSummaryMaxLength = 20_000,
                 )
 
             `when`("the digest tick runs") {
                 dispatcher.digestTick()
 
-                then("the bundled body is capped under the section limit with a truncation marker") {
-                    val markdown = messages.single().channelText().markdown
-                    markdown.length shouldBe 2900 + "\n…(truncated)".length
-                    markdown shouldEndWith "…(truncated)"
+                then("only that line is cut with a marker and the next event starts a fresh part") {
+                    messages.size shouldBe 2
+                    val first = messages[0].channelText().markdown
+                    first.length shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_BODY_BUDGET
+                    first shouldStartWith "*Alpha*\n• *t1*\n"
+                    first shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                    messages[1].channelText().markdown shouldBe "*Alpha*\n• *t2*\ns2"
                 }
             }
         }

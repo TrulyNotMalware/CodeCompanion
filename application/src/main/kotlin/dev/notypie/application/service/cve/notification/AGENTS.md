@@ -13,7 +13,7 @@ bundled into one DM per user per day after a configured local send time. Feature
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveNotificationDispatcher.kt` | `class CveNotificationDispatcher(cveDeliveryRepository, outboxRepository, outboundMessagePort, transactionManager, batchSize, digestSendAt: LocalTime, digestZone: ZoneId, digestSummaryMaxLength, deliveryHorizonDays, clock)`. `@Scheduled(fixedDelay = 60_000) immediateTick()`: `findUndelivered(IMMEDIATE, since = dbNow() - horizon, doneBefore = now, limit = batchSize)` then per pair `runInTx { claim(eventId, userId) && enqueue(...) }`. `@Scheduled(fixedDelay = 60_000) digestTick()`: returns before `digestSendAt` in `digestZone`; `doneBefore` = today's send time converted to the system zone; groups pairs by user and per user `runInTx { claim each; one DM with the won events }`. `enqueue` builds `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` + `OutboundMessage.ChannelMessage` and calls `outboxRepository.save(outboundMessagePort.toRow(...))`; bodies are capped at `BODY_MAX_LENGTH` (2 900) with a truncation marker Topic names, titles and summaries (the prod `NoopAiSummarizer` passes GitHub release bodies through) go through `templates/escapeMrkdwn()` before interpolation; `digestSummaryMaxLength` trims the raw summary and `capBody` (`truncateSectionText`, never splitting an entity) measures the escaped body. |
+| `CveNotificationDispatcher.kt` | `class CveNotificationDispatcher(cveDeliveryRepository, outboxRepository, outboundMessagePort, transactionManager, batchSize, digestSendAt: LocalTime, digestZone: ZoneId, digestSummaryMaxLength, deliveryHorizonDays, clock)`. `@Scheduled(fixedDelay = 60_000) immediateTick()`: `findUndelivered(IMMEDIATE, since = dbNow() - horizon, doneBefore = now, limit = batchSize)` then per pair `runInTx { claim(eventId, userId) && enqueue(...) }`. `@Scheduled(fixedDelay = 60_000) digestTick()`: returns before `digestSendAt` in `digestZone`; `doneBefore` = today's send time converted to the system zone; groups pairs by user and per user `runInTx { claim each; the won events as one or more DMs }`. `enqueue` builds `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` + `OutboundMessage.ChannelMessage` and calls `outboxRepository.save(outboundMessagePort.toRow(...))`; an immediate body is capped at `BODY_MAX_LENGTH` (2 900) with a truncation marker. `digestParts` packs the digest's event lines into bodies of at most `SlackBlockLimits.MESSAGE_BODY_BUDGET`, repeating the topic header when a topic spills into the next body, and posts each as its own DM headlined `CodeCompanion — CVE digest (i/n)` when there are several; only one event line longer than a body is cut. Topic names, titles and summaries (the prod `NoopAiSummarizer` passes GitHub release bodies through) go through `templates/escapeMrkdwn()` before interpolation; `digestSummaryMaxLength` trims the raw summary and `capBody` (`truncateSectionText`, never splitting an entity) measures the escaped body. |
 
 ## For AI Agents
 
@@ -27,9 +27,11 @@ bundled into one DM per user per day after a configured local send time. Feature
 - The digest has no once-per-day ledger. Its cutoff is today's send time, so the first tick after it
   drains everything summarized before it and later ticks find nothing; events summarized after the
   cutoff roll into tomorrow. Changing `doneBefore` changes that guarantee.
-- The 2 900-char cap is a Slack `section` limit (3 000). An oversized body would be rejected by Slack
-  *after* the claim committed and the outbox would retry it forever, so cap the aggregate, not just
-  each summary (`digestSummaryMaxLength` trims per event, `capBody` trims the whole).
+- **Every claimed event must reach a sent body.** A claimed pair already has its `cve_delivery` row, so an
+  event cut off the end of a capped digest would never be sent again. The digest is split into bodies
+  rather than truncated; the renderer cuts each body into sections, and a body within `MESSAGE_BODY_BUDGET`
+  stays under the per-message block text budget. The immediate DM is one event and keeps the 2 900-char
+  section cap (`capBody`).
 - This class writes outbox rows directly (`outboxRepository.save`) instead of going through
   `OutboundMessageStager` + `EventPublisher` because there is no command transaction to hook a
   `BEFORE_COMMIT` listener onto. The scheduling services in `service/meeting` and `service/standup`
@@ -46,8 +48,9 @@ bundled into one DM per user per day after a configured local send time. Feature
 `CveNotificationDispatcherTest` (Kotest `BehaviorSpec`, MockK) builds
 `TransactionTemplate(transactionManager)` for real over a MockK `PlatformTransactionManager`
 (`getTransaction` → relaxed status, `commit` / `rollback` `just Runs`), pins `Clock.fixed`, and asserts:
-no DM when the claim is lost, one row per immediate pair, one row per user for digests, the pre-send-time
-early return, `doneBefore` values, and the truncation marker. Use `CveEventCreator` /
+no DM when the claim is lost, one row per immediate pair, one row per user for small digests, a large
+digest split into numbered bodies that together name every claimed event, the pre-send-time early return,
+`doneBefore` values, and the truncation marker. Use `CveEventCreator` /
 `CveTopicCreator` from the infrastructure testFixtures for `UndeliveredCveEvent` inputs.
 
 ### Common Patterns

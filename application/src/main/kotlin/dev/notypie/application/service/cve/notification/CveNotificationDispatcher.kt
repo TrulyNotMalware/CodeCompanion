@@ -112,7 +112,11 @@ class CveNotificationDispatcher(
     private fun dispatchDigest(userId: String, userPairs: List<UndeliveredCveEvent>): Int {
         val claimed = userPairs.filter { cveDeliveryRepository.claim(eventId = it.eventId, userId = it.userId) }
         if (claimed.isEmpty()) return 0
-        enqueue(userId = userId, headline = DIGEST_HEADLINE, markdown = digestMarkdown(events = claimed))
+        val parts = digestParts(events = claimed)
+        parts.forEachIndexed { index, markdown ->
+            val headline = if (parts.size == 1) DIGEST_HEADLINE else "$DIGEST_HEADLINE (${index + 1}/${parts.size})"
+            enqueue(userId = userId, headline = headline, markdown = markdown)
+        }
         return claimed.size
     }
 
@@ -132,14 +136,32 @@ class CveNotificationDispatcher(
         return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n${summary.escapeMrkdwn()}")
     }
 
-    private fun digestMarkdown(events: List<UndeliveredCveEvent>): String =
-        events
-            .groupBy { it.topicDisplayName }
-            .entries
-            .joinToString(separator = "\n\n") { (topicDisplayName, topicEvents) ->
-                val lines = topicEvents.joinToString(separator = "\n") { digestEventLine(event = it) }
-                "*${topicDisplayName.escapeMrkdwn()}*\n$lines"
-            }.let { capBody(body = it) }
+    // A claimed pair already has its delivery row, so an event cut off the end of a body is never sent again.
+    private fun digestParts(events: List<UndeliveredCveEvent>): List<String> {
+        val parts = mutableListOf<String>()
+        val current = StringBuilder()
+        var currentTopic: String? = null
+        events.groupBy { it.topicDisplayName }.forEach { (topicDisplayName, topicEvents) ->
+            val header = "*${topicDisplayName.escapeMrkdwn()}*"
+            topicEvents.forEach { event ->
+                val line = digestEventLine(event = event)
+                val separator = if (currentTopic == topicDisplayName) "\n" else "\n\n$header\n"
+                if (current.isNotEmpty() &&
+                    current.length + separator.length + line.length <= SlackBlockLimits.MESSAGE_BODY_BUDGET
+                ) {
+                    current.append(separator).append(line)
+                } else {
+                    if (current.isNotEmpty()) parts += current.toString()
+                    current.clear().append(
+                        "$header\n$line".truncateSectionText(limit = SlackBlockLimits.MESSAGE_BODY_BUDGET),
+                    )
+                }
+                currentTopic = topicDisplayName
+            }
+        }
+        if (current.isNotEmpty()) parts += current.toString()
+        return parts
+    }
 
     // Oversized body would be rejected by Slack post-claim and retry forever — capping prevents that.
     private fun capBody(body: String): String = body.truncateSectionText(limit = CAPPED_BODY_MAX_LENGTH)
