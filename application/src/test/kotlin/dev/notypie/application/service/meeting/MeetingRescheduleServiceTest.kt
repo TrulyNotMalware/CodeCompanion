@@ -377,5 +377,39 @@ class MeetingRescheduleServiceTest :
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
                 }
             }
+
+            `when`("the write fails and the failure reply cannot be staged either") {
+                val localMeetingRepository = mockk<MeetingRepository>()
+                val localStager = mockk<OutboundMessageStager>()
+                val writeFailure = RuntimeException("db down")
+                every {
+                    localMeetingRepository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        newStartAt = newStartAt,
+                    )
+                } throws writeFailure
+                every { localStager.stage(message = any(), basicInfo = any()) } throws
+                    IllegalStateException("outbox insert failed: database down")
+
+                var escaped: Throwable? = null
+                val errors =
+                    captureErrorLogs(loggerName = MeetingRescheduleService::class.java.name) {
+                        escaped =
+                            runCatching {
+                                serviceCapturing(
+                                    localMeetingRepository = localMeetingRepository,
+                                    localReminderRepository = mockk(relaxed = true),
+                                    localStager = localStager,
+                                ).rescheduleMeeting(event = event)
+                            }.exceptionOrNull()
+                    }
+
+                then("nothing escapes and one ERROR line carries the reply failure as suppressed") {
+                    escaped shouldBe null
+                    writeFailure.suppressed.map { it.message } shouldBe listOf("outbox insert failed: database down")
+                    errors.map { it.throwableProxy.message } shouldBe listOf("db down")
+                }
+            }
         }
     })

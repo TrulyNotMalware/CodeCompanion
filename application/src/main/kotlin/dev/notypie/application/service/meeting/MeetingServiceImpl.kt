@@ -152,16 +152,16 @@ class MeetingServiceImpl(
                     targetUserId = payload.requesterId,
                 )
             }.onFailure { exception ->
-                log.error(exception) {
-                    "Failed to cancel meeting meetingUid=${payload.meetingUid} " +
-                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
-                }
-                replyTemplate.executeWithoutResult {
+                replyTemplate.stageFailureReply(failure = exception) {
                     publishCancelEphemeral(
                         message = "Failed to cancel the meeting. Please try again later.",
                         basicInfo = basicInfo,
                         targetUserId = payload.requesterId,
                     )
+                }
+                log.error(exception) {
+                    "Failed to cancel meeting meetingUid=${payload.meetingUid} " +
+                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
             }
     }
@@ -209,16 +209,16 @@ class MeetingServiceImpl(
                     targetUserId = payload.requesterId,
                 )
             }.onFailure { exception ->
-                log.error(exception) {
-                    "Failed to add participants meetingUid=${payload.meetingUid} " +
-                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
-                }
-                replyTemplate.executeWithoutResult {
+                replyTemplate.stageFailureReply(failure = exception) {
                     publishHostEphemeral(
                         message = "Failed to add participants. Please try again later.",
                         basicInfo = basicInfo,
                         targetUserId = payload.requesterId,
                     )
+                }
+                log.error(exception) {
+                    "Failed to add participants meetingUid=${payload.meetingUid} " +
+                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
             }
     }
@@ -322,6 +322,14 @@ internal fun TransactionTemplate.executeRetryingOnConflict(action: () -> Unit): 
     val failure = firstAttempt.exceptionOrNull()
     if (failure !is RuntimeException || !failure.isMeetingWriteConflict()) return firstAttempt
     return attempt(action = action)
+}
+
+internal fun TransactionTemplate.stageFailureReply(failure: Throwable, reply: () -> Unit) {
+    try {
+        executeWithoutResult { reply() }
+    } catch (replyFailure: RuntimeException) {
+        failure.addSuppressed(replyFailure)
+    }
 }
 
 private fun TransactionTemplate.attempt(action: () -> Unit): Result<Unit> =

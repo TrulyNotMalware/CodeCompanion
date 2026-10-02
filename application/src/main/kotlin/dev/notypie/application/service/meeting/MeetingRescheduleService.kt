@@ -59,16 +59,16 @@ class MeetingRescheduleService(
         writeTemplate
             .executeRetryingOnConflict { applyReschedule(payload = payload) }
             .onFailure { exception ->
-                log.error(exception) {
-                    "Failed to reschedule meeting meetingUid=${payload.meetingUid} " +
-                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
-                }
-                replyTemplate.executeWithoutResult {
+                replyTemplate.stageFailureReply(failure = exception) {
                     publishEphemeral(
                         message = "Failed to reschedule the meeting. Please try again later.",
                         basicInfo = basicInfo,
                         targetUserId = payload.requesterId,
                     )
+                }
+                log.error(exception) {
+                    "Failed to reschedule meeting meetingUid=${payload.meetingUid} " +
+                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
             }
     }

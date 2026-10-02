@@ -1,5 +1,9 @@
 package dev.notypie.application.service.meeting
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -37,6 +41,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.slf4j.LoggerFactory
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.transaction.support.TransactionTemplate
@@ -585,6 +590,68 @@ class MeetingServiceImplTest :
             }
         }
 
+        given("a deferred write whose failure reply fails as well") {
+            val failingStager = mockk<OutboundMessageStager>()
+            every { failingStager.stage(message = any(), basicInfo = any()) } throws
+                IllegalStateException("outbox insert failed: database down")
+            val downRepository = mockk<MeetingRepository>()
+            val downService =
+                MeetingServiceImpl(
+                    meetingRepository = downRepository,
+                    commandExecutor = commandExecutor,
+                    outboundStager = failingStager,
+                    eventPublisher = eventPublisher,
+                    transactionManager = createH2TransactionManager(),
+                )
+
+            `when`("a cancel fails and so does its reply") {
+                val writeFailure = RuntimeException("db down")
+                val event = createCancelMeetingEvent(requesterId = "U_HOST_DOWN")
+                every {
+                    downRepository.markMeetingCanceled(
+                        meetingUid = event.payload.meetingUid,
+                        requesterId = "U_HOST_DOWN",
+                    )
+                } throws writeFailure
+
+                var escaped: Throwable? = null
+                val errors =
+                    captureErrorLogs(loggerName = MeetingServiceImpl::class.java.name) {
+                        escaped = runCatching { downService.cancelMeeting(event = event) }.exceptionOrNull()
+                    }
+
+                then("nothing escapes and one ERROR line carries the reply failure as suppressed") {
+                    escaped shouldBe null
+                    writeFailure.suppressed.map { it.message } shouldBe listOf("outbox insert failed: database down")
+                    errors.map { it.throwableProxy.message } shouldBe listOf("db down")
+                }
+            }
+
+            `when`("an add fails and so does its reply") {
+                val writeFailure = RuntimeException("db down")
+                val event = createAddParticipantEvent(requesterId = "U_HOST_DOWN", participantUserIds = listOf("U_A"))
+                every {
+                    downRepository.addParticipants(
+                        meetingUid = event.payload.meetingUid,
+                        requesterId = "U_HOST_DOWN",
+                        participantUserIds = listOf("U_A"),
+                    )
+                } throws writeFailure
+
+                var escaped: Throwable? = null
+                val errors =
+                    captureErrorLogs(loggerName = MeetingServiceImpl::class.java.name) {
+                        escaped = runCatching { downService.addParticipants(event = event) }.exceptionOrNull()
+                    }
+
+                then("nothing escapes and one ERROR line carries the reply failure as suppressed") {
+                    escaped shouldBe null
+                    writeFailure.suppressed.map { it.message } shouldBe listOf("outbox insert failed: database down")
+                    errors.map { it.throwableProxy.message } shouldBe listOf("db down")
+                }
+            }
+        }
+
         given("the interaction transaction already holds a connection from a pool of two") {
             val transactionManager = createH2TransactionManager(dataSource = twoConnectionPool)
             val recordingPublisher = CommitRecordingEventPublisher()
@@ -712,3 +779,15 @@ class MeetingServiceImplTest :
             }
         }
     })
+
+internal fun captureErrorLogs(loggerName: String, block: () -> Unit): List<ILoggingEvent> {
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    val logger = LoggerFactory.getLogger(loggerName) as Logger
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == Level.ERROR }
+}
