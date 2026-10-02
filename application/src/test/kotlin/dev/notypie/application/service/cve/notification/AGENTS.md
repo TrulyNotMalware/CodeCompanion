@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/cve/notification
 
@@ -12,7 +12,7 @@ Slack payload.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveNotificationDispatcherTest.kt` | Plain Kotest `BehaviorSpec` + MockK, no Spring context. Immediate: claim won → one `ChannelMessage` to `U1`, headline `CodeCompanion — CVE alert`, markdown `*Java CVE* — Boom\n\nPatch now`; claim lost → no `toRow`, no `save`; first of two pairs throws on `save`, on a real H2 `DataSourceTransactionManager` whose `claim` inserts a `delivery_claim` row through `JdbcTemplate` → only `U2`'s claim row survives (the failed pair's claim rolls back), the second pair is still claimed and saved, and `verifyOrder` proves claim/save interleave pair by pair; 3,500-char summary → body capped at 2,887 `x` + `\n…(truncated)`; null summary → title-only `*Alpha* — t`. Digest: clock at 08:00Z with `digestSendAt = 09:00` → repository never queried; after send time → captured `doneBefore` equals 09:00Z converted through `ZoneId.systemDefault()`; three pairs over two users → two DMs, `U1` grouped as `*Alpha*\n• *t1*\ns1\n• *t2*\ns2`; one won and one lost claim → only the won event in the single DM; `digestSummaryMaxLength = 10` truncates each summary; five 700-char summaries → total length `2900 + "\n…(truncated)".length`. Horizon: captured `since` equals `dbNow() - 7 days`. |
+| `CveNotificationDispatcherTest.kt` | Plain Kotest `BehaviorSpec` + MockK, no Spring context. Immediate: claim won → one `ChannelMessage` to `U1`, headline `CodeCompanion — CVE alert`, markdown `*Java CVE* — Boom\n\nPatch now`; claim lost → no `toRow`, no `save`; first of two pairs throws on `save`, on a real H2 `DataSourceTransactionManager` whose `claim` inserts a `delivery_claim` row through `JdbcTemplate` → only `U2`'s claim row survives (the failed pair's claim rolls back), the second pair is still claimed and saved, and `verifyOrder` proves claim/save interleave pair by pair; 3,500-char summary → body capped at 2,887 `x` + `\n…(truncated)`; null summary → title-only `*Alpha* — t`. Digest: clock at 08:00Z with `digestSendAt = 09:00` → repository never queried; after send time → captured `doneBefore` equals 09:00Z converted through `ZoneId.systemDefault()`; three pairs over two users → two DMs, `U1` grouped as `*Alpha*\n• *t1*\ns1\n• *t2*\ns2`; one won and one lost claim → only the won event in the single DM; `digestSummaryMaxLength = 10` truncates each summary; five 700-char summaries → total length `2900 + "\n…(truncated)".length`. Horizon: captured `since` equals `dbNow() - 7 days`. Escapes: `R&D <team>` / `<!channel> v2.3.1` / a `<https://evil.example|Patch here>` summary → every piece escaped; a 1,000-character `<` summary (4,000 once escaped) → capped within `2900 + "\n…(truncated)".length`, no raw `<`, ending on a whole `&lt;`; a digest event with `<!here>` topic, `a&b` title and a link summary → `*&lt;!here&gt;*\n• *a&amp;b*\n&lt;https://evil.example|x&gt;`. |
 
 ## For AI Agents
 

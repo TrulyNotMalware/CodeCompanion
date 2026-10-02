@@ -113,6 +113,24 @@ class DomainReadToolsTest :
                 }
             }
 
+            `when`("a meeting title carries Slack control sequences") {
+                val meetingRepository = mockk<MeetingRepository>()
+                every {
+                    meetingRepository.getMeetingsByUserIdInRange(userId = any(), startAt = any(), endAt = any())
+                } returns
+                    listOf(
+                        createMeetingDto(title = "<!channel> <https://evil.example|Sync>", startAt = now.plusDays(1L)),
+                    )
+                val result =
+                    toolsWith(role = UserRole.USER, meetingRepository = meetingRepository)
+                        .listMeetings(daysAhead = null, context = requestContext)
+
+                then("the title reaches the model escaped, so an echoed title stays literal text in Slack") {
+                    result.text() shouldContain "• &lt;!channel&gt; &lt;https://evil.example|Sync&gt; — "
+                    result.text() shouldNotContain "<!channel>"
+                }
+            }
+
             `when`("called with an out-of-range window") {
                 val meetingRepository = mockk<MeetingRepository>()
                 every {

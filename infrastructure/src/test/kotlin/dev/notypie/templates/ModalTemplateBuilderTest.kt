@@ -24,6 +24,7 @@ import dev.notypie.impl.command.dto.createProfile
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.ints.shouldBeGreaterThan
@@ -279,6 +280,47 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, userThumbnail, text, and approval blocks") {
                     result.template.size shouldBe 5
+                }
+            }
+
+            `when`("the profile name and the subtitle carry Slack control sequences") {
+                val profileRequester = mockk<RestRequester>()
+                every {
+                    profileRequester.safeGet(
+                        uri = any(),
+                        authorizationHeader = any(),
+                        responseType = SlackUserProfileDto::class.java,
+                        uriVariables = any(),
+                    )
+                } returns
+                    Result.success(
+                        ResponseEntity.ok(
+                            SlackUserProfileDto(ok = true, profile = createProfile(displayName = "<!here> R&D")),
+                        ),
+                    )
+                val result =
+                    ModalTemplateBuilder(
+                        modalBlockBuilder = ModalBlockBuilder(),
+                        restRequester = profileRequester,
+                        slackApiToken = TEST_BOT_TOKEN,
+                    ).approvalTemplate(
+                        headLineText = "Approval Request",
+                        approvalContents = testApprovalContents.copy(subTitle = "<!channel> <https://evil.example|x>"),
+                        idempotencyKey = testIdempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+
+                then("both are escaped") {
+                    result.template[2]
+                        .shouldBeInstanceOf<ContextBlock>()
+                        .elements
+                        .filterIsInstance<MarkdownTextObject>()
+                        .map { it.text } shouldContain "*&lt;!here&gt; R&amp;D* "
+                    result.template[3]
+                        .shouldBeInstanceOf<SectionBlock>()
+                        .fields
+                        .single()
+                        .text shouldBe "*&lt;!channel&gt; &lt;https://evil.example|x&gt;*"
                 }
             }
 

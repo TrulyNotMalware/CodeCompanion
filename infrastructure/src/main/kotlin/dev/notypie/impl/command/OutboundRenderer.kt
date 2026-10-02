@@ -5,6 +5,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.SlackEventPayload
+import dev.notypie.templates.escapeMrkdwn
 
 interface OutboundRenderer {
     fun render(message: OutboundMessage, basicInfo: CommandBasicInfo): SlackEventPayload
@@ -112,7 +113,7 @@ class SlackOutboundRenderer(
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
                         headLineText = "Notice!",
                         commandBasicInfo = basicInfo,
-                        simpleString = "[Notice] $userMentions ${message.message}",
+                        simpleString = "[Notice] $userMentions ${message.message.escapeMrkdwn()}",
                     ).payload
             }
 

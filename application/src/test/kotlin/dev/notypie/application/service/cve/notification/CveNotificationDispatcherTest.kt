@@ -11,8 +11,10 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.schema.createUndeliveredCveEvent
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -122,6 +124,135 @@ class CveNotificationDispatcherTest :
                     messages.single().channelId() shouldBe "U1"
                     messages.single().channelText().headline shouldBe "CodeCompanion — CVE alert"
                     messages.single().channelText().markdown shouldBe "*Java CVE* — Boom\n\nPatch now"
+                }
+            }
+        }
+
+        given("an immediate pair whose feed text carries Slack control sequences") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.IMMEDIATE,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(
+                        eventId = 1L,
+                        userId = "U1",
+                        topicDisplayName = "R&D <team>",
+                        title = "<!channel> v2.3.1",
+                        aiSummary = "Fix for < 2.3.1: <https://evil.example|Patch here>",
+                    ),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = stubOutbox(),
+                )
+
+            `when`("the immediate tick runs") {
+                dispatcher.immediateTick()
+
+                then("topic, title and summary are escaped so no mention or disguised link reaches Slack") {
+                    messages.single().channelText().markdown shouldBe
+                        "*R&amp;D &lt;team&gt;* — &lt;!channel&gt; v2.3.1\n\n" +
+                        "Fix for &lt; 2.3.1: &lt;https://evil.example|Patch here&gt;"
+                }
+            }
+        }
+
+        given("an immediate pair whose summary only overflows the section limit once escaped") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.IMMEDIATE,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(
+                        eventId = 1L,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "t",
+                        aiSummary = "<".repeat(n = 1_000),
+                    ),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = stubOutbox(),
+                )
+
+            `when`("the immediate tick runs") {
+                dispatcher.immediateTick()
+
+                then("the cap is measured on the escaped body and never splits an entity") {
+                    val markdown = messages.single().channelText().markdown
+                    markdown.length shouldBeLessThanOrEqual 2900 + "\n…(truncated)".length
+                    markdown shouldNotContain "<"
+                    markdown shouldEndWith "&lt;\n…(truncated)"
+                }
+            }
+        }
+
+        given("a digest event whose topic, title and summary carry Slack control sequences") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val messages = mutableListOf<OutboundMessage>()
+            every {
+                deliveryRepository.findUndelivered(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns
+                listOf(
+                    createUndeliveredCveEvent(
+                        eventId = 1L,
+                        userId = "U1",
+                        topicDisplayName = "<!here>",
+                        title = "a&b",
+                        aiSummary = "<https://evil.example|x>",
+                    ),
+                )
+            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                createOutboxRow(eventId = UUID.randomUUID().toString())
+            }
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = stubOutbox(),
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+
+                then("every interpolated piece is escaped") {
+                    messages.single().channelText().markdown shouldBe
+                        "*&lt;!here&gt;*\n• *a&amp;b*\n&lt;https://evil.example|x&gt;"
                 }
             }
         }

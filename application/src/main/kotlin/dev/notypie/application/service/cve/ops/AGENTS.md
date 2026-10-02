@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # application/service/cve/ops
 
@@ -12,7 +12,7 @@ topic's `active` flag, and re-queue dead-lettered events for summarization. `Cve
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveOpsService.kt` | `@Service class CveOpsService(appConfig, cveTopicRepository, cveEventRepository, outboundStager, eventPublisher)`; `maxRetries = appConfig.ai.maxRetries`. `@Transactional @EventListener handleCveOps(event)`: feature off → "The CVE feature is currently disabled."; else `LIST_TOPICS` → "CVE topics (N):" with `• *Name* (`key`) — digest|immediate, active|inactive, N event(s)` from `findAllTopics()` + `countEventsByTopic` (missing count → 0); `ACTIVATE_TOPIC` / `DEACTIVATE_TOPIC` → `setActive(topicKey, active)` and "Topic *Name* (`key`): active → inactive." or "No CVE topic with key `key`."; `RETRY_ALL` → `resetDeadLetters(maxRetries)` and "Re-queued N dead-letter event(s) for summarization."; `RETRY_EVENT` → `resetDeadLetter(id, maxRetries)` and "Re-queued event #id …" or "Event #id is not a dead-letter (…)". Reply: `ChannelMessage` to `payload.responseBasicInfo.channel`, headline `CodeCompanion — CVE operations`, published via `publishOne` |
+| `CveOpsService.kt` | `@Service class CveOpsService(appConfig, cveTopicRepository, cveEventRepository, outboundStager, eventPublisher)`; `maxRetries = appConfig.ai.maxRetries`. `@Transactional @EventListener handleCveOps(event)`: feature off → "The CVE feature is currently disabled."; else `LIST_TOPICS` → "CVE topics (N):" with `• *Name* (`key`) — digest|immediate, active|inactive, N event(s)` from `findAllTopics()` + `countEventsByTopic` (missing count → 0); `ACTIVATE_TOPIC` / `DEACTIVATE_TOPIC` → `setActive(topicKey, active)` and "Topic *Name* (`key`): active → inactive." or "No CVE topic with key `key`."; `RETRY_ALL` → `resetDeadLetters(maxRetries)` and "Re-queued N dead-letter event(s) for summarization."; `RETRY_EVENT` → `resetDeadLetter(id, maxRetries)` and "Re-queued event #id …" or "Event #id is not a dead-letter (…)". Reply: `ChannelMessage` to `payload.responseBasicInfo.channel`, headline `CodeCompanion — CVE operations`, published via `publishOne` Every echoed display name and topic key (including a typed unknown key) goes through `escapeMrkdwn()`. |
 
 ## For AI Agents
 

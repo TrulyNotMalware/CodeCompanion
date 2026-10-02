@@ -3,6 +3,7 @@ package dev.notypie.application.mcp
 import dev.notypie.application.service.command.RoleManagementService
 import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.domain.command.authorization.CommandPermission
+import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.repository.meeting.MeetingRepository
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult
@@ -80,7 +81,7 @@ class DomainReadTools(
         return active
             .sortedBy { it.startAt }
             .joinToString(separator = "\n") { meeting ->
-                "• ${meeting.title} — ${meeting.startAt.format(MEETING_TIME_FORMAT)}" +
+                "• ${meeting.title.escapeMarkup()} — ${meeting.startAt.format(MEETING_TIME_FORMAT)}" +
                     " (host <@${meeting.creator}>, ${meeting.participants.size} participant(s))"
             }
     }

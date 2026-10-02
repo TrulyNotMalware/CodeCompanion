@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/cve/ops
 
@@ -11,7 +11,7 @@ messages to the command channel.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveOpsServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. LIST_TOPICS with a digest/active topic (7 events) and an immediate/inactive topic (no count row) → `CVE topics (2):`, `• *Kotlin* (\`kotlin\`) — digest, active, 7 event(s)`, `• *Java CVE* (\`cve-java\`) — immediate, inactive, 0 event(s)`; DEACTIVATE_TOPIC known → `setActive(topicKey = "kotlin", active = false)` and exact reply `Topic *Kotlin* (\`kotlin\`): active → inactive.`; ACTIVATE_TOPIC unknown → no `setActive`, `No CVE topic with key \`ghost\`.`; RETRY_ALL with `resetDeadLetters(maxRetries = 5)` returning 3 → `Re-queued 3 dead-letter event(s) for summarization.` and `publishEvent` once; RETRY_EVENT hit → `Re-queued event #42 for summarization.`; RETRY_EVENT miss → contains `Event #99 is not a dead-letter`; disabled → no `resetDeadLetters`, no `findAllTopics`, reply `The CVE feature is currently disabled.` still published. |
+| `CveOpsServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. LIST_TOPICS with a digest/active topic (7 events) and an immediate/inactive topic (no count row) → `CVE topics (2):`, `• *Kotlin* (\`kotlin\`) — digest, active, 7 event(s)`, `• *Java CVE* (\`cve-java\`) — immediate, inactive, 0 event(s)`; DEACTIVATE_TOPIC known → `setActive(topicKey = "kotlin", active = false)` and exact reply `Topic *Kotlin* (\`kotlin\`): active → inactive.`; ACTIVATE_TOPIC unknown → no `setActive`, `No CVE topic with key \`ghost\`.`; RETRY_ALL with `resetDeadLetters(maxRetries = 5)` returning 3 → `Re-queued 3 dead-letter event(s) for summarization.` and `publishEvent` once; RETRY_EVENT hit → `Re-queued event #42 for summarization.`; RETRY_EVENT miss → contains `Event #99 is not a dead-letter`; disabled → no `resetDeadLetters`, no `findAllTopics`, reply `The CVE feature is currently disabled.` still published. A topic named `<!channel>` with key `r&d` → escaped in the list, in the toggle reply, and a typed unknown key `<!here>` → ``No CVE topic with key `&lt;!here&gt;`.``. |
 
 ## For AI Agents
 

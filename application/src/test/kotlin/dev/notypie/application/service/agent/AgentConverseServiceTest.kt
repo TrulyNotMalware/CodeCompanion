@@ -304,6 +304,30 @@ class AgentConverseServiceTest :
             }
         }
 
+        given("a turn whose answer echoes broadcast mentions from user text or a tool result") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Completed(
+                    sessionId = null,
+                    finalText = "<!channel> sync moved, ask <@U1> <!here|here> see <https://example.com|notes>",
+                )
+            val stagedMessage = slot<OutboundMessage>()
+            val service = buildService(agentGateway = gateway, outboundStager = stagerCapturing(stagedMessage))
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent())
+
+                then("the broadcasts are neutralised while user mentions and links keep working") {
+                    stagedMessage.captured
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe
+                        "&lt;!channel&gt; sync moved, ask <@U1> &lt;!here|here&gt; see <https://example.com|notes>"
+                }
+            }
+        }
+
         given("capAnswer") {
             `when`("the cut would land inside a surrogate pair") {
                 val text = "a".repeat(n = AgentConverseService.MAX_ANSWER_LENGTH - 14) + "😀".repeat(n = 10)

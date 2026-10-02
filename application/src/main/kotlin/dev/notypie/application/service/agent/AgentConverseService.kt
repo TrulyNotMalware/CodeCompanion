@@ -23,6 +23,7 @@ import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import dev.notypie.templates.SlackBlockLimits
+import dev.notypie.templates.neutralizeBroadcastMentions
 import dev.notypie.templates.splitMessageText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
@@ -223,7 +224,10 @@ class AgentConverseService(
                 )
                 val parts =
                     splitMessageText(
-                        text = capAnswer(text = result.finalText).ifBlank { EMPTY_RESPONSE_MESSAGE },
+                        text =
+                            capAnswer(text = result.finalText)
+                                .neutralizeBroadcastMentions()
+                                .ifBlank { EMPTY_RESPONSE_MESSAGE },
                         maxMessages = MAX_ANSWER_MESSAGES,
                     )
                 parts.forEachIndexed { index, part ->

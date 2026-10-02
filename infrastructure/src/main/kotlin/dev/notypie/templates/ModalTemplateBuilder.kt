@@ -103,13 +103,16 @@ class ModalTemplateBuilder(
         commandDetailType: CommandDetailType,
     ): LayoutBlocks {
         val publisher = profileResolver.resolve(userId = approvalContents.publisherId)
+        val publisherName =
+            publisher.displayName.takeIf { it == "<@${approvalContents.publisherId}>" }
+                ?: publisher.displayName.escapeMrkdwn()
         return layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
             add(
                 block =
                     modalBlockBuilder.userNameWithThumbnailBlock(
-                        userName = publisher.displayName,
+                        userName = publisherName,
                         userThumbnailUrl = publisher.thumbnailUrl,
                         mkdIntroduceComment = "*Publisher* :",
                     ),
@@ -117,7 +120,7 @@ class ModalTemplateBuilder(
             add(
                 block =
                     modalBlockBuilder.textBlock(
-                        "*${approvalContents.subTitle}*",
+                        "*${approvalContents.subTitle.escapeMrkdwn()}*",
                         isMarkDown = true,
                     ),
             )

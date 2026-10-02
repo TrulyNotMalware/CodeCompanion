@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/mcp
 
@@ -12,7 +12,7 @@ and `DomainReadTools` (the read-only tools the AI sidecar can call: `get_status`
 | File | Description |
 |------|-------------|
 | `McpToolGateTest.kt` | `McpToolGate.execute(transportContext, toolName, requiredPermission, argumentsSummary) { body }` with a MockK `CommandRoleResolver` and `McpToolCallHistoryRepository`. Cases: role lacks permission → `isError`, text names the tool and lowercase permission, `DENIED` audit row with resolved role and requester; permitted → body text returned, `COMPLETED` row carrying `turnId`, `sessionKey`, `argumentsJson`, `durationMs >= 0`; `McpTransportContext.EMPTY` → "Unauthenticated", resolver and audit never touched; body throws → `FAILED` row with `errorCode = "IllegalStateException"`; audit repository throws → tool result still succeeds; resolver throws → fails closed, `FAILED` row with floor role `USER`. |
-| `DomainReadToolsTest.kt` | `DomainReadTools` built over a real `McpToolGate` (relaxed audit repository), a MockK `McpSyncRequestContext` whose `transportContext()` carries `createScopedTurnToken()` under `SCOPED_TURN_TOKEN_CONTEXT_KEY`, and `Clock.fixed(2026-07-08T03:00Z)`. `get_status`: `DEVELOPER` gets `OpsStatusService.renderReport()` verbatim, `USER` is denied ("permission"). `list_meetings`: null `daysAhead` → `getMeetingsByUserIdInRange(userId, now, now + 7d)`, cancelled meetings filtered out; `daysAhead = 99` → clamped to 31 and "No meetings". `list_roles`: `ADMIN` gets `RoleManagementService.renderGrants()`, `DEVELOPER` denied. |
+| `DomainReadToolsTest.kt` | `DomainReadTools` built over a real `McpToolGate` (relaxed audit repository), a MockK `McpSyncRequestContext` whose `transportContext()` carries `createScopedTurnToken()` under `SCOPED_TURN_TOKEN_CONTEXT_KEY`, and `Clock.fixed(2026-07-08T03:00Z)`. `get_status`: `DEVELOPER` gets `OpsStatusService.renderReport()` verbatim, `USER` is denied ("permission"). `list_meetings`: null `daysAhead` → `getMeetingsByUserIdInRange(userId, now, now + 7d)`, cancelled meetings filtered out; `daysAhead = 99` → clamped to 31 and "No meetings". `list_roles`: `ADMIN` gets `RoleManagementService.renderGrants()`, `DEVELOPER` denied. A meeting titled `<!channel> <https://evil.example|Sync>` → the tool text carries it escaped and no raw `<!channel>`. |
 
 Both files define an identical private `CallToolResult.text()` helper.
 

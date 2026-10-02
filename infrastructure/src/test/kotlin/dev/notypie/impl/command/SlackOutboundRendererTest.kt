@@ -636,6 +636,34 @@ class SlackOutboundRendererTest :
             }
         }
 
+        given("a Notice whose body carries Slack control sequences") {
+            val message =
+                OutboundMessage.Notice(
+                    target = target,
+                    mentions = listOf(UserRef(id = "U1")),
+                    message = "<!channel> R&D <https://evil.example|agenda>",
+                )
+
+            `when`("render is called") {
+                val capturedText = slot<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(capturedText),
+                    )
+                } returns stubEvent
+
+                renderer.render(message = message, basicInfo = basicInfo)
+
+                then("the sender's words are escaped while the mention prefix stays markup") {
+                    capturedText.captured shouldBe
+                        "[Notice] <@U1> &lt;!channel&gt; R&amp;D &lt;https://evil.example|agenda&gt;"
+                }
+            }
+        }
+
         given("an UpdateMessage with STANDUP_ANSWER_SUBMIT detailType") {
             val message =
                 OutboundMessage.UpdateMessage(

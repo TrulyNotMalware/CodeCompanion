@@ -10,6 +10,9 @@ import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.SlackBlockLimits
+import dev.notypie.templates.escapeMrkdwn
+import dev.notypie.templates.truncateSectionText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.transaction.PlatformTransactionManager
@@ -124,9 +127,9 @@ class CveNotificationDispatcher(
     }
 
     private fun immediateMarkdown(pair: UndeliveredCveEvent): String {
-        val head = "*${pair.topicDisplayName}* — ${pair.title}"
+        val head = "*${pair.topicDisplayName.escapeMrkdwn()}* — ${pair.title.escapeMrkdwn()}"
         val summary = pair.aiSummary
-        return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n$summary")
+        return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n${summary.escapeMrkdwn()}")
     }
 
     private fun digestMarkdown(events: List<UndeliveredCveEvent>): String =
@@ -135,20 +138,16 @@ class CveNotificationDispatcher(
             .entries
             .joinToString(separator = "\n\n") { (topicDisplayName, topicEvents) ->
                 val lines = topicEvents.joinToString(separator = "\n") { digestEventLine(event = it) }
-                "*$topicDisplayName*\n$lines"
+                "*${topicDisplayName.escapeMrkdwn()}*\n$lines"
             }.let { capBody(body = it) }
 
     // Oversized body would be rejected by Slack post-claim and retry forever — capping prevents that.
-    private fun capBody(body: String): String =
-        if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
+    private fun capBody(body: String): String = body.truncateSectionText(limit = CAPPED_BODY_MAX_LENGTH)
 
     private fun digestEventLine(event: UndeliveredCveEvent): String {
         val summary = event.aiSummary
-        return if (summary.isNullOrBlank()) {
-            "• *${event.title}*"
-        } else {
-            "• *${event.title}*\n${summary.take(digestSummaryMaxLength)}"
-        }
+        val title = "• *${event.title.escapeMrkdwn()}*"
+        return if (summary.isNullOrBlank()) title else "$title\n${summary.take(digestSummaryMaxLength).escapeMrkdwn()}"
     }
 
     companion object {
@@ -156,5 +155,6 @@ class CveNotificationDispatcher(
         private const val DIGEST_HEADLINE = "CodeCompanion — CVE digest"
 
         private const val BODY_MAX_LENGTH = 2_900
+        private const val CAPPED_BODY_MAX_LENGTH = BODY_MAX_LENGTH + 1 + SlackBlockLimits.TRUNCATION_MARKER.length
     }
 }

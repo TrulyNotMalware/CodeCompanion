@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/service/cve/notification
 
@@ -13,7 +13,7 @@ bundled into one DM per user per day after a configured local send time. Feature
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveNotificationDispatcher.kt` | `class CveNotificationDispatcher(cveDeliveryRepository, outboxRepository, outboundMessagePort, transactionManager, batchSize, digestSendAt: LocalTime, digestZone: ZoneId, digestSummaryMaxLength, deliveryHorizonDays, clock)`. `@Scheduled(fixedDelay = 60_000) immediateTick()`: `findUndelivered(IMMEDIATE, since = dbNow() - horizon, doneBefore = now, limit = batchSize)` then per pair `runInTx { claim(eventId, userId) && enqueue(...) }`. `@Scheduled(fixedDelay = 60_000) digestTick()`: returns before `digestSendAt` in `digestZone`; `doneBefore` = today's send time converted to the system zone; groups pairs by user and per user `runInTx { claim each; one DM with the won events }`. `enqueue` builds `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` + `OutboundMessage.ChannelMessage` and calls `outboxRepository.save(outboundMessagePort.toRow(...))`; bodies are capped at `BODY_MAX_LENGTH` (2 900) with a truncation marker |
+| `CveNotificationDispatcher.kt` | `class CveNotificationDispatcher(cveDeliveryRepository, outboxRepository, outboundMessagePort, transactionManager, batchSize, digestSendAt: LocalTime, digestZone: ZoneId, digestSummaryMaxLength, deliveryHorizonDays, clock)`. `@Scheduled(fixedDelay = 60_000) immediateTick()`: `findUndelivered(IMMEDIATE, since = dbNow() - horizon, doneBefore = now, limit = batchSize)` then per pair `runInTx { claim(eventId, userId) && enqueue(...) }`. `@Scheduled(fixedDelay = 60_000) digestTick()`: returns before `digestSendAt` in `digestZone`; `doneBefore` = today's send time converted to the system zone; groups pairs by user and per user `runInTx { claim each; one DM with the won events }`. `enqueue` builds `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` + `OutboundMessage.ChannelMessage` and calls `outboxRepository.save(outboundMessagePort.toRow(...))`; bodies are capped at `BODY_MAX_LENGTH` (2 900) with a truncation marker Topic names, titles and summaries (the prod `NoopAiSummarizer` passes GitHub release bodies through) go through `templates/escapeMrkdwn()` before interpolation; `digestSummaryMaxLength` trims the raw summary and `capBody` (`truncateSectionText`, never splitting an entity) measures the escaped body. |
 
 ## For AI Agents
 
