@@ -30,6 +30,7 @@ import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
@@ -893,6 +894,43 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, text, and detail blocks") {
                     result.template.size shouldBe 4
+                }
+            }
+
+            `when`("the error message is longer than a section field") {
+                val result =
+                    templateBuilder.errorNoticeTemplate(
+                        headLineText = "Error",
+                        errorMessage = "e".repeat(n = 5_000),
+                        details = null,
+                    )
+                val reason =
+                    result.template[2]
+                        .shouldBeInstanceOf<SectionBlock>()
+                        .fields
+                        .last()
+                        .text
+
+                then("the reason field is cut to the field limit with an ellipsis") {
+                    reason.length shouldBe SlackBlockLimits.SECTION_FIELD_MAX_LENGTH
+                    reason shouldEndWith "…"
+                }
+            }
+
+            `when`("the details are longer than one section") {
+                val result =
+                    templateBuilder.errorNoticeTemplate(
+                        headLineText = "Error",
+                        errorMessage = "Err",
+                        details = "at frame\n".repeat(n = 1_000),
+                    )
+
+                then("the details become several sections within the budget") {
+                    result.template.size shouldBeGreaterThan 4
+                    result.template.drop(n = 3).forEach { block ->
+                        val text = block.shouldBeInstanceOf<SectionBlock>().text.text
+                        text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    }
                 }
             }
         }

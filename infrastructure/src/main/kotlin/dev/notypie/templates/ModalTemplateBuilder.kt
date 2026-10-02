@@ -133,10 +133,10 @@ class ModalTemplateBuilder(
                 block =
                     modalBlockBuilder.textBlock(
                         "type = exception",
-                        "reason = $errorMessage",
+                        "reason = $errorMessage".truncatePlainText(limit = SlackBlockLimits.SECTION_FIELD_MAX_LENGTH),
                     ),
             )
-            details?.let { add(block = modalBlockBuilder.simpleText(text = it, isMarkDown = false)) }
+            details?.let { modalBlockBuilder.textSections(text = it, isMarkDown = false).forEach { add(block = it) } }
         }
 
     override fun requestApprovalFormTemplate(
