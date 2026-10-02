@@ -133,6 +133,41 @@ class CveTopicBootstrapTest :
             }
         }
 
+        given("a display name of 128 emoji, 256 UTF-16 units but 128 characters to the utf8mb4 column") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            val bootstrap =
+                CveTopicBootstrap(
+                    topics = listOf(createCveTopicConfigDefinition(displayName = "🔒".repeat(128))),
+                    cveTopicRepository = cveTopicRepository,
+                )
+            every { cveTopicRepository.upsert(definition = any()) } returns true
+            every { cveTopicRepository.countActive() } returns 1L
+
+            `when`("the boot sync runs") {
+                bootstrap.bootstrapTopics()
+
+                then("it is accepted, because the limit counts characters the way the column does") {
+                    verify(exactly = 1) { cveTopicRepository.upsert(definition = any()) }
+                }
+            }
+        }
+
+        given("a display name of 129 emoji, one character past the column") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            val bootstrap =
+                CveTopicBootstrap(
+                    topics = listOf(createCveTopicConfigDefinition(displayName = "🔒".repeat(129))),
+                    cveTopicRepository = cveTopicRepository,
+                )
+
+            `when`("the boot sync runs") {
+                then("boot fails before touching the repository") {
+                    shouldThrow<IllegalArgumentException> { bootstrap.bootstrapTopics() }
+                    verify(exactly = 0) { cveTopicRepository.upsert(definition = any()) }
+                }
+            }
+        }
+
         given("a key at 65 characters, one past the topic_key column") {
             val cveTopicRepository = mockk<CveTopicRepository>()
             val bootstrap =

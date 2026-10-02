@@ -45,7 +45,9 @@ class CveTopicBootstrap(
             "CVE topic key '${topic.key}' exceeds $KEY_MAX_LENGTH characters"
         }
         require(topic.displayName.isNotBlank()) { "CVE topic '${topic.key}' requires a non-blank display-name" }
-        require(topic.displayName.length <= DISPLAY_NAME_MAX_LENGTH) {
+        // Counted in code points, as MariaDB counts VARCHAR(128) characters under utf8mb4: an emoji is one character
+        // there but two UTF-16 units here.
+        require(topic.displayName.codePointCount(0, topic.displayName.length) <= DISPLAY_NAME_MAX_LENGTH) {
             "CVE topic '${topic.key}' display-name exceeds $DISPLAY_NAME_MAX_LENGTH characters"
         }
         return CveTopicDefinition(
