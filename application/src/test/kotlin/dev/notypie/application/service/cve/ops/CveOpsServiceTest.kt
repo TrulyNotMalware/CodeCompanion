@@ -172,6 +172,31 @@ class CveOpsServiceTest :
             }
         }
 
+        given("a DEACTIVATE_TOPIC event whose key the mention parser lower-cased") {
+            val topicRepository = mockk<CveTopicRepository>(relaxed = true)
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findAllTopics() } returns
+                listOf(createCveTopic(id = 1L, topicKey = "springBoot", displayName = "Spring Boot", active = true))
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stagedMessage = staged,
+                )
+
+            `when`("handled") {
+                service.handleCveOps(
+                    event = createCveOpsRequestEvent(action = CveOpsAction.DEACTIVATE_TOPIC, topicKey = "springboot"),
+                )
+
+                then("the stored mixed-case key is found and toggled") {
+                    verify(exactly = 1) { topicRepository.setActive(topicKey = "springBoot", active = false) }
+                    staged.markdown() shouldBe "Topic *Spring Boot* (`springBoot`): active → inactive."
+                }
+            }
+        }
+
         given("an ACTIVATE_TOPIC event for an unknown key") {
             val topicRepository = mockk<CveTopicRepository>(relaxed = true)
             val eventRepository = mockk<CveEventRepository>()

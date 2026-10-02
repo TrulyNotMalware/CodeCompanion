@@ -15,7 +15,7 @@ The whole lane is **feature-gated**: every bean here is declared conditionally i
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, upserts the YAML-declared topics into `cve_topic` (keyed by topic key) |
+| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, upserts the YAML-declared topics into `cve_topic` (keyed by topic key) Keys must be unique ignoring case (`/latest` and `cve topic activate` lower-case the argument and match ignoring case; MariaDB's `_ci` collation rejects such a pair on the UNIQUE key anyway); a clash fails the boot before any upsert. |
 
 ## Subdirectories
 | Directory | Purpose |

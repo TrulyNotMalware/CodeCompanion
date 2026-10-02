@@ -84,7 +84,7 @@ class CveLatestQueryService(
             emptyMessage = "No recent CVE updates for your subscribed topics yet."
         } else {
             val topic =
-                cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey == topicKey }
+                cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey.equals(topicKey, ignoreCase = true) }
                     ?: return "Topic `${topicKey.escapeMrkdwn()}` is not available."
             topicIds = listOf(topic.id)
             emptyMessage = "No recent CVE updates for *${topic.displayName.escapeMrkdwn()}* yet."

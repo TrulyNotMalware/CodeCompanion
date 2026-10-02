@@ -41,6 +41,26 @@ class CveTopicBootstrapTest :
             }
         }
 
+        given("two declarations whose keys differ only in case") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            val bootstrap =
+                CveTopicBootstrap(
+                    topics =
+                        listOf(
+                            createCveTopicConfigDefinition(key = "springBoot"),
+                            createCveTopicConfigDefinition(key = "springboot"),
+                        ),
+                    cveTopicRepository = cveTopicRepository,
+                )
+
+            `when`("the boot sync runs") {
+                then("boot fails before touching the repository, since keys are matched ignoring case") {
+                    shouldThrow<IllegalArgumentException> { bootstrap.bootstrapTopics() }
+                    verify(exactly = 0) { cveTopicRepository.upsert(definition = any()) }
+                }
+            }
+        }
+
         given("a declaration with a blank key") {
             val cveTopicRepository = mockk<CveTopicRepository>()
             val bootstrap =

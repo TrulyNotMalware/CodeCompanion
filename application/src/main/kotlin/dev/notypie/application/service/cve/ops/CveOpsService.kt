@@ -82,14 +82,14 @@ class CveOpsService(
 
     private fun setActive(payload: CveOpsPayload, active: Boolean): String {
         val topicKey = checkNotNull(payload.topicKey) { "ACTIVATE_TOPIC/DEACTIVATE_TOPIC requires a topic key" }
-        val shownKey = topicKey.escapeMrkdwn()
         val topic =
-            cveTopicRepository.findAllTopics().firstOrNull { it.topicKey == topicKey }
-                ?: return "No CVE topic with key `$shownKey`."
-        cveTopicRepository.setActive(topicKey = topicKey, active = active)
+            cveTopicRepository.findAllTopics().firstOrNull { it.topicKey.equals(topicKey, ignoreCase = true) }
+                ?: return "No CVE topic with key `${topicKey.escapeMrkdwn()}`."
+        cveTopicRepository.setActive(topicKey = topic.topicKey, active = active)
         val oldState = stateOf(topic = topic)
         val newState = if (active) "active" else "inactive"
-        return "Topic *${topic.displayName.escapeMrkdwn()}* (`$shownKey`): $oldState → $newState."
+        return "Topic *${topic.displayName.escapeMrkdwn()}* (`${topic.topicKey.escapeMrkdwn()}`): " +
+            "$oldState → $newState."
     }
 
     private fun retryAll(): String {

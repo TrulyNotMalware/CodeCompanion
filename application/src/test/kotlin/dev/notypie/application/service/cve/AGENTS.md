@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/cve
 
@@ -10,7 +10,7 @@ Specs for the CVE watch lane. This directory holds the boot-time topic sync; eac
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrapTest.kt` | `CveTopicBootstrap(topics, cveTopicRepository).bootstrapTopics()`: two declarations → `upsert` called twice, every `AppConfig.Cve.TopicDefinition` field mapped onto `CveTopicDefinition` (`topicKey`, `displayName`, `category`, `sourceType`, `sourceConfig`, `deliveryMode`, `active`); blank key or blank display name → `IllegalArgumentException` before any repository call; empty list → repository untouched. |
+| `CveTopicBootstrapTest.kt` | `CveTopicBootstrap(topics, cveTopicRepository).bootstrapTopics()`: two declarations → `upsert` called twice, every `AppConfig.Cve.TopicDefinition` field mapped onto `CveTopicDefinition` (`topicKey`, `displayName`, `category`, `sourceType`, `sourceConfig`, `deliveryMode`, `active`); blank key or blank display name → `IllegalArgumentException` before any repository call; empty list → repository untouched. Keys `springBoot` + `springboot` → `IllegalArgumentException`, no upsert. |
 
 ## Subdirectories
 | Directory | Purpose |
