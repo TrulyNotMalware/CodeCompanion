@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-08-28_
+_type: pattern · updated: 2026-10-02_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -75,6 +75,8 @@ _type: pattern · updated: 2026-08-28_
 5. **서비스 내부 관례.** `TransactionTemplate.runInTx`는 예외를 `Result.failure`로 바꾸고 `setRollbackOnly`만 한다 —
    throw 여부는 호출자가 정한다. `StandupSchedulingService`/`MeetingReminderSchedulingService`는
    `DataIntegrityViolationException`을 "예상된 레이스"로 잡되 **행이 실제로 존재하는지 확인한 뒤에만** 삼킨다.
+   스탠드업 스케줄러는 루틴·세션·단계 단위로 `containFailure`(`Exception`만 잡아 로그, `InterruptedException`은
+   플래그를 복원해 다시 던지고 `Error`는 전파)로 격리해 한 루틴의 나쁜 데이터가 다른 루틴과 이후 단계를 막지 않게 한다.
    `CveCollector`는 토픽마다 `runCatching`으로 격리한다. `CommandExecutor`는 로그 후 재throw하고 인텐트를 재큐잉하지
    않는다 — 재시도는 `idempotencyKey` 아래 상류(아웃박스 릴레이, Kafka, Slack 재전송)가 맡는다.
    `ApplicationMessageDispatcher`는 Slack `ok=false`를 예외가 아니라 `failOutput(reason)`으로 되돌리고 WARN을 남긴다.

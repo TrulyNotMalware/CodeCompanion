@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-10-01_
+_type: guide · updated: 2026-10-02_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -56,7 +56,7 @@ _type: guide · updated: 2026-10-01_
   `createH2DataSource()` + `createH2TransactionManager()`(meeting testFixtures)로 실제 트랜잭션을 열고, 목 저장소가
   `JdbcTemplate`으로 프로브 행을 쓰게 한 뒤(같은 `DataSource`라 서비스 트랜잭션에 합류한다) 남은 행 수를 단언한다.
   예: `DailyAgendaSchedulingServiceTest`, `MeetingReminderSchedulingServiceTest`, `StandupSummaryServiceTest`,
-  `CveNotificationDispatcherTest`(2026-10-01). 저장 호출을 `runInTx` 밖으로 옮기면 이 케이스들이 실패한다.
+  `StandupSchedulingServiceTest`(DM·넛지 claim 롤백), `CveNotificationDispatcherTest`(2026-10-02). 저장 호출을 `runInTx` 밖으로 옮기면 이 케이스들이 실패한다.
 - 시간은 항상 고정한다. `Clock.fixed` 또는 `createFixedUtcClock()`(기본 `2026-04-28T12:00`)을 주입하고,
   `IdempotencyCreatorTest`처럼 `currentTimeMillis`를 명시해 `999` vs `1000` ms 경계를 핀한다.
 - 서비스 스펙은 Slack 페이로드가 아니라 **효과**를 단언한다: `verify(exactly = 1) { repo.markDispatchSent(...) }`,
