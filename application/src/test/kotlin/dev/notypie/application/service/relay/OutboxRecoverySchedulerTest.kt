@@ -4,9 +4,11 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.impl.command.ACCESS_BLOCKED_DEFER
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.longs.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import io.mockk.Runs
 import io.mockk.every
@@ -14,6 +16,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.Duration
 
 class OutboxRecoverySchedulerTest :
     BehaviorSpec({
@@ -302,6 +305,15 @@ class OutboxRecoverySchedulerTest :
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Polling(giveUpAfterHours = 0L) }
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(retryingSendThreshold = 0) }
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(stuckThresholdSeconds = 0L) }
+                shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(accessBlockedWindowSeconds = 0L) }
+            }
+
+            then(
+                "the access-blocked window outlasts the time a held row takes to come back, so the verdict cannot flap",
+            ) {
+                val heldRowReturn =
+                    ACCESS_BLOCKED_DEFER + RATE_LIMIT_SPREAD + Duration.ofMillis(RECOVERY_SWEEP_PERIOD_MILLIS)
+                AppConfig.Outbox.Health().accessBlockedWindowSeconds shouldBeGreaterThan heldRowReturn.seconds
             }
         }
 

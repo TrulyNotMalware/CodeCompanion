@@ -87,10 +87,17 @@ data class AppConfig(
         data class Health(
             val stuckThresholdSeconds: Long = 300L,
             val retryingSendThreshold: Int = 3,
+            // DOWN while the relay held a row for a Slack access error this recently. Longer than the time a held row
+            // takes to come back (ACCESS_BLOCKED_DEFER 15 min + up to 2 min of spread + one 1 min sweep), so a token
+            // that stays dead keeps the verdict DOWN between retries instead of flapping.
+            val accessBlockedWindowSeconds: Long = 1_200L,
         ) {
             init {
                 require(stuckThresholdSeconds > 0L) { "outbox.health.stuck-threshold-seconds must be positive" }
                 require(retryingSendThreshold > 0) { "outbox.health.retrying-send-threshold must be positive" }
+                require(accessBlockedWindowSeconds > 0L) {
+                    "outbox.health.access-blocked-window-seconds must be positive"
+                }
             }
         }
 

@@ -3,6 +3,7 @@ package dev.notypie.application.service.ops
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.stubOutboxStatus
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -38,6 +39,7 @@ class OpsStatusServiceTest :
             val outboxRepository = mockk<MessageOutboxRepository>()
             val stager = mockk<OutboundMessageStager>()
             val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val accessBlockedTracker = AccessBlockedTracker()
             val service =
                 OpsStatusService(
                     outboxRepository = outboxRepository,
@@ -46,6 +48,7 @@ class OpsStatusServiceTest :
                     cveTopicRepository = mockk(relaxed = true),
                     cveEventRepository = mockk(relaxed = true),
                     cveCollectLedgerRepository = mockk(relaxed = true),
+                    accessBlockedTracker = accessBlockedTracker,
                     clock = clock,
                     appConfig =
                         AppConfig(
@@ -132,6 +135,26 @@ class OpsStatusServiceTest :
                 }
             }
 
+            // Review F6: a held row is neither stuck nor retrying, so before the tracker this reported UP.
+            `when`("the relay held a row for a Slack access error five minutes ago") {
+                outboxRepository.stubOutboxStatus(inProgressCount = 1L)
+                accessBlockedTracker.record(at = clock.instant().minusSeconds(300L))
+
+                val captured = slot<OutboundMessage>()
+                every { stager.stage(message = capture(captured), basicInfo = any()) } returns outboundStub
+                every { eventPublisher.publishEvent(events = any()) } returns Unit
+
+                service.handleStatusReport(event = event)
+
+                then("the report names the access block and says DOWN, as the actuator indicator does") {
+                    val body =
+                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                            .markdown
+                    body shouldContain "*Slack access blocked:* rows held, last at 2026-04-29T11:55:00Z (window 1200s)"
+                    body shouldContain "DOWN"
+                }
+            }
+
             `when`("the repository throws while reading metrics") {
                 every { outboxRepository.countPending() } throws RuntimeException("db down")
 
@@ -181,6 +204,7 @@ class OpsStatusServiceTest :
                     cveTopicRepository = cveTopicRepository,
                     cveEventRepository = cveEventRepository,
                     cveCollectLedgerRepository = cveCollectLedgerRepository,
+                    accessBlockedTracker = AccessBlockedTracker(),
                     clock = clock,
                     appConfig =
                         AppConfig(

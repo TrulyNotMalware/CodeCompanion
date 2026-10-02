@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/ops
 
@@ -19,7 +19,9 @@ came from. The same renderer feeds the MCP `get_status` tool.
 ### Working In This Directory
 - **Same numbers and verdict as `/actuator/health`.** `renderReport` and `application/health/OutboxHealthIndicator`
   both read `readOutboxHealth`: `DOWN` iff a PENDING row is older than the stuck threshold, an IN_PROGRESS row is
-  older than the threshold plus one sweep period, or an IN_PROGRESS row has `send_count >= retryingSendThreshold`.
+  older than the threshold plus one sweep period, or an IN_PROGRESS row has `send_count >= retryingSendThreshold`,
+  or the relay held a row for a Slack access error within `accessBlockedWindowSeconds` (the report adds a
+  "*Slack access blocked:*" line; the service takes the same `AccessBlockedTracker` bean as the indicator).
   Never compute a count or a cutoff here; `health/OutboxHealthAgreementTest` fails if the two surfaces disagree.
 - **`renderReport()` is `internal` for a reason:** `application/mcp/DomainReadTools.get_status` calls it so
   chat and MCP output never disagree. Text changes affect both surfaces.

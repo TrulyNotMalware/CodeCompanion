@@ -4,6 +4,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.stubOutboxStatus
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -17,10 +18,12 @@ class OutboxHealthIndicatorTest :
             val now = DEFAULT_TEST_NOW
             val clock = createFixedUtcClock(now = now)
             val repository = mockk<MessageOutboxRepository>()
+            val accessBlockedTracker = AccessBlockedTracker()
             val indicator =
                 OutboxHealthIndicator(
                     outboxRepository = repository,
                     clock = clock,
+                    accessBlockedTracker = accessBlockedTracker,
                     appConfig =
                         AppConfig(
                             outbox =
@@ -51,6 +54,9 @@ class OutboxHealthIndicatorTest :
                     result.details["stuckThresholdSeconds"] shouldBe 300L
                     result.details["retryingCount"] shouldBe 0L
                     result.details["retryingSendThreshold"] shouldBe 3
+                    result.details["accessBlocked"] shouldBe false
+                    result.details["lastAccessBlockedAt"] shouldBe "never"
+                    result.details["accessBlockedWindowSeconds"] shouldBe 1_200L
                 }
             }
 
@@ -150,6 +156,35 @@ class OutboxHealthIndicatorTest :
                     result.status shouldBe Status.UP
                     verify { repository.countInProgressOlderThan(threshold = now.minusSeconds(360L)) }
                     verify { repository.countInProgressWithSendsAtLeast(sends = 3) }
+                }
+            }
+
+            // Review F6: the held row has its send taken back and updated_at moved ahead, so no count sees it.
+            `when`("the relay held a row for a Slack access error inside the window, and only that row is in flight") {
+                repository.stubOutboxStatus(inProgressCount = 1L)
+                accessBlockedTracker.record(at = clock.instant().minusSeconds(1_100L))
+
+                val result = indicator.health()
+
+                then("status is DOWN on the access block alone") {
+                    result.status shouldBe Status.DOWN
+                    result.details["stuckInFlightCount"] shouldBe 0L
+                    result.details["retryingCount"] shouldBe 0L
+                    result.details["accessBlocked"] shouldBe true
+                    result.details["lastAccessBlockedAt"] shouldBe "2026-04-28T11:41:40Z"
+                }
+            }
+
+            `when`("the last access block is older than the window") {
+                repository.stubOutboxStatus()
+                val tracker = AccessBlockedTracker().apply { record(at = clock.instant().minusSeconds(1_200L)) }
+                val result =
+                    OutboxHealthIndicator(outboxRepository = repository, clock = clock, accessBlockedTracker = tracker)
+                        .health()
+
+                then("status is back to UP") {
+                    result.status shouldBe Status.UP
+                    result.details["accessBlocked"] shouldBe false
                 }
             }
 

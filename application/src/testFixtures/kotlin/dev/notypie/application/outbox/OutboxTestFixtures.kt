@@ -1,6 +1,7 @@
 package dev.notypie.application.outbox
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.application.service.relay.OutboxPayloadRenderer
 import dev.notypie.application.service.relay.PollingMessageProcessor
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
@@ -83,6 +84,7 @@ fun createRelayService(
     clock: Clock = createFixedUtcClock(),
     relayTaskExecutor: Executor = Executor { command -> command.run() },
     appConfig: AppConfig = AppConfig(),
+    accessBlockedTracker: AccessBlockedTracker = AccessBlockedTracker(),
 ): SlackMessageRelayServiceImpl =
     SlackMessageRelayServiceImpl(
         outboxRepository = outboxRepository,
@@ -93,6 +95,7 @@ fun createRelayService(
         applicationEventPublisher = applicationEventPublisher,
         relayTaskExecutor = relayTaskExecutor,
         clock = clock,
+        accessBlockedTracker = accessBlockedTracker,
         appConfig = appConfig,
     )
 

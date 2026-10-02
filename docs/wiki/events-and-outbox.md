@@ -250,9 +250,13 @@ _type: architecture · updated: 2026-09-30_
   `send_count`가 `slack.app.outbox.health.retrying-send-threshold`(기본 3) 이상인 `IN_PROGRESS`가 있으면 DOWN.
   `PENDING`-stuck은 폴러 지연/정지, `IN_PROGRESS`-stuck은 스윕이 한 주기 안에 가져가지 못한 행, retrying은 실제
   발송이 거듭 실패하는 행을 가리킨다. rate limit만 맞은 행은 유예 중이고 `send_count`도 돌려받으므로 DOWN을 만들지
-  않는다. 디테일 키: `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`,
+  않는다. 접근 차단(⑤)으로 보류된 행도 `send_count`를 돌려받고 `updated_at`이 미래로 밀려 어느 카운트에도 안 잡히므로,
+  relay가 보류할 때마다 `AccessBlockedTracker`(메모리, 레플리카별)에 시각을 남기고 마지막 보류가
+  `slack.app.outbox.health.access-blocked-window-seconds`(기본 1200초) 안이면 DOWN이다(수정 리뷰 F6). 창은 보류 행이 돌아오는
+  주기(15분 + 분산 최대 2분 + 스윕 1분)보다 길어 토큰이 죽어 있는 동안 깜빡이지 않는다. 이 지표는 readiness 그룹에
+  없어 배포 게이트를 막지 않는다. 디테일 키: `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`,
   `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`,
-  `retryingSendThreshold`.
+  `retryingSendThreshold`, `accessBlocked`, `lastAccessBlockedAt`, `accessBlockedWindowSeconds`.
 - `OpsStatusService.renderReport`와 `OutboxHealthIndicator`는 같은 함수 `readOutboxHealth`(`health/OutboxHealthSnapshot.kt`)의
   스냅숏과 판정(`healthy`)을 쓴다. 예전에는 채팅 쪽이 스윕 유예 60초와 retrying 카운터 없이 따로 계산해 actuator와
   UP/DOWN이 갈렸다(review 14장 O4). `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP `get_status`가 이 텍스트를

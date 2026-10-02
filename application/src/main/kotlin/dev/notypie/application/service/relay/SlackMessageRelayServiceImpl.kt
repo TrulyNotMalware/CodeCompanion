@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger
 private val logger = KotlinLogging.logger {}
 
 private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
-private val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
+internal val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
 
 // Each attempt can wait a full Hikari connection-timeout on the listener thread; three ride out a deadlock or a
 // dropped connection, and anything longer is an outage the recovery sweep handles (budget: relay AGENTS.md).
@@ -52,6 +52,7 @@ class SlackMessageRelayServiceImpl(
     private val applicationEventPublisher: ApplicationEventPublisher,
     @Qualifier("relayTaskExecutor") private val relayTaskExecutor: Executor,
     private val clock: Clock,
+    private val accessBlockedTracker: AccessBlockedTracker,
     appConfig: AppConfig,
 ) : MessageRelayService,
     SmartLifecycle {
@@ -202,10 +203,16 @@ class SlackMessageRelayServiceImpl(
                 return
             }
         when {
-            result.isRateLimited() -> defer(claim = claim, retryAfter = result.retryAfter())
+            result.isRateLimited() ->
+                defer(
+                    claim = claim,
+                    retryAfter = result.retryAfter(),
+                    reason = "Slack rate limit (Retry-After=${result.retryAfter()?.toSeconds()}s)",
+                )
             result.isAccessBlocked() -> {
                 logger.error { "Slack refused the bot's access; holding eventId=$eventId until it is fixed" }
-                defer(claim = claim, retryAfter = ACCESS_BLOCKED_DEFER)
+                accessBlockedTracker.record(at = clock.instant())
+                defer(claim = claim, retryAfter = ACCESS_BLOCKED_DEFER, reason = "Slack access blocked")
             }
             result.isTransientExhausted() ->
                 logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
@@ -231,7 +238,8 @@ class SlackMessageRelayServiceImpl(
         return renewed == 1
     }
 
-    private fun defer(claim: OutboxClaim, retryAfter: Duration?) {
+    // reason leads the WARN line, so an access-blocked hold does not read as a rate limit (review F6).
+    private fun defer(claim: OutboxClaim, retryAfter: Duration?, reason: String) {
         val wait = (retryAfter ?: DEFAULT_RATE_LIMIT_WAIT) + spreadOf(claim = claim)
         val eligibleAt = minOf(now().plus(wait), claim.row.createdAt.plus(giveUpAfter))
         val deferred =
@@ -243,12 +251,12 @@ class SlackMessageRelayServiceImpl(
                 )
             }.getOrElse { exception ->
                 logger.error(exception) {
-                    "Deferring rate-limited eventId=${claim.row.eventId} failed; the sweep retries it on its own clock"
+                    "Deferring eventId=${claim.row.eventId} after \"$reason\" failed; the sweep retries it on its own clock"
                 }
                 return
             }
         logger.warn {
-            "Slack rate limit (Retry-After=${retryAfter?.toSeconds()}s); eventId=${claim.row.eventId} " +
+            "$reason; eventId=${claim.row.eventId} " +
                 (if (deferred == 1) "deferred until $eligibleAt" else "was taken over while deferring")
         }
     }

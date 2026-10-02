@@ -4,6 +4,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.service.ops.OpsStatusService
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.core.spec.style.BehaviorSpec
@@ -41,13 +42,19 @@ class OutboxHealthAgreementTest :
             }
         }
 
-        fun verdicts(rows: List<Row>): Pair<Boolean, Boolean> {
+        fun verdicts(rows: List<Row>, accessBlockedSecondsAgo: Long? = null): Pair<Boolean, Boolean> {
             val repository = repositoryOver(rows = rows)
             val clock = createFixedUtcClock()
             val appConfig = AppConfig()
+            val tracker = AccessBlockedTracker()
+            accessBlockedSecondsAgo?.let { tracker.record(at = clock.instant().minusSeconds(it)) }
             val actuatorUp =
-                OutboxHealthIndicator(outboxRepository = repository, clock = clock, appConfig = appConfig)
-                    .health()
+                OutboxHealthIndicator(
+                    outboxRepository = repository,
+                    clock = clock,
+                    accessBlockedTracker = tracker,
+                    appConfig = appConfig,
+                ).health()
                     .status == Status.UP
             val chatUp =
                 OpsStatusService(
@@ -57,6 +64,7 @@ class OutboxHealthAgreementTest :
                     cveTopicRepository = mockk(),
                     cveEventRepository = mockk(),
                     cveCollectLedgerRepository = mockk(),
+                    accessBlockedTracker = tracker,
                     clock = clock,
                     appConfig = appConfig,
                 ).renderReport().contains("UP")
@@ -88,6 +96,21 @@ class OutboxHealthAgreementTest :
 
                     then("@bot status and the actuator indicator reach the same verdict") {
                         chatUp shouldBe actuatorUp
+                    }
+                }
+            }
+        }
+
+        // Review F6: a row held for a Slack access error is only visible through the tracker.
+        given("a row held for a Slack access error on either side of the window") {
+            val held = listOf(Row(status = MessageStatus.IN_PROGRESS, updatedAt = DEFAULT_TEST_NOW.plusSeconds(600L)))
+            mapOf(300L to false, 1_300L to true).forEach { (secondsAgo, up) ->
+                `when`("the relay last held one ${secondsAgo}s ago") {
+                    val (actuatorUp, chatUp) = verdicts(rows = held, accessBlockedSecondsAgo = secondsAgo)
+
+                    then("both say ${if (up) "UP" else "DOWN"}") {
+                        actuatorUp shouldBe up
+                        chatUp shouldBe up
                     }
                 }
             }

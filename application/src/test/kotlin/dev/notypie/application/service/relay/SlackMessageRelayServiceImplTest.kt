@@ -3,6 +3,7 @@ package dev.notypie.application.service.relay
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.AsyncConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
+import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.outbox.createRelayService
 import dev.notypie.application.outbox.stubClaimLifecycle
@@ -381,18 +382,21 @@ class SlackMessageRelayServiceImplTest :
                 every {
                     outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = capture(deferredTo))
                 } returns 1
+                val accessBlockedTracker = AccessBlockedTracker()
                 val service =
                     createRelayService(
                         outboxRepository = outboxRepository,
                         messageDispatcher =
                             dispatcherReturning(output = RateLimitedOutput(event = payload(), retryAfter = null)),
+                        accessBlockedTracker = accessBlockedTracker,
                     )
 
                 service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
 
-                then("it waits the default minute plus its spread") {
+                then("it waits the default minute plus its spread, and a rate limit is not an access block") {
                     deferredTo.captured shouldBeGreaterThanOrEqualTo DEFAULT_TEST_NOW.minusSeconds(240L)
                     deferredTo.captured shouldBeLessThan DEFAULT_TEST_NOW.minusSeconds(120L)
+                    accessBlockedTracker.lastBlockedAt() shouldBe null
                 }
             }
 
@@ -443,6 +447,7 @@ class SlackMessageRelayServiceImplTest :
                 every {
                     outboxRepository.deferClaim(eventId = any(), attemptCount = 1, updatedAt = capture(deferredTo))
                 } returns 1
+                val accessBlockedTracker = AccessBlockedTracker()
                 val service =
                     createRelayService(
                         outboxRepository = outboxRepository,
@@ -451,9 +456,14 @@ class SlackMessageRelayServiceImplTest :
                                 output = failOutput(event = payload(), reason = ACCESS_BLOCKED_REASON),
                             ),
                         applicationEventPublisher = eventPublisher,
+                        accessBlockedTracker = accessBlockedTracker,
                     )
 
                 service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                then("the hold is recorded for the health verdict (review F6), at the relay clock's time") {
+                    accessBlockedTracker.lastBlockedAt() shouldBe createFixedUtcClock().instant()
+                }
 
                 then("the row is held for the longer access wait instead of failing, and nothing terminal happens") {
                     val eligibleAt = deferredTo.captured.plusSeconds(300L)
@@ -848,7 +858,8 @@ class SlackMessageRelayServiceImplTest :
                 service.dispatchClaimed(claim = claims[3])
                 service.batchPendingMessages(claims = listOf(claims[4]))
                 release.countDown()
-                pool.shutdown()
+                pool.threadPoolExecutor.shutdown()
+                pool.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
 
                 then(
                     "only the running dispatch finishes; queued and later claims stay IN_PROGRESS unsent for the sweep",
