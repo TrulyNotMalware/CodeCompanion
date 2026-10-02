@@ -35,16 +35,19 @@ import io.kotest.matchers.collections.shouldNotContainAnyOf
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.LinkedMultiValueMap
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CyclicBarrier
@@ -152,6 +155,71 @@ class SlackInteractionHandlerImplTest :
                 then("the request fails and the meeting write never runs") {
                     (escaped is IllegalStateException) shouldBe true
                     events shouldBe listOf("command in transaction=true", "interaction transaction completed")
+                }
+            }
+        }
+
+        given("a command that fails with a checked exception after queueing a meeting write") {
+            val completions = CopyOnWriteArrayList<Int>()
+            val meetingWrites = CopyOnWriteArrayList<String>()
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } answers {
+                TransactionSynchronizationManager.registerSynchronization(
+                    object : TransactionSynchronization {
+                        override fun afterCompletion(status: Int) {
+                            completions.add(status)
+                        }
+                    },
+                )
+                MeetingWriteDeferral.runOrDefer { meetingWrites.add("meeting write") }
+                throw IOException("checked failure")
+            }
+            val checkedHandler =
+                isolatedHandler(
+                    transactionManager = createH2TransactionManager(),
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the interaction is handled") {
+                val escaped =
+                    runCatching {
+                        checkedHandler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+                    }.exceptionOrNull()
+
+                then("the interaction rolls back instead of committing without its queued meeting write") {
+                    escaped.shouldBeInstanceOf<IOException>()
+                    completions shouldBe listOf(TransactionSynchronization.STATUS_ROLLED_BACK)
+                    meetingWrites shouldBe emptyList()
+                }
+            }
+        }
+
+        given("an interaction whose rollback fails too") {
+            val failingTransactionManager = mockk<PlatformTransactionManager>()
+            every { failingTransactionManager.getTransaction(any()) } returns mockk<TransactionStatus>()
+            every { failingTransactionManager.rollback(any()) } throws IllegalStateException("rollback failed")
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } throws IllegalArgumentException("original failure")
+            val rollbackFailingHandler =
+                isolatedHandler(
+                    transactionManager = failingTransactionManager,
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the command throws") {
+                val escaped =
+                    runCatching {
+                        rollbackFailingHandler.handleInteraction(
+                            headers = LinkedMultiValueMap(),
+                            payload = "dummy-payload",
+                        )
+                    }.exceptionOrNull()
+
+                then("the original exception escapes with the rollback failure attached as suppressed") {
+                    escaped?.message shouldBe "original failure"
+                    escaped?.suppressed?.map { it.message } shouldBe listOf("rollback failed")
                 }
             }
         }

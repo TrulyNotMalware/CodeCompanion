@@ -23,7 +23,7 @@ import dev.notypie.templates.DeclineReasonModalIds
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.interceptor.DefaultTransactionAttribute
+import org.springframework.transaction.support.DefaultTransactionDefinition
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.MultiValueMap
 import java.util.UUID
@@ -46,7 +46,7 @@ class SlackInteractionHandlerImpl(
             )
 
         private val INTERACTION_TRANSACTION =
-            DefaultTransactionAttribute().apply { setName("SlackInteractionHandlerImpl.handleInteraction") }
+            DefaultTransactionDefinition().apply { setName("SlackInteractionHandlerImpl.handleInteraction") }
     }
 
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String): String? {
@@ -67,10 +67,10 @@ class SlackInteractionHandlerImpl(
             try {
                 block()
             } catch (failure: Throwable) {
-                if (INTERACTION_TRANSACTION.rollbackOn(failure)) {
+                try {
                     transactionManager.rollback(status)
-                } else {
-                    transactionManager.commit(status)
+                } catch (rollbackFailure: Throwable) {
+                    failure.addSuppressed(rollbackFailure)
                 }
                 throw failure
             }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # application/service/interaction
 
@@ -14,7 +14,7 @@ persisting anything.
 | File | Description |
 |------|-------------|
 | `InteractionHandler.kt` | Interface `handleInteraction(headers, payload: String): String?` — `null` is the normal empty ack; a non-null string is the `response_action` JSON the caller must relay to Slack (HTTP 200 body in `SlackEventController`, ack body in `SocketModeReceiver.handleInteractive`) |
-| `SlackInteractionHandlerImpl.kt` | `@Service` taking the `PlatformTransactionManager`. `handleInteraction` opens the interaction transaction programmatically (`DefaultTransactionAttribute`, REQUIRED, rolls back on `RuntimeException` / `Error` and commits on a checked exception — the same rules `@Transactional` applied) inside `MeetingWriteDeferral.collecting { }`, and after that transaction has committed and released its connection runs the meeting writes the command queued (cancel, reschedule, add-participant); if the transaction fails they are dropped. Called inside an already active transaction it joins it and nothing is deferred. The body: `InteractionPayloadParser.parseStringPayload` → `declineDetailErrorOrNull` (early return with the errors body) → `toInboundCommand()` → `IdempotencyCreator.create`. `LEGACY_AUTO_REJECT_TYPES = {APPLY_REQUEST, APPROVAL_REQUEST}` + `isCanceled()` → `ReplaceTextResponseCommand("Canceled.", replyHandle = responseUrl)`; otherwise `isPrimary() || isCanceled()` → `InteractionCommand(actorRole = commandRoleResolver.resolve(actorId), parseObserver = MeteredSubmissionParseObserver)` → `commandExecutor.execute`, and `applicationEventPublisher.publishEvent(result)` when `result.ok` |
+| `SlackInteractionHandlerImpl.kt` | `@Service` taking the `PlatformTransactionManager`. `handleInteraction` opens the interaction transaction programmatically (`DefaultTransactionDefinition`, REQUIRED, rolls back on every `Throwable`, a checked exception included: committing on one kept the interaction's rows while `MeetingWriteDeferral.collecting` dropped the meeting writes queued behind them; a rollback that fails too is attached to the original as suppressed instead of replacing it) inside `MeetingWriteDeferral.collecting { }`, and after that transaction has committed and released its connection runs the meeting writes the command queued (cancel, reschedule, add-participant); if the transaction fails they are dropped. Called inside an already active transaction it joins it and nothing is deferred. The body: `InteractionPayloadParser.parseStringPayload` → `declineDetailErrorOrNull` (early return with the errors body) → `toInboundCommand()` → `IdempotencyCreator.create`. `LEGACY_AUTO_REJECT_TYPES = {APPLY_REQUEST, APPROVAL_REQUEST}` + `isCanceled()` → `ReplaceTextResponseCommand("Canceled.", replyHandle = responseUrl)`; otherwise `isPrimary() || isCanceled()` → `InteractionCommand(actorRole = commandRoleResolver.resolve(actorId), parseObserver = MeteredSubmissionParseObserver)` → `commandExecutor.execute`, and `applicationEventPublisher.publishEvent(result)` when `result.ok` |
 | `MeteredSubmissionParseObserver.kt` | `@Component` binding the domain `SubmissionParseObserver` port to Micrometer: `codecompanion.submission.ignored` counter tagged `detail_type` × `reason` plus a debug log; raw form values never reach a tag or log line |
 
 ## For AI Agents
@@ -84,7 +84,7 @@ real `createH2TransactionManager()`; the deferral and pool cases use `createBoun
   `authorization/UserRole`; `domain/command/inbound/InboundCommand`; `domain/meet/entity/RejectReason`
 
 ### External
-Spring `@Service`, `PlatformTransactionManager` / `DefaultTransactionAttribute` /
+Spring `@Service`, `PlatformTransactionManager` / `DefaultTransactionDefinition` /
 `TransactionSynchronizationManager`, `ApplicationEventPublisher`, `MultiValueMap`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
