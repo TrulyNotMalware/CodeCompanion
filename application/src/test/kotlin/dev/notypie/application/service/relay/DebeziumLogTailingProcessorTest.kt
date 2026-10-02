@@ -292,7 +292,7 @@ class DebeziumLogTailingProcessorTest :
 
             `when`("the record is a delete event with no after-image") {
                 f.processor.consume(
-                    envelope = createCdcEnvelope(after = null, before = createOutboxAfterImage(), op = "d"),
+                    envelope = createCdcEnvelope(after = null, op = "d"),
                 )
 
                 then("it is skipped") {

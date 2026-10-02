@@ -27,38 +27,8 @@ fun createOutboxAfterImage(
         "attempt_count" to attemptCount,
     )
 
-fun createCdcEnvelope(
-    after: Map<String, Any>? = createOutboxAfterImage(),
-    before: Map<String, Any>? = null,
-    op: String = "c",
-): Envelope =
-    Envelope(
-        schema = Schema(type = "struct", optional = false, name = "outbox.Envelope", version = 1),
-        payload =
-            Payload(
-                before = before,
-                after = after,
-                source =
-                    Source(
-                        version = "3.0.0.Final",
-                        connector = "mariadb",
-                        name = "cdc",
-                        db = "code_companion",
-                        table = "outbox_message",
-                        timeMillisecond = 0L,
-                        timeMicrosecond = 0L,
-                        timeNanosecond = 0L,
-                        serverId = 1L,
-                        file = "binlog.000001",
-                        pos = 0,
-                        row = 0,
-                    ),
-                op = op,
-                timeMillisecond = 0L,
-                timeMicrosecond = 0L,
-                timeNanosecond = 0L,
-            ),
-    )
+fun createCdcEnvelope(after: Map<String, Any>? = createOutboxAfterImage(), op: String = "c"): Envelope =
+    Envelope(payload = Payload(op = op, after = after))
 
 fun createCdcConsumerRecord(
     value: Any? = createCdcEnvelope(),
