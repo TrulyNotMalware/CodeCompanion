@@ -332,8 +332,38 @@ class ParsedSubmissionsTest :
                     parsed.summaryChannel shouldBe "C_SUM"
                     parsed.weekdays shouldBe setOf(DayOfWeek.MONDAY)
                     parsed.triggerLocalTime shouldBe LocalTime.of(10, 0)
-                    parsed.cutoffMinutes shouldBe StandupSetupParsed.DEFAULT_CUTOFF_MINUTES
                     parsed.timezone shouldBe ZoneId.of("Asia/Seoul")
+                }
+
+                then("a non-numeric cutoff is flagged as invalid instead of silently becoming the default") {
+                    parsed.cutoffMinutes.shouldBeNull()
+                }
+            }
+
+            `when`("the cutoff is blank") {
+                val parsed = StandupSetupParsed.from(raw = raw(cutoffRaw = "  "), actorId = ACTOR)
+
+                then("the modal's default is used") {
+                    parsed.cutoffMinutes shouldBe StandupSetupParsed.DEFAULT_CUTOFF_MINUTES
+                }
+            }
+
+            `when`("the cutoff is a whole number outside the Routine bounds") {
+                then("zero, a negative value, a value past one day and an overflowing value are all flagged") {
+                    listOf("0", "-5", "1441", "1000000000000000", "99999999999999999999").forEach { cutoff ->
+                        StandupSetupParsed
+                            .from(raw = raw(cutoffRaw = cutoff), actorId = ACTOR)
+                            .cutoffMinutes
+                            .shouldBeNull()
+                    }
+                }
+            }
+
+            `when`("the cutoff sits on the Routine bounds") {
+                then("1 and 1440 minutes are accepted") {
+                    StandupSetupParsed.from(raw = raw(cutoffRaw = "1"), actorId = ACTOR).cutoffMinutes shouldBe 1L
+                    StandupSetupParsed.from(raw = raw(cutoffRaw = "1440"), actorId = ACTOR).cutoffMinutes shouldBe
+                        1440L
                 }
             }
 

@@ -12,13 +12,14 @@ class StandupScheduler(
 ) {
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
-        runCatching {
-            schedulingService.openSessionsForToday()
-            schedulingService.sendPendingDispatches()
-            schedulingService.nudgeNonResponders()
-            schedulingService.detectCutoffs()
-        }.onFailure { ex ->
-            log.error(ex) { "Standup scheduler tick failed" }
-        }
+        runPhase(name = "openSessionsForToday") { schedulingService.openSessionsForToday() }
+        runPhase(name = "sendPendingDispatches") { schedulingService.sendPendingDispatches() }
+        runPhase(name = "nudgeNonResponders") { schedulingService.nudgeNonResponders() }
+        runPhase(name = "detectCutoffs") { schedulingService.detectCutoffs() }
     }
+
+    private fun runPhase(name: String, phase: () -> Unit) =
+        containFailure(onFailure = { ex -> log.error(ex) { "Standup scheduler phase failed: phase=$name" } }) {
+            phase()
+        }
 }

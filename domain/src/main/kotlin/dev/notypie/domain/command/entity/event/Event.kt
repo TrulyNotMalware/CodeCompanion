@@ -280,7 +280,7 @@ class CreateStandupRoutinePayload(
     val memberIds: List<String>,
     val weekdays: Set<java.time.DayOfWeek>,
     val triggerLocalTime: java.time.LocalTime,
-    val cutoffMinutes: Long,
+    val cutoffMinutes: Long?,
     val timezone: java.time.ZoneId,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload

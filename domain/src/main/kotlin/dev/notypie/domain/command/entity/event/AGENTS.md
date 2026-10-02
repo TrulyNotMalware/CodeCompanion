@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # domain/command/entity/event
 
@@ -36,6 +36,8 @@ implements to deliver them.
   `*ModalOpenFailedEvent`s by `infrastructure/impl/command/ApplicationMessageDispatcher.kt` when
   `views.open` fails. They are the fallback path for an expired trigger.
 - Prefer `publishOne(event)` (30 call sites) over building a queue by hand.
+- `CreateStandupRoutinePayload.cutoffMinutes` is `Long?`: `null` carries an unusable cutoff from the modal to
+  `StandupRoutineSetupService`, which answers it with the accepted range instead of a default.
 - This package is where `command` legitimately depends on `meet` (`RejectReason`) and on
   `authorization/UserRole`; the reverse edge is guard-forbidden.
 

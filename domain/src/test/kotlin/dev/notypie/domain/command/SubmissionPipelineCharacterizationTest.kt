@@ -431,9 +431,16 @@ class SubmissionPipelineCharacterizationTest :
                     val intent = effects.filterIsInstance<CommandIntent.CreateStandupRoutine>().single()
                     intent.weekdays shouldBe setOf(DayOfWeek.MONDAY)
                     intent.triggerLocalTime shouldBe LocalTime.of(10, 0)
-                    intent.cutoffMinutes shouldBe 120L
                     intent.timezone shouldBe ZoneId.of("Asia/Seoul")
                     intent.creatorId shouldBe TEST_USER_ID
+                }
+
+                then("the non-numeric cutoff is carried as null so the setup service rejects it") {
+                    effects
+                        .filterIsInstance<CommandIntent.CreateStandupRoutine>()
+                        .single()
+                        .cutoffMinutes
+                        .shouldBeNull()
                 }
             }
         }

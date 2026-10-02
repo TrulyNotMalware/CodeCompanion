@@ -57,7 +57,11 @@ class StandupSchedulingService(
     fun openSessionsForToday() {
         val now = clock.instant()
         standupRepository.listActiveRoutines().forEach { routine ->
-            openSessionForRoutine(routine = routine, now = now)
+            containFailure(
+                onFailure = { ex -> log.error(ex) { "Standup session open failed: routine=${routine.routineUid}" } },
+            ) {
+                openSessionForRoutine(routine = routine, now = now)
+            }
         }
     }
 
@@ -250,15 +254,32 @@ class StandupSchedulingService(
         val now = clock.instant()
         standupRepository.findCollectingSessionsPastCutoff(before = now).forEach { session ->
             log.info { "Standup cutoff reached: sessionUid=${session.sessionUid} routineUid=${session.routineUid}" }
-            applicationEventPublisher.publishEvent(
-                StandupCutoffEvent(
-                    sessionId = session.sessionId,
-                    sessionUid = session.sessionUid,
-                    routineUid = session.routineUid,
-                    sessionDate = session.sessionDate,
-                ),
-            )
+            containFailure(
+                onFailure = { ex ->
+                    log.error(ex) { "Standup cutoff handling failed: sessionUid=${session.sessionUid}" }
+                },
+            ) {
+                applicationEventPublisher.publishEvent(
+                    StandupCutoffEvent(
+                        sessionId = session.sessionId,
+                        sessionUid = session.sessionUid,
+                        routineUid = session.routineUid,
+                        sessionDate = session.sessionDate,
+                    ),
+                )
+            }
         }
+    }
+}
+
+internal inline fun containFailure(onFailure: (Exception) -> Unit, block: () -> Unit) {
+    try {
+        block()
+    } catch (interrupted: InterruptedException) {
+        Thread.currentThread().interrupt()
+        throw interrupted
+    } catch (ex: Exception) {
+        onFailure(ex)
     }
 }
 

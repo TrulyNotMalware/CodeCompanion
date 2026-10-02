@@ -55,7 +55,7 @@ fun createCreateStandupRoutineEvent(
     memberIds: List<String> = listOf("U_ALICE", "U_BOB"),
     weekdays: Set<DayOfWeek> = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY),
     triggerLocalTime: LocalTime = LocalTime.of(10, 0),
-    cutoffMinutes: Long = 120L,
+    cutoffMinutes: Long? = 120L,
     timezone: ZoneId = ZoneId.of("Asia/Seoul"),
     responseBasicInfo: dev.notypie.domain.command.dto.CommandBasicInfo =
         createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = commandChannel),

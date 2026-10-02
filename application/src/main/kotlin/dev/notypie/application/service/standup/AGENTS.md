@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # application/service/standup
 
@@ -17,7 +17,7 @@ is written back onto the session row once the relay has posted it.
 | `StandupSlashServiceImpl.kt` | `@Service`, `@Transactional handleStandup`: `IdempotencyCreator.create(data = commandData)` → `SetupStandupCommand` → `CommandExecutor.execute` (the resolved intent is the synchronous `views.open` of the setup modal) |
 | `StandupRoutineSetupService.kt` | `@EventListener createRoutine(CreateStandupRoutineEvent)`: builds `Routine` + one `RoutineMember` per id (each member adopts the routine timezone), `StandupRepository.createRoutine`, then stages an `OutboundMessage.Ephemeral` confirmation, or a rejection when building the `Routine` (input validation) throws; a failed `createRoutine` write propagates, since it left the caller's transaction rollback-only (`STANDUP_SETUP_SUBMIT`) and `eventPublisher.publishOne`. `Routine.init` is the only validator; its throw becomes the rejection text |
 | `StandupAnswerService.kt` | `@EventListener recordAnswer(RecordStandupAnswerEvent)` → `StandupRepository.recordAnswer` (the transaction lives in the repository impl, not here); `@EventListener @Transactional onStandupModalOpenFailed(StandupModalOpenFailedEvent)` (its own transaction, because modals now open after the caller's transaction ended and the outbox write is BEFORE_COMMIT) stages an `Ephemeral` with `recipient = null` into the originating DM channel |
-| `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, one `runCatching` around the whole tick |
+| `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, each phase in its own `containFailure` so one failing phase no longer skips the later ones |
 | `StandupSchedulingService.kt` | `@Service` owning the four phases, a `TransactionTemplate` built from the injected `PlatformTransactionManager`, and the `internal` builders `buildDmNotice` (`OutboundMessage.Approval`, buttons "Fill in standup" / "Skip", `STANDUP_PROMPT`, `routingExtras = [sessionUid, routineUid]`) and `buildNudgeNotice` (`ChannelMessage`). Publishes `StandupCutoffEvent` through a plain `ApplicationEventPublisher` |
 | `StandupSummaryService.kt` | `@EventListener postSummary(StandupCutoffEvent)`: builds a `MessageContent.StandupSummary` outbox row, then `runInTx { outboxRepository.save(row); markSessionSummarized(messageTs = "outbox:<eventId>") }` — a `false` from the CAS throws so the row rolls back. `@EventListener replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` swaps the marker for the real Slack `ts`. The stored answers are `boundedForSummary()` first (2026-10-01): each member gets at most `SUMMARY_MEMBER_RESPONSE_CHARS` (2,400) and the session at most `SUMMARY_TOTAL_RESPONSE_CHARS` (18,000) characters of responses, split evenly and cut with `…`, because the outbox `payload` column is TEXT (65,535 bytes, 3 bytes per Korean character) and the modal inputs have no `max_length` |
 
@@ -27,7 +27,14 @@ is written back onto the session row once the relay has posted it.
 - **Phase order is load-bearing.** Open sessions before sending, send before nudging, nudge before cutoff.
   `openSessionForRoutine` is idempotent through the unique `(routine_uid, session_date)` constraint; the
   `DataIntegrityViolationException` is swallowed only after `findSession` confirms the row exists — any
-  other violation must surface.
+  other violation must surface, and it does, but only for its own routine.
+- **Failures are contained per routine, per session and per phase, never per `Throwable`.**
+  `containFailure` (`internal inline`, `StandupSchedulingService.kt`) logs an `Exception` and moves on;
+  an `InterruptedException` is rethrown with the interrupt flag restored, and an `Error` propagates.
+  `openSessionsForToday` contains each routine (one routine's bad data, such as a cutoff that overflows
+  `Instant`, no longer blocks the rest), `detectCutoffs` contains each session (the summary listener runs
+  synchronously inside `publishEvent`), and `StandupScheduler.tick` contains each phase. Do not wrap these in
+  `runCatching`: it catches `Throwable` and swallows interrupts.
 - **Per-member timezone.** `dmTriggerAt` is `today@triggerLocalTime` in the *member's* zone; `cutoffAt` is
   the **latest** member trigger plus `cutoffOffset`, so a westward member still gets the full window.
   `sendPendingDispatches` queries by absolute instant across all sessions, never "today in routine zone".
@@ -57,7 +64,7 @@ is written back onto the session row once the relay has posted it.
 ```
 Specs under `application/src/test/kotlin/dev/notypie/application/service/standup/`:
 `StandupSchedulingServiceTest`, `StandupSummaryServiceTest`, `StandupAnswerServiceTest`,
-`StandupRoutineSetupServiceTest`, `StandupDispatchMessageBuilderTest` (`buildDmNotice` /
+`StandupRoutineSetupServiceTest`, `StandupSchedulerTest`, `StandupDispatchMessageBuilderTest` (`buildDmNotice` /
 `buildNudgeNotice`). MockK the `StandupRepository`, `MessageOutboxRepository`, `OutboundMessagePort` and
 `OutboundMessageStager`; pass a MockK `PlatformTransactionManager` and a fixed `Clock`; assert on the
 CAS calls and captured outbox rows / staged messages. Fixtures: `createNudgeCandidateSession`

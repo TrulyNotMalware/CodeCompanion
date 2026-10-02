@@ -530,7 +530,7 @@ class ModalTemplateBuilder(
                         )
                     }
                     input(blockId = StandupSetupModalIds.CUTOFF_BLOCK_ID) {
-                        label(text = "Cutoff minutes")
+                        label(text = "Cutoff minutes (1–1440)")
                         plainTextInput(
                             actionId = StandupSetupModalIds.CUTOFF_ACTION_ID,
                             initialValue = DEFAULT_CUTOFF_MINUTES,
