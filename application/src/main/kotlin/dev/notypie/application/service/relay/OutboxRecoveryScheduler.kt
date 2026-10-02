@@ -53,14 +53,6 @@ class OutboxRecoveryScheduler(
                 }
             }
         }
-        // Only as many claims as the relay can queue; the rest stay eligible for the next sweep, unclaimed.
-        val slots = messageRelayService.freeDispatchSlots().coerceAtLeast(0)
-        val reclaimed =
-            stuck
-                .asSequence()
-                .mapNotNull { outboxRepository.reclaim(row = it, olderThan = cutoff, now = now) }
-                .take(slots)
-                .toList()
         // A PENDING row past the give-up window is failed unclaimed, even when the relay has no free slot.
         val (expired, live) =
             outboxRepository
@@ -76,18 +68,27 @@ class OutboxRecoveryScheduler(
                 }
             }
         }
-        val staleSlots = slots - reclaimed.size
-        val stale =
-            live
-                .asSequence()
-                .mapNotNull { outboxRepository.claim(row = it, now = now) }
-                .take(staleSlots)
-                .toList()
-        val claims = reclaimed + stale
-        if (claims.isNotEmpty()) {
-            log.warn { "Outbox recovery re-dispatching ${reclaimed.size} stuck and ${stale.size} stale rows" }
-            messageRelayService.batchPendingMessages(claims = claims)
-        }
+        // Only as many claims as the relay slots this sweep reserved, reclaims first; the rest stay eligible for the
+        // next sweep, unclaimed.
+        val claims =
+            messageRelayService.claimWithReservedSlots(wanted = stuck.size + live.size) { slots ->
+                val reclaimed =
+                    stuck
+                        .asSequence()
+                        .mapNotNull { outboxRepository.reclaim(row = it, olderThan = cutoff, now = now) }
+                        .take(slots)
+                        .toList()
+                val stale =
+                    live
+                        .asSequence()
+                        .mapNotNull { outboxRepository.claim(row = it, now = now) }
+                        .take(slots - reclaimed.size)
+                        .toList()
+                if (reclaimed.isNotEmpty() || stale.isNotEmpty()) {
+                    log.warn { "Outbox recovery re-dispatching ${reclaimed.size} stuck and ${stale.size} stale rows" }
+                }
+                reclaimed + stale
+            }
         return claims.size
     }
 }

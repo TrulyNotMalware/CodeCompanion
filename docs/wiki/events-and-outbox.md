@@ -148,8 +148,11 @@ _type: architecture · updated: 2026-09-30_
   (`SchedulingConfig`의 `ThreadPoolTaskScheduler`, `spring.task.scheduling.pool.size` 4) 위에서 돈다. 예전에는
   가상 스레드 설정 때문에 Boot가 `SimpleAsyncTaskScheduler`를 골라 fixed-delay 작업 전부가 스레드 하나에서 직렬로
   돌았고, 넘친 relay 작업이 `CallerRunsPolicy`로 그 스레드에서 발송되어 리마인더·스탠드업이 수십 분 멈출 수
-  있었다(review 14장 T1). 지금은 두 리더가 `freeDispatchSlots()`(relay 풀의 남은 큐 + 쉬는 스레드)만큼만
-  claim하고, 그래도 거절된 claim은 발송 없이 `IN_PROGRESS`로 남겨 stuck 임계 뒤 스윕이 회수한다.
+  있었다(review 14장 T1). 지금은 두 리더가 `claimWithReservedSlots`로 relay 발송 자리를 먼저 **원자적으로 예약**한 만큼만
+  claim한다. 자리 수는 풀을 읽지 않고 relay 큐 크기(`relayQueueCapacity`, = batch-size)에서 센다. claim은 풀 스레드가
+  시작할 때까지 자리를 쥐므로 큐가 넘치지 않고, 실행 중인 발송은 자리를 쥐지 않는다(스레드 몫). 예전 `freeDispatchSlots()`는
+  쉬는 스레드를 받을 자리로 세서 큐를 넘겼고(F2), 폴러와 스윕이 같은 자리를 함께 읽었고(F3), 캐스트 실패 시 무제한이었다(F4).
+  그래도 거절된 claim은 발송 없이 `IN_PROGRESS`로 남겨 stuck 임계 뒤 스윕이 회수한다.
 - **CDC** — Debezium MariaDB 커넥터(`table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`;
   `cdc/docker-compose/debezium/connect_mariadb.sh`) → Kafka → `DebeziumLogTailingProcessor`. 리스너는
   `spring.json.use.type.headers:false` + 기본 타입 `Envelope`로 역직렬화하고, `payload.after.status == PENDING`인

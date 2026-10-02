@@ -9,6 +9,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import java.util.concurrent.Executor
 import java.util.concurrent.ThreadPoolExecutor
 
+// The relay pool's queue, which is also how many dispatch slots SlackMessageRelayServiceImpl hands out: a claim is
+// reserved a slot before it is claimed and gives it back when a pool thread starts it, so the queue cannot overflow.
+fun relayQueueCapacity(appConfig: AppConfig): Int = appConfig.outbox.polling.batchSize
+
 // No async multicaster: it would detach @TransactionalEventListener(BEFORE_COMMIT) from the tx.
 @Configuration
 @EnableAsync
@@ -32,7 +36,7 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
         ThreadPoolTaskExecutor().apply {
             corePoolSize = 4
             maxPoolSize = 4
-            queueCapacity = appConfig.outbox.polling.batchSize
+            queueCapacity = relayQueueCapacity(appConfig = appConfig)
             setThreadNamePrefix("relay-")
             setRejectedExecutionHandler(ThreadPoolExecutor.AbortPolicy())
             setWaitForTasksToCompleteOnShutdown(true)

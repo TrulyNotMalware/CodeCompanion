@@ -29,17 +29,15 @@ class PollingMessageProcessor(
         }
     }
 
-    // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work. Claims only what the
-    // relay can queue: a PENDING row left unclaimed is picked up by a later tick, a claimed one would wait 300 s.
+    // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work. Claims only as many rows
+    // as it reserved relay slots for: a PENDING row left unclaimed is picked up by a later tick, a claimed one would
+    // wait 300 s, and the sweep may be reserving on another scheduler thread at the same time.
     private fun claimAndDispatch() {
-        val slots = messageRelayService.freeDispatchSlots()
-        if (slots <= 0) return
         val now = LocalDateTime.now(clock)
-        val claims =
+        messageRelayService.claimWithReservedSlots(wanted = batchSize) { slots ->
             outboxRepository
-                .findPendingMessages(limit = minOf(batchSize, slots))
+                .findPendingMessages(limit = slots)
                 .mapNotNull { outboxRepository.claim(row = it, now = now) }
-        if (claims.isEmpty()) return
-        messageRelayService.batchPendingMessages(claims = claims)
+        }
     }
 }

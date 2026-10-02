@@ -8,7 +8,9 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.Runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
@@ -18,7 +20,10 @@ class OutboxRecoverySchedulerTest :
         val cutoff = DEFAULT_TEST_NOW.minusSeconds(300L)
 
         fun relayWithSlots(slots: Int = Int.MAX_VALUE): MessageRelayService =
-            mockk { every { freeDispatchSlots() } returns slots }
+            mockk {
+                every { reserveDispatchSlots(wanted = any()) } answers { minOf(firstArg<Int>(), slots) }
+                every { releaseDispatchSlots(count = any()) } just Runs
+            }
 
         fun scheduler(repository: MessageOutboxRepository, relay: MessageRelayService) =
             OutboxRecoveryScheduler(

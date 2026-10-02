@@ -52,7 +52,7 @@ fun createPollingProcessorFixture(
     batchSize: Int = 100,
     outboxRepository: MessageOutboxRepository = mockk(),
     relayService: SlackMessageRelayServiceImpl =
-        mockk(relaxed = true) { every { freeDispatchSlots() } returns Int.MAX_VALUE },
+        mockk(relaxed = true) { every { reserveDispatchSlots(wanted = any()) } answers { firstArg() } },
     clock: Clock = createFixedUtcClock(),
 ): PollingProcessorFixture =
     PollingProcessorFixture(

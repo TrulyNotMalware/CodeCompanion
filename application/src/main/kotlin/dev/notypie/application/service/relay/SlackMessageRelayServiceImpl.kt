@@ -1,6 +1,7 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.configurations.relayQueueCapacity
 import dev.notypie.impl.command.ACCESS_BLOCKED_DEFER
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
@@ -19,7 +20,6 @@ import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -29,6 +29,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = KotlinLogging.logger {}
 
@@ -54,20 +55,37 @@ class SlackMessageRelayServiceImpl(
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
     private val giveUpAfter: Duration = Duration.ofHours(appConfig.outbox.polling.giveUpAfterHours)
 
-    // An executor that is not a bounded pool (inline, test queue) never rejects.
-    override fun freeDispatchSlots(): Int =
-        (relayTaskExecutor as? ThreadPoolTaskExecutor)?.threadPoolExecutor?.let { pool ->
-            pool.queue.remainingCapacity() + (pool.maximumPoolSize - pool.activeCount).coerceAtLeast(0)
-        } ?: Int.MAX_VALUE
+    // Dispatch slots, counted from the configured queue capacity of relayTaskExecutor rather than read off the pool:
+    // a reading cannot be reserved atomically (review F3), counted idle threads that cannot take a task the moment it
+    // is queued (F2), and fell back to "unlimited" for any executor it could not cast (F4). A claim holds its slot from
+    // the reservation until a pool thread starts it, so the queue never holds more claims than it has room for and
+    // the AbortPolicy stays a safety net; a running dispatch holds none, which is the pool threads' share.
+    private val slotCapacity: Int = relayQueueCapacity(appConfig = appConfig)
+    private val freeSlots = AtomicInteger(slotCapacity)
+
+    override fun reserveDispatchSlots(wanted: Int): Int {
+        if (wanted <= 0) return 0
+        return minOf(freeSlots.getAndUpdate { free -> free - minOf(free, wanted) }, wanted)
+    }
+
+    // Capped at the capacity, so a claim handed over without a reservation cannot grow the relay past its queue.
+    override fun releaseDispatchSlots(count: Int) {
+        if (count <= 0) return
+        freeSlots.updateAndGet { free -> minOf(free + count, slotCapacity) }
+    }
 
     // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
     // A rejected claim is left IN_PROGRESS without a send, so the recovery sweep reclaims it after the stuck threshold.
     override fun batchPendingMessages(claims: List<OutboxClaim>) {
         claims.forEachIndexed { index, claim ->
             try {
-                relayTaskExecutor.execute { dispatchClaimed(claim = claim) }
+                relayTaskExecutor.execute {
+                    releaseDispatchSlots(count = 1)
+                    dispatchClaimed(claim = claim)
+                }
             } catch (rejected: RejectedExecutionException) {
                 val left = claims.drop(index)
+                releaseDispatchSlots(count = left.size)
                 logger.warn(rejected) {
                     "Relay executor rejected ${left.size} of ${claims.size} claims; leaving eventIds=" +
                         "${left.map { it.row.eventId }} IN_PROGRESS for the recovery sweep"
