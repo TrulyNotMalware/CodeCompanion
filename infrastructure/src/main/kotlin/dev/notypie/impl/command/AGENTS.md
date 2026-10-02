@@ -60,10 +60,14 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   - **Was the request written?** Every production OkHttp client is built by `slackOkHttpClient(config)`:
     `retryOnConnectionFailure(false)` (OkHttp would otherwise re-send a written form body after a reset on a
     pooled connection, before the dispatcher sees anything) and `RequestProgressListener`, which records on the
-    calling thread whether the attempt reached `requestHeadersStart`. An `IOException` from an attempt that never
-    got there is rethrown as `SlackRequestNotSentException`, whatever OkHttp wrapped it in (a connect or DNS
+    calling thread whether the attempt finished writing its request headers (`requestHeadersEnd`, not
+    `requestHeadersStart`: on HTTP/2 the header write opens the stream, and a pooled connection that already got
+    `GOAWAY` fails there with `ConnectionShutdownException` before anything is sent). An `IOException` from an
+    attempt that never got there is rethrown as `SlackRequestNotSentException`, whatever OkHttp wrapped it in (a connect or DNS
     failure that ends after the call timeout surfaces as `InterruptedIOException("timeout")` with the real error
-    as its cause). A client without the listener counts as "may have been written". Classification after the
+    as its cause). A client without the listener counts as "may have been written". A stream the server resets with
+    `REFUSED_STREAM` after the headers went out still counts as written (outcome unknown), although HTTP/2 promises
+    it was not processed. Classification after the
     retries walks the cause chain, as Spring's retry policy does.
   - Transient — retried by `RetryService` (3 attempts), then `failOutput(TRANSIENT_EXHAUSTED_REASON)`
     (`isTransientExhausted()`); the relay leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to

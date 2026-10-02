@@ -16,6 +16,7 @@ import io.kotest.matchers.string.shouldStartWith
 import io.mockk.mockk
 import okhttp3.Dns
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -550,6 +551,28 @@ class ApplicationMessageDispatcherTest :
             then("neither client lets OkHttp re-send a written request on its own") {
                 production.httpClient.okHttpClient.retryOnConnectionFailure shouldBe false
                 responseClient.retryOnConnectionFailure shouldBe false
+            }
+        }
+
+        given("an attempt whose request-header write began but did not finish") {
+            val request = Request.Builder().url("http://127.0.0.1/").build()
+            val call = OkHttpClient().newCall(request)
+
+            fun startHeaderWrite() {
+                RequestProgressListener.reset()
+                RequestProgressListener.callStart(call = call)
+                RequestProgressListener.requestHeadersStart(call = call)
+            }
+
+            then("it still counts as never written, as when HTTP/2 cannot open a stream on a shut-down connection") {
+                startHeaderWrite()
+                RequestProgressListener.requestNeverWritten() shouldBe true
+            }
+
+            then("it counts as written once the headers are written") {
+                startHeaderWrite()
+                RequestProgressListener.requestHeadersEnd(call = call, request = request)
+                RequestProgressListener.requestNeverWritten() shouldBe false
             }
         }
 

@@ -88,7 +88,7 @@ class RateLimitedOutput(
         errorReason = RATE_LIMITED_REASON,
     )
 
-private enum class RequestProgress { UNTRACKED, NOT_WRITTEN, WRITE_STARTED }
+private enum class RequestProgress { UNTRACKED, NOT_WRITTEN, HEADERS_WRITTEN }
 
 // Synchronous OkHttp calls emit these events on the calling thread, so a thread-local scopes them to one attempt.
 object RequestProgressListener : EventListener() {
@@ -100,7 +100,8 @@ object RequestProgressListener : EventListener() {
 
     override fun callStart(call: Call) = progress.set(RequestProgress.NOT_WRITTEN)
 
-    override fun requestHeadersStart(call: Call) = progress.set(RequestProgress.WRITE_STARTED)
+    // End, not start: on HTTP/2 the header write opens the stream, which fails unsent on a connection already shut down.
+    override fun requestHeadersEnd(call: Call, request: Request) = progress.set(RequestProgress.HEADERS_WRITTEN)
 }
 
 // OkHttp's own retry would re-send a written POST after a reset, behind the dispatcher's back.
