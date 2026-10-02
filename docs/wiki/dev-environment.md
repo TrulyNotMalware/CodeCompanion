@@ -76,7 +76,8 @@ _type: guide · updated: 2026-10-02_
   산정식: 동시 회의 interaction 수 + 같은 순간 거절된 멘션 수 × 2 + 릴레이 워커(`relayTaskExecutor` 4) + 스케줄러
   스레드(4) + CDC 리스너(1) + DB를 쓰는 AI 턴(`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent` 4). 요청 스레드는 가상 스레드라 동시 interaction을
   막는 것은 스레드 수가 아니라 풀이며, 커넥션을 못 얻은 요청은 `connection-timeout` 뒤 실패한다. MariaDB `max_connections`는
-  풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40, 롤링 업데이트 surge 중 60, 여기에 Debezium과 운영자 세션을 더한다.
+  풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40(`Recreate` 블록이 있는 동안의 상한), 블록을 지운 뒤 롤링 업데이트 surge 중 60,
+  여기에 Debezium과 운영자 세션을 더한다.
 
 ## 로컬 실행 레시피
 
@@ -133,7 +134,7 @@ _type: guide · updated: 2026-10-02_
   운영 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
   구 파드 종료 → 배포 → V21**이다. V21을 뺀 나머지는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 구 바이너리는 그것에 의존하지
   않으므로 이전 릴리스가 떠 있는 동안 적용한다. V23은 헤더대로 크기를 재고 온라인 형식을 먼저 시도하며, 거부되고 테이블이 크면
-  배포와 보존 정리 뒤로 미룬다. "구 파드 종료 → 배포"는 `k8s/README.md` "One-time" 절의 1회성 `Recreate` 절차다. V21(뒤집힌
+  배포와 보존 정리 뒤로 미룬다. "구 파드 종료 → 배포"는 `deployment.yaml`의 `Recreate` 롤아웃 한 번이 순서대로 수행한다. V21(뒤집힌
   `end_at` 정리)은 모든 파드가 새 바이너리가 된 뒤에만 돌린다 — 구 바이너리의 일정 변경은 `version` 검사 없이 `start_at`만 옮겨
   뒤집힌 행을 다시 만든다. readiness는 스키마를 검사하지 않으므로 V18이 빠지면 모든 `meetings` 조회가, V20·V22가 빠지면 모든
   아웃박스 claim이 실패하는데도 배포 게이트는 통과한다. 머지 전에 `SHOW COLUMNS`로 `meetings.version`,
@@ -212,8 +213,11 @@ _type: guide · updated: 2026-10-02_
   (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더한다). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
   끝까지 보내고 상태를 기록한다. 풀이 고갈되면 문장마다 `connection-timeout`이 더해져 예산을 넘을 수 있고, 크래시·SIGKILL은
   여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
-  힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 기본 롤링 업데이트(surge 1)라 롤아웃 중에는 요청 기준 3 × 1536Mi = 4.5Gi가
-  동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가 Pending → 타임아웃 → 롤백). 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
+  힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 전략은 V20 릴리스 동안 `Recreate`라(이전 파드와 겹치면 안 됨) 롤아웃마다 이전 파드
+  종료(최대 유예 180초) + 새 파드 기동(최대 startup 180초) + 첫 readiness(10초)만큼 중단되고, 워크플로 롤아웃 타임아웃 450초·
+  deploy job 25분이 그 합에서 나온다(`ShutdownBudgetTest`가 확인). 요청은 2 × 1536Mi. 블록을 지운 뒤 기본 롤링 업데이트(surge 1)에서는
+  롤아웃 중 요청 기준 3 × 1536Mi = 4.5Gi가 동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면
+  surge 파드가 Pending → 타임아웃 → 롤백). 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
 - `run`은 **빌드된 jar를 손으로 띄우는** 스크립트다(`./run [-e local|dev|prod] <jar>`). 환경별 힙·GC(local/dev G1, prod ZGC) ·
   JDWP 디버그 포트(기본 5005, 인증 없음, `127.0.0.1`에만 바인드) · devtools · prod 확인 프롬프트 · JMX(기본 9010, 인증 없음,
   `127.0.0.1`에만 바인드, RMI 포트를 레지스트리 포트와 같게 고정해 포트 하나짜리 SSH 터널로 접근)를 붙이고 `-Dspring.profiles.active`를

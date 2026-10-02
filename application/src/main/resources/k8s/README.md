@@ -43,8 +43,13 @@ Defines the application deployment with:
   (startup allows 3 minutes). A Pod that never turns Ready usually failed property binding or cannot reach
   the DB/Kafka: check `kubectl logs` before touching the probes
 - Resources: 250m CPU / 1536Mi memory requested, 2Gi memory limit (the JVM heap is 50% of the limit; the
-  request covers heap plus non-heap memory). With the default rolling update a rollout briefly runs 3 Pods
-  (2 replicas + 1 surge), so the nodes need 3 × 1536Mi = 4.5Gi of requestable memory at once; see Prerequisites
+  request covers heap plus non-heap memory)
+- Strategy: `Recreate` for the current release (see "One-time" below). A rollout stops both Pods before starting
+  new ones, so every deploy, a rollback included, is an outage: the old Pods' shutdown (normally seconds, at most
+  the 180s grace) plus the new Pod's startup (at most the startup probe's 180s) and first readiness check (10s),
+  about 6 minutes in the worst case plus scheduling and image pull. It needs only 2 × 1536Mi of requests. Once
+  that block is removed, the default rolling update briefly runs 3 Pods (2 replicas + 1 surge) and needs
+  3 × 1536Mi = 4.5Gi of requestable memory at once; see Prerequisites
 - Shutdown: a 5s `preStop` sleep, then Spring's graceful shutdown (scheduler and web server phases 10s each, the
   Kafka listener phase up to one dispatch, 50s, so a record in hand finishes), three Kafka producer closes (5s each)
   and the executor waits (relay up to one dispatch, 50s; AI turns 20s; default 10s), plus a 10s margin, within a
@@ -117,10 +122,14 @@ step 4, or `kubectl apply -n api-service` rejects the mismatch.
 
 ## One-time: a release that must not overlap the previous one
 
-The strategy in `deployment.yaml` is the default rolling update, so old and new Pods briefly run side by side. The
-release that introduced outbox claim tokens (`attempt_count`, migration V20) cannot overlap its predecessor: the
-old Pods write outbox timestamps with the database clock and re-dispatch `IN_PROGRESS` rows they do not own. For
-that one rollout, stop the old Pods first. Do not change the strategy in `deployment.yaml`.
+The release that introduced outbox claim tokens (`attempt_count`, migration V20) cannot overlap its predecessor:
+the old Pods write outbox timestamps with the database clock and re-dispatch `IN_PROGRESS` rows they do not own.
+That release therefore ships `deployment.yaml` with `strategy.type: Recreate`, and no manual `kubectl patch` is
+needed: the workflow's `kubectl apply` sets the strategy, and its rollout stops every old Pod before the first new
+one starts. A `rollout undo` does the same, because it restores only the pod template and the strategy is not part
+of it. `Recreate` deletes the old Pods through the ReplicaSet, not the eviction API, so the PodDisruptionBudget does
+not block it. While the block is in the manifest, every deploy is an outage (see Deployment above); the workflow's
+450s rollout timeout covers the worst case.
 
 That release ships V18 through V23 at once (`main` was at V17), and the script numbers are not the apply order:
 V21 goes last. Production runs `ddl-auto: none` and nothing applies the scripts automatically, so work through
@@ -135,7 +144,7 @@ this list by hand (`../db/migration/AGENTS.md` keeps the same order):
    Then apply V18.
 2. **V19** (outbox status indexes) and **V23** (outbox payload `MEDIUMTEXT`). For V23, measure the table and try
    the online form first, as its header says; if the server rejects it and copying the table would block outbox
-   writes too long, apply V23 after step 6 instead, once the release's retention purge has shrunk the table.
+   writes too long, apply V23 after step 5 instead, once the release's retention purge has shrunk the table.
 3. **V20**, then **V22** (the claim token and the send budget).
 
    Steps 1–3 only add columns with defaults, indexes and a wider type, which the running pre-V20 Pods never depend
@@ -147,30 +156,22 @@ this list by hand (`../db/migration/AGENTS.md` keeps the same order):
    SHOW COLUMNS FROM meetings LIKE 'version';
    SHOW COLUMNS FROM outbox_message WHERE Field IN ('attempt_count', 'send_count');
    ```
-4. Before merging, switch the live Deployment to `Recreate`. `kubectl apply` leaves `spec.strategy` alone because
-   the manifest does not set it, so the workflow's rollout will use it:
-   ```bash
-   kubectl patch deployment code-companion-deploy -n api-service \
-     -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
-   ```
-   The patch changes no Pod template, so it starts no rollout. `Recreate` deletes the old Pods through the
-   ReplicaSet, not the eviction API, so the PodDisruptionBudget does not block it. The service is down from the
-   moment the old Pods stop until a new Pod is Ready (the startup probe allows up to 3 minutes).
-5. Merge and watch the workflow. A rollback it performs also uses `Recreate`, which is what you want then.
-6. **V21** — only once every Pod runs the new release: the workflow finished and `kubectl get pods -n api-service
+4. **Stop the old Pods, then deploy** — merge and watch the workflow. Its `Recreate` rollout does both, in that
+   order, and a rollback it performs stops the new Pods first the same way.
+5. **V21** — only once every Pod runs the new release: the workflow finished and `kubectl get pods -n api-service
    -l app=code-companion-deploy` lists only Pods of the new ReplicaSet. An older binary's reschedule moves only
    `start_at` without checking `version`, so it can leave new inverted rows behind the script. If the workflow
    rolled back, V21 waits for the next successful deploy; the previous release runs on the V18–V23 schema
    unchanged.
-7. Afterwards, restore the rolling update:
-   ```bash
-   kubectl patch deployment code-companion-deploy -n api-service \
-     -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"}}}}'
-   ```
+
+**Afterwards:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision is no longer wanted, delete
+the `strategy` block from `deployment.yaml` in a follow-up PR. `kubectl apply` removes the field, because it is in
+the last-applied configuration, and the API server defaults it back to `RollingUpdate` (25% / 25%). Do not restore
+the rolling update while a pre-V20 revision is still serving (for example after the workflow rolled back).
 
 If a migration must run while no Pod is up, use `kubectl scale deployment code-companion-deploy -n api-service
---replicas=0` instead of step 4, wait for the Pods to disappear (`kubectl get pods -n api-service -l
-app=code-companion-deploy`), run the script, then merge; V21 still waits for step 6. The workflow's apply sets `replicas: 2` again. The
+--replicas=0` before merging, wait for the Pods to disappear (`kubectl get pods -n api-service -l
+app=code-companion-deploy`), run the script, then merge; V21 still waits for step 5. The workflow's apply sets `replicas: 2` again. The
 outage then lasts until the build finishes and a new Pod is Ready.
 
 ## Prerequisites
@@ -198,9 +199,10 @@ outage then lasts until the build finishes and a new Pod is Ready.
     already use), for `kubectl exec <pod> -c code-companion-deploy -- wget -qO- http://localhost:80/actuator/health/readiness`
     on every Pod of the new ReplicaSet that is not terminating.
   Run the first command once from the deploy identity before relying on it; the workflow log says which method answered.
-- Rollout capacity: 3 × 1536Mi of memory requests must fit during a rollout (see Deployment). Check with
+- Rollout capacity: under `Recreate`, 2 × 1536Mi of memory requests must fit; under the rolling update (once the
+  `Recreate` block is removed, see Deployment), 3 × 1536Mi during a rollout. Check with
   `kubectl describe nodes | grep -A8 'Allocated resources'`, comparing requested memory with each node's
-  allocatable. If the surge Pod stays `Pending`, the rollout times out and the workflow rolls back
+  allocatable. If a new or surge Pod stays `Pending`, the rollout times out and the workflow rolls back
 - The MariaDB manifests under `cdc/` set no time zone (UTC) while this Pod runs Asia/Seoul. The application
   writes outbox timestamps from its own clock, so do not rely on the DB session time zone (`NOW()`,
   `CURRENT_TIMESTAMP`) when comparing against them
@@ -234,7 +236,8 @@ Because both containers share the Pod network namespace, no Service or NetworkPo
 
 - The deployment uses `$IMAGE_NAME` variable which should be replaced during CI/CD (`envsubst '${IMAGE_NAME}'`)
 - Timezone is set to Asia/Seoul via volume mount
-- PodDisruptionBudget ensures service availability during updates
+- PodDisruptionBudget keeps one Pod through voluntary disruptions such as node drains; it does not apply to a
+  `Recreate` rollout
 - Image pull policy is set to `IfNotPresent`
 - Probes, resources and the shutdown budget are described under Deployment above; on a failed deploy the
   workflow runs `kubectl rollout undo` to the previous revision
@@ -284,9 +287,12 @@ k8s/
 - `/etc/localtime`의 `hostPath` 마운트를 통한 타임존 설정 (Asia/Seoul)
 - `/actuator/health/liveness`·`/actuator/health/readiness` 기반 startup/readiness/liveness 프로브(startup은 3분 허용).
   파드가 Ready가 되지 않으면 대개 프로퍼티 바인딩 실패나 DB/Kafka 연결 실패이므로 프로브를 고치기 전에 `kubectl logs`부터 확인
-- 리소스: CPU 250m / 메모리 1536Mi 요청, 메모리 limit 2Gi (JVM 힙은 limit의 50%, 요청값은 힙 + 비힙 메모리를 포함).
-  기본 롤링 업데이트는 롤아웃 중 파드 3개(레플리카 2 + surge 1)를 띄우므로 노드에 요청 기준 3 × 1536Mi = 4.5Gi가
-  동시에 들어갈 자리가 있어야 합니다(사전 요구사항 참고)
+- 리소스: CPU 250m / 메모리 1536Mi 요청, 메모리 limit 2Gi (JVM 힙은 limit의 50%, 요청값은 힙 + 비힙 메모리를 포함)
+- 전략: 현재 릴리스는 `Recreate`입니다(아래 "1회성" 참고). 롤아웃이 파드 두 개를 모두 멈춘 뒤 새 파드를 띄우므로 롤백을 포함한
+  모든 배포가 중단을 냅니다: 이전 파드 종료(보통 몇 초, 최대 유예 180초) + 새 파드 기동(최대 startup 프로브 180초) + 첫
+  readiness 확인(10초), 최악 약 6분에 스케줄링·이미지 풀 시간이 더해집니다. 요청은 2 × 1536Mi만 있으면 됩니다. 그 블록을 지운
+  뒤의 기본 롤링 업데이트는 롤아웃 중 파드 3개(레플리카 2 + surge 1)를 띄우므로 요청 기준 3 × 1536Mi = 4.5Gi가 동시에 들어갈
+  자리가 있어야 합니다(사전 요구사항 참고)
 - 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(스케줄러·웹 서버 단계 각 10초, 처리 중인 레코드를 끝내도록 Kafka 리스너 단계는 디스패치 하나 50초), Kafka producer 종료 세 번(각 5초), executor 대기(릴레이 디스패치 하나 50초, AI 턴 20초, 기본 10초), 여유 10초, 전체 `terminationGracePeriodSeconds` 180초
 - 컨테이너 `securityContext` `allowPrivilegeEscalation: false` (80 포트 바인딩 때문에 여전히 root로 실행)
 - 중단 시 최소 1개의 파드를 유지하는 PodDisruptionBudget
@@ -355,9 +361,12 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
 
 ## 1회성: 이전 릴리스와 겹치면 안 되는 릴리스
 
-`deployment.yaml`은 기본 롤링 업데이트라 잠시 이전 파드와 새 파드가 함께 돕니다. 아웃박스 claim 토큰(`attempt_count`,
-마이그레이션 V20)을 도입한 릴리스는 이전 릴리스와 겹치면 안 됩니다. 이전 파드는 아웃박스 시각을 DB 시계로 쓰고, 자기 것이
-아닌 `IN_PROGRESS` 행을 다시 발송합니다. 그 한 번의 롤아웃에서는 이전 파드를 먼저 멈추세요. `deployment.yaml`의 전략은 바꾸지 않습니다.
+아웃박스 claim 토큰(`attempt_count`, 마이그레이션 V20)을 도입한 릴리스는 이전 릴리스와 겹치면 안 됩니다. 이전 파드는 아웃박스
+시각을 DB 시계로 쓰고, 자기 것이 아닌 `IN_PROGRESS` 행을 다시 발송합니다. 그래서 그 릴리스의 `deployment.yaml`은
+`strategy.type: Recreate`를 담고, 손으로 `kubectl patch`할 필요가 없습니다. 워크플로의 `kubectl apply`가 전략을 설정하고, 롤아웃이
+이전 파드를 모두 멈춘 뒤 첫 새 파드를 띄웁니다. `rollout undo`도 같습니다(파드 템플릿만 되돌리고 전략은 템플릿 밖에 있음).
+`Recreate`는 eviction API가 아니라 ReplicaSet으로 파드를 지우므로 PodDisruptionBudget에 막히지 않습니다. 블록이 매니페스트에 있는
+동안은 모든 배포가 중단을 냅니다(위 배포 절 참고). 워크플로의 롤아웃 타임아웃 450초가 최악의 경우를 덮습니다.
 
 그 릴리스는 V18부터 V23까지를 한꺼번에 싣고(`main`은 V17까지), 스크립트 번호는 적용 순서가 아닙니다. V21이 마지막입니다.
 운영은 `ddl-auto: none`이고 스크립트를 자동으로 적용하는 도구가 없으므로 아래 순서대로 직접 진행합니다(`../db/migration/AGENTS.md`와 같은 순서):
@@ -370,7 +379,7 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
    ```
    그다음 V18을 적용합니다.
 2. **V19**(아웃박스 status 인덱스)와 **V23**(아웃박스 payload `MEDIUMTEXT`). V23은 헤더대로 테이블 크기를 재고 온라인 형식을
-   먼저 시도합니다. 서버가 거부하고 테이블 복사가 아웃박스 쓰기를 너무 오래 막을 크기라면 V23은 6단계 뒤, 새 릴리스의 보존
+   먼저 시도합니다. 서버가 거부하고 테이블 복사가 아웃박스 쓰기를 너무 오래 막을 크기라면 V23은 5단계 뒤, 새 릴리스의 보존
    정리가 테이블을 줄인 다음에 적용합니다.
 3. **V20**, 이어서 **V22** (claim 토큰과 발송 예산).
 
@@ -382,28 +391,20 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
    SHOW COLUMNS FROM meetings LIKE 'version';
    SHOW COLUMNS FROM outbox_message WHERE Field IN ('attempt_count', 'send_count');
    ```
-4. 머지 전에 라이브 Deployment를 `Recreate`로 바꿉니다. 매니페스트에 `spec.strategy`가 없으므로 `kubectl apply`는 이 값을
-   건드리지 않고, 워크플로의 롤아웃이 그대로 사용합니다:
-   ```bash
-   kubectl patch deployment code-companion-deploy -n api-service \
-     -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
-   ```
-   파드 템플릿은 바뀌지 않으므로 롤아웃이 시작되지 않습니다. `Recreate`는 eviction API가 아니라 ReplicaSet으로 파드를 지우므로
-   PodDisruptionBudget에 막히지 않습니다. 이전 파드가 멈춘 뒤 새 파드가 Ready가 될 때까지(startup 프로브 최대 3분) 서비스가 중단됩니다.
-5. 머지하고 워크플로를 지켜봅니다. 워크플로가 롤백해도 `Recreate`로 진행되며, 그때도 그것이 맞습니다.
-6. **V21** — 모든 파드가 새 릴리스로 돈 뒤에만 적용합니다. 워크플로가 끝났고 `kubectl get pods -n api-service -l
+4. **이전 파드 종료 후 배포** — 머지하고 워크플로를 지켜봅니다. `Recreate` 롤아웃이 이 순서로 둘 다 수행하고, 워크플로가
+   롤백하면 같은 방식으로 새 파드를 먼저 멈춥니다.
+5. **V21** — 모든 파드가 새 릴리스로 돈 뒤에만 적용합니다. 워크플로가 끝났고 `kubectl get pods -n api-service -l
    app=code-companion-deploy`에 새 ReplicaSet의 파드만 보여야 합니다. 이전 바이너리의 일정 변경은 `version` 검사 없이
    `start_at`만 옮기므로 스크립트 뒤에 뒤집힌 행을 새로 남길 수 있습니다. 워크플로가 롤백했다면 V21은 다음 배포가 성공할 때까지
    기다립니다. 이전 릴리스는 V18~V23 스키마에서 그대로 돕니다.
-7. 끝나면 롤링 업데이트로 되돌립니다:
-   ```bash
-   kubectl patch deployment code-companion-deploy -n api-service \
-     -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"}}}}'
-   ```
 
-파드가 하나도 없을 때 실행해야 하는 마이그레이션이 있으면 4단계 대신 `kubectl scale deployment code-companion-deploy -n
+**그 다음:** 모든 파드가 V20 이상 바이너리로 돌고 pre-V20 리비전으로의 롤백이 더는 필요 없으면, 후속 PR에서 `deployment.yaml`의
+`strategy` 블록을 지웁니다. 필드가 last-applied 설정에 있으므로 `kubectl apply`가 지우고, API 서버가 `RollingUpdate`(25% / 25%)로
+되돌립니다. pre-V20 리비전이 아직 서비스 중이면(예: 워크플로가 롤백한 뒤) 롤링 업데이트로 되돌리지 마세요.
+
+파드가 하나도 없을 때 실행해야 하는 마이그레이션이 있으면 머지 전에 `kubectl scale deployment code-companion-deploy -n
 api-service --replicas=0`으로 내리고 파드가 사라진 것을 확인한 뒤(`kubectl get pods -n api-service -l app=code-companion-deploy`)
-스크립트를 실행하고 머지합니다. V21은 여전히 6단계를 기다립니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
+스크립트를 실행하고 머지합니다. V21은 여전히 5단계를 기다립니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
 Ready가 될 때까지 이어집니다.
 
 ## 사전 요구사항
@@ -430,9 +431,10 @@ Ready가 될 때까지 이어집니다.
   - `pods/exec` `create`(롤백과 Ready 파드 수 확인이 이미 쓰는 `replicasets`·`pods` `list` 포함): 종료 중이 아닌 새 ReplicaSet의
     모든 파드에 대해 `kubectl exec <pod> -c code-companion-deploy -- wget -qO- http://localhost:80/actuator/health/readiness`.
   첫 번째 명령을 배포 계정으로 한 번 실행해 확인하세요. 워크플로 로그에 어느 방식이 응답했는지 남습니다.
-- 롤아웃 용량: 롤아웃 중 메모리 요청 3 × 1536Mi가 동시에 들어가야 합니다(Deployment 참고).
+- 롤아웃 용량: `Recreate`에서는 메모리 요청 2 × 1536Mi, 롤링 업데이트(`Recreate` 블록을 지운 뒤, Deployment 참고)에서는
+  롤아웃 중 3 × 1536Mi가 동시에 들어가야 합니다.
   `kubectl describe nodes | grep -A8 'Allocated resources'`로 노드별 요청량과 allocatable을 비교하세요.
-  surge 파드가 `Pending`에 머물면 롤아웃이 타임아웃되고 워크플로가 롤백합니다
+  새 파드나 surge 파드가 `Pending`에 머물면 롤아웃이 타임아웃되고 워크플로가 롤백합니다
 - `cdc/`의 MariaDB 매니페스트는 타임존을 지정하지 않아(UTC) Asia/Seoul인 이 파드와 다릅니다. 아웃박스 시각은
   애플리케이션 시계로 기록되므로 DB 세션 타임존(`NOW()`, `CURRENT_TIMESTAMP`)을 비교 기준으로 쓰지 마세요
 
@@ -465,6 +467,6 @@ AI 어시스턴트 기능(`@bot ask`)을 사용하려면 [agent-sidecar](https:/
 
 - 배포는 CI/CD 중에 교체되어야 하는 `$IMAGE_NAME` 변수를 사용합니다 (`envsubst '${IMAGE_NAME}'`)
 - 볼륨 마운트를 통해 타임존이 Asia/Seoul로 설정됩니다
-- PodDisruptionBudget은 업데이트 중 서비스 가용성을 보장합니다
+- PodDisruptionBudget은 노드 drain 같은 자발적 중단에서 파드 하나를 유지합니다. `Recreate` 롤아웃에는 적용되지 않습니다
 - 이미지 풀 정책은 `IfNotPresent`로 설정되어 있습니다
 - 프로브·리소스·종료 예산은 위 Deployment 절 참고. 배포가 실패하면 워크플로가 `kubectl rollout undo`로 이전 리비전을 복원합니다

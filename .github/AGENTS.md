@@ -121,6 +121,11 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 - The `PROD_OCI_*` variables are job-level, not scoped to the `configure-kubectl-oke` step, because the
   kubeconfig that action writes (v1.5.0, `tokenVersion: 2.0.0`) runs `oci ce cluster generate-token` on every
   `kubectl` call — step-scoping them breaks all later kubectl steps.
+- **Timeouts follow the `Recreate` rollout.** `DEPLOYMENT_ROLLOUT_TIMEOUT` (450s) covers the old Pods' grace
+  (`terminationGracePeriodSeconds`, 180s), the startup probe (36 × 5s) and the first readiness check (10s), plus
+  scheduling and image pull; the deploy job's `timeout-minutes: 25` covers a rollout, the health check (~2.5 min)
+  and a rollback rollout. `configurations/ShutdownBudgetTest` reads this workflow and the manifest and fails when the
+  rollout timeout or the job timeout falls below that sum; raise the grace or the startup probe and these follow.
 - **Rollback:** `Backup current deployment` reads the Deployment once as JSON and records its
   `deployment.kubernetes.io/revision`, a sha256 of `.spec.template` (`jq -cS`, so key order does not matter) and
   the image (for the log). `NotFound` records `none` (first deploy); any other lookup error fails the step before

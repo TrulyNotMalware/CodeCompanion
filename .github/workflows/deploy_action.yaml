@@ -41,7 +41,9 @@ env:
   K8S_DEPLOYMENT_NAME: code-companion-deploy
   K8S_SERVICE_NAME: code-companion-svc
   K8S_CONTAINER_NAME: code-companion-deploy
-  DEPLOYMENT_ROLLOUT_TIMEOUT: 300s
+  # Recreate (k8s/deployment.yaml): the old Pods' grace (180s) + the startup probe (180s) + first readiness (10s) +
+  # scheduling and image pull. ShutdownBudgetTest checks it against the manifest.
+  DEPLOYMENT_ROLLOUT_TIMEOUT: 450s
 
   JAR_FILE_NAME: code-companion-prod
   STATIC_DOCKER_TAG: ${{ github.sha }}
@@ -216,8 +218,8 @@ jobs:
     needs: [ check-changes, build ]
     if: needs.check-changes.outputs.should-deploy == 'true' && success()
     runs-on: ubuntu-latest
-    # Rollout (300s) + health check (~2 min) + rollback rollout (300s) must fit.
-    timeout-minutes: 20
+    # Rollout (450s) + health check (~2.5 min) + rollback rollout (450s) + the other steps must fit.
+    timeout-minutes: 25
     name: Deploy to Production OKE
     env:
       DEPLOYMENT_ID: ${{ needs.build.outputs.deployment-id }}

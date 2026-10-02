@@ -95,16 +95,18 @@ adds what an agent editing the manifests needs to know.
   cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is
   sized for heap + non-heap; a request equal to the heap would leave the Pod above its request and first in line
   for node-pressure eviction. Change the request, the limit and the percentage together.
-- **Rollout capacity:** the Deployment uses the default RollingUpdate (`maxSurge` 25% → 1 Pod, `maxUnavailable`
-  25% → 0 with 2 replicas), so a rollout briefly runs 3 Pods and needs 3 × 1536Mi = 4.5Gi of *requested* memory
-  schedulable at once (was 3Gi at the old 1Gi request). If the surge Pod cannot be scheduled it stays `Pending`,
-  `rollout status` times out and the workflow rolls back. Check before a rollout with
-  `kubectl describe nodes | grep -A8 'Allocated resources'` (requests vs allocatable per node). The strategy is
-  deliberately unchanged; if capacity is short, `maxSurge: 0` / `maxUnavailable: 1` keeps the PDB satisfied.
-- **Releases that must not overlap their predecessor** (first rollout of the outbox claim-token release, V20) are
-  handled by a one-time `kubectl patch` of the live strategy to `Recreate` (or a scale to 0) before the merge, and a
-  patch back afterwards, as `README.md` describes. Keep `deployment.yaml` on the rolling update: the manifest does
-  not set `spec.strategy`, which is what lets the live patch survive the workflow's `kubectl apply`.
+- **Strategy `Recreate`, on purpose and temporarily.** The outbox claim-token release (V20) must never run beside a
+  pre-V20 Pod, which re-dispatches `IN_PROGRESS` rows it does not own, so `deployment.yaml` sets
+  `strategy.type: Recreate` (with `rollingUpdate: null`, which clears the API server's defaulted block). Every
+  rollout and every `rollout undo` stops the old Pods before the first new one starts, and the PDB does not apply
+  (the ReplicaSet deletes the Pods, not the eviction API). Cost: each deploy is an outage of the old Pods' shutdown
+  (at most the 180s grace) plus the new Pod's startup (at most the 180s startup probe) and first readiness check
+  (10s); the workflow's 450s rollout timeout and 25-minute deploy job are sized from those numbers, and
+  `configurations/ShutdownBudgetTest` fails if the rollout timeout drops below them. Requests need only
+  2 × 1536Mi. Remove the block in a follow-up PR once no pre-V20 revision is wanted (`README.md`, "Afterwards");
+  the default RollingUpdate then runs 3 Pods during a rollout (3 × 1536Mi = 4.5Gi of requested memory at once) —
+  check with `kubectl describe nodes | grep -A8 'Allocated resources'`; a Pod that cannot be scheduled stays
+  `Pending`, `rollout status` times out and the workflow rolls back.
 - **Open decision — Slack retry dedup across replicas.** `SlackRetryDeduplicator` keeps its state in one JVM,
   while this Deployment runs 2 replicas (3 during a rollout), so a Slack retry routed to the other Pod is processed
   again. Two options, not yet chosen (`docs/wiki/decisions.md` #34):
@@ -150,7 +152,7 @@ adds what an agent editing the manifests needs to know.
 - There is no unit or integration test for manifests. Validate locally with
   `IMAGE_NAME=example envsubst '${IMAGE_NAME}' < deployment.yaml | kubectl apply --dry-run=server -f -` and
   `kubectl apply --dry-run=client -f <file>` for the rest.
-- The deploy workflow is the real check: rollout status (300s), ready-pod count at least `spec.replicas`, then
+- The deploy workflow is the real check: rollout status (450s), ready-pod count at least `spec.replicas`, then
   up to ~2 minutes of in-cluster readiness checks; a failure of one of those steps (or of the apply) that left the
   pod template or the revision different from the pre-apply backup triggers
   `kubectl rollout undo --to-revision=<previous>`, which restores the whole previous pod template.

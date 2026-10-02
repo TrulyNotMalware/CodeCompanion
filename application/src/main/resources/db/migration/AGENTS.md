@@ -53,7 +53,8 @@ the release checklist below decide the order.
      retention purge — the release only needs it for payloads over 65,535 bytes;
   3. `V20`, then `V22`. Steps 1–3 only add defaulted columns, indexes and a wider type that the pre-V20 binary
      never depends on, so they go in while the old release still serves;
-  4. stop the old Pods, then deploy (the one-time `Recreate` procedure in `../k8s/README.md`). This is how the
+  4. stop the old Pods, then deploy — the `Recreate` strategy in `../k8s/deployment.yaml` does both in one
+     rollout. This is how the
      "stop every old pod … then start the new release" constraint in the `V20` header is met; applying
      `V20`/`V22` before the old Pods stop does not break it;
   5. `V21`, only once every Pod runs the new release (an older binary's reschedule moves `start_at` alone and

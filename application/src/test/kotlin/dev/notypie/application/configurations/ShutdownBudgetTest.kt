@@ -25,6 +25,7 @@ import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.test.util.ReflectionTestUtils
 import org.yaml.snakeyaml.Yaml
+import java.io.File
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -134,6 +135,43 @@ class ShutdownBudgetTest :
                 then("the grace period covers every wait in the serial shutdown plus a margin") {
                     graceSeconds shouldBeGreaterThanOrEqual required
                 }
+            }
+        }
+
+        given("the Recreate rollout and the deploy workflow that waits for it") {
+            val deployment =
+                ClassPathResource("k8s/deployment.yaml").inputStream.use { stream ->
+                    Yaml().loadAll(stream).toList().single { it.at("kind") == "Deployment" }
+                }
+            val podSpec = deployment.at("spec").at("template").at("spec")
+
+            @Suppress("UNCHECKED_CAST")
+            val container = (podSpec.at("containers") as List<Any?>).single()
+            val workflow = File("../.github/workflows/deploy_action.yaml").inputStream().use { Yaml().load<Any?>(it) }
+            val rolloutSeconds =
+                Duration
+                    .parse(
+                        "PT" +
+                            workflow
+                                .at("env")
+                                .at("DEPLOYMENT_ROLLOUT_TIMEOUT")
+                                .toString()
+                                .uppercase(),
+                    ).seconds
+            val deployJobSeconds = (workflow.at("jobs").at("deploy").at("timeout-minutes") as Int) * 60L
+
+            then("the rollout timeout covers the old Pods' grace, the startup probe and the first readiness check") {
+                deployment.at("spec").at("strategy").at("type") shouldBe "Recreate"
+                val startupSeconds =
+                    (container.at("startupProbe").at("periodSeconds") as Int) *
+                        (container.at("startupProbe").at("failureThreshold") as Int)
+                val readinessSeconds = container.at("readinessProbe").at("periodSeconds") as Int
+                rolloutSeconds shouldBeGreaterThanOrEqual
+                    (podSpec.at("terminationGracePeriodSeconds") as Int + startupSeconds + readinessSeconds).toLong()
+            }
+
+            then("the deploy job outlasts a rollout, the two-minute health check and a rollback rollout") {
+                deployJobSeconds shouldBeGreaterThanOrEqual 2 * rolloutSeconds + 120L
             }
         }
 
