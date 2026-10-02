@@ -76,6 +76,43 @@ class SidecarAgentClientTest :
             }
         }
 
+        given("a turn whose thread is interrupted while the stream is being read") {
+            val streaming = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            respond = { exchange ->
+                exchange.responseHeaders.add("Content-Type", "text/event-stream")
+                exchange.sendResponseHeaders(200, 0)
+                exchange.responseBody.write("event: session\ndata: {\"sessionId\":\"sess-int\"}\n\n".toByteArray())
+                exchange.responseBody.flush()
+                streaming.countDown()
+                release.await(10L, TimeUnit.SECONDS)
+                exchange.close()
+            }
+
+            `when`("converse runs") {
+                var outcome: Result<AgentTurnResult>? = null
+                var keptInterrupt = false
+                val turn =
+                    Thread {
+                        outcome =
+                            runCatching {
+                                client.converse(request = AgentTurnRequest(sessionKey = "C1:int", prompt = "hi"))
+                            }
+                        keptInterrupt = Thread.currentThread().isInterrupted
+                    }.apply { start() }
+                streaming.await(5L, TimeUnit.SECONDS)
+                Thread.sleep(300L)
+                turn.interrupt()
+                turn.join(5_000L)
+                release.countDown()
+
+                then("the interrupt propagates with its flag instead of becoming a transport failure") {
+                    outcome?.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
         given("a turn that completes with done") {
             respond =
                 sseResponse(

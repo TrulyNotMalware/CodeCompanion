@@ -60,6 +60,12 @@ class SidecarAgentClient(
                     Thread.currentThread().interrupt()
                     throw exception
                 }
+                // The JDK client reports an interrupt during the body read as an IOException and leaves the flag set.
+                if (Thread.currentThread().isInterrupted) {
+                    throw InterruptedException("Sidecar turn interrupted while streaming").apply {
+                        initCause(exception)
+                    }
+                }
                 log.error(exception) { "Sidecar converse transport failure sessionKey=${request.sessionKey}" }
                 AgentTurnResult.Failed(
                     code = ERROR_CODE_TRANSPORT,

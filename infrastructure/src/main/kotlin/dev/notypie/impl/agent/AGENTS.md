@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # infrastructure/impl/agent
 
@@ -42,8 +42,10 @@ new frame type or error code rather than mocking `HttpClient`.
 
 ### Common Patterns
 - Port and adapter side by side; result modelled as a sealed interface, consumed with exhaustive `when`.
-- `runCatching { ... }.getOrElse { ... }` at the transport boundary, except that an `InterruptedException`
-  is rethrown with its flag restored instead of becoming a `transport` failure; `jsonMapper` (`common/`) for all JSON.
+- `runCatching { ... }.getOrElse { ... }` at the transport boundary, except that an interrupt is rethrown as an
+  `InterruptedException` with its flag set instead of becoming a `transport` failure. That covers the wait for
+  headers (an `InterruptedException`) and the body read, which the JDK client reports as an `IOException` with the
+  flag still set; `jsonMapper` (`common/`) for all JSON.
 
 ## Dependencies
 
