@@ -12,10 +12,11 @@ spec:
       labels:
         app: code-companion-deploy
     spec:
-      # Covers the whole shutdown, one step after another: preStop sleep (5s), two lifecycle phases bounded by
-      # spring.lifecycle.timeout-per-shutdown-phase (web server drain, Kafka container stop; 10s each), then the
-      # destroy-time executor waits (relay 20s, agent turns 20s, default 10s) = 75s. ShutdownBudgetTest pins the sum.
-      terminationGracePeriodSeconds: 80
+      # Covers the whole shutdown, one step after another: preStop sleep (5s), three lifecycle phases bounded by
+      # spring.lifecycle.timeout-per-shutdown-phase (scheduler with a running job, Kafka container stop, web server
+      # drain; 10s each), then the destroy-time executor waits (relay 20s, agent turns 20s, default 10s) = 85s.
+      # ShutdownBudgetTest pins the sum.
+      terminationGracePeriodSeconds: 90
       imagePullSecrets:
         - name: dockercred
       containers:

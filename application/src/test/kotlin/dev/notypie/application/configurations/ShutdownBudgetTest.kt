@@ -45,11 +45,14 @@ class ShutdownBudgetTest :
                             "slack.app.agent.turns.shutdown-await-seconds",
                         ).toString()
                         .toInt()
+                // Each waits up to the phase timeout, one after another: the scheduler (a running job), the Kafka
+                // listener containers (the record in hand) and the web server drain.
+                val lifecyclePhases = 3
                 val required =
-                    preStopSeconds + 2 * phaseSeconds + RELAY_SHUTDOWN_AWAIT_SECONDS + agentTurnSeconds +
+                    preStopSeconds + lifecyclePhases * phaseSeconds + RELAY_SHUTDOWN_AWAIT_SECONDS + agentTurnSeconds +
                         DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS
 
-                then("the grace period covers preStop, both lifecycle phases and every executor wait") {
+                then("the grace period covers preStop, the three lifecycle phases and every executor wait") {
                     graceSeconds shouldBeGreaterThanOrEqual required
                 }
             }

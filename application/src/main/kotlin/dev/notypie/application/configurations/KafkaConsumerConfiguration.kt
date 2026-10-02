@@ -184,7 +184,8 @@ class KafkaConsumerConfiguration(
         containerProperties.isObservationEnabled = true
         containerProperties.isMicrometerEnabled = false
         containerProperties.ackMode = ContainerProperties.AckMode.RECORD
-        // Stop after the record in hand, not after the rest of the poll, so shutdown waits for one dispatch at most.
+        // Stop after the record in hand, not after the rest of the poll. Shutdown waits for it only up to the phase
+        // timeout; a slower dispatch is cut, and its IN_PROGRESS row is re-sent by the recovery sweep.
         containerProperties.isStopImmediate = true
         setCommonErrorHandler(
             DefaultErrorHandler(cdcDeadLetterRecovery.recoverer, FixedBackOff(1_000L, 2L)).apply {
