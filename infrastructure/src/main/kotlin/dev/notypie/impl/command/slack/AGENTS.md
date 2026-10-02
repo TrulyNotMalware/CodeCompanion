@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # infrastructure/impl/command/slack
 
@@ -19,11 +19,11 @@ Nothing here is a Spring bean.
 | `Container.kt` | `Container(type, messageTime: Instant, isEphemeral, …, viewId?, messageTs?)`, `Channel(id, name)`, `Enterprise(id, name)` |
 | `Users.kt` | `User(id, userName, name, teamId)`, `Team(id, domain)` |
 | `SlackEventCallBackRequest.kt` | Events API envelope: `token`, `team_id`, `api_app_id`, `event: EventCallbackData`, `type`, `event_id`, `event_time`, `authorizations: List<Authorization>`, `is_ext_shared_channel`, `event_context` |
-| `EventCallbackData.kt` | `app_mention` body: `client_msg_id?`, `type`, `text`, `user`, `app_id?` / `bot_id?` / `bot_profile?`, `ts: String`, `thread_ts?`, `blocks: List<Block>`, `team`, `channel`, `event_ts: Double`, `channel_type?`; plus `BotProfile`, `Icons` |
+| `EventCallbackData.kt` | `app_mention` body: `client_msg_id?`, `type`, `text`, `user?` (absent on mentions posted by a workflow or another app, which carry `bot_id`; non-null, such a callback failed deserialization and Slack retried the 500), `app_id?` / `bot_id?` / `bot_profile?`, `ts: String`, `thread_ts?`, `blocks: List<Block> = emptyList()` (absent on text-only posts), `team`, `channel`, `event_ts: Double`, `channel_type?`; plus `BotProfile`, `Icons` |
 | `Authorization.kt` | `(enterprise_id?, team_id, user_id, is_bot, is_enterprise_install)` — `is_bot` identifies the bot's own user id |
 | `Block.kt` / `Element.kt` | `Block(type, block_id, elements, fields, text: TextElement?)`; `Element(type, text, user_id, image_url, alt_text, verbatim, action_id, value, style, elements)`, `Element.extractText()`, `sealed TextElement` (`TextObject` / `PlainText`) with `TextValueDeserializer` accepting a string or an object |
 | `SlackEventType.kt` | `URL_VERIFICATION`, `EVENT_CALLBACK`, `APP_MENTION` |
-| `SlackMentionMapper.kt` | `SlackEventCallBackRequest.toMentionInboundCommand(appId, channelName, actorName)`: walks the `rich_text` → `rich_text_section`, drops the bot's own mention, splits text on single spaces with blanks removed, sets `hasCommandStructure` |
+| `SlackMentionMapper.kt` | `SlackEventCallBackRequest.toMentionInboundCommand(appId, channelName, actorName)`: walks the `rich_text` → `rich_text_section`, drops the bot's own mention, splits text on single spaces with blanks removed, sets `hasCommandStructure` A missing `user` maps to a blank `actorId`; the mention handler drops app- and workflow-posted mentions before they become commands. |
 | `SlashCommandRequestBody.kt` | Slash command form (`text` → `subCommands`, `channel_id`, `user_id`, `trigger_id`, `response_url`, …); `toInboundCommand()` (`InboundKind.SLASH`, `SlashInvocation(TriggerHandle)`), `subCommandList()` |
 
 ## For AI Agents

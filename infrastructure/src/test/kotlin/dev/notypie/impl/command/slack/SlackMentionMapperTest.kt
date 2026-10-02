@@ -1,5 +1,6 @@
 package dev.notypie.impl.command.slack
 
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.MentionInvocation
@@ -20,6 +21,22 @@ class SlackMentionMapperTest :
             val command =
                 request.toMentionInboundCommand(appId = TEST_APP_ID, channelName = "general", actorName = "tester")
             return command.payload.shouldBeInstanceOf<MentionInvocation>()
+        }
+
+        given("an app_mention posted by a workflow with text only") {
+            `when`("the callback is parsed and mapped") {
+                val command =
+                    jsonMapper
+                        .readValue(
+                            createWorkflowAppMentionJson(botUserId = botId),
+                            SlackEventCallBackRequest::class.java,
+                        ).toMentionInboundCommand(appId = TEST_APP_ID, channelName = "", actorName = "")
+
+                then("it deserializes with a blank actor and no command structure instead of throwing") {
+                    command.actorId shouldBe ""
+                    command.payload.shouldBeInstanceOf<MentionInvocation>().hasCommandStructure shouldBe false
+                }
+            }
         }
 
         given("a rich_text mention mixing user mentions and command text") {

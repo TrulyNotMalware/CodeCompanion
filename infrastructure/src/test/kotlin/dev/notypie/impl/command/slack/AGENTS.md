@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/impl/command/slack
 
@@ -12,7 +12,7 @@ Spring.
 | File | Description |
 |------|-------------|
 | `ElementTest.kt` | `Element.extractText()` returns the `PlainText.value`, the `TextObject.text`, or `null`; `TextValueDeserializer` (through a local Jackson 3 `JsonMapper` + `KotlinModule`) reads `"text":"hello"` as `PlainText`, an object as `TextObject` (`verbatim` / `emoji` default `true`), and `null` as `null`. Also pins the `PlainText` / `TextObject` constructors |
-| `SlackMentionMapperTest.kt` | `SlackEventCallBackRequest.toMentionInboundCommand(appId, channelName, actorName)` → `InboundCommand` with `InboundKind.MENTION` and a `MentionInvocation` payload. Golden cases ported from the old domain `AppMentionContextParserTest`: the bot's own id (from `authorizations`) is dropped from `mentionedUserIds`; command text splits on whitespace with blanks removed; empty `blocks` → `hasCommandStructure = false`; a mention-only section → `true` with zero tokens; `ts` becomes `message`, `thread_ts` becomes `thread` (null at top level) |
+| `SlackMentionMapperTest.kt` | `SlackEventCallBackRequest.toMentionInboundCommand(appId, channelName, actorName)` → `InboundCommand` with `InboundKind.MENTION` and a `MentionInvocation` payload. Golden cases ported from the old domain `AppMentionContextParserTest`: the bot's own id (from `authorizations`) is dropped from `mentionedUserIds`; command text splits on whitespace with blanks removed; empty `blocks` → `hasCommandStructure = false`; a mention-only section → `true` with zero tokens; `ts` becomes `message`, `thread_ts` becomes `thread` (null at top level) A workflow `app_mention` with `bot_id` but no `user` or `blocks` (`createWorkflowAppMentionJson`) parses with the shared `jsonMapper` and maps to a blank `actorId` with `hasCommandStructure = false`. |
 
 ## For AI Agents
 

@@ -47,7 +47,7 @@ fun createAuthorization(
 
 fun createEventCallbackData(
     type: String = "app_mention",
-    userId: String = TEST_USER_ID,
+    userId: String? = TEST_USER_ID,
     appId: String? = null,
     botId: String? = null,
     channel: String = TEST_CHANNEL_ID,
@@ -73,7 +73,7 @@ fun createEventCallbackData(
                 deleted = false,
                 updated = 1234567890L,
                 appId = appId ?: TEST_APP_ID,
-                userId = userId,
+                userId = userId.orEmpty(),
                 teamId = teamId,
                 icons =
                     Icons(
@@ -99,6 +99,20 @@ fun createRichTextBlock(vararg elements: Element) =
                 ),
             ),
     )
+
+fun createWorkflowAppMentionJson(botUserId: String): String =
+    """
+    {
+      "token": "t", "team_id": "T1", "api_app_id": "A1", "type": "event_callback",
+      "event_id": "Ev2", "event_time": "1", "is_ext_shared_channel": false, "event_context": "c",
+      "authorizations": [{"enterprise_id": null, "team_id": "T1", "user_id": "$botUserId",
+        "is_bot": true, "is_enterprise_install": false}],
+      "event": {
+        "type": "app_mention", "bot_id": "B_WORKFLOW", "app_id": "A_WF", "text": "<@$botUserId> help",
+        "ts": "1712345678.000200", "team": "T1", "channel": "C1", "event_ts": 1712345678.0002
+      }
+    }
+    """.trimIndent()
 
 fun createUserElement(userId: String) = Element(type = "user", userId = userId)
 
