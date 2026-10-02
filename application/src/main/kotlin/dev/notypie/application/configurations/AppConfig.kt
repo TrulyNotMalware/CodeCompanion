@@ -212,7 +212,7 @@ data class AppConfig(
         data class Turns(
             val maxConcurrent: Int = 4,
             val queueCapacity: Int = 20,
-            val shutdownAwaitSeconds: Long = 30L,
+            val shutdownAwaitSeconds: Long = 20L,
         ) {
             init {
                 require(maxConcurrent > 0) { "agent.turns.max-concurrent must be positive" }

@@ -184,6 +184,8 @@ class KafkaConsumerConfiguration(
         containerProperties.isObservationEnabled = true
         containerProperties.isMicrometerEnabled = false
         containerProperties.ackMode = ContainerProperties.AckMode.RECORD
+        // Stop after the record in hand, not after the rest of the poll, so shutdown waits for one dispatch at most.
+        containerProperties.isStopImmediate = true
         setCommonErrorHandler(
             DefaultErrorHandler(cdcDeadLetterRecovery.recoverer, FixedBackOff(1_000L, 2L)).apply {
                 addNotRetryableExceptions(CdcRecordParseException::class.java)

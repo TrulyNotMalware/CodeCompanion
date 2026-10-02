@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-01 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-10-01 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/configurations
 
@@ -15,6 +15,7 @@ wins: Boot auto-configuration plus one configuration class, started with `Applic
 | `McpServerConfigurationTest.kt` | `McpServerConfiguration` with `slack.app.mcp.enabled=true`, `JacksonAutoConfiguration` and relaxed mocks for the tool collaborators: the transport's `JacksonMcpJsonMapper` wraps the context's `JsonMapper` bean (same instance) and reads JSON into a Kotlin data class |
 | `KafkaProducerConfigurationTest.kt` | `KafkaAutoConfiguration` + `KafkaEventPublisherConfiguration` with `event-publisher=KAFKA` and a `SimpleMeterRegistry` bean (the imported dead-letter recovery bean counts records): the `KafkaTemplate` uses the `ProducerFactory` bean (same instance), and `spring.kafka.producer.acks` and a `spring.kafka.properties.*` key reach the producer configuration. No broker is contacted |
 | `ProfileYamlTest.kt` | Loads profile YAML with `YamlPropertySourceLoader`, no context: `slack-live` exposes only `health` and its `spring.datasource.password` is exactly `${DATABASE_USER_PWD}` (asserted as a boolean so a failure never prints a value); `prod` and `dev` expose `health,info,metrics,prometheus` |
+| `ShutdownBudgetTest.kt` | Reads `application-prod.yaml` (`timeout-per-shutdown-phase`, agent `shutdown-await-seconds`) and the `Deployment` in `k8s/deployment.yaml` (`terminationGracePeriodSeconds`, the `preStop` sleep) and asserts the grace period covers preStop + 2 phases + the relay, agent-turn and default executor waits. Fails at the old 45s grace |
 | `SchedulingConfigTest.kt` | With `spring.threads.virtual.enabled=true` and `spring.task.scheduling.pool.size=4`, the `TaskScheduler` is the `ThreadPoolTaskScheduler` from `SchedulingConfig` with a core pool of 4. Without that bean Boot creates `SimpleAsyncTaskScheduler`, which ignores `pool.size` and runs every fixedDelay job on one thread |
 
 ## For AI Agents

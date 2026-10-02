@@ -8,7 +8,7 @@ One AI-agent conversation turn. `AgentConverseService` listens for the `AgentCon
 that `SlackIntentResolver` lifts from a free-text `@bot ...` mention, calls the sidecar through
 `AgentGateway`, then commits the resumable session id, an `agent_turn_history` audit row, and the
 staged Slack reply in one transaction. Turns run on `agentTurnExecutor` (declared in
-`configurations/AgentConfiguration`, sized by `slack.app.agent.turns.*`: 4 concurrent turns, a queue of 20, 30 s
+`configurations/AgentConfiguration`, sized by `slack.app.agent.turns.*`: 4 concurrent turns, a queue of 20, 20 s
 shutdown wait), which the AFTER_COMMIT listener submits to directly rather than through `@Async`, so a full
 executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own transaction) and
 `agent.turns{outcome=rejected}` counts it.
@@ -48,7 +48,7 @@ executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own tr
 - `scopedTurnTokenCodec` is null when MCP is off (`AgentConfiguration` uses `ObjectProvider`); the
   turn then carries no token and the model has no tools. `turnId` is the mention's `idempotencyKey`
   so tool audit rows join back to `agent_turn_history`.
-- A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds` (120 s), longer than the 30 s shutdown
+- A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds` (120 s), longer than the 20 s shutdown
   wait: a rolling deploy cuts turns still running after that wait. Keep `turns.queue-capacity` small; a deep queue
   only converts an immediate "busy" reply into minutes of silence.
 - Metric names are `internal const` and dashboards depend on the `outcome` / `direction` tags.
