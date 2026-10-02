@@ -433,6 +433,42 @@ class AgentConverseServiceTest :
             }
         }
 
+        given("a turn still queued when the executor's shutdown wait ends") {
+            val basicInfo = createCommandBasicInfo()
+            val gateway = mockk<AgentGateway>()
+            val stagedMessage = slot<OutboundMessage>()
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val meterRegistry = SimpleMeterRegistry()
+            val queued = mutableListOf<Runnable>()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                    turnExecutor = Executor { queued += it },
+                )
+
+            `when`("the executor discards it unstarted") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent(responseBasicInfo = basicInfo))
+                queued.single().shouldBeInstanceOf<AgentTurn>().discard()
+
+                then("the requester is told to ask again instead of never hearing back") {
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    staged.recipient?.id shouldBe basicInfo.publisherId
+                    staged.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        AgentConverseService.OVERLOADED_MESSAGE
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("the sidecar is not called and the discarded turn is counted") {
+                    verify(exactly = 0) { gateway.converse(request = any()) }
+                    meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "discarded").count() shouldBe
+                        1.0
+                }
+            }
+        }
+
         given("a rejected turn whose AFTER_COMMIT listener runs as a real JPA transaction completes") {
             val context = createOutboxJpaContext()
             afterSpec { context.close() }

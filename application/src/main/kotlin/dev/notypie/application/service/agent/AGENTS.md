@@ -11,7 +11,9 @@ staged Slack reply in one transaction. Turns run on `agentTurnExecutor` (declare
 `configurations/AgentConfiguration`, sized by `slack.app.agent.turns.*`: 4 concurrent turns, a queue of 20, 20 s
 shutdown wait), which the AFTER_COMMIT listener submits to directly rather than through `@Async`, so a full
 executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own transaction) and
-`agent.turns{outcome=rejected}` counts it.
+`agent.turns{outcome=rejected}` counts it. Each submission is an `AgentTurn(start, onDiscard)`: a turn still
+queued when the executor's shutdown wait ends is discarded by `AgentTurnExecutor`, and its requester gets the same
+notice (`agent.turns{outcome=discarded}`, WARN log).
 
 ## Key Files
 | File | Description |

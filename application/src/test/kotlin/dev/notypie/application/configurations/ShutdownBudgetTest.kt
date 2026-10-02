@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.service.agent.AgentTurn
 import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
@@ -207,6 +208,49 @@ class ShutdownBudgetTest :
 
                 then("both executors are shut down before the EntityManagerFactory closes") {
                     executorsShutDownWhenEmfCloses.get() shouldBe listOf(true, true)
+                }
+            }
+        }
+
+        given("the agent-turn executor with every thread busy and a turn still queued when its shutdown wait ends") {
+            val configuration =
+                AgentConfiguration(
+                    appConfig =
+                        AppConfig(
+                            agent =
+                                AppConfig.Agent(turns = AppConfig.Agent.Turns(shutdownAwaitSeconds = 1L)),
+                        ),
+                )
+            val executor = configuration.agentTurnExecutor().apply { initialize() }
+            val intake = configuration.agentTurnIntake(agentTurnExecutor = executor).apply { start() }
+            val release = CountDownLatch(1)
+            val outcomes = CopyOnWriteArrayList<String>()
+            repeat(times = executor.corePoolSize) {
+                executor.execute(
+                    AgentTurn(
+                        start = {
+                            release.await(10L, TimeUnit.SECONDS)
+                            outcomes.add("running finished")
+                        },
+                        onDiscard = { outcomes.add("running discarded") },
+                    ),
+                )
+            }
+            executor.execute(
+                AgentTurn(start = { outcomes.add("queued ran") }, onDiscard = { outcomes.add("queued discarded") }),
+            )
+
+            `when`("the intake stops and the executor is destroyed") {
+                intake.stop()
+                executor.destroy()
+                release.countDown()
+                executor.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
+
+                then("the queued turn is discarded, so its notice goes out, and never starts; running turns finish") {
+                    outcomes shouldContain "queued discarded"
+                    outcomes shouldNotContain "queued ran"
+                    outcomes shouldNotContain "running discarded"
+                    outcomes.count { it == "running finished" } shouldBe executor.corePoolSize
                 }
             }
         }

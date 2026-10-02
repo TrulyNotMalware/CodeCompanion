@@ -42,6 +42,15 @@ import java.util.concurrent.RejectedExecutionException
 
 private val log = KotlinLogging.logger {}
 
+class AgentTurn(
+    private val start: () -> Unit,
+    private val onDiscard: () -> Unit,
+) : Runnable {
+    override fun run() = start()
+
+    fun discard() = onDiscard()
+}
+
 class AgentConverseService(
     private val agentGateway: AgentGateway,
     private val agentSessionRepository: AgentSessionRepository,
@@ -113,12 +122,20 @@ class AgentConverseService(
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     fun handleAgentConverse(event: AgentConverseRequestEvent) {
         try {
-            turnExecutor.execute { converse(event = event) }
+            turnExecutor.execute(
+                AgentTurn(start = { converse(event = event) }, onDiscard = { discarded(event = event) }),
+            )
         } catch (rejected: RejectedExecutionException) {
             log.warn(rejected) { "Agent turn rejected, every turn slot is busy idempotencyKey=${event.idempotencyKey}" }
             meterRegistry.counter(METRIC_TURNS, "outcome", "rejected").increment()
             publishOverloaded(event = event)
         }
+    }
+
+    private fun discarded(event: AgentConverseRequestEvent) {
+        log.warn { "Agent turn discarded unstarted at shutdown idempotencyKey=${event.idempotencyKey}" }
+        meterRegistry.counter(METRIC_TURNS, "outcome", "discarded").increment()
+        publishOverloaded(event = event)
     }
 
     private fun converse(event: AgentConverseRequestEvent) {

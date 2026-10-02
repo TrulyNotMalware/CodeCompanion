@@ -2,6 +2,7 @@ package dev.notypie.application.configurations
 
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.application.service.agent.AgentConverseService
+import dev.notypie.application.service.agent.AgentTurn
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.agent.AgentGateway
@@ -38,7 +39,7 @@ class AgentConfiguration(
     @Bean
     @DependsOn("entityManagerFactory")
     fun agentTurnExecutor(): ThreadPoolTaskExecutor =
-        ThreadPoolTaskExecutor().apply {
+        AgentTurnExecutor().apply {
             val turns = appConfig.agent.turns
             corePoolSize = turns.maxConcurrent
             maxPoolSize = turns.maxConcurrent
@@ -79,6 +80,16 @@ class AgentConfiguration(
             scopedTurnTokenCodec = scopedTurnTokenCodec.getIfAvailable(),
             clock = clock,
         )
+}
+
+// Spring's wait ends without shutdownNow, so a turn still queued then would vanish with the JVM, unanswered.
+class AgentTurnExecutor : ThreadPoolTaskExecutor() {
+    override fun shutdown() {
+        super.shutdown()
+        val unstarted = ArrayList<Runnable>()
+        threadPoolExecutor.queue.drainTo(unstarted)
+        unstarted.filterIsInstance<AgentTurn>().forEach { it.discard() }
+    }
 }
 
 // From the start of the close a new turn is refused, so its mention gets the busy notice instead of queueing behind
