@@ -89,7 +89,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     processed is a judgement from its HTTP meaning, not something Slack documents.
   - Permanent — any other `ok=false` (including `fatal_error`, which may have partly succeeded, and
     `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
-    and `response_url` 3xx / 4xx / JSON `ok=false` → `failOutput(<error>)`, once. The relay writes `FAILURE`.
+    and `response_url` 3xx / 4xx / JSON `ok=false` / a 2xx body that is not an acknowledgement →
+    `failOutput(<error>)`, once. The relay writes `FAILURE`.
   - Anything else (a non-transient exception inside the retry, or thrown outside it) propagates as-is; the
     relay treats it like a transient outcome.
 - **`Retry-After` parsing is complete in production** because `slackClient()` turns SDK stats off: with stats on
@@ -111,7 +112,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   userinfo (`https://hooks.slack.com@evil.example/…`) and a trailing dot are rejected and upper case is
   canonicalised; anything else is `failOutput("response_url_rejected: …")`. The client never follows
   redirects, so the allowlist is final and a 3xx is a permanent failure. Only the first 4 KiB of the response
-  are read (`peekBody`); success is plain-text `ok` or JSON `ok=true`.
+  are read (`peekBody`); success is plain-text `ok` or JSON `ok=true`, and any other 2xx body (an HTML page, an
+  empty body) is a permanent `unexpected_body: http_<code>: <body prefix>` failure, once, never resent.
 - The invalid `PostEventPayloadContents`/action-response pairing is unrepresentable — `MessageType` has no
   `ACTION_RESPONSE`.
 - **`dispatchImmediate` fallbacks need `participantUserId`.** Every `open*ModalRequest` sets it (requester,

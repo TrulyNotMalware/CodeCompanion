@@ -491,6 +491,11 @@ class ApplicationMessageDispatcher(
                 !response.isSuccessful ->
                     failOutput(event = event, reason = "http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}")
                 slackError != null -> failOutput(event = event, reason = slackError.take(MAX_FAILURE_REASON_CHARS))
+                !isAcknowledgement(body = body) ->
+                    failOutput(
+                        event = event,
+                        reason = "unexpected_body: http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}",
+                    )
                 else -> successOutput(payload = event, commandType = CommandType.RESPONSE)
             }
         }
@@ -502,6 +507,13 @@ class ApplicationMessageDispatcher(
         }
         val retryable = if (idempotent) TRANSIENT_SLACK_ERRORS else NOT_SENT_SLACK_ERRORS
         if (error in retryable) throw SlackTransientErrorException(error = error)
+    }
+
+    private fun isAcknowledgement(body: String): Boolean {
+        val trimmed = body.trim()
+        if (trimmed == "ok") return true
+        if (!trimmed.startsWith("{")) return false
+        return runCatching { jsonMapper.readTree(trimmed).path("ok").asBoolean(false) }.getOrDefault(false)
     }
 
     private fun slackErrorOf(body: String): String? {

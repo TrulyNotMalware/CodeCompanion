@@ -817,6 +817,21 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
+        given("a response_url that answers 200 with a body that is neither ok nor Slack JSON") {
+            reset()
+            responses.add(status(code = 200, body = "<html>maintenance</html>"))
+
+            `when`("an action response is dispatched") {
+                val output = defaultDispatcher.dispatch(event = actionResponse())
+
+                then("only the documented acknowledgements count as success, so it fails once for good") {
+                    output.ok shouldBe false
+                    output.errorReason shouldBe "unexpected_body: http_200: <html>maintenance</html>"
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
         given("a response_url that answers 200 with a JSON ok body") {
             reset()
             responses.add(status(code = 200, body = """{"ok":true}"""))
