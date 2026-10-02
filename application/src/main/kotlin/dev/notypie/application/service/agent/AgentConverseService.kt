@@ -22,6 +22,7 @@ import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
+import dev.notypie.repository.outbox.CHAIN_TEXT_BUDGET
 import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.neutralizeBroadcastMentions
 import dev.notypie.templates.splitMessageText
@@ -61,7 +62,7 @@ class AgentConverseService(
         internal const val OVERLOADED_MESSAGE =
             "I'm handling too many requests right now — please ask again in a minute."
         internal const val EMPTY_RESPONSE_MESSAGE = "_(the assistant returned an empty response)_"
-        internal const val MAX_ANSWER_LENGTH: Int = 40_000
+        internal const val MAX_ANSWER_LENGTH: Int = CHAIN_TEXT_BUDGET
         internal const val MAX_ANSWER_MESSAGES: Int = 8
         private const val ANSWER_TRUNCATION_SUFFIX = "\n${SlackBlockLimits.TRUNCATION_MARKER}"
 

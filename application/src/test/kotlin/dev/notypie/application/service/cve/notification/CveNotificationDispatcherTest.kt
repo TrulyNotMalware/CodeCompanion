@@ -8,6 +8,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.cve.CveDeliveryRepository
 import dev.notypie.repository.cve.schema.CveDeliveryMode
+import dev.notypie.repository.outbox.CHAIN_TEXT_BUDGET
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.schema.createUndeliveredCveEvent
@@ -858,6 +859,66 @@ class CveNotificationDispatcherTest :
                     val markdown = messages.single().channelText().markdown
                     (1..5).forEach { markdown shouldContain "CVE-2026-000$it" }
                     verify(exactly = 5) { deliveryRepository.claim(eventId = any(), userId = "U1") }
+                }
+            }
+        }
+
+        given("a single user's day whose digest would carry more text than one chained row may") {
+            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+            val outboundMessagePort = mockk<OutboundMessagePort>()
+            val day =
+                (1L..500L).map { eventId ->
+                    createUndeliveredCveEvent(
+                        eventId = eventId,
+                        userId = "U1",
+                        topicDisplayName = "Alpha",
+                        title = "CVE-2026-$eventId",
+                        aiSummary = "x".repeat(n = 700),
+                    )
+                }
+            every {
+                deliveryRepository.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 50,
+                )
+            } returns day.take(n = 50)
+            every {
+                deliveryRepository.findUndeliveredForUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    userId = "U1",
+                    since = any(),
+                    doneBefore = any(),
+                    limit = 500,
+                )
+            } returns day
+            val claimed = mutableListOf<Long>()
+            every { deliveryRepository.claim(eventId = capture(claimed), userId = "U1") } returns true
+            val chains = mutableListOf<List<OutboundMessage>>()
+            outboundMessagePort.captureChains(chains = chains)
+            val outboxRepository = stubOutbox()
+            val dispatcher =
+                dispatcherWith(
+                    deliveryRepository = deliveryRepository,
+                    outboundMessagePort = outboundMessagePort,
+                    outboxRepository = outboxRepository,
+                )
+
+            `when`("the digest tick runs") {
+                dispatcher.digestTick()
+                val bodies = chains.single().map { it.channelText().markdown }
+
+                then("only the oldest events that fit the chain's text budget are claimed, the rest wait unclaimed") {
+                    (claimed.size in 2 until day.size) shouldBe true
+                    claimed shouldBe (1L..claimed.size.toLong()).toList()
+                    bodies.sumOf { it.length } shouldBeLessThanOrEqual CHAIN_TEXT_BUDGET
+                    verify(exactly = 1) { outboxRepository.save(any()) }
+                }
+
+                then("every claimed event still reaches a sent body") {
+                    val sent = bodies.joinToString(separator = "\n")
+                    claimed.forEach { eventId -> sent shouldContain "*CVE-2026-$eventId*" }
                 }
             }
         }

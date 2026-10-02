@@ -24,6 +24,9 @@ private val summaryLog = KotlinLogging.logger {}
 
 internal const val SUMMARY_MEMBER_RESPONSE_CHARS = SlackBlockLimits.SECTION_TEXT_BUDGET
 
+// Each costs 14 bytes in the summary chain's CDC update record; stripped, a full routine fits within 1 MiB.
+private val CONTROL_CHARACTERS = Regex("[\\p{Cc}&&[^\\n\\t]]")
+
 internal fun List<StandupAnswerDto>.boundedForSummary(): List<StandupAnswerDto> =
     map { answer ->
         if (answer.responses.isEmpty()) {
@@ -32,7 +35,8 @@ internal fun List<StandupAnswerDto>.boundedForSummary(): List<StandupAnswerDto> 
             val perResponse = SUMMARY_MEMBER_RESPONSE_CHARS / answer.responses.size
             answer.copy(
                 responses =
-                    answer.responses.map { response ->
+                    answer.responses.map { raw ->
+                        val response = raw.replace(regex = CONTROL_CHARACTERS, replacement = "")
                         if (response.length <= perResponse) response else "${response.take(perResponse - 1)}…"
                     },
             )

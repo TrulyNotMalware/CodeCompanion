@@ -8,6 +8,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.cve.CveDeliveryRepository
 import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveDeliveryMode
+import dev.notypie.repository.outbox.CHAIN_TEXT_BUDGET
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.toChainHead
@@ -143,7 +144,14 @@ class CveNotificationDispatcher(
     }
 
     private fun dispatchDigest(userId: String, userPairs: List<UndeliveredCveEvent>): Int {
-        val claimed = userPairs.filter { cveDeliveryRepository.claim(eventId = it.eventId, userId = it.userId) }
+        val bounded = userPairs.withinDigestBudget()
+        if (bounded.size < userPairs.size) {
+            log.info {
+                "CVE digest for user=$userId holds ${bounded.size} of ${userPairs.size} events; " +
+                    "the rest goes out in a later digest"
+            }
+        }
+        val claimed = bounded.filter { cveDeliveryRepository.claim(eventId = it.eventId, userId = it.userId) }
         if (claimed.isEmpty()) return 0
         val parts = digestParts(events = claimed)
         outboxRepository.save(
@@ -208,6 +216,15 @@ class CveNotificationDispatcher(
         return parts
     }
 
+    private fun List<UndeliveredCveEvent>.withinDigestBudget(): List<UndeliveredCveEvent> {
+        val totals =
+            runningFold(initial = 0) { total, event ->
+                total + digestEventLine(event = event).length + event.topicDisplayName.escapeMrkdwn().length +
+                    DIGEST_LINE_SEPARATORS
+            }.drop(n = 1)
+        return take(n = totals.count { it <= CHAIN_TEXT_BUDGET }.coerceAtLeast(minimumValue = 1))
+    }
+
     // Oversized body would be rejected by Slack post-claim and retry forever — capping prevents that.
     private fun capBody(body: String): String = body.truncateSectionText(limit = CAPPED_BODY_MAX_LENGTH)
 
@@ -224,5 +241,6 @@ class CveNotificationDispatcher(
         private const val BODY_MAX_LENGTH = 2_900
         private const val CAPPED_BODY_MAX_LENGTH = BODY_MAX_LENGTH + 1 + SlackBlockLimits.TRUNCATION_MARKER.length
         private const val SINGLE_USER_DIGEST_PAGES = 10
+        private const val DIGEST_LINE_SEPARATORS = 5
     }
 }

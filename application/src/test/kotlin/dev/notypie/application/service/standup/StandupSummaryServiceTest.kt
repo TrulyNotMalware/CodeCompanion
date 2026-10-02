@@ -201,6 +201,19 @@ class StandupSummaryServiceTest :
             }
         }
 
+        given("stored answers carrying control characters") {
+            val answers =
+                listOf(createStandupAnswerDto(userId = "U1", responses = listOf("line one\n\tline\u0001 two\u0000")))
+
+            `when`("they are bounded for the summary") {
+                val bounded = answers.boundedForSummary()
+
+                then("control characters are dropped while line breaks and tabs stay") {
+                    bounded.single().responses shouldBe listOf("line one\n\tline two")
+                }
+            }
+        }
+
         given("postSummary") {
             `when`("a cutoff event is received for a collecting session") {
                 val dataSource = createH2DataSource()

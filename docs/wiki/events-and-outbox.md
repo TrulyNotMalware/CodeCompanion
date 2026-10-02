@@ -228,8 +228,12 @@ _type: architecture · updated: 2026-10-02_
   보류된 행은 payload에 나머지를 그대로 들고 있다. outcome unknown은 `FAILURE`로 기록하되 다음 조각을 이어
   보낸다(요청이 Slack에 닿았을 가능성이 높고, 멈추면 이후 조각 전부가 조용히 사라지지만 이어 가면 최악이
   `(k/n)` 라벨로 드러나는 조각 하나의 누락이다). 그 밖의 `FAILURE`(영구 거절·렌더 실패·24시간 상한·스윕 포기)는
-  남은 조각을 버리고 개수를 ERROR로 남긴다. 머리 행이 모든 조각을 들고 있으므로 CDC 레코드 크기 상한은
-  이 행 기준이다.
+  남은 조각을 버리고 개수를 ERROR로 남긴다. 머리 행이 모든 조각을 들고 있으므로 CDC 크기 상한은
+  이 행 기준이다: 갱신 레코드는 payload를 두 벌(before/after), JSON 문자열로 한 번 더 이스케이프해 싣고 Kafka
+  producer 기본 `max.request.size` 1 MiB를 넘으면 커넥터가 멈춘다. 그래서 생산자가 싣는 양을 묶는다. AI 답변은
+  `CHAIN_TEXT_BUDGET`(40,000자), CVE digest는 같은 예산을 넘는 사건을 claim하지 않고 다음 digest로 미루며, 스탠드업
+  요약은 멤버 30명 × 섹션 예산에 제어문자(레코드에서 글자당 14바이트)를 지운다. `OutboxPayloadSizeGuardTest`가
+  최악 입력(한국어·역슬래시·따옴표·제어문자·`&`)으로 고정하며 가장 큰 경우가 약 735 KB다.
 - `spring.kafka.consumer.enable-auto-commit: false` + 컨테이너 `AckMode.RECORD`(2026-09-22)라 오프셋은 리스너가
   그 레코드를 반환한 뒤에만 커밋된다. 크래시 시 재전달되며, 위의 현재 상태 확인이 중복 발송을 막는다(claim과
   상태 기록 사이에 크래시하면 행은 `IN_PROGRESS`로 남고 스윕이 재발송 — at-least-once). CDC 프로파일의
