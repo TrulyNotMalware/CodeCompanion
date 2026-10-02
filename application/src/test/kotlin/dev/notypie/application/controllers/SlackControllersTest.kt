@@ -1,12 +1,18 @@
 package dev.notypie.application.controllers
 
 import dev.notypie.application.exception.ControllerAdvice
+import dev.notypie.application.service.cve.query.CveQuerySlashService
+import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.mention.AppMentionEventHandler
+import dev.notypie.application.service.standup.StandupSlashService
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.impl.command.SlackViewOpenDispatcher
+import dev.notypie.impl.command.event.MessageDispatcher
+import dev.notypie.impl.command.event.createOpenViewEvent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -118,6 +124,76 @@ class SlackControllersTest :
 
                 then("it is rejected as an unsupported media type") {
                     response.status shouldBe 415
+                }
+            }
+        }
+
+        given("slash commands whose service opens a modal") {
+            val messageDispatcher = mockk<MessageDispatcher>()
+            var opens = 0
+            every { messageDispatcher.dispatchImmediate(event = any()) } answers {
+                opens++
+                CommandOutput.empty()
+            }
+            val viewOpenDispatcher = SlackViewOpenDispatcher(messageDispatcher = messageDispatcher)
+            var opensInsideService = -1
+            val openModal: () -> Unit = {
+                viewOpenDispatcher.listenOpenViewEvent(event = createOpenViewEvent())
+                opensInsideService = opens
+            }
+            val meeting = mockk<MeetingService>()
+            every { meeting.handleMeeting(headers = any(), payload = any(), commandData = any()) } answers
+                { openModal() }
+            val standup = mockk<StandupSlashService>()
+            every { standup.handleStandup(headers = any(), payload = any(), commandData = any()) } answers
+                { openModal() }
+            val subscription = mockk<CveSubscriptionSlashService>()
+            every { subscription.handleSubscribe(headers = any(), payload = any(), commandData = any()) } answers {
+                openModal()
+            }
+            every { subscription.handleUnsubscribe(headers = any(), payload = any(), commandData = any()) } answers {
+                openModal()
+            }
+            every { subscription.handleSubscriptions(headers = any(), payload = any(), commandData = any()) } answers {
+                openModal()
+            }
+            val query = mockk<CveQuerySlashService>()
+            every { query.handleLatest(headers = any(), payload = any(), commandData = any()) } answers { openModal() }
+            val slashMvc =
+                MockMvcBuilders
+                    .standaloneSetup(
+                        SlashCommandController(
+                            meetingService = meeting,
+                            standupSlashService = standup,
+                            cveSubscriptionSlashService = subscription,
+                            cveQuerySlashService = query,
+                        ),
+                    ).build()
+            val form =
+                LinkedMultiValueMap<String, String>().apply {
+                    createSlashCommandForm().forEach { (k, v) ->
+                        add(k, v)
+                    }
+                }
+
+            listOf("/meet", "/standup", "/subscribe", "/unsubscribe", "/subscriptions", "/latest").forEach { path ->
+                `when`("$path runs its service, which publishes a views.open") {
+                    opens = 0
+                    opensInsideService = -1
+                    val status =
+                        slashMvc
+                            .perform(
+                                post("/api/slash$path")
+                                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                                    .params(form),
+                            ).andReturn()
+                            .response.status
+
+                    then("the modal opens once, after the service (and its transaction) has returned") {
+                        status shouldBe 200
+                        opensInsideService shouldBe 0
+                        opens shouldBe 1
+                    }
                 }
             }
         }

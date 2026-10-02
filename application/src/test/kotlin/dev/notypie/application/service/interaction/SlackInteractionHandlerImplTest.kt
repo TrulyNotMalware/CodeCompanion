@@ -19,6 +19,9 @@ import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.SlackOutboundStager
+import dev.notypie.impl.command.SlackViewOpenDispatcher
+import dev.notypie.impl.command.event.MessageDispatcher
+import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.States
 import dev.notypie.impl.command.slack.createInteractionPayloadInput
@@ -149,6 +152,50 @@ class SlackInteractionHandlerImplTest :
                 then("the request fails and the meeting write never runs") {
                     (escaped is IllegalStateException) shouldBe true
                     events shouldBe listOf("command in transaction=true", "interaction transaction completed")
+                }
+            }
+        }
+
+        given("a command that opens a modal") {
+            val events = CopyOnWriteArrayList<String>()
+            val messageDispatcher = mockk<MessageDispatcher>()
+            every { messageDispatcher.dispatchImmediate(event = any()) } answers {
+                events.add(
+                    "view opened in transaction=${TransactionSynchronizationManager.isActualTransactionActive()}",
+                )
+                CommandOutput.empty()
+            }
+            val viewOpenDispatcher = SlackViewOpenDispatcher(messageDispatcher = messageDispatcher)
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } answers {
+                events.add("command in transaction=${TransactionSynchronizationManager.isActualTransactionActive()}")
+                TransactionSynchronizationManager.registerSynchronization(
+                    object : TransactionSynchronization {
+                        override fun afterCompletion(status: Int) {
+                            events.add("interaction transaction completed")
+                        }
+                    },
+                )
+                viewOpenDispatcher.listenOpenViewEvent(event = createOpenViewEvent())
+                CommandOutput.empty()
+            }
+            val handler =
+                isolatedHandler(
+                    transactionManager = createH2TransactionManager(),
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the interaction transaction commits") {
+                handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                then("views.open runs only after the transaction has completed, outside it") {
+                    events shouldBe
+                        listOf(
+                            "command in transaction=true",
+                            "interaction transaction completed",
+                            "view opened in transaction=false",
+                        )
                 }
             }
         }
