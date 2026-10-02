@@ -72,7 +72,7 @@ _type: guide · updated: 2026-09-28_
   `isolatedWriteTemplate`의 `REQUIRES_NEW` 쓰기로 커넥션 두 개를 동시에 잡는다. `agentTurnExecutor`가 가득 차 거절된 `@bot`
   멘션도 같다: 과부하 안내는 `afterCompletion` 안의 `REQUIRES_NEW` 쓰기인데, 그때 커밋된 멘션 트랜잭션이 아직 커넥션을 쥐고 있다.
   릴레이 executor·스케줄러·CDC 리스너가 같은 풀을 쓴다.
-  산정식: (동시 회의 interaction 수 + 같은 순간 거절된 멘션 수) × 2 + 릴레이 워커(`relayTaskExecutor` 4, `CallerRunsPolicy`면 제출 스레드 1 추가) + 스케줄러
+  산정식: (동시 회의 interaction 수 + 같은 순간 거절된 멘션 수) × 2 + 릴레이 워커(`relayTaskExecutor` 4) + 스케줄러
   스레드(4) + CDC 리스너(1) + DB를 쓰는 AI 턴(`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent` 4). 요청 스레드는 가상 스레드라 동시 interaction을
   막는 것은 스레드 수가 아니라 풀이며, 커넥션을 못 얻은 요청은 `connection-timeout` 뒤 실패한다. MariaDB `max_connections`는
   풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40, 롤링 업데이트 surge 중 60, 여기에 Debezium과 운영자 세션을 더한다.

@@ -60,8 +60,7 @@ stand up change-data-capture locally and in-cluster.
   notice is a `REQUIRES_NEW` write inside `afterCompletion`, while the committed mention transaction still holds its
   connection (measured on H2: two sessions there, one in a plain transaction). The relay executor, the schedulers and
   the CDC listener share the same pool. Size it as: (concurrent meeting interactions + mentions rejected at the same
-  moment) x 2 + relay workers (`relayTaskExecutor`, 4, plus the submitting thread
-  under `CallerRunsPolicy`) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
+  moment) x 2 + relay workers (`relayTaskExecutor`, 4) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + AI turns that use the DB (`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent`, 4). Request threads are virtual,
   so the pool, not a thread limit, is what bounds concurrent interactions; a request that cannot get a connection
   fails after `connection-timeout`. MariaDB must allow pool size x Pods: 2 replicas x 20 = 40, and 60 during a

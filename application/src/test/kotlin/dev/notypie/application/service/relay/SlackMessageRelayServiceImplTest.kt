@@ -1,5 +1,7 @@
 package dev.notypie.application.service.relay
 
+import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.configurations.AsyncConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.outbox.createRelayService
@@ -31,6 +33,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
@@ -40,9 +43,16 @@ import io.mockk.slot
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataAccessResourceFailureException
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class SlackMessageRelayServiceImplTest :
     BehaviorSpec({
@@ -52,6 +62,21 @@ class SlackMessageRelayServiceImplTest :
 
         fun dispatcherReturning(output: CommandOutput): MessageDispatcher =
             mockk { every { dispatch(event = any()) } returns output }
+
+        fun appConfigWithBatchSize(batchSize: Int) =
+            AppConfig(outbox = AppConfig.Outbox(polling = AppConfig.Outbox.Polling(batchSize = batchSize)))
+
+        fun boundedPool(threads: Int, queue: Int) =
+            ThreadPoolTaskExecutor().apply {
+                corePoolSize = threads
+                maxPoolSize = threads
+                queueCapacity = queue
+                setThreadNamePrefix("relay-test-")
+                setRejectedExecutionHandler(ThreadPoolExecutor.AbortPolicy())
+                initialize()
+            }
+
+        fun newClaim() = OutboxClaim(row = createOutboxRow(eventId = UUID.randomUUID().toString()), attempt = 1)
 
         given("saveOutboxMessage (interactive enqueue)") {
             `when`("an OutboundMessageEnqueued is received") {
@@ -483,6 +508,164 @@ class SlackMessageRelayServiceImplTest :
                             outboxRepository.renewClaim(eventId = eventId, attemptCount = 2, now = any())
                         }
                     }
+                }
+            }
+
+            `when`("claims are handed over within the slots reserved for them on a bounded pool") {
+                val release = CountDownLatch(1)
+                val firstStarted = CountDownLatch(1)
+                val messageDispatcher = mockk<MessageDispatcher>()
+                every { messageDispatcher.dispatch(event = any()) } answers {
+                    firstStarted.countDown()
+                    release.await(5L, TimeUnit.SECONDS)
+                    delivered()
+                }
+                val pool = boundedPool(threads = 1, queue = 1)
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = messageDispatcher,
+                        relayTaskExecutor = pool,
+                        appConfig = appConfigWithBatchSize(batchSize = 1),
+                    )
+
+                val firstReserved = service.reserveDispatchSlots(wanted = 5)
+                service.batchPendingMessages(claims = listOf(newClaim()))
+                firstStarted.await(5L, TimeUnit.SECONDS)
+                val reservedWhileRunning = service.reserveDispatchSlots(wanted = 5)
+                service.batchPendingMessages(claims = listOf(newClaim()))
+                val reservedWhileQueued = service.reserveDispatchSlots(wanted = 5)
+                release.countDown()
+                pool.threadPoolExecutor.shutdown()
+                pool.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
+
+                then("a claim holds its slot only until a pool thread starts it, so the queue never overflows") {
+                    firstReserved shouldBe 1
+                    reservedWhileRunning shouldBe 1
+                    reservedWhileQueued shouldBe 0
+                    pool.threadPoolExecutor.completedTaskCount shouldBe 2L
+                    service.reserveDispatchSlots(wanted = 5) shouldBe 1
+                }
+            }
+
+            `when`("more claims arrive than the bounded pool can take") {
+                val release = CountDownLatch(1)
+                val firstStarted = CountDownLatch(1)
+                val dispatchThreads = ConcurrentLinkedQueue<String>()
+                val messageDispatcher = mockk<MessageDispatcher>()
+                every { messageDispatcher.dispatch(event = any()) } answers {
+                    dispatchThreads.add(Thread.currentThread().name)
+                    firstStarted.countDown()
+                    release.await(5L, TimeUnit.SECONDS)
+                    delivered()
+                }
+                val pool = boundedPool(threads = 1, queue = 1)
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = messageDispatcher,
+                        relayTaskExecutor = pool,
+                        appConfig = appConfigWithBatchSize(batchSize = 3),
+                    )
+                val eventIds = List(size = 3) { UUID.randomUUID().toString() }
+                val claims = eventIds.map { OutboxClaim(row = createOutboxRow(eventId = it), attempt = 1) }
+                val reserved = service.reserveDispatchSlots(wanted = 3)
+
+                shouldNotThrowAny { service.batchPendingMessages(claims = claims) }
+                firstStarted.await(5L, TimeUnit.SECONDS)
+                release.countDown()
+                pool.threadPoolExecutor.shutdown()
+                pool.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
+
+                then("the rejected claim is left for the recovery sweep, never run on the caller's thread") {
+                    reserved shouldBe 3
+                    dispatchThreads.toList() shouldHaveSize 2
+                    dispatchThreads.forEach { it.startsWith("relay-test-") shouldBe true }
+                    verify(exactly = 0) {
+                        outboxRepository.renewClaim(eventId = eventIds.last(), attemptCount = any(), now = any())
+                    }
+                    service.reserveDispatchSlots(wanted = 10) shouldBe 3
+                }
+            }
+
+            `when`("the production pool's threads already exist and sit idle between full reservations") {
+                val pool = AsyncConfig().relayTaskExecutor(appConfig = AppConfig()) as ThreadPoolTaskExecutor
+                pool.threadPoolExecutor.prestartAllCoreThreads()
+                val dispatched = AtomicInteger(0)
+                val messageDispatcher = mockk<MessageDispatcher>()
+                every { messageDispatcher.dispatch(event = any()) } answers {
+                    dispatched.incrementAndGet()
+                    delivered()
+                }
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = messageDispatcher,
+                        relayTaskExecutor = pool,
+                    )
+                val claims = List(size = pool.queueCapacity) { newClaim() }
+                val rounds = 20
+                val reservations = mutableListOf<Int>()
+                repeat(rounds) {
+                    val before = dispatched.get()
+                    val reserved = service.reserveDispatchSlots(wanted = Int.MAX_VALUE)
+                    reservations.add(reserved)
+                    service.batchPendingMessages(claims = claims.take(reserved))
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10L)
+                    while (dispatched.get() < before + reserved && System.nanoTime() < deadline) {
+                        Thread.sleep(1L)
+                    }
+                }
+                pool.shutdown()
+
+                then("overflow is rejected, a full reservation is the queue capacity, and every claim is dispatched") {
+                    pool.threadPoolExecutor.rejectedExecutionHandler
+                        .shouldBeInstanceOf<ThreadPoolExecutor.AbortPolicy>()
+                    reservations.toSet() shouldBe setOf(pool.queueCapacity)
+                    dispatched.get() shouldBe rounds * pool.queueCapacity
+                }
+            }
+
+            `when`("the executor is not a bounded pool") {
+                val service =
+                    createRelayService(outboxRepository = mockk(), appConfig = appConfigWithBatchSize(batchSize = 3))
+
+                then("the slots are still the configured queue capacity") {
+                    service.reserveDispatchSlots(wanted = 10) shouldBe 3
+                    service.reserveDispatchSlots(wanted = 1) shouldBe 0
+                    service.releaseDispatchSlots(count = 2)
+                    service.reserveDispatchSlots(wanted = 10) shouldBe 2
+                    service.releaseDispatchSlots(count = 100)
+                    service.reserveDispatchSlots(wanted = Int.MAX_VALUE) shouldBe 3
+                }
+            }
+        }
+
+        given("reserveDispatchSlots called from several threads at once") {
+            val service = createRelayService(outboxRepository = mockk())
+            val start = CountDownLatch(1)
+            val results = ConcurrentLinkedQueue<Int>()
+            val reservers =
+                List(size = 8) {
+                    thread {
+                        start.await(5L, TimeUnit.SECONDS)
+                        results.add(service.reserveDispatchSlots(wanted = 30))
+                    }
+                }
+
+            `when`("each asks for more than its share of the relay") {
+                start.countDown()
+                reservers.forEach { it.join(5_000L) }
+
+                then("together they get exactly the capacity, never a slot twice") {
+                    results.sum() shouldBe AppConfig().outbox.polling.batchSize
+                    results.forEach { it shouldBeLessThanOrEqual 30 }
                 }
             }
         }

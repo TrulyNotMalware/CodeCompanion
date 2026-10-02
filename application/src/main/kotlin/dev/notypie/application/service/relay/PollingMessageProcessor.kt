@@ -23,11 +23,10 @@ class PollingMessageProcessor(
     // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work.
     private fun claimAndDispatch() {
         val now = LocalDateTime.now(clock)
-        val claims =
+        messageRelayService.claimWithReservedSlots(wanted = batchSize) { slots ->
             outboxRepository
-                .findPendingMessages(limit = batchSize)
+                .findPendingMessages(limit = slots)
                 .mapNotNull { outboxRepository.claim(row = it, now = now) }
-        if (claims.isEmpty()) return
-        messageRelayService.batchPendingMessages(claims = claims)
+        }
     }
 }

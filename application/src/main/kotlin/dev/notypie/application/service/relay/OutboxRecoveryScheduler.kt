@@ -53,16 +53,26 @@ class OutboxRecoveryScheduler(
                 }
             }
         }
-        val reclaimed = stuck.mapNotNull { outboxRepository.reclaim(row = it, olderThan = cutoff, now = now) }
-        val stale =
-            outboxRepository
-                .findStalePending(olderThan = cutoff, limit = batchSize)
-                .mapNotNull { outboxRepository.claim(row = it, now = now) }
-        val claims = reclaimed + stale
-        if (claims.isNotEmpty()) {
-            log.warn { "Outbox recovery re-dispatching ${reclaimed.size} stuck and ${stale.size} stale rows" }
-            messageRelayService.batchPendingMessages(claims = claims)
-        }
+        val stalePending = outboxRepository.findStalePending(olderThan = cutoff, limit = batchSize)
+        val claims =
+            messageRelayService.claimWithReservedSlots(wanted = stuck.size + stalePending.size) { slots ->
+                val reclaimed =
+                    stuck
+                        .asSequence()
+                        .mapNotNull { outboxRepository.reclaim(row = it, olderThan = cutoff, now = now) }
+                        .take(slots)
+                        .toList()
+                val stale =
+                    stalePending
+                        .asSequence()
+                        .mapNotNull { outboxRepository.claim(row = it, now = now) }
+                        .take(slots - reclaimed.size)
+                        .toList()
+                if (reclaimed.isNotEmpty() || stale.isNotEmpty()) {
+                    log.warn { "Outbox recovery re-dispatching ${reclaimed.size} stuck and ${stale.size} stale rows" }
+                }
+                reclaimed + stale
+            }
         return claims.size
     }
 }

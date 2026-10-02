@@ -126,8 +126,11 @@ _type: architecture · updated: 2026-09-28_
 - **POLLING** — `PollingMessageProcessor`, `@Scheduled(fixedRate = 5000)`(하드코딩). tick당 `PENDING`
   `batch-size`(기본 100)건 읽기 → 행마다 `claimPending` → 이긴 claim만 `batchPendingMessages`, 내부 루프 없음(스케줄러
   스레드 독점 방지). 복구는 여기 없고 `OutboxRecoveryScheduler`가 한다. `SlackMessageRelayServiceImpl.batchPendingMessages`는
-  `@Async` 대신 `@Qualifier("relayTaskExecutor")`(4스레드, 큐 = batch-size, `CallerRunsPolicy`)에 직접 submit 한다
-  (같은 빈 내부 self-invocation은 AOP 프록시를 타지 않음). 큐에서 오래 기다린 작업의 안전은 큐 크기가 아니라 위의
+  `@Async` 대신 `@Qualifier("relayTaskExecutor")`(4스레드, 큐 = batch-size, `AbortPolicy`)에 직접 submit 한다
+  (같은 빈 내부 self-invocation은 AOP 프록시를 타지 않음). 폴러와 스윕은 스케줄러 스레드를 다른 잡과 나눠 쓰므로 넘친
+  작업을 제출 스레드에서 돌리지 않는다: 둘 다 `claimWithReservedSlots`로 relay 자리(큐 크기만큼, 풀 스레드가 작업을
+  시작하면 반납)를 먼저 원자적으로 예약하고 그만큼만 claim한다. 그래도 거절된 claim은 발송 없이 `IN_PROGRESS`로 남아
+  스윕이 회수한다. 큐에서 오래 기다린 작업의 안전은 큐 크기가 아니라 위의
   `renewClaim` 검사가 보장한다.
 - **CDC** — Debezium MariaDB 커넥터(`table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`;
   `cdc/docker-compose/debezium/connect_mariadb.sh`) → Kafka → `DebeziumLogTailingProcessor`. 리스너는

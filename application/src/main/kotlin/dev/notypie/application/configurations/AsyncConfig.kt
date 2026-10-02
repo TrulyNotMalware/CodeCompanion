@@ -13,6 +13,8 @@ import java.util.concurrent.ThreadPoolExecutor
 const val DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS = 10
 const val RELAY_SHUTDOWN_AWAIT_SECONDS = 20
 
+fun relayQueueCapacity(appConfig: AppConfig): Int = appConfig.outbox.polling.batchSize
+
 // No async multicaster: it would detach @TransactionalEventListener(BEFORE_COMMIT) from the tx.
 @Configuration
 @EnableAsync
@@ -30,14 +32,15 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             initialize()
         }
 
+    // Never CallerRunsPolicy: the callers are taskScheduler threads shared by every @Scheduled job.
     @Bean(name = ["relayTaskExecutor"])
     fun relayTaskExecutor(appConfig: AppConfig): Executor =
         ThreadPoolTaskExecutor().apply {
             corePoolSize = 4
             maxPoolSize = 4
-            queueCapacity = appConfig.outbox.polling.batchSize
+            queueCapacity = relayQueueCapacity(appConfig = appConfig)
             setThreadNamePrefix("relay-")
-            setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
+            setRejectedExecutionHandler(ThreadPoolExecutor.AbortPolicy())
             setWaitForTasksToCompleteOnShutdown(true)
             setAwaitTerminationSeconds(RELAY_SHUTDOWN_AWAIT_SECONDS)
             initialize()

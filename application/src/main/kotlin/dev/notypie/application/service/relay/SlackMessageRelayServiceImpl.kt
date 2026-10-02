@@ -1,6 +1,7 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.configurations.relayQueueCapacity
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.isRateLimited
@@ -24,6 +25,8 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = KotlinLogging.logger {}
 
@@ -44,11 +47,36 @@ class SlackMessageRelayServiceImpl(
 ) : MessageRelayService {
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
     private val giveUpAfter: Duration = Duration.ofHours(appConfig.outbox.polling.giveUpAfterHours)
+    private val slotCapacity: Int = relayQueueCapacity(appConfig = appConfig)
+    private val freeSlots = AtomicInteger(slotCapacity)
+
+    override fun reserveDispatchSlots(wanted: Int): Int {
+        if (wanted <= 0) return 0
+        return minOf(freeSlots.getAndUpdate { free -> free - minOf(free, wanted) }, wanted)
+    }
+
+    override fun releaseDispatchSlots(count: Int) {
+        if (count <= 0) return
+        freeSlots.updateAndGet { free -> minOf(free + count, slotCapacity) }
+    }
 
     // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
     override fun batchPendingMessages(claims: List<OutboxClaim>) {
-        claims.forEach { claim ->
-            relayTaskExecutor.execute { dispatchClaimed(claim = claim) }
+        claims.forEachIndexed { index, claim ->
+            try {
+                relayTaskExecutor.execute {
+                    releaseDispatchSlots(count = 1)
+                    dispatchClaimed(claim = claim)
+                }
+            } catch (rejected: RejectedExecutionException) {
+                val left = claims.drop(index)
+                releaseDispatchSlots(count = left.size)
+                logger.warn(rejected) {
+                    "Relay executor rejected ${left.size} of ${claims.size} claims; leaving eventIds=" +
+                        "${left.map { it.row.eventId }} IN_PROGRESS for the recovery sweep"
+                }
+                return
+            }
         }
     }
 
