@@ -19,7 +19,9 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Clock
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
@@ -34,7 +36,8 @@ class MeetingRepositoryWriteTest
         private val jpaMeetingRepository: JpaMeetingRepository,
         transactionManager: PlatformTransactionManager,
     ) : BehaviorSpec({
-            val repositoryImpl = MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+            val repositoryImpl =
+                MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
             val transactionTemplate = TransactionTemplate(transactionManager)
 
             fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }!!
@@ -246,6 +249,34 @@ class MeetingRepositoryWriteTest
                         )
 
                     then("it is rejected because the meeting has started") {
+                        result.outcome shouldBe AddParticipantResult.Outcome.MEETING_STARTED
+                    }
+                }
+            }
+
+            given("a meeting in 2030, judged by a repository whose clock is already past its start") {
+                `when`("the host adds a participant") {
+                    val startAt = LocalDateTime.of(2030, 1, 1, 10, 0)
+                    val meetingUid =
+                        jpaMeetingRepository
+                            .save(createMeetingSchema(publisherId = "U_CLOCK_HOST", startAt = startAt))
+                            .meetingUid
+                    val lateClock =
+                        Clock.fixed(
+                            startAt.plusMinutes(1L).atZone(ZoneId.systemDefault()).toInstant(),
+                            ZoneId.systemDefault(),
+                        )
+                    val result =
+                        inTx {
+                            MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = lateClock)
+                                .addParticipants(
+                                    meetingUid = meetingUid,
+                                    requesterId = "U_CLOCK_HOST",
+                                    participantUserIds = listOf("U_NEW"),
+                                )
+                        }
+
+                    then("the injected clock, not the wall clock, decides that the meeting has started") {
                         result.outcome shouldBe AddParticipantResult.Outcome.MEETING_STARTED
                     }
                 }

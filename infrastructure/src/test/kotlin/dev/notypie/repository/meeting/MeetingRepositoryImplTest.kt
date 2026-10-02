@@ -12,13 +12,15 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 
 class MeetingRepositoryImplTest :
     BehaviorSpec({
         val jpaMeetingRepository = mockk<JpaMeetingRepository>()
-        val repository = MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+        val repository =
+            MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
 
         given("getMeeting") {
             val meetingSchema =

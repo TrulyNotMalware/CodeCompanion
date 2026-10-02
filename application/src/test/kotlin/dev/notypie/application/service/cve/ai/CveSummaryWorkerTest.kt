@@ -10,7 +10,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.Clock
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 class CveSummaryWorkerTest :
     BehaviorSpec({
@@ -21,6 +23,7 @@ class CveSummaryWorkerTest :
             eventRepository: CveEventRepository,
             topicRepository: CveTopicRepository = mockk(),
             summarizer: AiSummarizer = mockk(),
+            clock: Clock = Clock.systemDefaultZone(),
         ): CveSummaryWorker =
             CveSummaryWorker(
                 cveEventRepository = eventRepository,
@@ -30,6 +33,7 @@ class CveSummaryWorkerTest :
                 maxRetries = 5,
                 backoffMinutes = backoffMinutes,
                 stuckMinutes = stuckMinutes,
+                clock = clock,
             )
 
         given("a claimable event that summarizes cleanly") {
@@ -168,6 +172,23 @@ class CveSummaryWorkerTest :
                         exactly = 0,
                     ) { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) }
                     keptInterrupt shouldBe true
+                }
+            }
+        }
+
+        given("a tick on a clock fixed far from the wall clock") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val fixedNow = LocalDateTime.of(2030, 3, 4, 5, 6)
+            val clock = Clock.fixed(fixedNow.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault())
+            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns emptyList()
+
+            `when`("the tick runs") {
+                workerWith(eventRepository = eventRepository, clock = clock).tick()
+
+                then("the stuck cutoff and the claim horizon come from that clock") {
+                    verify(exactly = 1) { eventRepository.resetStuck(olderThan = fixedNow.minusMinutes(stuckMinutes)) }
+                    verify(exactly = 1) { eventRepository.findClaimable(now = fixedNow, maxRetries = 5, limit = 10) }
                 }
             }
         }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/service/cve/collector
 
@@ -29,7 +29,8 @@ collect ledger, fetches, and `insertIgnore`s each raw event as a `PENDING` `cve_
 - `windowMinutes` must divide 60 (`CveConfiguration` rejects anything else); `windowStart` is what makes
   every instance ticking inside the same bucket race for one ledger row, so multi-replica deployments
   do not double-fetch. The tick cadence (5 minutes) is hard-coded and independent of the window size.
-- `LocalDateTime.now()` is used directly; there is no injected `Clock`. `windowStart` is `internal` so
+- `now` comes from the injected `Clock` (the context bean, passed by `CveConfiguration`; 2026-10-02), so the window
+  and the ledger prune cutoff are pinned in specs with a fixed clock. `windowStart` is `internal` so
   the bucket math is unit-tested in isolation.
 - A new source is a new `SourceAdapter` in `infrastructure/impl/cve/` registered as a `@Bean` in
   `CveConfiguration` — the collector receives every `SourceAdapter` bean and needs no change.

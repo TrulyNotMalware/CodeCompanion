@@ -69,6 +69,7 @@ class CveConfiguration {
         cveEventRepository: CveEventRepository,
         cveTopicRepository: CveTopicRepository,
         aiSummarizer: AiSummarizer,
+        clock: Clock,
     ): CveSummaryWorker =
         CveSummaryWorker(
             cveEventRepository = cveEventRepository,
@@ -78,6 +79,7 @@ class CveConfiguration {
             maxRetries = appConfig.ai.maxRetries,
             backoffMinutes = appConfig.ai.backoffMinutes,
             stuckMinutes = appConfig.ai.stuckMinutes,
+            clock = clock,
         )
 
     @Bean
@@ -112,6 +114,7 @@ class CveConfiguration {
         cveEventRepository: CveEventRepository,
         cveCollectLedgerRepository: CveCollectLedgerRepository,
         sourceAdapters: List<SourceAdapter>,
+        clock: Clock,
     ): CveCollector {
         // windowMinutes must divide 60 evenly, or bucket boundaries drift across the hour (0 throws).
         val windowMinutes = appConfig.cve.collector.windowMinutes
@@ -124,6 +127,7 @@ class CveConfiguration {
             cveCollectLedgerRepository = cveCollectLedgerRepository,
             adapters = sourceAdapters,
             windowMinutes = windowMinutes,
+            clock = clock,
         )
     }
 

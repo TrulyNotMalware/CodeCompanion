@@ -12,7 +12,9 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.time.Clock
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 class CveCollectorTest :
     BehaviorSpec({
@@ -21,12 +23,14 @@ class CveCollectorTest :
             eventRepository: CveEventRepository,
             ledgerRepository: CveCollectLedgerRepository,
             adapters: List<SourceAdapter>,
+            clock: Clock = Clock.systemDefaultZone(),
         ) = CveCollector(
             cveTopicRepository = topicRepository,
             cveEventRepository = eventRepository,
             cveCollectLedgerRepository = ledgerRepository,
             adapters = adapters,
             windowMinutes = 5,
+            clock = clock,
         )
 
         given("a topic whose window this instance claims") {
@@ -96,6 +100,34 @@ class CveCollectorTest :
                     verify(exactly = 0) { ledgerRepository.claimWindow(topicId = 2L, windowStart = any()) }
                     verify(exactly = 0) { adapter.fetch(topic = second) }
                     keptInterrupt shouldBe true
+                }
+            }
+        }
+
+        given("a tick on a clock fixed far from the wall clock") {
+            val topicRepository = mockk<CveTopicRepository>()
+            val ledgerRepository = mockk<CveCollectLedgerRepository>()
+            val adapter = mockk<SourceAdapter>()
+            val topic = createCveTopic(id = 9L, topicKey = "clocked", sourceType = CveSourceType.NVD_CVE)
+            val fixedNow = LocalDateTime.of(2030, 3, 4, 5, 17, 42)
+            val clock = Clock.fixed(fixedNow.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault())
+            every { topicRepository.findActiveTopics() } returns listOf(topic)
+            every { adapter.supports(sourceType = CveSourceType.NVD_CVE) } returns true
+            every { ledgerRepository.claimWindow(topicId = 9L, windowStart = any()) } returns false
+            every { ledgerRepository.deleteOlderThan(cutoff = any()) } returns 0
+
+            `when`("tick runs") {
+                collectorWith(topicRepository, mockk(), ledgerRepository, listOf(adapter), clock = clock).tick()
+
+                then("the claimed window and the ledger prune come from that clock") {
+                    verify(exactly = 1) {
+                        ledgerRepository.claimWindow(topicId = 9L, windowStart = LocalDateTime.of(2030, 3, 4, 5, 15))
+                    }
+                    verify(exactly = 1) {
+                        ledgerRepository.deleteOlderThan(
+                            cutoff = fixedNow.minusDays(CveCollector.LEDGER_RETENTION_DAYS),
+                        )
+                    }
                 }
             }
         }
@@ -198,6 +230,7 @@ class CveCollectorTest :
                     cveCollectLedgerRepository = mockk(),
                     adapters = emptyList(),
                     windowMinutes = windowMinutes,
+                    clock = Clock.systemDefaultZone(),
                 )
 
             `when`("a tick time falls inside a 5-minute bucket") {

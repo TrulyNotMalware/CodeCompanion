@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/service/cve/ai
 
@@ -26,9 +26,9 @@ working (deterministically) with no LLM. Which implementation exists is decided 
   keyed on the token the worker generated; a `0` row count means the row was reset and re-owned, and
   the worker logs and walks away rather than burning the new owner's retry budget. Preserve that on any
   new transition.
-- The worker uses `LocalDateTime.now()` directly — no injected `Clock`. `CveSummaryWorkerTest`
-  therefore matches repository calls with `any()` for timestamps; a `Clock` refactor must update the
-  spec and `CveConfiguration.cveSummaryWorker`.
+- Every timestamp (`resetStuck` cutoff, claim horizon, `markDone`, backoff) comes from the injected `Clock` (the context
+  bean, passed by `CveConfiguration`; 2026-10-02). `CveSummaryWorkerTest` pins the stuck cutoff and the claim horizon with
+  a fixed clock; older cases still match timestamps with `any()` or a `before`/`after` window.
 - Busy is not failure. The sidecar serialises turns, so `AiSummarizerBusyException` re-schedules in
   2 minutes (`BUSY_RETRY_DELAY_MINUTES`) with `retryCount` untouched; only real exceptions consume the
   `maxRetries` budget. An interrupt is not a failure either: it is rethrown with the flag restored, the row

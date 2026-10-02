@@ -9,11 +9,13 @@ import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 
 open class MeetingRepositoryImpl(
     private val jpaMeetingRepository: JpaMeetingRepository,
+    private val clock: Clock,
 ) : MeetingRepository {
     @Transactional
     override fun createNewMeeting(meeting: Meeting, idempotencyKey: UUID, channel: String): Meeting =
@@ -115,7 +117,7 @@ open class MeetingRepositoryImpl(
         if (schema.publisherId != requesterId || schema.isCanceled) {
             return AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
         }
-        if (!schema.startAt.isAfter(LocalDateTime.now())) {
+        if (!schema.startAt.isAfter(LocalDateTime.now(clock))) {
             return AddParticipantResult(
                 outcome = AddParticipantResult.Outcome.MEETING_STARTED,
                 meeting = schema.toMeetingDto(),

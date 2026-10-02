@@ -108,7 +108,8 @@ class MeetingJpaStore(
     val jpaMeetingRepository: JpaMeetingRepository,
     val jpaMeetingReminderRepository: JpaMeetingReminderRepository,
 ) : AutoCloseable {
-    val meetingRepository = MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+    val meetingRepository =
+        MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
     val reminderRepository =
         MeetingReminderRepositoryImpl(
             jpaMeetingRepository = jpaMeetingRepository,

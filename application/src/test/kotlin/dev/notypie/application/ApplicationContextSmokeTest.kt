@@ -23,6 +23,7 @@ import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
+import dev.notypie.repository.meeting.MeetingRepositoryImpl
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.extensions.ApplyExtension
@@ -114,6 +115,7 @@ class ApplicationContextSmokeTest
                             StandupSchedulingService::class.java,
                             StandupAnswerService::class.java,
                             OpsStatusService::class.java,
+                            MeetingRepositoryImpl::class.java,
                         ).forEach { type ->
                             val bean = AopTestUtils.getUltimateTargetObject<Any>(context.getBean(type))
                             ReflectionTestUtils.getField(bean, "clock") shouldBeSameInstanceAs clock

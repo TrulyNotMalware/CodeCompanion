@@ -29,6 +29,7 @@ import dev.notypie.repository.standup.JpaRoutineRepository
 import dev.notypie.repository.standup.JpaSessionDispatchRepository
 import dev.notypie.repository.standup.JpaStandupSessionRepository
 import dev.notypie.repository.standup.StandupRepositoryImpl
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties
 import org.springframework.context.annotation.Bean
@@ -36,6 +37,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy
+import java.time.Clock
 
 const val PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"
 const val JPA_ENTITY_PACKAGES = "dev.notypie.repository"
@@ -58,8 +60,12 @@ class JpaConfiguration {
 
     @Bean
     @Primary
-    fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository) =
-        MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+    fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository, clock: ObjectProvider<Clock>) =
+        MeetingRepositoryImpl(
+            jpaMeetingRepository = jpaMeetingRepository,
+            // The application declares the Clock bean; infrastructure-only JPA slices have none.
+            clock = clock.getIfAvailable { Clock.systemDefaultZone() },
+        )
 
     @Bean
     @Primary
