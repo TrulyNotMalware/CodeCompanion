@@ -109,7 +109,7 @@ class AgentConverseServiceTest :
                     threadId = TEST_THREAD_TS,
                     responseBasicInfo = basicInfo,
                 )
-            val expectedSessionKey = "${basicInfo.channel}:$TEST_THREAD_TS"
+            val expectedSessionKey = "${basicInfo.channel}:$TEST_THREAD_TS:${basicInfo.publisherId}"
 
             val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
             every { sessionRepository.findProviderSessionId(sessionKey = expectedSessionKey) } returns "sess-prev"
@@ -146,7 +146,7 @@ class AgentConverseServiceTest :
             `when`("handleAgentConverse") {
                 service.handleAgentConverse(event = event)
 
-                then("the turn is keyed by channel:thread and resumes the stored session") {
+                then("the turn is keyed by channel:thread:requester and resumes the stored session") {
                     turnRequest.captured.sessionKey shouldBe expectedSessionKey
                     turnRequest.captured.prompt shouldBe "what is on my calendar"
                     turnRequest.captured.sessionId shouldBe "sess-prev"
@@ -514,6 +514,67 @@ class AgentConverseServiceTest :
             }
         }
 
+        given("two requesters asking in the same thread") {
+            val first = createCommandBasicInfo(publisherId = "U_FIRST")
+            val second = createCommandBasicInfo(publisherId = "U_SECOND")
+            val gateway = mockk<AgentGateway>()
+            val turnRequests = mutableListOf<AgentTurnRequest>()
+            every { gateway.converse(request = capture(turnRequests)) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "hi")
+
+            val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
+            every {
+                sessionRepository.findProviderSessionId(sessionKey = "${first.channel}:$TEST_THREAD_TS:U_FIRST")
+            } returns "sess-first"
+            every {
+                sessionRepository.findProviderSessionId(sessionKey = "${second.channel}:$TEST_THREAD_TS:U_SECOND")
+            } returns null
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    outboundStager = stagerCapturing(stagedMessage = slot()),
+                )
+
+            `when`("each asks once") {
+                service.handleAgentConverse(
+                    event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS, responseBasicInfo = first),
+                )
+                service.handleAgentConverse(
+                    event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS, responseBasicInfo = second),
+                )
+
+                then("the second requester does not resume the first requester's provider session") {
+                    turnRequests.map { it.sessionKey } shouldBe
+                        listOf(
+                            "${first.channel}:$TEST_THREAD_TS:U_FIRST",
+                            "${second.channel}:$TEST_THREAD_TS:U_SECOND",
+                        )
+                    turnRequests.map { it.sessionId } shouldBe listOf("sess-first", null)
+                }
+            }
+        }
+
+        given("an event with a blank thread anchor") {
+            val basicInfo = createCommandBasicInfo()
+            val gateway = mockk<AgentGateway>()
+            val turnRequest = slot<AgentTurnRequest>()
+            every { gateway.converse(request = capture(turnRequest)) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "hi")
+            val service =
+                buildService(agentGateway = gateway, outboundStager = stagerCapturing(stagedMessage = slot()))
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(
+                    event = createAgentConverseRequestEvent(threadId = " ", responseBasicInfo = basicInfo),
+                )
+
+                then("the session key skips the blank thread instead of keeping an empty segment") {
+                    turnRequest.captured.sessionKey shouldBe "${basicInfo.channel}:${basicInfo.publisherId}"
+                }
+            }
+        }
+
         given("an event whose app_mention carried no display names") {
             val basicInfo = createCommandBasicInfo()
             val gateway = mockk<AgentGateway>()
@@ -692,7 +753,7 @@ class AgentConverseServiceTest :
                     val scopedToken = turnRequest.captured.scopedToken.shouldNotBeNull()
                     val decoded = codec.verify(token = scopedToken).shouldNotBeNull()
                     decoded.userId shouldBe basicInfo.publisherId
-                    decoded.sessionKey shouldBe "${basicInfo.channel}:$TEST_THREAD_TS"
+                    decoded.sessionKey shouldBe "${basicInfo.channel}:$TEST_THREAD_TS:${basicInfo.publisherId}"
                     decoded.turnId shouldBe event.idempotencyKey.toString()
                 }
             }

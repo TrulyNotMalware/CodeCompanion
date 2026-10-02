@@ -122,7 +122,9 @@ class AgentConverseService(
     private fun converse(event: AgentConverseRequestEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        val sessionKey = "${basicInfo.channel}:${payload.threadId ?: basicInfo.publisherId}"
+        val sessionKey =
+            listOfNotNull(basicInfo.channel, payload.threadId?.takeIf { it.isNotBlank() }, basicInfo.publisherId)
+                .joinToString(separator = ":")
 
         val startedAtNanos = System.nanoTime()
         val result =
