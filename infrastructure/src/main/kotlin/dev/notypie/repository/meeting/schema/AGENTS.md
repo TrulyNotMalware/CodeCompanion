@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/repository/meeting/schema
 
@@ -33,7 +33,8 @@ change together.
   `endAt` after `startAt`) re-run on load. Only `createNewMeeting` calls it; every read path uses
   `toMeetingDto`. Rows with `end_at <= start_at` from before the reschedule fix are reset by `V21`.
 - **`absent_reason` is stored by enum name with no `length`** (unlike every other enum column in the module);
-  `RejectReason` constants must fit the default column and must never be renamed.
+  `RejectReason` constants must fit the default column and must never be renamed. It is mapped `nullable = false`
+  to match the non-null property; that reaches only schemas Hibernate creates, not an existing database column.
 - **`MeetingReminderSchema` is all `val`**: status, token and timestamps change only through the native
   statements in `JpaMeetingReminderRepository`. Do not add setters and mutate through the entity.
   `updated_at` is `@UpdateTimestamp` for entity saves but is set explicitly by every native CAS; the

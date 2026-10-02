@@ -89,7 +89,7 @@ class OutboxMessage(
     var version: Long = 0L
         protected set
 
-    @field:Column(name = "status")
+    @field:Column(name = "status", nullable = false)
     var status: String = MessageStatus.PENDING.name
         protected set
 

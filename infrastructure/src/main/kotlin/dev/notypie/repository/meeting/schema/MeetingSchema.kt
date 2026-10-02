@@ -169,7 +169,7 @@ class ParticipantsSchema(
     @field:Column(name = "is_attending", nullable = false)
     val isAttending: Boolean = true,
     @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "absent_reason")
+    @field:Column(name = "absent_reason", nullable = false)
     val absentReason: RejectReason = RejectReason.ATTENDING,
     @field:Column(name = "absent_reason_detail")
     val absentReasonDetail: String? = null,
