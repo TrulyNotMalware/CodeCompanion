@@ -85,12 +85,14 @@ class ApplicationMessageDispatcherTest :
         val slack = testSlack()
         val loopbackClient = toLoopback(client = responseUrlClient(slack = slack))
         val sleeps = mutableListOf<Duration>()
+        val unknownOutcomes = ConcurrentLinkedDeque<String>()
 
         fun dispatcher(sleeper: (Duration) -> Unit = { sleeps.add(it) }) =
             ApplicationMessageDispatcher(
                 botToken = "xoxb-test",
                 applicationEventPublisher = mockk(relaxed = true),
                 retryService = RetryService(),
+                onOutcomeUnknown = { unknownOutcomes.add(it) },
                 slack = slack,
                 okHttpClient = loopbackClient,
                 sleeper = sleeper,
@@ -101,6 +103,7 @@ class ApplicationMessageDispatcherTest :
         fun reset() {
             responses.clear()
             sleeps.clear()
+            unknownOutcomes.clear()
             calls.set(0)
         }
 
@@ -436,6 +439,7 @@ class ApplicationMessageDispatcherTest :
             botToken = "xoxb-test",
             applicationEventPublisher = mockk(relaxed = true),
             retryService = RetryService(),
+            onOutcomeUnknown = { unknownOutcomes.add(it) },
             slack = slack,
             okHttpClient = toLoopback(client = responseUrlClient(slack = slack)),
         )
@@ -577,6 +581,7 @@ class ApplicationMessageDispatcherTest :
                 botToken = "xoxb-test",
                 applicationEventPublisher = mockk(relaxed = true),
                 retryService = RetryService(),
+                onOutcomeUnknown = { unknownOutcomes.add(it) },
                 slack = Slack.getInstance(config, SlackHttpClient(resettingClient)),
                 okHttpClient = loopbackClient,
             )
@@ -601,6 +606,51 @@ class ApplicationMessageDispatcherTest :
                 then("it is not resent, because Slack may already have posted it") {
                     output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: StreamResetException"
                     calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("dispatches that end with an unknown outcome") {
+            `when`("chat.postMessage answers HTTP 500") {
+                reset()
+                responses.add(status(code = 500, body = "boom"))
+                defaultDispatcher.dispatch(event = channelMessage())
+
+                then("it is reported once under chat.postMessage") {
+                    unknownOutcomes.toList() shouldBe listOf("chat.postMessage")
+                }
+            }
+
+            `when`("chat.postEphemeral stalls after the request was sent") {
+                reset()
+                val release = CountDownLatch(1)
+                repeat(3) { responses.add(stallAfterRequest(release = release)) }
+                impatientDispatcher().dispatch(event = ephemeralMessage())
+                release.countDown()
+
+                then("it is reported once under chat.postEphemeral") {
+                    unknownOutcomes.toList() shouldBe listOf("chat.postEphemeral")
+                }
+            }
+
+            `when`("a response_url answers internal_error") {
+                reset()
+                responses.add(status(code = 200, body = """{"ok":false,"error":"internal_error"}"""))
+                defaultDispatcher.dispatch(event = actionResponse())
+
+                then("it is reported once under response_url") {
+                    unknownOutcomes.toList() shouldBe listOf("response_url")
+                }
+            }
+
+            `when`("chat.postMessage is rejected for good or delivered") {
+                reset()
+                responses.add(status(code = 200, body = """{"ok":false,"error":"channel_not_found"}"""))
+                defaultDispatcher.dispatch(event = channelMessage())
+                defaultDispatcher.dispatch(event = channelMessage())
+
+                then("nothing is reported") {
+                    unknownOutcomes.toList() shouldBe emptyList()
                 }
             }
         }

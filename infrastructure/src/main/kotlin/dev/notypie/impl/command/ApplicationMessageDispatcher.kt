@@ -56,6 +56,11 @@ private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR = 500
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 private const val HTTPS_PORT = 443
+private const val CHAT_POST_MESSAGE_METHOD = "chat.postMessage"
+private const val CHAT_POST_EPHEMERAL_METHOD = "chat.postEphemeral"
+private const val CHAT_UPDATE_METHOD = "chat.update"
+private const val VIEWS_OPEN_METHOD = "views.open"
+private const val RESPONSE_URL_METHOD = "response_url"
 private const val MAX_RESPONSE_BODY_BYTES = 4_096L
 private const val MAX_FAILURE_REASON_CHARS = 200
 private val MAX_INLINE_RETRY_AFTER: Duration = Duration.ofSeconds(3L)
@@ -157,6 +162,7 @@ class ApplicationMessageDispatcher(
     private val botToken: String,
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val retryService: RetryService,
+    private val onOutcomeUnknown: (slackMethod: String) -> Unit,
     private val slack: Slack = slackClient(),
     private val okHttpClient: OkHttpClient = responseUrlClient(slack = slack),
     private val sleeper: (Duration) -> Unit = { Thread.sleep(it.toMillis()) },
@@ -192,13 +198,8 @@ class ApplicationMessageDispatcher(
                     failOutput(event = event, reason = TRANSIENT_EXHAUSTED_REASON)
                 }
 
-                cause is IOException -> {
-                    dispatcherLog.warn(exception) {
-                        "Slack call for ${event.commandDetailType} failed after it may have been sent; " +
-                            "not resending idempotencyKey=${event.idempotencyKey}"
-                    }
-                    failOutput(event = event, reason = "$OUTCOME_UNKNOWN_REASON: ${cause::class.java.simpleName}")
-                }
+                cause is IOException ->
+                    outcomeUnknown(event = event, what = cause::class.java.simpleName, cause = exception)
 
                 else -> throw exception
             }
@@ -247,13 +248,27 @@ class ApplicationMessageDispatcher(
         return outcomeUnknown(event = event, what = "http_$code")
     }
 
-    private fun outcomeUnknown(event: SlackEventPayload, what: String): CommandOutput {
-        dispatcherLog.warn {
-            "Slack answered $what for ${event.commandDetailType}, which may already have been delivered; " +
+    private fun outcomeUnknown(event: SlackEventPayload, what: String, cause: Throwable? = null): CommandOutput {
+        val slackMethod = slackMethodOf(event = event)
+        dispatcherLog.warn(cause) {
+            "$slackMethod for ${event.commandDetailType} ended with $what and may already have been delivered; " +
                 "not resending idempotencyKey=${event.idempotencyKey}"
         }
+        onOutcomeUnknown(slackMethod)
         return failOutput(event = event, reason = "$OUTCOME_UNKNOWN_REASON: $what")
     }
+
+    private fun slackMethodOf(event: SlackEventPayload): String =
+        when (event) {
+            is ActionEventPayloadContents -> RESPONSE_URL_METHOD
+            is OpenViewPayloadContents -> VIEWS_OPEN_METHOD
+            is PostEventPayloadContents ->
+                when (event.messageType) {
+                    MessageType.EPHEMERAL_MESSAGE -> CHAT_POST_EPHEMERAL_METHOD
+                    MessageType.CHANNEL_ALERT, MessageType.DIRECT_MESSAGE -> CHAT_POST_MESSAGE_METHOD
+                    MessageType.UPDATE_MESSAGE -> CHAT_UPDATE_METHOD
+                }
+        }
 
     private fun withRateLimitRetry(event: SlackEventPayload, block: () -> CommandOutput): CommandOutput {
         val rateLimited =
@@ -294,7 +309,7 @@ class ApplicationMessageDispatcher(
     private fun dispatchEphemeralContents(event: PostEventPayloadContents, idempotent: Boolean) =
         dispatchPostContents(
             event = event,
-            apiMethod = "chat.postEphemeral",
+            apiMethod = CHAT_POST_EPHEMERAL_METHOD,
             responseType = ChatPostEphemeralResponse::class.java,
             idempotent = idempotent,
         )
@@ -302,7 +317,7 @@ class ApplicationMessageDispatcher(
     private fun dispatchChatPostMessageContents(event: PostEventPayloadContents, idempotent: Boolean) =
         dispatchPostContents(
             event = event,
-            apiMethod = "chat.postMessage",
+            apiMethod = CHAT_POST_MESSAGE_METHOD,
             responseType = ChatPostMessageResponse::class.java,
             idempotent = idempotent,
         )
@@ -310,7 +325,7 @@ class ApplicationMessageDispatcher(
     private fun dispatchChatUpdateContents(event: PostEventPayloadContents, idempotent: Boolean) =
         dispatchPostContents(
             event = event,
-            apiMethod = "chat.update",
+            apiMethod = CHAT_UPDATE_METHOD,
             responseType = ChatUpdateResponse::class.java,
             idempotent = idempotent,
         )

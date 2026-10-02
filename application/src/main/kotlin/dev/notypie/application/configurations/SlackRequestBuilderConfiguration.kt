@@ -12,10 +12,13 @@ import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackTemplateBuilder
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+
+const val METRIC_OUTCOME_UNKNOWN = "codecompanion.slack.dispatch.outcome_unknown"
 
 @Configuration
 class SlackRequestBuilderConfiguration(
@@ -28,12 +31,18 @@ class SlackRequestBuilderConfiguration(
 
     @Bean
     @ConditionalOnMissingBean(MessageDispatcher::class)
-    fun messageDispatcher(applicationEventPublisher: ApplicationEventPublisher, retryService: RetryService) =
-        ApplicationMessageDispatcher(
-            botToken = appConfig.api.token,
-            applicationEventPublisher = applicationEventPublisher,
-            retryService = retryService,
-        )
+    fun messageDispatcher(
+        applicationEventPublisher: ApplicationEventPublisher,
+        retryService: RetryService,
+        meterRegistry: MeterRegistry,
+    ) = ApplicationMessageDispatcher(
+        botToken = appConfig.api.token,
+        applicationEventPublisher = applicationEventPublisher,
+        retryService = retryService,
+        onOutcomeUnknown = { slackMethod ->
+            meterRegistry.counter(METRIC_OUTCOME_UNKNOWN, "method", slackMethod).increment()
+        },
+    )
 
     @Bean
     @ConditionalOnMissingBean(SlackViewOpenDispatcher::class)
