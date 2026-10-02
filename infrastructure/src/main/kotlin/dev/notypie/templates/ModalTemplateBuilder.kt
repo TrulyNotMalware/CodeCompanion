@@ -41,9 +41,41 @@ class ModalTemplateBuilder(
         private val STANDUP_SESSION_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-        // Slack: a section's text holds at most 3,000 characters and a message at most 50 blocks.
-        const val SLACK_SECTION_TEXT_MAX_CHARS = 3_000
         const val STANDUP_SUMMARY_MAX_MEMBER_SECTIONS = 48
+        private const val STANDUP_MEMBER_LINE_RESERVE: Int = 32
+        private const val STANDUP_QUESTION_LINE_OVERHEAD: Int = 6
+        internal const val STANDUP_ANSWER_MIN_LENGTH: Int = 50
+
+        fun standupSummaryHeader(routineName: String, sessionDate: LocalDate): String =
+            "*${routineName.escapeMrkdwn()} — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*"
+
+        fun standupSummaryMemberSection(userId: String, answer: StandupAnswerDto?, questions: List<String>): String =
+            buildString {
+                append("<@$userId>")
+                if (answer == null) {
+                    append(" _(no response)_")
+                    return@buildString
+                }
+                questions.forEachIndexed { index, question ->
+                    val response =
+                        answer.responses
+                            .getOrNull(index)
+                            .orEmpty()
+                            .ifBlank { "(blank)" }
+                    append("\n• *${question.escapeMrkdwn()}* ${response.escapeMrkdwn()}")
+                }
+            }.truncateSectionText(limit = SlackBlockLimits.SECTION_TEXT_BUDGET)
+
+        private fun standupAnswerMaxLength(questions: List<String>): Int {
+            val fixed =
+                STANDUP_MEMBER_LINE_RESERVE +
+                    questions.sumOf { it.escapeMrkdwn().length + STANDUP_QUESTION_LINE_OVERHEAD }
+            return ((SlackBlockLimits.SECTION_TEXT_BUDGET - fixed) / questions.size.coerceAtLeast(minimumValue = 1))
+                .coerceIn(
+                    minimumValue = STANDUP_ANSWER_MIN_LENGTH,
+                    maximumValue = SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH,
+                )
+        }
 
         // Must stay aligned with RescheduleMeetingSubmissionContext's DATE_PATTERN/TIME_PATTERN, which reads these.
         private val RESCHEDULE_DATE_FORMAT: DateTimeFormatter =
@@ -462,12 +494,14 @@ class ModalTemplateBuilder(
                             )}",
                         )
                     }
+                    val answerMaxLength = standupAnswerMaxLength(questions = questions)
                     questions.forEachIndexed { index, question ->
                         input(blockId = "${StandupModalIds.BLOCK_ID_PREFIX}$index") {
                             label(text = question)
                             plainTextInput(
                                 actionId = "${StandupModalIds.ACTION_ID_PREFIX}$index",
                                 multiline = true,
+                                maxLength = answerMaxLength,
                             )
                         }
                     }
@@ -636,36 +670,28 @@ class ModalTemplateBuilder(
         questions: List<String>,
     ): LayoutBlocks {
         val answersByUser = answers.associateBy { it.userId }
-        val memberSections =
-            members.map { member ->
-                buildString {
-                    append("<@${member.userId}>")
-                    val answer = answersByUser[member.userId]
-                    if (answer == null) {
-                        append(" _(no response)_")
-                    } else {
-                        questions.forEachIndexed { index, question ->
-                            val response =
-                                answer.responses
-                                    .getOrNull(index)
-                                    .orEmpty()
-                                    .ifBlank { "(blank)" }
-                            append("\n• *$question* $response")
-                        }
-                    }
-                }
-            }
-        val hiddenMembers = memberSections.size - STANDUP_SUMMARY_MAX_MEMBER_SECTIONS
+        val hiddenMembers = members.size - STANDUP_SUMMARY_MAX_MEMBER_SECTIONS
         return layoutBlocks {
             add(
                 block =
                     modalBlockBuilder.simpleText(
-                        text = "*$routineName — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*",
+                        text = standupSummaryHeader(routineName = routineName, sessionDate = sessionDate),
                         isMarkDown = true,
                     ),
             )
-            memberSections.take(STANDUP_SUMMARY_MAX_MEMBER_SECTIONS).forEach { section ->
-                add(block = modalBlockBuilder.simpleText(text = section.fitSlackSection(), isMarkDown = true))
+            members.take(STANDUP_SUMMARY_MAX_MEMBER_SECTIONS).forEach { member ->
+                add(
+                    block =
+                        modalBlockBuilder.simpleText(
+                            text =
+                                standupSummaryMemberSection(
+                                    userId = member.userId,
+                                    answer = answersByUser[member.userId],
+                                    questions = questions,
+                                ),
+                            isMarkDown = true,
+                        ),
+                )
             }
             if (hiddenMembers > 0) {
                 add(
@@ -678,9 +704,6 @@ class ModalTemplateBuilder(
             }
         }
     }
-
-    private fun String.fitSlackSection(): String =
-        if (length <= SLACK_SECTION_TEXT_MAX_CHARS) this else "${take(SLACK_SECTION_TEXT_MAX_CHARS - 1)}…"
 
     override fun timeScheduleNoticeTemplate(
         timeScheduleInfo: TimeScheduleAlertContents,

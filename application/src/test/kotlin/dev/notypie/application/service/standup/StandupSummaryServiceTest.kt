@@ -1,9 +1,9 @@
 package dev.notypie.application.service.standup
 
+import com.slack.api.model.block.SectionBlock
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.service.meeting.createH2DataSource
 import dev.notypie.application.service.meeting.createH2TransactionManager
-import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -12,7 +12,6 @@ import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupAnswerDto
 import dev.notypie.domain.standup.createStandupSessionDto
-import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -20,8 +19,12 @@ import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.templates.ModalTemplateBuilder
+import dev.notypie.templates.SlackBlockLimits
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -46,53 +49,102 @@ class StandupSummaryServiceTest :
             return transactionManager
         }
 
-        given("the largest summary the modal allows: 15 members x 3 questions x 3,000 Korean characters") {
-            val members = (1..15).map { createRoutineMemberDto(userId = "U$it") }
-            val answers =
-                members.map { member ->
-                    createStandupAnswerDto(userId = member.userId, responses = List(size = 3) { "가".repeat(3_000) })
+        given("a cutoff for a full routine whose stored answers fill several Slack messages") {
+            val questions = (1..8).map { index -> "질문$index " + "가".repeat(n = 194) }
+            val members = (1..30).map { createRoutineMemberDto(userId = "U0123456789$it") }
+            val sessionUid = UUID.randomUUID()
+            val routineUid = UUID.randomUUID()
+            val repo = mockk<StandupRepository>()
+            val outboxRepo = mockk<MessageOutboxRepository>()
+            val codec = CodecOutboundMessagePort()
+            val port = mockk<OutboundMessagePort>()
+            val staged = mutableListOf<OutboundMessage>()
+            val saved = mutableListOf<OutboxMessage>()
+            every { port.toRow(message = capture(staged), basicInfo = any()) } answers {
+                codec.toRow(message = firstArg(), basicInfo = secondArg())
+            }
+            every { outboxRepo.save(capture(saved)) } answers { firstArg() }
+            every { repo.findSessionForSummary(sessionUid = sessionUid) } returns
+                createStandupSessionDto(
+                    sessionId = 21L,
+                    sessionUid = sessionUid,
+                    routineUid = routineUid,
+                    answers =
+                        members.map { member ->
+                            createStandupAnswerDto(
+                                userId = member.userId,
+                                responses = questions.map { "나".repeat(3_000) },
+                            )
+                        },
+                )
+            every { repo.getRoutine(routineUid = routineUid) } returns
+                createRoutineDto(
+                    routineUid = routineUid,
+                    name = "Daily Standup",
+                    members = members,
+                    questions = questions,
+                )
+            every { repo.markSessionSummarized(sessionId = 21L, messageTs = any()) } returns true
+            val templateBuilder = ModalTemplateBuilder(slackApiToken = "xoxb-test")
+
+            `when`("the summary is posted") {
+                StandupSummaryService(
+                    standupRepository = repo,
+                    outboxRepository = outboxRepo,
+                    outboundMessagePort = port,
+                    transactionManager = stubTransactionManager(),
+                ).postSummary(
+                    event =
+                        StandupCutoffEvent(
+                            sessionId = 21L,
+                            sessionUid = sessionUid,
+                            routineUid = routineUid,
+                            sessionDate = LocalDate.of(2026, 5, 4),
+                        ),
+                )
+                val summaries =
+                    staged.map { (it as OutboundMessage.ChannelMessage).content as MessageContent.StandupSummary }
+
+                then("it is split into several messages, each within Slack's total block text and block count") {
+                    (summaries.size > 1) shouldBe true
+                    summaries.forEach { summary ->
+                        val blocks =
+                            templateBuilder
+                                .standupSummaryTemplate(
+                                    routineName = summary.routineName,
+                                    sessionDate = summary.sessionDate,
+                                    members = summary.members,
+                                    answers = summary.answers,
+                                    questions = summary.questions,
+                                ).template
+                        val texts = blocks.map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+                        blocks.size shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_MAX_BLOCKS
+                        texts.sumOf { it.length } shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                    }
                 }
-            val port = CodecOutboundMessagePort()
 
-            fun payloadBytes(summaryAnswers: List<StandupAnswerDto>): Int =
-                port
-                    .toRow(
-                        message =
-                            OutboundMessage.ChannelMessage(
-                                target = ConversationTarget(id = "C_SUMMARY"),
-                                content =
-                                    MessageContent.StandupSummary(
-                                        routineName = "Daily Standup",
-                                        sessionDate = LocalDate.of(2026, 5, 4),
-                                        members = members,
-                                        answers = summaryAnswers,
-                                        questions = listOf("Yesterday?", "Today?", "Blockers?"),
-                                    ),
-                            ),
-                        basicInfo = createCommandBasicInfo(),
-                    ).payload
-                    .toByteArray(Charsets.UTF_8)
-                    .size
-
-            `when`("its outbox row is encoded with and without the summary bound") {
-                val unbounded = payloadBytes(summaryAnswers = answers)
-                val bounded = payloadBytes(summaryAnswers = answers.boundedForSummary())
-
-                then("the unbounded payload would not fit the TEXT column, and the bounded one does") {
-                    (unbounded > 65_535) shouldBe true
-                    (bounded < 65_535) shouldBe true
+                then("every member appears once, in routine order, and each part is labelled") {
+                    summaries.flatMap { summary -> summary.members.map { it.userId } } shouldBe
+                        members.map { it.userId }
+                    summaries.mapIndexed { index, summary ->
+                        summary.routineName shouldBe "Daily Standup (${index + 1}/${summaries.size})"
+                    }
                 }
 
-                then("every member keeps an answer per question, cut short with an ellipsis") {
-                    answers.boundedForSummary().forEach { answer ->
-                        answer.responses.size shouldBe 3
-                        answer.responses.forEach { it.endsWith("…") shouldBe true }
+                then("each outbox row's payload fits the TEXT column") {
+                    saved.size shouldBe summaries.size
+                    saved.forEach { row -> row.payload.toByteArray(Charsets.UTF_8).size shouldBeLessThanOrEqual 65_535 }
+                }
+
+                then("the session is marked summarized once, with the first row's marker") {
+                    verify(exactly = 1) {
+                        repo.markSessionSummarized(sessionId = 21L, messageTs = "outbox:${saved.first().eventId}")
                     }
                 }
             }
         }
 
-        given("a cutoff for a session whose answers exceed the summary budget") {
+        given("a cutoff for a session whose answers exceed what one member section shows") {
             val repo = mockk<StandupRepository>()
             val outboxRepo = mockk<MessageOutboxRepository>()
             val port = mockk<OutboundMessagePort>()
@@ -114,7 +166,8 @@ class StandupSummaryServiceTest :
                 )
             val staged = slot<OutboundMessage>()
             every { repo.findSessionForSummary(sessionUid = sessionUid) } returns session
-            every { repo.getRoutine(routineUid = routineUid) } returns createRoutineDto(routineUid = routineUid)
+            every { repo.getRoutine(routineUid = routineUid) } returns
+                createRoutineDto(routineUid = routineUid, members = listOf(createRoutineMemberDto(userId = "U_LONG")))
             every { port.toRow(message = capture(staged), basicInfo = any()) } returns
                 createOutboxRow(eventId = "EVT-11")
             every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
@@ -131,7 +184,7 @@ class StandupSummaryServiceTest :
                         ),
                 )
 
-                then("the stored summary carries the bounded answer, not the raw one") {
+                then("the stored summary carries the member's answer bounded to one section, not the raw one") {
                     val content =
                         (staged.captured as OutboundMessage.ChannelMessage).content as MessageContent.StandupSummary
                     val response =
