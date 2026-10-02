@@ -112,7 +112,6 @@ open class StandupRepositoryImpl(
         return AnswerRecordResult.RECORDED
     }
 
-    // An instance already in the persistence context keeps its stale status after the locking query; read it again.
     private fun lockedStatusOf(session: StandupSessionSchema): SessionStatus =
         SessionStatus.valueOf(jpaStandupSessionRepository.findLockedStatus(id = session.id))
 

@@ -27,7 +27,6 @@ open class MeetingReminderRepositoryImpl(
                 )
             }
 
-    // Moved, not kept: the (meeting_id, offset_minutes) unique key would leave the stale PENDING row as the only one.
     @Transactional
     override fun ensureReminder(
         meetingId: Long,

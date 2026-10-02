@@ -116,7 +116,6 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         @Param("now") now: Instant,
     ): Int
 
-    // CAS on the value read and the current start: a pass that read a pre-reschedule start must not undo a re-arm.
     @Modifying
     @Transactional
     @Query(
@@ -138,7 +137,6 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         @Param("now") now: Instant,
     ): Int
 
-    // Conditional on the value read: a row another replica realigned since is correct and must survive.
     @Modifying
     @Transactional
     @Query(

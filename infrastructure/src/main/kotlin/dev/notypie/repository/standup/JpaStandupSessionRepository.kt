@@ -57,7 +57,6 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("id") id: Long,
     ): String
 
-    // MariaDB-only syntax (H2: MODE=MariaDB); decides insert vs update on committed rows, not this tx's view.
     @Modifying
     @Query(
         value = """
