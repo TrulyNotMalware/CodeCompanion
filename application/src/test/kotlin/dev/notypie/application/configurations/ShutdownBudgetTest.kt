@@ -49,15 +49,13 @@ class ShutdownBudgetTest :
                 // listener containers (the record in hand) and the web server drain.
                 val lifecyclePhases = 3
 
-                // Not bounded by the phase timeout: the JSON producer closes synchronously in its stop(), the
-                // dead-letter bytes producer in its owner's destroy().
-                val producerCloses = 2
+                val producerCloses = 3
                 val required =
                     preStopSeconds + lifecyclePhases * phaseSeconds + RELAY_SHUTDOWN_AWAIT_SECONDS + agentTurnSeconds +
                         DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS + producerCloses * PRODUCER_CLOSE_TIMEOUT_SECONDS
 
                 then(
-                    "the grace period covers preStop, the three lifecycle phases, every executor wait and both producer closes",
+                    "the grace period covers preStop, the three lifecycle phases, every executor wait and every producer close",
                 ) {
                     graceSeconds shouldBeGreaterThanOrEqual required
                 }

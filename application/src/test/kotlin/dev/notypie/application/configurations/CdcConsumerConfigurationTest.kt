@@ -30,7 +30,7 @@ class CdcConsumerConfigurationTest :
                         .withBean(SimpleMeterRegistry::class.java)
                         .withPropertyValues(*cdcProperties)
 
-                then("the dead-letter recovery publishes through that template") {
+                then("the dead-letter recovery publishes through producers derived from that template") {
                     contextRunner.run { context ->
                         context.startupFailure shouldBe null
                         context

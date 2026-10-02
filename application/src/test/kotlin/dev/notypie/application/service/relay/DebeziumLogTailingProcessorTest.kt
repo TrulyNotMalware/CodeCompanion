@@ -3,9 +3,10 @@ package dev.notypie.application.service.relay
 import dev.notypie.application.configurations.CdcDeadLetterRecovery
 import dev.notypie.application.configurations.CountingRecordRecoverer
 import dev.notypie.application.configurations.DEAD_LETTER_HANDOFFS_METRIC
+import dev.notypie.application.configurations.DEAD_LETTER_MAX_BLOCK
+import dev.notypie.application.configurations.DEAD_LETTER_PUBLISH_FAILURES_METRIC
 import dev.notypie.application.configurations.PoisonOnlyDeadLetterRecoverer
 import dev.notypie.application.configurations.cdcDeadLetterRecoverer
-import dev.notypie.application.configurations.deadLetterBytesProducerFactory
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
@@ -32,6 +33,7 @@ import io.mockk.verify
 import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataAccessResourceFailureException
@@ -346,26 +348,37 @@ class DebeziumLogTailingProcessorTest :
                 val jsonTemplate: KafkaOperations<Any, Any>,
                 val bytesTemplate: KafkaOperations<Any, Any>,
                 val recoverer: DeadLetterPublishingRecoverer,
+                val meterRegistry: SimpleMeterRegistry,
             )
 
-            fun recovererWith(sendResult: CompletableFuture<SendResult<Any, Any>>): DeadLetterFixture {
+            fun recovererWith(sendResult: () -> CompletableFuture<SendResult<Any, Any>>): DeadLetterFixture {
                 val jsonTemplate = mockk<KafkaOperations<Any, Any>>()
                 val bytesTemplate = mockk<KafkaOperations<Any, Any>>()
                 listOf(jsonTemplate, bytesTemplate).forEach { template ->
                     every { template.isTransactional } returns false
-                    every { template.send(any<ProducerRecord<Any, Any>>()) } returns sendResult
+                    every { template.send(any<ProducerRecord<Any, Any>>()) } answers { sendResult() }
                 }
+                val meterRegistry = SimpleMeterRegistry()
                 return DeadLetterFixture(
                     jsonTemplate = jsonTemplate,
                     bytesTemplate = bytesTemplate,
-                    recoverer = cdcDeadLetterRecoverer(jsonTemplate = jsonTemplate, bytesTemplate = bytesTemplate),
+                    recoverer =
+                        cdcDeadLetterRecoverer(
+                            jsonTemplate = jsonTemplate,
+                            bytesTemplate = bytesTemplate,
+                            meterRegistry = meterRegistry,
+                        ),
+                    meterRegistry = meterRegistry,
                 )
             }
 
+            fun SimpleMeterRegistry.publishFailures(): Double =
+                find(DEAD_LETTER_PUBLISH_FAILURES_METRIC).counter()?.count() ?: 0.0
+
             `when`("a record whose value could not be deserialized is recovered") {
                 val raw = """{"payload":{"after":"not an outbox row"}}""".toByteArray()
-                val (jsonTemplate, bytesTemplate, recoverer) =
-                    recovererWith(sendResult = CompletableFuture.completedFuture(mockk(relaxed = true)))
+                val (jsonTemplate, bytesTemplate, recoverer, meterRegistry) =
+                    recovererWith(sendResult = { CompletableFuture.completedFuture(mockk(relaxed = true)) })
 
                 recoverer.accept(
                     createCdcConsumerRecord(value = null, undeserializableValue = raw),
@@ -383,12 +396,13 @@ class DebeziumLogTailingProcessorTest :
                         )
                     }
                     verify(exactly = 0) { jsonTemplate.send(any<ProducerRecord<Any, Any>>()) }
+                    meterRegistry.publishFailures() shouldBe 0.0
                 }
             }
 
             `when`("a deserialized envelope fails to parse") {
                 val (jsonTemplate, bytesTemplate, recoverer) =
-                    recovererWith(sendResult = CompletableFuture.completedFuture(mockk(relaxed = true)))
+                    recovererWith(sendResult = { CompletableFuture.completedFuture(mockk(relaxed = true)) })
 
                 recoverer.accept(
                     createCdcConsumerRecord(),
@@ -406,16 +420,32 @@ class DebeziumLogTailingProcessorTest :
             }
 
             `when`("the dead-letter topic cannot be written") {
-                val (_, _, recoverer) =
-                    recovererWith(sendResult = CompletableFuture.failedFuture(KafkaException("unknown topic")))
+                val (_, _, recoverer, meterRegistry) =
+                    recovererWith(sendResult = { CompletableFuture.failedFuture(KafkaException("unknown topic")) })
 
-                then("recovery still completes, so the partition moves past the record") {
+                then("recovery still completes, so the partition moves past the record, and the failure is counted") {
                     shouldNotThrowAny {
                         recoverer.accept(
                             createCdcConsumerRecord(value = null, undeserializableValue = "{}".toByteArray()),
                             IllegalStateException("deserialization failed"),
                         )
                     }
+                    meterRegistry.publishFailures() shouldBe 1.0
+                }
+            }
+
+            `when`("the send itself throws, as KafkaTemplate does when the metadata wait times out") {
+                val (_, _, recoverer, meterRegistry) =
+                    recovererWith(sendResult = { throw KafkaException("Send failed", TimeoutException("metadata")) })
+
+                then("recovery still completes and the failure is counted once") {
+                    shouldNotThrowAny {
+                        recoverer.accept(
+                            createCdcConsumerRecord(),
+                            CdcRecordParseException(message = "Failed to parse CDC after-image"),
+                        )
+                    }
+                    meterRegistry.publishFailures() shouldBe 1.0
                 }
             }
         }
@@ -427,30 +457,40 @@ class DebeziumLogTailingProcessorTest :
                 mapOf(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to "127.0.0.1:1")
 
             `when`("it is built from the JSON template and the context shuts down") {
-                val bytesProducerFactory = mockk<DefaultKafkaProducerFactory<Any, ByteArray>>(relaxed = true)
+                val jsonProducerFactory = mockk<DefaultKafkaProducerFactory<Any, Any>>(relaxed = true)
+                val bytesProducerFactory = mockk<DefaultKafkaProducerFactory<Any, Any>>(relaxed = true)
                 val recovery =
                     CdcDeadLetterRecovery(
                         jsonTemplate = jsonTemplate,
                         meterRegistry = SimpleMeterRegistry(),
+                        jsonProducerFactory = jsonProducerFactory,
                         bytesProducerFactory = bytesProducerFactory,
                     )
                 recovery.destroy()
 
-                then("it dead-letters through both templates and closes the producer it owns") {
+                then("it dead-letters through both templates and closes both producers it owns") {
                     recovery.recoverer.deadLetter
                         .shouldBeInstanceOf<CountingRecordRecoverer>()
                         .delegate
                         .shouldBeInstanceOf<DeadLetterPublishingRecoverer>()
+                    verify(exactly = 1) { jsonProducerFactory.destroy() }
                     verify(exactly = 1) { bytesProducerFactory.destroy() }
                 }
             }
 
-            `when`("its bytes producer factory is derived from the JSON template") {
-                val factory = deadLetterBytesProducerFactory(jsonTemplate = jsonTemplate)
+            `when`("its producer factories are derived from the JSON template") {
+                val recovery = CdcDeadLetterRecovery(jsonTemplate = jsonTemplate, meterRegistry = SimpleMeterRegistry())
+                val json = recovery.jsonProducerFactory
+                val bytes = recovery.bytesProducerFactory
 
-                then("it keeps the JSON producer's settings and swaps only the value serializer") {
-                    factory.configurationProperties[ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] shouldBe "127.0.0.1:1"
-                    factory.configurationProperties[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] shouldBe
+                then("both keep the JSON producer's settings and block a few seconds; only bytes swaps serializer") {
+                    listOf(json, bytes).forEach { factory ->
+                        factory.configurationProperties[ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] shouldBe "127.0.0.1:1"
+                        factory.configurationProperties[ProducerConfig.MAX_BLOCK_MS_CONFIG] shouldBe
+                            DEAD_LETTER_MAX_BLOCK.toMillis()
+                    }
+                    json.configurationProperties[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] shouldBe null
+                    bytes.configurationProperties[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] shouldBe
                         ByteArraySerializer::class.java
                 }
             }

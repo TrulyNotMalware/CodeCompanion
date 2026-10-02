@@ -58,7 +58,7 @@ alerting reads. All three surfaces — the indicator, the gauges and the `@bot s
 - Suggested alerts (not provisioned in this repository): `max(outbox_pending_oldest_age_seconds) > 120` for
   10 m (the CDC connector or the poller stopped; the recovery sweep then delivers PENDING rows only after the
   stuck threshold), `max(outbox_retrying_messages) > 0` for 15 m, and
-  `sum(increase(kafka_dead_letter_handoffs_total[15m])) > 0` (a CDC record was handed to the `<topic>-dlt` publisher; whether the send succeeded is only in the spring-kafka log).
+  `sum(increase(kafka_dead_letter_handoffs_total[15m])) > 0` (a CDC record was handed to the `<topic>-dlt` publisher) and `sum(increase(kafka_dead_letter_publish_failures_total[15m])) > 0` (that send failed, so the record exists nowhere but the log).
 
 ### Testing Requirements
 ```bash

@@ -65,17 +65,18 @@ adds what an agent editing the manifests needs to know.
   `spring.lifecycle.timeout-per-shutdown-phase` (10s) in `application-prod.yaml` for each of three phases, one after
   another: the `ThreadPoolTaskScheduler` while a job runs (it does not set `await-termination`, so it waits in its
   own phase; measured 2026-10-02, a running job doubled a 1s-per-phase close to 2s), the Kafka container stop and
-  the web server drain. Two Kafka producer closes are not bounded by the phase timeout (the JSON producer factory
-  closes synchronously in its own `stop()`, the dead-letter bytes producer in `CdcDeadLetterRecovery.destroy()`) and
-  wait for unsent records, so both are capped at `PRODUCER_CLOSE_TIMEOUT_SECONDS` (5s) instead of spring-kafka's 30s.
+  the web server drain. Three Kafka producer closes are not bounded by the phase timeout (the JSON producer factory
+  closes synchronously in its own `stop()`, the two dead-letter producers, JSON and bytes, in
+  `CdcDeadLetterRecovery.destroy()`) and wait for unsent records, so each is capped at `PRODUCER_CLOSE_TIMEOUT_SECONDS`
+  (5s) instead of spring-kafka's 30s.
   Then the destroy-time executor waits run one after another: relay 20s (`RELAY_SHUTDOWN_AWAIT_SECONDS`), agent turns
   20s (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (100) must cover
-  5 + 3 x 10 + 2 x 5 + 20 + 20 + 10 = 95; `configurations/ShutdownBudgetTest` reads this manifest and the prod profile
+  5 + 3 x 10 + 3 x 5 + 20 + 20 + 10 = 100; `configurations/ShutdownBudgetTest` reads this manifest and the prod profile
   and fails when it does not (90 left out the producer closes, 80 counted only two phases; 45 was the value before
   2026-10-02). Not counted, and only inferred from source: a poison record still in its retry back-off when the
   container phase times out can create a new producer for its dead-letter send, which costs one more close at
   destroy time; HikariCP's pool shutdown can wait several seconds when the database is unreachable. Both come out
-  of the 5s slack. The CDC container stops after the record in hand (`stopImmediate`), not after the rest of its
+  of the grace, which the counted sum already fills (100 of 100). The CDC container stops after the record in hand (`stopImmediate`), not after the rest of its
   poll, but waits for that record only up to the phase timeout, and the relay executor only 20s, while one dispatch
   can take about 53s (`application/src/main/resources/AGENTS.md`). A dispatch still running then is cut when the
   context closes: if Slack had already posted, its completion never lands and the recovery sweep re-sends the

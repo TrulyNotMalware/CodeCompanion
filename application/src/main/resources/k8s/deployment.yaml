@@ -14,8 +14,8 @@ spec:
     spec:
       # Covers the whole shutdown, one step after another: preStop sleep (5s), three lifecycle phases bounded by
       # spring.lifecycle.timeout-per-shutdown-phase (scheduler with a running job, Kafka container stop, web server
-      # drain; 10s each), two Kafka producer closes (5s each), then the destroy-time executor waits (relay 20s,
-      # agent turns 20s, default 10s) = 95s. ShutdownBudgetTest pins the sum.
+      # drain; 10s each), three Kafka producer closes (5s each), then the destroy-time executor waits (relay 20s,
+      # agent turns 20s, default 10s) = 100s. ShutdownBudgetTest pins the sum.
       terminationGracePeriodSeconds: 100
       imagePullSecrets:
         - name: dockercred

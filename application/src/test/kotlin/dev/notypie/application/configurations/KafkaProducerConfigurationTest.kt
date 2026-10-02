@@ -37,15 +37,15 @@ class KafkaProducerConfigurationTest :
                     }
                 }
 
-                then("the JSON producer and the dead-letter bytes producer close within the budgeted timeout") {
+                then("the JSON producer and both dead-letter producers close within the budgeted timeout") {
                     contextRunner.run { context ->
                         val factory = context.getBean(ProducerFactory::class.java)
                         factory.shouldBeInstanceOf<DefaultKafkaProducerFactory<*, *>>().physicalCloseTimeout shouldBe
                             Duration.ofSeconds(PRODUCER_CLOSE_TIMEOUT_SECONDS.toLong())
-                        context
-                            .getBean(CdcDeadLetterRecovery::class.java)
-                            .bytesProducerFactory
-                            .physicalCloseTimeout shouldBe Duration.ofSeconds(PRODUCER_CLOSE_TIMEOUT_SECONDS.toLong())
+                        val recovery = context.getBean(CdcDeadLetterRecovery::class.java)
+                        listOf(recovery.jsonProducerFactory, recovery.bytesProducerFactory).forEach {
+                            it.physicalCloseTimeout shouldBe Duration.ofSeconds(PRODUCER_CLOSE_TIMEOUT_SECONDS.toLong())
+                        }
                     }
                 }
 

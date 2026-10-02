@@ -192,8 +192,8 @@ _type: guide · updated: 2026-10-02_
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
 - 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(단계당 10초, 실행 중인 잡이 있는 스케줄러·Kafka 컨테이너·
-  웹 서버 드레인 세 단계) → Kafka producer 종료 두 번(각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기(릴레이 20초,
-  AI 턴 20초, 기본 10초) = 95초 ⊂ `terminationGracePeriodSeconds` 100초(`ShutdownBudgetTest`). 단계 대기보다 오래 걸린 디스패치는 끊기고, Slack이 이미 게시했다면 복구 스윕이 `IN_PROGRESS` 행을
+  웹 서버 드레인 세 단계) → Kafka producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기(릴레이 20초,
+  AI 턴 20초, 기본 10초) = 100초 ⊂ `terminationGracePeriodSeconds` 100초(`ShutdownBudgetTest`). 단계 대기보다 오래 걸린 디스패치는 끊기고, Slack이 이미 게시했다면 복구 스윕이 `IN_PROGRESS` 행을
   다시 보내 두 번 게시될 수 있다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 기본 롤링 업데이트(surge 1)라 롤아웃 중에는 요청 기준 3 × 1536Mi = 4.5Gi가
   동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가 Pending → 타임아웃 → 롤백). 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).

@@ -11,6 +11,7 @@ import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.beans.factory.DisposableBean
@@ -29,6 +30,7 @@ import org.springframework.kafka.listener.ConsumerAwareRecordRecoverer
 import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
 import org.springframework.kafka.listener.DefaultErrorHandler
+import org.springframework.kafka.support.SendResult
 import org.springframework.kafka.support.micrometer.KafkaListenerObservation
 import org.springframework.kafka.support.micrometer.KafkaListenerObservationConvention
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
@@ -36,36 +38,85 @@ import org.springframework.kafka.support.serializer.DeserializationException
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
 import org.springframework.messaging.converter.MessageConversionException
 import org.springframework.util.backoff.FixedBackOff
+import java.time.Duration
+import java.util.concurrent.CompletableFuture
 
 private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
 
 // Counts hand-offs: with setFailIfSendResultIsError(false) the publisher only logs a failed dead-letter send.
 const val DEAD_LETTER_HANDOFFS_METRIC = "kafka.dead.letter.handoffs"
 
-// Producer.close waits this long for unsent records (30s by default); ShutdownBudgetTest counts two closes.
+const val DEAD_LETTER_PUBLISH_FAILURES_METRIC = "kafka.dead.letter.publish.failures"
+
+// Producer.close waits this long for unsent records (30s by default); ShutdownBudgetTest counts three closes.
 const val PRODUCER_CLOSE_TIMEOUT_SECONDS = 5
+
+// A dead-letter send blocks the listener thread while it waits for topic metadata; kafka-clients' default is 60 s.
+internal val DEAD_LETTER_MAX_BLOCK: Duration = Duration.ofSeconds(5L)
 
 internal fun deadLetterTopic(topic: String): String = "$topic$DEAD_LETTER_TOPIC_SUFFIX"
 
 internal fun cdcDeadLetterRecoverer(
     jsonTemplate: KafkaOperations<*, *>,
     bytesTemplate: KafkaOperations<*, *>,
+    meterRegistry: MeterRegistry,
 ): DeadLetterPublishingRecoverer =
-    DeadLetterPublishingRecoverer(
-        linkedMapOf<Class<*>, KafkaOperations<*, *>>(
-            ByteArray::class.java to bytesTemplate,
-            Any::class.java to jsonTemplate,
-        ),
-    ) { record, _ -> TopicPartition(deadLetterTopic(topic = record.topic()), -1) }
-        .apply { setFailIfSendResultIsError(false) }
+    MeteredDeadLetterPublishingRecoverer(
+        templates =
+            linkedMapOf<Class<*>, KafkaOperations<*, *>>(
+                ByteArray::class.java to bytesTemplate,
+                Any::class.java to jsonTemplate,
+            ),
+        meterRegistry = meterRegistry,
+    ).apply { setFailIfSendResultIsError(false) }
 
-internal fun deadLetterBytesProducerFactory(
+internal fun deadLetterProducerFactory(
     jsonTemplate: KafkaTemplate<String, Any>,
-): DefaultKafkaProducerFactory<Any, ByteArray> =
-    DefaultKafkaProducerFactory<Any, ByteArray>(
+    overrides: Map<String, Any>,
+): DefaultKafkaProducerFactory<Any, Any> =
+    DefaultKafkaProducerFactory<Any, Any>(
         jsonTemplate.producerFactory.configurationProperties +
-            (ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to ByteArraySerializer::class.java),
+            (ProducerConfig.MAX_BLOCK_MS_CONFIG to DEAD_LETTER_MAX_BLOCK.toMillis()) +
+            overrides,
     ).apply { setPhysicalCloseTimeout(PRODUCER_CLOSE_TIMEOUT_SECONDS) }
+
+private class MeteredDeadLetterPublishingRecoverer(
+    templates: Map<Class<*>, KafkaOperations<*, *>>,
+    private val meterRegistry: MeterRegistry,
+) : DeadLetterPublishingRecoverer(
+        templates,
+        { record, _ -> TopicPartition(deadLetterTopic(topic = record.topic()), -1) },
+    ) {
+    // The library logs a send that throws or fails later and returns normally, so the template is wrapped to count both.
+    override fun publish(
+        outRecord: ProducerRecord<Any, Any>,
+        kafkaTemplate: KafkaOperations<Any, Any>,
+        inRecord: ConsumerRecord<*, *>,
+    ) {
+        val reporting =
+            FailureReportingOperations(delegate = kafkaTemplate) { failure ->
+                meterRegistry.counter(DEAD_LETTER_PUBLISH_FAILURES_METRIC, "topic", inRecord.topic()).increment()
+                log.error(failure) {
+                    "Dead-letter publish to ${outRecord.topic()} failed; CDC record topic=${inRecord.topic()} " +
+                        "partition=${inRecord.partition()} offset=${inRecord.offset()} is dropped"
+                }
+            }
+        super.publish(outRecord, reporting, inRecord)
+    }
+}
+
+private class FailureReportingOperations(
+    private val delegate: KafkaOperations<Any, Any>,
+    private val onFailure: (Throwable) -> Unit,
+) : KafkaOperations<Any, Any> by delegate {
+    override fun send(record: ProducerRecord<Any, Any>): CompletableFuture<SendResult<Any, Any>> =
+        try {
+            delegate.send(record).whenComplete { _, failure -> failure?.let(onFailure) }
+        } catch (exception: Exception) {
+            onFailure(exception)
+            throw exception
+        }
+}
 
 // Consumer-aware so DeadLetterPublishingRecoverer still receives the consumer (original group-id header).
 class CountingRecordRecoverer(
@@ -110,8 +161,13 @@ class PoisonOnlyDeadLetterRecoverer(
 class CdcDeadLetterRecovery(
     jsonTemplate: KafkaTemplate<String, Any>,
     meterRegistry: MeterRegistry,
-    internal val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray> =
-        deadLetterBytesProducerFactory(jsonTemplate = jsonTemplate),
+    internal val jsonProducerFactory: DefaultKafkaProducerFactory<Any, Any> =
+        deadLetterProducerFactory(jsonTemplate = jsonTemplate, overrides = emptyMap()),
+    internal val bytesProducerFactory: DefaultKafkaProducerFactory<Any, Any> =
+        deadLetterProducerFactory(
+            jsonTemplate = jsonTemplate,
+            overrides = mapOf(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to ByteArraySerializer::class.java),
+        ),
 ) : DisposableBean {
     val recoverer: PoisonOnlyDeadLetterRecoverer =
         PoisonOnlyDeadLetterRecoverer(
@@ -119,14 +175,16 @@ class CdcDeadLetterRecovery(
                 CountingRecordRecoverer(
                     delegate =
                         cdcDeadLetterRecoverer(
-                            jsonTemplate = jsonTemplate,
+                            jsonTemplate = KafkaTemplate(jsonProducerFactory),
                             bytesTemplate = KafkaTemplate(bytesProducerFactory),
+                            meterRegistry = meterRegistry,
                         ),
                     meterRegistry = meterRegistry,
                 ),
         )
 
     override fun destroy() {
+        jsonProducerFactory.destroy()
         bytesProducerFactory.destroy()
     }
 }
