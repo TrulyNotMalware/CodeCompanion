@@ -1,8 +1,11 @@
 package dev.notypie.application.configurations
 
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor
 import org.springframework.boot.env.YamlPropertySourceLoader
@@ -11,6 +14,10 @@ import org.springframework.core.io.ClassPathResource
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.yaml.snakeyaml.Yaml
 import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 
@@ -101,6 +108,36 @@ class ShutdownBudgetTest :
 
                 then("both executors are shut down before the EntityManagerFactory closes") {
                     executorsShutDownWhenEmfCloses.get() shouldBe listOf(true, true)
+                }
+            }
+        }
+
+        given("the agent-turn executor with one turn running and one queued when the context begins to close") {
+            val configuration = AgentConfiguration(appConfig = AppConfig())
+            val executor = configuration.agentTurnExecutor().apply { initialize() }
+            val intake = configuration.agentTurnIntake(agentTurnExecutor = executor).apply { start() }
+            val release = CountDownLatch(1)
+            val ran = CopyOnWriteArrayList<String>()
+            repeat(times = executor.corePoolSize) {
+                executor.execute {
+                    release.await(5L, TimeUnit.SECONDS)
+                    ran.add("running")
+                }
+            }
+            executor.execute { ran.add("queued") }
+
+            `when`("its intake stops") {
+                intake.stop()
+                val refused = runCatching { executor.execute { ran.add("after stop") } }.exceptionOrNull()
+                release.countDown()
+                executor.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
+
+                then("a new turn is refused, so the mention gets the busy notice, and the queued turn still runs") {
+                    refused.shouldBeInstanceOf<RejectedExecutionException>()
+                    intake.isRunning shouldBe false
+                    ran.count { it == "running" } shouldBe executor.corePoolSize
+                    ran shouldContain "queued"
+                    ran shouldNotContain "after stop"
                 }
             }
         }
