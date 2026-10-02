@@ -29,6 +29,8 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
   `AppIdNotFoundException` and `InvalidEventPayloadException` (the mention handler wraps a failed
   `SlackEventCallBackRequest` binding in it) and logs at `WARN`. They used to fall into `handleUnexpected` as 500, and
   Slack resent the same payload three times. Whether Slack really sends such payloads was not observed.
+- `ErrorCode` carries no HTTP status; the handler decides it. `CodeCompanionRuntimeException` exposes `errorCode` as a
+  property, so a generic status-mapping handler can switch on it.
 - `handleDatabaseException` covers `DatabaseException` thrown by `MeetingRepositoryImpl` and
   `StandupRepositoryImpl` via `schemaNotFound { }` / `throwIfSchemaNotFound`. It answers 500 on purpose:
   Slack retries a 5xx, and the request's transaction has already rolled back. Note that the retry is
