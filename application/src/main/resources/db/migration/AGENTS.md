@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # db/migration
 
@@ -37,11 +37,12 @@ The headers, not the numbers, decide the apply order (see "Release checklist" be
 | `V20__add_outbox_attempt_count.sql` | `outbox_message.attempt_count INT NOT NULL DEFAULT 0` — incremented by every claim/reclaim; the ownership token for the relay's lease renewal, rate-limit deferral and terminal status write. Its header carries the rollout constraint: this release must not run beside a pre-V20 release (stop the old pods first) |
 | `V21__fix_inverted_meeting_end_at.sql` | Data fix, no DDL: `end_at = NULL` (V3's "start + 1h" marker) where `end_at <= start_at`, rows left by reschedules that moved only `start_at`, with `version = version + 1` so a meeting write that read the row earlier fails its optimistic-lock check instead of restoring the inverted value. Idempotent; the header carries the inspection query and the rollout constraint (after V18, once every replica writes through the `@Version` entity) |
 | `V22__add_outbox_send_count.sql` | `outbox_message.send_count INT NOT NULL DEFAULT 0` — raised by `renewClaim` right before a send, taken back by the rate-limit deferral; the recovery sweep's abandon budget (`outbox.polling.max-sends`) and the health probe's retrying-row counter. Ships with V20 under the same rollout constraint |
+| `V23__widen_outbox_payload_to_mediumtext.sql` | `outbox_message.payload` `TEXT` → `MEDIUMTEXT NOT NULL` (16,777,215 bytes). Under strict `sql_mode` TEXT's 65,535 bytes rolled back a long AI answer (no reply) and a full standup summary (never posted, retried every tick) — review H1. Re-runnable; may rebuild the table and block outbox writes while it runs. Safe before the rollout and for a rollback (older binaries never relied on the limit); the header covers the Debezium schema-history effect (still a `STRING`), the 1 MiB Kafka record the application still caps for, and the rollback statement |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V23`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V24`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Every script is MariaDB dialect.** `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`,
   `DROP INDEX IF EXISTS … ON`, inline `INDEX` clauses inside `CREATE TABLE`, `ENUM`, `DATETIME(6)`,
   `ON UPDATE CURRENT_TIMESTAMP` and `INSERT IGNORE` semantics are all assumed. They will not run on H2 (the
@@ -59,14 +60,14 @@ The headers, not the numbers, decide the apply order (see "Release checklist" be
 - **Ordering assumptions live in the headers.** `V1` expects an `outbox_message` with an `idempotency_key`
   PK; `V11` expects the outbox to be drained first; `V17` supersedes the status-only index from `V14` for
   the `/latest` query. Read the "Apply … BEFORE rolling out" line before sequencing a deploy.
-- **Number ≠ apply order: the V18–V22 release checklist.** `main` stopped at `V17`, and the release after it
-  ships `V18`–`V22` together. Apply them in this order, which is also in `../../k8s/README.md` ("One-time")
+- **Number ≠ apply order: the V18–V23 release checklist.** `main` stopped at `V17`, and the release after it
+  ships `V18`–`V23` together. Apply them in this order, which is also in `../../k8s/README.md` ("One-time")
   and `docs/wiki/dev-environment.md`:
   1. `V18`, after its header's duplicate check on `meeting_participants (meeting_id, user_id)` (delete the extra
      rows, keep the lowest `id`), or the unique key fails;
-  2. `V19`;
-  3. `V20`, then `V22`. Steps 1–3 only add defaulted columns and indexes that the pre-V20 binary never reads,
-     so they go in while the old release still serves;
+  2. `V19` and `V23` (`payload` → `MEDIUMTEXT`; widening a column the old binary never sized against);
+  3. `V20`, then `V22`. Steps 1–3 only add defaulted columns and indexes that the pre-V20 binary never reads, or
+     widen a column, so they go in while the old release still serves;
   4. stop the old Pods, then deploy — the `Recreate` strategy in `k8s/deployment.yaml` does both in one
      rollout. This is how the "stop every old pod … then start the new release" constraint in the `V20`
      header is met; applying `V20`/`V22` before the old Pods stop does not break it. The overlap is unsafe for
@@ -81,7 +82,7 @@ The headers, not the numbers, decide the apply order (see "Release checklist" be
   for a change is recorded, since prod applies these outside any migration tool.
 - The profile YAML carries no `spring.flyway.*` keys (the inert `enabled: false` leftovers were removed
   2026-09-21). Do not add Flyway config — adopting the tool would also require a baseline for every
-  environment that already applied `V1`–`V22` by hand.
+  environment that already applied `V1`–`V23` by hand.
 - Files here are packaged into the boot jar by `processResources` although the app never reads them.
 
 ### Testing Requirements
@@ -104,7 +105,7 @@ The headers, not the numbers, decide the apply order (see "Release checklist" be
 ## Dependencies
 
 ### Internal
-- `infrastructure/repository/outbox/schema/` — `V1`, `V11`, `V19`, `V20`, `V22`
+- `infrastructure/repository/outbox/schema/` — `V1`, `V11`, `V19`, `V20`, `V22`, `V23`
 - `infrastructure/repository/meeting/schema/` — `V2`, `V3`, `V5`, `V7`, `V8`, `V18` (`version`, participant unique
   key, indexes), `V21` (data fix that bumps `version`)
 - `infrastructure/repository/standup/schema/` — `V4`, `V6`, `V18` (`standup_routine` index)

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/service/agent
 
@@ -14,7 +14,7 @@ proxy that `@Async` needs is guaranteed.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "channel:thread:publisherId"` (`"channel:publisherId"` when there is no thread), sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE` whose text went through `neutralizeBroadcastMentions()`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
+| `AgentConverseService.kt` | `@Async class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, clock = Clock.systemDefaultZone(), scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@EventListener handleAgentConverse(event)` builds `sessionKey = "channel:thread:publisherId"` (`"channel:publisherId"` when there is no thread), sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts, thread reply headlined `RESPONSE_HEADLINE` whose text was cut by `capAnswer` to `MAX_ANSWER_LENGTH` (48 sections × 2,900 = 139,200 characters, the most the renderer shows under header + divider; longer → cut on a code point plus `\n…(truncated)`, review H1) and then went through `neutralizeBroadcastMentions()`, blank text → `EMPTY_RESPONSE_MESSAGE`); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` |
 
 ## For AI Agents
 

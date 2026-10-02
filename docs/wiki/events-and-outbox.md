@@ -84,7 +84,9 @@ _type: architecture · updated: 2026-09-30_
   `idx_outbox_idempotency_key` **인덱스일 뿐 유니크가 아니다**: 다중 수신자 커맨드(참가자별 ApplyReject)가 같은
   키로 여러 행을 만들어 PK 충돌로 메시지가 유실됐고, V1 마이그레이션이 PK를 `event_id`로 옮겼다. 용도는 "커맨드
   X가 만든 모든 메시지 찾기"이지 중복 차단이 아니다.
-- `payload`는 opaque TEXT. `OutboundMessageCodec`이 `OutboundEnvelope{message, basicInfo}`를 인코딩하며, 도메인은
+- `payload`는 opaque `MEDIUMTEXT`(V23; TEXT의 65,535바이트는 strict 모드에서 긴 AI 답변·꽉 찬 스탠드업 요약을 롤백시켰다,
+  review H1). AI 답변은 렌더러가 보여 줄 수 있는 48 section × 2,900자로 스테이징 전에 잘라 CDC 갱신 레코드(행 두 벌)가
+  Kafka 기본 1 MiB 안에 들게 한다. `OutboundMessageCodec`이 `OutboundEnvelope{message, basicInfo}`를 인코딩하며, 도메인은
   Jackson 주석 없이 유지하고 다형성은 코덱 쪽 mix-in으로 처리한다. `OpenModal`·`DirectMessage`는 의도적으로
   미등록이라 인코딩/디코딩 시 fail-fast 한다.
 - `transport`는 문자열 컬럼(Debezium CDC가 enum을 null로 전달). 오늘은 `SLACK`뿐; 추가 = enum 상수 + 렌더러 등록.

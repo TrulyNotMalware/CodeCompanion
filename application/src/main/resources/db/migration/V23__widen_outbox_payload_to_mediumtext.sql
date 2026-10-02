@@ -1,0 +1,51 @@
+-- -----------------------------------------------------------------------------
+-- Outbox: payload TEXT -> MEDIUMTEXT
+-- -----------------------------------------------------------------------------
+-- Rationale:
+--   payload holds the codec-encoded envelope (V11). TEXT caps it at 65,535
+--   bytes, and MariaDB's default strict sql_mode rejects a longer value with
+--   "Data too long" instead of truncating it, so the writing transaction rolls
+--   back. An AI answer over about 21,800 Korean characters left the requester
+--   with no reply and no failure notice, and a full standup summary (30 members
+--   answering at the modal cap, up to ~260 KB in Korean) failed on every
+--   scheduler tick and was never posted. MEDIUMTEXT holds 16,777,215 bytes.
+--   The application keeps rows far below that: it cuts an AI answer to what the
+--   renderer can show (48 sections x 2,900 characters) before staging it, so the
+--   largest row stays under the 1 MiB Kafka record default even for a CDC update
+--   event, which carries the row twice (before and after).
+--
+-- Behaviour:
+--   - payload becomes MEDIUMTEXT NOT NULL; existing values are kept unchanged.
+--   - Re-runnable: modifying the column to the type it already has is a no-op
+--     for the data.
+--   - MariaDB may rebuild the table to change the column type, blocking writes
+--     to outbox_message while it runs. The retention purge keeps the table
+--     small, so this takes seconds; apply it at a quiet moment all the same.
+--
+-- CDC (Debezium):
+--   The connector reads this ALTER from the binlog into its schema history.
+--   TEXT and MEDIUMTEXT both map to a Kafka Connect STRING, so the record schema
+--   and DebeziumLogTailingProcessor are unaffected; where source column types
+--   are propagated, the column's type parameter changes from TEXT to MEDIUMTEXT
+--   and nothing reads it. The wider column does not raise Kafka's limit: a
+--   record over the producer's max.request.size (1 MiB by default) fails the
+--   connector, which is why the application caps what it stages.
+--
+-- Apply this script any time BEFORE rolling out the release that relies on it,
+-- including while the previous release still serves: older binaries never
+-- depend on the 65,535-byte limit, so the wider column is safe for them and for
+-- a rollback to them. Without it the new release behaves as the old one did
+-- for oversized rows (rolled-back writes), and readiness does not notice.
+--
+-- Rollback (rarely needed — leaving MEDIUMTEXT in place is harmless):
+--   ALTER TABLE outbox_message MODIFY COLUMN payload TEXT NOT NULL;
+-- fails under strict mode while any row holds more than 65,535 bytes; let those
+-- rows reach a terminal status and the retention purge remove them first.
+--
+-- ddl-auto: update creates the column as MEDIUMTEXT on a fresh schema but never
+-- changes the type of an existing column, so a dev/local database created
+-- earlier keeps TEXT until this script is applied there too. In prod, execute
+-- manually — schema auto-migration is disabled.
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE outbox_message MODIFY COLUMN payload MEDIUMTEXT NOT NULL;

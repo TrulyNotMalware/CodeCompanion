@@ -254,6 +254,49 @@ class AgentConverseServiceTest :
             }
         }
 
+        // H1: the renderer shows at most 48 sections of 2,900 characters; staging more only grew the outbox row past
+        // its column (TEXT, then a rolled-back reply) and toward the 1 MiB Kafka record.
+        given("a turn whose answer is longer than the renderer can show") {
+            // An emoji (a surrogate pair) straddles the cut, which must not split it.
+            val cutAt = AgentConverseService.MAX_ANSWER_LENGTH - "\n…(truncated)".length
+            val longAnswer = "a".repeat(n = cutAt - 1) + "😀" + "가".repeat(n = 50_000)
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = longAnswer)
+
+            val stagedMessage = slot<OutboundMessage>()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                )
+
+            `when`("handleAgentConverse") {
+                service.handleAgentConverse(event = createAgentConverseRequestEvent())
+
+                then("the staged answer is cut within the cap, on a code point, and ends with the truncation marker") {
+                    val markdown =
+                        stagedMessage.captured
+                            .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                            .markdown
+                    (markdown.length <= AgentConverseService.MAX_ANSWER_LENGTH) shouldBe true
+                    markdown shouldBe "a".repeat(n = cutAt - 1) + "\n…(truncated)"
+                }
+            }
+        }
+
+        given("an answer exactly at the cap") {
+            val answer = "b".repeat(n = AgentConverseService.MAX_ANSWER_LENGTH)
+
+            `when`("capAnswer") {
+                then("it is left untouched") {
+                    AgentConverseService.capAnswer(text = answer) shouldBe answer
+                }
+            }
+        }
+
         // T20: keyed by channel:thread alone, a second participant resumed the first one's provider session and
         // could read back tool results fetched under the first user's role.
         given("two people mentioning the bot in the same thread") {

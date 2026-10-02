@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # infrastructure/repository/outbox/schema
 
@@ -11,7 +11,7 @@ decoding.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`TEXT`, codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.CURRENT`), `attempt_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised only by the native claim statements, V20), `send_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised by `renewClaim`, lowered by `deferClaim`, V22). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue` |
+| `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`MEDIUMTEXT` since V23 — TEXT's 65,535 bytes rolled back long AI answers and full standup summaries under strict mode, review H1; codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.CURRENT`), `attempt_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised only by the native claim statements, V20), `send_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised by `renewClaim`, lowered by `deferClaim`, V22). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue` |
 | `MessageStatus.kt` | `enum MessageStatus { INIT, FAILURE, SUCCESS, PENDING, IN_PROGRESS }` |
 | `OutboxSchemaVersion.kt` | `object OutboxSchemaVersion { const V2 = 2; const CURRENT = V2; val SUPPORTED: Set<Int> = setOf(V2) }` |
 

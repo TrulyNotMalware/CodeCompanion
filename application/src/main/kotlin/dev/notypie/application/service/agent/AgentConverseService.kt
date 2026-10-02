@@ -22,6 +22,7 @@ import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.AgentTurnRecord
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
+import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.neutralizeBroadcastMentions
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
@@ -55,6 +56,14 @@ class AgentConverseService(
         internal const val FAILURE_MESSAGE = "Sorry — I couldn't process that request. Please try again later."
         internal const val EMPTY_RESPONSE_MESSAGE = "_(the assistant returned an empty response)_"
 
+        // The reply renders as a header, a divider and at most MESSAGE_MAX_BLOCKS - 2 sections of SECTION_TEXT_BUDGET
+        // characters; the renderer drops the rest. Cutting the answer to that before staging loses nothing visible
+        // and bounds the outbox row: uncut, a long answer outgrew the payload column (TEXT before V23 — the reply
+        // rolled back and the requester got silence) and can outgrow the 1 MiB Kafka record in CDC mode (review H1).
+        internal const val MAX_ANSWER_LENGTH: Int =
+            (SlackBlockLimits.MESSAGE_MAX_BLOCKS - 2) * SlackBlockLimits.SECTION_TEXT_BUDGET
+        private const val ANSWER_TRUNCATION_SUFFIX = "\n${SlackBlockLimits.TRUNCATION_MARKER}"
+
         internal const val METRIC_TURNS = "agent.turns"
         internal const val METRIC_TOKENS = "agent.tokens"
         internal const val METRIC_TURN_DURATION = "agent.turn.duration"
@@ -74,6 +83,16 @@ class AgentConverseService(
                 .trim()
                 .takeWithinCodePoints(maxLength = MAX_CONTEXT_NAME_LENGTH)
                 .trim()
+
+        // Cut before the mentions are neutralised, so an escape is never split; neutralising adds six characters per
+        // special mention, which the renderer cuts like any other excess.
+        internal fun capAnswer(text: String): String =
+            if (text.length <= MAX_ANSWER_LENGTH) {
+                text
+            } else {
+                text.takeWithinCodePoints(maxLength = MAX_ANSWER_LENGTH - ANSWER_TRUNCATION_SUFFIX.length) +
+                    ANSWER_TRUNCATION_SUFFIX
+            }
 
         private fun String.takeWithinCodePoints(maxLength: Int): String {
             if (length <= maxLength) return this
@@ -202,7 +221,8 @@ class AgentConverseService(
                 )
                 // The model may echo user text (a meeting title, a tool result) verbatim; its links and emphasis
                 // stay, but a `<!channel>`-style special mention must not notify a channel under the bot's name.
-                val answer = result.finalText.neutralizeBroadcastMentions().ifBlank { EMPTY_RESPONSE_MESSAGE }
+                val answer =
+                    capAnswer(text = result.finalText).neutralizeBroadcastMentions().ifBlank { EMPTY_RESPONSE_MESSAGE }
                 eventPublisher.publishOne(event = answerEvent(event = event, text = answer))
             }.onFailure { exception ->
                 log.error(exception) {
