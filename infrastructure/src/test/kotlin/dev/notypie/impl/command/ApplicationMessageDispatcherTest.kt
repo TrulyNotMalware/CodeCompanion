@@ -318,6 +318,36 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
+        given("chat.postMessage answers 200 with a body the SDK cannot parse") {
+            listOf("not JSON" to "<html>upstream error</html>", "empty" to "").forEach { (kind, body) ->
+                `when`("a channel message is dispatched and the body is $kind") {
+                    reset()
+                    repeat(3) { responses.add(status(code = 200, body = body)) }
+                    val output = defaultDispatcher.dispatch(event = channelMessage())
+
+                    then("Slack has answered, so it is not resent and ends as outcome unknown") {
+                        output.isTransientExhausted() shouldBe false
+                        output.errorReason shouldStartWith OUTCOME_UNKNOWN_REASON
+                        calls.get() shouldBe 1
+                    }
+                }
+            }
+        }
+
+        given("chat.update keeps answering 200 with a body that is not JSON") {
+            reset()
+            repeat(3) { responses.add(status(code = 200, body = "<html>upstream error</html>")) }
+
+            `when`("a message update is dispatched") {
+                val output = defaultDispatcher.dispatch(event = messageUpdate())
+
+                then("the idempotent update is retried and ends as a transient outcome") {
+                    output.isTransientExhausted() shouldBe true
+                    calls.get() shouldBe 3
+                }
+            }
+        }
+
         given("chat.update keeps answering HTTP 500") {
             reset()
             repeat(3) { responses.add(status(code = 500, body = "boom")) }

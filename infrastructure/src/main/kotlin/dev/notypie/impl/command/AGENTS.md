@@ -67,7 +67,9 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     failure that ends after the call timeout surfaces as `InterruptedIOException("timeout")` with the real error
     as its cause). A client without the listener counts as "may have been written". A stream the server resets with
     `REFUSED_STREAM` after the headers went out still counts as written (outcome unknown), although HTTP/2 promises
-    it was not processed. Classification after the
+    it was not processed. A 2xx body the SDK cannot read (Gson `JsonParseException` for a non-JSON body, an
+    NPE for an empty one) on a written request becomes `SlackResponseUnreadableException`, an `IOException`: Slack
+    has answered, so a post ends as outcome unknown and the idempotent `chat.update` is retried. Classification after the
     retries walks the cause chain, as Spring's retry policy does.
   - Transient — retried by `RetryService` (3 attempts), then `failOutput(TRANSIENT_EXHAUSTED_REASON)`
     (`isTransientExhausted()`); the relay leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to

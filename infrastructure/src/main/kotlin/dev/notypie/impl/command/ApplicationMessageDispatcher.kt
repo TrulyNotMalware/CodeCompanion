@@ -1,5 +1,6 @@
 package dev.notypie.impl.command
 
+import com.google.gson.JsonParseException
 import com.slack.api.RequestConfigurator
 import com.slack.api.Slack
 import com.slack.api.SlackConfig
@@ -132,6 +133,10 @@ class SlackRequestNotSentException(
     cause: IOException,
 ) : RuntimeException("Slack request failed before it was written: ${cause::class.java.simpleName}", cause)
 
+class SlackResponseUnreadableException(
+    cause: RuntimeException,
+) : IOException("Slack answered with a body that could not be read: ${cause::class.java.simpleName}", cause)
+
 class SlackTransientErrorException(
     val error: String,
 ) : RuntimeException("Slack transient error: $error")
@@ -201,6 +206,13 @@ class ApplicationMessageDispatcher(
             dispatchOnce(event = event, idempotent = idempotent)
         } catch (exception: IOException) {
             if (RequestProgressListener.requestNeverWritten()) throw SlackRequestNotSentException(cause = exception)
+            throw exception
+        } catch (exception: RuntimeException) {
+            // A 2xx body goes through Gson in the SDK: bad JSON throws, an empty body ends in an NPE. Slack answered.
+            val unreadable = exception is JsonParseException || exception is NullPointerException
+            if (unreadable && !RequestProgressListener.requestNeverWritten()) {
+                throw SlackResponseUnreadableException(cause = exception)
+            }
             throw exception
         }
     }
