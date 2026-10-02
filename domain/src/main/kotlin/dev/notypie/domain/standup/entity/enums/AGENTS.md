@@ -16,7 +16,7 @@ The two forward-only state machines of the standup aggregate: one per session, o
 
 ### Working In This Directory
 - Transitions are compare-and-set SQL, not entity methods: `JpaSessionDispatchRepository.claimDispatch`
-  (`PENDING → SENDING` with `claim_token`), `markSent` / `markFailed`, `markSkipped` (`PENDING → FAILED` with a `skipped:` reason), `resetStuckSending`
+  (`PENDING → SENDING` with `claim_token`), `markSent`, `markSkipped` (`PENDING → FAILED` with a `skipped:` reason), `resetStuckSending`
   (`SENDING` past a threshold `→ PENDING`); `JpaStandupSessionRepository.markSummarized`
   (`COLLECTING → SUMMARIZED`, writes `summary_message_ts`). Add a state by adding a query there.
 - Constants are referenced by fully-qualified name in JPQL (`WHERE d.dmStatus =

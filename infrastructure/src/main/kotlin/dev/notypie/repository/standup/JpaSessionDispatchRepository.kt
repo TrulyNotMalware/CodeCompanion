@@ -65,14 +65,13 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     @Query(
         value = """
             UPDATE standup_session_dispatch
-            SET dm_status = 'FAILED', failure_reason = :reason, claim_token = NULL, updated_at = :now
-            WHERE id = :id AND dm_status = 'SENDING' AND claim_token = :token
+            SET failure_reason = :reason, updated_at = :now
+            WHERE id = :id AND dm_status = 'PENDING'
         """,
         nativeQuery = true,
     )
-    fun markFailed(
+    fun recordFailure(
         @Param("id") id: Long,
-        @Param("token") token: String,
         @Param("reason") reason: String,
         @Param("now") now: Instant,
     ): Int

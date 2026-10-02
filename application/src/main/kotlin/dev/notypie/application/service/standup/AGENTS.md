@@ -43,13 +43,18 @@ is written back onto the session row once the relay has posted it.
   sent")` (the DM would invite an answer that can no longer count); an unknown or inactive routine →
   `markDispatchSkipped("routine inactive")`. Left `PENDING`, such rows kept winning
   `ORDER BY dm_trigger_at` + the batch limit and starved every active routine's DMs.
-- **Dispatch CAS with a claim token.** `resetStuckDispatches(olderThan)` runs first. Then per row:
-  `claimDispatch(dispatchId, claimToken)` commits in its own tx; `buildDmNotice` +
-  `outboxRepository.save(outboundMessagePort.toRow(...))` + `markDispatchSent(claimToken)` run in one
-  `runInTx` that rolls back when the mark is a no-op (recovery raced us); `markDispatchFailed(claimToken)`
-  records failure in a fresh tx. Only the token that claimed may acknowledge.
-- **Nudge is at-most-once by design.** `claimNudge(sessionId)` is taken only when non-responders exist and
-  commits *before* the DMs are enqueued; an enqueue failure after the claim is logged, not retried.
+- **Dispatch CAS with a claim token, the claim inside the enqueue transaction.** `resetStuckDispatches` runs
+  first. Then per row one `runInTx` holds `claimDispatch(dispatchId, claimToken)`, `buildDmNotice`,
+  `outboxRepository.save(outboundMessagePort.toRow(...))` and `markDispatchSent(claimToken)` (a no-op mark —
+  recovery raced us — throws and rolls back). Any failure rolls the claim back too, so the row stays `PENDING`
+  and the next tick retries; previously a committed claim ended in terminal `FAILED` after one transient error
+  and the member never got that day's DM. The cause is then stored on the still-`PENDING` row
+  (`recordDispatchFailure`, its own transaction, contained) and retries stop at cutoff, where the row is skipped
+  with `"enqueue failed until cutoff: <cause>"` instead of "session closed before the DM was sent", so the real
+  reason survives. A row that keeps failing is retried every tick until cutoff and takes a batch slot each time.
+- **Nudge claim inside the enqueue transaction.** `claimNudge(sessionId)` is taken only when non-responders
+  exist, in the same `runInTx` as the DMs; a failed enqueue rolls `nudged_at` back and the next tick retries
+  while the session is still in the nudge window (`cutoffAt > now`), which bounds the retries.
   `standup.nudge.offsetMinutes <= 0` disables the phase entirely.
 - **Summary marker.** `summary_message_ts` holds `outbox:<eventId>` until the relay posts; the write-back
   `UPDATE` is keyed on that marker, so it is a cheap no-op for every non-standup

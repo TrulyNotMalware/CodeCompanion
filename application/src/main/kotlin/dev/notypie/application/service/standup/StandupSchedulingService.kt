@@ -127,7 +127,10 @@ class StandupSchedulingService(
 
         ready.forEach { item ->
             if (item.sessionStatus != SessionStatus.COLLECTING || !now.isBefore(item.cutoffAt)) {
-                skipDispatch(item = item, reason = "session closed before the DM was sent", now = now)
+                val reason =
+                    item.dispatch.failureReason?.let { cause -> "enqueue failed until cutoff: $cause" }
+                        ?: "session closed before the DM was sent"
+                skipDispatch(item = item, reason = reason, now = now)
                 return@forEach
             }
             val routine = routinesByUid[item.routineUid]
@@ -151,18 +154,21 @@ class StandupSchedulingService(
         }
     }
 
-    // Claim, save+markSent, and failure-record each run in their own tx; the claim token gates the CAS.
     private fun processDispatch(item: ReadyDispatch, routine: RoutineDto, sentAt: Instant) {
         val dispatchId = item.dispatch.id
         val userId = item.dispatch.userId
         val claimToken = UUID.randomUUID().toString()
 
-        if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken, now = clock.instant())) {
-            return
-        }
-
-        val outcome: Result<Unit> =
-            transactionTemplate.runInTx<Unit> {
+        transactionTemplate
+            .runInTx {
+                if (!standupRepository.claimDispatch(
+                        dispatchId = dispatchId,
+                        claimToken = claimToken,
+                        now = clock.instant(),
+                    )
+                ) {
+                    return@runInTx false
+                }
                 val commandBasicInfo =
                     CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                 val message =
@@ -185,24 +191,27 @@ class StandupSchedulingService(
                 ) {
                     error("markDispatchSent had no effect for dispatch $dispatchId — rolling back.")
                 }
+                true
+            }.onSuccess { enqueued ->
+                if (enqueued) log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
+            }.onFailure { ex ->
+                log.error(ex) {
+                    "Standup DM dispatch failed, claim rolled back for retry: dispatchId=$dispatchId userId=$userId"
+                }
+                recordDispatchFailure(dispatchId = dispatchId, cause = ex, now = clock.instant())
             }
-
-        if (outcome.isFailure) {
-            val ex = outcome.exceptionOrNull()!!
-            log.error(ex) { "Standup DM dispatch failed: dispatchId=$dispatchId userId=$userId" }
-            if (!standupRepository.markDispatchFailed(
-                    dispatchId = dispatchId,
-                    claimToken = claimToken,
-                    reason = ex.message ?: "unknown",
-                    now = clock.instant(),
-                )
-            ) {
-                log.warn { "markDispatchFailed no-op for dispatch $dispatchId — recovery already reset or re-claimed." }
-            }
-        } else {
-            log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
-        }
     }
+
+    private fun recordDispatchFailure(dispatchId: Long, cause: Throwable, now: Instant) =
+        containFailure(onFailure = { ex ->
+            log.warn(ex) { "Recording the DM failure failed: dispatchId=$dispatchId" }
+        }) {
+            standupRepository.recordDispatchFailure(
+                dispatchId = dispatchId,
+                reason = cause.message ?: cause.javaClass.name,
+                now = now,
+            )
+        }
 
     fun nudgeNonResponders() {
         if (nudgeOffsetMinutes <= 0L) return
@@ -233,10 +242,9 @@ class StandupSchedulingService(
         val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
         if (nonResponders.isEmpty()) return
 
-        if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return
-
-        val outcome: Result<Unit> =
-            transactionTemplate.runInTx<Unit> {
+        val outcome: Result<Boolean> =
+            transactionTemplate.runInTx {
+                if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return@runInTx false
                 nonResponders.forEach { userId ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
@@ -251,18 +259,21 @@ class StandupSchedulingService(
                         outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
                     )
                 }
+                true
             }
 
-        if (outcome.isFailure) {
-            log.error(outcome.exceptionOrNull()) {
-                "Standup nudge enqueue failed after claim: sessionUid=${candidate.sessionUid}"
+        outcome
+            .onSuccess { enqueued ->
+                if (!enqueued) return@onSuccess
+                log.info {
+                    "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
+                        "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
+                }
+            }.onFailure { ex ->
+                log.error(ex) {
+                    "Standup nudge enqueue failed, claim rolled back for retry: sessionUid=${candidate.sessionUid}"
+                }
             }
-        } else {
-            log.info {
-                "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
-                    "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
-            }
-        }
     }
 
     fun detectCutoffs() {

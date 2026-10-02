@@ -278,6 +278,52 @@ class StandupRepositoryImplTest
                 }
             }
 
+            given("recordDispatchFailure") {
+                `when`("an enqueue attempt failed for a dispatch that is PENDING again, and for one already claimed") {
+                    val pendingUid = openSession()
+                    val claimedUid = openSession()
+                    val pendingId =
+                        repository
+                            .findSession(sessionUid = pendingUid)!!
+                            .dispatches
+                            .single()
+                            .id
+                    val claimedId =
+                        repository
+                            .findSession(sessionUid = claimedUid)!!
+                            .dispatches
+                            .single()
+                            .id
+                    repository.claimDispatch(dispatchId = claimedId, claimToken = "token", now = cutoffAt) shouldBe true
+                    val recorded =
+                        inTx {
+                            repository.recordDispatchFailure(dispatchId = pendingId, reason = "timeout", now = cutoffAt)
+                        }
+                    val ignored =
+                        inTx {
+                            repository.recordDispatchFailure(dispatchId = claimedId, reason = "timeout", now = cutoffAt)
+                        }
+
+                    then("the PENDING row keeps the cause and stays queued; the claimed row is left to its claim") {
+                        recorded shouldBe true
+                        ignored shouldBe false
+                        val pending = repository.findSession(sessionUid = pendingUid)!!.dispatches.single()
+                        pending.dmStatus shouldBe DispatchStatus.PENDING
+                        pending.failureReason shouldBe "timeout"
+                        repository
+                            .findPendingDispatchesBefore(before = Instant.parse("2100-01-01T00:00:00Z"), limit = 500)
+                            .single { it.dispatch.id == pendingId }
+                            .dispatch
+                            .failureReason shouldBe "timeout"
+                        repository
+                            .findSession(sessionUid = claimedUid)!!
+                            .dispatches
+                            .single()
+                            .failureReason shouldBe null
+                    }
+                }
+            }
+
             given("markDispatchSkipped") {
                 `when`("a PENDING dispatch is skipped twice") {
                     val sessionUid = openSession()

@@ -65,12 +65,7 @@ interface StandupRepository {
 
     fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean
 
-    fun markDispatchFailed(
-        dispatchId: Long,
-        claimToken: String,
-        reason: String,
-        now: Instant,
-    ): Boolean
+    fun recordDispatchFailure(dispatchId: Long, reason: String, now: Instant): Boolean
 
     fun markDispatchSkipped(dispatchId: Long, reason: String, now: Instant): Boolean
 

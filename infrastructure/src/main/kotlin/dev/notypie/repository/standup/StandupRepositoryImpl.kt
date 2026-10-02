@@ -124,13 +124,8 @@ open class StandupRepositoryImpl(
         jpaSessionDispatchRepository.markSent(id = dispatchId, token = claimToken, sentAt = sentAt) == 1
 
     @Transactional
-    override fun markDispatchFailed(
-        dispatchId: Long,
-        claimToken: String,
-        reason: String,
-        now: Instant,
-    ): Boolean =
-        jpaSessionDispatchRepository.markFailed(id = dispatchId, token = claimToken, reason = reason, now = now) == 1
+    override fun recordDispatchFailure(dispatchId: Long, reason: String, now: Instant): Boolean =
+        jpaSessionDispatchRepository.recordFailure(id = dispatchId, reason = reason, now = now) == 1
 
     @Transactional
     override fun markDispatchSkipped(dispatchId: Long, reason: String, now: Instant): Boolean =
