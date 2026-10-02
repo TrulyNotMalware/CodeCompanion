@@ -24,9 +24,24 @@ data class Element(
     val actionId: String? = null,
     @field:JsonProperty("value")
     val value: String? = null,
+    // A string on buttons and lists ("primary", "ordered") but an object on rich_text leaves ({"bold": true}).
     @field:JsonProperty("style")
-    val style: String? = null,
+    val style: JsonNode? = null,
     val elements: List<Element> = listOf(),
+    @field:JsonProperty("url")
+    val url: String? = null,
+    @field:JsonProperty("name")
+    val name: String? = null,
+    @field:JsonProperty("channel_id")
+    val channelId: String? = null,
+    @field:JsonProperty("usergroup_id")
+    val usergroupId: String? = null,
+    @field:JsonProperty("range")
+    val range: String? = null,
+    @field:JsonProperty("fallback")
+    val fallback: String? = null,
+    @field:JsonProperty("indent")
+    val indent: Int = 0,
 )
 
 internal fun Element.extractText(): String? =

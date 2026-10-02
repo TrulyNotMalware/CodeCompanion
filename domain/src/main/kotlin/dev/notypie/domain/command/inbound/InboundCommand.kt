@@ -22,6 +22,7 @@ data class MentionInvocation(
     val hasCommandStructure: Boolean,
     val message: MessageHandle? = null,
     val thread: MessageHandle? = null,
+    val text: String = "",
 ) : InboundPayload
 
 data class InboundCommand(

@@ -133,6 +133,83 @@ class AppMentionContextParserTest :
                 }
             }
 
+            `when`("command is 'ask' and the transport restored the whole message text") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            MentionInvocation(
+                                mentionedUserIds = listOf("U_ALICE"),
+                                commandTokens = listOf("ask", "summarize"),
+                                hasCommandStructure = true,
+                                message = MessageHandle(raw = TEST_MESSAGE_TS),
+                                text = "ask summarize https://example.com/log for <@U_ALICE>\n```\nval x = 1\n```",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the prompt is the restored text without the keyword, link, mention and code block included") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "summarize https://example.com/log for <@U_ALICE>\n```\nval x = 1\n```"
+                }
+            }
+
+            `when`("command is 'ask' and the restored text leads with another person's mention") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            MentionInvocation(
+                                mentionedUserIds = listOf("U_ALICE"),
+                                commandTokens = listOf("ask", "why", "is", "the", "task", "red?"),
+                                hasCommandStructure = true,
+                                message = MessageHandle(raw = TEST_MESSAGE_TS),
+                                text = "<@U_ALICE> ask why is the task red?\n> ask later",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("only the first whole-word occurrence of the command word is removed; the mention stays") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "<@U_ALICE> why is the task red?\n> ask later"
+                }
+            }
+
+            `when`("free text arrives with the restored message text") {
+                val freeTextIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            MentionInvocation(
+                                mentionedUserIds = emptyList(),
+                                commandTokens = listOf("what", "is"),
+                                hasCommandStructure = true,
+                                text = "  what is <#C_OPS> for?  ",
+                            ),
+                        intentQueue = freeTextIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the whole restored text, trimmed, becomes the prompt") {
+                    freeTextIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is <#C_OPS> for?"
+                }
+            }
+
             `when`("command is 'ask' inside an existing thread") {
                 val askIntents = createIntentQueue()
                 val parser =
