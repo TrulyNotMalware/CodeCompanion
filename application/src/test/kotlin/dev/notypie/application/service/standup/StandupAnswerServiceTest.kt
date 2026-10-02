@@ -146,12 +146,17 @@ class StandupAnswerServiceTest :
                     )
                 } returns
                     AnswerRecordResult.SESSION_NOT_FOUND
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
 
                 serviceOf(repo = repo, stager = stager, eventPublisher = mockk(relaxed = true))
                     .recordAnswer(event = eventOf(sessionUid = UUID.randomUUID(), notice = notice))
 
-                then("nothing is staged — no false \"submitted\" confirmation") {
-                    verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
+                then("the prompt is still collapsed, saying the answer was not recorded — never \"submitted\" (G7)") {
+                    verify(exactly = 1) {
+                        stager.stage(message = updateTo(text = SESSION_NOT_FOUND_NOTICE), basicInfo = any())
+                    }
+                    verify(exactly = 0) { stager.stage(message = updateTo(text = SUBMITTED_NOTICE), basicInfo = any()) }
                 }
             }
 

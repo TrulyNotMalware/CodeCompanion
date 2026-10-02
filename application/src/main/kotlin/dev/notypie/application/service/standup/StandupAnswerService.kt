@@ -22,6 +22,8 @@ private val answerLog = KotlinLogging.logger {}
 internal const val SUBMITTED_NOTICE: String = "Standup submitted."
 internal const val CLOSED_NOTICE: String =
     "This standup has already closed, so your answer was not recorded or added to the summary."
+internal const val SESSION_NOT_FOUND_NOTICE: String =
+    "This standup could no longer be found, so your answer was not recorded."
 
 @Service
 class StandupAnswerService(
@@ -51,9 +53,11 @@ class StandupAnswerService(
                     }
                     CLOSED_NOTICE
                 }
+                // Still collapses the prompt: returning here left the "Fill in standup" button in the DM with no
+                // feedback, inviting the member to submit again into nothing (review G7).
                 AnswerRecordResult.SESSION_NOT_FOUND -> {
                     answerLog.warn { "Standup answer ignored; session not found: sessionUid=${payload.sessionUid}" }
-                    return
+                    SESSION_NOT_FOUND_NOTICE
                 }
             }
         val notice = payload.notice ?: return
