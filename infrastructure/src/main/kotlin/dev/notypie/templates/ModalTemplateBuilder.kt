@@ -330,7 +330,7 @@ class ModalTemplateBuilder(
                 close(text = "Cancel")
                 blocks {
                     if (meetingTitle.isNotBlank()) {
-                        section { mrkdwn(text = "*$meetingTitle*") }
+                        section { mrkdwn(text = "*${meetingTitle.escapeMrkdwn()}*") }
                     }
                     input(blockId = DeclineReasonModalIds.BLOCK_ID) {
                         label(text = "Reason")
@@ -456,7 +456,11 @@ class ModalTemplateBuilder(
                 close(text = "Cancel")
                 blocks {
                     section {
-                        mrkdwn(text = "*$routineName* — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}")
+                        mrkdwn(
+                            text = "*${routineName.escapeMrkdwn()}* — ${sessionDate.format(
+                                STANDUP_SESSION_DATE_FORMAT,
+                            )}",
+                        )
                     }
                     questions.forEachIndexed { index, question ->
                         input(blockId = "${StandupModalIds.BLOCK_ID_PREFIX}$index") {

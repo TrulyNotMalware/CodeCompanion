@@ -1149,6 +1149,32 @@ class ModalTemplateBuilderTest :
                     textInput.maxLength shouldBe RejectReason.MAX_DETAIL_LENGTH
                 }
             }
+
+            `when`("the meeting title carries mrkdwn control sequences") {
+                val view =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(
+                            templateBuilder.declineReasonModalViewJson(
+                                meetingTitle = "<!channel> R&D <https://evil.example|docs>",
+                                meetingIdempotencyKey = meetingKey,
+                                participantUserId = participantUserId,
+                                noticeChannel = noticeChannel,
+                                noticeMessageTs = noticeMessageTs,
+                            ),
+                            com.slack.api.model.view.View::class.java,
+                        )
+
+                then("the title section shows it as literal text") {
+                    (
+                        view.blocks
+                            .first()
+                            .shouldBeInstanceOf<SectionBlock>()
+                            .text as MarkdownTextObject
+                    ).text shouldBe
+                        "*&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;*"
+                }
+            }
         }
 
         given("rescheduleMeetingModalViewJson") {
@@ -1256,6 +1282,34 @@ class ModalTemplateBuilderTest :
                     view.type shouldBe "modal"
                     view.callbackId shouldBe StandupModalIds.CALLBACK_ID
                     inputs.size shouldBe 2
+                }
+            }
+
+            `when`("the routine name carries mrkdwn control sequences") {
+                val view =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(
+                            templateBuilder.standupModalViewJson(
+                                routineName = "<!channel> R&D <https://evil.example|docs>",
+                                sessionDate = LocalDate.of(2026, 5, 4),
+                                sessionUid = sessionUid,
+                                userId = "U_STANDUP",
+                                noticeChannel = "D_NOTICE",
+                                noticeMessageTs = "1700000000.000400",
+                                questions = listOf("Q1"),
+                            ),
+                            com.slack.api.model.view.View::class.java,
+                        )
+
+                then("the header section shows it as literal text") {
+                    (
+                        view.blocks
+                            .first()
+                            .shouldBeInstanceOf<SectionBlock>()
+                            .text as MarkdownTextObject
+                    ).text shouldBe
+                        "*&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;* — 2026-05-04"
                 }
             }
         }
