@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/repository/cve
 
@@ -22,9 +22,9 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 | `CveSubscriptionRepository.kt` | Port `subscribe(userId, topicIds): Int`, `unsubscribe(userId, topicIds): Int`, `findSubscribedTopics(userId): List<CveTopic>` |
 | `CveSubscriptionRepositoryImpl.kt` | `subscribe` loops `insertIgnore` per distinct topic and sums the inserted count; `unsubscribe` → `deleteByUserIdAndTopicIdIn`; `findSubscribedTopics` reads ids then `findAllById` on the topic repo, sorted by `topicKey` |
 | `JpaCveSubscriptionRepository.kt` | Derived `findByUserId`, `deleteByUserIdAndTopicIdIn(): Long`; native `insertIgnore(userId, topicId): Int`. Not `@Repository`-annotated |
-| `CveDeliveryRepository.kt` | `data class UndeliveredCveEvent(eventId, userId, topicKey, topicDisplayName, title, aiSummary?)`; port `claim(eventId, userId): Boolean`, `findUndelivered(deliveryMode, since, doneBefore, limit)`, `dbNow(): LocalDateTime` |
-| `CveDeliveryRepositoryImpl.kt` | `claim` = affected rows `== 1`; `findUndelivered` wraps `limit` into a `PageRequest` |
-| `JpaCveDeliveryRepository.kt` | Native `INSERT IGNORE ... 'SENT'` claim; JPQL `findUndelivered` joining `cve_topic` and `cve_subscription` to `cve_event` by unrelated-entity `ON`, anti-joining `cve_delivery` (`d.id IS NULL`), filtering `DONE`, `deliveryMode`, `active = true`, `createdAt >= :since`, `updatedAt < :doneBefore`, ordered by event id then user id; native `dbNow()` = `SELECT LOCALTIMESTAMP(6)` |
+| `CveDeliveryRepository.kt` | `data class UndeliveredCveEvent(eventId, userId, topicKey, topicDisplayName, title, aiSummary?)`; port `claim(eventId, userId): Boolean`, `findUndelivered(deliveryMode, since, doneBefore, limit)` (event-major), `findUndeliveredByUser(...)` (same filter, user-major), `findUndeliveredForUser(deliveryMode, userId, since, doneBefore, limit)` (one user, event order), `dbNow(): LocalDateTime` |
+| `CveDeliveryRepositoryImpl.kt` | `claim` = affected rows `== 1`; the three reads are `@Transactional(readOnly = true)` and wrap `limit` into a `PageRequest` |
+| `JpaCveDeliveryRepository.kt` | Native `INSERT IGNORE ... 'SENT'` claim; JPQL `findUndelivered` joining `cve_topic` and `cve_subscription` to `cve_event` by unrelated-entity `ON`, anti-joining `cve_delivery` (`d.id IS NULL`), filtering `DONE`, `deliveryMode`, `active = true`, `createdAt >= :since`, `updatedAt < :doneBefore`, ordered by event id then user id; native `dbNow()` = `SELECT LOCALTIMESTAMP(6)` The three reads share one `UNDELIVERED_SELECT` and differ only in order: `findUndelivered` `e.id, s.userId` (immediate: oldest events first across users), `findUndeliveredByUser` `s.userId, e.id` (digest: a page cut can split only its last user), `findUndeliveredForUser` adds `s.userId = :userId`. |
 | `CveCollectLedgerRepository.kt` | Port `claimWindow(topicId, windowStart): Boolean`, `deleteOlderThan(cutoff): Int`, `latestWindowStart(): LocalDateTime?` |
 | `CveCollectLedgerRepositoryImpl.kt` | Thin delegation; `claimWindow` = affected rows `== 1` |
 | `JpaCveCollectLedgerRepository.kt` | Native `INSERT IGNORE` on `(topic_id, window_start)`; JPQL `deleteOlderThan`, `findLatestWindowStart` (`MAX(windowStart)`) |

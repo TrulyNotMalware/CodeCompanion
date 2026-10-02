@@ -215,6 +215,61 @@ class JpaCveDeliveryRepositoryTest
                 }
             }
 
+            given("two DIGEST events on a topic with two subscribers") {
+                val topicId = saveTopic(topicKey = "by-user", deliveryMode = CveDeliveryMode.DIGEST)
+                val first = saveEvent(topicId = topicId, externalId = "by-user-1")
+                val second = saveEvent(topicId = topicId, externalId = "by-user-2")
+                subscribe(userId = "U_BYUSER_A", topicId = topicId)
+                subscribe(userId = "U_BYUSER_B", topicId = topicId)
+
+                `when`("the event-major, user-major and single-user reads run for DIGEST") {
+                    fun List<UndeliveredCveEvent>.scoped() =
+                        filter { it.userId.startsWith("U_BYUSER_") }.map { it.userId to it.eventId }
+                    val eventMajor = undelivered(mode = CveDeliveryMode.DIGEST).scoped()
+                    val userMajor =
+                        deliveryRepository
+                            .findUndeliveredByUser(
+                                deliveryMode = CveDeliveryMode.DIGEST,
+                                since = since,
+                                doneBefore = doneBefore,
+                                pageable = page,
+                            ).scoped()
+                    val singleUser =
+                        deliveryRepository
+                            .findUndeliveredForUser(
+                                deliveryMode = CveDeliveryMode.DIGEST,
+                                userId = "U_BYUSER_B",
+                                since = since,
+                                doneBefore = doneBefore,
+                                pageable = page,
+                            ).map { it.userId to it.eventId }
+
+                    then("the event-major order interleaves users, so a page cut can split every user's digest") {
+                        eventMajor shouldContainExactly
+                            listOf(
+                                "U_BYUSER_A" to first,
+                                "U_BYUSER_B" to first,
+                                "U_BYUSER_A" to second,
+                                "U_BYUSER_B" to second,
+                            )
+                    }
+
+                    then("the user-major order keeps each user's pairs contiguous, events in id order") {
+                        userMajor shouldContainExactly
+                            listOf(
+                                "U_BYUSER_A" to first,
+                                "U_BYUSER_A" to second,
+                                "U_BYUSER_B" to first,
+                                "U_BYUSER_B" to second,
+                            )
+                    }
+
+                    then("the single-user read returns only that user's pairs in event order") {
+                        singleUser shouldContainExactly listOf("U_BYUSER_B" to first, "U_BYUSER_B" to second)
+                    }
+                }
+            }
+
             given("more undelivered pairs than the requested limit") {
                 val topicId = saveTopic(topicKey = "limit")
                 saveEvent(topicId = topicId, externalId = "limit-1")

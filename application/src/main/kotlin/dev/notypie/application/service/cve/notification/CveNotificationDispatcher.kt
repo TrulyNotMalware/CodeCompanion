@@ -76,18 +76,30 @@ class CveNotificationDispatcher(
                 .atZone(digestZone)
                 .withZoneSameInstant(ZoneId.systemDefault())
                 .toLocalDateTime()
+        val since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays)
         val pairs =
-            cveDeliveryRepository.findUndelivered(
+            cveDeliveryRepository.findUndeliveredByUser(
                 deliveryMode = CveDeliveryMode.DIGEST,
-                since = cveDeliveryRepository.dbNow().minusDays(deliveryHorizonDays),
+                since = since,
                 doneBefore = doneBefore,
                 limit = batchSize,
             )
         if (pairs.isEmpty()) return
 
+        val byUser = pairs.groupBy { it.userId }
+        val bundles =
+            when {
+                pairs.size < batchSize -> byUser
+                byUser.size > 1 -> byUser - byUser.keys.last()
+                else -> {
+                    val userId = byUser.keys.single()
+                    mapOf(userId to singleUserDay(userId = userId, since = since, doneBefore = doneBefore))
+                }
+            }
+
         var dispatchedUsers = 0
         var dispatchedEvents = 0
-        pairs.groupBy { it.userId }.forEach { (userId, userPairs) ->
+        bundles.forEach { (userId, userPairs) ->
             transactionTemplate
                 .runInTx { dispatchDigest(userId = userId, userPairs = userPairs) }
                 .onFailure { ex -> log.error(ex) { "CVE digest dispatch failed for user=$userId" } }
@@ -101,6 +113,26 @@ class CveNotificationDispatcher(
         if (dispatchedUsers > 0) {
             log.info { "CVE digest dispatch users=$dispatchedUsers events=$dispatchedEvents" }
         }
+    }
+
+    private fun singleUserDay(
+        userId: String,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+    ): List<UndeliveredCveEvent> {
+        val limit = batchSize * SINGLE_USER_DIGEST_PAGES
+        val day =
+            cveDeliveryRepository.findUndeliveredForUser(
+                deliveryMode = CveDeliveryMode.DIGEST,
+                userId = userId,
+                since = since,
+                doneBefore = doneBefore,
+                limit = limit,
+            )
+        if (day.size >= limit) {
+            log.warn { "CVE digest for user=$userId reached $limit events; the rest goes out in a later digest" }
+        }
+        return day
     }
 
     private fun dispatchImmediate(pair: UndeliveredCveEvent): Boolean {
@@ -178,5 +210,6 @@ class CveNotificationDispatcher(
 
         private const val BODY_MAX_LENGTH = 2_900
         private const val CAPPED_BODY_MAX_LENGTH = BODY_MAX_LENGTH + 1 + SlackBlockLimits.TRUNCATION_MARKER.length
+        private const val SINGLE_USER_DIGEST_PAGES = 10
     }
 }

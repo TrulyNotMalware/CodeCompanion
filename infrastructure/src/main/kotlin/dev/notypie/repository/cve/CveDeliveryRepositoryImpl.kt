@@ -27,5 +27,35 @@ open class CveDeliveryRepositoryImpl(
         )
 
     @Transactional(readOnly = true)
+    override fun findUndeliveredByUser(
+        deliveryMode: CveDeliveryMode,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent> =
+        jpaCveDeliveryRepository.findUndeliveredByUser(
+            deliveryMode = deliveryMode,
+            since = since,
+            doneBefore = doneBefore,
+            pageable = PageRequest.of(0, limit),
+        )
+
+    @Transactional(readOnly = true)
+    override fun findUndeliveredForUser(
+        deliveryMode: CveDeliveryMode,
+        userId: String,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent> =
+        jpaCveDeliveryRepository.findUndeliveredForUser(
+            deliveryMode = deliveryMode,
+            userId = userId,
+            since = since,
+            doneBefore = doneBefore,
+            pageable = PageRequest.of(0, limit),
+        )
+
+    @Transactional(readOnly = true)
     override fun dbNow(): LocalDateTime = jpaCveDeliveryRepository.dbNow()
 }
