@@ -348,7 +348,11 @@ class ModalTemplateBuilder(
                     input(blockId = DeclineReasonModalIds.DETAIL_BLOCK_ID) {
                         optional(value = true)
                         label(text = "Details (required if you pick Other)")
-                        plainTextInput(actionId = DeclineReasonModalIds.DETAIL_ACTION_ID, multiline = true)
+                        plainTextInput(
+                            actionId = DeclineReasonModalIds.DETAIL_ACTION_ID,
+                            multiline = true,
+                            maxLength = RejectReason.MAX_DETAIL_LENGTH,
+                        )
                     }
                 }
             }

@@ -1138,6 +1138,16 @@ class ModalTemplateBuilderTest :
                         detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
                     textInput.actionId shouldBe DeclineReasonModalIds.DETAIL_ACTION_ID
                 }
+
+                then("the detail input is capped at the stored detail length") {
+                    val detailBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
+                    val textInput =
+                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    textInput.maxLength shouldBe RejectReason.MAX_DETAIL_LENGTH
+                }
             }
         }
 

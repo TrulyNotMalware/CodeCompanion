@@ -90,23 +90,31 @@ internal data class DeclineReasonParsed(
     val reason: RejectReason,
     val reasonDetail: String?,
     val notice: NoticeTarget,
+    val detailTooLong: Boolean = false,
 ) {
     fun noticeSummaryMarkdown(): String =
         buildString {
             append("You declined the meeting — *Reason:* ${reason.showMessage}")
             if (!reasonDetail.isNullOrBlank()) append(" — $reasonDetail")
+            if (detailTooLong) {
+                append(" — _Your note was longer than ${RejectReason.MAX_DETAIL_LENGTH} characters and was not saved._")
+            }
         }
 
     companion object {
         fun from(raw: InboundSubmission.DeclineReason, actorId: String): DeclineReasonParsed? {
             val meetingIdempotencyKey = raw.meetingIdempotencyKeyRaw.toUuidOrNull() ?: return null
             val reason = parseReason(raw = raw.reasonRaw)
+            val detail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER }
+            val detailTooLong =
+                detail != null && detail.codePointCount(0, detail.length) > RejectReason.MAX_DETAIL_LENGTH
             return DeclineReasonParsed(
                 meetingIdempotencyKey = meetingIdempotencyKey,
                 participantUserId = raw.participantUserId.ifBlank { actorId },
                 reason = reason,
-                reasonDetail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER },
+                reasonDetail = detail.takeUnless { detailTooLong },
                 notice = NoticeTarget.of(channel = raw.noticeChannel, messageTs = raw.noticeMessageTs),
+                detailTooLong = detailTooLong,
             )
         }
 

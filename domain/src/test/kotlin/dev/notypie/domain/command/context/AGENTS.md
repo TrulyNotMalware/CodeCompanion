@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # domain/command/context (test)
 
@@ -25,13 +25,13 @@ All specs are Kotest `BehaviorSpec`s.
 | `EphemeralTextContextTest.kt` | `EphemeralTextResponseContext`: `Ephemeral` to the publisher (`recipient == null`) in the command channel; `isOk = false` yields `FAILED` but still emits |
 | `MeetingApprovalResponseContextTest.kt` | `form.MeetingApprovalResponseContext`: APPROVE → `MeetingAttendanceUpdate(true, ATTENDING)` + `ReplaceMessage` "You accepted the meeting invitation."; DECLINE → `OpenModal(ModalForm.DeclineReason)` first (title from `routingExtras[0]`, origin notice from `message`), a provisional `MeetingAttendanceUpdate(OTHER)`, and **no** `ReplaceMessage`; regression case proving a button-only payload never triggers "Select participants". Uses `applyButtonField`, `rejectButtonField` |
 | `MeetingContextTest.kt` | `form.RequestMeetingContext`, the largest spec. `NONE` → `ChannelMessage(MeetingRequest)`; `LIST` with no / blank / each valid / unknown / too-many options → `MeetingListRequest` window per `MeetingListRange` or an `Ephemeral` usage hint (`recipient` must stay `null`); form submission: happy path, explicit end time, same start/end ("End time must be after start time."), no end time (entity default), reject button ("Meeting request canceled."), no participants ("Select participants"), over-long title (message rendered from the `Meeting` entity's own validation). Uses `plainTextField`, `datePickerField`, `timePickerField`, `multiUsersField`, `MeetingFormInput.DATE_PATTERN` / `SIMPLE_TIME_PATTERN` |
-| `ParsedSubmissionsTest.kt` | The per-variant `*Parsed.from` factories (Phase 11): uid/date/time rejection, a past reschedule start still parses (the application service answers it), actor fallback for blank routing tokens, `RejectReason` coercion, blank-OTHER detail surviving as `""`, `NoticeTarget.of` partial routing → `None`, standup-setup defaults, CVE parsers never rejecting |
+| `ParsedSubmissionsTest.kt` | The per-variant `*Parsed.from` factories (Phase 11): uid/date/time rejection, a past reschedule start still parses (the application service answers it), actor fallback for blank routing tokens, `RejectReason` coercion, blank-OTHER detail surviving as `""`, an OTHER note of exactly `MAX_DETAIL_LENGTH` kept and one longer dropped with `detailTooLong` and the "not saved" notice (measured in code points: 255 emoji kept, 256 dropped; a long non-OTHER detail is ignored, not flagged), `NoticeTarget.of` partial routing → `None`, standup-setup defaults, CVE parsers never rejecting |
 | `NoticeContextTest.kt` | `NoticeContext`: `OutboundMessage.Notice` with `UserRef` mentions and space-joined command text; empty inputs still succeed |
 | `ReplaceMessageContextTest.kt` | `ReplaceMessageContext`: `SIMPLE` / `REPLACE_TEXT`; both `runCommand` and `handleInteraction` enqueue a `ReplaceMessage` on the reply handle |
 | `RequestApprovalContextTest.kt` | `RequestApprovalContext`: `PIPELINE` / `APPLY_REQUEST`; one `Approval` targeted at the channel, reason taken from the commands queue. Constructor parameter is `basicInfo`, not `commandBasicInfo` |
 | `RescheduleMeetingContextTest.kt` | `form.RescheduleMeetingContext`: click → `OpenModal(ModalForm.Reschedule)`; malformed uid → no effects |
 | `StandupFillContextTest.kt` | `form.StandupFillContext`: Fill click with `routingExtras = [sessionUid, routineUid]` → `OpenModal(ModalForm.StandupFill)` carrying the origin notice ref; malformed extras → no intents |
-| `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue |
+| `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, a dropped over-long note recorded as `OTHER` without detail and announced in the notice, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue |
 | `TextResponseContextTest.kt` | `TextResponseContext`: `ChannelMessage(Text)` in the command channel with headline "Simple Text Response" |
 
 ## For AI Agents

@@ -166,6 +166,64 @@ class ParsedSubmissionsTest :
                 }
             }
 
+            `when`("an OTHER detail is exactly the stored length, or one character longer") {
+                val atLimit = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
+                val fits =
+                    DeclineReasonParsed.from(raw = raw(reasonRaw = "OTHER", detailRaw = " $atLimit "), actorId = ACTOR)
+                val tooLong =
+                    DeclineReasonParsed.from(raw = raw(reasonRaw = "OTHER", detailRaw = atLimit + "b"), actorId = ACTOR)
+
+                then("the fitting note is kept (trimmed before measuring)") {
+                    fits.shouldNotBeNull().reasonDetail shouldBe atLimit
+                    fits.detailTooLong shouldBe false
+                }
+
+                then("the longer note is dropped, the decline still parses as OTHER and its notice says why") {
+                    tooLong.shouldNotBeNull()
+                    tooLong.reason shouldBe RejectReason.OTHER
+                    tooLong.reasonDetail.shouldBeNull()
+                    tooLong.detailTooLong shouldBe true
+                    tooLong.noticeSummaryMarkdown() shouldBe
+                        "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
+                        "_Your note was longer than 255 characters and was not saved._"
+                }
+            }
+
+            `when`("an OTHER detail of emoji is at the stored length in code points, or one past it") {
+                val emoji = "😀"
+                val atLimit = emoji.repeat(RejectReason.MAX_DETAIL_LENGTH)
+                val fits =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = atLimit),
+                        actorId = ACTOR,
+                    )
+                val tooLong =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = atLimit + emoji),
+                        actorId = ACTOR,
+                    )
+
+                then("the length is measured in code points, the unit utf8mb4 VARCHAR counts") {
+                    fits.shouldNotBeNull().reasonDetail shouldBe atLimit
+                    fits.detailTooLong shouldBe false
+                    tooLong.shouldNotBeNull().reasonDetail.shouldBeNull()
+                    tooLong.detailTooLong shouldBe true
+                }
+            }
+
+            `when`("a non-OTHER reason arrives with a long detail") {
+                val parsed =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "VACATION", detailRaw = "a".repeat(RejectReason.MAX_DETAIL_LENGTH + 1)),
+                        actorId = ACTOR,
+                    )
+
+                then("the detail is ignored as before, so nothing is flagged") {
+                    parsed.shouldNotBeNull().reasonDetail.shouldBeNull()
+                    parsed.detailTooLong shouldBe false
+                }
+            }
+
             `when`("notice routing is partial or the key is malformed") {
                 then("partial routing becomes None; a bad key rejects") {
                     DeclineReasonParsed

@@ -35,6 +35,9 @@ change together.
 - **`absent_reason` is stored by enum name with no `length`** (unlike every other enum column in the module);
   `RejectReason` constants must fit the default column and must never be renamed. It is mapped `nullable = false`
   to match the non-null property; that reaches only schemas Hibernate creates, not an existing database column.
+  `absent_reason_detail` takes its length from `RejectReason.MAX_DETAIL_LENGTH` (255, as V8 created it). MariaDB
+  utf8mb4 counts code points there; H2 counts UTF-16 units and silently cuts a longer bound value to the width
+  (`JpaMeetingRepositoryTest`), so an emoji-heavy note at the limit is cut locally but stored whole in prod.
 - **`MeetingReminderSchema` is all `val`**: status, token and timestamps change only through the native
   statements in `JpaMeetingReminderRepository`. Do not add setters and mutate through the entity.
   `updated_at` is `@UpdateTimestamp` for entity saves but is set explicitly by every native CAS; the

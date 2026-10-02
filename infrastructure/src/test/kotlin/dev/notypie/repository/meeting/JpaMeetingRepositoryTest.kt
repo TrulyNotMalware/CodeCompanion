@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import dev.notypie.schema.createParticipants
@@ -11,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -20,6 +22,7 @@ class JpaMeetingRepositoryTest
     @Autowired
     constructor(
         private val repository: JpaMeetingRepository,
+        private val jdbcTemplate: JdbcTemplate,
     ) : BehaviorSpec({
 
             given("save and findById") {
@@ -278,6 +281,49 @@ class JpaMeetingRepositoryTest
                         found.absentReason shouldBe
                             dev.notypie.domain.meet.entity.RejectReason.OTHER
                         found.absentReasonDetail shouldBe "Out of town for a family event"
+                    }
+                }
+
+                `when`("the detail is exactly RejectReason.MAX_DETAIL_LENGTH characters") {
+                    val meetingKey = UUID.randomUUID()
+                    val participantUserId = "U_ATTENDANCE_LIMIT"
+                    val meeting = createMeetingSchema(idempotencyKey = meetingKey, publisherId = "U_LIMIT_PUB")
+                    meeting.participants.add(createParticipants(meeting = meeting, userId = participantUserId))
+                    repository.save(meeting)
+
+                    fun decline(detail: String) =
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = participantUserId,
+                            isAttending = false,
+                            absentReason = RejectReason.OTHER,
+                            absentReasonDetail = detail,
+                        )
+
+                    fun storedDetail() =
+                        repository
+                            .findMeetingWithParticipants(meetingId = meeting.id)!!
+                            .participants
+                            .single()
+                            .absentReasonDetail
+
+                    then(
+                        "the mapped column is exactly the domain limit wide and a note of that length is stored intact",
+                    ) {
+                        jdbcTemplate.queryForObject(
+                            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS " +
+                                "WHERE TABLE_NAME = 'MEETING_PARTICIPANTS' AND COLUMN_NAME = 'ABSENT_REASON_DETAIL'",
+                            Int::class.java,
+                        ) shouldBe RejectReason.MAX_DETAIL_LENGTH
+                        decline(detail = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)) shouldBe 1
+                        storedDetail() shouldBe "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
+                    }
+
+                    then("H2 counts UTF-16 units: a note at the limit in emoji is cut to the column width") {
+                        val emojiAtLimit = "😀".repeat(RejectReason.MAX_DETAIL_LENGTH)
+                        decline(detail = emojiAtLimit) shouldBe 1
+                        storedDetail()!!.length shouldBe RejectReason.MAX_DETAIL_LENGTH
+                        storedDetail() shouldNotBe emojiAtLimit
                     }
                 }
 

@@ -13,4 +13,9 @@ enum class RejectReason(
     VACATION("Vacation"),
     PERSONAL_REASON("PERSONAL reason"),
     OTHER("Other"),
+    ;
+
+    companion object {
+        const val MAX_DETAIL_LENGTH: Int = 255
+    }
 }

@@ -151,6 +151,26 @@ class SubmissionContextsTest :
                     effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
+
+            `when`("the note was too long to store") {
+                val intents = createIntentQueue()
+                DeclineReasonSubmissionContext(
+                    commandBasicInfo = createCommandBasicInfo(),
+                    intents = intents,
+                    model =
+                        model(notice = NoticeTarget.Update(channel = "C_N", messageTs = "1.2"))
+                            .copy(reasonDetail = null, detailTooLong = true),
+                ).handleInteraction(interaction = interaction)
+
+                then("the decline is recorded without a detail and the participant is told the note was not saved") {
+                    val effects = intents.drainSnapshot()
+                    val intent = effects.filterIsInstance<CommandIntent.MeetingAttendanceUpdate>().single()
+                    intent.absentReason shouldBe RejectReason.OTHER
+                    intent.absentReasonDetail shouldBe null
+                    val update = effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    (update.content as MessageContent.Text).markdown shouldContain "was not saved"
+                }
+            }
         }
 
         given("StandupAnswerSubmissionContext") {
