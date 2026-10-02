@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # gradle-config
 
@@ -34,7 +34,7 @@ All presets share: parallel + caching + configuration cache (`problems=warn`), i
   no GC, sets no experimental VM options, leaves `workers.max` unset, and enables
   `kotlin.daemon.useFallbackStrategy` — the opposite of the macOS/Linux presets. Do not "optimize" it.
 - **Preset selection degrades, it does not fail.** `detect_os` recognises `macos`, `linux`, `windows`,
-  and `unknown`, but only two presets exist. `apply_os_config` warns and delegates to
+  and `unknown`, but only two OS presets exist (`common` and `ci` are chosen by argument, never by OS). `apply_os_config` warns and delegates to
   `apply_common_config` when `gradle-<os>.properties` is absent, so Windows and any future platform
   land on the portable preset instead of exiting 1. Adding `gradle-windows.properties` overrides it
   with no code change — that is the intended way to tune a new platform.
@@ -47,8 +47,8 @@ All presets share: parallel + caching + configuration cache (`problems=warn`), i
 - `force` is threaded through both paths: `apply_os_config "$os" "$force"` passes it to
   `apply_common_config`, which skips `backup_existing_config` when set. Keep them consistent, or
   `--force` starts meaning different things depending on which preset was chosen.
-- All three presets now declare `kotlin.version=2.4.10`, matching the Kotlin plugin in the root
-  `build.gradle.kts`. The property is inert — no build script reads it — but keep the three files
+- All four presets (`macos`, `linux`, `common`, `ci`) declare `kotlin.version=2.4.10`, matching the Kotlin plugin in
+  the root `build.gradle.kts`. The property is inert — no build script reads it — but keep the four files
   agreeing with the plugin so it does not drift back into a misleading second source of truth.
   `README.md` states the real toolchain (Gradle 9.7.1 / Java 25 / Kotlin 2.4.10 / Boot 4.1.1).
 - CI runs `./gradle-config/apply.sh ci` in the test workflow and in the deploy build, so a change to `apply.sh`

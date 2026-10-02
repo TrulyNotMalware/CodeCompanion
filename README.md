@@ -23,8 +23,8 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Messaging**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC outbox relay
 - **Persistence**: JPA / Hibernate — MariaDB (runtime, every profile), H2 (tests only)
 - **Slack**: Slack Java SDK `1.51.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
-- **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
-- **Serialization**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
+- **AI / MCP**: Spring AI `2.0.1` (BOM; MCP server modules `spring-ai-autoconfigure-mcp-server-webmvc`, `spring-ai-mcp`, `spring-ai-mcp-annotations`, `mcp-spring-webmvc`)
+- **Serialization**: Jackson 3 (`tools.jackson`, BOM `3.2.2`)
 - **Logging**: kotlin-logging `8.0.4`
 - **Testing**: Kotest `6.2.5` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
 
@@ -171,8 +171,8 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **메시징**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC 아웃박스 릴레이
 - **영속성**: JPA / Hibernate — MariaDB(런타임, 모든 프로파일), H2(테스트 전용)
 - **슬랙**: Slack Java SDK `1.51.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
-- **AI / MCP**: Spring AI `2.0.0` (`spring-ai-starter-mcp-server-webmvc`)
-- **직렬화**: Jackson 3 (`tools.jackson`, BOM `3.2.0`)
+- **AI / MCP**: Spring AI `2.0.1` (BOM, MCP 서버 모듈 `spring-ai-autoconfigure-mcp-server-webmvc`, `spring-ai-mcp`, `spring-ai-mcp-annotations`, `mcp-spring-webmvc`)
+- **직렬화**: Jackson 3 (`tools.jackson`, BOM `3.2.2`)
 - **로깅**: kotlin-logging `8.0.4`
 - **테스트**: Kotest `6.2.5` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
 
