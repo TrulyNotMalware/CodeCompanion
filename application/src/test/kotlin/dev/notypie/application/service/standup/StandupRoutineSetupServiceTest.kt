@@ -1,6 +1,7 @@
 package dev.notypie.application.service.standup
 
 import dev.notypie.domain.command.createCreateStandupRoutineEvent
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
@@ -73,12 +74,17 @@ class StandupRoutineSetupServiceTest :
                     }
                 }
 
-                then("a confirmation message is published to the command channel") {
+                then("the event mirrors production: the view_submission basicInfo carries no channel") {
+                    event.payload.responseBasicInfo.channel shouldBe ""
+                }
+
+                then("a confirmation message is published to the command channel, not the blank submission channel") {
                     verify(exactly = 1) {
                         stager.stage(
                             message =
                                 match { message ->
                                     message is OutboundMessage.Ephemeral &&
+                                        message.target.id == "C_COMMAND" &&
                                         message.recipient == null &&
                                         message.detailType == CommandDetailType.STANDUP_SETUP_SUBMIT &&
                                         message.content.let {
@@ -88,7 +94,12 @@ class StandupRoutineSetupServiceTest :
                                                 it.markdown.contains("created")
                                         }
                                 },
-                            basicInfo = match { it.channel == "C_COMMAND" },
+                            basicInfo =
+                                match {
+                                    it.channel == "C_COMMAND" &&
+                                        it.publisherId == event.payload.responseBasicInfo.publisherId &&
+                                        it.idempotencyKey == event.payload.responseBasicInfo.idempotencyKey
+                                },
                         )
                     }
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
@@ -130,9 +141,10 @@ class StandupRoutineSetupServiceTest :
                         outboundStager = stager,
                         eventPublisher = eventPublisher,
                     )
-                val event = createCreateStandupRoutineEvent(questions = emptyList())
+                val event = createCreateStandupRoutineEvent(questions = emptyList(), commandChannel = "C_COMMAND")
                 val errorSlot = slot<OutboundMessage>()
-                every { stager.stage(message = capture(errorSlot), basicInfo = any()) } returns
+                val errorInfoSlot = slot<CommandBasicInfo>()
+                every { stager.stage(message = capture(errorSlot), basicInfo = capture(errorInfoSlot)) } returns
                     mockk<SendSlackMessageEvent>(relaxed = true)
 
                 service.createRoutine(event = event)
@@ -146,6 +158,11 @@ class StandupRoutineSetupServiceTest :
                     val body = (ephemeral.content as MessageContent.Text).markdown
                     body.contains("Couldn't create the standup routine") shouldBe true
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("the rejection also goes to the command channel, so the user learns nothing was created") {
+                    (errorSlot.captured as OutboundMessage.Ephemeral).target.id shouldBe "C_COMMAND"
+                    errorInfoSlot.captured.channel shouldBe "C_COMMAND"
                 }
             }
 

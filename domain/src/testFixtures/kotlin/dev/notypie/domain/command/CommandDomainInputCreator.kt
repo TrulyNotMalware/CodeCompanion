@@ -58,7 +58,7 @@ fun createCreateStandupRoutineEvent(
     cutoffMinutes: Long? = 120L,
     timezone: ZoneId = ZoneId.of("Asia/Seoul"),
     responseBasicInfo: dev.notypie.domain.command.dto.CommandBasicInfo =
-        createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = commandChannel),
+        createCommandBasicInfo(idempotencyKey = idempotencyKey, channel = ""),
 ) = CreateStandupRoutineEvent(
     idempotencyKey = idempotencyKey,
     payload =

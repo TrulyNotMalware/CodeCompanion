@@ -12,6 +12,7 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.RoutineMember
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -41,20 +42,22 @@ class StandupRoutineSetupService(
                             "Standup routine setup rejected: name=${payload.name} creatorId=${payload.creatorId} " +
                                 "idempotencyKey=${event.idempotencyKey}"
                         }
-                        "Couldn't create the standup routine: ${exception.message ?: "invalid input"}. " +
+                        val reason = exception.message?.escapeMrkdwn() ?: "invalid input"
+                        "Couldn't create the standup routine: $reason. " +
                             "_Please run /standup setup again and review your inputs._"
                     },
                 )
+        val replyInfo = payload.responseBasicInfo.copy(channel = payload.commandChannel)
         outboundStager
             .stage(
                 message =
                     OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                        target = ConversationTarget(id = replyInfo.channel),
                         recipient = null,
                         content = MessageContent.Text(headline = null, markdown = message),
                         detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
                     ),
-                basicInfo = payload.responseBasicInfo,
+                basicInfo = replyInfo,
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
