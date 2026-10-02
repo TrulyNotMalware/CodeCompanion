@@ -9,7 +9,6 @@ import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.standup.schema.SessionDispatchSchema
-import dev.notypie.repository.standup.schema.StandupAnswerSchema
 import dev.notypie.repository.standup.schema.StandupSessionSchema
 import dev.notypie.repository.standup.schema.toDomainEntity
 import dev.notypie.repository.standup.schema.toRoutineDto
@@ -105,24 +104,17 @@ open class StandupRepositoryImpl(
         if (session.status != SessionStatus.COLLECTING || !submittedAt.isBefore(session.cutoffAt)) {
             return AnswerRecordResult.SESSION_CLOSED
         }
-        val responsesRaw = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER)
-        // Update in place: an IDENTITY insert runs at merge time, ahead of the orphan delete, so remove + add
-        // always hit uk_standup_answer_session_user on a resubmission (T9).
-        val existing = session.answers.firstOrNull { it.userId == userId }
-        if (existing != null) {
-            existing.responsesRaw = responsesRaw
-            existing.submittedAt = submittedAt
-        } else {
-            session.answers.add(
-                StandupAnswerSchema(
-                    session = session,
-                    userId = userId,
-                    responsesRaw = responsesRaw,
-                    submittedAt = submittedAt,
-                ),
-            )
-        }
-        jpaStandupSessionRepository.save(session)
+        // A native upsert, not "find the member's row, update or add": that choice was made from the answers this
+        // transaction could see, and the interaction transaction around it may have read before the lock (a
+        // REPEATABLE READ snapshot, or a session already in the persistence context). Two first submissions by one
+        // member then both inserted and the second hit uk_standup_answer_session_user (review G4). Remove + add
+        // is out too: its IDENTITY insert ran ahead of the orphan delete on every resubmission (T9).
+        jpaStandupSessionRepository.upsertAnswer(
+            sessionId = session.id,
+            userId = userId,
+            responses = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER),
+            submittedAt = submittedAt,
+        )
         return AnswerRecordResult.RECORDED
     }
 

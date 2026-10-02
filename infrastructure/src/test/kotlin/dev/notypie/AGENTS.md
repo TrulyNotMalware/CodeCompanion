@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/src/test/kotlin/dev/notypie
 
@@ -42,7 +42,7 @@ spec in the subtree boots from it and inherits `src/main`'s component scan (`con
 ./gradlew :infrastructure:test --tests 'dev.notypie.<package>.*' # one package
 ./gradlew :infrastructure:test --tests 'dev.notypie.<package>.<SpecName>'
 ```
-Spring-booting specs share a cached context per configuration: all `@DataJpaTest` specs share one H2, and
+Spring-booting specs share a cached context per configuration: all `@DataJpaTest` specs share one H2 (except `repository/standup/StandupRepositoryImplJpaTest`, which overrides the URL with its own `MODE=MariaDB` database for a native upsert), and
 `impl/command/KafkaEventPublisherTest` (`@SpringBootTest` + `@EmbeddedKafka`) is its own context and the only
 broker start in the module. Two specs need the network: `impl/command/RestClientRequesterTest` (live
 jsonplaceholder API) and nothing else — `impl/agent` and `impl/cve` stub HTTP with the JDK `HttpServer` on

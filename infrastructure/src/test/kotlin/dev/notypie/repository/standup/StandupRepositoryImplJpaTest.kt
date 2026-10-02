@@ -16,6 +16,7 @@ import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -29,8 +30,14 @@ import kotlin.concurrent.thread
 // Long enough for the other thread to reach the lock, well under H2's lock timeout.
 private const val LOCK_HOLD_MILLIS = 300L
 
-// Real Hibernate + H2 so SQL ordering (IDENTITY inserts vs. orphan deletes) is what production sees.
-@DataJpaTest
+private const val MARIADB_MODE_H2_URL =
+    "jdbc:h2:mem:standup_mariadb;MODE=MariaDB;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false"
+
+// Real Hibernate + H2 so SQL ordering (IDENTITY inserts vs. orphan deletes) is what production sees. H2 runs in
+// MariaDB mode here, on a database of its own, because recordAnswer's INSERT … ON DUPLICATE KEY UPDATE is
+// MariaDB syntax that H2's default mode rejects (review G4).
+@DataJpaTest(properties = ["spring.datasource.url=$MARIADB_MODE_H2_URL"])
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ApplyExtension(extensions = [SpringExtension::class])
 class StandupRepositoryImplJpaTest
     @Autowired
@@ -138,6 +145,53 @@ class StandupRepositoryImplJpaTest
                         answers.size shouldBe 1
                         answers.single().responses shouldContainExactly listOf("second", "final")
                         answers.single().submittedAt shouldBe cutoffAt.minusSeconds(300L)
+                    }
+                }
+            }
+
+            given("two first submissions by one member, the later deciding from a view older than the first (G4)") {
+                `when`("the second transaction read the session before the first answer committed") {
+                    val sessionUid = openSession()
+                    val staleViewTaken = CountDownLatch(1)
+                    val firstCommitted = CountDownLatch(1)
+                    val secondResult = AtomicReference<Result<AnswerRecordResult>>()
+                    val second =
+                        thread {
+                            secondResult.set(
+                                runCatching {
+                                    inTx {
+                                        // The interaction transaction read first — what a REPEATABLE READ snapshot or
+                                        // an entity already in the persistence context shows: no answer yet.
+                                        repository.findSession(sessionUid = sessionUid)
+                                        staleViewTaken.countDown()
+                                        firstCommitted.await(5L, TimeUnit.SECONDS)
+                                        repository.recordAnswer(
+                                            sessionUid = sessionUid,
+                                            userId = "U_A",
+                                            responses = listOf("second"),
+                                            submittedAt = cutoffAt.minusSeconds(60L),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    staleViewTaken.await(5L, TimeUnit.SECONDS)
+                    val first =
+                        record(
+                            sessionUid = sessionUid,
+                            responses = listOf("first"),
+                            submittedAt = cutoffAt.minusSeconds(120L),
+                        )
+                    firstCommitted.countDown()
+                    second.join()
+
+                    then("both are recorded and the member keeps one row with the later answer, no unique violation") {
+                        first shouldBe AnswerRecordResult.RECORDED
+                        secondResult.get().getOrThrow() shouldBe AnswerRecordResult.RECORDED
+                        val answers = repository.findSession(sessionUid = sessionUid)!!.answers
+                        answers.size shouldBe 1
+                        answers.single().responses shouldContainExactly listOf("second")
+                        answers.single().submittedAt shouldBe cutoffAt.minusSeconds(60L)
                     }
                 }
             }

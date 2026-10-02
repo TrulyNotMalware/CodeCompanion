@@ -55,6 +55,24 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("sessionUid") sessionUid: UUID,
     ): StandupSessionSchema?
 
+    // MariaDB-only (H2 needs MODE=MariaDB), on uk_standup_answer_session_user: one statement decides insert or update
+    // against the committed rows, where a find-then-insert decides from whatever the transaction last saw (review G4).
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO standup_answer (session_id, user_id, responses, submitted_at)
+            VALUES (:sessionId, :userId, :responses, :submittedAt)
+            ON DUPLICATE KEY UPDATE responses = :responses, submitted_at = :submittedAt
+        """,
+        nativeQuery = true,
+    )
+    fun upsertAnswer(
+        @Param("sessionId") sessionId: Long,
+        @Param("userId") userId: String,
+        @Param("responses") responses: String,
+        @Param("submittedAt") submittedAt: Instant,
+    ): Int
+
     @Query(
         """
         SELECT DISTINCT s FROM standup_session s
