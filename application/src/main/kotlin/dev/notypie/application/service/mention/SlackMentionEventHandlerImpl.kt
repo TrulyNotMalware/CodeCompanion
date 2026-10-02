@@ -38,21 +38,25 @@ class SlackMentionEventHandlerImpl(
 
     // FIXME Remove AppMention Events.
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
-        if (isPostedByApp(payload = payload)) {
-            log.debug { "Ignoring app_mention posted by an app or workflow (bot_id set or no user)." }
+        if (isIgnoredMention(payload = payload)) {
+            log.debug { "Ignoring app_mention posted by this app or without a user (workflow)." }
             return CommandOutput.empty()
         }
         val commandData = parseAppMentionEvent(headers = headers, payload = payload)
         return handleEvent(commandData = commandData)
     }
 
-    // Mentions posted by an app — our own replies included — or a workflow are acknowledged and dropped. An AI answer
-    // that echoes `<@bot>` must not start another turn (a reply loop), and a bot has no human actor to resolve a role
-    // for, so a workflow cannot drive commands under its own bot user. Workflow-triggered commands would need an
-    // explicit allow-list decision first.
-    private fun isPostedByApp(payload: Map<String, Any>): Boolean {
+    // Two kinds of mention are acknowledged and dropped. Our own messages: an AI answer that echoes `<@bot>` must not
+    // start another turn (a reply loop); they carry this app's id as `event.app_id` or `bot_profile.app_id`. And a
+    // mention with no `user`: a workflow has no human actor to resolve a role for, and workflow-triggered commands
+    // would need an explicit allow-list decision first. `bot_id` alone is not a reason: a person posting through
+    // another app (a user-token integration) carries it next to their own `user`, and used to be dropped silently.
+    private fun isIgnoredMention(payload: Map<String, Any>): Boolean {
         val event = payload["event"] as? Map<*, *> ?: return false
-        return event["bot_id"] != null || (event["user"] as? String).isNullOrBlank()
+        if ((event["user"] as? String).isNullOrBlank()) return true
+        val ownAppId = payload[SLACK_APPID_KEY_NAME] as? String ?: return false
+        val botProfile = event["bot_profile"] as? Map<*, *>
+        return event["app_id"] == ownAppId || botProfile?.get("app_id") == ownAppId
     }
 
     override fun parseAppMentionEvent(

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/service/mention
 
@@ -11,16 +11,17 @@ still sees raw Slack JSON before infrastructure maps it.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AppMentionPayloadCreator.kt` | `createAppMentionPayload(appId = TEST_APP_ID, token = TEST_BOT_TOKEN, teamId = TEST_TEAM_ID, type = "event_callback", eventId = "Ev0001", eventTime, eventContext, isExtSharedChannel = false, userName = null, channelName = null, publisherId = TEST_USER_ID, channel = TEST_CHANNEL_ID, eventType = "app_mention", botId = null): Map<String, Any>` |
+| `AppMentionPayloadCreator.kt` | `createAppMentionPayload(appId = TEST_APP_ID, token = TEST_BOT_TOKEN, teamId = TEST_TEAM_ID, type = "event_callback", eventId = "Ev0001", eventTime, eventContext, isExtSharedChannel = false, userName = null, channelName = null, publisherId = TEST_USER_ID, channel = TEST_CHANNEL_ID, eventType = "app_mention", botId = null, botAppId = appId ?: TEST_APP_ID): Map<String, Any>` |
 
 ## For AI Agents
 
 ### Working In This Directory
 - Sole consumer: `SlackMentionEventHandlerImplTest`, which drives the envelope guards — `appId = null`
   drops `api_app_id`, `type = "not_a_real_type"` fails the callback-type check, `botId = "B001"` turns the
-  event into an app-posted message that must be ignored.
-- `botId` non-null adds `app_id`, `bot_id`, `channel_type` and a full `bot_profile` block to the inner
-  `event`; a human mention (the default) carries none of them. Keep that switch when adding fields.
+  event into an app-posted message: ignored when `botAppId` is this app (the default — our own reply), handled
+  when it names another app and `user` is kept (a person posting through another app, H5).
+- `botId` non-null adds `app_id` (= `botAppId`), `bot_id`, `channel_type` and a full `bot_profile` block
+  (`app_id` = `botAppId`) to the inner `event`, keeping `user`; a human mention (the default) carries none of them. Keep that switch when adding fields.
 - Wire fidelity matters: `event.ts` is a **string**, `event_ts` is a **double**, `authorizations` is a
   one-element list. The mapper relies on these types. `user_name` / `channel_name` are **absent by
   default** because a real `app_mention` callback never carries them (they are slash-command form

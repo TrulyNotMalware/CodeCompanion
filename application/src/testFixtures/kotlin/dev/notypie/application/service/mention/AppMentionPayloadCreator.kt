@@ -21,7 +21,10 @@ fun createAppMentionPayload(
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     eventType: String = "app_mention",
+    // With botId set, the message was posted through an app: botAppId names it (event.app_id and bot_profile.app_id).
+    // The default is this app itself, i.e. our own reply; pass another id for a person posting through another app.
     botId: String? = null,
+    botAppId: String = appId ?: TEST_APP_ID,
 ): Map<String, Any> =
     buildMap {
         appId?.let { put("api_app_id", it) }
@@ -57,7 +60,7 @@ fun createAppMentionPayload(
                 put("event_ts", 1234567890.123)
                 put("blocks", emptyList<Any>())
                 botId?.let {
-                    put("app_id", appId ?: TEST_APP_ID)
+                    put("app_id", botAppId)
                     put("bot_id", it)
                     put("channel_type", "channel")
                     put(
@@ -67,7 +70,7 @@ fun createAppMentionPayload(
                             "name" to "TestBot",
                             "deleted" to false,
                             "updated" to 1234567890L,
-                            "app_id" to (appId ?: TEST_APP_ID),
+                            "app_id" to botAppId,
                             "user_id" to publisherId,
                             "team_id" to teamId,
                             "icons" to

@@ -142,7 +142,7 @@ class SlackMentionEventHandlerImplTest :
         }
 
         given("handleEvent(headers, payload)") {
-            `when`("the mention was posted by an app or workflow (bot_id set)") {
+            `when`("the mention was posted by this app itself (its own reply echoing the bot mention)") {
                 val executor = mockk<CommandExecutor>()
                 val roleResolver = mockk<CommandRoleResolver>()
                 val appHandler =
@@ -153,12 +153,60 @@ class SlackMentionEventHandlerImplTest :
                     )
 
                 val result =
-                    appHandler.handleEvent(headers = testHeaders, payload = createAppMentionPayload(botId = "B_ANY"))
+                    appHandler.handleEvent(
+                        headers = testHeaders,
+                        payload = createAppMentionPayload(botId = "B_SELF", botAppId = TEST_APP_ID),
+                    )
 
                 then("it is acknowledged as a no-op: no role lookup, no command run (no self-reply loop)") {
                     result.status shouldBe Status.DO_NOTHING
                     verify(exactly = 0) { roleResolver.resolve(userId = any()) }
                     verify(exactly = 0) { executor.execute<SubCommandDefinition>(command = any()) }
+                }
+            }
+
+            `when`("only the bot profile names this app") {
+                val executor = mockk<CommandExecutor>()
+                val appHandler =
+                    SlackMentionEventHandlerImpl(
+                        commandExecutor = executor,
+                        commandRoleResolver = mockk(),
+                        transactionManager = createH2TransactionManager(),
+                    )
+
+                val result =
+                    appHandler.handleEvent(
+                        headers = testHeaders,
+                        payload = createAppMentionPayload(botId = "B_SELF").withoutEventKeys("app_id"),
+                    )
+
+                then("it is still recognised as our own message and dropped") {
+                    result.status shouldBe Status.DO_NOTHING
+                    verify(exactly = 0) { executor.execute<SubCommandDefinition>(command = any()) }
+                }
+            }
+
+            // H5: bot_id alone used to drop the mention, including a person posting through another app (a user-token
+            // integration), whose event carries their own `user` next to the other app's bot metadata.
+            `when`("a person mentions the bot through another app (bot_id and user set, foreign app id)") {
+                val executor = mockk<CommandExecutor>(relaxed = true)
+                val roleResolver = mockk<CommandRoleResolver>()
+                every { roleResolver.resolve(userId = TEST_USER_ID) } returns UserRole.USER
+                val personHandler =
+                    SlackMentionEventHandlerImpl(
+                        commandExecutor = executor,
+                        commandRoleResolver = roleResolver,
+                        transactionManager = createH2TransactionManager(),
+                    )
+
+                personHandler.handleEvent(
+                    headers = testHeaders,
+                    payload = createAppMentionPayload(botId = "B_OTHER", botAppId = "A_OTHER_APP"),
+                )
+
+                then("the command runs with the person's resolved role") {
+                    verify(exactly = 1) { roleResolver.resolve(userId = TEST_USER_ID) }
+                    verify(exactly = 1) { executor.execute<SubCommandDefinition>(command = any()) }
                 }
             }
 
