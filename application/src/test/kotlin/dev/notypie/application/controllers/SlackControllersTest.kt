@@ -1,5 +1,9 @@
 package dev.notypie.application.controllers
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.exception.ControllerAdvice
 import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
@@ -18,6 +22,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -61,6 +66,49 @@ class SlackControllersTest :
                 then("the ack is an empty 200, so the exception text never reaches Slack") {
                     response.status shouldBe 200
                     response.contentAsString shouldBe ""
+                }
+            }
+        }
+
+        given("app_mentions the handler ignored or failed") {
+            fun deliverAndCaptureWarnings(output: CommandOutput): List<String> {
+                every { eventHandler.handleEvent(headers = any(), payload = any()) } returns output
+                val appender = ListAppender<ILoggingEvent>().apply { start() }
+                val logger = LoggerFactory.getLogger(SlackEventController::class.java.packageName) as Logger
+                logger.addAppender(appender)
+                try {
+                    mockMvc.perform(
+                        post("/api/slack/events")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""{"type":"event_callback","event":{"type":"app_mention"}}"""),
+                    )
+                } finally {
+                    logger.detachAppender(appender)
+                }
+                return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+            }
+
+            `when`("the mention had nothing to do, as one from the bot itself or a workflow") {
+                val warnings = deliverAndCaptureWarnings(output = CommandOutput.empty())
+
+                then("no warning is logged for it") {
+                    warnings shouldBe emptyList()
+                }
+            }
+
+            `when`("the mention's command failed") {
+                val warnings =
+                    deliverAndCaptureWarnings(
+                        output =
+                            CommandOutput.fail(
+                                basicInfo = createCommandBasicInfo(),
+                                commandDetailType = CommandDetailType.ERROR_RESPONSE,
+                                reason = "boom",
+                            ),
+                    )
+
+                then("it is still logged as a warning") {
+                    warnings shouldBe listOf("app_mention command failed: boom")
                 }
             }
         }
