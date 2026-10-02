@@ -208,10 +208,10 @@ _type: guide · updated: 2026-10-02_
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
 - 파드 종료 예산: `preStop` 5초 sleep → 릴레이 정지(큐에 남은 claim은 보내지 않고 `IN_PROGRESS`로 둠) → Spring graceful
   shutdown(Kafka 리스너 단계는 처리 중인 레코드 하나를 `RECORD_SHUTDOWN_WAIT`만큼 기다림 — 프로필 조회·Slack 재시도·상태 기록
-  백오프 상수에서 코드로 계산한 디스패치 하나, 지금 50초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초) → Kafka
+  백오프 상수에서 코드로 계산한 디스패치 하나, 지금 46초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초) → Kafka
   producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기
-  (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 기본 10초) + 여유 10초 = 180초 ⊂ `terminationGracePeriodSeconds` 180초
-  (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더한다). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
+  (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 기본 10초) = 162초 ⊂ `terminationGracePeriodSeconds` 180초, 여유 18초
+  (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더하고 여유가 10초 아래면 실패). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
   끝까지 보내고 상태를 기록한다. 풀이 고갈되면 문장마다 `connection-timeout`이 더해져 예산을 넘을 수 있고, 크래시·SIGKILL은
   여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 전략은 V20 릴리스 동안 `Recreate`라(이전 파드와 겹치면 안 됨) 롤아웃마다 이전 파드

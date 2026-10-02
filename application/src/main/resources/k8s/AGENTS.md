@@ -72,7 +72,7 @@ adds what an agent editing the manifests needs to know.
   first and drains its queue (queued claims stay `IN_PROGRESS` for another pod's sweep). Then the lifecycle phases run
   one after another: the Kafka listener phase waits for the record in hand for `RECORD_SHUTDOWN_WAIT`
   (`configurations/AsyncConfig.kt`: one dispatch, `RELAY_RECORD_TIME_BOUND` rounded up — derived in code from the
-  profile lookup's whole-call timeout, `SLACK_DISPATCH_TIME_BOUND` and the status write's retry backoff, 50s today;
+  profile lookup's whole-call timeout, `SLACK_DISPATCH_TIME_BOUND` and the status write's retry backoff, 46s today;
   the CDC-mode `lifecycleProcessor` bean sets that phase alone), while the web server drain and the
   `ThreadPoolTaskScheduler` with a running job keep `spring.lifecycle.timeout-per-shutdown-phase` (10s in
   `application-prod.yaml`). Three Kafka producer closes are not bounded by any phase timeout (the JSON producer
@@ -82,8 +82,8 @@ adds what an agent editing the manifests needs to know.
   after another, all before the EntityManagerFactory and the DataSource close (`@DependsOn("entityManagerFactory")` on
   the relay and agent-turn executors): relay `RECORD_SHUTDOWN_WAIT`, agent turns 20s
   (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (180) must cover
-  5 + 2 x 10 + 50 + 3 x 5 + 50 + 20 + 10 + a 10s margin = 180; `configurations/ShutdownBudgetTest` recomputes every
-  term from code, this manifest and the prod profile and fails when the grace is short. So a dispatch running at
+  5 + 2 x 10 + 46 + 3 x 5 + 46 + 20 + 10 = 162, leaving 18s; `configurations/ShutdownBudgetTest` recomputes every
+  term from code, this manifest and the prod profile and fails when the grace leaves less than a 10s margin. So a dispatch running at
   SIGTERM, on the listener thread or a relay thread, finishes and records its status before the DataSource closes,
   with a healthy pool; a starved pool adds a `connection-timeout` per statement that the budget does not cover
   (`service/relay/AGENTS.md`, "Per-record time budget"). Not counted, and only inferred from source: a poison record
