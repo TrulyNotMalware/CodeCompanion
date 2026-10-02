@@ -65,6 +65,10 @@ _type: architecture · updated: 2026-09-30_
   본문을 다 보낸 뒤 타임아웃·연결 끊김·503 외 5xx·`internal_error`로 끝난 경우) → 재시도도 스윕 재발송도 없이
   ERROR 로그와 `FAILURE`. 이 메서드들에는 멱등 키가 없어 재발송은 채널에 보이는 중복이 되므로, 중복보다 한 건
   유실을 택했다. "본문을 다 보냈는가"는 예외 종류가 아니라 OkHttp `EventListener.requestBodyEnd`로 판정한다.
+  OkHttp 자체의 투명 재전송(`retryOnConnectionFailure`, 기본 켜짐)은 두 클라이언트 모두 끈다: 켜져 있으면 Slack이 본문을
+  읽은 뒤 끊긴 재사용 연결에서 OkHttp가 같은 POST를 새 연결로 다시 보내고 dispatcher는 성공 1건으로 봤다(수정 리뷰 R1/F5,
+  로컬 서버로 재현, 회귀 테스트 있음). 대가로 연결이 요청 도중 끊기면 결과 불명(유실)이 되므로, 서버 idle 타임아웃 근처의
+  경합을 줄이려고 풀 연결은 20초만 유휴로 둔다.
   ⑤ 접근 차단(`ACCESS_BLOCKED_REASON`: `invalid_auth`·`token_revoked`·`missing_scope` 등 토큰·워크스페이스 전체
   오류) → 행마다 실패시키지 않고 `deferClaim`으로 15분씩 보류해 토큰·권한을 고친 뒤 나가게 한다(24시간 한도).
   카운터 `codecompanion.slack.dispatch.access_blocked`가 오른다.

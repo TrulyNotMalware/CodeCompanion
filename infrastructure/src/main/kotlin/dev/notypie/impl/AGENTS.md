@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # infrastructure/impl
 
@@ -28,7 +28,7 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 | `command/SlackOutboundStager.kt` | Implements `OutboundMessageStager`: stages modals synchronously, enqueues everything else unrendered |
 | `command/OutboundRenderer.kt` | `OutboundRenderer` port + `SlackOutboundRenderer` — renders message-family effects at deliver time |
 | `command/SlackApiEventConstructor.kt` | Shared builder used by both the stager and the renderer so their wire output is byte-identical |
-| `command/ApplicationMessageDispatcher.kt` / `SlackViewOpenDispatcher.kt` | Actual Slack Web API calls (`chat.*`, `response_url`, `views.open`) on a time-bounded, stats-off `Slack` client and a non-redirecting `response_url` client, both carrying `RequestSendTracker`; reports done / rate-limited / transient-exhausted / outcome-unknown to the outbox relay |
+| `command/ApplicationMessageDispatcher.kt` / `SlackViewOpenDispatcher.kt` | Actual Slack Web API calls (`chat.*`, `response_url`, `views.open`) on a time-bounded, stats-off `Slack` client and a non-redirecting `response_url` client, both carrying `RequestSendTracker` with OkHttp's own resend (`retryOnConnectionFailure`) off; reports done / rate-limited / transient-exhausted / outcome-unknown to the outbox relay |
 | `command/KafkaEventPublisher.kt` / `AppEventPublisher.kt` | `EventPublisher` implementations — Kafka for external events, Spring bus for internal ones |
 | `command/InteractionPayloadParser.kt` / `SlackInteractionRequestParser.kt` | Raw Slack request → typed payload |
 | `command/RestRequester.kt` / `RestClientRequester.kt` | Thin Slack Web API HTTP client with explicit connect/read timeouts; its only consumer is `templates/SlackUserProfileResolver` |

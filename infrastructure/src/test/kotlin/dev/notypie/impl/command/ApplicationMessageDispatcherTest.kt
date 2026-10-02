@@ -16,9 +16,12 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldStartWith
 import io.mockk.mockk
 import okhttp3.OkHttpClient
+import java.io.BufferedInputStream
 import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -26,6 +29,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class ApplicationMessageDispatcherTest :
     BehaviorSpec({
@@ -492,6 +496,62 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
+        // Review R1/F5 (Codex reproduced it against a local server): with OkHttp's default retryOnConnectionFailure, a
+        // reused connection that the server closes after reading the whole POST makes OkHttp send the same POST again
+        // on a new connection, and the dispatcher reports one success for two posts.
+        given("a reused connection that Slack closes after reading the whole chat.postMessage request") {
+            val dropping = DroppingHttpServer(dropAfterReading = setOf(2), answer = """{"ok":true,"ts":"1.0"}""")
+            afterContainer { dropping.close() }
+            val droppingSlack =
+                slackClient {
+                    methodsEndpointUrlPrefix = "http://127.0.0.1:${dropping.port}/api/"
+                    isPrettyResponseLoggingEnabled = false
+                }
+
+            `when`("a warm-up message and then a channel message are dispatched") {
+                val warmUp = dispatcher(client = droppingSlack).dispatch(event = channelMessage())
+                val output = dispatcher(client = droppingSlack).dispatch(event = channelMessage())
+
+                then("the second is outcome unknown and Slack received it once: OkHttp does not resend it by itself") {
+                    warmUp.ok shouldBe true
+                    output.isOutcomeUnknown() shouldBe true
+                    dropping.requestCount shouldBe 2
+                    dropping.connectionCount shouldBe 1
+                }
+            }
+        }
+
+        given("a reused connection that the response_url host closes after reading the whole POST") {
+            val dropping = DroppingHttpServer(dropAfterReading = setOf(2), answer = "ok")
+            afterContainer { dropping.close() }
+            val droppingClient =
+                responseUrlClient(slack = slack)
+                    .newBuilder()
+                    .addInterceptor { chain ->
+                        val original = chain.request()
+                        val rewritten =
+                            original.url
+                                .newBuilder()
+                                .scheme("http")
+                                .host("127.0.0.1")
+                                .port(dropping.port)
+                                .build()
+                        chain.proceed(original.newBuilder().url(rewritten).build())
+                    }.build()
+
+            `when`("a warm-up action response and then another are dispatched") {
+                val warmUp = dispatcher(responseClient = droppingClient).dispatch(event = actionResponse())
+                val output = dispatcher(responseClient = droppingClient).dispatch(event = actionResponse())
+
+                then("the second is outcome unknown and the host received it once") {
+                    warmUp.ok shouldBe true
+                    output.isOutcomeUnknown() shouldBe true
+                    dropping.requestCount shouldBe 2
+                    dropping.connectionCount shouldBe 1
+                }
+            }
+        }
+
         given("the production Slack client and response_url client") {
             val production = slackClient()
             val sdkClient = production.httpClient.okHttpClient
@@ -503,7 +563,9 @@ class ApplicationMessageDispatcherTest :
                 sdkClient.callTimeoutMillis shouldBe SLACK_CALL_TIMEOUT.toMillis().toInt()
                 sdkClient.followRedirects shouldBe false
                 sdkClient.eventListenerFactory shouldBe RequestSendTracker
+                sdkClient.retryOnConnectionFailure shouldBe false
                 responseClient.callTimeoutMillis shouldBe SLACK_CALL_TIMEOUT.toMillis().toInt()
+                responseClient.retryOnConnectionFailure shouldBe false
                 responseClient.followRedirects shouldBe false
                 responseClient.followSslRedirects shouldBe false
                 responseClient.eventListenerFactory shouldBe RequestSendTracker
@@ -819,3 +881,73 @@ private fun endlessBody(code: Int): (HttpExchange) -> Unit =
             exchange.close()
         }
     }
+
+// A keep-alive HTTP/1.1 server on loopback. It answers every request with 200 and [answer], except the requests whose
+// 1-based number is in [dropAfterReading]: for those it reads the whole request, body included, and then closes the
+// connection without a response, like a server going away right after it acted on the request.
+private class DroppingHttpServer(
+    private val dropAfterReading: Set<Int>,
+    private val answer: String,
+) : AutoCloseable {
+    private val server = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
+    private val requests = AtomicInteger(0)
+    private val connections = AtomicInteger(0)
+
+    val port: Int = server.localPort
+    val requestCount: Int
+        get() = requests.get()
+    val connectionCount: Int
+        get() = connections.get()
+
+    init {
+        thread(isDaemon = true) {
+            while (!server.isClosed) {
+                val socket = runCatching { server.accept() }.getOrNull() ?: break
+                connections.incrementAndGet()
+                thread(isDaemon = true) { serve(socket = socket) }
+            }
+        }
+    }
+
+    private fun serve(socket: Socket) =
+        socket.use {
+            val input = BufferedInputStream(socket.getInputStream())
+            val output = socket.getOutputStream()
+            while (true) {
+                val contentLength = readContentLength(input = input) ?: return
+                input.readNBytes(contentLength)
+                if (requests.incrementAndGet() in dropAfterReading) return
+                val body = answer.toByteArray()
+                val head =
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n" +
+                        "Content-Length: ${body.size}\r\nConnection: keep-alive\r\n\r\n"
+                output.write(head.toByteArray() + body)
+                output.flush()
+            }
+        }
+
+    // Reads the request line and headers; null when the client closed the connection.
+    private fun readContentLength(input: BufferedInputStream): Int? {
+        var contentLength = 0
+        while (true) {
+            val line = readLine(input = input) ?: return null
+            if (line.isEmpty()) return contentLength
+            val (name, value) = line.split(":", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+            if (name.equals("Content-Length", ignoreCase = true)) contentLength = value.trim().toInt()
+        }
+    }
+
+    private fun readLine(input: BufferedInputStream): String? {
+        val line = StringBuilder()
+        while (true) {
+            val next = input.read()
+            if (next == -1) return null
+            if (next == '\n'.code) return line.toString().removeSuffix("\r")
+            line.append(next.toChar())
+        }
+    }
+
+    override fun close() {
+        server.close()
+    }
+}

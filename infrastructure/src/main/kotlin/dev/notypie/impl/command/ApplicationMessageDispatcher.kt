@@ -27,6 +27,7 @@ import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.impl.retry.RetryService
 import io.github.oshai.kotlinlogging.KotlinLogging
+import okhttp3.ConnectionPool
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -41,6 +42,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 
 private val dispatcherLog = KotlinLogging.logger {}
 
@@ -117,6 +119,24 @@ class RateLimitedOutput(
         errorReason = RATE_LIMITED_REASON,
     )
 
+// Pooled connections idle longer than this are closed rather than reused. OkHttp runs an extensive health check before
+// it reuses a pooled connection for a non-GET, which catches a connection the server has already closed; what is left
+// is a server closing it while our request is in flight, most likely near the server's own idle timeout. Without
+// OkHttp's transparent retry that call ends outcome unknown, so connections are not kept idle long enough to get there.
+private val SLACK_CONNECTION_KEEP_ALIVE: Duration = Duration.ofSeconds(20L)
+private const val SLACK_MAX_IDLE_CONNECTIONS = 5
+
+// OkHttp's retryOnConnectionFailure (on by default) resends a call on a new connection after an IOException, even once
+// the whole body was written: a POST whose connection broke after Slack had read it was posted twice and reported as
+// one success (review R1/F5, reproduced against a local server). Off on both clients, so every resend decision is the
+// dispatcher's own (RequestSendTracker: only when the body never left). A connect failure, which OkHttp would also
+// have retried on Slack's next address, now reaches RetryService instead, which retries it the same way.
+private fun OkHttpClient.Builder.sendOnceAtMost(): OkHttpClient.Builder =
+    retryOnConnectionFailure(false)
+        .connectionPool(
+            ConnectionPool(SLACK_MAX_IDLE_CONNECTIONS, SLACK_CONNECTION_KEEP_ALIVE.seconds, TimeUnit.SECONDS),
+        )
+
 // The SDK's own OkHttp client is rebuilt with RequestSendTracker so a failed non-idempotent call can tell whether
 // Slack may already have acted on it.
 fun slackClient(callTimeout: Duration = SLACK_CALL_TIMEOUT, configure: SlackConfig.() -> Unit = {}): Slack {
@@ -126,7 +146,12 @@ fun slackClient(callTimeout: Duration = SLACK_CALL_TIMEOUT, configure: SlackConf
             httpClientCallTimeoutMillis = callTimeout.toMillis().toInt()
             configure()
         }
-    val okHttpClient = buildOkHttpClient(config).newBuilder().eventListenerFactory(RequestSendTracker).build()
+    val okHttpClient =
+        buildOkHttpClient(config)
+            .newBuilder()
+            .eventListenerFactory(RequestSendTracker)
+            .sendOnceAtMost()
+            .build()
     return Slack.getInstance(config, SlackHttpClient(okHttpClient))
 }
 
@@ -134,6 +159,7 @@ fun responseUrlClient(slack: Slack): OkHttpClient =
     buildOkHttpClient(slack.config)
         .newBuilder()
         .eventListenerFactory(RequestSendTracker)
+        .sendOnceAtMost()
         .followRedirects(false)
         .followSslRedirects(false)
         .build()

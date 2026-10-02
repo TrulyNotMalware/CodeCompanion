@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/impl/command
 
@@ -19,7 +19,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 | `SlackOutboundStager.kt` | `OutboundMessageStager` impl. `OpenModal` → `stageModal` (seven `ModalForm` variants; blank `trigger_id` → `null` + warn; `StandupFill` loads routine and session via `StandupRepository`); every other family → `OutboundMessageEnqueued`, unrendered |
 | `OutboundRenderer.kt` | `OutboundRenderer` port + `SlackOutboundRenderer`: `OutboundMessage` → `SlackEventPayload` via the constructor; `OpenModal` / `DirectMessage` and not-yet-migrated `MessageContent`s hit `error(...)`. A `Notice` body is `escapeMrkdwn`-ed (the sender's own words) behind the `<@id>` mentions the renderer adds |
 | `SlackApiEventConstructor.kt` | Builds `SendSlackMessageEvent` (message/ephemeral/action-response/`chat.update`) and `OpenViewEvent` (seven `open*ModalRequest`s) from `SlackTemplateBuilder` layouts. SDK requests become form maps via `RequestFormBuilder.toForm`; `buildRoutingText` writes `"<idempotencyKey>,<CommandDetailType>[,urlencoded extras…]"` into `message.text` |
-| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl. Constructor defaults are the production clients: `slack = slackClient()` (`SlackConfig` with `statsEnabled = false` and `httpClientCallTimeoutMillis = SLACK_CALL_TIMEOUT` = 6 s, plus an optional `configure` block; the SDK's OkHttp client is rebuilt with `eventListenerFactory(RequestSendTracker)` and handed over as `Slack.getInstance(config, SlackHttpClient(okHttpClient))`) and `okHttpClient = responseUrlClient(slack)` (the SDK's OkHttp builder with the same call timeout, `RequestSendTracker`, `followRedirects(false)`, `followSslRedirects(false)`); specs pass their own `slack`, `okHttpClient` and `sleeper`. `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url`; `OpenViewPayloadContents` throws before any retry. `dispatchImmediate` runs `views.open` on the caller's thread and never throws: a rejection or exception publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` when the detail type has one, and returns `failOutput`. Also declares `RATE_LIMITED_REASON` / `isRateLimited()`, `TRANSIENT_EXHAUSTED_REASON` / `isTransientExhausted()`, `OUTCOME_UNKNOWN_REASON` / `isOutcomeUnknown()`, `ACCESS_BLOCKED_REASON` / `isAccessBlocked()` / `ACCESS_BLOCKED_DEFER` (15 min), `RateLimitedOutput(event, retryAfter)` and `retryAfter()`. The optional `onAccessBlocked(slackError)` hook is how `:application` counts access-blocked sends (`codecompanion.slack.dispatch.access_blocked`, tag `error`) without a Micrometer dependency here. Decision table below |
+| `ApplicationMessageDispatcher.kt` | `MessageDispatcher` impl. Constructor defaults are the production clients: `slack = slackClient()` (`SlackConfig` with `statsEnabled = false` and `httpClientCallTimeoutMillis = SLACK_CALL_TIMEOUT` = 6 s, plus an optional `configure` block; the SDK's OkHttp client is rebuilt with `eventListenerFactory(RequestSendTracker)` and `sendOnceAtMost()` and handed over as `Slack.getInstance(config, SlackHttpClient(okHttpClient))`) and `okHttpClient = responseUrlClient(slack)` (the SDK's OkHttp builder with the same call timeout, `RequestSendTracker`, `sendOnceAtMost()`, `followRedirects(false)`, `followSslRedirects(false)`). `sendOnceAtMost()` = `retryOnConnectionFailure(false)` + a `ConnectionPool` of 5 idle connections kept `SLACK_CONNECTION_KEEP_ALIVE` (20 s), see "No transparent resend"; specs pass their own `slack`, `okHttpClient` and `sleeper`. `dispatch` routes `PostEventPayloadContents.messageType` to `chat.postEphemeral` / `chat.postMessage` / `chat.update` via `postFormWithTokenAndParseResponse`, and `ActionEventPayloadContents` to an OkHttp POST on `response_url`; `OpenViewPayloadContents` throws before any retry. `dispatchImmediate` runs `views.open` on the caller's thread and never throws: a rejection or exception publishes `DeclineModalOpenFailedEvent` / `StandupModalOpenFailedEvent` when the detail type has one, and returns `failOutput`. Also declares `RATE_LIMITED_REASON` / `isRateLimited()`, `TRANSIENT_EXHAUSTED_REASON` / `isTransientExhausted()`, `OUTCOME_UNKNOWN_REASON` / `isOutcomeUnknown()`, `ACCESS_BLOCKED_REASON` / `isAccessBlocked()` / `ACCESS_BLOCKED_DEFER` (15 min), `RateLimitedOutput(event, retryAfter)` and `retryAfter()`. The optional `onAccessBlocked(slackError)` hook is how `:application` counts access-blocked sends (`codecompanion.slack.dispatch.access_blocked`, tag `error`) without a Micrometer dependency here. Decision table below |
 | `RequestSendTracker.kt` | `object RequestSendTracker : EventListener.Factory` + `class RequestSendProbe`. `RequestSendTracker.track(probe) { … }` puts the probe in a `ThreadLocal` that `create(call)` reads inside `newCall()` (on the dispatching thread, since both clients call `execute()` synchronously); the call's listener sets `bodySent` on `requestBodyEnd`. `probe.mayHaveBeenSent` is `bodySent`, or `true` when no tracking listener was attached (a client built without the tracker fails towards no resend) |
 | `SlackViewOpenDispatcher.kt` | Synchronous (non-`@Async`) `@EventListener` for `OpenViewEvent` → `dispatchImmediate` |
 | `KafkaEventPublisher.kt` | `EventPublisher`: `isInternal` → Spring bus, else `kafkaTemplate.send(destination, idempotencyKey, payload)` awaited `sendTimeoutMillis` (default 5000) — timeout / execution cause / interrupt are rethrown |
@@ -73,6 +73,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     → `failOutput(
     OUTCOME_UNKNOWN_REASON)` (`isOutcomeUnknown()`) at once, with an ERROR log carrying the call, detail type and
     `idempotencyKey`. Nothing retries it here, and the relay writes `FAILURE`, so the sweep never resends it.
+    It holds only because OkHttp's own resend is off (see "No transparent resend" below).
     "Written" comes from `RequestSendTracker` (`requestBodyEnd`), not from the exception type, because a call
     timeout reads the same (`InterruptedIOException: timeout`) whether it fired while connecting or while Slack
     was processing. **This deliberately prefers losing one message to posting it twice**: these methods take no
@@ -97,6 +98,19 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   - Anything else (a non-transient exception inside the retry, or thrown outside it) propagates as-is; the
     relay treats it like a transient outcome. A 2xx body the SDK cannot parse is such an exception, so a
     non-idempotent call hit by it can still be resent by the sweep.
+- **No transparent resend (review R1/F5).** OkHttp's `retryOnConnectionFailure` is on by default and resends a
+  call on a new connection after an `IOException`, even once the whole body was written (`RetryAndFollowUpInterceptor`
+  retries any recoverable failure of a body that is not one-shot). A reused connection that Slack closed after reading
+  a `chat.postMessage` was therefore posted twice and reported as one success; Codex reproduced it against a local
+  server and `ApplicationMessageDispatcherTest` now pins it for both clients. Both clients turn it off, so the only
+  resends are the dispatcher's (`RetryService`, guarded by `RequestSendTracker`), which is what makes "posted at most
+  once by this process" true. Costs: a connect failure that OkHttp would have retried on Slack's next address goes to
+  `RetryService` (same outcome, since nothing was sent; `views.open` in `dispatchImmediate` has no `RetryService` and
+  now fails over to its fallback event at once), and a connection the server closes while our request is in flight
+  ends as outcome unknown (lost, logged) instead of a possible duplicate. OkHttp health-checks a pooled connection
+  thoroughly before reusing it for a non-GET, which catches one the server already closed; the remaining race sits
+  near the server's idle timeout, so pooled connections are dropped after 20 s idle (`SLACK_CONNECTION_KEEP_ALIVE`).
+  Never build a Slack client without `sendOnceAtMost()`.
 - **`Retry-After` parsing is complete in production** because `slackClient()` turns SDK stats off: with stats on
   the SDK's own catch block runs `Long.valueOf(Retry-After)` before rethrowing (an HTTP-date would escape as
   `NumberFormatException`), and it resolves the team id with an extra `auth.test` call, which is retried on
@@ -151,7 +165,8 @@ delete), `KafkaEventPublisherTest` (`@SpringBootTest` + `EmbeddedKafka`), `RestC
 and eats the queued response — and `RequestSendTracker` is installed, plus `responseUrlClient(...)` with an OkHttp
 interceptor that redirects `https://hooks.slack.com` to the fake and can send the first attempt to a closed port;
 covers the whole decision table, the call timeout before and after the body, connect-refused retries, the production
-client settings and the redirect / allowlist cases).
+client settings, no OkHttp resend on a reused connection closed after the body (a raw-socket `DroppingHttpServer`), and
+the redirect / allowlist cases).
 Fixtures: `testFixtures/.../impl/command/BlockActionPayloadCreator`, `slack/InteractionPayloadCreator`,
 `slack/SlackEventCallBackRequestCreator`, `event/SlackEventTestFixtures`. There is no spec for
 `SlackViewOpenDispatcher` or `AppEventPublisher`.
