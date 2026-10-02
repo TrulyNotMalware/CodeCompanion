@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/repository/standup
 
@@ -65,7 +65,7 @@ compares against the claim time the caller bound. The CAS guards and the routine
 
 ### Common Patterns
 - Port + `open class *Impl` + three `Jpa*Repository`; `@Transactional` on writes; boolean = `rowCount == 1`.
-- Native SQL for CAS with string status literals matching `DispatchStatus` / `SessionStatus` names; JPQL with
+- Native SQL for CAS with string status literals matching `DispatchStatus` / `SessionStatus` names (`NativeQueryStatusLiteralTest` (test `repository/`) fails when a quoted name is not a constant of the column's enum); JPQL with
   fully-qualified enum constants for reads.
 - `Instant` for trigger / cutoff / sent times; `LocalDate` for `sessionDate`.
 

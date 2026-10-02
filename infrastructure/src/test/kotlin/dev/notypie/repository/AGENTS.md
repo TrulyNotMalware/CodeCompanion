@@ -15,6 +15,7 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 ## Key Files
 | File | Description |
 |------|-------------|
+| `NativeQueryStatusLiteralTest.kt` | Plain `StringSpec` guard: every `'QUOTED_CONSTANT'` in a native `@Query` of the six status-CAS repositories must be a constant of that table's status enum (`MessageStatus`, `CveSummaryStatus`, `CveDeliveryStatus`, `MeetingReminderStatus`, `DispatchStatus`, `SessionStatus`), and a classpath scan of `dev.notypie.repository` fails if another repository starts quoting constants without a mapping. Renaming a constant still needs a data migration; this only stops the SQL from silently matching nothing |
 | `SchemaNullabilityTest.kt` | `@DataJpaTest` `StringSpec` reading H2's `INFORMATION_SCHEMA.COLUMNS`: `outbox_message.status` and `meeting_participants.absent_reason`, both non-null Kotlin properties, are `NOT NULL` in the schema Hibernate generates. It sees only the generated schema; an existing MariaDB column keeps whatever nullability it was created with |
 
 ## Subdirectories

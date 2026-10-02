@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/repository/outbox
 
@@ -58,7 +58,8 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 - **`CodecOutboundMessagePort` persists nothing.** Callers save the returned row through their own
   repository inside their own `@Transactional` so the outbox insert shares the domain transaction.
 - `status` and `transport` on the row are plain `String` columns written via `updateMessageStatus(MessageStatus)`
-  and the native statements; the literals in the SQL must equal `MessageStatus.name`.
+  and the native statements; the literals in the SQL must equal `MessageStatus.name`;
+  `NativeQueryStatusLiteralTest` (test `repository/`) fails when a quoted name is not a constant of the column's enum.
 - Consumers in `:application`: `PollingMessageProcessor`, `SlackMessageRelayServiceImpl`,
   `OutboxPayloadRenderer` (codec + `OutboxSchemaVersion`), `DebeziumLogTailingProcessor`,
   `OutboxRecoveryScheduler`, `OutboxRetentionScheduler`, `OutboxHealthIndicator`, `OpsStatusService`, and every scheduler / dispatcher that enqueues through

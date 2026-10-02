@@ -20,7 +20,8 @@ decoding.
 ### Working In This Directory
 - **`status` and `transport` are `String` columns, not `@Enumerated`.** The `transport` comment records why:
   Debezium CDC delivered enum-typed columns as `null`. The native statements in `MessageOutboxRepository`
-  compare against the literal names, so renaming a `MessageStatus` constant is a data migration. `status` is
+  compare against the literal names, so renaming a `MessageStatus` constant is a data migration (and
+  `NativeQueryStatusLiteralTest` fails until the SQL is updated too). `status` is
   mapped `nullable = false` like the property; an existing database column keeps its own nullability.
 - **The `@JsonProperty("event_id")`-style annotations exist for the Debezium path**: `toOutboxMessage()`
   maps a CDC row (snake_case keys, epoch `Long` dates) with `dev.notypie.common.jsonMapper`. Debezium writes a
