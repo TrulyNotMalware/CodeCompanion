@@ -119,3 +119,27 @@ fun MessageOutboxRepository.stubOutboxStatus(
     every { findOldestInProgressUpdatedAt() } returns oldestInProgressUpdatedAt
     every { countInProgressWithSendsAtLeast(sends = any()) } returns retryingCount
 }
+
+data class OutboxStatusRow(
+    val status: MessageStatus,
+    val createdAt: LocalDateTime = DEFAULT_TEST_NOW,
+    val updatedAt: LocalDateTime = DEFAULT_TEST_NOW,
+    val sendCount: Int = 0,
+)
+
+fun createOutboxRepositoryOver(rows: List<OutboxStatusRow>): MessageOutboxRepository {
+    val pending = rows.filter { it.status == MessageStatus.PENDING }
+    val inFlight = rows.filter { it.status == MessageStatus.IN_PROGRESS }
+    return mockk {
+        every { countPending() } returns pending.size.toLong()
+        every { countPendingOlderThan(threshold = any()) } answers
+            { pending.count { it.createdAt < firstArg<LocalDateTime>() }.toLong() }
+        every { findOldestPendingCreatedAt() } returns pending.minOfOrNull { it.createdAt }
+        every { countInProgress() } returns inFlight.size.toLong()
+        every { countInProgressOlderThan(threshold = any()) } answers
+            { inFlight.count { it.updatedAt < firstArg<LocalDateTime>() }.toLong() }
+        every { findOldestInProgressUpdatedAt() } returns inFlight.minOfOrNull { it.updatedAt }
+        every { countInProgressWithSendsAtLeast(sends = any()) } answers
+            { inFlight.count { it.sendCount >= firstArg<Int>() }.toLong() }
+    }
+}

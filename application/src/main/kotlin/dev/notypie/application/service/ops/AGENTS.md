@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # application/service/ops
 
@@ -12,14 +12,14 @@ came from. The same renderer feeds the MCP `get_status` tool.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OpsStatusService.kt` | `@Service`. `@EventListener handleStatusReport(StatusReportRequestEvent)`: `runCatching { renderReport() }` with a fixed fallback text on failure, then stages `OutboundMessage.ChannelMessage` (`STATUS_REPORT`, headline `"CodeCompanion — outbox status"`) to `payload.responseBasicInfo.channel` and `eventPublisher.publishOne`. `internal fun renderReport(): String`: pending / in-flight counts, stuck counts older than `outbox.health.stuckThresholdSeconds`, oldest-row ages, `Health: UP/DOWN`; `cveSection()` appended only when `cve.enabled` — active topics, `PENDING` / `SUMMARIZING` backlog, `FAILED` split into retryable vs dead-letter at `ai.maxRetries`, latest collect window |
+| `OpsStatusService.kt` | `@Service`. `@EventListener handleStatusReport(StatusReportRequestEvent)`: `runCatching { renderReport() }` with a fixed fallback text on failure, then stages `OutboundMessage.ChannelMessage` (`STATUS_REPORT`, headline `"CodeCompanion — outbox status"`) to `payload.responseBasicInfo.channel` and `eventPublisher.publishOne`. `internal fun renderReport(): String`: reads `readOutboxHealth` (`application/health`), the same snapshot and verdict as `OutboxHealthIndicator` — pending / in-flight counts, stuck counts, oldest-row ages, the retrying count (`*Retrying:* n (sent at least Nx, still in flight)`), the stuck threshold and `Health: UP/DOWN`; `cveSection()` appended only when `cve.enabled` — active topics, `PENDING` / `SUMMARIZING` backlog, `FAILED` split into retryable vs dead-letter at `ai.maxRetries`, latest collect window |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Same numbers as `/actuator/health`.** `renderReport` and `application/health/OutboxHealthIndicator`
-  must read the same `MessageOutboxRepository` counters with the same `stuckThresholdSeconds`; health is
-  `DOWN` iff any PENDING or IN_PROGRESS row is older than the threshold. Change both or neither.
+- **Same numbers as `/actuator/health`.** `renderReport` reads `readOutboxHealth`, the snapshot
+  `OutboxHealthIndicator` and the gauges read, so the verdict (stuck PENDING, in-flight past the threshold
+  plus one sweep period, or a retrying row) is defined once. Do not recompute a count here.
 - **`renderReport()` is `internal` for a reason:** `application/mcp/DomainReadTools.get_status` calls it so
   chat and MCP output never disagree. Text changes affect both surfaces.
 - The reply is a regular channel message, not an ephemeral — operators scroll back through history, and

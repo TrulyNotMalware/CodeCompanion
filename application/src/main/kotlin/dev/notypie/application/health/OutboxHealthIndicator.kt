@@ -10,52 +10,64 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
 
+data class OutboxHealthSnapshot(
+    val pendingCount: Long,
+    val stuckPendingCount: Long,
+    val oldestPendingAgeSeconds: Long,
+    val inFlightCount: Long,
+    val stuckInFlightCount: Long,
+    val oldestInFlightAgeSeconds: Long,
+    val retryingCount: Long,
+    val stuckThresholdSeconds: Long,
+    val retryingSendThreshold: Int,
+) {
+    val healthy: Boolean
+        get() = stuckPendingCount == 0L && stuckInFlightCount == 0L && retryingCount == 0L
+}
+
+fun MessageOutboxRepository.readOutboxHealth(clock: Clock, health: AppConfig.Outbox.Health): OutboxHealthSnapshot {
+    val now = clock.instant().atZone(clock.zone).toLocalDateTime()
+    val cutoff = now.minusSeconds(health.stuckThresholdSeconds)
+    return OutboxHealthSnapshot(
+        pendingCount = countPending(),
+        stuckPendingCount = countPendingOlderThan(threshold = cutoff),
+        oldestPendingAgeSeconds = ageSeconds(at = findOldestPendingCreatedAt(), now = now),
+        inFlightCount = countInProgress(),
+        stuckInFlightCount =
+            countInProgressOlderThan(threshold = cutoff.minus(Duration.ofMillis(RECOVERY_SWEEP_PERIOD_MILLIS))),
+        oldestInFlightAgeSeconds = ageSeconds(at = findOldestInProgressUpdatedAt(), now = now),
+        retryingCount = countInProgressWithSendsAtLeast(sends = health.retryingSendThreshold),
+        stuckThresholdSeconds = health.stuckThresholdSeconds,
+        retryingSendThreshold = health.retryingSendThreshold,
+    )
+}
+
+private fun ageSeconds(at: LocalDateTime?, now: LocalDateTime): Long =
+    at?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
+
 @Component
 class OutboxHealthIndicator(
     private val outboxRepository: MessageOutboxRepository,
     private val clock: Clock,
     appConfig: AppConfig,
 ) : HealthIndicator {
-    private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.health.stuckThresholdSeconds)
-    private val retryingSendThreshold: Int = appConfig.outbox.health.retryingSendThreshold
-    private val sweepPeriod: Duration = Duration.ofMillis(RECOVERY_SWEEP_PERIOD_MILLIS)
+    private val healthConfig: AppConfig.Outbox.Health = appConfig.outbox.health
 
     override fun health(): Health {
-        val now = clock.instant().atZone(clock.zone).toLocalDateTime()
-        val cutoff = now.minus(stuckThreshold)
-
-        val pendingCount = outboxRepository.countPending()
-        val stuckPendingCount = outboxRepository.countPendingOlderThan(threshold = cutoff)
-        val oldestPending = outboxRepository.findOldestPendingCreatedAt()
-        val oldestPendingAgeSeconds = ageSeconds(at = oldestPending, now = now)
-
-        val inFlightCount = outboxRepository.countInProgress()
-        val stuckInFlightCount = outboxRepository.countInProgressOlderThan(threshold = cutoff.minus(sweepPeriod))
-        val oldestInFlight = outboxRepository.findOldestInProgressUpdatedAt()
-        val oldestInFlightAgeSeconds = ageSeconds(at = oldestInFlight, now = now)
-        val retryingCount = outboxRepository.countInProgressWithSendsAtLeast(sends = retryingSendThreshold)
-
-        val builder =
-            if (stuckPendingCount > 0L || stuckInFlightCount > 0L || retryingCount > 0L) {
-                Health.down()
-            } else {
-                Health.up()
-            }
+        val snapshot = outboxRepository.readOutboxHealth(clock = clock, health = healthConfig)
+        val builder = if (snapshot.healthy) Health.up() else Health.down()
 
         return builder
-            .withDetail("pendingCount", pendingCount)
-            .withDetail("stuckPendingCount", stuckPendingCount)
-            .withDetail("stuckCount", stuckPendingCount)
-            .withDetail("oldestPendingAgeSeconds", oldestPendingAgeSeconds)
-            .withDetail("inFlightCount", inFlightCount)
-            .withDetail("stuckInFlightCount", stuckInFlightCount)
-            .withDetail("oldestInFlightAgeSeconds", oldestInFlightAgeSeconds)
-            .withDetail("stuckThresholdSeconds", stuckThreshold.seconds)
-            .withDetail("retryingCount", retryingCount)
-            .withDetail("retryingSendThreshold", retryingSendThreshold)
+            .withDetail("pendingCount", snapshot.pendingCount)
+            .withDetail("stuckPendingCount", snapshot.stuckPendingCount)
+            .withDetail("stuckCount", snapshot.stuckPendingCount)
+            .withDetail("oldestPendingAgeSeconds", snapshot.oldestPendingAgeSeconds)
+            .withDetail("inFlightCount", snapshot.inFlightCount)
+            .withDetail("stuckInFlightCount", snapshot.stuckInFlightCount)
+            .withDetail("oldestInFlightAgeSeconds", snapshot.oldestInFlightAgeSeconds)
+            .withDetail("stuckThresholdSeconds", snapshot.stuckThresholdSeconds)
+            .withDetail("retryingCount", snapshot.retryingCount)
+            .withDetail("retryingSendThreshold", snapshot.retryingSendThreshold)
             .build()
     }
-
-    private fun ageSeconds(at: LocalDateTime?, now: LocalDateTime): Long =
-        at?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
 }

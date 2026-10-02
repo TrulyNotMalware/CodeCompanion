@@ -60,6 +60,26 @@ class OutboxMetricsTest :
             }
         }
 
+        given("a scrape that reads every gauge") {
+            val repository = mockk<MessageOutboxRepository>()
+            repository.stubOutboxStatus(pendingCount = 1L)
+            val registry = metricsOver(repository = repository)
+
+            `when`("the five gauges are read one after another") {
+                registry.gaugeValue(OUTBOX_MESSAGES_METRIC, "status", "pending")
+                registry.gaugeValue(OUTBOX_MESSAGES_METRIC, "status", "in_progress")
+                registry.ageSeconds(OUTBOX_PENDING_OLDEST_AGE_METRIC)
+                registry.ageSeconds(OUTBOX_IN_PROGRESS_OLDEST_CLAIM_AGE_METRIC)
+                registry.gaugeValue(OUTBOX_RETRYING_METRIC)
+
+                then("they share one snapshot instead of querying the outbox once per gauge") {
+                    verify(exactly = 1) { repository.countPending() }
+                    verify(exactly = 1) { repository.countInProgress() }
+                    verify(exactly = 1) { repository.countInProgressWithSendsAtLeast(sends = 4) }
+                }
+            }
+        }
+
         given("an empty outbox") {
             val repository = mockk<MessageOutboxRepository>()
             repository.stubOutboxStatus()

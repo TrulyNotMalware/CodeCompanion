@@ -2,14 +2,20 @@ package dev.notypie.application.health
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
+import dev.notypie.application.outbox.OutboxStatusRow
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.createOutboxRepositoryOver
 import dev.notypie.application.outbox.stubOutboxStatus
+import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.boot.health.contributor.Status
+import java.util.concurrent.TimeUnit
 
 class OutboxHealthIndicatorTest :
     BehaviorSpec({
@@ -168,6 +174,86 @@ class OutboxHealthIndicatorTest :
                     result.details["stuckInFlightCount"] shouldBe 0L
                     result.details["retryingCount"] shouldBe 1L
                     verify(atLeast = 1) { repository.countInProgressWithSendsAtLeast(sends = 3) }
+                }
+            }
+        }
+
+        given("outbox states on either side of every DOWN rule") {
+            val states =
+                mapOf(
+                    "empty" to emptyList(),
+                    "a deferred row 330 s old, inside the sweep's grace period" to
+                        listOf(
+                            OutboxStatusRow(
+                                status = MessageStatus.IN_PROGRESS,
+                                updatedAt = DEFAULT_TEST_NOW.minusSeconds(330L),
+                            ),
+                        ),
+                    "an in-flight row the sweep failed to take for a full period" to
+                        listOf(
+                            OutboxStatusRow(
+                                status = MessageStatus.IN_PROGRESS,
+                                updatedAt = DEFAULT_TEST_NOW.minusSeconds(400L),
+                            ),
+                        ),
+                    "a just-reclaimed row that has already been sent three times" to
+                        listOf(OutboxStatusRow(status = MessageStatus.IN_PROGRESS, sendCount = 3)),
+                    "a PENDING row older than the stuck threshold" to
+                        listOf(
+                            OutboxStatusRow(
+                                status = MessageStatus.PENDING,
+                                createdAt = DEFAULT_TEST_NOW.minusSeconds(400L),
+                            ),
+                        ),
+                    "a fresh PENDING row" to listOf(OutboxStatusRow(status = MessageStatus.PENDING)),
+                )
+
+            states.forEach { (name, rows) ->
+                `when`("the outbox holds $name") {
+                    val repository = createOutboxRepositoryOver(rows = rows)
+                    val clock = createFixedUtcClock()
+                    val appConfig = AppConfig()
+                    val health =
+                        OutboxHealthIndicator(outboxRepository = repository, clock = clock, appConfig = appConfig)
+                            .health()
+                    val report =
+                        OpsStatusService(
+                            outboxRepository = repository,
+                            outboundStager = mockk(),
+                            eventPublisher = mockk(),
+                            cveTopicRepository = mockk(),
+                            cveEventRepository = mockk(),
+                            cveCollectLedgerRepository = mockk(),
+                            clock = clock,
+                            appConfig = appConfig,
+                        ).renderReport()
+                    val registry = SimpleMeterRegistry()
+                    OutboxMetrics(
+                        outboxRepository = repository,
+                        clock = clock,
+                        appConfig = appConfig,
+                        meterRegistry = registry,
+                    )
+
+                    then("@bot status, the actuator indicator and the gauges report the same outbox") {
+                        fun detail(key: String): Double = (health.details[key] as Long).toDouble()
+
+                        fun gauge(name: String, vararg tags: String): Double =
+                            registry
+                                .get(name)
+                                .tags(*tags)
+                                .gauge()
+                                .value()
+
+                        report.contains("UP") shouldBe (health.status == Status.UP)
+                        gauge(OUTBOX_MESSAGES_METRIC, "status", "pending") shouldBe detail("pendingCount")
+                        gauge(OUTBOX_MESSAGES_METRIC, "status", "in_progress") shouldBe detail("inFlightCount")
+                        gauge(OUTBOX_RETRYING_METRIC) shouldBe detail("retryingCount")
+                        registry
+                            .get(OUTBOX_IN_PROGRESS_OLDEST_CLAIM_AGE_METRIC)
+                            .timeGauge()
+                            .value(TimeUnit.SECONDS) shouldBe detail("oldestInFlightAgeSeconds")
+                    }
                 }
             }
         }

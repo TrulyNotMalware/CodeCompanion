@@ -114,6 +114,24 @@ class OpsStatusServiceTest :
                 }
             }
 
+            `when`("a fresh in-flight row keeps being re-sent") {
+                outboxRepository.stubOutboxStatus(inProgressCount = 1L, retryingCount = 1L)
+
+                val captured = slot<OutboundMessage>()
+                every { stager.stage(message = capture(captured), basicInfo = any()) } returns outboundStub
+                every { eventPublisher.publishEvent(events = any()) } returns Unit
+
+                service.handleStatusReport(event = event)
+
+                then("the report shows the retrying count and DOWN, as the actuator indicator does") {
+                    val body =
+                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                            .markdown
+                    body shouldContain "*Retrying:* 1 (sent at least 3x, still in flight)"
+                    body shouldContain "DOWN"
+                }
+            }
+
             `when`("the repository throws while reading metrics") {
                 every { outboxRepository.countPending() } throws RuntimeException("db down")
 

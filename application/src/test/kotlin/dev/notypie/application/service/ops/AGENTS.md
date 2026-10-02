@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/ops
 
@@ -11,7 +11,7 @@ topic/event counts and the last collect window.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OpsStatusServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK, clock `createFixedUtcClock(2026-04-29T12:00)`, `stuckThresholdSeconds = 300`. Healthy → `*Pending:* 0`, `*In-flight:* 0`, `UP`, and the published queue holds exactly the staged event; 7 pending (2 stuck, oldest 900 s) and 1 in-flight (1 stuck, oldest 600 s) → `*Pending:* 7 (oldest 900s ago, stuck 2)`, `*In-flight:* 1 (oldest 600s ago, stuck 1)`, `DOWN`; `countPending` throws → body contains `Failed to read outbox status`; CVE disabled (default) → no `CVE` substring. CVE enabled with `countActive = 3`, PENDING 4, SUMMARIZING 1, failed-retryable 2, dead-letter 1 → `*CVE topics:* 3 active`, `*CVE events:* 4 pending, 1 summarizing, 2 failed (retryable), 1 dead-letter`, `*CVE last collect window:* 2026-07-14 09:30` with the outbox section still present; `latestWindowStart` null → `never`. |
+| `OpsStatusServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK, clock `createFixedUtcClock(2026-04-29T12:00)`, `stuckThresholdSeconds = 300`. Healthy → `*Pending:* 0`, `*In-flight:* 0`, `UP`, and the published queue holds exactly the staged event; 7 pending (2 stuck, oldest 900 s) and 1 in-flight (1 stuck, oldest 600 s) → `*Pending:* 7 (oldest 900s ago, stuck 2)`, `*In-flight:* 1 (oldest 600s ago, stuck 1)`, `DOWN`; one fresh in-flight row with `retryingCount = 1` → `*Retrying:* 1 (sent at least 3x, still in flight)` and `DOWN`; `countPending` throws → body contains `Failed to read outbox status`; CVE disabled (default) → no `CVE` substring. CVE enabled with `countActive = 3`, PENDING 4, SUMMARIZING 1, failed-retryable 2, dead-letter 1 → `*CVE topics:* 3 active`, `*CVE events:* 4 pending, 1 summarizing, 2 failed (retryable), 1 dead-letter`, `*CVE last collect window:* 2026-07-14 09:30` with the outbox section still present; `latestWindowStart` null → `never`. |
 
 ## For AI Agents
 

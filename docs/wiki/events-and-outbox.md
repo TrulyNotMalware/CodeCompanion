@@ -226,8 +226,10 @@ _type: architecture · updated: 2026-10-02_
   않는다. 디테일 키: `pendingCount`, `stuckPendingCount`, `stuckCount`(구 별칭), `oldestPendingAgeSeconds`,
   `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`,
   `retryingSendThreshold`.
-- `OpsStatusService.renderReport`가 **같은 카운터**(retrying 제외)를 읽어 `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP
-  `get_status`를 만든다. 채팅과 actuator가 다른 숫자를 말하지 않게 하려는 의도다.
+- 헬스 인디케이터, Prometheus 게이지, `OpsStatusService.renderReport`(`@bot status` 답장과 MCP `get_status`)가 모두
+  `readOutboxHealth`가 만든 `OutboxHealthSnapshot` 하나를 읽는다. 판정(stuck PENDING, 임계 + 스윕 주기를 넘긴 in-flight,
+  retrying 행)도 한 곳에만 있어 채팅과 actuator가 다른 결론을 내지 않는다. 게이지 다섯 개는 한 스크레이프에서 스냅샷
+  하나를 함께 쓴다(1초 재사용).
 - 미지원 `schema_version` 행은 `IN_PROGRESS`로 남지만 헬스에는 잡히지 않는다: 회수할 때마다 `updated_at`이 갱신되고
   `send_count`는 0이다. ERROR 로그(`not in [...]; leaving it IN_PROGRESS unsent`)로 본다.
 

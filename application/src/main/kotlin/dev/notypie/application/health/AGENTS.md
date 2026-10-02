@@ -11,14 +11,14 @@ ages and flips the application to `DOWN` when any outbox row has sat in `PENDING
 sweep period, or when an `IN_PROGRESS` row has been sent at least `retryingSendThreshold` times (a row the
 recovery sweep keeps re-sending). A row that is only rate-limited is never `DOWN`. `show-details:
 when_authorized` hides those details from every caller (there is no Spring Security), so the gauges are what
-alerting reads. The first six counters also back the `@bot status` chat report in
-`service/ops/OpsStatusService`; the retrying counter is not in that report yet.
+alerting reads. All three surfaces — the indicator, the gauges and the `@bot status` chat report in
+`service/ops/OpsStatusService` — read one `OutboxHealthSnapshot`, so they cannot disagree.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxHealthIndicator.kt` | `@Component class OutboxHealthIndicator(outboxRepository, clock: Clock, appConfig: AppConfig) : HealthIndicator`. `health()` computes `cutoff = now - slack.app.outbox.health.stuck-threshold-seconds` (default 300) and reads `countPending`, `countPendingOlderThan(cutoff)`, `findOldestPendingCreatedAt`, `countInProgress`, `countInProgressOlderThan(cutoff - RECOVERY_SWEEP_PERIOD_MILLIS)` (the sweep gets one period to pick a row up), `findOldestInProgressUpdatedAt`, `countInProgressWithSendsAtLeast(slack.app.outbox.health.retrying-send-threshold)` (default 3); `DOWN` when either stuck count or the retrying count > 0. Details: `pendingCount`, `stuckPendingCount`, `stuckCount` (legacy alias of `stuckPendingCount`), `oldestPendingAgeSeconds`, `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`, `retryingSendThreshold` |
-| `OutboxMetrics.kt` | `@Component class OutboxMetrics(outboxRepository, clock, appConfig, meterRegistry)`. Registers supplier gauges that query the repository on every read: `outbox.messages{status=pending\|in_progress}` (`countPending` / `countInProgress`), `outbox.pending.oldest.age` (`TimeGauge`, from `findOldestPendingCreatedAt`), `outbox.in.progress.oldest.claim.age` (`TimeGauge`, from `findOldestInProgressUpdatedAt`, so it is the time since the last claim or renewal) and `outbox.retrying.messages` (`countInProgressWithSendsAtLeast(retrying-send-threshold)`). Ages are 0 when no row is in that status. Prometheus names: `outbox_messages`, `outbox_pending_oldest_age_seconds`, `outbox_in_progress_oldest_claim_age_seconds`, `outbox_retrying_messages` |
+| `OutboxHealthIndicator.kt` | `data class OutboxHealthSnapshot` (the seven counts/ages plus the two thresholds, `healthy` = no stuck PENDING, no stuck in-flight, no retrying row) and `MessageOutboxRepository.readOutboxHealth(clock, health: AppConfig.Outbox.Health)`, the one verdict the indicator, `OutboxMetrics` and `OpsStatusService` read. `@Component class OutboxHealthIndicator(outboxRepository, clock: Clock, appConfig: AppConfig) : HealthIndicator`. `health()` reads the snapshot, which computes `cutoff = now - slack.app.outbox.health.stuck-threshold-seconds` (default 300) and reads `countPending`, `countPendingOlderThan(cutoff)`, `findOldestPendingCreatedAt`, `countInProgress`, `countInProgressOlderThan(cutoff - RECOVERY_SWEEP_PERIOD_MILLIS)` (the sweep gets one period to pick a row up), `findOldestInProgressUpdatedAt`, `countInProgressWithSendsAtLeast(slack.app.outbox.health.retrying-send-threshold)` (default 3); `DOWN` when either stuck count or the retrying count > 0. Details: `pendingCount`, `stuckPendingCount`, `stuckCount` (legacy alias of `stuckPendingCount`), `oldestPendingAgeSeconds`, `inFlightCount`, `stuckInFlightCount`, `oldestInFlightAgeSeconds`, `stuckThresholdSeconds`, `retryingCount`, `retryingSendThreshold` |
+| `OutboxMetrics.kt` | `@Component class OutboxMetrics(outboxRepository, clock, appConfig, meterRegistry)`. Registers supplier gauges over `readOutboxHealth`; the five gauges of one scrape share one snapshot (reused for 1 s by `System.nanoTime`), so a scrape runs the seven outbox queries once: `outbox.messages{status=pending\|in_progress}` (`countPending` / `countInProgress`), `outbox.pending.oldest.age` (`TimeGauge`, from `findOldestPendingCreatedAt`), `outbox.in.progress.oldest.claim.age` (`TimeGauge`, from `findOldestInProgressUpdatedAt`, so it is the time since the last claim or renewal) and `outbox.retrying.messages` (`countInProgressWithSendsAtLeast(retrying-send-threshold)`). Ages are 0 when no row is in that status. Prometheus names: `outbox_messages`, `outbox_pending_oldest_age_seconds`, `outbox_in_progress_oldest_claim_age_seconds`, `outbox_retrying_messages` |
 
 ## For AI Agents
 
@@ -49,11 +49,11 @@ alerting reads. The first six counters also back the `@bot status` chat report i
   today is a covered count/min lookup.
 - **Retrying rows keep the aggregate DOWN on purpose** (the review's "a single retrying row turns it DOWN" was kept as
   designed): it gates nothing now, and alerting reads `outbox_retrying_messages` with a duration instead.
-- Keep the report and `OpsStatusService.renderReport()` computing the same numbers from the same
+- Never compute an outbox count or verdict outside `readOutboxHealth`; the report and `OpsStatusService.renderReport()` share it so they keep the same numbers from the same
   repository methods — the chat reply and the health endpoint must never disagree.
 - Thresholds come from `AppConfig.Outbox.Health`; do not read `@Value` here.
-- **Gauges read the database on every scrape** (five covered queries per scrape per replica). A query that
-  throws makes Micrometer report `NaN` for that gauge, which is intended: a stale or zero age would hide an
+- **Gauges read the database on every scrape** (the seven covered queries of one snapshot per scrape per
+  replica). A query that throws fails the snapshot, so Micrometer reports `NaN` for every outbox gauge, which is intended: a stale or zero age would hide an
   outage. Every replica reports the same table-wide numbers, so alert on `max(...)`, not `sum(...)`.
 - Suggested alerts (not provisioned in this repository): `max(outbox_pending_oldest_age_seconds) > 120` for
   10 m (the CDC connector or the poller stopped; the recovery sweep then delivers PENDING rows only after the
@@ -69,7 +69,7 @@ alerting reads. The first six counters also back the `@bot status` chat report i
 and asserts `UP` / `DOWN` plus every detail key. Add a case for any new detail key and for the
 in-flight branch when changing the `DOWN` rule. `OutboxMetricsTest` reads each gauge from a `SimpleMeterRegistry`
 over the same stubs (counts, ages from the fixed clock, zero ages on an empty outbox, `NaN` when the query
-throws); `ApplicationContextSmokeTest` checks that the Prometheus scrape carries the four gauges.
+throws, one repository read for the five gauges of a scrape); `ApplicationContextSmokeTest` checks that the Prometheus scrape carries the four gauges.
 
 ### Common Patterns
 - `Health.up()` / `Health.down()` builder chosen first, then `.withDetail(...)` for every metric so
