@@ -160,7 +160,7 @@ _type: decision · updated: 2026-10-02_
     변경과 **같은 트랜잭션**에 넣는다 — 처리 결과와 처리 표시가 함께 커밋·롤백되므로 실패한 원본은 표시가 남지 않아
     재시도가 정상 처리된다. 메모리 맵은 같은 파드 안의 1차 필터로 남긴다. 착수 전 조사할 것: 이벤트 핸들러가 트랜잭션
     밖에서 하는 일(비동기 AI 턴은 메모리 이벤트라 파드가 죽으면 사라짐 — dedup과는 별개 문제), Slack `event_id` 추출 위치,
-    다음 마이그레이션 번호 V23, 보존 기간 정리 작업.
+    다음 마이그레이션 번호 V24, 보존 기간 정리 작업.
     근거: `application/.../security/SlackRetryDeduplicator.kt`, `application/src/main/resources/k8s/deployment.yaml`,
     `application/src/main/resources/k8s/AGENTS.md`.
 

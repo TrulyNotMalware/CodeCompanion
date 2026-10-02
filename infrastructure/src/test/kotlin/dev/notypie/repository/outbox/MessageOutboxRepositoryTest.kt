@@ -1,13 +1,16 @@
 package dev.notypie.repository.outbox
 
 import dev.notypie.repository.outbox.schema.MessageStatus
+import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.schema.createOutboxMessage
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
+import jakarta.persistence.Column
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.data.repository.findByIdOrNull
@@ -321,6 +324,26 @@ class MessageOutboxRepositoryTest
                         abandoned shouldBe 0
                         statusOf(eventId = row.eventId) shouldBe MessageStatus.IN_PROGRESS.name
                         attemptsOf(eventId = row.eventId) shouldBe 2
+                    }
+                }
+            }
+
+            given("a payload longer than TEXT's 65,535 bytes") {
+                `when`("it is saved and read back") {
+                    val payload = "가".repeat(n = 30_000)
+                    val row = repository.save(createOutboxMessage(payload = payload))
+
+                    then("it is stored whole in a column mapped as MEDIUMTEXT, the type V23 gives prod") {
+                        payload.toByteArray(charset = Charsets.UTF_8).size shouldBeGreaterThan 65_535
+                        jdbcTemplate.queryForObject(
+                            "SELECT payload FROM outbox_message WHERE event_id = ?",
+                            String::class.java,
+                            row.eventId,
+                        ) shouldBe payload
+                        OutboxMessage::class.java
+                            .getDeclaredField("payload")
+                            .getAnnotation(Column::class.java)
+                            .columnDefinition shouldBe "MEDIUMTEXT"
                     }
                 }
             }

@@ -1,0 +1,68 @@
+-- -----------------------------------------------------------------------------
+-- Outbox: payload TEXT -> MEDIUMTEXT
+-- -----------------------------------------------------------------------------
+-- Rationale:
+--   payload holds the codec-encoded envelope (V11). TEXT caps it at 65,535
+--   bytes, and MariaDB's default strict sql_mode rejects a longer value with
+--   "Data too long" instead of truncating it, so the writing transaction rolls
+--   back: a long AI answer or a full standup summary was never staged, and the
+--   requester got no reply and no failure notice. MEDIUMTEXT holds 16,777,215
+--   bytes. The application still bounds what it stages: in CDC mode a row
+--   travels in a Debezium record, an update event carries it twice (before and
+--   after), JSON-escaped again, and the producer's max.request.size (1 MiB by
+--   default) fails the connector for a larger record. The wider column does
+--   not raise that limit.
+--
+-- Behaviour:
+--   - payload becomes MEDIUMTEXT NOT NULL; existing values are kept unchanged.
+--   - Re-runnable: modifying the column to the type it already has changes no
+--     data.
+--
+-- Cost of the first run (not measured on MariaDB):
+--   The table is not small yet. The retention purge (OutboxRetentionScheduler)
+--   ships in the same release as this script, so the first run meets every
+--   outbox row written since the table was created. Measure it first:
+--     SELECT COUNT(*) AS rows_total,
+--            ROUND(SUM(LENGTH(payload)) / 1048576) AS payload_mib
+--     FROM outbox_message;
+--     SELECT ROUND((data_length + index_length) / 1048576) AS table_mib
+--     FROM information_schema.tables
+--     WHERE table_schema = DATABASE() AND table_name = 'outbox_message';
+--   Then try the online form. When the change cannot be done in place without
+--   blocking writes, the server rejects the statement at once and changes
+--   nothing; it never falls back silently to a slower algorithm:
+--     SET SESSION lock_wait_timeout = 5;
+--     ALTER TABLE outbox_message
+--       MODIFY COLUMN payload MEDIUMTEXT NOT NULL, ALGORITHM=INPLACE, LOCK=NONE;
+--   lock_wait_timeout keeps the ALTER from queueing for its metadata lock
+--   behind a long transaction: while it waits, every later outbox write (each
+--   bot reply) waits behind it. Re-run it if it times out.
+--   If the online form is rejected, the plain statement at the bottom copies
+--   the table and blocks writes to outbox_message until the copy ends. Run it
+--   with the same lock_wait_timeout, at a quiet moment, when the measured size
+--   makes that pause acceptable; otherwise apply it after this release's
+--   retention purge has deleted terminal rows older than
+--   slack.app.outbox.retention.days (14 by default).
+--
+-- CDC (Debezium):
+--   The connector reads this ALTER from the binlog into its schema history.
+--   TEXT and MEDIUMTEXT both map to a Kafka Connect STRING, so the record schema
+--   and DebeziumLogTailingProcessor are unaffected.
+--
+-- Older binaries never depend on the 65,535-byte limit, so the script is safe
+-- before, during or after the rollout and for a rollback. Until it runs, a row
+-- over 65,535 bytes fails its write as it did before. The release order is in
+-- this directory's AGENTS.md.
+--
+-- Rollback (rarely needed; leaving MEDIUMTEXT in place is harmless):
+--   ALTER TABLE outbox_message MODIFY COLUMN payload TEXT NOT NULL;
+-- fails under strict mode while any row holds more than 65,535 bytes; let those
+-- rows reach a terminal status and the retention purge remove them first.
+--
+-- ddl-auto: update creates the column as MEDIUMTEXT on a fresh schema but never
+-- changes the type of an existing column, so a dev/local database created
+-- earlier keeps TEXT until this script is applied there too. In prod, execute
+-- manually; schema auto-migration is disabled.
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE outbox_message MODIFY COLUMN payload MEDIUMTEXT NOT NULL;

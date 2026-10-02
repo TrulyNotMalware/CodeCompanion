@@ -36,7 +36,7 @@ class OutboxMessage(
     // Debezium CDC delivers enum types as null, so transport rides as a plain string column.
     @field:Column(name = "transport", nullable = false)
     val transport: String = Transport.SLACK.name,
-    @field:Column(name = "payload", columnDefinition = "TEXT", nullable = false)
+    @field:Column(name = "payload", columnDefinition = "MEDIUMTEXT", nullable = false)
     val payload: String,
     @field:CreationTimestamp
     @field:JsonProperty("created_at")

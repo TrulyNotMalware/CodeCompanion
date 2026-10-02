@@ -38,8 +38,8 @@ stand up change-data-capture locally and in-cluster.
   `ddl-auto: update` to create base tables, then the `V*` scripts patch them. Prod runs `ddl-auto: none`.
   So: a new migration must be additive and safe against a Hibernate-created base table, and any new
   entity needs *both* a JPA schema class and a migration.
-- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-09-28 is
-  `V22__`, so the next free one is `V23__`. Check the highest existing `V*` here and on `origin/main` before
+- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-02 is
+  `V23__`, so the next free one is `V24__`. Check the highest existing `V*` here and on `origin/main` before
   naming a new one.
 - **Prod config is env-var only** (`${SQL_DATABASE_URL}`, `${MCP_ENABLED}`, ...). Do not commit a literal
   secret or host here; add the variable to `k8s/configmap.yaml` / `k8s/secret.yaml` instead.
