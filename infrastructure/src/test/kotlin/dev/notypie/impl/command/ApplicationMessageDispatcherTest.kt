@@ -334,16 +334,32 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("chat.update keeps answering 200 with a body that is not JSON") {
+        given("chat.update keeps answering 200 with a body the SDK cannot parse") {
+            listOf("not JSON" to "<html>upstream error</html>", "empty" to "").forEach { (kind, body) ->
+                `when`("a message update is dispatched and the body is $kind") {
+                    reset()
+                    repeat(3) { responses.add(status(code = 200, body = body)) }
+                    val output = defaultDispatcher.dispatch(event = messageUpdate())
+
+                    then("the idempotent update is retried and ends as a transient outcome") {
+                        output.isTransientExhausted() shouldBe true
+                        calls.get() shouldBe 3
+                    }
+                }
+            }
+        }
+
+        given("chat.postMessage answers ok=false without an error field") {
             reset()
-            repeat(3) { responses.add(status(code = 200, body = "<html>upstream error</html>")) }
+            responses.add(status(code = 200, body = """{"ok":false}"""))
 
-            `when`("a message update is dispatched") {
-                val output = defaultDispatcher.dispatch(event = messageUpdate())
+            `when`("a channel message is dispatched") {
+                val output = defaultDispatcher.dispatch(event = channelMessage())
 
-                then("the idempotent update is retried and ends as a transient outcome") {
-                    output.isTransientExhausted() shouldBe true
-                    calls.get() shouldBe 3
+                then("it is a plain rejection, not an unreadable body or an outcome unknown") {
+                    output.ok shouldBe false
+                    output.errorReason shouldBe UNSPECIFIED_ERROR_REASON
+                    calls.get() shouldBe 1
                 }
             }
         }

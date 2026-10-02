@@ -67,6 +67,7 @@ val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
 const val RATE_LIMITED_REASON = "ratelimited"
 const val TRANSIENT_EXHAUSTED_REASON = "transient_exhausted"
 const val OUTCOME_UNKNOWN_REASON = "outcome_unknown"
+const val UNSPECIFIED_ERROR_REASON = "unspecified_error"
 
 fun CommandOutput.isRateLimited(): Boolean = !ok && errorReason == RATE_LIMITED_REASON
 
@@ -98,6 +99,8 @@ object RequestProgressListener : EventListener() {
     fun reset() = progress.set(RequestProgress.UNTRACKED)
 
     fun requestNeverWritten(): Boolean = progress.get() == RequestProgress.NOT_WRITTEN
+
+    fun requestHeadersWritten(): Boolean = progress.get() == RequestProgress.HEADERS_WRITTEN
 
     override fun callStart(call: Call) = progress.set(RequestProgress.NOT_WRITTEN)
 
@@ -206,13 +209,6 @@ class ApplicationMessageDispatcher(
             dispatchOnce(event = event, idempotent = idempotent)
         } catch (exception: IOException) {
             if (RequestProgressListener.requestNeverWritten()) throw SlackRequestNotSentException(cause = exception)
-            throw exception
-        } catch (exception: RuntimeException) {
-            // A 2xx body goes through Gson in the SDK: bad JSON throws, an empty body ends in an NPE. Slack answered.
-            val unreadable = exception is JsonParseException || exception is NullPointerException
-            if (unreadable && !RequestProgressListener.requestNeverWritten()) {
-                throw SlackResponseUnreadableException(cause = exception)
-            }
             throw exception
         }
     }
@@ -328,6 +324,13 @@ class ApplicationMessageDispatcher(
                     botToken,
                     responseType,
                 )
+            } catch (exception: RuntimeException) {
+                // A 2xx body goes through Gson in the SDK: bad JSON throws, an empty body ends in an NPE. Slack answered.
+                val unreadable = exception is JsonParseException || exception is NullPointerException
+                if (unreadable && RequestProgressListener.requestHeadersWritten()) {
+                    throw SlackResponseUnreadableException(cause = exception)
+                }
+                throw exception
             } catch (exception: SlackApiException) {
                 val code = exception.response.code
                 if (code == HTTP_TOO_MANY_REQUESTS) {
@@ -502,6 +505,6 @@ class ApplicationMessageDispatcher(
         dispatcherLog.warn {
             "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
         }
-        return failOutput(event = event, reason = result.error)
+        return failOutput(event = event, reason = error.ifEmpty { UNSPECIFIED_ERROR_REASON })
     }
 }

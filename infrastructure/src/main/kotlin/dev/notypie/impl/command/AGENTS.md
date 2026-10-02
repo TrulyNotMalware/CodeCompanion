@@ -68,8 +68,10 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     as its cause). A client without the listener counts as "may have been written". A stream the server resets with
     `REFUSED_STREAM` after the headers went out still counts as written (outcome unknown), although HTTP/2 promises
     it was not processed. A 2xx body the SDK cannot read (Gson `JsonParseException` for a non-JSON body, an
-    NPE for an empty one) on a written request becomes `SlackResponseUnreadableException`, an `IOException`: Slack
-    has answered, so a post ends as outcome unknown and the idempotent `chat.update` is retried. Classification after the
+    NPE for an empty one) becomes `SlackResponseUnreadableException`, an `IOException`: Slack has answered, so a post
+    ends as outcome unknown and the idempotent `chat.update` is retried. The catch wraps only the SDK call and only
+    after `requestHeadersEnd`, so an NPE in our own code (before sending, or while mapping the response) is not
+    mislabelled. An `ok=false` without an `error` field is a plain rejection with `UNSPECIFIED_ERROR_REASON`. Classification after the
     retries walks the cause chain, as Spring's retry policy does.
   - Transient — retried by `RetryService` (3 attempts), then `failOutput(TRANSIENT_EXHAUSTED_REASON)`
     (`isTransientExhausted()`); the relay leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to
