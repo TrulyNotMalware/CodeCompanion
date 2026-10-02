@@ -132,19 +132,22 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
 
     // A stuck claim is a failed attempt: it spends one retry and lands in FAILED so the retry ceiling (and the
     // dead-letter view) applies. Returning it to PENDING with the budget intact re-summarized a row whose
-    // markDone kept failing every stuckMinutes, forever.
+    // markDone kept failing every stuckMinutes, forever. Like markFailed it also sets next_attempt_at: without a
+    // backoff the same tick's findClaimable picked the row straight back up (review H6).
     @Modifying
     @Transactional
     @Query(
         value = """
             UPDATE cve_event
-            SET summary_status = 'FAILED', retry_count = retry_count + 1, claim_token = NULL, updated_at = :now
+            SET summary_status = 'FAILED', retry_count = retry_count + 1, next_attempt_at = :nextAttemptAt,
+                claim_token = NULL, updated_at = :now
             WHERE summary_status = 'SUMMARIZING' AND updated_at < :olderThan
         """,
         nativeQuery = true,
     )
     fun resetStuck(
         @Param("olderThan") olderThan: LocalDateTime,
+        @Param("nextAttemptAt") nextAttemptAt: LocalDateTime,
         @Param("now") now: LocalDateTime,
     ): Int
 

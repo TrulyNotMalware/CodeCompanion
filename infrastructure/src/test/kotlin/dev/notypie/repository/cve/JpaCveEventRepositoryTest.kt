@@ -6,6 +6,7 @@ import dev.notypie.schema.createCveTopicSchema
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
@@ -179,7 +180,14 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = live, token = "working", now = now.minusMinutes(1), maxRetries = 5)
 
                 `when`("resetStuck runs with a 15-minute threshold") {
-                    val reset = repository.resetStuck(olderThan = now.minusMinutes(15), now = now)
+                    val reset =
+                        repository.resetStuck(
+                            olderThan = now.minusMinutes(15),
+                            nextAttemptAt = now.plusMinutes(5),
+                            now = now,
+                        )
+                    val claimable =
+                        repository.findClaimable(now = now, maxRetries = 5, pageable = PageRequest.of(0, 500))
 
                     then("only the stale row is failed with one retry spent, stamped from :now; the live claim stays") {
                         reset shouldBe 1
@@ -193,6 +201,15 @@ class JpaCveEventRepositoryTest
                         liveRow.claimToken.shouldNotBeNull()
                         liveRow.updatedAt shouldBe now.minusMinutes(1)
                     }
+
+                    // H6: without a backoff the same tick's findClaimable picked the reset row straight back up.
+                    then("the reset row waits for its backoff instead of being claimable in the same tick") {
+                        repository.findById(stale).orElseThrow().nextAttemptAt shouldBe now.plusMinutes(5)
+                        claimable.map { it.id } shouldNotContain stale
+                        repository
+                            .findClaimable(now = now.plusMinutes(5), maxRetries = 5, pageable = PageRequest.of(0, 500))
+                            .map { it.id } shouldContain stale
+                    }
                 }
             }
 
@@ -205,7 +222,7 @@ class JpaCveEventRepositoryTest
                 val baseDeadLetter = repository.countDeadLetter(maxRetries = 20)
 
                 `when`("resetStuck reclaims it") {
-                    repository.resetStuck(olderThan = now.minusMinutes(15), now = now)
+                    repository.resetStuck(olderThan = now.minusMinutes(15), nextAttemptAt = now, now = now)
                     val claimable =
                         repository.findClaimable(now = now, maxRetries = 20, pageable = PageRequest.of(0, 500))
 

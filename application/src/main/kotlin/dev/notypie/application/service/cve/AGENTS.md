@@ -35,7 +35,7 @@ Each stage owns a distinct exactly-once mechanism. Preserve them:
   means another instance owns that window, so the topic is skipped this tick. Raw events are written
   with `insertIgnore`, making overlapping windows idempotent. Every topic runs inside its own
   `runCatching` so one bad source never aborts the rest; the ledger is pruned past its retention.
-- **Summarize** — `CveSummaryWorker` first calls `resetStuck` (which spends one retry per reset) to recover rows a crashed worker
+- **Summarize** — `CveSummaryWorker` first calls `resetStuck` (which spends one retry per reset and holds the row for one backoff step) to recover rows a crashed worker
   abandoned, then claims events one at a time by **claim-token CAS**, producing exactly one summary
   per event. A single failure is recorded as `FAILED` with backoff (bounded by `maxRetries`) and never
   aborts the batch.

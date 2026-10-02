@@ -27,9 +27,18 @@ class CveSummaryWorker(
     fun tick() {
         runCatching {
             val now = now()
-            val reset = cveEventRepository.resetStuck(olderThan = now.minusMinutes(stuckMinutes), now = now)
+            // The reset rows wait one backoff step, or the findClaimable below would pick them straight back up.
+            val reset =
+                cveEventRepository.resetStuck(
+                    olderThan = now.minusMinutes(stuckMinutes),
+                    nextAttemptAt = now.plusMinutes(backoffMinutes),
+                    now = now,
+                )
             if (reset > 0) {
-                log.warn { "Reset $reset CVE summary claim(s) stuck over ${stuckMinutes}m; each spent one retry" }
+                log.warn {
+                    "Reset $reset CVE summary claim(s) stuck over ${stuckMinutes}m; each spent one retry and waits " +
+                        "${backoffMinutes}m"
+                }
             }
             cveEventRepository
                 .findClaimable(now = now, maxRetries = maxRetries, limit = batchSize)

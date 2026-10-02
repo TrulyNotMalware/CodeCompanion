@@ -64,7 +64,8 @@ interface CveEventRepository {
         now: LocalDateTime,
     ): Int
 
-    fun resetStuck(olderThan: LocalDateTime, now: LocalDateTime): Int
+    // Fails every SUMMARIZING claim older than olderThan (one retry spent) and holds it until nextAttemptAt.
+    fun resetStuck(olderThan: LocalDateTime, nextAttemptAt: LocalDateTime, now: LocalDateTime): Int
 
     fun countByStatus(status: CveSummaryStatus): Long
 
