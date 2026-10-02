@@ -56,8 +56,9 @@ class SocketModeReceiver(
             }
             socketClient.addInteractiveEnvelopeListener { envelope ->
                 // Handled first — a view_submission's response_action must ride the ack itself.
-                val ackBody = handleInteractive(payloadJson = envelope.payload.toString())
-                ackInteractive(socketClient = socketClient, envelopeId = envelope.envelopeId, ackBody = ackBody)
+                handleInteractive(payloadJson = envelope.payload.toString()) { ackBody ->
+                    ackInteractive(socketClient = socketClient, envelopeId = envelope.envelopeId, ackBody = ackBody)
+                }
             }
             socketClient.addEventsApiEnvelopeListener { envelope ->
                 ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
@@ -149,11 +150,16 @@ class SocketModeReceiver(
         }
     }
 
-    private fun handleInteractive(payloadJson: String): String? =
-        runCatching {
-            interactionHandler.handleInteraction(headers = noHeaders, payload = payloadJson)
-        }.onFailure { log.error(it) { "Socket Mode interaction handling failed." } }
-            .getOrNull()
+    internal fun handleInteractive(payloadJson: String, acknowledge: (ackBody: String?) -> Unit) {
+        val ackBody =
+            try {
+                interactionHandler.handleInteraction(headers = noHeaders, payload = payloadJson)
+            } catch (exception: Exception) {
+                log.error(exception) { "Socket Mode interaction handling failed; not acknowledging the envelope." }
+                return
+            }
+        acknowledge(ackBody)
+    }
 
     private fun handleEvent(payloadJson: String) {
         runCatching {

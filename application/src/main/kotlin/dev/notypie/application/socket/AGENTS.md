@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/socket
 
@@ -12,7 +12,7 @@ is unchanged (Web API via the outbox relay). The bean exists only under the `loc
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SocketModeReceiver.kt` | `@Component @Profile("local") class SocketModeReceiver(appConfig, meetingService, standupSlashService, cveSubscriptionSlashService, cveQuerySlashService, interactionHandler, appMentionEventHandler) : SmartLifecycle`. `start()` skips with a warning when `slack.app.api.app-token` is blank, else builds `Slack.getInstance().socketMode(appToken)`, registers three envelope listeners and connects. `handleSlash` parses the envelope map through `parseRequestBodyData(headers = noHeaders, data)` and dispatches on `payload.command` against `AppConfig.Socket` (`meetingCommand` → `handleMeeting`, `standupCommand` → `handleStandup`, `subscribeCommand` / `unsubscribeCommand` / `subscriptionsCommand` → the CVE subscription service, `latestCommand` → `handleLatest`); `handleInteractive` returns the `InteractionHandler` ack body; `handleEvent` forwards only `event.type == "app_mention"`. `stop()` disconnects |
+| `SocketModeReceiver.kt` | `@Component @Profile("local") class SocketModeReceiver(appConfig, meetingService, standupSlashService, cveSubscriptionSlashService, cveQuerySlashService, interactionHandler, appMentionEventHandler) : SmartLifecycle`. `start()` skips with a warning when `slack.app.api.app-token` is blank, else builds `Slack.getInstance().socketMode(appToken)`, registers three envelope listeners and connects. `handleSlash` parses the envelope map through `parseRequestBodyData(headers = noHeaders, data)` and dispatches on `payload.command` against `AppConfig.Socket` (`meetingCommand` → `handleMeeting`, `standupCommand` → `handleStandup`, `subscribeCommand` / `unsubscribeCommand` / `subscriptionsCommand` → the CVE subscription service, `latestCommand` → `handleLatest`); `handleInteractive(payloadJson, acknowledge)` (internal, the test seam) passes the `InteractionHandler` ack body to `acknowledge`, and on a handler exception logs ERROR and sends **no** ack; `handleEvent` forwards only `event.type == "app_mention"`. `stop()` disconnects |
 
 ## For AI Agents
 
@@ -27,8 +27,10 @@ is unchanged (Web API via the outbox relay). The bean exists only under the `loc
   runs inside `ViewOpenDeferral.afterBoundary` so staged modals open after the service transaction released its connection. A new
   slash command needs a mapping here, a property in `AppConfig.Socket`, and the controller route; an
   unmapped command is only logged as a warning.
-- Failures are `runCatching` + `log.error` — there is no `ControllerAdvice` on this transport, so a
-  bug that would return 400/500 over HTTP is invisible here except in the log.
+- Slash and event failures are `runCatching` + `log.error` after the ack — there is no `ControllerAdvice` on
+  this transport, so a bug that would return 400/500 over HTTP is invisible there except in the log. A failed
+  interactive envelope is not acked at all, so Slack shows the user an error (as it does for the HTTP route's
+  500) instead of closing the modal as if the rolled-back click or submission had succeeded.
 - The build script comment describes this as gated to a `socket` profile; the code gates on `local`.
   `application-local.yaml` and `docs/wiki/dev-environment.md` document the `local` profile and the
   `SLACK_APP_TOKEN` (`connections:write`) requirement.
@@ -39,7 +41,8 @@ is unchanged (Web API via the outbox relay). The bean exists only under the `loc
 ```bash
 ./gradlew :application:test
 ```
-No spec covers the receiver (it wraps a live `SocketModeClient`). Handler behaviour is covered by the
+`socket/SocketModeReceiverTest` covers `handleInteractive` (empty ack, `response_action` body ack, no ack
+on failure); the rest of the receiver wraps a live `SocketModeClient` and has no spec. Handler behaviour is covered by the
 service specs (`MeetingServiceImplTest`, `CveSubscriptionSlashServiceImplTest`,
 `CveQuerySlashServiceImplTest`, `SlackInteractionHandlerImplTest`, `SlackMentionEventHandlerImplTest`).
 To test the routing, extract `handleSlash` / `handleEvent` behind a seam that takes the JSON string and

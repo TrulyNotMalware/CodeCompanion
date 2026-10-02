@@ -24,5 +24,6 @@ package with `./gradlew :application:test --tests 'dev.notypie.application.<pack
 | `mcp/` | `McpToolGate` and `DomainReadTools` MCP tools (see `mcp/AGENTS.md`) |
 | `security/` | Slack signature filter, retry dedup, cached body wrapper, MCP token codec (see `security/AGENTS.md`) |
 | `service/` | One spec directory per use-case lane (see `service/AGENTS.md`) |
+| `socket/` | `SocketModeReceiver` interactive ack contract (see `socket/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
