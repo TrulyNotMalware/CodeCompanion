@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/repository/outbox/schema
 
@@ -22,7 +22,10 @@ decoding.
   Debezium CDC delivered enum-typed columns as `null`. The native statements in `MessageOutboxRepository`
   compare against the literal names, so renaming a `MessageStatus` constant is a data migration.
 - **The `@JsonProperty("event_id")`-style annotations exist for the Debezium path**: `toOutboxMessage()`
-  maps a CDC row (snake_case keys, micro-epoch `Long` dates) with `dev.notypie.common.jsonMapper`. Keep the
+  maps a CDC row (snake_case keys, epoch `Long` dates) with `dev.notypie.common.jsonMapper`. Debezium writes a
+  `DATETIME` as epoch time read as UTC, in millis for `DATETIME(0-3)` and micros for `DATETIME(4-6)`;
+  `debeziumDateTime()` decodes it in UTC (not the JVM zone, which shifted it by nine hours in `Asia/Seoul`) and tells the
+  units apart by magnitude (2026-10-02). Keep the
   JSON property names aligned with the column names or log tailing breaks while the JPA path keeps working.
 - **`version` is a JPA optimistic lock**, unrelated to `schemaVersion`. The native CAS statements bypass it,
   and since status writes moved to `completeClaim` no code saves an existing row through JPA.
@@ -43,8 +46,9 @@ decoding.
 ```
 `OutboxMessageTest` (BehaviorSpec, no Spring) checks `CodecOutboundMessagePort.toRow` output (identity
 columns, `schemaVersion == CURRENT`, `status == PENDING`, fresh `eventId` per call, payload round-trip) and
-`updateMessageStatus`. The H2 mapping is exercised by `../MessageOutboxRepositoryTest`; `toOutboxMessage()` is
-exercised only from `:application` (`DebeziumLogTailingProcessorTest`, with and without `attempt_count`).
+`updateMessageStatus`, and `toOutboxMessage()` with a micros `created_at` and a millis `updated_at` while the JVM default
+zone is set to `Asia/Seoul` (both decode to the stored wall-clock value). The H2 mapping is exercised by
+`../MessageOutboxRepositoryTest`; `:application`'s `DebeziumLogTailingProcessorTest` runs the converter on full envelopes.
 
 ### Common Patterns
 - `@field:` targeted annotations on constructor `val`s; mutable state in the class body with `protected set`.

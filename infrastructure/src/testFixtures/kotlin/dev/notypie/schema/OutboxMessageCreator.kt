@@ -23,3 +23,21 @@ fun createOutboxMessage(
         payload = payload,
         createdAt = createdAt,
     ).apply { updateMessageStatus(status = status) }
+
+fun createOutboxColumnMap(
+    eventId: String = UUID.randomUUID().toString(),
+    createdAt: Long,
+    updatedAt: Long? = null,
+): MutableMap<String, Any> =
+    mutableMapOf<String, Any>(
+        "event_id" to eventId,
+        "idempotency_key" to UUID.randomUUID().toString(),
+        "publisher_id" to TEST_USER_ID,
+        "transport" to Transport.SLACK.name,
+        "payload" to "{}",
+        "created_at" to createdAt,
+        "schema_version" to 2,
+        "attempt_count" to 0,
+        "send_count" to 0,
+        "status" to MessageStatus.PENDING.name,
+    ).apply { if (updatedAt != null) put("updated_at", updatedAt) }

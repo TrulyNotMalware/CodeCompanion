@@ -8,9 +8,8 @@ import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import org.springframework.data.domain.Persistable
-import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneId
+import java.time.ZoneOffset
 
 private val logger = KotlinLogging.logger { }
 
@@ -103,17 +102,25 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
     runCatching {
         val createdAt = this["created_at"]
         val updatedAt = this["updated_at"]
-        if (createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
-        if (updatedAt is Long) this["updated_at"] = updatedAt.toLocalDateTime()
+        if (createdAt is Long) this["created_at"] = createdAt.debeziumDateTime()
+        if (updatedAt is Long) this["updated_at"] = updatedAt.debeziumDateTime()
 
         jsonMapper.convertValue(this, OutboxMessage::class.java)
     }.getOrElse { e ->
-        logger.error { "Failed to convert to OutboxMessage. ${e.message}" }
+        logger.error(e) { "Failed to convert to OutboxMessage" }
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }
 
-private fun Long.toLocalDateTime(): LocalDateTime {
-    val seconds = this / 1_000_000
-    val nanos = (this % 1_000_000) * 1_000
-    return Instant.ofEpochSecond(seconds, nanos).atZone(ZoneId.systemDefault()).toLocalDateTime()
+// Milliseconds since the epoch reach 1e14 only in the year 5138, so anything at or above it is microseconds.
+private const val EPOCH_MICROS_FLOOR = 100_000_000_000_000L
+
+// Debezium writes DATETIME as epoch time read as UTC (no zone): Timestamp (millis) for DATETIME(0-3),
+// MicroTimestamp (micros) for DATETIME(4-6).
+internal fun Long.debeziumDateTime(): LocalDateTime {
+    val micros = if (this >= EPOCH_MICROS_FLOOR) this else this * 1_000
+    return LocalDateTime.ofEpochSecond(
+        Math.floorDiv(micros, 1_000_000L),
+        (Math.floorMod(micros, 1_000_000L) * 1_000).toInt(),
+        ZoneOffset.UTC,
+    )
 }

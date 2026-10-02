@@ -7,14 +7,40 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.OutboundMessageCodec
 import dev.notypie.repository.outbox.Transport
+import dev.notypie.schema.createOutboxColumnMap
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.matchers.types.shouldBeInstanceOf
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.util.TimeZone
 
 class OutboxMessageTest :
     BehaviorSpec({
         val port = CodecOutboundMessagePort()
+
+        given("a CDC after-image on a JVM whose default zone is not UTC") {
+            val previousZone = TimeZone.getDefault()
+            val expected = LocalDateTime.of(2026, 10, 1, 12, 34, 56, 123_456_000)
+            val epochMicros = expected.toEpochSecond(ZoneOffset.UTC) * 1_000_000 + 123_456
+            val epochMillis = expected.toEpochSecond(ZoneOffset.UTC) * 1_000 + 123
+
+            `when`("created_at arrives as Debezium micros and updated_at as Debezium millis") {
+                TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"))
+                val converted =
+                    try {
+                        createOutboxColumnMap(createdAt = epochMicros, updatedAt = epochMillis).toOutboxMessage()
+                    } finally {
+                        TimeZone.setDefault(previousZone)
+                    }
+
+                then("both read back as the stored wall-clock value, not shifted by the JVM zone") {
+                    converted.createdAt shouldBe expected
+                    converted.updatedAt shouldBe expected.withNano(123_000_000)
+                }
+            }
+        }
 
         given("CodecOutboundMessagePort.toRow") {
             val basicInfo = createCommandBasicInfo()
