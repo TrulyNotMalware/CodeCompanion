@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # infrastructure/impl/cve
 
@@ -13,7 +13,7 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 |------|-------------|
 | `SourceAdapter.kt` | `data class RawSourceEvent(externalId, title, rawContent, publishedAt: LocalDateTime?)`; `interface SourceAdapter { supports(CveSourceType): Boolean; fetch(CveTopic): List<RawSourceEvent> }`; `internal fun JsonNode.stringOrNull()` (blank folds to null); `internal fun parseSourceTimestamp(String?)` (offset or offset-free ISO, null on failure) |
 | `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com")`. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. A 403/429 carrying `X-RateLimit-Remaining: 0` or `Retry-After` is logged as `GitHub rate limit exhausted …` with the reset instant and auth mode, any other non-2xx as `GitHub releases returned <status>`; both still return an empty list. `anonymousLimitWarning(topicCount, requestsPerTopicPerHour)` returns a boot warning when `token` is blank and the load reaches `ANONYMOUS_HOURLY_LIMIT` (60), else null; `CveConfiguration.githubReleaseSourceAdapter` logs it. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` |
-| `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC, sleeper = Thread.sleep)`. Pages with `startIndex` until `totalResults` (or an empty page), at most `MAX_PAGES` (5) requests, pausing 6 s between pages without a key and 0.6 s with one; `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
+| `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock = UTC, sleeper = Thread.sleep, onPageCapReached: (CveTopic) -> Unit = {})`. Pages with `startIndex` until `totalResults` (or an empty page), at most `MAX_PAGES` (5) requests (reaching the cap logs WARN and calls `onPageCapReached`, which `CveConfiguration` counts as `codecompanion.cve.nvd.page_cap_reached{topic}`), pausing 6 s between pages without a key and 0.6 s with one; `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) |
 
 ## For AI Agents
 
@@ -23,9 +23,14 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
   string would break that contract — that is why `REPO_PATTERN` exists.
 - **NVD paging respects the NVD rate limit** (5 requests / 30 s anonymous, 50 with a key): the adapter
   sleeps `sleeper(pagePause)` before every page after the first and caps a fetch at `MAX_PAGES`. A failed
-  later page (transport, non-2xx, bad JSON) or an interrupted pause keeps the events already read — the
-  next window's 120-minute lookback re-covers the rest — and an interrupt restores the thread's flag
-  rather than throwing. Pacing *between topics* is still the collector's open item (review M23).
+  later page (transport, non-2xx, bad JSON) keeps the events already read, and the next window's 120-minute
+  lookback re-covers that transient gap. An interrupt — during the pause **or** during `httpClient.send`,
+  which clears the flag when it throws — stops paging, keeps the events read and restores the thread's flag
+  rather than throwing (H7). **The page cap is not re-covered**: the next window overlaps this one by 115
+  minutes and reads the same first pages again, so while an NVD bulk re-analysis lasts the results past
+  `MAX_PAGES` × 2,000 may never be collected. That is why reaching the cap is a WARN plus the
+  `onPageCapReached` metric, not a silent stop. Pacing *between topics* is still the collector's open item
+  (review M23).
 - **A rate-limited window must be tellable from a quiet repo in the logs** (V8, M23 family). Both return
   `emptyList()` by contract; only `logFailure`'s distinct `rate limit exhausted` line separates them. The
   prod default `GITHUB_TOKEN` is blank, and 5 topics polled every 5 minutes already reach the anonymous

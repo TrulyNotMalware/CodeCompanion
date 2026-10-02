@@ -2,6 +2,7 @@ package dev.notypie.impl.cve
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
@@ -14,6 +15,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class NvdCveSourceAdapterTest :
     BehaviorSpec({
@@ -38,6 +41,7 @@ class NvdCveSourceAdapterTest :
             apiKey: String,
             clock: Clock = Clock.systemUTC(),
             sleeper: (Duration) -> Unit = { pauses += it },
+            onPageCapReached: (CveTopic) -> Unit = {},
         ): NvdCveSourceAdapter =
             NvdCveSourceAdapter(
                 apiKey = apiKey,
@@ -46,6 +50,7 @@ class NvdCveSourceAdapterTest :
                 apiBaseUrl = "http://127.0.0.1:${server.address.port}",
                 clock = clock,
                 sleeper = sleeper,
+                onPageCapReached = onPageCapReached,
             )
 
         fun vulnerability(id: String): String =
@@ -327,18 +332,48 @@ class NvdCveSourceAdapterTest :
 
         given("a window larger than the page budget") {
             val requested = mutableListOf<Int>()
+            val capped = mutableListOf<CveTopic>()
             respond =
                 paged(
                     pages = (0 until 20).associateWith { page(totalResults = 100_000, ids = listOf("CVE-2026-$it")) },
                     requested = requested,
                 )
+            val topic = nvdTopic(sourceConfig = """{"keyword":"linux"}""")
 
             `when`("fetch") {
-                val events = adapter(apiKey = "").fetch(topic = nvdTopic(sourceConfig = """{"keyword":"linux"}"""))
+                val events = adapter(apiKey = "", onPageCapReached = { capped += it }).fetch(topic = topic)
 
                 then("it stops after MAX_PAGES requests with the events read so far") {
                     requested.size shouldBe NvdCveSourceAdapter.MAX_PAGES
                     events.size shouldBe NvdCveSourceAdapter.MAX_PAGES
+                }
+
+                // H7: the next window re-reads the same first pages, so the tail is not re-covered; it is signalled.
+                then("the page-cap hook fires once for the topic") {
+                    capped shouldBe listOf(topic)
+                }
+            }
+        }
+
+        // H7: the request itself swallowed InterruptedException, and send() had already cleared the flag.
+        given("a thread interrupted while a request is in flight") {
+            val release = CountDownLatch(1)
+            respond = { exchange ->
+                release.await(5, TimeUnit.SECONDS)
+                val bytes = page(totalResults = 1, ids = listOf("CVE-2026-0001")).toByteArray()
+                exchange.sendResponseHeaders(200, bytes.size.toLong())
+                exchange.responseBody.use { it.write(bytes) }
+            }
+
+            `when`("fetch") {
+                Thread.currentThread().interrupt()
+                val events = adapter(apiKey = "").fetch(topic = nvdTopic(sourceConfig = """{"keyword":"linux"}"""))
+                val interrupted = Thread.interrupted()
+                release.countDown()
+
+                then("it returns what it has without throwing and restores the interrupt flag") {
+                    events shouldBe emptyList()
+                    interrupted shouldBe true
                 }
             }
         }

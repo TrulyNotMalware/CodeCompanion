@@ -26,6 +26,8 @@ class NvdCveSourceAdapter(
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     private val clock: Clock = Clock.systemUTC(),
     private val sleeper: (Duration) -> Unit = { Thread.sleep(it.toMillis()) },
+    // Called when a window hits MAX_PAGES (the application counts it as a metric): the tail past the cap is lost.
+    private val onPageCapReached: (CveTopic) -> Unit = {},
 ) : SourceAdapter {
     // NVD allows 5 requests per rolling 30 s without a key and 50 with one, and asks clients to pace
     // accordingly; the pause runs between the pages of one fetch.
@@ -53,7 +55,8 @@ class NvdCveSourceAdapter(
 
         // A window can exceed one page (2,000 results) during an NVD bulk re-analysis; follow startIndex up to
         // totalResults. A failed or interrupted later page keeps the earlier pages — the next window's lookback
-        // re-covers the rest — and fetch still never throws.
+        // re-covers a transient gap — and fetch still never throws. An interrupt (shutdown) stops paging and leaves
+        // the thread's flag set.
         val events = mutableListOf<RawSourceEvent>()
         var startIndex = 0
         repeat(MAX_PAGES) { page ->
@@ -66,9 +69,13 @@ class NvdCveSourceAdapter(
             val totalResults = root["totalResults"]?.stringOrNull()?.toIntOrNull()
             if (pageSize == 0 || totalResults == null || startIndex >= totalResults) return events
         }
+        // The next window overlaps this one and reads the same first pages again, so while the bulk lasts the tail
+        // past the cap is not re-covered: an operator signal, not a transient gap (review H7).
         log.warn {
-            "NVD results for topic=${topic.topicKey} exceed $MAX_PAGES pages; stopped at startIndex=$startIndex"
+            "NVD results for topic=${topic.topicKey} exceed $MAX_PAGES pages; stopped at startIndex=$startIndex — " +
+                "the rest of this window may never be collected"
         }
+        onPageCapReached(topic)
         return events
     }
 
@@ -93,11 +100,17 @@ class NvdCveSourceAdapter(
                 .build()
 
         val response =
-            runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
-                    return null
-                }
+            try {
+                httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+            } catch (_: InterruptedException) {
+                // send() clears the flag when it throws; restore it so the collector's shutdown sees the interrupt.
+                Thread.currentThread().interrupt()
+                log.warn { "NVD request interrupted for topic=${topic.topicKey}; keeping the pages read so far" }
+                return null
+            } catch (ex: Exception) {
+                log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
+                return null
+            }
         if (response.statusCode() !in 200..299) {
             log.warn { "NVD returned ${response.statusCode()} for topic=${topic.topicKey}" }
             return null

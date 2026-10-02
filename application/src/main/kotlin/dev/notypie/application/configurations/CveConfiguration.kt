@@ -20,6 +20,7 @@ import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -30,6 +31,9 @@ import java.time.LocalTime
 import java.time.ZoneId
 
 private val log = KotlinLogging.logger {}
+
+// A collect window that hit NvdCveSourceAdapter.MAX_PAGES: results past the cap may never be collected.
+internal const val METRIC_NVD_PAGE_CAP_REACHED = "codecompanion.cve.nvd.page_cap_reached"
 
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
@@ -104,7 +108,7 @@ class CveConfiguration {
     }
 
     @Bean
-    fun nvdCveSourceAdapter(appConfig: AppConfig): SourceAdapter {
+    fun nvdCveSourceAdapter(appConfig: AppConfig, meterRegistry: MeterRegistry): SourceAdapter {
         val lookbackMinutes = appConfig.cve.nvd.lookbackMinutes
         val windowMinutes = appConfig.cve.collector.windowMinutes
         require(lookbackMinutes >= windowMinutes * 2) {
@@ -115,6 +119,10 @@ class CveConfiguration {
             apiKey = appConfig.cve.nvd.apiKey,
             lookbackMinutes = lookbackMinutes,
             requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
+            // Topic keys come from yaml (at most a few dozen), so the tag stays low-cardinality.
+            onPageCapReached = { topic ->
+                meterRegistry.counter(METRIC_NVD_PAGE_CAP_REACHED, "topic", topic.topicKey).increment()
+            },
         )
     }
 
