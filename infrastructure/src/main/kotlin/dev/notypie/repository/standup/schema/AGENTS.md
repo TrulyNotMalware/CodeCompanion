@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/repository/standup/schema
 
@@ -31,11 +31,10 @@ entities: the routine config with its member rows, and the session with its disp
 - **`routine_uid` on the session is a plain column**, not a relation to `standup_routine`; the scheduler
   resolves routine context separately (`ReadyDispatch` / `NudgeCandidateSession` in the parent package).
 - **Dispatch entities are all `val`**; status / token / timestamps change only through the native CAS statements
-  in `JpaSessionDispatchRepository` and `JpaStandupSessionRepository`. An answer's `responsesRaw` and
-  `submittedAt` are `protected set` and change only through `StandupSessionSchema.replaceAnswer`, which revises
-  the member's existing row in place: a remove-then-add persists the new row (IDENTITY ids insert immediately)
-  before the orphan delete runs at flush, so a second answer hit `uk_standup_answer_session_user` (reproduced on
-  H2 by `StandupRepositoryImplTest`, 2026-10-01). `updated_at` is set
+  in `JpaSessionDispatchRepository` and `JpaStandupSessionRepository`. `StandupAnswerSchema` is
+  read-only too: answers are written by the native upsert `JpaStandupSessionRepository.upsertAnswer`, never
+  through the entity (a remove-then-add persisted the new IDENTITY row before the orphan delete and hit
+  `uk_standup_answer_session_user`). `updated_at` is set
   explicitly inside each CAS because native updates bypass `@UpdateTimestamp`, and `resetStuckSending` ages
   off that column.
 - `Routine.toSchema()` / `StandupSession.toSchema()` build the child rows pointing back at the parent and
@@ -48,7 +47,7 @@ entities: the routine config with its member rows, and the session with its disp
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.standup.*'
 ```
 `JpaStandupSessionRepositoryTest` persists a session through `StandupSession.toSchema()` and maps it back
-(each answer once), `StandupRepositoryImplTest` records a member's answer twice (one row, latest responses), and
+(each answer once), `StandupRepositoryImplTest` (H2 `MODE=MariaDB`) records a member's answer twice (one row, latest responses), and
 `StandupDispatchSweepTest` covers the clock-bound stuck sweep. Sessions are built from the domain testFixtures
 (`createStandupSession`, `createSessionDispatch`, `createStandupAnswer`); there are no schema builders for this
 lane under `src/testFixtures/kotlin/dev/notypie/schema/`, and routines are not persisted by any spec.

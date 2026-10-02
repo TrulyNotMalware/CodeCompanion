@@ -12,7 +12,7 @@ emission order until the application layer drains the command.
 | File | Description |
 |------|-------------|
 | `CommandEffect.kt` | Marker interface implemented by `CommandIntent` and `outbound/OutboundMessage`. Not `sealed` because the two implementors live in different packages |
-| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer`, `CreateStandupRoutine`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`. Each KDoc names who triggers it and where its invariant is enforced |
+| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer` (with `notice: MessageRef?`, the DM prompt to collapse once the outcome is known), `CreateStandupRoutine`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`. Each KDoc names who triggers it and where its invariant is enforced |
 | `IntentQueue.kt` | `IntentQueue` (`offer`, `snapshot`, `drainSnapshot`, `isEmpty`, `size`) and `internal DefaultIntentQueue` over an `ArrayDeque`; thread-unsafe by design |
 
 ## For AI Agents

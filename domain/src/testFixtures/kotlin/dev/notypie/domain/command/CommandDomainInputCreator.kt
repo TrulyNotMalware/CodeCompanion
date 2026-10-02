@@ -23,9 +23,12 @@ import dev.notypie.domain.command.entity.event.CveOpsRequestEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
+import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
+import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
+import dev.notypie.domain.command.outbound.MessageRef
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -76,6 +79,24 @@ fun createCreateStandupRoutineEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.STANDUP_SETUP_SUBMIT,
+)
+
+fun createRecordStandupAnswerEvent(
+    sessionUid: UUID = UUID.randomUUID(),
+    userId: String = TEST_USER_ID,
+    responses: List<String> = listOf("Done", "Next"),
+    notice: MessageRef? = null,
+    idempotencyKey: UUID = UUID.randomUUID(),
+) = RecordStandupAnswerEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        RecordStandupAnswerPayload(
+            sessionUid = sessionUid,
+            userId = userId,
+            responses = responses,
+            notice = notice,
+        ),
+    type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
 )
 
 fun createAgentConverseRequestEvent(

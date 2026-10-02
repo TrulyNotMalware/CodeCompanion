@@ -7,6 +7,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.standup.dto.StandupAnswerDto
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
@@ -53,49 +54,57 @@ class StandupSummaryService(
 
     @EventListener
     fun postSummary(event: StandupCutoffEvent) {
-        val session =
-            standupRepository.findSession(sessionUid = event.sessionUid)
-                ?: run {
-                    summaryLog.warn { "Standup summary skipped; session not found: sessionUid=${event.sessionUid}" }
-                    return
-                }
-        val routine = standupRepository.getRoutine(routineUid = event.routineUid)
-        val commandBasicInfo =
-            CommandBasicInfo.forOutbound(
-                publisherId = routine.creatorId,
-                channel = routine.summaryChannel,
-            )
-        val summaryRow =
-            outboundMessagePort.toRow(
-                message =
-                    OutboundMessage.ChannelMessage(
-                        target = ConversationTarget(id = commandBasicInfo.channel),
-                        content =
-                            MessageContent.StandupSummary(
-                                routineName = routine.name,
-                                sessionDate = session.sessionDate,
-                                members = routine.members,
-                                answers = session.answers.boundedForSummary(),
-                                questions = routine.questions,
-                            ),
-                    ),
-                basicInfo = commandBasicInfo,
-            )
-        val summaryMarker = "outbox:${summaryRow.eventId}"
         transactionTemplate
-            .runInTx<Unit> {
+            .runInTx {
+                val session =
+                    standupRepository.findSessionForSummary(sessionUid = event.sessionUid)
+                        ?: run {
+                            summaryLog.warn {
+                                "Standup summary skipped; session not found: sessionUid=${event.sessionUid}"
+                            }
+                            return@runInTx false
+                        }
+                if (session.status != SessionStatus.COLLECTING) {
+                    summaryLog.info {
+                        "Standup summary skipped; session is ${session.status}: sessionUid=${event.sessionUid}"
+                    }
+                    return@runInTx false
+                }
+                val routine = standupRepository.getRoutine(routineUid = event.routineUid)
+                val commandBasicInfo =
+                    CommandBasicInfo.forOutbound(
+                        publisherId = routine.creatorId,
+                        channel = routine.summaryChannel,
+                    )
+                val summaryRow =
+                    outboundMessagePort.toRow(
+                        message =
+                            OutboundMessage.ChannelMessage(
+                                target = ConversationTarget(id = commandBasicInfo.channel),
+                                content =
+                                    MessageContent.StandupSummary(
+                                        routineName = routine.name,
+                                        sessionDate = session.sessionDate,
+                                        members = routine.members,
+                                        answers = session.answers.boundedForSummary(),
+                                        questions = routine.questions,
+                                    ),
+                            ),
+                        basicInfo = commandBasicInfo,
+                    )
                 outboxRepository.save(summaryRow)
                 if (!standupRepository.markSessionSummarized(
                         sessionId = session.sessionId,
-                        messageTs = summaryMarker,
+                        messageTs = "outbox:${summaryRow.eventId}",
                     )
                 ) {
                     error("Session was already summarized: sessionUid=${session.sessionUid}")
                 }
-            }.onSuccess {
-                summaryLog.info { "Standup summary enqueued: sessionUid=${session.sessionUid}" }
+                true
+            }.onSuccess { enqueued ->
+                if (enqueued) summaryLog.info { "Standup summary enqueued: sessionUid=${event.sessionUid}" }
             }.onFailure { ex ->
-                summaryLog.warn(ex) { "Standup summary enqueue rolled back: sessionUid=${session.sessionUid}" }
+                summaryLog.warn(ex) { "Standup summary enqueue rolled back: sessionUid=${event.sessionUid}" }
             }
     }
 

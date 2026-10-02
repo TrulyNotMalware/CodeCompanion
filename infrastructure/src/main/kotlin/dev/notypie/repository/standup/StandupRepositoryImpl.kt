@@ -6,13 +6,16 @@ import dev.notypie.domain.standup.dto.StandupSessionDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.standup.schema.SessionDispatchSchema
+import dev.notypie.repository.standup.schema.StandupSessionSchema
 import dev.notypie.repository.standup.schema.toDomainEntity
 import dev.notypie.repository.standup.schema.toRoutineDto
 import dev.notypie.repository.standup.schema.toSchema
 import dev.notypie.repository.standup.schema.toStandupSessionDto
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
@@ -80,20 +83,38 @@ open class StandupRepositoryImpl(
             .findBySessionUid(sessionUid = sessionUid)
             ?.toStandupSessionDto()
 
+    // The caller's transaction must hold the row lock while it saves the summary and flips the status.
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun findSessionForSummary(sessionUid: UUID): StandupSessionDto? =
+        jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)?.let { session ->
+            session.toStandupSessionDto().copy(status = lockedStatusOf(session = session))
+        }
+
     @Transactional
     override fun recordAnswer(
         sessionUid: UUID,
         userId: String,
         responses: List<String>,
         submittedAt: Instant,
-    ): Boolean {
+    ): AnswerRecordResult {
         val session =
-            jpaStandupSessionRepository.findBySessionUid(sessionUid = sessionUid)
-                ?: return false
-        session.replaceAnswer(userId = userId, responses = responses, submittedAt = submittedAt)
-        jpaStandupSessionRepository.save(session)
-        return true
+            jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)
+                ?: return AnswerRecordResult.SESSION_NOT_FOUND
+        if (lockedStatusOf(session = session) != SessionStatus.COLLECTING || !submittedAt.isBefore(session.cutoffAt)) {
+            return AnswerRecordResult.SESSION_CLOSED
+        }
+        jpaStandupSessionRepository.upsertAnswer(
+            sessionId = session.id,
+            userId = userId,
+            responses = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER),
+            submittedAt = submittedAt,
+        )
+        return AnswerRecordResult.RECORDED
     }
+
+    // An instance already in the persistence context keeps its stale status after the locking query; read it again.
+    private fun lockedStatusOf(session: StandupSessionSchema): SessionStatus =
+        SessionStatus.valueOf(jpaStandupSessionRepository.findLockedStatus(id = session.id))
 
     override fun claimDispatch(dispatchId: Long, claimToken: String, now: Instant): Boolean =
         jpaSessionDispatchRepository.claimDispatch(id = dispatchId, token = claimToken, now = now) == 1

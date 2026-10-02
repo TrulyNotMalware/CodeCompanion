@@ -1,7 +1,9 @@
 package dev.notypie.repository.standup
 
 import dev.notypie.repository.standup.schema.StandupSessionSchema
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -38,6 +40,39 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("routineUid") routineUid: UUID,
         @Param("sessionDate") sessionDate: LocalDate,
     ): StandupSessionSchema?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        """
+        SELECT s FROM standup_session s
+        WHERE s.sessionUid = :sessionUid
+    """,
+    )
+    fun findLockedBySessionUid(
+        @Param("sessionUid") sessionUid: UUID,
+    ): StandupSessionSchema?
+
+    @Query(value = "SELECT status FROM standup_session WHERE id = :id FOR UPDATE", nativeQuery = true)
+    fun findLockedStatus(
+        @Param("id") id: Long,
+    ): String
+
+    // MariaDB-only syntax (H2: MODE=MariaDB); decides insert vs update on committed rows, not this tx's view.
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO standup_answer (session_id, user_id, responses, submitted_at)
+            VALUES (:sessionId, :userId, :responses, :submittedAt)
+            ON DUPLICATE KEY UPDATE responses = :responses, submitted_at = :submittedAt
+        """,
+        nativeQuery = true,
+    )
+    fun upsertAnswer(
+        @Param("sessionId") sessionId: Long,
+        @Param("userId") userId: String,
+        @Param("responses") responses: String,
+        @Param("submittedAt") submittedAt: Instant,
+    ): Int
 
     @Query(
         """

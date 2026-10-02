@@ -13,6 +13,7 @@ import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupAnswerDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.domain.standup.dto.StandupAnswerDto
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
@@ -27,6 +28,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
@@ -111,7 +113,7 @@ class StandupSummaryServiceTest :
                     answers = listOf(createStandupAnswerDto(userId = "U_LONG", responses = listOf("x".repeat(5_000)))),
                 )
             val staged = slot<OutboundMessage>()
-            every { repo.findSession(sessionUid = sessionUid) } returns session
+            every { repo.findSessionForSummary(sessionUid = sessionUid) } returns session
             every { repo.getRoutine(routineUid = routineUid) } returns createRoutineDto(routineUid = routineUid)
             every { port.toRow(message = capture(staged), basicInfo = any()) } returns
                 createOutboxRow(eventId = "EVT-11")
@@ -177,7 +179,7 @@ class StandupSummaryServiceTest :
                         members = listOf(createRoutineMemberDto(userId = "U_STANDUP")),
                     )
                 val summaryRow = createOutboxRow(eventId = "EVT-SUMMARY")
-                every { repo.findSession(sessionUid = sessionUid) } returns session
+                every { repo.findSessionForSummary(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every {
                     port.toRow(
@@ -237,6 +239,87 @@ class StandupSummaryServiceTest :
                     verify(exactly = 1) {
                         repo.markSessionSummarized(sessionId = 7L, messageTs = "outbox:EVT-SUMMARY")
                     }
+                    verify(exactly = 0) { repo.findSession(sessionUid = any()) }
+                }
+            }
+
+            `when`("the locked read happens inside the transaction that saves the summary") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val transactionManager = stubTransactionManager()
+                val port = mockk<OutboundMessagePort>()
+                every { port.toRow(message = any(), basicInfo = any()) } returns createOutboxRow(eventId = "EVT-LOCK")
+                val service =
+                    StandupSummaryService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = port,
+                        transactionManager = transactionManager,
+                    )
+                val sessionUid = UUID.randomUUID()
+                val routineUid = UUID.randomUUID()
+                every { repo.findSessionForSummary(sessionUid = sessionUid) } returns
+                    createStandupSessionDto(sessionId = 12L, sessionUid = sessionUid, routineUid = routineUid)
+                every { repo.getRoutine(routineUid = routineUid) } returns createRoutineDto(routineUid = routineUid)
+                every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
+                every { repo.markSessionSummarized(sessionId = 12L, messageTs = "outbox:EVT-LOCK") } returns true
+
+                service.postSummary(
+                    event =
+                        StandupCutoffEvent(
+                            sessionId = 12L,
+                            sessionUid = sessionUid,
+                            routineUid = routineUid,
+                            sessionDate = LocalDate.of(2026, 5, 4),
+                        ),
+                )
+
+                then("the session is read after the transaction begins and before the save, CAS and commit") {
+                    verifyOrder {
+                        transactionManager.getTransaction(any())
+                        repo.findSessionForSummary(sessionUid = sessionUid)
+                        outboxRepo.save(any<OutboxMessage>())
+                        repo.markSessionSummarized(sessionId = 12L, messageTs = "outbox:EVT-LOCK")
+                        transactionManager.commit(any())
+                    }
+                }
+            }
+
+            `when`("the locked read finds the session already summarized by another replica") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val port = mockk<OutboundMessagePort>()
+                val service =
+                    StandupSummaryService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = port,
+                        transactionManager = stubTransactionManager(),
+                    )
+                val sessionUid = UUID.randomUUID()
+                every { repo.findSessionForSummary(sessionUid = sessionUid) } returns
+                    createStandupSessionDto(
+                        sessionId = 8L,
+                        sessionUid = sessionUid,
+                        status = SessionStatus.SUMMARIZED,
+                        summaryMessageTs = "outbox:EVT-OTHER",
+                    )
+
+                service.postSummary(
+                    event =
+                        StandupCutoffEvent(
+                            sessionId = 8L,
+                            sessionUid = sessionUid,
+                            routineUid = UUID.randomUUID(),
+                            sessionDate = LocalDate.of(2026, 5, 4),
+                        ),
+                )
+
+                then("nothing is built, saved or flipped") {
+                    verify(exactly = 0) { repo.getRoutine(routineUid = any()) }
+                    verify(exactly = 0) { port.toRow(message = any(), basicInfo = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any<OutboxMessage>()) }
+                    verify(exactly = 0) { repo.markSessionSummarized(any(), any()) }
                 }
             }
 
@@ -251,7 +334,7 @@ class StandupSummaryServiceTest :
                         transactionManager = stubTransactionManager(),
                     )
                 val sessionUid = UUID.randomUUID()
-                every { repo.findSession(sessionUid = sessionUid) } returns null
+                every { repo.findSessionForSummary(sessionUid = sessionUid) } returns null
 
                 service.postSummary(
                     event =
@@ -301,7 +384,7 @@ class StandupSummaryServiceTest :
                         questions = listOf("Yesterday?"),
                         members = listOf(createRoutineMemberDto(userId = "U_STANDUP")),
                     )
-                every { repo.findSession(sessionUid = sessionUid) } returns session
+                every { repo.findSessionForSummary(sessionUid = sessionUid) } returns session
                 every { repo.getRoutine(routineUid = routineUid) } returns routine
                 every { port.toRow(message = any(), basicInfo = any()) } returns createOutboxRow(eventId = "EVT-9")
                 every { outboxRepo.save(any<OutboxMessage>()) } answers {

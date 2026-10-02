@@ -31,7 +31,7 @@ All specs are Kotest `BehaviorSpec`s.
 | `RequestApprovalContextTest.kt` | `RequestApprovalContext`: `PIPELINE` / `APPLY_REQUEST`; one `Approval` targeted at the channel, reason taken from the commands queue. Constructor parameter is `basicInfo`, not `commandBasicInfo` |
 | `RescheduleMeetingContextTest.kt` | `form.RescheduleMeetingContext`: click → `OpenModal(ModalForm.Reschedule)`; malformed uid → no effects |
 | `StandupFillContextTest.kt` | `form.StandupFillContext`: Fill click with `routingExtras = [sessionUid, routineUid]` → `OpenModal(ModalForm.StandupFill)` carrying the origin notice ref; malformed extras → no intents |
-| `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, a dropped over-long note recorded as `OTHER` without detail and announced in the notice, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue |
+| `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, a standup answer with responses yielding `RecordStandupAnswer(notice = the Update target)` and no `UpdateMessage`, a dropped over-long note recorded as `OTHER` without detail and announced in the notice, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue |
 | `TextResponseContextTest.kt` | `TextResponseContext`: `ChannelMessage(Text)` in the command channel with headline "Simple Text Response" |
 
 ## For AI Agents

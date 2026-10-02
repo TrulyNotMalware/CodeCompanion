@@ -3,6 +3,7 @@ package dev.notypie.domain.command.entity.event
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -251,6 +252,7 @@ class RecordStandupAnswerPayload(
     val sessionUid: UUID,
     val userId: String,
     val responses: List<String>,
+    val notice: MessageRef?,
 ) : EventPayload
 
 data class RecordStandupAnswerEvent(

@@ -21,7 +21,9 @@ import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionCon
 import dev.notypie.domain.command.entity.context.form.StandupSetupParsed
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
@@ -196,10 +198,11 @@ class SubmissionContextsTest :
                         ),
                 ).handleInteraction(interaction = interaction)
 
-                then("both the record intent and the update go out") {
+                then("the record intent carries the notice and no update goes out before the outcome is known") {
                     val effects = intents.drainSnapshot()
-                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().shouldHaveSize(1)
-                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldHaveSize(1)
+                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single().notice shouldBe
+                        MessageRef(conversation = ConversationTarget(id = "C"), messageId = "1")
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
 

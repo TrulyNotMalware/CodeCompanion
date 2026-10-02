@@ -335,13 +335,15 @@ class SubmissionPipelineCharacterizationTest :
             `when`("answers are present with notice routing") {
                 val (output, effects) = answer(answers = listOf("did X", "will do Y"))
 
-                then("the record intent and the notice update are both emitted") {
+                then("the record intent carries the notice; the outcome update is left to the application") {
                     output.ok shouldBe true
                     val intent = effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single()
                     intent.sessionUid shouldBe sessionUid
                     intent.userId shouldBe "U_MEMBER"
                     intent.responses shouldContainExactly listOf("did X", "will do Y")
-                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    intent.notice?.conversation?.id shouldBe "C_STANDUP"
+                    intent.notice?.messageId shouldBe "777.888"
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
 

@@ -71,25 +71,6 @@ class StandupSessionSchema(
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
 ) {
-    // Revised in place: a remove-then-add inserts the new IDENTITY row before the orphan delete and hits
-    // uk_standup_answer_session_user.
-    fun replaceAnswer(userId: String, responses: List<String>, submittedAt: Instant) {
-        val responsesRaw = responses.joinToString(separator = RESPONSE_DELIMITER)
-        val existing = answers.firstOrNull { it.userId == userId }
-        if (existing == null) {
-            answers.add(
-                StandupAnswerSchema(
-                    session = this,
-                    userId = userId,
-                    responsesRaw = responsesRaw,
-                    submittedAt = submittedAt,
-                ),
-            )
-        } else {
-            existing.revise(responsesRaw = responsesRaw, submittedAt = submittedAt)
-        }
-    }
-
     companion object {
         const val RESPONSE_DELIMITER: String = "" // ASCII Unit Separator — never appears in Slack text.
     }
@@ -147,22 +128,11 @@ class StandupAnswerSchema(
     val session: StandupSessionSchema,
     @field:Column(name = "user_id", nullable = false)
     val userId: String,
-    responsesRaw: String,
-    submittedAt: Instant,
-) {
     @field:Column(name = "responses", nullable = false, columnDefinition = "TEXT")
-    var responsesRaw: String = responsesRaw
-        protected set
-
+    val responsesRaw: String,
     @field:Column(name = "submitted_at", nullable = false)
-    var submittedAt: Instant = submittedAt
-        protected set
-
-    fun revise(responsesRaw: String, submittedAt: Instant) {
-        this.responsesRaw = responsesRaw
-        this.submittedAt = submittedAt
-    }
-}
+    val submittedAt: Instant,
+)
 
 fun StandupSession.toSchema(): StandupSessionSchema {
     val schema =

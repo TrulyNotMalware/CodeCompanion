@@ -24,8 +24,9 @@ implements to deliver them.
   an event `data class`, and the resolver branch; keep the naming pair `XxxPayload` / `XxxRequestEvent`
   (or `XxxEvent` for state changes).
 - Every payload that expects an asynchronous reply carries `responseBasicInfo: CommandBasicInfo` — the
-  channel/app the listener answers on. `RecordStandupAnswerPayload` and `UpdateMeetingAttendancePayload`
-  omit it because their listeners do not post.
+  channel/app the listener answers on. `UpdateMeetingAttendancePayload` omits it because its listener does not
+  post; `RecordStandupAnswerPayload` carries `notice: MessageRef?` instead — the DM prompt the listener
+  collapses with the outcome.
 - `type: CommandDetailType` on the event is the routing token that later interactions use to find
   their context again; it must match what the emitting context declared.
 - `name` defaults to the event's simple class name and `timestamp` to `System.currentTimeMillis()` at
