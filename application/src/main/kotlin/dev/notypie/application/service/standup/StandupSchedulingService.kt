@@ -18,6 +18,7 @@ import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.NudgeCandidateSession
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
@@ -318,7 +319,7 @@ internal fun buildNudgeNotice(
 ): OutboundMessage.ChannelMessage {
     val cutoffText = NUDGE_CUTOFF_TIME_FORMAT.format(cutoffAt.atZone(routineTimezone))
     val body =
-        "⏰ Standup for *$routineName* closes at $cutoffText — you haven't responded yet. " +
+        "⏰ Standup for *${routineName.escapeMrkdwn()}* closes at $cutoffText — you haven't responded yet. " +
             "Tap the *Fill in standup* button in your DM."
     return OutboundMessage.ChannelMessage(
         target = ConversationTarget(id = commandBasicInfo.channel),

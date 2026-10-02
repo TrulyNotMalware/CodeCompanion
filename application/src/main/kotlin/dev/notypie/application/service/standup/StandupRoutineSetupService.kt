@@ -94,7 +94,7 @@ class StandupRoutineSetupService(
                 .sortedBy { it.value }
                 .joinToString(", ") { day -> day.name.lowercase().replaceFirstChar { it.uppercase() } }
         val triggerTime = routine.triggerLocalTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-        return "Standup routine *${routine.name}* created — ${routine.questions.size} questions, " +
+        return "Standup routine *${routine.name.escapeMrkdwn()}* created — ${routine.questions.size} questions, " +
             "members $members, weekdays $weekdays, daily at $triggerTime."
     }
 }
