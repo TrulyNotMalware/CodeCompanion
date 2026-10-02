@@ -3,6 +3,7 @@ package dev.notypie.application.configurations
 import dev.notypie.application.configurations.conditions.OnCdcConsumer
 import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import dev.notypie.application.service.relay.CdcRecordParseException
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.admin.NewTopic
@@ -30,7 +31,9 @@ import org.springframework.kafka.listener.DefaultErrorHandler
 import org.springframework.kafka.support.micrometer.KafkaListenerObservation
 import org.springframework.kafka.support.micrometer.KafkaListenerObservationConvention
 import org.springframework.kafka.support.micrometer.KafkaRecordReceiverContext
+import org.springframework.kafka.support.serializer.DeserializationException
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+import org.springframework.messaging.converter.MessageConversionException
 import org.springframework.util.backoff.FixedBackOff
 
 private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
@@ -71,20 +74,52 @@ class CountingRecordRecoverer(
     }
 }
 
+private val log = KotlinLogging.logger {}
+
+private val POISON_RECORD_EXCEPTIONS: List<Class<out Throwable>> =
+    listOf(
+        CdcRecordParseException::class.java,
+        DeserializationException::class.java,
+        MessageConversionException::class.java,
+    )
+
+// The outbox row, not the record, is the source of truth: a record that failed for another reason (the database was
+// down) is acknowledged and its row delivered by OutboxRecoveryScheduler, so the DLT holds only records nobody can read.
+class PoisonOnlyDeadLetterRecoverer(
+    val deadLetter: ConsumerAwareRecordRecoverer,
+) : ConsumerAwareRecordRecoverer {
+    override fun accept(record: ConsumerRecord<*, *>, consumer: Consumer<*, *>?, exception: Exception?) {
+        val poison =
+            generateSequence<Throwable>(exception) { it.cause }
+                .any { cause -> POISON_RECORD_EXCEPTIONS.any { it.isInstance(cause) } }
+        if (poison) {
+            deadLetter.accept(record, consumer, exception)
+            return
+        }
+        log.warn(exception) {
+            "CDC record failed after retries; leaving its outbox row to the recovery sweep " +
+                "topic=${record.topic()} partition=${record.partition()} offset=${record.offset()}"
+        }
+    }
+}
+
 class CdcDeadLetterRecovery(
     jsonTemplate: KafkaTemplate<String, Any>,
     meterRegistry: MeterRegistry,
     private val bytesProducerFactory: DefaultKafkaProducerFactory<Any, ByteArray> =
         deadLetterBytesProducerFactory(jsonTemplate = jsonTemplate),
 ) : DisposableBean {
-    val recoverer: CountingRecordRecoverer =
-        CountingRecordRecoverer(
-            delegate =
-                cdcDeadLetterRecoverer(
-                    jsonTemplate = jsonTemplate,
-                    bytesTemplate = KafkaTemplate(bytesProducerFactory),
+    val recoverer: PoisonOnlyDeadLetterRecoverer =
+        PoisonOnlyDeadLetterRecoverer(
+            deadLetter =
+                CountingRecordRecoverer(
+                    delegate =
+                        cdcDeadLetterRecoverer(
+                            jsonTemplate = jsonTemplate,
+                            bytesTemplate = KafkaTemplate(bytesProducerFactory),
+                        ),
+                    meterRegistry = meterRegistry,
                 ),
-            meterRegistry = meterRegistry,
         )
 
     override fun destroy() {

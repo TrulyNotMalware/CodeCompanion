@@ -3,6 +3,7 @@ package dev.notypie.application.service.relay
 import dev.notypie.application.configurations.CdcDeadLetterRecovery
 import dev.notypie.application.configurations.CountingRecordRecoverer
 import dev.notypie.application.configurations.DEAD_LETTER_HANDOFFS_METRIC
+import dev.notypie.application.configurations.PoisonOnlyDeadLetterRecoverer
 import dev.notypie.application.configurations.cdcDeadLetterRecoverer
 import dev.notypie.application.configurations.deadLetterBytesProducerFactory
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
@@ -33,12 +34,14 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.kafka.KafkaException
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaOperations
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.listener.ConsumerAwareRecordRecoverer
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
+import org.springframework.kafka.listener.ListenerExecutionFailedException
 import org.springframework.kafka.support.SendResult
 import java.util.Optional
 import java.util.UUID
@@ -434,7 +437,10 @@ class DebeziumLogTailingProcessorTest :
                 recovery.destroy()
 
                 then("it dead-letters through both templates and closes the producer it owns") {
-                    recovery.recoverer.delegate.shouldBeInstanceOf<DeadLetterPublishingRecoverer>()
+                    recovery.recoverer.deadLetter
+                        .shouldBeInstanceOf<CountingRecordRecoverer>()
+                        .delegate
+                        .shouldBeInstanceOf<DeadLetterPublishingRecoverer>()
                     verify(exactly = 1) { bytesProducerFactory.destroy() }
                 }
             }
@@ -446,6 +452,40 @@ class DebeziumLogTailingProcessorTest :
                     factory.configurationProperties[ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] shouldBe "127.0.0.1:1"
                     factory.configurationProperties[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] shouldBe
                         ByteArraySerializer::class.java
+                }
+            }
+        }
+
+        given("the poison-only recoverer in front of the dead-letter publisher") {
+            val record = createCdcConsumerRecord()
+            val consumer = mockk<Consumer<*, *>>()
+
+            `when`("the listener failed to parse the after-image") {
+                val deadLetter = mockk<ConsumerAwareRecordRecoverer>(relaxed = true)
+                val failure =
+                    ListenerExecutionFailedException(
+                        "listener failed",
+                        CdcRecordParseException(message = "bad after-image", cause = IllegalStateException("parse")),
+                    )
+                PoisonOnlyDeadLetterRecoverer(deadLetter = deadLetter).accept(record, consumer, failure)
+
+                then("the record goes to the dead-letter topic") {
+                    verify(exactly = 1) { deadLetter.accept(record, consumer, failure) }
+                }
+            }
+
+            `when`("the listener failed because the database was unreachable") {
+                val deadLetter = mockk<ConsumerAwareRecordRecoverer>(relaxed = true)
+                val failure =
+                    ListenerExecutionFailedException("listener failed", DataAccessResourceFailureException("db down"))
+
+                then("the record is acknowledged without dead-lettering, its row is left to the recovery sweep") {
+                    shouldNotThrowAny {
+                        PoisonOnlyDeadLetterRecoverer(
+                            deadLetter = deadLetter,
+                        ).accept(record, consumer, failure)
+                    }
+                    verify(exactly = 0) { deadLetter.accept(any(), any(), any()) }
                 }
             }
         }

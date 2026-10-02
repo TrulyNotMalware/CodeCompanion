@@ -35,7 +35,9 @@ class CdcConsumerConfigurationTest :
                         context.startupFailure shouldBe null
                         context
                             .getBean(CdcDeadLetterRecovery::class.java)
-                            .recoverer.delegate
+                            .recoverer.deadLetter
+                            .shouldBeInstanceOf<CountingRecordRecoverer>()
+                            .delegate
                             .shouldBeInstanceOf<DeadLetterPublishingRecoverer>()
                     }
                 }

@@ -250,6 +250,9 @@ _type: architecture · updated: 2026-09-28_
   `candidates.take(claimedCount)`는 다중 폴러에서 남의 행을 보냈다). 그러나 행 단위 claim만으로는 부족했다:
   100건을 먼저 claim하고 4스레드 executor에 넣으면 뒤쪽 작업이 stuck 임계를 넘겨 스윕에 회수되고 원래 작업도
   실행돼 두 번 나갔다(review 13장 Codex #3). 그래서 실행 직전 `renewClaim`이 attempt로 소유권을 확인한다.
+- CDC 리스너가 재시도(1초 간격 2회)를 넘겨 실패한 레코드 중 DLT로 가는 것은 읽을 수 없는 레코드뿐이다(`CdcRecordParseException`,
+  `DeserializationException`, `MessageConversionException`). DB 장애 같은 나머지는 로그를 남기고 ack 하며 행은 스윕이
+  보낸다(2026-10-02, 이전에는 정상 레코드가 2초 만에 DLT로 섞여 들어갔다).
 - 상태 기록 실패·429·일시 오류·DLT로 남은 `IN_PROGRESS`/오래된 `PENDING`은 모드와 무관한
   `OutboxRecoveryScheduler`가 재발송한다 — CDC는 그런 행에 두 번째 변경 이벤트를 만들지 않기 때문.
   `renewClaim`/`deferClaim`/`completeClaim`도 CDC UPDATE 이벤트를 만들지만 `PENDING`이 아니라서 리스너가 무시한다
