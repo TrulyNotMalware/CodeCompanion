@@ -129,6 +129,15 @@ _type: guide · updated: 2026-10-02_
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
 - 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V23**(2026-10-02 작업 트리; 마지막으로 fetch한 `origin/main`은 V17), 다음은 **V24**. 번호를 정하기
   전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
+- **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈췄고 다음 릴리스가 V18~V23을 한꺼번에 싣는다.
+  운영 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
+  구 파드 종료 → 배포 → V21**이다. V21을 뺀 나머지는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 구 바이너리는 그것에 의존하지
+  않으므로 이전 릴리스가 떠 있는 동안 적용한다. V23은 헤더대로 크기를 재고 온라인 형식을 먼저 시도하며, 거부되고 테이블이 크면
+  배포와 보존 정리 뒤로 미룬다. "구 파드 종료 → 배포"는 `k8s/README.md` "One-time" 절의 1회성 `Recreate` 절차다. V21(뒤집힌
+  `end_at` 정리)은 모든 파드가 새 바이너리가 된 뒤에만 돌린다 — 구 바이너리의 일정 변경은 `version` 검사 없이 `start_at`만 옮겨
+  뒤집힌 행을 다시 만든다. readiness는 스키마를 검사하지 않으므로 V18이 빠지면 모든 `meetings` 조회가, V20·V22가 빠지면 모든
+  아웃박스 claim이 실패하는데도 배포 게이트는 통과한다. 머지 전에 `SHOW COLUMNS`로 `meetings.version`,
+  `outbox_message.attempt_count`·`send_count`를 확인한다. 절차 원본은 `k8s/README.md`와 `db/migration/AGENTS.md`다.
 - 새 엔티티는 JPA 스키마 클래스(`infrastructure/repository/*/schema/`)와 마이그레이션을 **둘 다** 추가한다. H2/`ddl-auto` 테스트는
   MariaDB 전용 문법 오류를 잡지 못하므로 `slack-live` DB에 한 번 적용해 본다.
 

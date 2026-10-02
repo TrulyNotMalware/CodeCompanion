@@ -8,6 +8,9 @@ Ordered MariaDB patch scripts, one per schema change, in versioned `V<n>__*.sql`
 tool is a dependency of any module, so nothing runs these automatically: `local`/`dev`/`slack-live` shape tables from the JPA mappings via
 `ddl-auto: update`, and `prod` (`ddl-auto: none`) has each script applied by hand before the matching code
 rolls out. The folder is therefore the production schema runbook and the audit trail of every change.
+The number is the order a script was written in, not always the order it is applied in: a data fix that must wait
+for the new code (V21) carries a lower number than schema changes that must precede it (V22, V23). The headers and
+the release checklist below decide the order.
 
 ## Key Files
 | File | Description |
@@ -33,13 +36,31 @@ rolls out. The folder is therefore the production schema runbook and the audit t
 | `V19__add_outbox_status_indexes.sql` | `idx_outbox_status_created_at` and `idx_outbox_status_updated_at` on `outbox_message` — the poller, CDC claim, retention purge and health scalars all filter on `status` |
 | `V20__add_outbox_attempt_count.sql` | `outbox_message.attempt_count INT NOT NULL DEFAULT 0` — incremented by every claim/reclaim; the ownership token for the relay's lease renewal, rate-limit deferral and terminal status write. Its header carries the rollout constraint: this release must not run beside a pre-V20 release (stop the old pods first) |
 | `V21__fix_inverted_meeting_end_at.sql` | Data fix, no DDL: `end_at = NULL` (V3's "start + 1h" marker) where `end_at <= start_at`, rows left by reschedules that moved only `start_at`, with `version = version + 1` so a meeting write that read the row earlier fails its optimistic-lock check instead of restoring the inverted value. Idempotent; the header carries the inspection query and the rollout constraint (after V18, once every replica writes through the `@Version` entity) |
-| `V23__widen_outbox_payload_to_mediumtext.sql` | `outbox_message.payload` `TEXT` → `MEDIUMTEXT NOT NULL`: under strict `sql_mode` a payload over 65,535 bytes failed its write (a long AI answer or a full standup summary was never staged). Re-runnable. The header carries the first-run cost: the retention purge ships in the same release, so the first run meets the whole history — measure the table, try `ALGORITHM=INPLACE, LOCK=NONE` with a short `lock_wait_timeout` (rejected at once if impossible), and run the copying form only at a quiet moment or after the purge. Safe for old binaries and rollbacks |
 | `V22__add_outbox_send_count.sql` | `outbox_message.send_count INT NOT NULL DEFAULT 0` — raised by `renewClaim` right before a send, taken back by the rate-limit deferral; the recovery sweep's abandon budget (`outbox.polling.max-sends`) and the health probe's retrying-row counter. Ships with V20 under the same rollout constraint |
+| `V23__widen_outbox_payload_to_mediumtext.sql` | `outbox_message.payload` `TEXT` → `MEDIUMTEXT NOT NULL`: under strict `sql_mode` a payload over 65,535 bytes failed its write (a long AI answer or a full standup summary was never staged). Re-runnable. The header carries the first-run cost: the retention purge ships in the same release, so the first run meets the whole history — measure the table, try `ALGORITHM=INPLACE, LOCK=NONE` with a short `lock_wait_timeout` (rejected at once if impossible), and run the copying form only at a quiet moment or after the purge. Safe for old binaries and rollbacks |
 
 ## For AI Agents
 
 ### Working In This Directory
 - **Next free number is `V24`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Number ≠ apply order: the V18–V23 release checklist.** `main` stopped at `V17`, and the next release ships
+  `V18`–`V23` together. Apply them in this order, which `../k8s/README.md` ("One-time") and
+  `docs/wiki/dev-environment.md` repeat:
+  1. `V18`, after its header's duplicate check on `meeting_participants (meeting_id, user_id)` (delete the extra
+     rows, keep the lowest `id`), or the unique key fails;
+  2. `V19` and `V23`. `V23` follows its header: measure the table and try the online form first; if that is
+     rejected and the copy would block outbox writes too long, `V23` may wait until after the deploy and the
+     retention purge — the release only needs it for payloads over 65,535 bytes;
+  3. `V20`, then `V22`. Steps 1–3 only add defaulted columns, indexes and a wider type that the pre-V20 binary
+     never depends on, so they go in while the old release still serves;
+  4. stop the old Pods, then deploy (the one-time `Recreate` procedure in `../k8s/README.md`). This is how the
+     "stop every old pod … then start the new release" constraint in the `V20` header is met; applying
+     `V20`/`V22` before the old Pods stop does not break it;
+  5. `V21`, only once every Pod runs the new release (an older binary's reschedule moves `start_at` alone and
+     skips the `version` check).
+  Readiness does not check the schema, so a skipped `V18` (every `meetings` query fails) or `V20`/`V22` (every
+  outbox claim fails) passes the deploy gate. A future release that again needs a script *after* the rollout
+  gets the next free number like any other and says so in its header; never renumber to make the order match.
 - **Every script is MariaDB dialect.** `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`,
   `DROP INDEX IF EXISTS … ON`, inline `INDEX` clauses inside `CREATE TABLE`, `ENUM`, `DATETIME(6)`,
   `ON UPDATE CURRENT_TIMESTAMP` and `INSERT IGNORE` semantics are all assumed. They will not run on H2 (the

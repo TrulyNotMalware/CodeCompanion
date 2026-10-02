@@ -120,8 +120,32 @@ release that introduced outbox claim tokens (`attempt_count`, migration V20) can
 old Pods write outbox timestamps with the database clock and re-dispatch `IN_PROGRESS` rows they do not own. For
 that one rollout, stop the old Pods first. Do not change the strategy in `deployment.yaml`.
 
-1. Apply the migrations that release needs, as their headers say (V20 must be in place before the new code runs).
-2. Before merging, switch the live Deployment to `Recreate`. `kubectl apply` leaves `spec.strategy` alone because
+That release ships V18 through V23 at once (`main` was at V17), and the script numbers are not the apply order:
+V21 goes last. Production runs `ddl-auto: none` and nothing applies the scripts automatically, so work through
+this list by hand (`../db/migration/AGENTS.md` keeps the same order):
+
+1. **V18** — first run the duplicate check in its header and delete the extra `meeting_participants` rows (keep
+   the lowest `id`); the new unique key fails otherwise:
+   ```sql
+   SELECT meeting_id, user_id, COUNT(*) FROM meeting_participants
+   GROUP BY meeting_id, user_id HAVING COUNT(*) > 1;
+   ```
+   Then apply V18.
+2. **V19** (outbox status indexes) and **V23** (outbox payload `MEDIUMTEXT`). For V23, measure the table and try
+   the online form first, as its header says; if the server rejects it and copying the table would block outbox
+   writes too long, apply V23 after step 6 instead, once the release's retention purge has shrunk the table.
+3. **V20**, then **V22** (the claim token and the send budget).
+
+   Steps 1–3 only add columns with defaults, indexes and a wider type, which the running pre-V20 Pods never depend
+   on, so apply them while the previous release still serves. The new release needs V18, V20 and V22, and
+   readiness does not check the schema: without V18 every `meetings` query fails on the unknown `version` column,
+   and without V20/V22 every outbox claim fails and no Slack message goes out, while the Pods stay Ready and the
+   workflow reports success. Confirm before merging:
+   ```sql
+   SHOW COLUMNS FROM meetings LIKE 'version';
+   SHOW COLUMNS FROM outbox_message WHERE Field IN ('attempt_count', 'send_count');
+   ```
+4. Before merging, switch the live Deployment to `Recreate`. `kubectl apply` leaves `spec.strategy` alone because
    the manifest does not set it, so the workflow's rollout will use it:
    ```bash
    kubectl patch deployment code-companion-deploy -n api-service \
@@ -130,16 +154,21 @@ that one rollout, stop the old Pods first. Do not change the strategy in `deploy
    The patch changes no Pod template, so it starts no rollout. `Recreate` deletes the old Pods through the
    ReplicaSet, not the eviction API, so the PodDisruptionBudget does not block it. The service is down from the
    moment the old Pods stop until a new Pod is Ready (the startup probe allows up to 3 minutes).
-3. Merge and watch the workflow. A rollback it performs also uses `Recreate`, which is what you want then.
-4. Afterwards, restore the rolling update:
+5. Merge and watch the workflow. A rollback it performs also uses `Recreate`, which is what you want then.
+6. **V21** — only once every Pod runs the new release: the workflow finished and `kubectl get pods -n api-service
+   -l app=code-companion-deploy` lists only Pods of the new ReplicaSet. An older binary's reschedule moves only
+   `start_at` without checking `version`, so it can leave new inverted rows behind the script. If the workflow
+   rolled back, V21 waits for the next successful deploy; the previous release runs on the V18–V23 schema
+   unchanged.
+7. Afterwards, restore the rolling update:
    ```bash
    kubectl patch deployment code-companion-deploy -n api-service \
      -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"}}}}'
    ```
 
 If a migration must run while no Pod is up, use `kubectl scale deployment code-companion-deploy -n api-service
---replicas=0` instead of step 2, wait for the Pods to disappear (`kubectl get pods -n api-service -l
-app=code-companion-deploy`), run the script, then merge. The workflow's apply sets `replicas: 2` again. The
+--replicas=0` instead of step 4, wait for the Pods to disappear (`kubectl get pods -n api-service -l
+app=code-companion-deploy`), run the script, then merge; V21 still waits for step 6. The workflow's apply sets `replicas: 2` again. The
 outage then lasts until the build finishes and a new Pod is Ready.
 
 ## Prerequisites
@@ -323,8 +352,30 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
 마이그레이션 V20)을 도입한 릴리스는 이전 릴리스와 겹치면 안 됩니다. 이전 파드는 아웃박스 시각을 DB 시계로 쓰고, 자기 것이
 아닌 `IN_PROGRESS` 행을 다시 발송합니다. 그 한 번의 롤아웃에서는 이전 파드를 먼저 멈추세요. `deployment.yaml`의 전략은 바꾸지 않습니다.
 
-1. 그 릴리스에 필요한 마이그레이션을 각 헤더의 안내대로 적용합니다(V20은 새 코드가 뜨기 전에 있어야 함).
-2. 머지 전에 라이브 Deployment를 `Recreate`로 바꿉니다. 매니페스트에 `spec.strategy`가 없으므로 `kubectl apply`는 이 값을
+그 릴리스는 V18부터 V23까지를 한꺼번에 싣고(`main`은 V17까지), 스크립트 번호는 적용 순서가 아닙니다. V21이 마지막입니다.
+운영은 `ddl-auto: none`이고 스크립트를 자동으로 적용하는 도구가 없으므로 아래 순서대로 직접 진행합니다(`../db/migration/AGENTS.md`와 같은 순서):
+
+1. **V18** — 먼저 헤더의 중복 점검 쿼리를 실행하고, 중복된 `meeting_participants` 행을 지웁니다(가장 작은 `id`만 남김).
+   그러지 않으면 새 유니크 키 생성이 실패합니다:
+   ```sql
+   SELECT meeting_id, user_id, COUNT(*) FROM meeting_participants
+   GROUP BY meeting_id, user_id HAVING COUNT(*) > 1;
+   ```
+   그다음 V18을 적용합니다.
+2. **V19**(아웃박스 status 인덱스)와 **V23**(아웃박스 payload `MEDIUMTEXT`). V23은 헤더대로 테이블 크기를 재고 온라인 형식을
+   먼저 시도합니다. 서버가 거부하고 테이블 복사가 아웃박스 쓰기를 너무 오래 막을 크기라면 V23은 6단계 뒤, 새 릴리스의 보존
+   정리가 테이블을 줄인 다음에 적용합니다.
+3. **V20**, 이어서 **V22** (claim 토큰과 발송 예산).
+
+   1~3단계는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 실행 중인 pre-V20 파드는 그것에 의존하지 않으므로, 이전 릴리스가
+   서비스하는 동안 적용합니다. 새 릴리스에는 V18·V20·V22가 필요한데 readiness는 스키마를 검사하지 않습니다. V18이 없으면 모든
+   `meetings` 조회가 알 수 없는 `version` 컬럼으로 실패하고, V20·V22가 없으면 아웃박스 claim이 전부 실패해 Slack 메시지가 하나도
+   나가지 않는데, 파드는 Ready이고 워크플로는 성공으로 끝납니다. 머지 전에 확인하세요:
+   ```sql
+   SHOW COLUMNS FROM meetings LIKE 'version';
+   SHOW COLUMNS FROM outbox_message WHERE Field IN ('attempt_count', 'send_count');
+   ```
+4. 머지 전에 라이브 Deployment를 `Recreate`로 바꿉니다. 매니페스트에 `spec.strategy`가 없으므로 `kubectl apply`는 이 값을
    건드리지 않고, 워크플로의 롤아웃이 그대로 사용합니다:
    ```bash
    kubectl patch deployment code-companion-deploy -n api-service \
@@ -332,16 +383,20 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
    ```
    파드 템플릿은 바뀌지 않으므로 롤아웃이 시작되지 않습니다. `Recreate`는 eviction API가 아니라 ReplicaSet으로 파드를 지우므로
    PodDisruptionBudget에 막히지 않습니다. 이전 파드가 멈춘 뒤 새 파드가 Ready가 될 때까지(startup 프로브 최대 3분) 서비스가 중단됩니다.
-3. 머지하고 워크플로를 지켜봅니다. 워크플로가 롤백해도 `Recreate`로 진행되며, 그때도 그것이 맞습니다.
-4. 끝나면 롤링 업데이트로 되돌립니다:
+5. 머지하고 워크플로를 지켜봅니다. 워크플로가 롤백해도 `Recreate`로 진행되며, 그때도 그것이 맞습니다.
+6. **V21** — 모든 파드가 새 릴리스로 돈 뒤에만 적용합니다. 워크플로가 끝났고 `kubectl get pods -n api-service -l
+   app=code-companion-deploy`에 새 ReplicaSet의 파드만 보여야 합니다. 이전 바이너리의 일정 변경은 `version` 검사 없이
+   `start_at`만 옮기므로 스크립트 뒤에 뒤집힌 행을 새로 남길 수 있습니다. 워크플로가 롤백했다면 V21은 다음 배포가 성공할 때까지
+   기다립니다. 이전 릴리스는 V18~V23 스키마에서 그대로 돕니다.
+7. 끝나면 롤링 업데이트로 되돌립니다:
    ```bash
    kubectl patch deployment code-companion-deploy -n api-service \
      -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"}}}}'
    ```
 
-파드가 하나도 없을 때 실행해야 하는 마이그레이션이 있으면 2단계 대신 `kubectl scale deployment code-companion-deploy -n
+파드가 하나도 없을 때 실행해야 하는 마이그레이션이 있으면 4단계 대신 `kubectl scale deployment code-companion-deploy -n
 api-service --replicas=0`으로 내리고 파드가 사라진 것을 확인한 뒤(`kubectl get pods -n api-service -l app=code-companion-deploy`)
-스크립트를 실행하고 머지합니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
+스크립트를 실행하고 머지합니다. V21은 여전히 6단계를 기다립니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
 Ready가 될 때까지 이어집니다.
 
 ## 사전 요구사항
