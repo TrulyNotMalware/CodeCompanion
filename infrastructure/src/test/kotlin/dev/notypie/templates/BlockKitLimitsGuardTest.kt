@@ -14,6 +14,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
+import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.SlackApiEventConstructor
@@ -164,6 +165,14 @@ class BlockKitLimitsGuardTest :
         given("modals rendered from user data") {
             val cases =
                 listOf(
+                    "a subscribe modal offering 120 topics with 120-character display names" to
+                        templateBuilder.cveSubscribeModalViewJson(
+                            idempotencyKey = UUID.randomUUID(),
+                            topics =
+                                (1..120).map { index ->
+                                    TopicOption(key = "topic-$index", label = "Topic $index " + "n".repeat(n = 110))
+                                },
+                        ),
                     "a standup modal with eight 200-character questions" to
                         templateBuilder.standupModalViewJson(
                             routineName = "R".repeat(n = 59),

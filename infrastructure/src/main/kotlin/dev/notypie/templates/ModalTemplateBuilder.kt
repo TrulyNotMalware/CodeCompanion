@@ -14,11 +14,14 @@ import dev.notypie.impl.command.RestRequester
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+private val log = KotlinLogging.logger {}
 
 class ModalTemplateBuilder(
     private val modalBlockBuilder: ModalBlockBuilder =
@@ -581,6 +584,12 @@ class ModalTemplateBuilder(
         submitText: String,
         topics: List<TopicOption>,
     ): String {
+        if (topics.size > SlackBlockLimits.MAX_OPTIONS) {
+            log.warn {
+                "CVE topic picker lists the first ${SlackBlockLimits.MAX_OPTIONS} of ${topics.size} topics: " +
+                    "callbackId=$callbackId"
+            }
+        }
         val view =
             modal {
                 callbackId(id = callbackId)
@@ -601,7 +610,13 @@ class ModalTemplateBuilder(
                             actionId = actionId,
                             placeholder = "Select topics",
                         ) {
-                            topics.forEach { topic -> option(text = topic.label, value = topic.key) }
+                            topics.take(n = SlackBlockLimits.MAX_OPTIONS).forEach { topic ->
+                                val label =
+                                    topic.label.truncatePlainText(
+                                        limit = SlackBlockLimits.OPTION_TEXT_MAX_LENGTH,
+                                    )
+                                option(text = label, value = topic.key)
+                            }
                         }
                     }
                 }

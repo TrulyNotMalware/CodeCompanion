@@ -1313,6 +1313,36 @@ class ModalTemplateBuilderTest :
             }
         }
 
+        given("a topic picker with more topics than a select holds and names longer than an option") {
+            `when`("the subscribe modal is rendered") {
+                val json =
+                    templateBuilder.cveSubscribeModalViewJson(
+                        idempotencyKey = UUID.randomUUID(),
+                        topics =
+                            (1..120).map { index ->
+                                TopicOption(key = "topic-$index", label = "Topic $index " + "n".repeat(n = 110))
+                            },
+                    )
+                val options =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(json, com.slack.api.model.view.View::class.java)
+                        .blocks
+                        .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                        .single()
+                        .element
+                        .shouldBeInstanceOf<com.slack.api.model.block.element.MultiStaticSelectElement>()
+                        .options
+
+                then("the first 100 topics are offered, labels cut to 75 characters and keys unchanged") {
+                    options.size shouldBe SlackBlockLimits.MAX_OPTIONS
+                    options.forEach { it.text.text.length shouldBe SlackBlockLimits.OPTION_TEXT_MAX_LENGTH }
+                    options.first().text.text shouldEndWith "…"
+                    options.map { it.value } shouldBe (1..100).map { "topic-$it" }
+                }
+            }
+        }
+
         given("cveUnsubscribeModalViewJson") {
             val unsubscribeKey = UUID.randomUUID()
 

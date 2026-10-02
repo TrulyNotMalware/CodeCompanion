@@ -25,6 +25,9 @@ class CveTopicBootstrap(
     private fun toDefinition(topic: AppConfig.Cve.TopicDefinition): CveTopicDefinition {
         require(topic.key.isNotBlank()) { "CVE topic definition requires a non-blank key" }
         require(topic.displayName.isNotBlank()) { "CVE topic '${topic.key}' requires a non-blank display-name" }
+        require(topic.displayName.codePointCount(0, topic.displayName.length) <= DISPLAY_NAME_MAX_LENGTH) {
+            "CVE topic '${topic.key}' display-name exceeds $DISPLAY_NAME_MAX_LENGTH characters"
+        }
         return CveTopicDefinition(
             topicKey = topic.key,
             displayName = topic.displayName,
@@ -34,5 +37,9 @@ class CveTopicBootstrap(
             deliveryMode = topic.deliveryMode,
             active = topic.active,
         )
+    }
+
+    companion object {
+        const val DISPLAY_NAME_MAX_LENGTH = 128
     }
 }
