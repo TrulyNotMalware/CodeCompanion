@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/security/mcp
 
@@ -52,8 +52,10 @@ token before the MCP protocol sees the request, and the transport provider's con
 ```
 `ScopedTurnTokenCodecTest` (Kotest `BehaviorSpec`) pins a fixed `Clock` and covers round-trip, expiry
 inside/outside the skew window, tampered signature, wrong version, and blank secret.
-`McpTurnTokenFilterTest` drives the filter with `MockHttpServletRequest` (a pod address with
-`X-Forwarded-For: 127.0.0.1` is rejected `loopback-only`; loopback + valid token reaches the chain) and runs
+`McpTurnTokenFilterTest` drives the filter with `MockHttpServletRequest` (a pod address is rejected
+`loopback-only`; loopback + valid token reaches the chain), serves it behind a real Jetty connector to show that
+under the prod configuration a client-supplied `X-Forwarded-For` never reaches `remoteAddr` (with forward
+headers on, the same request is rejected — the control), and runs
 Boot's `JettyWebServerFactoryCustomizer` with `spring.main.cloud-platform=kubernetes` over the real
 `application*.yaml` files to assert forward headers stay off. Build token claims with
 `createScopedTurnToken()` from `src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt`.
