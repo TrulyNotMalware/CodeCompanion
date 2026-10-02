@@ -42,7 +42,7 @@ persistence and retry only.
   `@SpringBootApplication` root package (`dev.notypie`) covering `dev.notypie.repository`; the explicit
   `@EnableJpaRepositories` makes Boot's `JpaRepositoriesAutoConfiguration` back off in the full context.
 - **`RetryService.execute` caches one `RetryTemplate` per distinct policy**, so per-call overrides
-  (`SlackMessageRelayServiceImpl` passes `maxAttempts = 5`) never leak to other callers; the
+  (`SlackMessageRelayServiceImpl` passes `maxAttempts = 3` for its status write) never leak to other callers; the
   `recoveryCallBack` runs only after a `RetryException`. `RetryOptions.default` is `internal`, so
   `:application` callers cannot read the defaults — they pass named overrides to `execute` instead.
 - **`@EnableResilientMethods` is on but unused.** No `@Retryable` / `@ConcurrencyLimit` method exists in

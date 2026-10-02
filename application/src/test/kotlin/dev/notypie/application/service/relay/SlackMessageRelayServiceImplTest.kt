@@ -445,9 +445,9 @@ class SlackMessageRelayServiceImplTest :
                 val service =
                     createRelayService(outboxRepository = outboxRepository, applicationEventPublisher = eventPublisher)
 
-                then("the failure is logged, not thrown, and the row is left IN_PROGRESS for the sweep") {
+                then("after three attempts the failure is logged, not thrown, and the row is left IN_PROGRESS") {
                     shouldNotThrowAny { service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1)) }
-                    verify(exactly = 5) {
+                    verify(exactly = 3) {
                         outboxRepository.completeClaim(
                             eventId = any(),
                             attemptCount = any(),
