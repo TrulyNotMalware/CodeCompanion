@@ -51,7 +51,10 @@ _type: architecture · updated: 2026-10-02_
   커밋되고 커넥션을 돌려준 **뒤에** 같은 요청 스레드에서 호출된다(2026-10-01). 경계가 실패하면 열지 않는다. 실패하면 예외 대신
   `DeclineModalOpenFailedEvent`/`StandupModalOpenFailedEvent`를 발행해 폴백 안내를 보낸다.
   `ApplicationMessageDispatcher.dispatch`는 `OpenViewPayloadContents`를 받으면 `UnsupportedOperationException`.
-- 렌더 실패(코덱/스키마)는 재시도하지 않고 `MessagePublishFailedEvent`로 바로 `FAILURE` 처리한다. 재시도는
+- 렌더 실패(코덱)는 재시도하지 않고 `MessagePublishFailedEvent`로 바로 `FAILURE` 처리한다. 단 이 바이너리가 읽을
+  수 없는 `schema_version`(새 릴리스가 쓴 행)은 실패가 아니다: `dispatchClaimed`가 `renewClaim` 전에 걸러 ERROR 로그만
+  남기고 행을 `IN_PROGRESS`로 둔다(발송 예산 미차감). 스윕이 stuck 임계마다 회수하다가 그 버전을 읽는 바이너리가
+  보내거나 24시간 상한에서 포기한다. 재시도는
   dispatch(Slack HTTP)에만 있다: 짧은 재시도는 `ApplicationMessageDispatcher` 안의 `RetryService`(3회, 약 0.3초),
   긴 재시도는 복구 스윕이다.
 - dispatcher는 릴레이에 **세 가지 결과**를 돌려준다. ① 완료(성공 또는 영구 실패: `fatal_error`, `ok=false` 오류,
@@ -223,8 +226,8 @@ _type: architecture · updated: 2026-10-02_
   `retryingSendThreshold`.
 - `OpsStatusService.renderReport`가 **같은 카운터**(retrying 제외)를 읽어 `@bot status` 답장(스테이저 경유 채널 메시지)과 MCP
   `get_status`를 만든다. 채팅과 actuator가 다른 숫자를 말하지 않게 하려는 의도다.
-- `OutboxSchemaVersion` KDoc은 미지원 버전 행이 "stuck으로 드러난다"고 하지만 실제 경로는 렌더 실패 →
-  `MessagePublishFailedEvent` → `FAILURE`다. 헬스에는 잡히지 않고 로그에만 남는다.
+- 미지원 `schema_version` 행은 `IN_PROGRESS`로 남지만 헬스에는 잡히지 않는다: 회수할 때마다 `updated_at`이 갱신되고
+  `send_count`는 0이다. ERROR 로그(`not in [...]; leaving it IN_PROGRESS unsent`)로 본다.
 
 ## 메트릭과 알림 (2026-10-01)
 

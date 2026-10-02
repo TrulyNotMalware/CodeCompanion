@@ -459,6 +459,40 @@ class SlackMessageRelayServiceImplTest :
                 }
             }
 
+            `when`("the row was written in a schema version this binary cannot read") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString(), schemaVersion = 9999)
+                val payloadRenderer = mockk<OutboxPayloadRenderer>()
+                val messageDispatcher = mockk<MessageDispatcher>()
+                val eventPublisher = mockk<ApplicationEventPublisher>()
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        payloadRenderer = payloadRenderer,
+                        messageDispatcher = messageDispatcher,
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                then("it is left IN_PROGRESS for a binary that can read it: no renew, no send, no FAILURE") {
+                    shouldNotThrowAny { service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1)) }
+                    verify(exactly = 0) {
+                        outboxRepository.renewClaim(eventId = any(), attemptCount = any(), now = any())
+                    }
+                    verify(exactly = 0) {
+                        outboxRepository.completeClaim(
+                            eventId = any(),
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { payloadRenderer.render(row = any()) }
+                    verify(exactly = 0) { messageDispatcher.dispatch(event = any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                }
+            }
+
             `when`("the row carries a malformed eventId") {
                 val row = createOutboxRow(eventId = "not-a-uuid")
                 val payloadRenderer = mockk<OutboxPayloadRenderer>()

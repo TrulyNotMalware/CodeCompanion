@@ -14,6 +14,7 @@ import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
@@ -95,6 +96,14 @@ class SlackMessageRelayServiceImpl(
                     writeTerminal(claim = claim, status = MessageStatus.FAILURE)
                     return
                 }
+        // A newer release's row waits, unsent and unfailed, for a binary that reads it or the give-up bound.
+        if (row.schemaVersion !in OutboxSchemaVersion.SUPPORTED) {
+            logger.error {
+                "Outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} has schemaVersion=" +
+                    "${row.schemaVersion}, not in ${OutboxSchemaVersion.SUPPORTED}; leaving it IN_PROGRESS unsent"
+            }
+            return
+        }
         if (!renew(claim = claim)) return
 
         val rendered =
