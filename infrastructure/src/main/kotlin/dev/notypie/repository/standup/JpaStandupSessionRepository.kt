@@ -1,7 +1,9 @@
 package dev.notypie.repository.standup
 
 import dev.notypie.repository.standup.schema.StandupSessionSchema
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -37,6 +39,20 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
     fun findShallowByRoutineUidAndSessionDate(
         @Param("routineUid") routineUid: UUID,
         @Param("sessionDate") sessionDate: LocalDate,
+    ): StandupSessionSchema?
+
+    // SELECT … FOR UPDATE on the session row alone — the answer/summary handshake (review G5). recordAnswer and the
+    // summary both take it before reading the session's state, so an answer either commits before the summary reads
+    // the answers or waits and then finds the session SUMMARIZED. Collections stay lazy; load them after the lock.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        """
+        SELECT s FROM standup_session s
+        WHERE s.sessionUid = :sessionUid
+    """,
+    )
+    fun findLockedBySessionUid(
+        @Param("sessionUid") sessionUid: UUID,
     ): StandupSessionSchema?
 
     @Query(

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # application/service/standup
 
@@ -19,7 +19,7 @@ is written back onto the session row once the relay has posted it.
 | `StandupAnswerService.kt` | `@EventListener recordAnswer(RecordStandupAnswerEvent)` → `StandupRepository.recordAnswer` (the transaction lives in the repository impl, not here), then stages `UpdateMessage` on `payload.notice`: `RECORDED` → `SUBMITTED_NOTICE` ("Standup submitted."), `SESSION_CLOSED` → `CLOSED_NOTICE` (answer not recorded), `SESSION_NOT_FOUND` → warn only (review T19); `@EventListener onStandupModalOpenFailed(StandupModalOpenFailedEvent)` stages an `Ephemeral` with `recipient = null` into the originating DM channel |
 | `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, each phase in its own `runCatching` so one failing phase cannot skip the later ones (review T2) |
 | `StandupSchedulingService.kt` | `@Service` owning the four phases, a `TransactionTemplate` built from the injected `PlatformTransactionManager`, and the `internal` builders `buildDmNotice` (`OutboundMessage.Approval`, buttons "Fill in standup" / "Skip", `STANDUP_PROMPT`, `routingExtras = [sessionUid, routineUid]`) and `buildNudgeNotice` (`ChannelMessage`). Publishes `StandupCutoffEvent` through a plain `ApplicationEventPublisher` |
-| `StandupSummaryService.kt` | `@EventListener postSummary(StandupCutoffEvent)`: builds a `MessageContent.StandupSummary` outbox row, then `runInTx { outboxRepository.save(row); markSessionSummarized(messageTs = "outbox:<eventId>") }` — a `false` from the CAS throws so the row rolls back. `@EventListener replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` swaps the marker for the real Slack `ts` |
+| `StandupSummaryService.kt` | `@EventListener postSummary(StandupCutoffEvent)`: one `runInTx` that reads the session with `findSessionForSummary` (session row locked `PESSIMISTIC_WRITE`, answers loaded under the lock), returns without writing when it is missing or no longer `COLLECTING`, loads the routine, builds the `MessageContent.StandupSummary` row, `outboxRepository.save(row)` and `markSessionSummarized(messageTs = "outbox:<eventId>")` — a `false` from the CAS throws so the row rolls back. `@EventListener replaceSummaryMarkerWithSlackTs(MessagePublishSuccessEvent)` swaps the marker for the real Slack `ts` |
 
 ## For AI Agents
 
@@ -50,6 +50,12 @@ is written back onto the session row once the relay has posted it.
   non-responders exist, inside the same `runInTx` as the outbox saves, so a failed enqueue un-claims the
   session and the next tick retries while `cutoffAt > now` still selects it (review T18).
   `standup.nudge.offsetMinutes <= 0` disables the phase entirely.
+- **Answers and the summary are serialized on the session row (review G5 / Codex R5).** `recordAnswer` takes
+  `PESSIMISTIC_WRITE` on the session before it checks status and cutoff, and `postSummary` takes the same lock
+  before it reads the answers, in the transaction that saves the summary and flips the session `SUMMARIZED`.
+  An answer therefore commits before the summary reads (and is in it) or waits and is told the session closed.
+  Do not move the session read back out of that transaction: read first and written later, an answer that
+  committed in between was acknowledged as submitted and missing from the summary.
 - **Summary marker.** `summary_message_ts` holds `outbox:<eventId>` until the relay posts; the write-back
   `UPDATE` is keyed on that marker, so it is a cheap no-op for every non-standup
   `MessagePublishSuccessEvent`. Do not add a `commandDetailType` to the relay event to short-circuit it.

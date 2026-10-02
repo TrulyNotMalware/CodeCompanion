@@ -53,6 +53,10 @@ interface StandupRepository {
 
     fun findSession(sessionUid: UUID): StandupSessionDto?
 
+    // Locks the session row, then reads it with its dispatches and answers; call it inside the transaction that writes
+    // the summary. recordAnswer waits on the same lock, so no answer it reports RECORDED is missing here (review G5).
+    fun findSessionForSummary(sessionUid: UUID): StandupSessionDto?
+
     fun recordAnswer(
         sessionUid: UUID,
         userId: String,

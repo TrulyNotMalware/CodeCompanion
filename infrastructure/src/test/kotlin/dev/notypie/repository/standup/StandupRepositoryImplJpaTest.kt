@@ -21,6 +21,13 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
+
+// Long enough for the other thread to reach the lock, well under H2's lock timeout.
+private const val LOCK_HOLD_MILLIS = 300L
 
 // Real Hibernate + H2 so SQL ordering (IDENTITY inserts vs. orphan deletes) is what production sees.
 @DataJpaTest
@@ -167,6 +174,77 @@ class StandupRepositoryImplJpaTest
 
                     then("it reports SESSION_NOT_FOUND") {
                         result shouldBe AnswerRecordResult.SESSION_NOT_FOUND
+                    }
+                }
+            }
+
+            // Two real transactions on two threads: one holds the session row lock while the other runs, so the test
+            // fails if either side reads the session without taking the lock (H2 is READ COMMITTED).
+            given("recordAnswer racing the cutoff summary on the same session (G5 / Codex R5)") {
+                `when`("the summary locks the session first and commits SUMMARIZED") {
+                    val sessionUid = openSession()
+                    val summaryLocked = CountDownLatch(1)
+                    val summaryFailure = AtomicReference<Throwable?>()
+                    val summary =
+                        thread {
+                            runCatching {
+                                inTx {
+                                    val session = repository.findSessionForSummary(sessionUid = sessionUid)!!
+                                    summaryLocked.countDown()
+                                    Thread.sleep(LOCK_HOLD_MILLIS)
+                                    repository.markSessionSummarized(
+                                        sessionId = session.sessionId,
+                                        messageTs = "outbox:race",
+                                    )
+                                }
+                            }.onFailure { summaryFailure.set(it) }
+                            summaryLocked.countDown()
+                        }
+                    summaryLocked.await(5L, TimeUnit.SECONDS)
+                    val result =
+                        record(
+                            sessionUid = sessionUid,
+                            responses = listOf("just before cutoff"),
+                            submittedAt = cutoffAt.minusSeconds(1L),
+                        )
+                    summary.join()
+
+                    then("the answer waits for the summary and is told closed instead of submitted") {
+                        summaryFailure.get() shouldBe null
+                        result shouldBe AnswerRecordResult.SESSION_CLOSED
+                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                    }
+                }
+
+                `when`("the answer locks the session first and commits") {
+                    val sessionUid = openSession()
+                    val answerLocked = CountDownLatch(1)
+                    val answerResult = AtomicReference<AnswerRecordResult?>()
+                    val answer =
+                        thread {
+                            runCatching {
+                                inTx {
+                                    repository
+                                        .recordAnswer(
+                                            sessionUid = sessionUid,
+                                            userId = "U_A",
+                                            responses = listOf("made it"),
+                                            submittedAt = cutoffAt.minusSeconds(1L),
+                                        ).also {
+                                            answerLocked.countDown()
+                                            Thread.sleep(LOCK_HOLD_MILLIS)
+                                        }
+                                }
+                            }.onSuccess { answerResult.set(it) }
+                            answerLocked.countDown()
+                        }
+                    answerLocked.await(5L, TimeUnit.SECONDS)
+                    val summaryRead = inTx { repository.findSessionForSummary(sessionUid = sessionUid)!! }
+                    answer.join()
+
+                    then("the summary read waits for the answer's commit and includes it") {
+                        answerResult.get() shouldBe AnswerRecordResult.RECORDED
+                        summaryRead.answers.map { it.userId } shouldContainExactly listOf("U_A")
                     }
                 }
             }

@@ -16,6 +16,7 @@ import dev.notypie.repository.standup.schema.toRoutineDto
 import dev.notypie.repository.standup.schema.toSchema
 import dev.notypie.repository.standup.schema.toStandupSessionDto
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
@@ -78,6 +79,15 @@ open class StandupRepositoryImpl(
             .findBySessionUid(sessionUid = sessionUid)
             ?.toStandupSessionDto()
 
+    // MANDATORY: the row lock only serializes anything while the caller's transaction, which also saves the summary
+    // row and runs the SUMMARIZED CAS, holds it. The lock is that transaction's first read, so the collection loads in
+    // toStandupSessionDto read after it — on MariaDB's REPEATABLE READ the snapshot is taken at the first plain read.
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun findSessionForSummary(sessionUid: UUID): StandupSessionDto? =
+        jpaStandupSessionRepository
+            .findLockedBySessionUid(sessionUid = sessionUid)
+            ?.toStandupSessionDto()
+
     @Transactional
     override fun recordAnswer(
         sessionUid: UUID,
@@ -85,8 +95,10 @@ open class StandupRepositoryImpl(
         responses: List<String>,
         submittedAt: Instant,
     ): AnswerRecordResult {
+        // Locked so the status read below cannot go stale before commit: without it an answer could read COLLECTING,
+        // the summary read the answers and commit, and the answer then commit as RECORDED yet be missing (review G5).
         val session =
-            jpaStandupSessionRepository.findBySessionUid(sessionUid = sessionUid)
+            jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)
                 ?: return AnswerRecordResult.SESSION_NOT_FOUND
         // Past cutoff counts as closed even before detectCutoffs flips the status: the summary may already be
         // reading the answers, and a late answer would be acknowledged but never shown (review T19).
