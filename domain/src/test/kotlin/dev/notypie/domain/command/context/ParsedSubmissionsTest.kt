@@ -206,6 +206,26 @@ class ParsedSubmissionsTest :
                 }
             }
 
+            // H9: 255 emoji are 510 UTF-16 units but 255 characters to VARCHAR(255); the UTF-16 check dropped them.
+            `when`("an OTHER detail of emoji is at the column length in code points, or one past it") {
+                val emoji = "😀"
+                val atLimit = emoji.repeat(RejectReason.MAX_DETAIL_LENGTH)
+                val fits =
+                    DeclineReasonParsed.from(raw = raw(reasonRaw = "OTHER", detailRaw = atLimit), actorId = ACTOR)
+                val tooLong =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = atLimit + emoji),
+                        actorId = ACTOR,
+                    )
+
+                then("the length is measured in code points, so the column-sized note is kept") {
+                    fits.shouldNotBeNull().reasonDetail shouldBe atLimit
+                    fits.detailTooLong shouldBe false
+                    tooLong.shouldNotBeNull().reasonDetail.shouldBeNull()
+                    tooLong.detailTooLong shouldBe true
+                }
+            }
+
             `when`("a non-OTHER reason arrives with a long detail") {
                 val parsed =
                     DeclineReasonParsed.from(

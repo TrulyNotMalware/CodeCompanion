@@ -110,9 +110,12 @@ internal data class DeclineReasonParsed(
             val reason = parseReason(raw = raw.reasonRaw)
             val detail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER }
             // The decline itself is still recorded; only an over-long note is dropped (and the notice says so), because
-            // storing it would fail the column and roll the whole decline back. UTF-16 length is never below the
-            // character count VARCHAR measures, so any note that passes here fits.
-            val detailTooLong = detail != null && detail.length > RejectReason.MAX_DETAIL_LENGTH
+            // storing it would fail the column and roll the whole decline back. Measured in code points, the unit
+            // VARCHAR(255) counts under utf8mb4 (review H9): UTF-16 length counted an emoji twice and dropped a note
+            // the column holds. Slack's `max_length` unit is undocumented; code points never exceed UTF-16 units, so
+            // a note Slack capped by either count still passes here, and anything that passes fits the column.
+            val detailTooLong =
+                detail != null && detail.codePointCount(0, detail.length) > RejectReason.MAX_DETAIL_LENGTH
             return DeclineReasonParsed(
                 meetingIdempotencyKey = meetingIdempotencyKey,
                 participantUserId = raw.participantUserId.ifBlank { actorId },
