@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-09-22 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-09-22 | Updated: 2026-10-02 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/service/relay
 
@@ -12,7 +12,7 @@ is the raw column map (`event_id`, `idempotency_key`, `status`, `created_at` as 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CdcEnvelopeCreator.kt` | `createOutboxAfterImage(eventId, idempotencyKey, status = PENDING, publisherId, payload = "{}", attemptCount = 0): Map<String, Any>`; `createCdcEnvelope(after = createOutboxAfterImage(), before = null, op = "c"): Envelope` with a minimal `Schema` / `Source`; `createCdcConsumerRecord(value = createCdcEnvelope(), undeserializableValue = null, topic = "cdc.code_companion.outbox_message", partition = 3, offset = 42)` — with `undeserializableValue` it adds the value-deserialization-exception header exactly as `ErrorHandlingDeserializer` does (`SerializationUtils.deserializationException`) |
+| `CdcEnvelopeCreator.kt` | `createOutboxAfterImage(eventId, idempotencyKey, status = PENDING, publisherId, payload = "{}", attemptCount = 0): Map<String, Any>`; `createCdcEnvelope(after = createOutboxAfterImage(), op = "c"): Envelope` (`Envelope(Payload(op, after))`, the only fields the model keeps); `createCdcConsumerRecord(value = createCdcEnvelope(), undeserializableValue = null, topic = "cdc.code_companion.outbox_message", partition = 3, offset = 42)` — with `undeserializableValue` it adds the value-deserialization-exception header exactly as `ErrorHandlingDeserializer` does (`SerializationUtils.deserializationException`) |
 
 ## For AI Agents
 
