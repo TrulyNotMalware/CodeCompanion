@@ -206,6 +206,35 @@ class CveOpsServiceTest :
             }
         }
 
+        // R6: the typed key is echoed into the mrkdwn reply, so a control sequence would render live.
+        given("an ACTIVATE_TOPIC event whose typed key carries markdown control sequences") {
+            val topicRepository = mockk<CveTopicRepository>(relaxed = true)
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findAllTopics() } returns emptyList()
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stagedMessage = staged,
+                )
+
+            `when`("handled") {
+                service.handleCveOps(
+                    event =
+                        createCveOpsRequestEvent(
+                            action = CveOpsAction.ACTIVATE_TOPIC,
+                            topicKey = "<!channel>&<https://evil.example|x>",
+                        ),
+                )
+
+                then("the echoed key is escaped") {
+                    staged.markdown() shouldBe
+                        "No CVE topic with key `&lt;!channel&gt;&amp;&lt;https://evil.example|x&gt;`."
+                }
+            }
+        }
+
         given("a RETRY_ALL event") {
             val topicRepository = mockk<CveTopicRepository>()
             val eventRepository = mockk<CveEventRepository>()

@@ -1,16 +1,17 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # domain/common (test)
 
 ## Purpose
 Specs for the validation DSL in `domain/common/` — the `validate { }` / `validateAndReturn { }`
 builders and the infix matchers every entity (`Meeting`, `Routine`, `StandupSession`, ...) uses in
-its `init` block.
+its `init` block — and for the canonical markup escape.
 
 ## Key Files
 | File | Description |
 |------|-------------|
+| `MarkupEscapeTest.kt` | `escapeMarkup`: `<!channel>` and `<url\|label>` become literal, `&` is escaped first so an existing entity is not decoded back into markup, plain emphasis passes through unchanged. `infrastructure`'s `SlackMrkdwnTest` pins that `escapeMrkdwn` returns the same text |
 | `ValidationBuilderTest.kt` | `BehaviorSpec` over the DSL: `validate` throws `ValidationException` while `validateAndReturn` collects a `List` of errors (`fieldName`, `value`, `reason`); `and` / `or` chaining (full `or` truth table, plus an earlier failing field followed by an `or` inside `shouldNotBeNullAnd` / `ifNotNull` that must leave the earlier error in place, a `Field` stored in a `val` and OR-ed after another field failed (right passes / left passes and right fails / both fail), an equal error from another field before a satisfied `or`, and an `and` block counted as the left operand); strings (`notBlank { }`, `shouldNotBeNullAnd`, `ifNotNull`, `shouldBeLongerThan` / `ShorterThan`, `shouldBeEmail`, `shouldMatchPattern` with `Regex` or `String`, `shouldBeOneOf` for `String` and `Int`); integers (`shouldBePositive` / `Negative` / `NonNegative`, `GreaterThan[OrEqualTo]`, `LessThan[OrEqualTo]`, `shouldBeBetween`); `LocalDateTime` (`shouldBeAfter` / `Before`, `shouldBeInFuture` / `InPast`); collections (`shouldHaveSize`, `MinSize`, `MaxSize`, `shouldNotBeEmpty`); `shouldSatisfy` with the default reason "does not satisfy the required condition" and with a custom message. No fixtures |
 
 ## For AI Agents

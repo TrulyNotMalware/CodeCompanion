@@ -1,5 +1,6 @@
 package dev.notypie.templates
 
+import dev.notypie.domain.common.escapeMarkup
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 
@@ -28,6 +29,13 @@ class SlackMrkdwnTest :
             `when`("the text has no control characters") {
                 then("it is returned unchanged, including mrkdwn emphasis") {
                     "*bold* _it_ `code`".escapeMrkdwn() shouldBe "*bold* _it_ `code`"
+                }
+            }
+
+            `when`("compared with the domain's canonical escape") {
+                then("both produce the same text, so domain-built and template-built markdown never diverge") {
+                    val sample = "<!here> R&D <https://x|y> &amp;"
+                    sample.escapeMrkdwn() shouldBe sample.escapeMarkup()
                 }
             }
         }

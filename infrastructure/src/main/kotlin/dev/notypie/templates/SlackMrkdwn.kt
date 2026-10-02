@@ -1,12 +1,13 @@
 package dev.notypie.templates
 
+import dev.notypie.domain.common.escapeMarkup
+
 // Slack parses `<…>` in mrkdwn as control sequences even with `verbatim` set: `<!channel>` notifies the whole
 // channel and `<https://evil|label>` renders a disguised link. Escape user- or externally-supplied text before
 // interpolating it; the formatting a template adds itself (`*bold*`, `<@userId>`) stays outside the escape.
-fun String.escapeMrkdwn(): String =
-    replace(oldValue = "&", newValue = "&amp;")
-        .replace(oldValue = "<", newValue = "&lt;")
-        .replace(oldValue = ">", newValue = "&gt;")
+// The implementation lives in the domain (`domain/common/escapeMarkup`) so domain-built markdown, such as the
+// decline notice summary, escapes the same three characters; this name stays for the Slack-side callers.
+fun String.escapeMrkdwn(): String = escapeMarkup()
 
 // `<!…>` is Slack's special-mention syntax: `<!channel>`, `<!here>`, `<!everyone>`, the legacy `<!group>`, and
 // `<!subteam^ID>` user groups, each optionally with a `|label`. Only `<!date^…>` among them is plain formatting.

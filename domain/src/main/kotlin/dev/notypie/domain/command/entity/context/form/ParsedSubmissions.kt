@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.entity.Routine
 import java.time.DayOfWeek
@@ -96,7 +97,8 @@ internal data class DeclineReasonParsed(
     fun noticeSummaryMarkdown(): String =
         buildString {
             append("You declined the meeting — *Reason:* ${reason.showMessage}")
-            if (!reasonDetail.isNullOrBlank()) append(" — $reasonDetail")
+            // The detail is the participant's own text, and an UpdateMessage body is not escaped downstream.
+            if (!reasonDetail.isNullOrBlank()) append(" — ${reasonDetail.escapeMarkup()}")
             if (detailTooLong) {
                 append(" — _Your note was longer than ${RejectReason.MAX_DETAIL_LENGTH} characters and was not saved._")
             }

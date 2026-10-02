@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-30 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-01 -->
 
 # domain/common
 
 ## Purpose
 The leaf package of the domain module: the `ValidationBuilder` DSL (`validate {}` / `validateAndReturn {}`),
-the `IdempotencyData` marker interface, and the error contract (`ErrorCode`, `ExceptionArgument`,
+the `IdempotencyData` marker interface, the canonical markup escape (`escapeMarkup`), and the error contract (`ErrorCode`, `ExceptionArgument`,
 `exceptionDetails {}`, `CodeCompanionRuntimeException`) that `command/`, `meet/`, `standup/` and the
 `application` / `infrastructure` modules all build their exceptions on. It imports nothing from the repo
 outside itself — only `java.time`, `java.io` and `java.util` (identity sets for `or`).
@@ -14,6 +14,7 @@ outside itself — only `java.time`, `java.io` and `java.util` (identity sets fo
 | File | Description |
 |------|-------------|
 | `Validation.kt` | `ValidationBuilder` plus two entrypoints: public `validate(className = "", block)` (throws) and `internal validateAndReturn(className = "", block)` (returns `List<ExceptionArgument>`). Full operator inventory under Common Patterns |
+| `MarkupEscape.kt` | `String.escapeMarkup()`: replaces `&`, `<`, `>` with `&amp;`, `&lt;`, `&gt;` (ampersand first) so user- or upstream-supplied text interpolated into outbound markdown cannot become a broadcast mention or a disguised link. The canonical implementation: `infrastructure/templates/escapeMrkdwn()` delegates to it, and domain-built markdown (`command/entity/context/form/DeclineReasonParsed.noticeSummaryMarkdown`) calls it directly (R6 / G8). Named transport-neutrally — the guard bans Slack vocabulary here |
 | `IdempotencyData.kt` | `IdempotencyData : java.io.Serializable` marker. Implemented by `command/inbound/InboundCommand`; `application/common/IdempotencyCreator` turns it into the idempotency `UUID` |
 | `error/Errors.kt` | `ErrorCode` (`message` only — transport-neutral); `internal enum CommonErrorCode` (only `VALIDATION_FAILED`); `ExceptionArgument(fieldName, value, reason = "")`; `exceptionDetails {}` with `ExceptionDetailsBuilder` / `ReasonBuilder`; `abstract CodeCompanionRuntimeException(val errorCode, val details)`; `internal ValidationException` and `internal ValidationExceptionWithName(className, ...)` |
 
@@ -126,6 +127,7 @@ None. `common` is a leaf: `command/`, `meet/`, `standup/` import it (one-way, gu
 `application` / `infrastructure` extend `CodeCompanionRuntimeException` and implement `ErrorCode`.
 
 ### External
-`java.time.LocalDateTime`, `java.io.Serializable`, and `java.util.Collections` / `IdentityHashMap` only.
+`java.time.LocalDateTime`, `java.io.Serializable`, and `java.util.Collections` / `IdentityHashMap` only
+(`MarkupEscape.kt` is Kotlin stdlib only).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

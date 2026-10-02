@@ -166,6 +166,23 @@ class ParsedSubmissionsTest :
                 }
             }
 
+            // G8 / R6: the notice update body is not escaped downstream, so a typed control sequence used to reach
+            // the participant's DM as a live broadcast mention or a disguised link.
+            `when`("an OTHER detail carries markdown control sequences") {
+                val parsed =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = "<!channel> <https://evil.example|Agenda> R&D"),
+                        actorId = ACTOR,
+                    )
+
+                then("the stored detail stays raw while the notice summary escapes it") {
+                    parsed.shouldNotBeNull().reasonDetail shouldBe "<!channel> <https://evil.example|Agenda> R&D"
+                    parsed.noticeSummaryMarkdown() shouldBe
+                        "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
+                        "&lt;!channel&gt; &lt;https://evil.example|Agenda&gt; R&amp;D"
+                }
+            }
+
             `when`("an OTHER detail is exactly the column length, or one character longer") {
                 val atLimit = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
                 val fits =

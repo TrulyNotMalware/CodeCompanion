@@ -22,6 +22,8 @@ topic's `active` flag, and re-queue dead-lettered events for summarization. `Cve
   halves: the spec asserts zero repository traffic and exactly one publish.
 - `setActive` reads `findAllTopics()` (not `findActiveTopics()`) so an inactive topic can be found and
   re-activated; the old state in the reply comes from that read, the new one from the `active` argument.
+- The typed topic key and the yaml display name are echoed into mrkdwn, so every reply escapes both with
+  `templates/escapeMrkdwn()` at the interpolation site (R6); the lookup itself compares the raw key.
 - The activation cap exists because the subscribe modal is one select and Slack rejects a select over 100
   options for every user. The count is read inside the same transaction but not locked, so two concurrent
   activations can still race past it; the template cutting the picker at 100 is the backstop, not this check.
