@@ -458,6 +458,17 @@ class ModalTemplateBuilderTest :
                     last.text shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
                 }
             }
+
+            // H11: the renderer passes a channel reply's null headline as "", and Slack rejects an empty header.
+            `when`("the headline is blank") {
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(headLineText = "", body = "Body", isMarkDown = true)
+
+                then("no header or divider is rendered, only the body section") {
+                    result.template.size shouldBe 1
+                    result.template.single().shouldBeInstanceOf<SectionBlock>()
+                }
+            }
         }
 
         given("onlyTextTemplate with a long body") {
@@ -942,6 +953,28 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, text, and detail blocks") {
                     result.template.size shouldBe 4
+                }
+            }
+
+            // H11: the reason is a section field, capped at 2,000 characters, and an exception message is unbounded.
+            `when`("the error message is longer than a section field") {
+                val result =
+                    templateBuilder.errorNoticeTemplate(
+                        headLineText = "Error",
+                        errorMessage = "e".repeat(n = 5_000),
+                        details = null,
+                    )
+                val reason =
+                    result.template[2]
+                        .shouldBeInstanceOf<SectionBlock>()
+                        .fields
+                        .last()
+                        .text
+
+                then("the reason field is cut to the field limit with an ellipsis") {
+                    reason.length shouldBe SlackBlockLimits.SECTION_FIELD_MAX_LENGTH
+                    reason shouldStartWith "reason = eee"
+                    reason shouldEndWith "…"
                 }
             }
         }

@@ -97,8 +97,11 @@ class ModalTemplateBuilder(
                 ).forEach { add(block = it) }
         }
 
-    override fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks =
-        layoutBlocks {
+    // A blank headline (a channel reply whose Text carries none) gets no header: Slack rejects a header with empty
+    // text, and the renderer passes a null headline as "".
+    override fun simpleTextResponseTemplate(headLineText: String, body: String, isMarkDown: Boolean): LayoutBlocks {
+        if (headLineText.isBlank()) return onlyTextTemplate(message = body, isMarkDown = isMarkDown)
+        return layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
             modalBlockBuilder
@@ -108,6 +111,7 @@ class ModalTemplateBuilder(
                     maxSections = SlackBlockLimits.MESSAGE_MAX_BLOCKS - 2,
                 ).forEach { add(block = it) }
         }
+    }
 
     override fun simpleScheduleNoticeTemplate(headLineText: String, timeScheduleInfo: TimeScheduleInfo): LayoutBlocks =
         layoutBlocks {
@@ -153,11 +157,12 @@ class ModalTemplateBuilder(
         layoutBlocks {
             add(block = modalBlockBuilder.headerBlock(text = headLineText))
             add(block = modalBlockBuilder.dividerBlock())
+            // A section field holds 2,000 characters and an exception message is unbounded (review H11).
             add(
                 block =
                     modalBlockBuilder.textBlock(
                         "type = exception",
-                        "reason = $errorMessage",
+                        "reason = $errorMessage".truncatePlainText(limit = SlackBlockLimits.SECTION_FIELD_MAX_LENGTH),
                     ),
             )
             details?.let {

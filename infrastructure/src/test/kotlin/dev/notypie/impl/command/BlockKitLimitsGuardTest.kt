@@ -6,6 +6,8 @@ import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_THREAD_TS
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.dto.modals.ApprovalContents
+import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -19,6 +21,7 @@ import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupAnswerDto
+import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.event.ActionEventPayloadContents
 import dev.notypie.impl.command.event.PostEventPayloadContents
 import dev.notypie.impl.command.event.SlackEventPayload
@@ -28,9 +31,12 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.mockk.every
 import io.mockk.mockk
+import org.springframework.web.client.RestClientException
 import tools.jackson.databind.JsonNode
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 // Slack rejects a whole message or view that crosses any Block Kit limit, and the relay treats that as permanent.
@@ -38,11 +44,22 @@ import java.util.UUID
 // checking the rendered payload, so this spec renders the real pipeline with worst-case inputs and walks the JSON.
 private const val MESSAGE_MAX_BLOCKS = SlackBlockLimits.MESSAGE_MAX_BLOCKS
 private const val VIEW_MAX_BLOCKS = 100
-private const val SECTION_FIELD_MAX_LENGTH = 2_000
 
 class BlockKitLimitsGuardTest :
     BehaviorSpec({
-        val templateBuilder = ModalTemplateBuilder(restRequester = mockk(), slackApiToken = TEST_BOT_TOKEN)
+        // The approval template looks the publisher up; a failed lookup renders the `<@id>` fallback.
+        val restRequester =
+            mockk<RestRequester>().also { requester ->
+                every {
+                    requester.safeGet(
+                        uri = any(),
+                        authorizationHeader = any(),
+                        responseType = SlackUserProfileDto::class.java,
+                        uriVariables = any(),
+                    )
+                } returns Result.failure(RestClientException("users.profile.get unavailable"))
+            }
+        val templateBuilder = ModalTemplateBuilder(restRequester = restRequester, slackApiToken = TEST_BOT_TOKEN)
         val eventConstructor = SlackApiEventConstructor(botToken = TEST_BOT_TOKEN, templateBuilder = templateBuilder)
         val renderer = SlackOutboundRenderer(slackEventBuilder = eventConstructor)
         val basicInfo = createCommandBasicInfo()
@@ -128,6 +145,55 @@ class BlockKitLimitsGuardTest :
                                     className = "IllegalStateException",
                                     message = "boom",
                                     details = "at frame\n".repeat(n = 40_000),
+                                ),
+                        ),
+                    // H11: the message lands in a section field (2,000) and used to be checked only as "boom".
+                    "an error notice whose exception message is longer than a section field" to
+                        OutboundMessage.ChannelMessage(
+                            target = target,
+                            content =
+                                MessageContent.ErrorNotice(
+                                    className = "DataIntegrityViolationException",
+                                    message = "could not execute statement ".repeat(n = 200),
+                                    details = null,
+                                ),
+                        ),
+                    "a channel reply whose text carries no headline" to
+                        OutboundMessage.ChannelMessage(
+                            target = target,
+                            content = MessageContent.Text(headline = null, markdown = longAiAnswer),
+                        ),
+                    "a meeting approval request with a control-character subtitle" to
+                        OutboundMessage.Approval(
+                            target = target,
+                            recipient = UserRef(id = TEST_USER_ID),
+                            approval =
+                                ApprovalContents(
+                                    reason = "r".repeat(n = 2_000),
+                                    subTitle = "<!channel>&<>".repeat(n = 2),
+                                    publisherId = TEST_USER_ID,
+                                    idempotencyKey = UUID.randomUUID(),
+                                    commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                                ),
+                        ),
+                    "a notice carrying a long message and many mentions" to
+                        OutboundMessage.Notice(
+                            target = target,
+                            mentions = (1..50).map { UserRef(id = "U0123456789$it") },
+                            message = "<!here> & <https://evil.example|x> ".repeat(n = 1_500),
+                        ),
+                    "a schedule notice" to
+                        OutboundMessage.ChannelMessage(
+                            target = target,
+                            content =
+                                MessageContent.Schedule(
+                                    headline = "Meeting scheduled — " + "t".repeat(n = 20),
+                                    info =
+                                        TimeScheduleInfo(
+                                            scheduleName = "<&>".repeat(n = 7),
+                                            startTime = LocalDateTime.of(2026, 5, 4, 10, 0),
+                                            endTime = LocalDateTime.of(2026, 5, 4, 11, 0),
+                                        ),
                                 ),
                         ),
                     "a host's meeting list longer than the page" to
@@ -245,16 +311,16 @@ private fun assertNodeWithinLimits(node: JsonNode) {
                     value.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_MAX_LENGTH
                 }
                 node.path("fields").forEach { field ->
-                    field.path("text").asString().length shouldBeLessThanOrEqual SECTION_FIELD_MAX_LENGTH
+                    field.path("text").asString().length shouldBeLessThanOrEqual
+                        SlackBlockLimits.SECTION_FIELD_MAX_LENGTH
                 }
             }
-            "header" ->
-                node
-                    .path("text")
-                    .path("text")
-                    .asString()
-                    .length shouldBeLessThanOrEqual
-                    SlackBlockLimits.HEADER_TEXT_MAX_LENGTH
+            // Slack rejects an empty header as well as a long one (H11: a null headline rendered as "").
+            "header" -> {
+                val value = node.path("text").path("text").asString()
+                value.isNotBlank() shouldBe true
+                value.length shouldBeLessThanOrEqual SlackBlockLimits.HEADER_TEXT_MAX_LENGTH
+            }
             "plain_text_input" ->
                 if (node.has("max_length")) {
                     node.path("max_length").asInt() shouldBeLessThanOrEqual SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH

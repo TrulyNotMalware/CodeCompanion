@@ -8,6 +8,9 @@ object SlackBlockLimits {
     // Working budget below the hard cap, the same margin the CVE digest uses: re-opened code fences and the
     // truncation marker are added on top of a packed chunk and must never push it past the cap.
     const val SECTION_TEXT_BUDGET: Int = 2_900
+
+    // Each text object in a section's `fields`.
+    const val SECTION_FIELD_MAX_LENGTH: Int = 2_000
     const val MESSAGE_MAX_BLOCKS: Int = 50
     const val HEADER_TEXT_MAX_LENGTH: Int = 150
     const val OPTION_TEXT_MAX_LENGTH: Int = 75
