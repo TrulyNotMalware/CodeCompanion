@@ -18,6 +18,7 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -26,6 +27,8 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZoneId
+
+internal const val METRIC_NVD_PAGE_CAP_REACHED = "cve.nvd.page.cap.reached"
 
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
@@ -91,7 +94,7 @@ class CveConfiguration {
         )
 
     @Bean
-    fun nvdCveSourceAdapter(appConfig: AppConfig, clock: Clock): SourceAdapter {
+    fun nvdCveSourceAdapter(appConfig: AppConfig, clock: Clock, meterRegistry: MeterRegistry): SourceAdapter {
         val lookbackMinutes = appConfig.cve.nvd.lookbackMinutes
         val windowMinutes = appConfig.cve.collector.windowMinutes
         require(lookbackMinutes >= windowMinutes * 2) {
@@ -104,6 +107,9 @@ class CveConfiguration {
             requestTimeout = Duration.ofSeconds(appConfig.cve.collector.requestTimeoutSeconds),
             requestInterval = Duration.ofMillis(appConfig.cve.nvd.requestIntervalMillis),
             clock = clock,
+            onPageCapReached = { topic ->
+                meterRegistry.counter(METRIC_NVD_PAGE_CAP_REACHED, "topic", topic.topicKey).increment()
+            },
         )
     }
 
