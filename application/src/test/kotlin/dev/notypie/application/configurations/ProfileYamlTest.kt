@@ -36,6 +36,13 @@ class ProfileYamlTest :
                         profile(name = it).getProperty("management.endpoints.web.exposure.include").toString()
                     }
 
+                then("prod caches the aggregate health response, whose outbox indicator queries the database") {
+                    profile(
+                        name = "prod",
+                    ).getProperty("management.endpoint.health.cache.time-to-live").toString() shouldBe
+                        "10s"
+                }
+
                 then("Prometheus can scrape them") {
                     exposures shouldBe
                         mapOf("prod" to "health,info,metrics,prometheus", "dev" to "health,info,metrics,prometheus")

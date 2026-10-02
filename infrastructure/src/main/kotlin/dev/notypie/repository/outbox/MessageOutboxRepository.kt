@@ -1,13 +1,19 @@
 package dev.notypie.repository.outbox
 
 import dev.notypie.repository.outbox.schema.OutboxMessage
+import jakarta.persistence.QueryHint
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.jpa.repository.QueryHints
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
+
+// Health and Prometheus read these on every probe or scrape; a stuck database must not hang the endpoint.
+const val HEALTH_QUERY_TIMEOUT_HINT = "jakarta.persistence.query.timeout"
+const val HEALTH_QUERY_TIMEOUT_MILLIS = "2000"
 
 @Repository
 interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
@@ -183,6 +189,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("limit") limit: Int,
     ): Int
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT MIN(created_at) FROM outbox_message
@@ -192,6 +199,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     )
     fun findOldestPendingCreatedAt(): LocalDateTime?
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT COUNT(*) FROM outbox_message
@@ -201,6 +209,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     )
     fun countPending(): Long
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT COUNT(*) FROM outbox_message
@@ -212,6 +221,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("threshold") threshold: LocalDateTime,
     ): Long
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT COUNT(*) FROM outbox_message
@@ -221,6 +231,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     )
     fun countInProgress(): Long
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT COUNT(*) FROM outbox_message
@@ -232,6 +243,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("threshold") threshold: LocalDateTime,
     ): Long
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT MIN(updated_at) FROM outbox_message
@@ -241,6 +253,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     )
     fun findOldestInProgressUpdatedAt(): LocalDateTime?
 
+    @QueryHints(QueryHint(name = HEALTH_QUERY_TIMEOUT_HINT, value = HEALTH_QUERY_TIMEOUT_MILLIS))
     @Query(
         """
         SELECT COUNT(*) FROM outbox_message

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/health
 
@@ -40,8 +40,15 @@ alerting reads. The first six counters also back the `@bot status` chat report i
   for the sweep exactly at the stuck threshold and the sweep runs every 60 s, so without the grace a
   healthy retry would read as stuck for up to a minute. Only a row the sweep failed to take within a full
   period counts.
-- The indicator is a hot path for liveness/readiness probes: seven repository calls per probe. Do not add
-  queries that scan the table; every call it makes today is a covered count/min lookup.
+- The indicator is not part of the liveness/readiness groups (the k8s probes and the deploy gate read those); it
+  feeds the aggregate `/actuator/health`, which prod caches for 10 s (`management.endpoint.health.cache.time-to-live`),
+  and the same seven reads back the Prometheus gauges on every scrape. Each read carries a 2 s
+  `jakarta.persistence.query.timeout` hint (`HEALTH_QUERY_TIMEOUT_MILLIS` on `MessageOutboxRepository`), so a stuck
+  database fails the call instead of hanging it (configuration pinned by `MessageOutboxRepositoryHintsTest`; the timeout
+  itself was not exercised, H2 cannot block a count). Do not add queries that scan the table; every call it makes
+  today is a covered count/min lookup.
+- **Retrying rows keep the aggregate DOWN on purpose** (the review's "a single retrying row turns it DOWN" was kept as
+  designed): it gates nothing now, and alerting reads `outbox_retrying_messages` with a duration instead.
 - Keep the report and `OpsStatusService.renderReport()` computing the same numbers from the same
   repository methods — the chat reply and the health endpoint must never disagree.
 - Thresholds come from `AppConfig.Outbox.Health`; do not read `@Value` here.

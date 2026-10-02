@@ -90,6 +90,9 @@ management:
       external-file: ./logback.log
     health:
       show-details: when_authorized
+      # Caches the aggregate /actuator/health only (probe groups are not cached); the outbox indicator runs 7 queries.
+      cache:
+        time-to-live: 10s
       # Explicit rather than relying on Boot's Kubernetes auto-detection: k8s/deployment.yaml probes
       # /actuator/health/{liveness,readiness}.
       probes:
