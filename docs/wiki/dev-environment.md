@@ -59,7 +59,7 @@ _type: guide · updated: 2026-10-02_
   가려지므로 outbox 상태는 `/actuator/prometheus`의 게이지로 본다).
   `local`은 개발자 편의를 위해 `loggers`·`threaddump`·`mappings`·`conditions`까지 열고 `show-details: always`다 — 인증이 없으므로
   `local`은 `server.address: 127.0.0.1`로 루프백에만 바인드한다(`run`의 기본 환경이 `local`이라 서버에서 `-e` 없이 띄워도 외부에 열리지
-  않게). `heapdump`는 어느 프로파일에도 없다(덤프에 토큰이 실림).
+  않게). `run`은 기본값을 바꾸지 않고 `local`로 띄울 때 그 사실과 서버에서는 `-e dev`/`-e prod`를 쓰라는 경고 두 줄을 찍는다. `heapdump`는 어느 프로파일에도 없다(덤프에 토큰이 실림).
   `run` 스크립트는 더 이상 `-Dmanagement.endpoints.web.exposure.include`로 YAML을 덮지 않는다.
 - Kafka 컨슈머(`local`·`dev`·`prod`): `max-poll-records: 5`, `max.poll.interval.ms: 300000`. 한 번에 받은 5건을 300초 안에
   끝내야 하므로 레코드당 평균 예산은 60초다. PENDING 행 레코드 1건은 Slack 디스패치 1회이고(나머지 CDC 이벤트는 즉시 반환),
