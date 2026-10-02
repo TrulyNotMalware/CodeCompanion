@@ -23,14 +23,16 @@
 --       SELECT id, meeting_uid, start_at, end_at FROM meetings
 --       WHERE end_at IS NOT NULL AND end_at <= start_at;
 --
--- Apply after V18, and only once every running replica writes meetings
--- through the @Version-checked managed entity. An older binary's bulk
--- reschedule does not check version and can recompute an end_at from a row it
--- read before this UPDATE; while such a replica is still serving, stop meeting
--- writes for the few seconds the script runs. It does not gate a rollout. The
--- application also drops an inverted end_at on the next reschedule. dev/local
--- with auto-ddl do not run it; execute manually in every environment that has
--- pre-existing meetings.
+-- Apply after V18, and only once every Pod runs the release that writes
+-- meetings through the @Version-checked managed entity: the last step of the
+-- release order in db/migration/AGENTS.md. The previous release's reschedule
+-- is a bulk UPDATE that moves start_at alone, without a version check and
+-- without touching end_at, so while such a Pod still serves it keeps creating
+-- inverted rows after this script ran; that UPDATE does not bump version
+-- either, so the bump above cannot guard against it, and pausing meeting
+-- writes while the script runs is not enough. The application also drops an
+-- inverted end_at on the next reschedule. dev/local with auto-ddl do not run
+-- it; execute manually in every environment that has pre-existing meetings.
 -- -----------------------------------------------------------------------------
 
 UPDATE meetings

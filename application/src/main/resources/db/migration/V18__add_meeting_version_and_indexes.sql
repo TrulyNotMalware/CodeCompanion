@@ -5,9 +5,12 @@
 --   MeetingRepositoryImpl.addParticipants is a read-modify-write. Without a
 --   version column two concurrent adds both pass the MAX_PARTICIPANTS check,
 --   and without a (meeting_id, user_id) unique key the same user can be
---   inserted twice. The entity now carries @Version and the participant write
---   path locks the meeting with OPTIMISTIC_FORCE_INCREMENT, so the loser fails
---   on commit instead of overfilling.
+--   inserted twice. The entity now carries @Version, and every meeting write
+--   (cancel, reschedule, add-participant) loads the managed row, changes it
+--   and flushes, so Hibernate's version check makes the loser of a race fail
+--   on that flush instead of overfilling. Adding a participant bumps the
+--   version through the participants collection (@OptimisticLock(excluded =
+--   false)); no explicit lock mode is used.
 --
 --   The reminder scheduler sweeps meetings(is_canceled, start_at) every minute,
 --   `/meetup list` filters meetings(publisher_id, start_at) and
