@@ -98,6 +98,10 @@ class AgentConverseServiceTest :
         fun stagerCapturing(stagedMessage: CapturingSlot<OutboundMessage>): OutboundMessageStager {
             val stager = mockk<OutboundMessageStager>()
             every { stager.stage(message = capture(stagedMessage), basicInfo = any()) } returns stubStagedEvent
+            every { stager.stageInOrder(messages = any(), basicInfo = any()) } answers {
+                firstArg<List<OutboundMessage>>().forEach { stager.stage(message = it, basicInfo = secondArg()) }
+                stubStagedEvent
+            }
             return stager
         }
 
@@ -247,25 +251,27 @@ class AgentConverseServiceTest :
             every { gateway.converse(request = any()) } returns
                 AgentTurnResult.Completed(sessionId = null, finalText = answer)
 
-            val stagedMessages = mutableListOf<OutboundMessage>()
+            val stagedChains = mutableListOf<List<OutboundMessage>>()
             val outboundStager = mockk<OutboundMessageStager>()
-            every { outboundStager.stage(message = capture(stagedMessages), basicInfo = any()) } returns stubStagedEvent
+            every { outboundStager.stageInOrder(messages = capture(stagedChains), basicInfo = any()) } returns
+                stubStagedEvent
             val eventPublisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 buildService(agentGateway = gateway, outboundStager = outboundStager, eventPublisher = eventPublisher)
 
             `when`("handleAgentConverse") {
                 service.handleAgentConverse(event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS))
-                val parts = stagedMessages.map { it.shouldBeInstanceOf<OutboundMessage.ChannelMessage>() }
+                val parts = stagedChains.flatten().map { it.shouldBeInstanceOf<OutboundMessage.ChannelMessage>() }
 
-                then("the answer is posted in order as several numbered messages in the same thread") {
+                then("the answer is staged once, as an ordered chain of numbered messages in the same thread") {
+                    stagedChains.size shouldBe 1
                     parts.size shouldBeGreaterThan 1
                     parts.forEach { it.threadId shouldBe TEST_THREAD_TS }
                     parts.mapIndexed { index, part ->
                         part.content.shouldBeInstanceOf<MessageContent.Text>().headline shouldBe
                             "${AgentConverseService.RESPONSE_HEADLINE} (${index + 1}/${parts.size})"
                     }
-                    verify(exactly = parts.size) { eventPublisher.publishEvent(events = any()) }
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
                 }
 
                 then("each message body fits one Slack message and together they carry the whole answer") {
@@ -281,15 +287,16 @@ class AgentConverseServiceTest :
             every { gateway.converse(request = any()) } returns
                 AgentTurnResult.Completed(sessionId = null, finalText = "word ".repeat(n = 20_000))
 
-            val stagedMessages = mutableListOf<OutboundMessage>()
+            val stagedChains = mutableListOf<List<OutboundMessage>>()
             val outboundStager = mockk<OutboundMessageStager>()
-            every { outboundStager.stage(message = capture(stagedMessages), basicInfo = any()) } returns stubStagedEvent
+            every { outboundStager.stageInOrder(messages = capture(stagedChains), basicInfo = any()) } returns
+                stubStagedEvent
             val service = buildService(agentGateway = gateway, outboundStager = outboundStager)
 
             `when`("handleAgentConverse") {
                 service.handleAgentConverse(event = createAgentConverseRequestEvent())
                 val bodies =
-                    stagedMessages.map {
+                    stagedChains.single().map {
                         it
                             .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
                             .content

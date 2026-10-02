@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # infrastructure/impl/command/event
 
@@ -14,7 +14,7 @@ and the `CommandOutput` helpers.
 |------|-------------|
 | `SlackEventPayloads.kt` | `sealed class SlackEventPayload(apiAppId, commandDetailType, idempotencyKey, publisherId, channel) : EventPayload`; `PostEventPayloadContents(eventId, …, messageType, replaceOriginal, body: Map<String, Any>)`; `ActionEventPayloadContents(…, responseUrl, body: String)`; `OpenViewPayloadContents(…, triggerId, viewJson, meetingIdempotencyKey?, participantUserId = "")`; `enum MessageType { CHANNEL_ALERT, EPHEMERAL_MESSAGE, DIRECT_MESSAGE, UPDATE_MESSAGE }` (no `ACTION_RESPONSE` since B1 — action responses are their own payload type); `toMessageTypeByTargetUser(targetUserId?)` |
 | `SlackCommandEvents.kt` | `SendSlackMessageEvent(idempotencyKey, payload: SlackEventPayload, destination, timestamp, type, isInternal = true)`; `OpenViewEvent(idempotencyKey, payload: OpenViewPayloadContents, type, isInternal = true, destination = "")` |
-| `OutboundMessageEnqueued.kt` | `OutboundMessageEnqueuedPayload(eventId, message: OutboundMessage, basicInfo)` and `OutboundMessageEnqueued(idempotencyKey, payload, isInternal = true, type = SIMPLE_TEXT)` — the transport-neutral effect a BEFORE_COMMIT listener turns into an outbox row |
+| `OutboundMessageEnqueued.kt` | `OutboundMessageEnqueuedPayload(eventId, message: OutboundMessage, basicInfo, continuation: List<OutboundMessage> = emptyList())` (`continuation` = the messages to post after `message`, in order) and `OutboundMessageEnqueued(idempotencyKey, payload, isInternal = true, type = SIMPLE_TEXT)` — the transport-neutral effect a BEFORE_COMMIT listener turns into an outbox row |
 | `MessageDispatcher.kt` | `interface MessageDispatcher { dispatch(SlackEventPayload): CommandOutput; dispatchImmediate(OpenViewPayloadContents): CommandOutput }` |
 | `SlackCommandOutputs.kt` | `failOutput(event, reason)` (`Status.FAILED`, `CommandType.SIMPLE`) and `successOutput(payload, commandType, messageTs = "")` |
 

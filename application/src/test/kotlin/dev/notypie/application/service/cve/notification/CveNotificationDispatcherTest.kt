@@ -1,5 +1,6 @@
 package dev.notypie.application.service.cve.notification
 
+import dev.notypie.application.outbox.captureChains
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.service.meeting.createH2DataSource
 import dev.notypie.application.service.meeting.createH2TransactionManager
@@ -677,18 +678,24 @@ class CveNotificationDispatcherTest :
                     )
                 }
             every { deliveryRepository.claim(eventId = capture(claimed), userId = "U1") } returns true
-            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
-                createOutboxRow(eventId = UUID.randomUUID().toString())
-            }
+            val chains = mutableListOf<List<OutboundMessage>>()
+            outboundMessagePort.captureChains(chains = chains)
+            val outboxRepository = stubOutbox()
             val dispatcher =
                 dispatcherWith(
                     deliveryRepository = deliveryRepository,
                     outboundMessagePort = outboundMessagePort,
-                    outboxRepository = stubOutbox(),
+                    outboxRepository = outboxRepository,
                 )
 
             `when`("the digest tick runs") {
                 dispatcher.digestTick()
+                messages += chains.flatten()
+
+                then("only the first part is staged, carrying the rest in order behind it") {
+                    chains.size shouldBe 1
+                    verify(exactly = 1) { outboxRepository.save(any()) }
+                }
 
                 then("every claimed event's identifier reaches a sent body") {
                     claimed shouldBe (10L..29L).toList()
@@ -739,9 +746,8 @@ class CveNotificationDispatcherTest :
                     ),
                 )
             every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
-            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
-                createOutboxRow(eventId = UUID.randomUUID().toString())
-            }
+            val chains = mutableListOf<List<OutboundMessage>>()
+            outboundMessagePort.captureChains(chains = chains)
             val dispatcher =
                 dispatcherWith(
                     deliveryRepository = deliveryRepository,
@@ -752,6 +758,7 @@ class CveNotificationDispatcherTest :
 
             `when`("the digest tick runs") {
                 dispatcher.digestTick()
+                messages += chains.single()
 
                 then("only that line is cut with a marker and the next event starts a fresh part") {
                     messages.size shouldBe 2

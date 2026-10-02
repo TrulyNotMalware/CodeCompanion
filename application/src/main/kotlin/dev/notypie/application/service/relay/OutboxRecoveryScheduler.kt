@@ -2,6 +2,8 @@ package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.chainedParts
+import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -49,7 +51,8 @@ class OutboxRecoveryScheduler(
             if (abandonedNow) {
                 log.error {
                     "Outbox row eventId=${row.eventId} idempotencyKey=${row.idempotencyKey} abandoned to FAILURE " +
-                        "after ${row.sendCount} sends and ${row.attemptCount} claims, created at ${row.createdAt}"
+                        "after ${row.sendCount} sends and ${row.attemptCount} claims, created at ${row.createdAt}" +
+                        row.droppedChain()
                 }
             }
         }
@@ -63,7 +66,8 @@ class OutboxRecoveryScheduler(
             if (abandonedNow) {
                 log.error {
                     "Outbox row eventId=${row.eventId} idempotencyKey=${row.idempotencyKey} abandoned to FAILURE " +
-                        "unsent: still PENDING past the give-up window, created at ${row.createdAt}"
+                        "unsent: still PENDING past the give-up window, created at ${row.createdAt}" +
+                        row.droppedChain()
                 }
             }
         }
@@ -89,3 +93,14 @@ class OutboxRecoveryScheduler(
         return claims.size
     }
 }
+
+private fun OutboxMessage.droppedChain(): String =
+    chainedParts().let {
+        if (it >
+            0
+        ) {
+            "; dropping $it chained parts"
+        } else {
+            ""
+        }
+    }

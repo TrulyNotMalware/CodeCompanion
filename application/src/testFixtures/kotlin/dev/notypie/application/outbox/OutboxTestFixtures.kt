@@ -4,21 +4,30 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.application.service.relay.OutboxPayloadRenderer
 import dev.notypie.application.service.relay.PollingMessageProcessor
+import dev.notypie.application.service.relay.RenderedRow
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
+import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
+import io.mockk.Runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.UUID
 import java.util.concurrent.Executor
 
 val DEFAULT_TEST_NOW: LocalDateTime = LocalDateTime.of(2026, 4, 28, 12, 0, 0)
@@ -26,13 +35,20 @@ val DEFAULT_TEST_NOW: LocalDateTime = LocalDateTime.of(2026, 4, 28, 12, 0, 0)
 fun createFixedUtcClock(now: LocalDateTime = DEFAULT_TEST_NOW): Clock =
     Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneId.of("UTC"))
 
+fun createStubTransactionManager(): PlatformTransactionManager =
+    mockk {
+        every { getTransaction(any()) } returns mockk<TransactionStatus>(relaxed = true)
+        every { commit(any()) } just Runs
+        every { rollback(any()) } just Runs
+    }
+
 fun createOutboxRow(
     eventId: String,
     status: MessageStatus = MessageStatus.PENDING,
     createdAt: LocalDateTime = DEFAULT_TEST_NOW,
     attemptCount: Int = 0,
     sendCount: Int = 0,
-    schemaVersion: Int = OutboxSchemaVersion.CURRENT,
+    schemaVersion: Int = OutboxSchemaVersion.V2,
 ): OutboxMessage =
     mockk(relaxed = true) {
         every { this@mockk.eventId } returns eventId
@@ -41,6 +57,7 @@ fun createOutboxRow(
         every { this@mockk.attemptCount } returns attemptCount
         every { this@mockk.sendCount } returns sendCount
         every { this@mockk.schemaVersion } returns schemaVersion
+        every { this@mockk.transport } returns Transport.SLACK.name
     }
 
 data class PollingProcessorFixture(
@@ -78,13 +95,15 @@ fun createPollingProcessorFixture(
 fun createRelayService(
     outboxRepository: MessageOutboxRepository,
     outboundMessagePort: OutboundMessagePort = mockk(relaxed = true),
-    payloadRenderer: OutboxPayloadRenderer = mockk(relaxed = true),
+    payloadRenderer: OutboxPayloadRenderer =
+        mockk { every { render(row = any()) } returns RenderedRow(payload = mockk(relaxed = true), next = null) },
     messageDispatcher: MessageDispatcher = mockk(relaxed = true),
     applicationEventPublisher: ApplicationEventPublisher = mockk(relaxed = true),
     clock: Clock = createFixedUtcClock(),
     relayTaskExecutor: Executor = Executor { command -> command.run() },
     appConfig: AppConfig = AppConfig(),
     accessBlockedTracker: AccessBlockedTracker = AccessBlockedTracker(),
+    transactionManager: PlatformTransactionManager = createStubTransactionManager(),
 ): SlackMessageRelayServiceImpl =
     SlackMessageRelayServiceImpl(
         outboxRepository = outboxRepository,
@@ -96,8 +115,22 @@ fun createRelayService(
         relayTaskExecutor = relayTaskExecutor,
         clock = clock,
         accessBlockedTracker = accessBlockedTracker,
+        transactionManager = transactionManager,
         appConfig = appConfig,
     )
+
+fun OutboundMessagePort.captureChains(
+    chains: MutableList<List<OutboundMessage>>,
+    build: (OutboundMessage, CommandBasicInfo, List<OutboundMessage>) -> OutboxMessage = { _, _, _ ->
+        createOutboxRow(eventId = UUID.randomUUID().toString())
+    },
+) {
+    every { toRow(message = any(), basicInfo = any(), transport = any(), continuation = any()) } answers {
+        val continuation = arg<List<OutboundMessage>>(n = 3)
+        chains += listOf(firstArg<OutboundMessage>()) + continuation
+        build(firstArg(), secondArg(), continuation)
+    }
+}
 
 fun MessageOutboxRepository.stubClaimLifecycle(renewed: Int = 1, completed: Int = 1, deferred: Int = 1) {
     every { renewClaim(eventId = any(), attemptCount = any(), now = any()) } returns renewed

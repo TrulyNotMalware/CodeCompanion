@@ -21,6 +21,7 @@ import dev.notypie.domain.standup.createStandupAnswerDto
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
@@ -299,6 +300,67 @@ class OutboundMessageCodecTest :
             OutboundMessageCodec.decode(json = replaceFixture) shouldBe replaceEnvelope
             OutboundMessageCodec.encode(envelope = updateEnvelope) shouldBe updateFixture
             OutboundMessageCodec.encode(envelope = replaceEnvelope) shouldBe replaceFixture
+        }
+
+        "an envelope carrying the rest of a chain round-trips every part with its subtype" {
+            val envelope =
+                OutboundEnvelope(
+                    message =
+                        OutboundMessage.ChannelMessage(
+                            target = target,
+                            content = MessageContent.Text(headline = "Answer (1/3)", markdown = "first"),
+                            threadId = "1700000000.000100",
+                        ),
+                    basicInfo = basicInfo,
+                    continuation =
+                        listOf(
+                            OutboundMessage.ChannelMessage(
+                                target = target,
+                                content = MessageContent.Text(headline = "Answer (2/3)", markdown = "second"),
+                                threadId = "1700000000.000100",
+                            ),
+                            OutboundMessage.Ephemeral(
+                                target = target,
+                                recipient = UserRef(id = "U_R"),
+                                content = MessageContent.Text(headline = "Answer (3/3)", markdown = "third"),
+                            ),
+                        ),
+                )
+
+            OutboundMessageCodec.decode(json = OutboundMessageCodec.encode(envelope = envelope)) shouldBe envelope
+        }
+
+        "an envelope without a continuation writes no continuation field" {
+            val json =
+                OutboundMessageCodec.encode(
+                    envelope =
+                        OutboundEnvelope(
+                            message =
+                                OutboundMessage.ChannelMessage(
+                                    target = target,
+                                    content = MessageContent.Text(headline = null, markdown = "plain"),
+                                ),
+                            basicInfo = basicInfo,
+                        ),
+                )
+
+            json shouldNotContain "continuation"
+        }
+
+        "next hands the first queued part the rest of the chain, and the last part has none" {
+            val parts =
+                (1..3).map { index ->
+                    OutboundMessage.ChannelMessage(
+                        target = target,
+                        content = MessageContent.Text(headline = "($index/3)", markdown = "part $index"),
+                    )
+                }
+            val head = OutboundEnvelope(message = parts[0], basicInfo = basicInfo, continuation = parts.drop(n = 1))
+
+            head.next() shouldBe
+                OutboundEnvelope(message = parts[1], basicInfo = basicInfo, continuation = listOf(parts[2]))
+            head.next()?.next() shouldBe OutboundEnvelope(message = parts[2], basicInfo = basicInfo)
+            head.next()?.next()?.next() shouldBe null
         }
 
         "OpenModal is not outbox-bound and fails fast on round-trip" {

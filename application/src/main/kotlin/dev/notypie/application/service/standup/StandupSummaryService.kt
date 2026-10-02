@@ -10,6 +10,7 @@ import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
+import dev.notypie.repository.outbox.toChainHead
 import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.SlackBlockLimits
@@ -74,26 +75,23 @@ class StandupSummaryService(
                         answers = session.answers.boundedForSummary(),
                         questions = routine.questions,
                     )
-                val summaryRows =
-                    parts.map { part ->
-                        val commandBasicInfo =
-                            CommandBasicInfo.forOutbound(
-                                publisherId = routine.creatorId,
-                                channel = routine.summaryChannel,
-                            )
-                        outboundMessagePort.toRow(
-                            message =
+                val commandBasicInfo =
+                    CommandBasicInfo.forOutbound(publisherId = routine.creatorId, channel = routine.summaryChannel)
+                val summaryRow =
+                    outboundMessagePort.toChainHead(
+                        messages =
+                            parts.map { part ->
                                 OutboundMessage.ChannelMessage(
                                     target = ConversationTarget(id = commandBasicInfo.channel),
                                     content = part,
-                                ),
-                            basicInfo = commandBasicInfo,
-                        )
-                    }
-                summaryRows.forEach { row -> outboxRepository.save(row) }
+                                )
+                            },
+                        basicInfo = commandBasicInfo,
+                    )
+                outboxRepository.save(summaryRow)
                 if (!standupRepository.markSessionSummarized(
                         sessionId = session.sessionId,
-                        messageTs = "outbox:${summaryRows.first().eventId}",
+                        messageTs = "outbox:${summaryRow.eventId}",
                     )
                 ) {
                     error("Session was already summarized: sessionUid=${session.sessionUid}")

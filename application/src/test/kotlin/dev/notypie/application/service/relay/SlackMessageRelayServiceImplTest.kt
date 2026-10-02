@@ -6,6 +6,7 @@ import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.outbox.createRelayService
+import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.outbox.stubClaimLifecycle
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -15,6 +16,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.ACCESS_BLOCKED_REASON
+import dev.notypie.impl.command.OUTCOME_UNKNOWN_REASON
 import dev.notypie.impl.command.RateLimitedOutput
 import dev.notypie.impl.command.TRANSIENT_EXHAUSTED_REASON
 import dev.notypie.impl.command.event.MessageDispatcher
@@ -25,10 +27,13 @@ import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
@@ -43,9 +48,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionSystemException
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -143,7 +151,7 @@ class SlackMessageRelayServiceImplTest :
                 val row = createOutboxRow(eventId = rowEventId.toString())
                 val rendered = mockk<SlackEventPayload>()
                 val payloadRenderer = mockk<OutboxPayloadRenderer>()
-                every { payloadRenderer.render(row = row) } returns rendered
+                every { payloadRenderer.render(row = row) } returns RenderedRow(payload = rendered, next = null)
                 val dispatchResult =
                     mockk<CommandOutput> {
                         every { ok } returns true
@@ -631,6 +639,178 @@ class SlackMessageRelayServiceImplTest :
                     }
                     verify(exactly = 0) { payloadRenderer.render(row = any()) }
                     verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                }
+            }
+        }
+
+        given("dispatchClaimed on a row that carries the rest of a chain") {
+            val basicInfo = createCommandBasicInfo()
+            val parts =
+                (1..3).map { index ->
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = "($index/3)", markdown = "part $index"),
+                    )
+                }
+            val next = OutboundEnvelope(message = parts[1], basicInfo = basicInfo, continuation = listOf(parts[2]))
+
+            class ChainLane(
+                result: CommandOutput,
+                completed: List<Int> = listOf(1),
+                val transactionManager: PlatformTransactionManager = createStubTransactionManager(),
+            ) {
+                val eventId = UUID.randomUUID().toString()
+                val row = createOutboxRow(eventId = eventId, schemaVersion = OutboxSchemaVersion.V3)
+                val nextRow = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val outboxRepository =
+                    mockk<MessageOutboxRepository>().also { repository ->
+                        repository.stubClaimLifecycle()
+                        every {
+                            repository.completeClaim(eventId = any(), attemptCount = any(), status = any(), now = any())
+                        } returnsMany completed
+                        every { repository.save(nextRow) } returns nextRow
+                    }
+                val port =
+                    mockk<OutboundMessagePort> {
+                        every {
+                            toRow(
+                                message = parts[1],
+                                basicInfo = basicInfo,
+                                transport = Transport.SLACK,
+                                continuation = listOf(parts[2]),
+                            )
+                        } returns nextRow
+                    }
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        outboundMessagePort = port,
+                        payloadRenderer =
+                            mockk { every { render(row = row) } returns RenderedRow(payload = payload(), next = next) },
+                        messageDispatcher = dispatcherReturning(output = result),
+                        transactionManager = transactionManager,
+                    )
+
+                fun dispatch() = service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                fun completed(status: MessageStatus) =
+                    outboxRepository.completeClaim(
+                        eventId = eventId,
+                        attemptCount = 1,
+                        status = status.name,
+                        now = DEFAULT_TEST_NOW,
+                    )
+            }
+
+            `when`("Slack accepts the part") {
+                val lane = ChainLane(result = delivered())
+                lane.dispatch()
+
+                then("exactly one next row is staged with the following part, inside the SUCCESS write's transaction") {
+                    verify(exactly = 1) { lane.outboxRepository.save(any()) }
+                    verifyOrder {
+                        lane.transactionManager.getTransaction(any())
+                        lane.completed(status = MessageStatus.SUCCESS)
+                        lane.outboxRepository.save(lane.nextRow)
+                        lane.transactionManager.commit(any())
+                    }
+                }
+            }
+
+            `when`("Slack refuses the part for good") {
+                val lane = ChainLane(result = failOutput(event = payload(), reason = "channel_not_found"))
+                lane.dispatch()
+
+                then("FAILURE is written and nothing more of the chain is staged") {
+                    verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
+                    verify(exactly = 0) { lane.outboxRepository.save(any()) }
+                }
+            }
+
+            `when`("the outcome of the part is unknown") {
+                val lane =
+                    ChainLane(result = failOutput(event = payload(), reason = "$OUTCOME_UNKNOWN_REASON: read timeout"))
+                lane.dispatch()
+
+                then("the row is not resent, and the chain goes on with the next part") {
+                    verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
+                    verify(exactly = 1) { lane.outboxRepository.save(lane.nextRow) }
+                }
+            }
+
+            `when`("Slack rate-limits the part") {
+                val lane =
+                    ChainLane(result = RateLimitedOutput(event = payload(), retryAfter = Duration.ofSeconds(30L)))
+                lane.dispatch()
+
+                then("the row is deferred with its continuation, and nothing is staged") {
+                    verify(
+                        exactly = 1,
+                    ) { lane.outboxRepository.deferClaim(eventId = any(), attemptCount = 1, updatedAt = any()) }
+                    verify(exactly = 0) { lane.outboxRepository.save(any()) }
+                }
+            }
+
+            `when`("another owner already recorded the row") {
+                val lane = ChainLane(result = delivered(), completed = listOf(0))
+                lane.dispatch()
+
+                then("this worker stages nothing, leaving the chain to the owner that recorded it") {
+                    verify(exactly = 0) { lane.outboxRepository.save(any()) }
+                }
+            }
+
+            `when`("the SUCCESS write commits but its acknowledgement is lost, so the write is retried") {
+                val transactionManager =
+                    createStubTransactionManager().also { manager ->
+                        every { manager.commit(any()) } throws
+                            TransactionSystemException("commit acknowledgement lost") andThen Unit
+                    }
+                val lane =
+                    ChainLane(result = delivered(), completed = listOf(1, 0), transactionManager = transactionManager)
+                lane.dispatch()
+
+                then("the retry finds the row already recorded and the next part is staged only once") {
+                    verify(exactly = 2) { lane.completed(status = MessageStatus.SUCCESS) }
+                    verify(exactly = 1) { lane.outboxRepository.save(any()) }
+                }
+            }
+        }
+
+        given("saveOutboxMessage for messages staged in order") {
+            `when`("the enqueued event carries a continuation") {
+                val basicInfo = createCommandBasicInfo()
+                val parts =
+                    (1..2).map { index ->
+                        OutboundMessage.ChannelMessage(
+                            target = ConversationTarget(id = basicInfo.channel),
+                            content = MessageContent.Text(headline = null, markdown = "part $index"),
+                        )
+                    }
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val port = mockk<OutboundMessagePort>()
+                every {
+                    port.toRow(message = parts[0], basicInfo = basicInfo, continuation = listOf(parts[1]))
+                } returns row
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                every { outboxRepository.save(row) } returns row
+                val service = createRelayService(outboxRepository = outboxRepository, outboundMessagePort = port)
+
+                service.saveOutboxMessage(
+                    event =
+                        OutboundMessageEnqueued(
+                            idempotencyKey = basicInfo.idempotencyKey,
+                            payload =
+                                OutboundMessageEnqueuedPayload(
+                                    message = parts[0],
+                                    basicInfo = basicInfo,
+                                    continuation = listOf(parts[1]),
+                                ),
+                        ),
+                )
+
+                then("one row is saved, carrying the rest behind the first part") {
+                    verify(exactly = 1) { outboxRepository.save(row) }
                 }
             }
         }

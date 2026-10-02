@@ -10,6 +10,7 @@ import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.repository.outbox.toChainHead
 import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.escapeMrkdwn
 import dev.notypie.templates.truncateSectionText
@@ -145,22 +146,34 @@ class CveNotificationDispatcher(
         val claimed = userPairs.filter { cveDeliveryRepository.claim(eventId = it.eventId, userId = it.userId) }
         if (claimed.isEmpty()) return 0
         val parts = digestParts(events = claimed)
-        parts.forEachIndexed { index, markdown ->
-            val headline = if (parts.size == 1) DIGEST_HEADLINE else "$DIGEST_HEADLINE (${index + 1}/${parts.size})"
-            enqueue(userId = userId, headline = headline, markdown = markdown)
-        }
+        outboxRepository.save(
+            outboundMessagePort.toChainHead(
+                messages =
+                    parts.mapIndexed { index, markdown ->
+                        val headline =
+                            if (parts.size == 1) DIGEST_HEADLINE else "$DIGEST_HEADLINE (${index + 1}/${parts.size})"
+                        directMessage(userId = userId, headline = headline, markdown = markdown)
+                    },
+                basicInfo = CommandBasicInfo.forOutbound(publisherId = userId, channel = userId),
+            ),
+        )
         return claimed.size
     }
 
     private fun enqueue(userId: String, headline: String, markdown: String) {
-        val commandBasicInfo = CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
-        val message =
-            OutboundMessage.ChannelMessage(
-                target = ConversationTarget(id = userId),
-                content = MessageContent.Text(headline = headline, markdown = markdown),
-            )
-        outboxRepository.save(outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo))
+        outboxRepository.save(
+            outboundMessagePort.toRow(
+                message = directMessage(userId = userId, headline = headline, markdown = markdown),
+                basicInfo = CommandBasicInfo.forOutbound(publisherId = userId, channel = userId),
+            ),
+        )
     }
+
+    private fun directMessage(userId: String, headline: String, markdown: String): OutboundMessage =
+        OutboundMessage.ChannelMessage(
+            target = ConversationTarget(id = userId),
+            content = MessageContent.Text(headline = headline, markdown = markdown),
+        )
 
     private fun immediateMarkdown(pair: UndeliveredCveEvent): String {
         val head = "*${pair.topicDisplayName.escapeMrkdwn()}* — ${pair.title.escapeMrkdwn()}"

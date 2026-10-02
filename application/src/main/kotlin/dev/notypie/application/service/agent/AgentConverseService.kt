@@ -230,16 +230,20 @@ class AgentConverseService(
                                 .ifBlank { EMPTY_RESPONSE_MESSAGE },
                         maxMessages = MAX_ANSWER_MESSAGES,
                     )
-                parts.forEachIndexed { index, part ->
-                    eventPublisher.publishOne(
-                        event =
-                            answerEvent(
-                                event = event,
-                                headline = answerHeadline(index = index, count = parts.size),
-                                text = part,
-                            ),
-                    )
-                }
+                eventPublisher.publishOne(
+                    event =
+                        outboundStager.stageInOrder(
+                            messages =
+                                parts.mapIndexed { index, part ->
+                                    answerMessage(
+                                        event = event,
+                                        headline = answerHeadline(index = index, count = parts.size),
+                                        text = part,
+                                    )
+                                },
+                            basicInfo = event.payload.responseBasicInfo,
+                        ),
+                )
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent answer sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
@@ -377,19 +381,21 @@ class AgentConverseService(
     private fun answerHeadline(index: Int, count: Int): String =
         if (count == 1) RESPONSE_HEADLINE else "$RESPONSE_HEADLINE (${index + 1}/$count)"
 
+    private fun answerMessage(event: AgentConverseRequestEvent, headline: String, text: String): OutboundMessage =
+        OutboundMessage.ChannelMessage(
+            target = ConversationTarget(id = event.payload.responseBasicInfo.channel),
+            content = MessageContent.Text(headline = headline, markdown = text),
+            detailType = CommandDetailType.AGENT_CONVERSE,
+            threadId = event.payload.threadId,
+        )
+
     private fun answerEvent(
         event: AgentConverseRequestEvent,
         headline: String,
         text: String,
     ): CommandEvent<EventPayload> =
         stageReply(
-            message =
-                OutboundMessage.ChannelMessage(
-                    target = ConversationTarget(id = event.payload.responseBasicInfo.channel),
-                    content = MessageContent.Text(headline = headline, markdown = text),
-                    detailType = CommandDetailType.AGENT_CONVERSE,
-                    threadId = event.payload.threadId,
-                ),
+            message = answerMessage(event = event, headline = headline, text = text),
             basicInfo = event.payload.responseBasicInfo,
         )
 

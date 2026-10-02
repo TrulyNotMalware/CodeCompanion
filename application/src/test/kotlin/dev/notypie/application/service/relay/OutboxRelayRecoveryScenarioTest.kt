@@ -35,7 +35,11 @@ class OutboxRelayRecoveryScenarioTest :
         val repository = context.getBean(MessageOutboxRepository::class.java)
         val jdbc = context.getBean(JdbcTemplate::class.java)
         val payload = createPostEventPayloadContents(commandDetailType = CommandDetailType.SIMPLE_TEXT)
-        val renderer = mockk<OutboxPayloadRenderer> { every { render(row = any()) } returns payload }
+        val renderer =
+            mockk<OutboxPayloadRenderer> {
+                every { render(row = any()) } returns
+                    RenderedRow(payload = payload, next = null)
+            }
 
         val delivered: (SlackEventPayload) -> CommandOutput =
             { successOutput(payload = it, commandType = CommandType.EXTERNAL_API) }

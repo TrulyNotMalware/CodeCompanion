@@ -7,17 +7,22 @@ import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.isAccessBlocked
+import dev.notypie.impl.command.isOutcomeUnknown
 import dev.notypie.impl.command.isRateLimited
 import dev.notypie.impl.command.isTransientExhausted
 import dev.notypie.impl.command.retryAfter
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.impl.retry.retryTimeBound
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.repository.outbox.Transport
+import dev.notypie.repository.outbox.chainedParts
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
+import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
@@ -26,8 +31,10 @@ import org.springframework.context.SmartLifecycle
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -76,9 +83,11 @@ class SlackMessageRelayServiceImpl(
     @Qualifier("relayTaskExecutor") private val relayTaskExecutor: Executor,
     private val clock: Clock,
     private val accessBlockedTracker: AccessBlockedTracker,
+    transactionManager: PlatformTransactionManager,
     appConfig: AppConfig,
 ) : MessageRelayService,
     SmartLifecycle {
+    private val statusTransaction = TransactionTemplate(transactionManager)
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
     private val giveUpAfter: Duration = Duration.ofHours(appConfig.outbox.polling.giveUpAfterHours)
     private val slotCapacity: Int = relayQueueCapacity(appConfig = appConfig)
@@ -194,7 +203,7 @@ class SlackMessageRelayServiceImpl(
             }
         val result =
             try {
-                messageDispatcher.dispatch(event = rendered)
+                messageDispatcher.dispatch(event = rendered.payload)
             } catch (exception: Exception) {
                 logger.error(exception) {
                     "Dispatch threw for eventId=$eventId idempotencyKey=${row.idempotencyKey}; " +
@@ -216,7 +225,12 @@ class SlackMessageRelayServiceImpl(
             }
             result.isTransientExhausted() ->
                 logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
-            else -> complete(claim = claim, updateEvent = result.toOutboxUpdateEvent(eventId = eventId))
+            else ->
+                complete(
+                    claim = claim,
+                    updateEvent = result.toOutboxUpdateEvent(eventId = eventId),
+                    next = rendered.next.takeIf { result.ok || result.isOutcomeUnknown() },
+                )
         }
     }
 
@@ -266,8 +280,9 @@ class SlackMessageRelayServiceImpl(
         return Duration.ofMillis(Math.floorMod(hash.toLong(), RATE_LIMIT_SPREAD.toMillis()))
     }
 
-    private fun complete(claim: OutboxClaim, updateEvent: OutboxUpdateEvent) {
-        if (!writeTerminal(claim = claim, status = updateEvent.status)) return
+    private fun complete(claim: OutboxClaim, updateEvent: OutboxUpdateEvent, next: OutboundEnvelope? = null) {
+        if (!writeTerminal(claim = claim, status = updateEvent.status, next = next)) return
+        if (next == null && updateEvent.status == MessageStatus.FAILURE) logDroppedChain(row = claim.row)
         try {
             applicationEventPublisher.publishEvent(updateEvent)
         } catch (exception: Exception) {
@@ -278,18 +293,11 @@ class SlackMessageRelayServiceImpl(
         }
     }
 
-    private fun writeTerminal(claim: OutboxClaim, status: MessageStatus): Boolean {
+    private fun writeTerminal(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope? = null): Boolean {
         val completed =
             try {
                 retryService.execute(
-                    action = {
-                        outboxRepository.completeClaim(
-                            eventId = claim.row.eventId,
-                            attemptCount = claim.attempt,
-                            status = status.name,
-                            now = now(),
-                        )
-                    },
+                    action = { completeAndChain(claim = claim, status = status, next = next) },
                     maxAttempts = STATUS_WRITE_ATTEMPTS,
                 )
             } catch (exception: Exception) {
@@ -307,6 +315,40 @@ class SlackMessageRelayServiceImpl(
         return completed == 1
     }
 
+    private fun completeAndChain(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope?): Int =
+        checkNotNull(
+            statusTransaction.execute {
+                val completed =
+                    outboxRepository.completeClaim(
+                        eventId = claim.row.eventId,
+                        attemptCount = claim.attempt,
+                        status = status.name,
+                        now = now(),
+                    )
+                // Only in the transaction of the CAS that won, so a retried or taken-over write never stages it twice.
+                if (completed == 1 && next != null) outboxRepository.save(nextRow(row = claim.row, next = next))
+                completed
+            },
+        )
+
+    private fun nextRow(row: OutboxMessage, next: OutboundEnvelope): OutboxMessage =
+        outboundMessagePort.toRow(
+            message = next.message,
+            basicInfo = next.basicInfo,
+            transport = Transport.valueOf(row.transport),
+            continuation = next.continuation,
+        )
+
+    private fun logDroppedChain(row: OutboxMessage) {
+        val dropped = row.chainedParts()
+        if (dropped > 0) {
+            logger.error {
+                "Dropping $dropped chained parts after eventId=${row.eventId} idempotencyKey=${row.idempotencyKey} " +
+                    "ended FAILURE"
+            }
+        }
+    }
+
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
     // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it.
@@ -316,6 +358,7 @@ class SlackMessageRelayServiceImpl(
             outboundMessagePort.toRow(
                 message = event.payload.message,
                 basicInfo = event.payload.basicInfo,
+                continuation = event.payload.continuation,
             )
         outboxRepository.save(row)
     }

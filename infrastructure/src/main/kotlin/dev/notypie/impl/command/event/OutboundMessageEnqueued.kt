@@ -11,6 +11,7 @@ data class OutboundMessageEnqueuedPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val message: OutboundMessage,
     val basicInfo: CommandBasicInfo,
+    val continuation: List<OutboundMessage> = emptyList(),
 ) : EventPayload
 
 data class OutboundMessageEnqueued(

@@ -102,6 +102,8 @@ fun CommandOutput.isTransientExhausted(): Boolean = !ok && errorReason == TRANSI
 
 fun CommandOutput.isAccessBlocked(): Boolean = !ok && errorReason == ACCESS_BLOCKED_REASON
 
+fun CommandOutput.isOutcomeUnknown(): Boolean = !ok && errorReason.startsWith(prefix = OUTCOME_UNKNOWN_REASON)
+
 fun CommandOutput.retryAfter(): Duration? = (this as? RateLimitedOutput)?.retryAfter
 
 class RateLimitedOutput(

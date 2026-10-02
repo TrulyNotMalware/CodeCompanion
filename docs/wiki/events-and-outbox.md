@@ -82,14 +82,17 @@ _type: architecture · updated: 2026-10-02_
   `idx_outbox_idempotency_key` **인덱스일 뿐 유니크가 아니다**: 다중 수신자 커맨드(참가자별 ApplyReject)가 같은
   키로 여러 행을 만들어 PK 충돌로 메시지가 유실됐고, V1 마이그레이션이 PK를 `event_id`로 옮겼다. 용도는 "커맨드
   X가 만든 모든 메시지 찾기"이지 중복 차단이 아니다.
-- `payload`는 opaque `MEDIUMTEXT`(V23; `TEXT`의 65,535바이트를 넘는 행은 strict 모드에서 쓰기가 롤백됐다). `OutboundMessageCodec`이 `OutboundEnvelope{message, basicInfo}`를 인코딩하며, 도메인은
+- `payload`는 opaque `MEDIUMTEXT`(V23; `TEXT`의 65,535바이트를 넘는 행은 strict 모드에서 쓰기가 롤백됐다). `OutboundMessageCodec`이 `OutboundEnvelope{message, basicInfo, continuation}`을 인코딩하며(`continuation`은 비어 있으면 쓰지 않아 일반 행의 payload는 전과 같다), 도메인은
   Jackson 주석 없이 유지하고 다형성은 코덱 쪽 mix-in으로 처리한다. `OpenModal`·`DirectMessage`는 의도적으로
   미등록이라 인코딩/디코딩 시 fail-fast 한다.
 - `transport`는 문자열 컬럼(Debezium CDC가 enum을 null로 전달). 오늘은 `SLACK`뿐; 추가 = enum 상수 + 렌더러 등록.
-- `schema_version`: 쓰기는 `OutboxSchemaVersion.CURRENT`(= V2), 읽기는 `SUPPORTED`(= {V2})만 허용
-  (`OutboxPayloadRenderer.render`의 `require`). V1(렌더된 Slack 페이로드 + `metadata`/`type` 컬럼)은 big-bang
-  drain으로 폐기했다(V11 마이그레이션, 데이터 이전 없음). 새 shape 도입 시 `CURRENT` 범프와 `SUPPORTED` 확장을
-  같이 하고, drain 창이 보장된 뒤에만 옛 버전을 뺀다.
+- `schema_version`: 행은 그것을 읽을 수 있는 가장 오래된 버전으로 찍는다. 일반 행은 V2, `continuation`이 있는
+  연쇄의 머리 행은 V3(2026-10-02)이고 읽기는 `SUPPORTED`(= {V2, V3})만 허용(`OutboxPayloadRenderer.render`의
+  `require`). Jackson 3은 모르는 필드를 무시하므로 V3을 모르는 바이너리가 머리 행을 V2로 읽으면 첫 조각만 보내고
+  나머지를 조용히 버린다. V3이면 이 릴리스 이후의 바이너리는 보류하고, 그 이전 바이너리는 렌더 실패(`FAILURE`)로
+  남긴다. V1(렌더된 Slack 페이로드 + `metadata`/`type` 컬럼)은 big-bang drain으로 폐기했다(V11 마이그레이션, 데이터
+  이전 없음). 새 shape는 그 shape를 쓰는 행에만 새 버전을 찍고 같은 변경에서 `SUPPORTED`에 넣으며, drain 창이
+  보장된 뒤에만 옛 버전을 뺀다.
 - 상태(`MessageStatus`): 새 행은 `PENDING`. 폴링·CDC·복구 스윕 모두 `claimPending`/`reclaimStuck`으로
   `IN_PROGRESS`를 잡고, dispatch 결과를 `completeClaim`으로 `SUCCESS`/`FAILURE`에 기록한다. `INIT`은 어디서도
   쓰이지 않는다. `FAILURE` 행을 다시 읽는 코드는 없다(재구동은 수동).
@@ -216,6 +219,17 @@ _type: architecture · updated: 2026-10-02_
   커맨드 단위 순서는 파티션 간에 보장되지 않는다. 토픽 파티션 수는 저장소에 없다(미확인).
 - 폴링은 `created_at ASC`로 읽지만 dispatch는 executor 병렬이라 배치 안에서도 순서가 없다.
   `PartitionKeyUtil`(6 버킷)은 테스트 외 호출자가 없다.
+- **여러 메시지로 나뉘는 응답은 연쇄로 보낸다(2026-10-02).** AI 답변·스탠드업 요약·CVE digest처럼 메시지 하나의
+  블록 텍스트 예산(12,000자)을 넘어 나뉘는 응답은 첫 조각만 행으로 스테이징하고 나머지는 envelope의
+  `continuation`에 싣는다. relay가 그 행의 결과를 기록하는 트랜잭션에서, `completeClaim`이 1일 때만 다음 조각을
+  새 `PENDING` 행으로 넣으므로 조각은 앞 조각의 결과가 정해진 뒤에야 나가고, 상태 기록 재시도(앞 커밋이 이미
+  반영된 경우)나 다른 소유자는 같은 조각을 다시 넣지 못하며, 삽입이 실패하면 `SUCCESS`도 함께 롤백돼 스윕이
+  다시 보낸다. 폴링은 새 행을 평소처럼 읽고, CDC는 그 INSERT의 변경 이벤트로 받는다. rate limit·access blocked로
+  보류된 행은 payload에 나머지를 그대로 들고 있다. outcome unknown은 `FAILURE`로 기록하되 다음 조각을 이어
+  보낸다(요청이 Slack에 닿았을 가능성이 높고, 멈추면 이후 조각 전부가 조용히 사라지지만 이어 가면 최악이
+  `(k/n)` 라벨로 드러나는 조각 하나의 누락이다). 그 밖의 `FAILURE`(영구 거절·렌더 실패·24시간 상한·스윕 포기)는
+  남은 조각을 버리고 개수를 ERROR로 남긴다. 머리 행이 모든 조각을 들고 있으므로 CDC 레코드 크기 상한은
+  이 행 기준이다.
 - `spring.kafka.consumer.enable-auto-commit: false` + 컨테이너 `AckMode.RECORD`(2026-09-22)라 오프셋은 리스너가
   그 레코드를 반환한 뒤에만 커밋된다. 크래시 시 재전달되며, 위의 현재 상태 확인이 중복 발송을 막는다(claim과
   상태 기록 사이에 크래시하면 행은 `IN_PROGRESS`로 남고 스윕이 재발송 — at-least-once). CDC 프로파일의

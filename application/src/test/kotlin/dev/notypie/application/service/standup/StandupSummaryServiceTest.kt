@@ -1,6 +1,7 @@
 package dev.notypie.application.service.standup
 
 import com.slack.api.model.block.SectionBlock
+import dev.notypie.application.outbox.captureChains
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.service.meeting.createH2DataSource
 import dev.notypie.application.service.meeting.createH2TransactionManager
@@ -58,11 +59,11 @@ class StandupSummaryServiceTest :
             val outboxRepo = mockk<MessageOutboxRepository>()
             val codec = CodecOutboundMessagePort()
             val port = mockk<OutboundMessagePort>()
-            val staged = mutableListOf<OutboundMessage>()
-            val saved = mutableListOf<OutboxMessage>()
-            every { port.toRow(message = capture(staged), basicInfo = any()) } answers {
-                codec.toRow(message = firstArg(), basicInfo = secondArg())
+            val chains = mutableListOf<List<OutboundMessage>>()
+            port.captureChains(chains = chains) { message, basicInfo, continuation ->
+                codec.toRow(message = message, basicInfo = basicInfo, continuation = continuation)
             }
+            val saved = mutableListOf<OutboxMessage>()
             every { outboxRepo.save(capture(saved)) } answers { firstArg() }
             every { repo.findSessionForSummary(sessionUid = sessionUid) } returns
                 createStandupSessionDto(
@@ -103,7 +104,9 @@ class StandupSummaryServiceTest :
                         ),
                 )
                 val summaries =
-                    staged.map { (it as OutboundMessage.ChannelMessage).content as MessageContent.StandupSummary }
+                    chains.flatten().map {
+                        (it as OutboundMessage.ChannelMessage).content as MessageContent.StandupSummary
+                    }
 
                 then("it is split into several messages, each within Slack's total block text and block count") {
                     (summaries.size > 1) shouldBe true
@@ -131,9 +134,9 @@ class StandupSummaryServiceTest :
                     }
                 }
 
-                then("each outbox row's payload fits the TEXT column") {
-                    saved.size shouldBe summaries.size
-                    saved.forEach { row -> row.payload.toByteArray(Charsets.UTF_8).size shouldBeLessThanOrEqual 65_535 }
+                then("only the first part is staged, carrying the rest in order behind it") {
+                    chains.size shouldBe 1
+                    saved.size shouldBe 1
                 }
 
                 then("the session is marked summarized once, with the first row's marker") {

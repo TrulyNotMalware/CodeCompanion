@@ -7,6 +7,8 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.OutboundMessageCodec
 import dev.notypie.repository.outbox.Transport
+import dev.notypie.repository.outbox.chainedParts
+import dev.notypie.repository.outbox.toChainHead
 import dev.notypie.schema.createOutboxColumnMap
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -61,7 +63,7 @@ class OutboxMessageTest :
                 }
 
                 then("the row is stamped at the current schema version and starts PENDING") {
-                    row.schemaVersion shouldBe OutboxSchemaVersion.CURRENT
+                    row.schemaVersion shouldBe OutboxSchemaVersion.V2
                     row.status shouldBe MessageStatus.PENDING.name
                 }
 
@@ -77,6 +79,37 @@ class OutboxMessageTest :
                     val text = channelMessage.content.shouldBeInstanceOf<MessageContent.Text>()
                     text.headline shouldBe "hi"
                     text.markdown shouldBe "hello world"
+                }
+            }
+        }
+
+        given("CodecOutboundMessagePort.toRow with the rest of a chain") {
+            val basicInfo = createCommandBasicInfo()
+            val parts =
+                (1..3).map { index ->
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = "($index/3)", markdown = "part $index"),
+                    )
+                }
+
+            `when`("the head row is built") {
+                val head = port.toChainHead(messages = parts, basicInfo = basicInfo)
+                val single = port.toChainHead(messages = parts.take(n = 1), basicInfo = basicInfo)
+
+                then("it carries the first part with the rest queued in order behind it") {
+                    val decoded = OutboundMessageCodec.decode(json = head.payload)
+                    decoded.message shouldBe parts[0]
+                    decoded.continuation shouldBe parts.drop(n = 1)
+                    head.chainedParts() shouldBe 2
+                }
+
+                then(
+                    "only a row with a continuation is stamped V3, so an older binary holds it instead of sending part 1",
+                ) {
+                    head.schemaVersion shouldBe OutboxSchemaVersion.V3
+                    single.schemaVersion shouldBe OutboxSchemaVersion.V2
+                    single.chainedParts() shouldBe 0
                 }
             }
         }
