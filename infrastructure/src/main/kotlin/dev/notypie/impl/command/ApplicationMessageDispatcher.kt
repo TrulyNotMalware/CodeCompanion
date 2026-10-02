@@ -68,10 +68,13 @@ const val RATE_LIMITED_REASON = "ratelimited"
 const val TRANSIENT_EXHAUSTED_REASON = "transient_exhausted"
 const val OUTCOME_UNKNOWN_REASON = "outcome_unknown"
 const val UNSPECIFIED_ERROR_REASON = "unspecified_error"
+const val ACCESS_BLOCKED_REASON = "access_blocked"
 
 fun CommandOutput.isRateLimited(): Boolean = !ok && errorReason == RATE_LIMITED_REASON
 
 fun CommandOutput.isTransientExhausted(): Boolean = !ok && errorReason == TRANSIENT_EXHAUSTED_REASON
+
+fun CommandOutput.isAccessBlocked(): Boolean = !ok && errorReason == ACCESS_BLOCKED_REASON
 
 fun CommandOutput.retryAfter(): Duration? = (this as? RateLimitedOutput)?.retryAfter
 

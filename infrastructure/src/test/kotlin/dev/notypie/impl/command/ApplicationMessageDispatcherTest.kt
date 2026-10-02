@@ -8,6 +8,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createActionEventPayloadContents
 import dev.notypie.impl.command.event.createPostEventPayloadContents
+import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.retry.RetryService
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeLessThan
@@ -849,6 +850,14 @@ class ApplicationMessageDispatcherTest :
                     output.errorReason shouldStartWith "http_400: xxxx"
                     output.errorReason.length shouldBeLessThan 300
                 }
+            }
+        }
+
+        given("the access-blocked outcome the relay holds instead of failing") {
+            then("only a failed output whose reason is exactly ACCESS_BLOCKED_REASON is access-blocked") {
+                failOutput(event = channelMessage(), reason = ACCESS_BLOCKED_REASON).isAccessBlocked() shouldBe true
+                failOutput(event = channelMessage(), reason = "channel_not_found").isAccessBlocked() shouldBe false
+                failOutput(event = channelMessage(), reason = RATE_LIMITED_REASON).isAccessBlocked() shouldBe false
             }
         }
     })
