@@ -22,6 +22,12 @@ permissions:
   contents: read
   deployments: write
 
+# An explicit bash runs `bash --noprofile --norc -eo pipefail {0}`; the implicit default `bash -e {0}` lets a failing
+# jq in `jq … | sha256sum | cut` hash empty input, so the rollback's change check could read "unchanged".
+defaults:
+  run:
+    shell: bash
+
 # Serialise production deploys: overlapping runs would interleave backup, apply and rollback.
 # An unmerged close gets its own group, or it would replace a merge's pending run in the deploy queue.
 concurrency:

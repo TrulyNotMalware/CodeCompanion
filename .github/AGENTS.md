@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # .github
 
@@ -108,6 +108,13 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 - `deploy_action.yaml` triggers on `pull_request: closed` and gates every job on
   `github.event.pull_request.merged == true` — a *closed but unmerged* PR must not deploy. Preserve that
   guard.
+- **`deploy_action.yaml` runs every `run:` step with pipefail.** Its workflow-level `defaults.run.shell: bash`
+  makes GitHub invoke `bash --noprofile --norc -eo pipefail {0}`; without an explicit `shell` the default is
+  `bash -e {0}`, where a pipeline takes the status of its last command, so a failing `jq` in
+  `jq -cS '.spec.template' | sha256sum | cut` hashed empty input and the rollback's change check could read
+  "unchanged". The Ready-pod count keeps its `|| true`, because `grep -c` exits 1 on zero matches. The other
+  workflows set no default; add the same `defaults` block before adding a pipe whose upstream failure must fail
+  a step there.
 - The deploy applies `application/src/main/resources/k8s/deployment.yaml` through `envsubst '${IMAGE_NAME}'`.
   The variable list is explicit because the job env holds the `PROD_OCI_*` secrets: an unrestricted
   `envsubst` would write any of them into the cluster the moment the manifest gained another `$NAME`.
