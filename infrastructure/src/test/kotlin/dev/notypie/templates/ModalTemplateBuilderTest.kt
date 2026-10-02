@@ -1086,6 +1086,41 @@ class ModalTemplateBuilderTest :
                 }
             }
 
+            `when`("the meetings fit the count cap but their sections overflow one message's text budget") {
+                val meetings =
+                    (1..ModalTemplateBuilder.MAX_MEETINGS_PER_LIST).map { index ->
+                        createMeetingDto(
+                            title = "D$index",
+                            participants =
+                                (1..10).map { participant ->
+                                    createMeetingParticipantDto(
+                                        userId = "U%010d".format(participant),
+                                        isAttending = false,
+                                        absentReason = RejectReason.OTHER,
+                                        absentReasonDetail = "d".repeat(n = RejectReason.MAX_DETAIL_LENGTH),
+                                    )
+                                },
+                        )
+                    }
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+                val sections = result.template.filterIsInstance<SectionBlock>()
+                val shown = sections.size - 1
+
+                then("it stops before the meeting that would pass the budget and says how many it left out") {
+                    (shown in 1 until meetings.size) shouldBe true
+                    sections.last().text.text shouldBe
+                        "_Showing the first $shown of ${meetings.size} meetings. " +
+                        "${meetings.size - shown} more omitted — narrow the range to see them._"
+                    sections.sumOf { it.text.text.length } shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                }
+            }
+
             `when`("meeting has no endAt") {
                 val meeting =
                     createMeetingDto(

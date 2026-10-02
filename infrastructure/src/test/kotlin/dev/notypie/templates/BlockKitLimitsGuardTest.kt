@@ -16,6 +16,9 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createMeetingParticipantDto
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.SlackApiEventConstructor
 import dev.notypie.impl.command.SlackOutboundRenderer
@@ -80,6 +83,22 @@ class BlockKitLimitsGuardTest :
                 List(size = SlackBlockLimits.MESSAGE_BODY_BUDGET / 1_448) { "c".repeat(n = 1_447) }
                     .joinToString(separator = "\n") + "\n```"
         val standupQuestions = (1..8).map { index -> "Q$index " + "q".repeat(n = 196) }
+        val fullMeetingList =
+            (1..16).map { index ->
+                createMeetingDto(
+                    creator = TEST_USER_ID,
+                    title = "<&>".repeat(n = 6) + index,
+                    participants =
+                        (1..10).map { participant ->
+                            createMeetingParticipantDto(
+                                userId = "U%010d".format(participant),
+                                isAttending = false,
+                                absentReason = RejectReason.UNEXPECTED_EMERGENCY,
+                                absentReasonDetail = "&".repeat(n = RejectReason.MAX_DETAIL_LENGTH),
+                            )
+                        },
+                )
+            }
 
         given("messages rendered from data that can grow") {
             val cases =
@@ -133,6 +152,16 @@ class BlockKitLimitsGuardTest :
                                     createApprovalContents(
                                         commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
                                     ).copy(subTitle = "<!channel>&<>".repeat(n = 2)),
+                            ),
+                        "a full meeting list the viewer hosts, every meeting declined by ten with the longest detail" to
+                            OutboundMessage.Ephemeral(
+                                target = target,
+                                recipient = UserRef(id = TEST_USER_ID),
+                                content =
+                                    MessageContent.MeetingList(
+                                        meetings = fullMeetingList,
+                                        currentUserId = TEST_USER_ID,
+                                    ),
                             ),
                         "a schedule notice" to
                             OutboundMessage.ChannelMessage(

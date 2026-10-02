@@ -127,6 +127,7 @@ class ModalTemplateBuilder(
 
         // Slack caps a message at 50 blocks; worst case is 3 blocks/meeting + 2, so 3N + 2 <= 50.
         internal const val MAX_MEETINGS_PER_LIST: Int = 16
+        private const val MEETING_LIST_HEADER = "My Meetings"
 
         // Value is the DayOfWeek enum name so the submission context round-trips via valueOf(...).
         private val WEEKDAY_OPTIONS: List<Pair<DayOfWeek, String>> =
@@ -251,21 +252,27 @@ class ModalTemplateBuilder(
         listIdempotencyKey: UUID,
     ): LayoutBlocks =
         layoutBlocks {
-            add(block = modalBlockBuilder.headerBlock(text = "My Meetings"))
+            add(block = modalBlockBuilder.headerBlock(text = MEETING_LIST_HEADER))
             add(block = modalBlockBuilder.dividerBlock())
             if (meetings.isEmpty()) {
                 add(block = modalBlockBuilder.simpleText(text = "_No upcoming meetings found._", isMarkDown = true))
                 return@layoutBlocks
             }
-            val displayed = meetings.take(n = MAX_MEETINGS_PER_LIST)
-            displayed.forEachIndexed { index, meeting ->
-                add(
-                    block =
-                        modalBlockBuilder.simpleText(
-                            text = renderMeetingSection(meeting = meeting),
-                            isMarkDown = true,
-                        ),
-                )
+            val budget =
+                SlackBlockLimits.MESSAGE_TEXT_BUDGET - MEETING_LIST_HEADER.length -
+                    omittedMeetingsNotice(shown = meetings.size, total = meetings.size).length
+            val sections =
+                meetings.take(n = MAX_MEETINGS_PER_LIST).map { meeting ->
+                    meeting to renderMeetingSection(meeting = meeting).truncateSectionText()
+                }
+            val totals =
+                sections
+                    .runningFold(initial = 0) { total, (_, text) ->
+                        total + text.length + ModalBlockBuilder.HOST_MEETING_ACTIONS_TEXT_LENGTH
+                    }.drop(n = 1)
+            val displayed = sections.take(n = totals.count { it <= budget })
+            displayed.forEachIndexed { index, (meeting, text) ->
+                add(block = modalBlockBuilder.simpleText(text = text, isMarkDown = true))
                 if (meeting.creator == currentUserId && !meeting.isCanceled) {
                     add(
                         layout =
@@ -277,19 +284,19 @@ class ModalTemplateBuilder(
                 }
                 if (index != displayed.lastIndex) add(block = modalBlockBuilder.dividerBlock())
             }
-            if (meetings.size > MAX_MEETINGS_PER_LIST) {
-                val hidden = meetings.size - MAX_MEETINGS_PER_LIST
+            if (displayed.size < meetings.size) {
                 add(
                     block =
                         modalBlockBuilder.simpleText(
-                            text =
-                                "_Showing the first $MAX_MEETINGS_PER_LIST of ${meetings.size} meetings. " +
-                                    "$hidden more omitted — narrow the range to see them._",
+                            text = omittedMeetingsNotice(shown = displayed.size, total = meetings.size),
                             isMarkDown = true,
                         ),
                 )
             }
         }
+
+    private fun omittedMeetingsNotice(shown: Int, total: Int): String =
+        "_Showing the first $shown of $total meetings. ${total - shown} more omitted — narrow the range to see them._"
 
     private fun renderMeetingSection(meeting: MeetingDto): String {
         val title = meeting.title.escapeMrkdwn()

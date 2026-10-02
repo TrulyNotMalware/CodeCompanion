@@ -15,6 +15,11 @@ class ModalBlockBuilder(
 ) {
     companion object {
         const val DEFAULT_CALENDAR_IMAGE_URLS = "https://api.slack.com/img/blocks/bkb_template_images/notifications.png"
+        private const val RESCHEDULE_BUTTON_NAME = "Reschedule"
+        private const val ADD_PARTICIPANT_BUTTON_NAME = "Add participant"
+        private const val CANCEL_BUTTON_NAME = "Cancel"
+        val HOST_MEETING_ACTIONS_TEXT_LENGTH: Int =
+            RESCHEDULE_BUTTON_NAME.length + ADD_PARTICIPANT_BUTTON_NAME.length + CANCEL_BUTTON_NAME.length
     }
 
     fun headerBlock(text: String): HeaderBlock =
@@ -85,19 +90,19 @@ class ModalBlockBuilder(
         // block_id/action_id must be unique per row; Slack rejects the whole message (invalid_blocks) on collision.
         val rescheduleButton: InteractiveObject =
             modalElementBuilder.rescheduleMeetingButtonElement(
-                buttonName = "Reschedule",
+                buttonName = RESCHEDULE_BUTTON_NAME,
                 interactionPayload = rescheduleRoutingValue,
                 actionId = "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid",
             )
         val addParticipantButton: InteractiveObject =
             modalElementBuilder.addParticipantButtonElement(
-                buttonName = "Add participant",
+                buttonName = ADD_PARTICIPANT_BUTTON_NAME,
                 interactionPayload = addParticipantRoutingValue,
                 actionId = "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid",
             )
         val cancelButton: InteractiveObject =
             modalElementBuilder.cancelMeetingButtonElement(
-                buttonName = "Cancel",
+                buttonName = CANCEL_BUTTON_NAME,
                 interactionPayload = cancelRoutingValue,
                 actionId = "${MeetingActionIds.CANCEL_ACTION_ID}_$meetingUid",
             )
