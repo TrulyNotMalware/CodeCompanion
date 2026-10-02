@@ -20,6 +20,8 @@ import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.SmartLifecycle
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Service
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -51,7 +53,8 @@ class SlackMessageRelayServiceImpl(
     @Qualifier("relayTaskExecutor") private val relayTaskExecutor: Executor,
     private val clock: Clock,
     appConfig: AppConfig,
-) : MessageRelayService {
+) : MessageRelayService,
+    SmartLifecycle {
     private val stuckThreshold: Duration = Duration.ofSeconds(appConfig.outbox.polling.stuckInProgressSeconds)
     private val giveUpAfter: Duration = Duration.ofHours(appConfig.outbox.polling.giveUpAfterHours)
 
@@ -63,8 +66,40 @@ class SlackMessageRelayServiceImpl(
     private val slotCapacity: Int = relayQueueCapacity(appConfig = appConfig)
     private val freeSlots = AtomicInteger(slotCapacity)
 
+    // Set by stop() at the start of the context close (review F1). From then on nothing new is sent: no slot is
+    // handed out, no claim is queued, and a claim that has not reached renewClaim yet returns unsent and stays
+    // IN_PROGRESS, so another pod's sweep reclaims it after the stuck threshold without a duplicate. Only dispatches
+    // already past that point keep running, and relayTaskExecutor's shutdown wait covers just those.
+    @Volatile
+    private var stopping = false
+
+    // Not stopping until stop(), so the bean counts as running from construction and unit tests need no start().
+    override fun isRunning(): Boolean = !stopping
+
+    override fun start() {
+        stopping = false
+    }
+
+    // DEFAULT_PHASE (Integer.MAX_VALUE) stops before the Kafka listener containers (Integer.MAX_VALUE - 100), so a
+    // CDC record still in hand after this point is not sent either. Left on its own, the executor (which only begins
+    // its shutdown when the context destroys it) would start every queued claim during the whole lifecycle stop and
+    // send it past the pod's grace period. The cast only skips the drain for an executor that is not a pool: the
+    // stopping check in dispatchClaimed still keeps every queued claim from sending.
+    override fun stop() {
+        stopping = true
+        val dropped = ArrayList<Runnable>()
+        (relayTaskExecutor as? ThreadPoolTaskExecutor)?.threadPoolExecutor?.queue?.drainTo(dropped)
+        releaseDispatchSlots(count = dropped.size)
+        logger.info {
+            "Relay stopping: ${dropped.size} queued claims left IN_PROGRESS unsent for the recovery sweep; " +
+                "only dispatches already running are waited for"
+        }
+    }
+
+    override fun getPhase(): Int = SmartLifecycle.DEFAULT_PHASE
+
     override fun reserveDispatchSlots(wanted: Int): Int {
-        if (wanted <= 0) return 0
+        if (stopping || wanted <= 0) return 0
         return minOf(freeSlots.getAndUpdate { free -> free - minOf(free, wanted) }, wanted)
     }
 
@@ -77,6 +112,13 @@ class SlackMessageRelayServiceImpl(
     // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
     // A rejected claim is left IN_PROGRESS without a send, so the recovery sweep reclaims it after the stuck threshold.
     override fun batchPendingMessages(claims: List<OutboxClaim>) {
+        if (stopping) {
+            releaseDispatchSlots(count = claims.size)
+            logger.info {
+                "Relay stopping; leaving eventIds=${claims.map { it.row.eventId }} IN_PROGRESS for the recovery sweep"
+            }
+            return
+        }
         claims.forEachIndexed { index, claim ->
             try {
                 relayTaskExecutor.execute {
@@ -98,6 +140,10 @@ class SlackMessageRelayServiceImpl(
     // Keyed on the row's eventId, not the renderer's payload eventId, which is throwaway.
     override fun dispatchClaimed(claim: OutboxClaim) {
         val row = claim.row
+        if (stopping) {
+            logger.info { "Relay stopping; leaving eventId=${row.eventId} IN_PROGRESS unsent for the recovery sweep" }
+            return
+        }
         val eventId =
             runCatching { UUID.fromString(row.eventId) }
                 .getOrElse { parseFailure ->

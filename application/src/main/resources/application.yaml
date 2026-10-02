@@ -4,8 +4,9 @@ spring:
   lifecycle:
     # Each shutdown phase must outwait one CDC record in flight (CDC_LISTENER_SHUTDOWN_TIMEOUT, 60 s): the listener
     # container finishes the record in hand and records its status before the DataSource closes; cut shorter,
-    # another pod's sweep re-sends a message that was already posted. k8s/deployment.yaml's grace period is sized
-    # on top of this; ShutdownBudgetTest checks every profile and the manifest.
+    # another pod's sweep re-sends a message that was already posted. k8s/deployment.yaml's grace period adds this
+    # phase to the relay executor's destroy-time wait (they run one after the other); ShutdownBudgetTest checks every
+    # profile and the manifest's sum.
     timeout-per-shutdown-phase: 60s
   jpa:
     # Explicitly off (Boot defaults to true and warns at startup). With it on, every HTTP request binds one

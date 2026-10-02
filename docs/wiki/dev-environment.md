@@ -203,18 +203,23 @@ _type: guide · updated: 2026-09-30_
   롤백은 apply·rollout·verify·health 단계가 실패했을 때만 돌고, 배포 전 백업과 비교해 파드 템플릿 해시나 리비전이 달라졌으면
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
-- 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(단계당 60초, CDC 리스너는 `stopImmediate`로 처리 중인
-  레코드 1건만 마치고 멈춤, relay executor도 실행 중 작업을 60초까지 기다림) ⊂ `terminationGracePeriodSeconds` 90초.
-  예전 값(단계 10초, grace 45초)은 레코드 1건의 최악 처리 시간을 못 담아, 발송 뒤 DataSource가 닫혀 완료 기록에 실패하고
-  다른 파드의 스윕이 재발송했다(review 14장 T12). 종료 중 시작된 relay 큐 작업은 SIGKILL에 끊길 수 있고 스윕이 재발송한다. 메모리는
+- 파드 종료 예산: 대기는 겹치지 않고 **차례로 더해진다**. `preStop` 5초 sleep → Spring 라이프사이클 정지(단계당 60초; CDC
+  리스너는 `stopImmediate`로 처리 중인 레코드 1건만 마치고 멈춤) → 컨텍스트 파기 때 relay executor가 실행 중 발송을 60초,
+  `@Async` executor가 10초까지 기다림. 그래서 `terminationGracePeriodSeconds`는 5 + 60 + 60 + 10 + 여유 15 = 150초다
+  (`ShutdownBudgetTest`가 합계를 검사). 예전 값(단계 10초, grace 45초)은 레코드 1건의 최악 처리 시간을 못 담아, 발송 뒤
+  DataSource가 닫혀 완료 기록에 실패하고 다른 파드의 스윕이 재발송했다(review 14장 T12). 그 뒤의 90초는 단계 하나만 셌고,
+  relay executor가 정지 단계 내내 큐의 claim을 새로 시작해 grace를 넘겨 보낼 수 있었다(수정 리뷰 F1). 지금은 relay 서비스가
+  종료 시작에 큐를 비우고 새 발송을 막아, 남은 claim은 발송 없이 `IN_PROGRESS`로 남아 스윕이 중복 없이 회수한다. relay
+  executor는 `EntityManagerFactory`에 의존해 DataSource보다 먼저 파기된다. 웹 graceful·스케줄러 단계도 그 사이에 있지만 보통
+  몇 초이고, 60초 상한까지 가도 종료 전에 시작된 발송이 레코드 1건 예산을 다 쓴 뒤다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
 - **배포 전략: V20 릴리스 동안은 `Recreate`.** 아웃박스 claim 토큰(V20·V22) 릴리스는 pre-V20 파드와 한순간도 겹치면 안 되므로
   (구 파드가 남의 `IN_PROGRESS` 행을 재발송하고 attempt 조건 없이 상태를 덮는다) `deployment.yaml`이
   `strategy: {type: Recreate, rollingUpdate: null}`을 싣는다. 워크플로의 `kubectl apply`가 전략을 설정하고, 롤아웃과
   `rollout undo`(파드 템플릿만 되돌리고 `spec.strategy`는 그대로) 모두 구 파드를 먼저 멈춘다. 이전의 "머지 전 수동
   `kubectl patch`" 절차는 잊으면 그대로 겹치고 롤백 뒤 무조건 RollingUpdate로 되돌리라는 지시가 다시 겹침을 만들어서 폐기했다.
-  대가는 이 블록이 있는 동안 **모든 배포가 중단**이라는 점이다(구 파드 종료 최대 90초 + 새 파드 Ready까지 startup 프로브 최대 3분;
-  롤아웃 420초 타임아웃 안). 모든 파드가 V20 이상이고 pre-V20 롤백이 필요 없어지면 후속 PR에서 블록을 지운다 — last-applied에 있는 필드라
+  대가는 이 블록이 있는 동안 **모든 배포가 중단**이라는 점이다(구 파드 종료 최대 150초 + 새 파드 Ready까지 startup 프로브 최대 3분;
+  롤아웃 480초 타임아웃 안, 배포 job은 롤아웃 두 번을 담는 25분). 모든 파드가 V20 이상이고 pre-V20 롤백이 필요 없어지면 후속 PR에서 블록을 지운다 — last-applied에 있는 필드라
   three-way merge가 지우고 API 서버가 기본 RollingUpdate(25%/25%)로 되돌린다. 그 뒤의 롤링 업데이트(surge 1)는 롤아웃 중 요청 기준
   3 × 1536Mi = 4.5Gi가 동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면 surge 파드가
   Pending → 타임아웃 → 롤백). `Recreate` 동안은 2 × 1536Mi.

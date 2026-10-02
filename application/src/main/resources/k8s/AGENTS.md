@@ -13,7 +13,7 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup, and the "One-time" checklist of the V18–V23 release (V18 → V19 + V23 → V20 → V22 → `Recreate` rollout → V21) |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `strategy: {type: Recreate, rollingUpdate: null}` for the V20 release, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 90`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `strategy: {type: Recreate, rollingUpdate: null}` for the V20 release, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 150`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
 | `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
@@ -71,9 +71,13 @@ adds what an agent editing the manifests needs to know.
 - **Probes and the shutdown budget go together.** On deletion the `preStop` hook sleeps 5s (endpoint removal
   reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown, bounded per phase by
   `spring.lifecycle.timeout-per-shutdown-phase` (60s, `application.yaml`) so the CDC listener can finish the record in
-  hand and record its status before the DataSource closes (review T12); `terminationGracePeriodSeconds` (90) =
-  preStop 5 + one phase 60 + 25 margin. `ShutdownBudgetTest` (application tests) parses this file and fails when the
-  grace period no longer covers preStop + one record + 15 s. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
+  hand and record its status before the DataSource closes (review T12). The waits add up rather than overlap
+  (review F1): `terminationGracePeriodSeconds` (150) = preStop 5 + the Kafka listener phase 60 + `relayTaskExecutor`'s
+  destroy-time wait 60 (it starts only after every lifecycle phase; queued claims are dropped at the start of the
+  close, so it waits only for dispatches already running) + the `@Async` executor's 10 + 15 margin. The web-graceful
+  and scheduler phases sit in between; each normally takes seconds, and even at its 60 s cap it runs after every
+  dispatch started before the close has had its one-record budget. `ShutdownBudgetTest` (application tests) parses
+  this file and fails when the grace period no longer covers that sum. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes
   `/actuator/health/{liveness,readiness}` exist. The startup probe allows 36 × 5s = 3 minutes.
 - **Memory:** the Dockerfile's `-XX:MaxRAMPercentage=50.0` makes the heap 1Gi of the 2Gi limit. Metaspace, code
   cache, thread stacks and direct buffers (Jetty, Kafka, MariaDB driver) come on top, so the 1536Mi request is
@@ -92,9 +96,9 @@ adds what an agent editing the manifests needs to know.
   workflow's `rollout undo` (which restores only the pod template, never `spec.strategy`) both stop every old Pod
   before starting a new one. `rollingUpdate: null` makes the apply delete the live object's defaulted
   `rollingUpdate` block, which the API server rejects next to `Recreate`. Cost: every deploy while the block is
-  there is an outage until a new Pod is Ready (startup probe up to 3 minutes); old-Pod shutdown (≤ 90s) + startup
-  (≤ 180s) + readiness fits the workflow's 420s rollout timeout, so do not lengthen either without raising
-  `DEPLOYMENT_ROLLOUT_TIMEOUT`. **Removal:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision
+  there is an outage until a new Pod is Ready (startup probe up to 3 minutes); old-Pod shutdown (≤ 150s) + startup
+  (≤ 180s) + readiness fits the workflow's 480s rollout timeout, so do not lengthen either without raising
+  `DEPLOYMENT_ROLLOUT_TIMEOUT` (and the deploy job's `timeout-minutes`, 25, which holds two rollouts). **Removal:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision
   is no longer wanted, delete the whole `strategy` block in a follow-up PR; the three-way merge removes the field
   (it is in the `last-applied-configuration` annotation) and the API server defaults to RollingUpdate 25%/25%. Do
   not go back to a one-time `kubectl patch` of the live strategy: a patched field is not in the last-applied
@@ -140,10 +144,11 @@ adds what an agent editing the manifests needs to know.
 - Everything here is packaged into the boot jar by `processResources` even though the app never reads it.
 
 ### Testing Requirements
-- There is no unit or integration test for manifests. Validate locally with
+- The only test that reads a manifest is `ShutdownBudgetTest` (grace period vs the shutdown waits of
+  `deployment.yaml`). Validate the rest locally with
   `IMAGE_NAME=example envsubst '${IMAGE_NAME}' < deployment.yaml | kubectl apply --dry-run=server -f -` and
   `kubectl apply --dry-run=client -f <file>` for the rest.
-- The deploy workflow is the real check: rollout status (300s), ready-pod count at least `spec.replicas`, then
+- The deploy workflow is the real check: rollout status (480s), ready-pod count at least `spec.replicas`, then
   up to ~2 minutes of in-cluster readiness checks; a failure of one of those steps (or of the apply) that left the
   pod template or the revision different from the pre-apply backup triggers
   `kubectl rollout undo --to-revision=<previous>`, which restores the whole previous pod template.

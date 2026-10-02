@@ -27,8 +27,12 @@ spec:
       labels:
         app: code-companion-deploy
     spec:
-      # preStop 5s + timeout-per-shutdown-phase 60s (application.yaml: one CDC record in flight) + 25s margin.
-      terminationGracePeriodSeconds: 90
+      # The close waits in series: preStop 5s + the Kafka listener phase 60s (timeout-per-shutdown-phase, one CDC record
+      # in flight) + relayTaskExecutor's destroy-time wait 60s (dispatches already running; queued ones are dropped) +
+      # the @Async executor's 10s + 15s margin = 150s. The web-graceful and scheduler phases sit between the Kafka phase
+      # and the executor waits; each normally takes seconds, and at its 60s cap it runs after every dispatch started
+      # before the close has had its one-record budget. ShutdownBudgetTest checks this sum.
+      terminationGracePeriodSeconds: 150
       imagePullSecrets:
         - name: dockercred
       containers:

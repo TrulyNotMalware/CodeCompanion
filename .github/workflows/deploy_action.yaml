@@ -42,9 +42,9 @@ env:
   K8S_DEPLOYMENT_NAME: code-companion-deploy
   K8S_SERVICE_NAME: code-companion-svc
   K8S_CONTAINER_NAME: code-companion-deploy
-  # Recreate (k8s/deployment.yaml): old Pods' grace (≤ 90s) + startup probe (≤ 180s) + first readiness (10s period)
-  # + scheduling and image pull. Lower it only together with that grace or the startup probe.
-  DEPLOYMENT_ROLLOUT_TIMEOUT: 420s
+  # Recreate (k8s/deployment.yaml): old Pods' grace (≤ 150s) + startup probe (≤ 180s) + first readiness (10s period)
+  # + about 140s for scheduling and image pull = 480s. Lower it only together with that grace or the startup probe.
+  DEPLOYMENT_ROLLOUT_TIMEOUT: 480s
 
   JAR_FILE_NAME: code-companion-prod
   STATIC_DOCKER_TAG: ${{ github.sha }}
@@ -219,8 +219,9 @@ jobs:
     needs: [ check-changes, build ]
     if: needs.check-changes.outputs.should-deploy == 'true' && success()
     runs-on: ubuntu-latest
-    # Rollout (300s) + health check (~2 min) + rollback rollout (300s) must fit.
-    timeout-minutes: 20
+    # Rollout (DEPLOYMENT_ROLLOUT_TIMEOUT 480s) + health check (120s deadline plus up to ~1 min for its last attempt)
+    # + rollback rollout (480s) + checkout, kubectl setup, backup and apply (~2 min) ≈ 1,260s must fit.
+    timeout-minutes: 25
     name: Deploy to Production OKE
     env:
       DEPLOYMENT_ID: ${{ needs.build.outputs.deployment-id }}

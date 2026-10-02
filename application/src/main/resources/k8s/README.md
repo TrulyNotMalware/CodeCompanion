@@ -49,7 +49,8 @@ Defines the application deployment with:
   requests. Once that block is removed, the default rolling update briefly runs 3 Pods (2 replicas + 1 surge),
   and the nodes need 3 × 1536Mi = 4.5Gi of requestable memory at once; see Prerequisites
 - Shutdown: a 5s `preStop` sleep, then Spring's graceful shutdown (60s per phase, sized on one CDC record in
-  flight), within a 90s `terminationGracePeriodSeconds`
+  flight) followed by the relay executor's 60s wait for dispatches already running, within a 150s
+  `terminationGracePeriodSeconds`
 - Container `securityContext` with `allowPrivilegeEscalation: false` (the container still runs as root to bind port 80)
 - PodDisruptionBudget ensuring at least 1 pod remains available during disruptions
 
@@ -130,8 +131,8 @@ through the ReplicaSet, not the eviction API, so the PodDisruptionBudget does no
 
 **Trade-off:** while the `strategy` block is in the manifest, *every* deploy — a rollback and any follow-up fix
 included — is an outage from the moment the old Pods stop until a new Pod is Ready (the startup probe allows up to
-3 minutes). The rollout (up to 90s of shutdown, 3 minutes of startup, then readiness) fits the workflow's
-420s rollout timeout.
+3 minutes). The rollout (up to 150s of shutdown, 3 minutes of startup, then readiness) fits the workflow's
+480s rollout timeout.
 
 That release ships V18 through V23 at once (`main` was at V17), and the script numbers are not the apply order:
 V21 goes last. Production runs `ddl-auto: none` and nothing applies the scripts automatically, so work through
@@ -296,8 +297,8 @@ k8s/
   배포마다 최대 startup 프로브 3분의 중단이 생기고, 요청은 2 × 1536Mi만 있으면 됩니다. 그 블록을 지운 뒤의 기본 롤링
   업데이트는 롤아웃 중 파드 3개(레플리카 2 + surge 1)를 띄우므로 노드에 요청 기준 3 × 1536Mi = 4.5Gi가 동시에 들어갈
   자리가 있어야 합니다(사전 요구사항 참고)
-- 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(단계당 60초, 처리 중인 CDC 레코드 1건 기준), 전체
-  `terminationGracePeriodSeconds` 90초
+- 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(단계당 60초, 처리 중인 CDC 레코드 1건 기준)과 그 뒤 relay
+  executor의 실행 중 발송 대기 60초, 전체 `terminationGracePeriodSeconds` 150초
 - 컨테이너 `securityContext` `allowPrivilegeEscalation: false` (80 포트 바인딩 때문에 여전히 root로 실행)
 - 중단 시 최소 1개의 파드를 유지하는 PodDisruptionBudget
 
@@ -374,8 +375,8 @@ undo는 파드 템플릿만 되돌리고 전략은 템플릿에 속하지 않기
 파드를 지우므로 PodDisruptionBudget에 막히지 않습니다.
 
 **트레이드오프:** 매니페스트에 `strategy` 블록이 있는 동안에는 롤백과 후속 수정 배포를 포함한 *모든* 배포가 이전 파드가
-멈춘 순간부터 새 파드가 Ready가 될 때까지(startup 프로브 최대 3분) 서비스 중단입니다. 롤아웃(종료 최대 90초 + 기동 최대
-3분 + readiness)은 워크플로의 롤아웃 타임아웃 420초 안에 들어갑니다.
+멈춘 순간부터 새 파드가 Ready가 될 때까지(startup 프로브 최대 3분) 서비스 중단입니다. 롤아웃(종료 최대 150초 + 기동 최대
+3분 + readiness)은 워크플로의 롤아웃 타임아웃 480초 안에 들어갑니다.
 
 그 릴리스는 V18부터 V23까지를 한꺼번에 싣고(`main`은 V17까지), 스크립트 번호는 적용 순서가 아닙니다. V21이 마지막입니다.
 운영은 `ddl-auto: none`이고 스크립트를 자동으로 적용하는 도구가 없으므로 아래 순서대로 직접 진행합니다:

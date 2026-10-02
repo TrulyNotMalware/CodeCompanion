@@ -16,6 +16,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import jakarta.persistence.EntityManagerFactory
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.autoconfigure.task.TaskSchedulingAutoConfiguration
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer
@@ -40,6 +41,7 @@ class SchedulingWiringSmokeTest :
                 .withConfiguration(AutoConfigurations.of(TaskSchedulingAutoConfiguration::class.java))
                 .withUserConfiguration(SchedulingConfig::class.java, AsyncConfig::class.java)
                 .withBean(AppConfig::class.java, { AppConfig() })
+                .withBean("entityManagerFactory", EntityManagerFactory::class.java, { mockk(relaxed = true) })
                 .withPropertyValues("spring.threads.virtual.enabled=true")
 
         given("the scheduling and async wiring with virtual threads enabled") {

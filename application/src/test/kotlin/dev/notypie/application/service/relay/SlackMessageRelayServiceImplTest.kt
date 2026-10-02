@@ -755,7 +755,12 @@ class SlackMessageRelayServiceImplTest :
             // Review F2: with the threads already started and idle, a new task only ever goes to the queue, so the
             // old "free queue + idle threads" reading (104) overfilled the queue: 197 of 200 probe runs rejected.
             `when`("the production-shaped pool's threads already exist and sit idle between full reservations") {
-                val pool = AsyncConfig().relayTaskExecutor(appConfig = AppConfig()) as ThreadPoolTaskExecutor
+                val pool =
+                    AsyncConfig().relayTaskExecutor(
+                        appConfig = AppConfig(),
+                        entityManagerFactory = mockk(relaxed = true),
+                    )
+                        as ThreadPoolTaskExecutor
                 pool.threadPoolExecutor.prestartAllCoreThreads()
                 val dispatched = AtomicInteger(0)
                 val messageDispatcher = mockk<MessageDispatcher>()
@@ -807,6 +812,64 @@ class SlackMessageRelayServiceImplTest :
                     service.reserveDispatchSlots(wanted = 10) shouldBe 2
                     service.releaseDispatchSlots(count = 100)
                     service.reserveDispatchSlots(wanted = Int.MAX_VALUE) shouldBe 3
+                }
+            }
+        }
+
+        // Review F1: the pool, which only begins its shutdown when the context destroys it, used to start every queued
+        // claim during the whole lifecycle stop and send it past the pod's grace period.
+        given("stop() at the start of the context close, with one dispatch running and claims queued") {
+            val release = CountDownLatch(1)
+            val firstStarted = CountDownLatch(1)
+            val messageDispatcher = mockk<MessageDispatcher>()
+            every { messageDispatcher.dispatch(event = any()) } answers {
+                firstStarted.countDown()
+                release.await(5L, TimeUnit.SECONDS)
+                delivered()
+            }
+            val pool = boundedPool(threads = 1, queue = 3)
+            val outboxRepository = mockk<MessageOutboxRepository>()
+            outboxRepository.stubClaimLifecycle()
+            val service =
+                createRelayService(
+                    outboxRepository = outboxRepository,
+                    messageDispatcher = messageDispatcher,
+                    relayTaskExecutor = pool,
+                    appConfig = appConfigWithBatchSize(batchSize = 3),
+                )
+            val eventIds = List(size = 5) { UUID.randomUUID().toString() }
+            val claims = eventIds.map { OutboxClaim(row = createOutboxRow(eventId = it), attempt = 1) }
+            service.batchPendingMessages(claims = claims.take(service.reserveDispatchSlots(wanted = 3)))
+            firstStarted.await(5L, TimeUnit.SECONDS)
+
+            `when`("the context begins to close") {
+                service.stop()
+                val reservedAfterStop = service.reserveDispatchSlots(wanted = 3)
+                service.dispatchClaimed(claim = claims[3])
+                service.batchPendingMessages(claims = listOf(claims[4]))
+                release.countDown()
+                pool.shutdown()
+
+                then(
+                    "only the running dispatch finishes; queued and later claims stay IN_PROGRESS unsent for the sweep",
+                ) {
+                    service.isRunning shouldBe false
+                    reservedAfterStop shouldBe 0
+                    pool.threadPoolExecutor.completedTaskCount shouldBe 1L
+                    verify(exactly = 1) { messageDispatcher.dispatch(event = any()) }
+                    verify(exactly = 1) {
+                        outboxRepository.completeClaim(
+                            eventId = eventIds[0],
+                            attemptCount = 1,
+                            status = MessageStatus.SUCCESS.name,
+                            now = any(),
+                        )
+                    }
+                    eventIds.drop(1).forEach { eventId ->
+                        verify(exactly = 0) {
+                            outboxRepository.renewClaim(eventId = eventId, attemptCount = any(), now = any())
+                        }
+                    }
                 }
             }
         }

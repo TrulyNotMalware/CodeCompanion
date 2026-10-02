@@ -231,8 +231,11 @@ _type: architecture · updated: 2026-09-30_
   상태 기록 사이에 크래시하면 행은 `IN_PROGRESS`로 남고 스윕이 재발송 — at-least-once). CDC 프로파일의
   `max-poll-records`·`max.poll.interval.ms`는 프로파일 YAML이 정한다.
 - 종료: CDC 컨테이너는 `stopImmediate = true`, `shutdownTimeout` 60초라 처리 중인 레코드 1건만 마치고 멈추고, 같은 poll의
-  나머지는 커밋되지 않아 다른 파드로 재전달된다(행은 아직 `PENDING`). 단계 타임아웃·relay executor 대기·파드 grace는
-  이 60초 위에 쌓는다(`dev-environment.md`의 파드 종료 예산, review 14장 T12).
+  나머지는 커밋되지 않아 다른 파드로 재전달된다(행은 아직 `PENDING`). 그보다 먼저 relay 서비스(`SmartLifecycle`,
+  컨테이너보다 이른 단계)가 relay 큐를 비우고 그 뒤로는 `renewClaim` 전의 claim을 보내지 않는다. 남은 claim은 발송 없이
+  `IN_PROGRESS`로 남아 다른 파드의 스윕이 중복 없이 회수한다. relay executor는 그 뒤 컨텍스트 파기 때 **실행 중인** 발송만
+  60초까지 기다리고, 이 대기는 Kafka 단계 다음에 차례로 온다. 파드 grace는 preStop 5 + Kafka 단계 60 + relay 대기 60 +
+  `@Async` 10 + 여유 15 = 150초(`dev-environment.md`의 파드 종료 예산, review 14장 T12, 수정 리뷰 F1).
 - 정직한 보장: README의 "exactly-once-style"은 지향 표현이다. 실제는 **at-least-once**(폴링 stuck 재전송, Kafka
   재전달) + **멱등 소비자**(상태 필터, `event_id` 기준 상태 갱신)이며, Slack 채널에는 중복 게시가 가능하다.
 
