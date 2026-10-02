@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-01 -->
 
 # application/service
 
@@ -26,7 +26,7 @@ that the relay lane dispatches.
 | File | Description |
 |------|-------------|
 | `command/CommandExecutor.kt` | The pipeline hub: `command.handleEvent()` → `drainIntents()` → `SlackIntentResolver.resolveAll` + `OutboundMessageStager.stage` → `EventPublisher.publishEvent` |
-| `relay/PollingMessageProcessor.kt` | Fixed-rate (5s) outbox poller: recovers stuck `IN_PROGRESS`, then CAS-claims `PENDING` rows |
+| `relay/PollingMessageProcessor.kt` | Fixed-rate (5s) outbox poller (polling mode only): CAS-claims `PENDING` rows within the relay slots it reserved. Stuck `IN_PROGRESS` rows are recovered by `relay/OutboxRecoveryScheduler`, in both modes |
 | `relay/DebeziumLogTailingProcessor.kt` | `@KafkaListener` on the CDC topic; consumes Debezium envelopes off the outbox table |
 | `relay/OutboxPayloadRenderer.kt` | Renders a stored outbox envelope into the concrete transport call |
 | `meeting/MeetingReminderScheduler.kt` / `MeetingReminderSchedulingService.kt` | Trigger vs. logic split for pre-meeting reminder batches |

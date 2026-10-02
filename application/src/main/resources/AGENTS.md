@@ -14,7 +14,7 @@ stand up change-data-capture locally and in-cluster.
 | `application.yaml` | Base defaults only — kept deliberately minimal. `spring.lifecycle.timeout-per-shutdown-phase: 60s` for every profile (one CDC record in flight must finish before the DataSource closes; `k8s/deployment.yaml`'s grace adds it to the relay executor's destroy-time wait); `spring.jpa.open-in-view: false` (see "Open-in-view" below); MCP server off by default; scheduler pool sized to 4 (read by the `taskScheduler` bean in `configurations/SchedulingConfig.kt`); `server.forward-headers-strategy: none` |
 | `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true`; HTTP bound to `server.address: 127.0.0.1` (the only profile allowed a blank signing secret, with unauthenticated actuator endpoints) |
 | `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
-| `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
+| `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), `ddl-auto: none`, `show-sql: false`, `server.shutdown: graceful` (no timeout of its own: every phase gets `application.yaml`'s 60 s, and the pod's shutdown budget is in `k8s/AGENTS.md`), H2 console off |
 | `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB defaults, port 9000, `SLACK_SIGNING_SECRET` required (no default), health `show-details: when_authorized` because the port is tunnelled to the internet |
 | `banner.txt` | Spring Boot startup banner |
 
@@ -52,13 +52,12 @@ stand up change-data-capture locally and in-cluster.
 - **`k8s/deployment.yaml` is templated with `envsubst '${IMAGE_NAME}'`** by `.github/workflows/deploy_action.yaml`.
   Keep the placeholder syntax intact or the deploy breaks.
 - **Kafka consumer sizing** (`local`, `dev`, `prod`): `max-poll-records: 5` and `max.poll.interval.ms: 300000`,
-  i.e. 300s for a batch of 5, 60s per record on average. A PENDING-row record costs one Slack dispatch: up to 3
-  `RetryService` attempts, plus, after a 429 with `Retry-After` <= 3s, that wait and a second round of up to 3.
-  Every Slack call (SDK and `response_url`) shares the SDK client's call timeout, `SLACK_CALL_TIMEOUT` (6s) in
-  `ApplicationMessageDispatcher`, so one dispatch is bounded by 2 x (3 x 6s + retry backoff) + 3s, about 40s; rendering
-  adds at most one profile lookup (3s connect + 10s read), about 53s in total, which leaves about 7s of the 60s
-  for the claim, renew and completion SQL. Redo this arithmetic whenever that timeout, the retry policy or these two values change,
-  and before adding any wait inside the listener. If a batch does overrun, the consumer leaves the group and the
+  i.e. 300s for a batch of 5, 60s per record on average. What one PENDING-row record costs is budgeted in one
+  place: the Slack HTTP bound (render's profile lookup plus the dispatch retries) only in
+  `infrastructure/src/main/kotlin/dev/notypie/impl/command/AGENTS.md`, and the claim, renew and completion SQL with
+  the combined per-record total in `kotlin/dev/notypie/application/service/relay/AGENTS.md` ("Per-record time
+  budget"). Do not copy those totals here; redo them there whenever these two values change, and before adding any
+  wait inside the listener. If a batch does overrun, the consumer leaves the group and the
   records are redelivered; an already-claimed row is no longer PENDING, so the CDC processor skips it.
 - **Open-in-view is off on purpose** (`application.yaml`, review T25). Boot's default binds one `EntityManager` to
   each HTTP request; the meeting write that `MeetingWriteDeferral` runs after the interaction transaction commits

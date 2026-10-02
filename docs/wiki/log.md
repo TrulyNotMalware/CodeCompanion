@@ -22,3 +22,4 @@ append-only. 형식: `## [YYYY-MM-DD] <create|update|lint> | 요약`
 ## [2026-09-30] update | events-and-outbox: 스탠드업 DM의 claim·outbox 저장·markSent를 한 트랜잭션으로 묶고(실패 시 PENDING 복귀, 마감 후 SKIPPED), 넛지 claim도 저장 트랜잭션에 합류(리뷰 T18)
 ## [2026-09-30] update | dev-environment: Hikari 산정식에서 회의 쓰기 ×2 삭제 — `spring.jpa.open-in-view: false` 명시(T25)로 지연 회의 쓰기가 자기 영속성 컨텍스트에서 돌고 요청당 커넥션은 한 번에 하나
 ## [2026-10-01] update | events-and-outbox·dev-environment: 아웃박스 `payload`를 `MEDIUMTEXT`(V23, 배포 전 적용 가능)로 넓히고 AI 답변을 렌더 상한(48 × 2,900자)으로 잘라 저장(H1), 스탠드업 건너뜀은 롤백 호환을 위해 이번 릴리스까지 `FAILED` + `skipped:` 사유로 기록(G2)
+## [2026-10-01] update | events-and-outbox·dev-environment: relay 발송 자리 원자적 예약(F2·F3·F4), 종료 시 relay 큐 비우기와 grace 150초·롤아웃 480초(F1), OkHttp 투명 재전송 끄기(R1/F5), access_blocked 헬스 DOWN(F6), 진입 핸들러 트랜잭션 서술 정정

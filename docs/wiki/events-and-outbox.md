@@ -20,9 +20,12 @@ _type: architecture · updated: 2026-09-30_
    `OutboundMessageStager.stage`에 넘기고, `SlackOutboundStager`는 모달을 제외한 모든 가족을 **미렌더** 상태로
    `OutboundMessageEnqueued`(`isInternal = true`)에 감싼다. `EventPublisher.publishEvent` → Spring 이벤트 버스 →
    `SlackMessageRelayServiceImpl.saveOutboxMessage`(`@TransactionalEventListener(phase = BEFORE_COMMIT)`)가
-   `OutboundMessagePort.toRow`로 row를 만들어 `MessageOutboxRepository.save`. 진입 핸들러
-   (`MeetingServiceImpl.handleMeeting`, `SlackMentionEventHandlerImpl.handleEvent`,
-   `SlackInteractionHandlerImpl.handleInteraction`)가 `@Transactional`이므로 도메인 쓰기와 row가 함께 커밋된다.
+   `OutboundMessagePort.toRow`로 row를 만들어 `MessageOutboxRepository.save`. 진입 핸들러가 트랜잭션을 열고 그 안에서
+   커맨드를 실행하므로 도메인 쓰기와 row가 함께 커밋된다. 여는 방식은 다르다: 슬래시 `MeetingServiceImpl.handleMeeting`은
+   `@Transactional`, 멘션 `SlackMentionEventHandlerImpl.handleEvent`는 `TransactionTemplate`, 상호작용
+   `SlackInteractionHandlerImpl.handleInteraction`은 트랜잭션 매니저로 직접 열고 닫는다(둘 다 역할 조회는 트랜잭션을 열기
+   전에 한다). 회의 취소·참가자 추가·일정 변경의 회의 쓰기는 `MeetingWriteDeferral`이 상호작용 트랜잭션 커밋 뒤로 미뤄
+   별도 트랜잭션(`isolatedWriteTemplate`, `REQUIRES_NEW`)에서 하고, 그 회신의 outbox row도 그 트랜잭션에서 저장된다.
    - **리스너는 활성 트랜잭션이 있어야 동작한다.** `fallbackExecution`이 기본(false)이라 트랜잭션 밖에서 publish
      하면 이벤트가 조용히 버려진다. Codex 리뷰 1라운드의 "DM never sent"가 정확히 이 사고였다(`Handoff.md`).
      트랜잭션이 없는 곳(`@Async` 리스너, 스케줄러)은 `TransactionTemplate.runInTx { }` 안에서 publish 하거나
