@@ -73,9 +73,11 @@ class JpaConfiguration {
     fun meetingReminderRepository(
         jpaMeetingRepository: JpaMeetingRepository,
         jpaMeetingReminderRepository: JpaMeetingReminderRepository,
+        transactionManager: PlatformTransactionManager,
     ) = MeetingReminderRepositoryImpl(
         jpaMeetingRepository = jpaMeetingRepository,
         jpaMeetingReminderRepository = jpaMeetingReminderRepository,
+        transactionManager = transactionManager,
     )
 
     @Bean

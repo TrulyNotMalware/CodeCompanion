@@ -114,6 +114,7 @@ class MeetingJpaStore(
         MeetingReminderRepositoryImpl(
             jpaMeetingRepository = jpaMeetingRepository,
             jpaMeetingReminderRepository = jpaMeetingReminderRepository,
+            transactionManager = transactionManager,
         )
 
     fun <T : Any> inNewTransaction(action: () -> T): T = TransactionTemplate(transactionManager).execute { action() }!!

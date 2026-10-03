@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-03 -->
 
 # infrastructure/configurations
 
@@ -14,7 +14,7 @@ persistence and retry only.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository`, `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository` (also takes the `PlatformTransactionManager` for its `REQUIRES_NEW` insert), `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references |
+| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository` (also takes the `PlatformTransactionManager` for its insert transaction), `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository` (also takes the `PlatformTransactionManager` for its locked-read sync and `REQUIRES_NEW` insert), `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references |
 | `RetryConfiguration.kt` | `@EnableResilientMethods @Configuration`. `retryService()` returns a parameterless `RetryService` (it builds its own per-policy templates; there is no `RetryTemplate` bean any more). The same file defines `enum class RetryOptions(internal val default: Long)`: `MAX_ATTEMPTS = 3`, `INITIAL_DELAY = 100`, `MULTIPLIER = 2`, `MAX_DELAY = 10000`, `JITTER = 10` (milliseconds) |
 
 ## For AI Agents

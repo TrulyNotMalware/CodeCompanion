@@ -28,7 +28,7 @@ Test doubles for repository transaction boundaries that H2 cannot reproduce. Tod
   it and falls back to `JpaSystemException`.
 
 ### Testing Requirements
-Consumed by `repository/cve/CveTopicRepositoryImplTest`.
+Consumed by `repository/cve/CveTopicRepositoryImplTest` and `repository/meeting/MeetingReminderRepositoryImplTest`.
 
 ## Dependencies
 

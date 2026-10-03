@@ -4,14 +4,19 @@ import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.repository.meeting.schema.MeetingReminderSchema
 import dev.notypie.repository.meeting.schema.toMeetingReminderDto
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDateTime
 
 open class MeetingReminderRepositoryImpl(
     private val jpaMeetingRepository: JpaMeetingRepository,
     private val jpaMeetingReminderRepository: JpaMeetingReminderRepository,
+    transactionManager: PlatformTransactionManager,
 ) : MeetingReminderRepository {
+    private val insertTransaction: TransactionTemplate = TransactionTemplate(transactionManager)
+
     @Transactional(readOnly = true)
     override fun findActiveMeetingsInWindow(from: LocalDateTime, to: LocalDateTime): List<ReminderCandidateMeeting> =
         jpaMeetingRepository
@@ -27,7 +32,7 @@ open class MeetingReminderRepositoryImpl(
                 )
             }
 
-    @Transactional
+    // No transaction may span the read and the write: under MariaDB snapshot isolation a lost race then fails (1020).
     override fun ensureReminder(
         meetingId: Long,
         offsetMinutes: Int,
@@ -39,26 +44,29 @@ open class MeetingReminderRepositoryImpl(
             jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
                 meetingId = meetingId,
                 offsetMinutes = offsetMinutes,
-            )
-        if (existing != null) {
-            if (existing.status != MeetingReminderStatus.PENDING || existing.scheduledAt.isSameSecond(scheduledAt)) {
-                return false
-            }
-            return jpaMeetingReminderRepository.realignPending(
-                id = existing.id,
-                observedAt = existing.scheduledAt,
-                scheduledAt = scheduledAt,
-                startAt = startAt,
-                now = now,
-            ) == 1
+            ) ?: return insertReminder(meetingId = meetingId, offsetMinutes = offsetMinutes, scheduledAt = scheduledAt)
+        if (existing.status != MeetingReminderStatus.PENDING || existing.scheduledAt.isSameSecond(scheduledAt)) {
+            return false
         }
-        val reminder =
-            MeetingReminderSchema(
-                meeting = jpaMeetingRepository.getReferenceById(meetingId),
-                offsetMinutes = offsetMinutes,
-                scheduledAt = scheduledAt,
+        return jpaMeetingReminderRepository.realignPending(
+            id = existing.id,
+            observedAt = existing.scheduledAt,
+            scheduledAt = scheduledAt,
+            startAt = startAt,
+            now = now,
+        ) == 1
+    }
+
+    private fun insertReminder(meetingId: Long, offsetMinutes: Int, scheduledAt: Instant): Boolean {
+        insertTransaction.executeWithoutResult {
+            jpaMeetingReminderRepository.save(
+                MeetingReminderSchema(
+                    meeting = jpaMeetingRepository.getReferenceById(meetingId),
+                    offsetMinutes = offsetMinutes,
+                    scheduledAt = scheduledAt,
+                ),
             )
-        jpaMeetingReminderRepository.save(reminder)
+        }
         return true
     }
 

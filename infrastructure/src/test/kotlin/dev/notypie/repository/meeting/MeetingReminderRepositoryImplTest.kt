@@ -1,10 +1,14 @@
 package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
+import dev.notypie.repository.SnapshotIsolationTransactionManager
+import dev.notypie.repository.createTransactionalProxy
+import dev.notypie.repository.meeting.schema.MeetingReminderSchema
 import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingReminderSchema
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -12,9 +16,12 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -34,6 +41,7 @@ class MeetingReminderRepositoryImplTest
                 MeetingReminderRepositoryImpl(
                     jpaMeetingRepository = jpaMeetingRepository,
                     jpaMeetingReminderRepository = jpaMeetingReminderRepository,
+                    transactionManager = transactionManager,
                 )
             val transactionTemplate = TransactionTemplate(transactionManager)
             val now = Instant.parse("2031-01-01T00:00:00Z")
@@ -207,6 +215,98 @@ class MeetingReminderRepositoryImplTest
                     then("the CAS misses and the row keeps its value") {
                         updated shouldBe 0
                         reminderOf(meeting = meeting)!!.scheduledAt shouldBe currentAt
+                    }
+                }
+            }
+
+            given("a PENDING reminder another replica claims between this pass's read and its realign") {
+                val isolation = SnapshotIsolationTransactionManager()
+                val reminders = mockk<JpaMeetingReminderRepository>()
+                val isolated =
+                    createTransactionalProxy<MeetingReminderRepository>(
+                        target =
+                            MeetingReminderRepositoryImpl(
+                                jpaMeetingRepository = mockk(),
+                                jpaMeetingReminderRepository = reminders,
+                                transactionManager = isolation,
+                            ),
+                        transactionManager = isolation,
+                    )
+                val staleAt = Instant.parse("2031-04-01T00:50:00Z")
+                val currentAt = Instant.parse("2031-04-01T05:50:00Z")
+                val startAt = LocalDateTime.of(2031, 4, 1, 15, 0)
+                every { reminders.findByMeetingIdAndOffsetMinutes(meetingId = 41L, offsetMinutes = 10) } answers {
+                    isolation.consistentRead()
+                    createMeetingReminderSchema(
+                        meeting = createMeetingSchema(),
+                        scheduledAt = staleAt,
+                        offsetMinutes = 10,
+                    )
+                }
+                every {
+                    reminders.realignPending(
+                        id = any(),
+                        observedAt = staleAt,
+                        scheduledAt = currentAt,
+                        startAt = startAt,
+                        now = now,
+                    )
+                } answers {
+                    isolation.lockingAccessToRowChangedConcurrently(table = "meeting_reminder")
+                    0
+                }
+
+                `when`("the realign runs under MariaDB snapshot isolation") {
+                    val moved =
+                        isolated.ensureReminder(
+                            meetingId = 41L,
+                            offsetMinutes = 10,
+                            scheduledAt = currentAt,
+                            startAt = startAt,
+                            now = now,
+                        )
+
+                    then("the change counts as a CAS miss instead of failing the materialize tick") {
+                        moved shouldBe false
+                    }
+                }
+            }
+
+            given("a reminder another replica inserts between this pass's read and its insert") {
+                val isolation = SnapshotIsolationTransactionManager()
+                val reminders = mockk<JpaMeetingReminderRepository>()
+                val meetings = mockk<JpaMeetingRepository>()
+                val isolated =
+                    createTransactionalProxy<MeetingReminderRepository>(
+                        target =
+                            MeetingReminderRepositoryImpl(
+                                jpaMeetingRepository = meetings,
+                                jpaMeetingReminderRepository = reminders,
+                                transactionManager = isolation,
+                            ),
+                        transactionManager = isolation,
+                    )
+                every { reminders.findByMeetingIdAndOffsetMinutes(meetingId = 42L, offsetMinutes = 10) } answers {
+                    isolation.consistentRead()
+                    null
+                }
+                every { meetings.getReferenceById(42L) } returns createMeetingSchema()
+                every { reminders.save(any<MeetingReminderSchema>()) } answers {
+                    isolation.lockingAccessToRowChangedConcurrently(table = "meeting_reminder")
+                    throw DataIntegrityViolationException("Duplicate entry '42-10' for key 'uk_meeting_reminder'")
+                }
+
+                `when`("the insert runs under MariaDB snapshot isolation") {
+                    then("it fails on the unique key, which the scheduler already absorbs as a lost race") {
+                        shouldThrow<DataIntegrityViolationException> {
+                            isolated.ensureReminder(
+                                meetingId = 42L,
+                                offsetMinutes = 10,
+                                scheduledAt = Instant.parse("2031-04-02T05:50:00Z"),
+                                startAt = LocalDateTime.of(2031, 4, 2, 15, 0),
+                                now = now,
+                            )
+                        }
                     }
                 }
             }
