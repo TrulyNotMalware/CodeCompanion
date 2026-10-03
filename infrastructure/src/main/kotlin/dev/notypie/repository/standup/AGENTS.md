@@ -46,6 +46,15 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
   and flips the status (`MANDATORY`). A session already in the caller's persistence context keeps its stale
   `status` after the locking query (Hibernate does not overwrite a managed instance), so the status is re-read
   with `findLockedStatus`; a `refresh` would cascade into both collections and lock their rows too.
+- **`recordAnswer` must be the first statement of its transaction** (and `findSessionForSummary` the first of
+  the summary's). Production MariaDB runs `innodb_snapshot_isolation` ON: an earlier plain read in the same
+  transaction opens a read view, and once another transaction has changed the session the lock fails with 1020
+  (the member's answer row committed by another submission fails the upsert the same way), so `SESSION_CLOSED`
+  is never reached. The submit path keeps it first: roles are resolved before the interaction transaction opens
+  and nothing reads before the `RecordStandupAnswerEvent` listener; `postSummary` opens its own transaction from
+  `detectCutoffs`, which holds none. The status re-read therefore only matters in that earlier-read order, which
+  H2 shows (`StandupRepositoryImplTest`) and MariaDB fails first (the same order measured 1020 on other tables,
+  review.md 15.8; not run on the standup tables).
 - **The answer write is a native upsert**, not "find the member's row, update or add": that decision was made
   from whatever the transaction last saw, and two first submissions by one member both inserted and hit the
   unique key; a remove-then-add inserted before the orphan delete. `INSERT … ON DUPLICATE KEY UPDATE` is

@@ -103,8 +103,51 @@ class StandupRepositoryImplTest
                 }
             }
 
-            given("two first submissions by one member, the later deciding from a view older than the first") {
-                `when`("the second transaction read the session before the first answer committed") {
+            given("two first submissions by one member") {
+                `when`("the second transaction starts with the session lock and waits while the first commits") {
+                    val sessionUid = openSession()
+                    val firstLocked = CountDownLatch(1)
+                    val firstResult = AtomicReference<AnswerRecordResult?>()
+                    val first =
+                        thread {
+                            runCatching {
+                                inTx {
+                                    repository
+                                        .recordAnswer(
+                                            sessionUid = sessionUid,
+                                            userId = "U_A",
+                                            responses = listOf("first"),
+                                            submittedAt = cutoffAt.minusSeconds(120L),
+                                        ).also {
+                                            firstLocked.countDown()
+                                            Thread.sleep(LOCK_HOLD_MILLIS)
+                                        }
+                                }
+                            }.onSuccess { firstResult.set(it) }
+                            firstLocked.countDown()
+                        }
+                    firstLocked.await(5L, TimeUnit.SECONDS)
+                    val second =
+                        record(
+                            sessionUid = sessionUid,
+                            responses = listOf("second"),
+                            submittedAt = cutoffAt.minusSeconds(60L),
+                        )
+                    first.join()
+
+                    then("both are recorded and the member keeps one row with the later answer, no unique violation") {
+                        firstResult.get() shouldBe AnswerRecordResult.RECORDED
+                        second shouldBe AnswerRecordResult.RECORDED
+                        val answers = repository.findSession(sessionUid = sessionUid)!!.answers
+                        answers.single().responses shouldContainExactly listOf("second")
+                        answers.single().submittedAt shouldBe cutoffAt.minusSeconds(60L)
+                    }
+                }
+
+                `when`(
+                    "the second transaction read the session before the first answer committed " +
+                        "(not the production order: MariaDB snapshot isolation fails that upsert with 1020)",
+                ) {
                     val sessionUid = openSession()
                     val staleViewTaken = CountDownLatch(1)
                     val firstCommitted = CountDownLatch(1)
@@ -137,7 +180,7 @@ class StandupRepositoryImplTest
                     firstCommitted.countDown()
                     second.join()
 
-                    then("both are recorded and the member keeps one row with the later answer, no unique violation") {
+                    then("H2 records both and keeps the later answer in one row") {
                         first shouldBe AnswerRecordResult.RECORDED
                         secondResult.get().getOrThrow() shouldBe AnswerRecordResult.RECORDED
                         val answers = repository.findSession(sessionUid = sessionUid)!!.answers
@@ -181,7 +224,27 @@ class StandupRepositoryImplTest
                     }
                 }
 
-                `when`("the answering transaction already holds the session and the summary commits before the lock") {
+                `when`("the summary commits before the answering transaction, whose first statement is the lock") {
+                    val sessionUid = openSession()
+                    val sessionId = repository.findSession(sessionUid = sessionUid)!!.sessionId
+                    inTx { repository.markSessionSummarized(sessionId = sessionId, messageTs = "outbox:before") }
+                    val result =
+                        record(
+                            sessionUid = sessionUid,
+                            responses = listOf("late"),
+                            submittedAt = cutoffAt.minusSeconds(30L),
+                        )
+
+                    then("it is rejected as closed and no answer row is written") {
+                        result shouldBe AnswerRecordResult.SESSION_CLOSED
+                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                    }
+                }
+
+                `when`(
+                    "the answering transaction read the session before the summary committed " +
+                        "(not the production order: MariaDB snapshot isolation fails that lock with 1020)",
+                ) {
                     val sessionUid = openSession()
                     val result =
                         inTx {
@@ -202,7 +265,7 @@ class StandupRepositoryImplTest
                             )
                         }
 
-                    then("the locked read sees SUMMARIZED, not the managed instance's stale COLLECTING") {
+                    then("H2 reads SUMMARIZED under the lock, not the managed instance's stale COLLECTING") {
                         result shouldBe AnswerRecordResult.SESSION_CLOSED
                         repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
                     }
