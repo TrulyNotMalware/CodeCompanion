@@ -63,7 +63,8 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 - **Every `upsert` transaction starts with the locking read.** Production MariaDB (12.0.2) runs REPEATABLE READ
   with `innodb_snapshot_isolation` ON (default since 11.6.2): once a transaction has done a plain read, a
   locking read or UPDATE of a row another transaction committed after it fails with ER_CHECKREAD 1020
-  (Hibernate `SnapshotIsolationException`, translated by Spring to `JpaSystemException`). A plain
+  (Hibernate `SnapshotIsolationException`, which `configurations/SnapshotIsolationExceptionTranslator` hands
+  callers as `SnapshotIsolationConflictException`; both old orders reproduced on MariaDB 12.3.3). A plain
   `findByTopicKey` before the lock, or one transaction around the insert and the re-read, brings the failure
   back on a two-replica boot. `CveTopicRepositoryImplTest` models the rule with
   `SnapshotIsolationTransactionManager`; H2 cannot raise 1020.

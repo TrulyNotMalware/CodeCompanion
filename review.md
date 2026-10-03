@@ -2188,7 +2188,7 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
 
 ### 15.8 최종 리뷰 반영 (2026-10-03, 레인 F)
 
-운영 MariaDB 12.0.2는 REPEATABLE READ에 `innodb_snapshot_isolation`이 기본 ON이다(11.6.2부터). 한 트랜잭션이 일반 읽기를 한 뒤 다른 트랜잭션이 그 뒤에 커밋한 행을 잠금 읽기·UPDATE하면 ER_CHECKREAD 1020이 난다. Hibernate 7.4.5는 이를 `SnapshotIsolationException`으로, Spring은 `JpaSystemException`으로 바꾼다. 설정은 그대로 두고 코드로 고쳤다.
+운영 MariaDB 12.0.2는 REPEATABLE READ에 `innodb_snapshot_isolation`이 기본 ON이다(11.6.2부터). 한 트랜잭션이 일반 읽기를 한 뒤 다른 트랜잭션이 그 뒤에 커밋한 행을 잠금 읽기·UPDATE하면 ER_CHECKREAD 1020이 난다. Hibernate 7.4.5는 이를 `SnapshotIsolationException`으로 바꾸고, Spring 기본 설정은 다시 `JpaSystemException`으로 바꾼다(아래 전역 번역 이후에는 `SnapshotIsolationConflictException`). 설정은 그대로 두고 코드로 고쳤다.
 
 - **CVE 토픽 upsert**(`77ac0e52`): 트랜잭션마다 잠금 읽기를 첫 문장으로 실행한다. 삽입은 REQUIRES_NEW로 하고, 유니크 키에 지면 새 트랜잭션에서 다시 잠금 읽기를 한다. `@DynamicUpdate`·`redefine()`은 그대로 둔다. 두 복제본이 함께 기동해도 1020으로 기동이 실패하지 않는다.
 - **리마인더 재정렬 CAS**(`23bc9355`): `ensureReminder`의 트랜잭션을 걷어 조회와 쓰기를 분리했다. 동시 변경은 0행 CAS 미스가 되어 틱이 계속 돈다.
