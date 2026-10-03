@@ -312,7 +312,7 @@
 | 요청 경로 `findAll()`, 벽시계 | `Clock`은 적용, `findAll`은 해당 없음 | `13bdde51` | 역할 목록 명령은 모든 부여를 보여 줘야 한다 |
 | CDC `Envelope` 메타 필드 | 적용 | `be581fb7`, `bf6719cb` | |
 | 일시 오류가 DLT로 | 적용 | `b51580ff` | 파싱·역직렬화 실패만 DLT로 보낸다. 나머지는 로그를 남기고 ack하며 복구 스윕에 맡긴다 |
-| 종료 예산 | 일부 적용 | `c2d1770f`, `7e054dd8`, `00a9abe5` | `ShutdownBudgetTest`: 5 + 3×10 + 2×5 + 20 + 20 + 10 = 95초 ≤ 유예 100초. 처음에는 단계를 둘로 세어 75 ≤ 80으로 봤다. Kafka producer 종료(기본 30초, 단계 타임아웃 밖에서 동기로 닫힘)는 Codex가 찾았고 5초로 제한해 두 번을 넣었다. 실행 중인 잡이 있으면 스케줄러도 자기 단계에서 기다린다(프로브: 단계당 1초에서 close 1초→2초). 같은 poll의 나머지가 닫힌 풀에서 DLT로 가는 부분은 `stopImmediate`로 막았다. **남음**: 처리 중인 레코드는 단계 타임아웃(10초)까지만, 릴레이 executor 작업은 20초까지만 기다리는데 디스패치 하나는 최대 약 53초다. 그 사이 Slack이 이미 게시했다면 스윕이 다시 보내 중복 게시가 된다. 크래시·SIGKILL도 같다. 막으려면 단계별 타임아웃(`DefaultLifecycleProcessor.setTimeoutForShutdownPhase`)과 훨씬 긴 유예가 필요하다(결정 필요) |
+| 종료 예산 | 적용(사용자 결정: 진행 중 디스패치를 끝까지 기다림) | `c2d1770f`, `7e054dd8`, `00a9abe5`, `dc28030a`, `0e2700a9` | `ShutdownBudgetTest`: 5 + 3×10 + 2×5 + 20 + 20 + 10 = 95초 ≤ 유예 100초. 처음에는 단계를 둘로 세어 75 ≤ 80으로 봤다. Kafka producer 종료(기본 30초, 단계 타임아웃 밖에서 동기로 닫힘)는 Codex가 찾았고 5초로 제한해 두 번을 넣었다. 실행 중인 잡이 있으면 스케줄러도 자기 단계에서 기다린다(프로브: 단계당 1초에서 close 1초→2초). 같은 poll의 나머지가 닫힌 풀에서 DLT로 가는 부분은 `stopImmediate`로 막았다. **해소(2026-10-02, review.md 15장)**: 리스너 단계와 릴레이 executor가 디스패치 1건 예산(`RECORD_SHUTDOWN_WAIT`, 코드 상수에서 계산해 약 46초)만큼 기다리고, 정지 시 큐에 남은 claim은 새로 보내지 않는다(스윕이 회수). 유예 180초, 계산된 합계 162초(`dc28030a`). **남음**: 커넥션 풀 고갈 시 문장마다 붙는 `connection-timeout`은 예산 밖이고, 크래시·SIGKILL은 여전히 중복 게시가 될 수 있다 |
 | outbox 헬스 쿼리 | 적용 | `5796442c` | 쿼리 타임아웃 힌트와 prod 캐시 10초. 재시도 행 하나에 DOWN이 되는 동작은 **설계대로 유지**한다(게이트에 쓰이지 않고, 알림은 `outbox_retrying_messages`로 보냄). **실행 필요**: 타임아웃 동작(H2로 재현 불가) |
 | CDC 스냅숏 시각 존·단위 | 적용 | `c766fd67` | UTC 기준이며 밀리·마이크로 단위를 구분한다. **실행 필요**: 실제 Debezium 레코드 |
 | 처리할 수 없는 이벤트에 500 | 적용 | `f49e4ed0`, `f026e232` | 400 + `X-Slack-No-Retry` |
@@ -365,7 +365,7 @@ Codex는 트랜잭션 전파, Spring 빈 연결, 회의·스탠드업 저장, CD
 
 **네이티브 SQL 리터럴을 바인딩 대신 가드로 막은 이유.** enum 상수 이름을 바꾸면 저장된 행에는 옛 이름이 그대로 남는다. 그래서 바인딩 파라미터로 바꿔도 데이터를 마이그레이션하지 않으면 똑같이 0행이 된다. 리터럴에만 있는 위험은 SQL이 더 이상 없는 상수를 가리키는 경우다. `NativeQueryStatusLiteralTest`는 여섯 저장소의 네이티브 `@Query`에 들어 있는 따옴표 상수가 해당 컬럼 enum의 상수인지 검사한다. 클래스패스를 스캔해 매핑 없이 리터럴을 쓰는 새 저장소도 잡는다.
 
-**nullable 컬럼 지적이 일부 적용인 이유.** 두 프로퍼티는 테이블이 생길 때부터 non-null 기본값을 가졌다(`e33aba5e`, `42be2edb`). 앱의 쓰기 경로는 셋이고 어느 것도 NULL을 쓰지 않는다: 엔티티 insert, 파라미터 UPDATE, 리터럴 UPDATE. 그래서 NULL 행은 수동 SQL로만 생길 수 있다. 매핑에 `nullable = false`를 두어 Hibernate가 만드는 스키마(H2, 새 DB)가 이 계약을 강제한다. 기존 MariaDB 컬럼은 바뀌지 않는다. **실행 필요**: prod에서 아래 두 쿼리를 확인한 뒤 V23 패치를 결정한다.
+**nullable 컬럼 지적이 일부 적용인 이유.** 두 프로퍼티는 테이블이 생길 때부터 non-null 기본값을 가졌다(`e33aba5e`, `42be2edb`). 앱의 쓰기 경로는 셋이고 어느 것도 NULL을 쓰지 않는다: 엔티티 insert, 파라미터 UPDATE, 리터럴 UPDATE. 그래서 NULL 행은 수동 SQL로만 생길 수 있다. 매핑에 `nullable = false`를 두어 Hibernate가 만드는 스키마(H2, 새 DB)가 이 계약을 강제한다. 기존 MariaDB 컬럼은 바뀌지 않는다. **실행 필요**: prod에서 아래 두 쿼리를 확인한 뒤 V24 패치를 결정한다(V23은 outbox payload MEDIUMTEXT가 차지했다, review.md 15장).
 
 - `SELECT COUNT(*) FROM outbox_message WHERE status IS NULL`
 - `SELECT COUNT(*) FROM meeting_participants WHERE absent_reason IS NULL`
