@@ -5,6 +5,7 @@ import dev.notypie.application.outbox.captureChains
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.service.meeting.createH2DataSource
 import dev.notypie.application.service.meeting.createH2TransactionManager
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -504,6 +505,7 @@ class StandupSummaryServiceTest :
                     event =
                         MessagePublishSuccessEvent(
                             eventId = eventId,
+                            commandDetailType = CommandDetailType.STANDUP_SUMMARY,
                             messageTs = "1700000000.000700",
                         ),
                 )
@@ -515,6 +517,30 @@ class StandupSummaryServiceTest :
                             messageTs = "1700000000.000700",
                         )
                     }
+                }
+            }
+
+            `when`("the outbox relay reports a Slack message ts for a message that is not a standup summary") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSummaryService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = mockk(relaxed = true),
+                        transactionManager = stubTransactionManager(),
+                    )
+
+                service.replaceSummaryMarkerWithSlackTs(
+                    event =
+                        MessagePublishSuccessEvent(
+                            eventId = UUID.randomUUID(),
+                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                            messageTs = "1700000000.000800",
+                        ),
+                )
+
+                then("no marker UPDATE runs, so standup_session is not scanned and locked on every relay success") {
+                    verify(exactly = 0) { repo.replaceSummaryMessageTs(currentMessageTs = any(), messageTs = any()) }
                 }
             }
         }

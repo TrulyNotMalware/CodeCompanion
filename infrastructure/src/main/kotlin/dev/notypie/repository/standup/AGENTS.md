@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-03 -->
 
 # infrastructure/repository/standup
 
@@ -34,7 +34,9 @@ port (`StandupRepository`) fronts three Spring Data interfaces.
   zone is (2026-10-01).
 - **`claimNudge` and `markSessionSummarized` are once-only CAS on the session row** (`nudged_at IS NULL`,
   `status = 'COLLECTING'`); `replaceSummaryMessageTs` is keyed on the *current* ts so a stale replacement is
-  a no-op. All three return row counts the impl maps to booleans.
+  a no-op. All three return row counts the impl maps to booleans. `replaceSummaryMessageTs` has no index to use
+  (`summary_message_ts` is unindexed), so it scans and, under REPEATABLE READ, locks the whole table; its only
+  caller runs it for standup-summary successes alone.
 - **`createSession` does not upsert.** Unique `(routine_uid, session_date)` throws on a duplicate; callers
   check `findSession(routineUid, sessionDate)` first.
 - **Answers and the summary are serialized on the session row lock.** `recordAnswer` and

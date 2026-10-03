@@ -156,6 +156,7 @@ class SlackMessageRelayServiceImplTest :
                     mockk<CommandOutput> {
                         every { ok } returns true
                         every { messageTs } returns "1700000000.000200"
+                        every { commandDetailType } returns CommandDetailType.STANDUP_SUMMARY
                     }
                 val messageDispatcher = mockk<MessageDispatcher>()
                 every { messageDispatcher.dispatch(event = rendered) } returns dispatchResult
@@ -192,9 +193,13 @@ class SlackMessageRelayServiceImplTest :
                     }
                 }
 
-                then("the success event keys on the ROW eventId, not any renderer-minted id") {
+                then("the success event keys on the ROW eventId, not any renderer-minted id, and names what was sent") {
                     published.captured shouldBe
-                        MessagePublishSuccessEvent(eventId = rowEventId, messageTs = "1700000000.000200")
+                        MessagePublishSuccessEvent(
+                            eventId = rowEventId,
+                            commandDetailType = CommandDetailType.STANDUP_SUMMARY,
+                            messageTs = "1700000000.000200",
+                        )
                 }
             }
 

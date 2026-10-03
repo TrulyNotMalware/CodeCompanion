@@ -18,6 +18,7 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.time.LocalDate
 
 class SlackApiEventConstructorTest :
     BehaviorSpec({
@@ -76,6 +77,35 @@ class SlackApiEventConstructorTest :
                     payload.channel shouldBe commandBasicInfo.channel
                     payload.publisherId shouldBe commandBasicInfo.publisherId
                     payload.apiAppId shouldBe commandBasicInfo.appId
+                }
+            }
+        }
+
+        given("standupSummaryRequest") {
+            `when`("a summary part is built") {
+                every {
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = any(),
+                        sessionDate = any(),
+                        members = any(),
+                        answers = any(),
+                        questions = any(),
+                    )
+                } returns emptyLayout
+
+                val result =
+                    constructor.standupSummaryRequest(
+                        commandBasicInfo = commandBasicInfo,
+                        routineName = "Daily Standup",
+                        sessionDate = LocalDate.of(2026, 5, 1),
+                        members = emptyList(),
+                        answers = emptyList(),
+                        questions = listOf("What did you do yesterday?"),
+                    )
+
+                then("the payload carries STANDUP_SUMMARY, which the success event hands the marker listener") {
+                    result.type shouldBe CommandDetailType.STANDUP_SUMMARY
+                    result.payload.commandDetailType shouldBe CommandDetailType.STANDUP_SUMMARY
                 }
             }
         }

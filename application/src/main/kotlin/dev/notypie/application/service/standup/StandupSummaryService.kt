@@ -2,6 +2,7 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.common.runInTx
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -109,7 +110,7 @@ class StandupSummaryService(
 
     @EventListener
     fun replaceSummaryMarkerWithSlackTs(event: MessagePublishSuccessEvent) {
-        if (event.messageTs.isBlank()) return
+        if (event.commandDetailType != CommandDetailType.STANDUP_SUMMARY || event.messageTs.isBlank()) return
         val marker = "outbox:${event.eventId}"
         if (standupRepository.replaceSummaryMessageTs(currentMessageTs = marker, messageTs = event.messageTs)) {
             summaryLog.info { "Standup summary Slack ts recorded: eventId=${event.eventId}" }

@@ -93,8 +93,9 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
 - **An outcome event is published only by the owner that recorded it.** `completeClaim` returning 0 means
   another owner has the row and will publish its own outcome.
 - **`MessagePublishSuccessEvent` has a downstream consumer:** `service/standup/StandupSummaryService`
-  swaps its `outbox:<eventId>` marker for `messageTs`. Keep `messageTs` populated on success. It is the
-  only listener of `OutboxUpdateEvent`s.
+  swaps its `outbox:<eventId>` marker for `messageTs`. Keep `messageTs` and `commandDetailType` (from the
+  dispatch output, i.e. the rendered payload) populated on success: the listener skips every type but
+  `STANDUP_SUMMARY`. It is the only listener of `OutboxUpdateEvent`s.
 - The `Envelope` FQN is hardcoded in the `@KafkaListener` properties; moving or renaming the class
   breaks CDC deserialization at runtime with no compile error. `relayTaskExecutor` is the dedicated bounded
   `@Qualifier("relayTaskExecutor")` bean in `configurations/AsyncConfig.kt`; `Error`s deliberately propagate to
