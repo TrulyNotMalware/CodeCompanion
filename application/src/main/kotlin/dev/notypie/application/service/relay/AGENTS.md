@@ -48,8 +48,8 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   polling/sweep path completes the claim as `FAILURE` at once, the CDC path sends the record to the DLT.
 - **Render is not retried; dispatch is.** A codec / schema failure surfaces as `MessagePublishFailedEvent`
   immediately; quick retries live inside `MessageDispatcher`, slow ones in the recovery sweep. A `schemaVersion` outside
-  `OutboxSchemaVersion.SUPPORTED` is held unsent before `renewClaim`, never failed, so an older binary (a
-  rollback) leaves a newer release's rows for that release — when adding a version, extend `SUPPORTED` and keep
+  `OutboxSchemaVersion.SUPPORTED` is held unsent before `renewClaim`, never failed, so an older binary that has
+  this check leaves a newer release's rows for that release; `main`, from before the check, fails them at render — when adding a version, extend `SUPPORTED` and keep
   `decode` able to read the old shape.
 - **`saveOutboxMessage` is `BEFORE_COMMIT`.** The row commits atomically with the command's own writes,
   which is why `SlackOutboundStager` must be called inside a `@Transactional` handler
