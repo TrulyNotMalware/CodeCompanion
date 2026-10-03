@@ -28,6 +28,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.SmartLifecycle
+import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
@@ -94,6 +95,9 @@ class SlackMessageRelayServiceImpl(
     private var stopping = false
 
     override fun isRunning(): Boolean = !stopping
+
+    // Below the Kafka listener phase: a record the CDC container claims while it stops must still be dispatched.
+    override fun getPhase(): Int = AbstractMessageListenerContainer.DEFAULT_PHASE - 1
 
     override fun start() {
         stopping = false

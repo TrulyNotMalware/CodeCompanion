@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.outbox.createRelayService
 import dev.notypie.application.service.agent.AgentTurn
 import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
 import dev.notypie.impl.command.RestClientRequester
@@ -19,9 +20,12 @@ import org.springframework.boot.LazyInitializationBeanFactoryPostProcessor
 import org.springframework.boot.autoconfigure.context.LifecycleProperties
 import org.springframework.boot.env.YamlPropertySourceLoader
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties
+import org.springframework.context.Lifecycle
 import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.io.ClassPathResource
+import org.springframework.kafka.config.KafkaListenerConfigUtils
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry
 import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.test.util.ReflectionTestUtils
@@ -208,6 +212,37 @@ class ShutdownBudgetTest :
 
                 then("both executors are shut down before the EntityManagerFactory closes") {
                     executorsShutDownWhenEmfCloses.get() shouldBe listOf(true, true)
+                }
+            }
+        }
+
+        given("the relay and the Kafka listener registry in one context") {
+            val relay = createRelayService(outboxRepository = mockk(relaxed = true))
+            val relayRunningWhenListenersStop = AtomicReference<Boolean>()
+            val context =
+                AnnotationConfigApplicationContext().apply {
+                    registerBean("relay", Lifecycle::class.java, Supplier { relay })
+                    registerBean(
+                        KafkaListenerConfigUtils.KAFKA_LISTENER_ENDPOINT_REGISTRY_BEAN_NAME,
+                        KafkaListenerEndpointRegistry::class.java,
+                        Supplier {
+                            object : KafkaListenerEndpointRegistry() {
+                                override fun stop(callback: Runnable) {
+                                    relayRunningWhenListenersStop.set(relay.isRunning)
+                                    super.stop(callback)
+                                }
+                            }
+                        },
+                    )
+                    refresh()
+                }
+
+            `when`("the context closes") {
+                context.close()
+
+                then("the CDC listeners stop first, so a record they claim is still dispatched, then the relay stops") {
+                    relayRunningWhenListenersStop.get() shouldBe true
+                    relay.isRunning shouldBe false
                 }
             }
         }

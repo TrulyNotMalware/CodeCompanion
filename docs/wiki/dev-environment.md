@@ -206,9 +206,10 @@ _type: guide · updated: 2026-10-02_
   롤백은 apply·rollout·verify·health 단계가 실패했을 때만 돌고, 배포 전 백업과 비교해 파드 템플릿 해시나 리비전이 달라졌으면
   `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
   `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
-- 파드 종료 예산: `preStop` 5초 sleep → 릴레이 정지(큐에 남은 claim은 보내지 않고 `IN_PROGRESS`로 둠) → Spring graceful
-  shutdown(Kafka 리스너 단계는 처리 중인 레코드 하나를 `RECORD_SHUTDOWN_WAIT`만큼 기다림 — 프로필 조회·Slack 재시도·상태 기록
-  백오프 상수에서 코드로 계산한 디스패치 하나, 지금 46초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초) → Kafka
+- 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(Kafka 리스너 단계는 처리 중인 레코드 하나를
+  `RECORD_SHUTDOWN_WAIT`만큼 기다림 — 프로필 조회·Slack 재시도·상태 기록 백오프 상수에서 코드로 계산한 디스패치 하나, 지금
+  46초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초. 릴레이는 스케줄러와 Kafka 리스너 단계 바로 뒤에 동기로
+  멈춰 큐에 남은 claim을 보내지 않고 `IN_PROGRESS`로 둔다 — 대기 없음) → Kafka
   producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기
   (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 기본 10초) = 162초 ⊂ `terminationGracePeriodSeconds` 180초, 여유 18초
   (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더하고 여유가 10초 아래면 실패). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
