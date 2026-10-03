@@ -37,6 +37,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy
+import org.springframework.jdbc.support.SQLExceptionTranslator
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Clock
 
@@ -58,6 +59,9 @@ class JpaConfiguration {
     @Primary
     fun lazyConnectionDataSourceProxy(hikariDataSource: HikariDataSource) =
         LazyConnectionDataSourceProxy(hikariDataSource)
+
+    @Bean
+    fun snapshotIsolationExceptionTranslator(): SQLExceptionTranslator = SnapshotIsolationExceptionTranslator()
 
     @Bean
     @Primary

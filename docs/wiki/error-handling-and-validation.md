@@ -98,6 +98,16 @@ _type: pattern · updated: 2026-10-02_
   전파된다. 기본 `includes(Exception)`은 `DataIntegrityViolationException`·검증 예외처럼 재시도해도 소용없는 실패까지
   재시도하므로 비일시적 실패가 섞이는 호출은 `exceptions`를 명시한다.
 - `@EnableResilientMethods`는 켜져 있지만 저장소에 `@Retryable`은 없다.
+- **MariaDB 스냅숏 격리(2026-10-03).** MariaDB ≥ 11.6.2의 REPEATABLE READ는 `innodb_snapshot_isolation`이 기본 ON이다
+  (운영 12.0.2, 로컬 실측 12.3.3 = 1). 같은 트랜잭션에서 일관 읽기 뒤에 다른 트랜잭션이 그 뒤 커밋한 행을 잠금 읽기·
+  UPDATE·DELETE·FK 부모 검사·PK 중복 검사로 건드리면 ER_CHECKREAD 1020이 나고 트랜잭션 전체가 롤백된다(보조 unique 중복은
+  계속 1062). 규칙: CAS·잠금 문장을 트랜잭션의 첫 문장으로 두거나 자기 트랜잭션을 준다(`CveTopicRepositoryImpl.upsert`,
+  `MeetingReminderRepositoryImpl.ensureReminder`). 1020은
+  `SnapshotIsolationExceptionTranslator`(`JpaConfiguration`의 유일한 `SQLExceptionTranslator` 빈 — Boot가 유일할 때만
+  `HibernateJpaDialect`와 `JdbcTemplate`에 연결)가 `OptimisticLockingFailureException` 하위인
+  `SnapshotIsolationConflictException`으로 바꾼다. 서버가 이미 롤백했으므로 잡으면 트랜잭션을 통째로 다시 실행해야 한다 —
+  회의 쓰기의 `executeRetryingOnConflict`가 그렇게 한 번 재시도한다. H2는 1020을 낼 수 없어 testFixtures의
+  `SnapshotIsolationTransactionManager`로 경계를 시험한다.
 
 ## 알려진 공백
 

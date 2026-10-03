@@ -12,6 +12,7 @@ import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.application.service.relay.SlackMessageRelayServiceImpl
 import dev.notypie.application.service.standup.StandupAnswerService
 import dev.notypie.application.service.standup.StandupSchedulingService
+import dev.notypie.configurations.SnapshotIsolationConflictException
 import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
@@ -29,6 +30,7 @@ import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
 import dev.notypie.impl.command.event.createOpenViewEvent
+import dev.notypie.repository.createRawSnapshotIsolationFailure
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.kotest.assertions.nondeterministic.eventually
@@ -51,6 +53,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.support.PersistenceExceptionTranslator
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.test.annotation.DirtiesContext
@@ -91,6 +94,12 @@ class ApplicationContextSmokeTest
                 `when`("it starts") {
                     then("the Hikari pool takes spring.datasource.hikari") {
                         context.getBean(HikariDataSource::class.java).maximumPoolSize shouldBe 20
+                    }
+
+                    then("repository proxies translate MariaDB's 1020 into an optimistic-locking conflict") {
+                        (context.getBean("&entityManagerFactory") as PersistenceExceptionTranslator)
+                            .translateExceptionIfPossible(createRawSnapshotIsolationFailure(table = "meetings"))
+                            .shouldBeInstanceOf<SnapshotIsolationConflictException>()
                     }
 
                     then("@Scheduled jobs run on a 4-thread ThreadPoolTaskScheduler") {

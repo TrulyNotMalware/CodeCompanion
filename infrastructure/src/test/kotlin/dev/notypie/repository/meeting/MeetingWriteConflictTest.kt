@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.repository.createSnapshotIsolationFailure
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import org.springframework.dao.CannotAcquireLockException
@@ -17,6 +18,14 @@ class MeetingWriteConflictTest :
                     ObjectOptimisticLockingFailureException("meetings", 1L).isMeetingWriteConflict() shouldBe true
                     PessimisticLockingFailureException("deadlock").isMeetingWriteConflict() shouldBe true
                     CannotAcquireLockException("lock wait timeout").isMeetingWriteConflict() shouldBe true
+                }
+            }
+
+            `when`(
+                "the failure is a MariaDB snapshot-isolation conflict (1020) as the repository proxy hands it over",
+            ) {
+                then("it is retryable") {
+                    createSnapshotIsolationFailure(table = "meetings").isMeetingWriteConflict() shouldBe true
                 }
             }
 

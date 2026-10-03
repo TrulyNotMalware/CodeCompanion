@@ -29,6 +29,7 @@ import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
+import dev.notypie.repository.createSnapshotIsolationFailure
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.assertions.throwables.shouldThrow
@@ -455,6 +456,41 @@ class MeetingServiceImplTest :
                         )
                     }
                     recordingPublisher.committedMessages.filterIsInstance<OutboundMessage.Approval>().size shouldBe 1
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe listOf("Added <@U_A> to the meeting.")
+                }
+            }
+
+            `when`("the add hits a MariaDB snapshot-isolation conflict once and the retry wins") {
+                recordingPublisher.committedMessages.clear()
+                clearMocks(conflictedRepository)
+                every {
+                    conflictedRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A"),
+                    )
+                } answers {
+                    transactionManager.failInsideParticipatingTx(
+                        exception = createSnapshotIsolationFailure(table = "meetings"),
+                    )
+                } andThenAnswer {
+                    AddParticipantResult(
+                        outcome = AddParticipantResult.Outcome.ADDED,
+                        addedUserIds = listOf("U_A"),
+                        meeting = createMeetingDto(creator = requesterId, title = "Team Sync"),
+                    )
+                }
+
+                outerTransaction.executeWithoutResult { conflictedService.addParticipants(event = addEvent) }
+
+                then("the write is retried once in a fresh transaction and the host gets the confirmation") {
+                    verify(exactly = 2) {
+                        conflictedRepository.addParticipants(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            participantUserIds = listOf("U_A"),
+                        )
+                    }
                     recordingPublisher.committedEphemeralMarkdowns shouldBe listOf("Added <@U_A> to the meeting.")
                 }
             }

@@ -1,8 +1,11 @@
 package dev.notypie.repository
 
+import dev.notypie.configurations.SnapshotIsolationExceptionTranslator
+import jakarta.persistence.OptimisticLockException
 import org.hibernate.exception.SnapshotIsolationException
 import org.springframework.aop.framework.ProxyFactory
-import org.springframework.orm.jpa.JpaSystemException
+import org.springframework.dao.DataAccessException
+import org.springframework.orm.jpa.vendor.HibernateJpaDialect
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
@@ -10,8 +13,6 @@ import org.springframework.transaction.annotation.AnnotationTransactionAttribute
 import org.springframework.transaction.interceptor.TransactionInterceptor
 import org.springframework.transaction.support.SimpleTransactionStatus
 import java.sql.SQLException
-
-const val ER_CHECKREAD = 1020
 
 class SnapshotIsolationTransactionManager : PlatformTransactionManager {
     private val readViewOpened = ArrayDeque<Boolean>()
@@ -41,13 +42,25 @@ class SnapshotIsolationTransactionManager : PlatformTransactionManager {
     }
 }
 
-fun createSnapshotIsolationFailure(table: String): JpaSystemException =
-    JpaSystemException(
+fun createRawSnapshotIsolationFailure(table: String): OptimisticLockException =
+    OptimisticLockException(
+        "could not execute statement [Record has changed since last read in table '$table']",
         SnapshotIsolationException(
             "could not execute statement [Record has changed since last read in table '$table']",
-            SQLException("Record has changed since last read in table '$table'", "HY000", ER_CHECKREAD),
+            SQLException(
+                "Record has changed since last read in table '$table'; try restarting transaction",
+                "HY000",
+                SnapshotIsolationExceptionTranslator.ER_CHECKREAD,
+            ),
             "update $table",
         ),
+    )
+
+fun createSnapshotIsolationFailure(table: String): DataAccessException =
+    checkNotNull(
+        HibernateJpaDialect()
+            .apply { setJdbcExceptionTranslator(SnapshotIsolationExceptionTranslator()) }
+            .translateExceptionIfPossible(createRawSnapshotIsolationFailure(table = table)),
     )
 
 inline fun <reified T : Any> createTransactionalProxy(target: T, transactionManager: PlatformTransactionManager): T =
