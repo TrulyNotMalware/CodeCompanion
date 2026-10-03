@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # application/health
 
@@ -67,7 +67,8 @@ alerting reads. It is also `DOWN` while the relay held a row for a Slack access 
   outage. Every replica reports the same table-wide numbers, so alert on `max(...)`, not `sum(...)`.
 - Suggested alerts (not provisioned in this repository): `max(outbox_pending_oldest_age_seconds) > 120` for
   10 m (the CDC connector or the poller stopped; the recovery sweep then delivers PENDING rows only after the
-  stuck threshold), `max(outbox_retrying_messages) > 0` for 15 m, and
+  stuck threshold, and a chained reply pays that delay once per part — each next part's row appears only after
+  the previous part succeeded — so an 8-part AI answer arrives over ≈ 40–48 min), `max(outbox_retrying_messages) > 0` for 15 m, and
   `sum(increase(kafka_dead_letter_handoffs_total[15m])) > 0` (a CDC record was handed to the `<topic>-dlt` publisher), `sum(increase(kafka_dead_letter_publish_failures_total[15m])) > 0` (that send failed, so the record exists nowhere but the log), `sum(increase(codecompanion_slack_dispatch_outcome_unknown_total[15m])) > 0` (a send that may or may not have posted was recorded `FAILURE` without a retry; check the channel by hand) and `sum(increase(codecompanion_slack_dispatch_access_blocked_total[5m])) > 0` (Slack refused the token, its scopes or the workspace; rows are held up to 24 h, and `outbox_access_blocked` stays 1 meanwhile).
 
 ### Testing Requirements

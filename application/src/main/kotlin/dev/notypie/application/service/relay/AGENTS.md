@@ -89,7 +89,11 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   (rate limit, access blocked) keeps its continuation in its payload; outcome unknown records `FAILURE` and still
   stages the next part (the request most likely reached Slack; stopping would silently drop every later part,
   while going on at worst leaves one labelled `(k/n)` gap); any other `FAILURE` drops the rest with an ERROR
-  log, as does the sweep's abandon.
+  log, as does the sweep's abandon. Runbook: with the CDC connector stuck, every later part waits for the
+  stale-`PENDING` sweep on its own (`created_at` + `stuck-in-progress-seconds` 300 s, sweep every 60 s), because
+  its row exists only after the previous part succeeded and no change event arrives — an n-part reply takes
+  about n × 5–6 min (an 8-part AI answer ≈ 40–48 min) where unchained parts went out in one sweep. Polling mode
+  (5 s) is unaffected. Restore the connector first.
 - **An outcome event is published only by the owner that recorded it.** `completeClaim` returning 0 means
   another owner has the row and will publish its own outcome.
 - **`MessagePublishSuccessEvent` has a downstream consumer:** `service/standup/StandupSummaryService`

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # k8s
 
@@ -13,7 +13,7 @@ adds what an agent editing the manifests needs to know.
 | File | Description |
 |------|-------------|
 | `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 100`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 180`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
 | `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
@@ -68,9 +68,10 @@ adds what an agent editing the manifests needs to know.
   `.gitleaks.toml` allowlists only the CDC MariaDB sample Secret, not this one — the `YOUR_*` placeholders
   pass, but realistic-looking sample values would trip the `secret-scan` job.
 - **Probes and the shutdown budget go together.** On deletion the `preStop` hook sleeps 5s (endpoint removal
-  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown. The relay stops
-  first and drains its queue (queued claims stay `IN_PROGRESS` for another pod's sweep). Then the lifecycle phases run
-  one after another: the Kafka listener phase waits for the record in hand for `RECORD_SHUTDOWN_WAIT`
+  reaches kube-proxy and the gateway asynchronously), then SIGTERM starts Spring's graceful shutdown. The lifecycle
+  phases run one after another: the scheduler, then the Kafka listener phase, then the relay (phase just below the
+  listener's, so a record the container claims while it stops is still sent), which drains its queue synchronously
+  (queued claims stay `IN_PROGRESS` for another pod's sweep), then the web server. The Kafka listener phase waits for the record in hand for `RECORD_SHUTDOWN_WAIT`
   (`configurations/AsyncConfig.kt`: one dispatch, `RELAY_RECORD_TIME_BOUND` rounded up — derived in code from the
   profile lookup's whole-call timeout, `SLACK_DISPATCH_TIME_BOUND` and the status write's retry backoff, 46s today;
   the CDC-mode `lifecycleProcessor` bean sets that phase alone), while the web server drain and the

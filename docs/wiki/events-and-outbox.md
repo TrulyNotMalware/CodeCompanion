@@ -225,7 +225,12 @@ _type: architecture · updated: 2026-10-02_
   `continuation`에 싣는다. relay가 그 행의 결과를 기록하는 트랜잭션에서, `completeClaim`이 1일 때만 다음 조각을
   새 `PENDING` 행으로 넣으므로 조각은 앞 조각의 결과가 정해진 뒤에야 나가고, 상태 기록 재시도(앞 커밋이 이미
   반영된 경우)나 다른 소유자는 같은 조각을 다시 넣지 못하며, 삽입이 실패하면 `SUCCESS`도 함께 롤백돼 스윕이
-  다시 보낸다. 폴링은 새 행을 평소처럼 읽고, CDC는 그 INSERT의 변경 이벤트로 받는다. rate limit·access blocked로
+  다시 보낸다. 폴링은 새 행을 평소처럼 읽고, CDC는 그 INSERT의 변경 이벤트로 받는다. **CDC 커넥터가 멈추면 지연이
+  조각마다 다시 붙는다**(런북): 다음 조각 행은 앞 조각이 성공한 뒤에야 생기고 변경 이벤트가 오지 않으므로 조각마다
+  스윕의 stale `PENDING` 회수(`created_at` + `stuck-in-progress-seconds` 300초, 스윕 주기 60초)를 따로 기다린다 —
+  n조각 응답이 약 n × 5–6분, AI 답변 최대 8조각이면 약 40–48분(연쇄 전에는 모든 조각이 스윕 한 번에 함께 나갔다).
+  폴링 모드(5초)는 해당 없다. `outbox_pending_oldest_age_seconds` 알림이 울리면 긴 답·요약·digest가 조각 단위로
+  늦게 이어진다고 보고 커넥터부터 살린다. rate limit·access blocked로
   보류된 행은 payload에 나머지를 그대로 들고 있다. outcome unknown은 `FAILURE`로 기록하되 다음 조각을 이어
   보낸다(요청이 Slack에 닿았을 가능성이 높고, 멈추면 이후 조각 전부가 조용히 사라지지만 이어 가면 최악이
   `(k/n)` 라벨로 드러나는 조각 하나의 누락이다). 그 밖의 `FAILURE`(영구 거절·렌더 실패·24시간 상한·스윕 포기)는
