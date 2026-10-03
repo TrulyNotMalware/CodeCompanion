@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # infrastructure/impl/retry
 
@@ -11,7 +11,7 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `RetryService.kt` | `class RetryService()`. `fun <T> execute(action: () -> T, recoveryCallBack: (() -> T)? = null, maxAttempts = 3, initialDelay = 100, multiplier = 2.0, maxDelay = 10000, jitter = 10, exceptions = listOf(Exception::class.java)): T` looks up (or builds once) a `RetryTemplate` per distinct policy in a `ConcurrentHashMap<PolicyKey, RetryTemplate>` and runs on that; a `RetryException` invokes `recoveryCallBack` or is rethrown. `maxAttempts` is the total execution count (`maxRetries = maxAttempts - 1`). Top-level `retryTimeBound(attemptTimeout, maxAttempts = 3)`: the longest a run of the default policy takes when every attempt fails after `attemptTimeout` — the attempts plus each backoff at its jitter maximum (3 × 6 s → 18.32 s); the dispatcher's `SLACK_DISPATCH_TIME_BOUND` and the relay's shutdown budget are built on it |
+| `RetryService.kt` | `class RetryService()`. `fun <T> execute(action: () -> T, recoveryCallBack: (() -> T)? = null, maxAttempts = 3, initialDelay = 100, multiplier = 2.0, maxDelay = 10000, jitter = 10, exceptions = listOf(Exception::class.java)): T` looks up (or builds once) a `RetryTemplate` per distinct policy in a `ConcurrentHashMap<PolicyKey, RetryTemplate>` and runs on that; a `RetryException` invokes `recoveryCallBack` or is rethrown. `maxAttempts` is the total execution count (`maxRetries = maxAttempts - 1`). Top-level `retryTimeBound(attemptTimeout, maxAttempts = 3)`: the longest a run of the default policy takes when every attempt fails after `attemptTimeout` — the attempts plus each backoff at its jitter maximum, the interval capped at `MAX_DELAY` and the jitter scaled by `interval / INITIAL_DELAY` as Spring 7's `ExponentialBackOff.applyJitter` does (second wait ≤ 0.2 s + 20 ms; 3 × 6 s → 18.33 s); the dispatcher's `SLACK_DISPATCH_TIME_BOUND` and the relay's shutdown budget are built on it |
 
 ## For AI Agents
 

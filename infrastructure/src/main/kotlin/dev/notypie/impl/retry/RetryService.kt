@@ -63,9 +63,14 @@ class RetryService {
 
 fun retryTimeBound(attemptTimeout: Duration, maxAttempts: Long = RetryOptions.MAX_ATTEMPTS.default): Duration {
     val attempts = maxAttempts.coerceAtLeast(1L)
+    val initialDelay = RetryOptions.INITIAL_DELAY.default
+    val maxDelay = RetryOptions.MAX_DELAY.default
     val backoffMillis =
-        generateSequence(RetryOptions.INITIAL_DELAY.default) { it * RetryOptions.MULTIPLIER.default }
+        generateSequence(initialDelay) { minOf(it * RetryOptions.MULTIPLIER.default, maxDelay) }
             .take((attempts - 1L).toInt())
-            .sumOf { minOf(it + RetryOptions.JITTER.default, RetryOptions.MAX_DELAY.default) }
+            .sumOf { interval ->
+                val jitterScale = if (initialDelay > 0L) interval / initialDelay else 1L
+                minOf(interval + RetryOptions.JITTER.default * jitterScale, maxDelay)
+            }
     return attemptTimeout.multipliedBy(attempts).plusMillis(backoffMillis)
 }

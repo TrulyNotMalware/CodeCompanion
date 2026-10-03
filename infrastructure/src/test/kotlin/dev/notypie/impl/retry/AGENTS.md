@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/impl/retry
 
@@ -11,7 +11,7 @@ production algorithm, not a mock.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `RetryServiceTest.kt` | `RetryService.execute(action, recoveryCallBack?, maxAttempts?, initialDelay?, jitter?, exceptions?)`. Cases: a succeeding action returns its value; an always-failing action without recovery throws `RetryException` whose `cause` is the very exception the action threw; an exception outside `exceptions` runs once and is wrapped the same way; with `recoveryCallBack` the recovery value is returned after exhaustion; an action that fails `N` times then succeeds returns the success when `maxAttempts = N + 1`; `maxAttempts` counts total executions; two concurrent callers with different `maxAttempts` each get their own policy. Plain `BehaviorSpec`, no Spring context.; `retryTimeBound`: 3 × 6 s → 18.32 s, 3 × 0 → 0.32 s, 1 × 6 s → 6 s |
+| `RetryServiceTest.kt` | `RetryService.execute(action, recoveryCallBack?, maxAttempts?, initialDelay?, jitter?, exceptions?)`. Cases: a succeeding action returns its value; an always-failing action without recovery throws `RetryException` whose `cause` is the very exception the action threw; an exception outside `exceptions` runs once and is wrapped the same way; with `recoveryCallBack` the recovery value is returned after exhaustion; an action that fails `N` times then succeeds returns the success when `maxAttempts = N + 1`; `maxAttempts` counts total executions; two concurrent callers with different `maxAttempts` each get their own policy. Plain `BehaviorSpec`, no Spring context.; `retryTimeBound`: 3 × 6 s → 18.33 s, 3 × 0 → 0.33 s, 1 × 6 s → 6 s; 5,000 runs of the default policy's `ExponentialBackOff` (built through `RetryPolicy.builder()` from `RetryOptions`) never wait longer in total than the backoff `retryTimeBound` adds (fails when the bound ignores Spring's jitter scaling: 328 > 320 ms) |
 
 ## For AI Agents
 

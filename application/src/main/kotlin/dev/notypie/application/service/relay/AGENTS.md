@@ -66,15 +66,15 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   there), which beats a row that never resolves.
 - **Per-record time budget (each number lives in one place).** On the CDC listener thread one PENDING record
   costs `findById` + `claimPending`, then `dispatchClaimed`: `renewClaim`, render + dispatch, and `completeClaim`
-  (up to `STATUS_WRITE_ATTEMPTS` = 3, backoff 0.1 + 0.2 s + 2 × 10 ms jitter). The Slack HTTP bound (render's
+  (up to `STATUS_WRITE_ATTEMPTS` = 3, backoff 0.1 + 0.2 s + 10 + 20 ms jitter). The Slack HTTP bound (render's
   profile lookup plus the dispatch retries) is derived **only** in
   `infrastructure/src/main/kotlin/dev/notypie/impl/command/AGENTS.md`; do not copy its total here or in the wiki.
   The SQL side is this file's: with the Hikari pool exhausted each statement attempt can wait a full
   `connection-timeout` (5 s in every profile, prod via `SQL_PROD_CONNECTION_TIMEOUT`), so find + claim + renew +
-  3 completes add up to 6 × `connection-timeout` + 0.32 s (≈ 30 s). Consequences: (a) with a starved pool one
+  3 completes add up to 6 × `connection-timeout` + 0.33 s (≈ 30 s). Consequences: (a) with a starved pool one
   record can overrun its 60 s share of `max.poll.interval.ms` 300 s / `max-poll-records` 5 — the result is a
   rebalance and redelivery, not a double send, because the listener claims only `PENDING`; (b) the renew →
-  complete window (HTTP bound + 3 × `connection-timeout` + 0.32 s) must stay well below
+  complete window (HTTP bound + 3 × `connection-timeout` + 0.33 s) must stay well below
   `stuck-in-progress-seconds` (300 s), or the sweep reclaims a row mid-send. Raising `connection-timeout` or
   `STATUS_WRITE_ATTEMPTS` means redoing (b). (c) Shutdown waits one record with a healthy pool: `RELAY_RECORD_TIME_BOUND`
   (in `SlackMessageRelayServiceImpl.kt`) is computed from `RestClientRequester.DEFAULT_READ_TIMEOUT` (the profile

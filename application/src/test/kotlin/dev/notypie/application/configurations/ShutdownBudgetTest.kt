@@ -46,8 +46,8 @@ class ShutdownBudgetTest :
 
         given("the record budget derived from the timeouts in code") {
             then("it is the profile lookup, two Slack retry runs around one inline wait, and the status backoff") {
-                SLACK_DISPATCH_TIME_BOUND shouldBe Duration.ofMillis(39_640L)
-                RELAY_RECORD_TIME_BOUND shouldBe RestClientRequester.DEFAULT_READ_TIMEOUT.plusMillis(39_960L)
+                SLACK_DISPATCH_TIME_BOUND shouldBe Duration.ofMillis(39_660L)
+                RELAY_RECORD_TIME_BOUND shouldBe RestClientRequester.DEFAULT_READ_TIMEOUT.plusMillis(39_990L)
             }
         }
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # infrastructure/impl/command
 
@@ -111,8 +111,9 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
 - **A whole dispatch is time-bounded**, so it always ends before the Kafka per-record budget and long before
   `outbox.polling.stuck-in-progress-seconds` (300 s) lets the sweep reclaim the row mid-send. Worst case:
   each HTTP call ≤ `SLACK_CALL_TIMEOUT` 6 s (OkHttp `callTimeout` spans DNS, connect, write, server time and
-  the whole body); one `RetryService` run is 3 calls + backoff ≤ 0.1 + 0.2 s + 2 × 10 ms jitter = 18.32 s; with
-  the single inline rate-limit wait (≤ 3 s) and the second run, `dispatch` ≤ 18.32 + 3 + 18.32 = 39.64 s.
+  the whole body); one `RetryService` run is 3 calls + backoff ≤ 0.1 + 0.2 s + 10 + 20 ms jitter (Spring scales the jitter
+  with the interval) = 18.33 s; with the single inline rate-limit wait (≤ 3 s) and the second run,
+  `dispatch` ≤ 18.33 + 3 + 18.33 = 39.66 s.
   `SLACK_DISPATCH_TIME_BOUND` (end of `ApplicationMessageDispatcher.kt`, built from `retryTimeBound`) holds that
   value in code; the relay's `RELAY_RECORD_TIME_BOUND`, its shutdown wait and the pod's grace period follow it.
   Render adds at most one `users.profile.get` (`RestClientRequester` read timeout = `SLACK_CALL_TIMEOUT` 6 s; Spring's

@@ -1,10 +1,14 @@
 package dev.notypie.impl.retry
 
+import dev.notypie.configurations.RetryOptions
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import org.springframework.core.retry.RetryException
+import org.springframework.core.retry.RetryPolicy
+import org.springframework.util.backoff.BackOffExecution
 import java.io.IOException
 import java.time.Duration
 import java.util.concurrent.Callable
@@ -144,10 +148,35 @@ class RetryServiceTest :
 
         given("the longest a run can take when every attempt fails") {
             then("it is every attempt at its timeout plus each backoff at its jitter maximum") {
-                retryTimeBound(attemptTimeout = Duration.ofSeconds(6L)) shouldBe Duration.ofMillis(18_320L)
-                retryTimeBound(attemptTimeout = Duration.ZERO, maxAttempts = 3L) shouldBe Duration.ofMillis(320L)
+                retryTimeBound(attemptTimeout = Duration.ofSeconds(6L)) shouldBe Duration.ofMillis(18_330L)
+                retryTimeBound(attemptTimeout = Duration.ZERO, maxAttempts = 3L) shouldBe Duration.ofMillis(330L)
                 retryTimeBound(attemptTimeout = Duration.ofSeconds(6L), maxAttempts = 1L) shouldBe
                     Duration.ofSeconds(6L)
+            }
+        }
+
+        given("the default policy's backoff as Spring draws it, jitter scaled by each interval") {
+            val backOff =
+                RetryPolicy
+                    .builder()
+                    .maxRetries(RetryOptions.MAX_ATTEMPTS.default - 1L)
+                    .delay(Duration.ofMillis(RetryOptions.INITIAL_DELAY.default))
+                    .multiplier(RetryOptions.MULTIPLIER.default.toDouble())
+                    .maxDelay(Duration.ofMillis(RetryOptions.MAX_DELAY.default))
+                    .jitter(Duration.ofMillis(RetryOptions.JITTER.default))
+                    .build()
+                    .backOff
+
+            `when`("thousands of runs are sampled") {
+                val longestTotalWait =
+                    (1..5_000).maxOf {
+                        val execution = backOff.start()
+                        generateSequence { execution.nextBackOff().takeIf { it != BackOffExecution.STOP } }.sum()
+                    }
+
+                then("no run waits longer than the backoff retryTimeBound adds") {
+                    longestTotalWait shouldBeLessThanOrEqual retryTimeBound(attemptTimeout = Duration.ZERO).toMillis()
+                }
             }
         }
     })
