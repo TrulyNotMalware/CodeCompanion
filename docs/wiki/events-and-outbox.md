@@ -57,10 +57,10 @@ _type: architecture · updated: 2026-10-03_
   보내거나 24시간 상한에서 포기한다. 재시도는
   dispatch(Slack HTTP)에만 있다: 짧은 재시도는 `ApplicationMessageDispatcher` 안의 `RetryService`(3회, 약 0.3초),
   긴 재시도는 복구 스윕이다.
-- dispatcher는 릴레이에 **세 가지 결과**를 돌려준다. ① 완료(성공 또는 영구 실패: `fatal_error`, `ok=false` 오류,
+- dispatcher는 릴레이에 **세 가지 결과**를 돌려준다. ① 완료(성공 또는 영구 실패: `ok=false` 오류,
   3xx/4xx, 거부된 `response_url`) → `completeClaim`으로 `SUCCESS`/`FAILURE`. ② rate limit(`RateLimitedOutput`,
   `retryAfter()`) → 행을 `IN_PROGRESS`로 두고 `deferClaim`으로 `Retry-After` 이후까지 미룬다. ③ 일시 오류
-  소진(`TRANSIENT_EXHAUSTED_REASON`: 5xx, `IOException`·call timeout, `internal_error`/`service_unavailable`가 짧은
+  소진(`TRANSIENT_EXHAUSTED_REASON`: 5xx, `IOException`·call timeout, `internal_error`/`fatal_error`/`service_unavailable`가 짧은
   재시도를 다 쓴 경우) → 아무것도 쓰지 않고 `IN_PROGRESS`로 둬 stuck 임계 뒤 스윕이 재발송한다. 예전에는 ③이
   예외로 올라가 `FAILURE`가 되어 1초짜리 Slack 장애에도 메시지를 잃었다. dispatcher가 예상 밖 예외를 던져도 ③과
   같이 다룬다. ④ 접근 차단(`isAccessBlocked()`: 토큰·스코프·워크스페이스 전역 거부 또는 이 복제본의 네트워크 단위 거부(`accesslimited`), 분류는 dispatcher) → 행 단위
@@ -188,7 +188,7 @@ _type: architecture · updated: 2026-10-03_
   `event_id`로 키를 잡는다 — 렌더러가 새로 발급하는 payload `eventId`는 버린다. Slack API에는 멱등 키가 없으므로
   재전송은 그대로 중복 게시가 된다. 그래서 `chat.postMessage`·`chat.postEphemeral`·`response_url`은 요청이 쓰이기
   전에 실패한 경우(OkHttp `EventListener`로 판정), HTTP/2 `REFUSED_STREAM`(서버가 처리 전에 거절했음을 RFC 9113이 보장),
-  `service_unavailable`·HTTP 503만 재시도하고, 쓰인 뒤의 I/O 실패·`internal_error`·그 밖의 5xx는 `outcome_unknown`으로
+  `service_unavailable`·HTTP 503만 재시도하고, 쓰인 뒤의 I/O 실패·`internal_error`·`fatal_error`(Slack: 일부가 이미 성공했을 수 있음)·그 밖의 5xx는 `outcome_unknown`으로
   `FAILURE`를 남기며 메서드별 카운터 `codecompanion_slack_dispatch_outcome_unknown_total{method}`를 올린다. OkHttp 자체 재전송
   (`retryOnConnectionFailure`)도 끈다(2026-10-01). 멱등인 `chat.update`만 모든 일시 오류를 재시도한다.
 

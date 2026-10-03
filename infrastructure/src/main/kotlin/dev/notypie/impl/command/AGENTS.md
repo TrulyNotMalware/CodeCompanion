@@ -80,10 +80,10 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     (`isTransientExhausted()`); the relay leaves the row `IN_PROGRESS` and the recovery sweep re-sends it, up to
     `outbox.polling.max-sends` sends. For `chat.postMessage`, `chat.postEphemeral` and `response_url`: a request
     that was never written or whose stream was refused, `ok=false service_unavailable`, and HTTP 503. For the idempotent `chat.update`: also
-    every other `IOException` (the call timeout included), any HTTP 5xx and `internal_error`.
+    every other `IOException` (the call timeout included), any HTTP 5xx, `internal_error` and `fatal_error`.
   - Outcome unknown — on the three non-idempotent calls, an `IOException` after the request was written (call
-    timeout, reset, dropped connection), `ok=false internal_error` (Slack: "possible some aspect of the operation
-    succeeded"), and HTTP 5xx other than 503 → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type|code>")`, and
+    timeout, reset, dropped connection), `ok=false internal_error` or `fatal_error` (Slack, for both: "possible
+    some aspect of the operation succeeded"), and HTTP 5xx other than 503 → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type|code>")`, and
     the relay writes `FAILURE`. Slack may already have posted the message and has no idempotency key, so
     resending would duplicate it; the row and the warning log (which names the Slack method) are the
     reconciliation record, and `onOutcomeUnknown` feeds the per-method counter. `isOutcomeUnknown()` matches the
@@ -101,8 +101,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     scopes to one channel stay permanent: `ekm_access_denied` (documented both as "disabled sending messages to
     this channel" and as a suspension, so it is not taken as global), `no_permission` ("make sure your app is a
     member of the conversation"), `not_in_channel`, `is_archived`, `restricted_action*`, `access_denied`.
-  - Permanent — any other `ok=false` (including `fatal_error`, which may have partly succeeded, and
-    `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
+  - Permanent — any other `ok=false` (including `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
     and `response_url` 3xx / 4xx / JSON `ok=false` / a 2xx body that is not an acknowledgement →
     `failOutput(<error>)`, once. The relay writes `FAILURE`.
   - Anything else (a non-transient exception inside the retry, or thrown outside it) propagates as-is; the

@@ -334,16 +334,49 @@ class ApplicationMessageDispatcherTest :
             }
         }
 
-        given("chat.* answers 200 ok=false fatal_error, which may have partially succeeded") {
+        given("chat.postMessage answers 200 ok=false fatal_error, which may have partly succeeded") {
             reset()
             responses.add(status(code = 200, body = """{"ok":false,"error":"fatal_error"}"""))
 
             `when`("a channel message is dispatched") {
                 val output = defaultDispatcher.dispatch(event = channelMessage())
 
-                then("it is not retried, so the message cannot be posted twice") {
+                then("it is not resent and ends as outcome unknown, counted under chat.postMessage") {
                     output.ok shouldBe false
-                    output.errorReason shouldBe "fatal_error"
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: fatal_error"
+                    output.isOutcomeUnknown() shouldBe true
+                    unknownOutcomes.toList() shouldBe listOf("chat.postMessage")
+                    calls.get() shouldBe 1
+                }
+            }
+        }
+
+        given("chat.update answers 200 ok=false fatal_error once and then succeeds") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"fatal_error"}"""))
+            responses.add(jsonOk())
+
+            `when`("a message update is dispatched") {
+                val output = defaultDispatcher.dispatch(event = messageUpdate())
+
+                then("the idempotent update is retried like internal_error") {
+                    output.ok shouldBe true
+                    unknownOutcomes.toList() shouldBe emptyList()
+                    calls.get() shouldBe 2
+                }
+            }
+        }
+
+        given("a response_url that answers 200 with fatal_error") {
+            reset()
+            responses.add(status(code = 200, body = """{"ok":false,"error":"fatal_error"}"""))
+
+            `when`("an action response is dispatched") {
+                val output = defaultDispatcher.dispatch(event = actionResponse())
+
+                then("it may have been applied, so it is not resent and is counted under response_url") {
+                    output.errorReason shouldBe "$OUTCOME_UNKNOWN_REASON: fatal_error"
+                    unknownOutcomes.toList() shouldBe listOf("response_url")
                     calls.get() shouldBe 1
                 }
             }

@@ -50,8 +50,8 @@ import java.time.format.DateTimeFormatter
 
 private val dispatcherLog = KotlinLogging.logger {}
 
-// internal_error "may have partly succeeded" per Slack, so only an idempotent call retries it.
-private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "service_unavailable")
+// internal_error and fatal_error "may have partly succeeded" per Slack, so only an idempotent call retries them.
+private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "fatal_error", "service_unavailable")
 private val NOT_SENT_SLACK_ERRORS = setOf("service_unavailable")
 
 // Codes that fail every call from this replica (token, workspace or its network); channel-scoped ones would hold 24 h.
