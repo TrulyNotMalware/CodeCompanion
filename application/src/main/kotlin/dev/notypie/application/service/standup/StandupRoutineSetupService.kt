@@ -47,13 +47,13 @@ class StandupRoutineSetupService(
                             "_Please run /standup setup again and review your inputs._"
                     },
                 )
-        val replyInfo = payload.responseBasicInfo.copy(channel = payload.commandChannel)
+        // A DM: an ephemeral in the command channel fails with no_permission when the bot is not a member there.
+        val replyInfo = payload.responseBasicInfo.copy(channel = payload.creatorId)
         outboundStager
             .stage(
                 message =
-                    OutboundMessage.Ephemeral(
+                    OutboundMessage.ChannelMessage(
                         target = ConversationTarget(id = replyInfo.channel),
-                        recipient = null,
                         content = MessageContent.Text(headline = null, markdown = message),
                         detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
                     ),

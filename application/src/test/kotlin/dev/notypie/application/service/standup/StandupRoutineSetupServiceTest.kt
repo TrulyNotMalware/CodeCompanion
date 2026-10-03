@@ -79,14 +79,14 @@ class StandupRoutineSetupServiceTest :
                     event.payload.responseBasicInfo.channel shouldBe ""
                 }
 
-                then("a confirmation message is published to the command channel, not the blank submission channel") {
+                then("a confirmation goes to the creator's DM, which needs no bot membership in the command channel") {
                     verify(exactly = 1) {
                         stager.stage(
                             message =
                                 match { message ->
-                                    message is OutboundMessage.Ephemeral &&
-                                        message.target.id == "C_COMMAND" &&
-                                        message.recipient == null &&
+                                    message is OutboundMessage.ChannelMessage &&
+                                        message.target.id == "U_CREATOR" &&
+                                        message.threadId == null &&
                                         message.detailType == CommandDetailType.STANDUP_SETUP_SUBMIT &&
                                         message.content.let {
                                             it is MessageContent.Text &&
@@ -97,7 +97,7 @@ class StandupRoutineSetupServiceTest :
                                 },
                             basicInfo =
                                 match {
-                                    it.channel == "C_COMMAND" &&
+                                    it.channel == "U_CREATOR" &&
                                         it.publisherId == event.payload.responseBasicInfo.publisherId &&
                                         it.idempotencyKey == event.payload.responseBasicInfo.idempotencyKey
                                 },
@@ -157,7 +157,7 @@ class StandupRoutineSetupServiceTest :
 
                 then("the confirmation shows the name as literal text while the member mention stays markup") {
                     val markdown =
-                        ((staged.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
+                        ((staged.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
                             .markdown
                     markdown shouldContain "*&lt;https://evil.example|Fill in standup&gt; &amp; co*"
                     markdown shouldNotContain "<https://evil.example"
@@ -175,7 +175,12 @@ class StandupRoutineSetupServiceTest :
                         outboundStager = stager,
                         eventPublisher = eventPublisher,
                     )
-                val event = createCreateStandupRoutineEvent(questions = emptyList(), commandChannel = "C_COMMAND")
+                val event =
+                    createCreateStandupRoutineEvent(
+                        questions = emptyList(),
+                        creatorId = "U_CREATOR",
+                        commandChannel = "C_COMMAND",
+                    )
                 val errorSlot = slot<OutboundMessage>()
                 val errorInfoSlot = slot<CommandBasicInfo>()
                 every { stager.stage(message = capture(errorSlot), basicInfo = capture(errorInfoSlot)) } returns
@@ -187,16 +192,16 @@ class StandupRoutineSetupServiceTest :
                     verify(exactly = 0) { repo.createRoutine(routine = any()) }
                 }
 
-                then("a friendly error ephemeral is published instead") {
-                    val ephemeral = errorSlot.captured as OutboundMessage.Ephemeral
-                    val body = (ephemeral.content as MessageContent.Text).markdown
+                then("a friendly error message is published instead") {
+                    val reply = errorSlot.captured as OutboundMessage.ChannelMessage
+                    val body = (reply.content as MessageContent.Text).markdown
                     body.contains("Couldn't create the standup routine") shouldBe true
                     verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
                 }
 
-                then("the rejection also goes to the command channel, so the user learns nothing was created") {
-                    (errorSlot.captured as OutboundMessage.Ephemeral).target.id shouldBe "C_COMMAND"
-                    errorInfoSlot.captured.channel shouldBe "C_COMMAND"
+                then("the rejection also goes to the creator's DM, so the user learns nothing was created") {
+                    (errorSlot.captured as OutboundMessage.ChannelMessage).target.id shouldBe "U_CREATOR"
+                    errorInfoSlot.captured.channel shouldBe "U_CREATOR"
                 }
             }
 
@@ -218,7 +223,7 @@ class StandupRoutineSetupServiceTest :
                 then("the routine is never persisted and the reply names the accepted cutoff range") {
                     verify(exactly = 0) { repo.createRoutine(routine = any()) }
                     val body =
-                        ((errorSlot.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
+                        ((errorSlot.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
                             .markdown
                     body shouldContain "Couldn't create the standup routine"
                     body shouldContain "whole number of minutes between 1 and 1440"
