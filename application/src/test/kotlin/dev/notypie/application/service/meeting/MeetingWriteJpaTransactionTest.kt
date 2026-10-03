@@ -77,15 +77,13 @@ class MeetingWriteJpaTransactionTest :
             }
 
         fun armReminder(meetingId: Long) =
-            store.inNewTransaction {
-                store.reminderRepository.ensureReminder(
-                    meetingId = meetingId,
-                    offsetMinutes = 10,
-                    scheduledAt = Instant.parse("2026-07-01T00:00:00Z"),
-                    startAt = LocalDateTime.of(2026, 7, 1, 10, 0),
-                    now = clock.instant(),
-                )
-            }
+            store.reminderRepository.ensureReminder(
+                meetingId = meetingId,
+                offsetMinutes = 10,
+                scheduledAt = Instant.parse("2026-07-01T00:00:00Z"),
+                startAt = LocalDateTime.of(2026, 7, 1, 10, 0),
+                now = clock.instant(),
+            )
 
         fun reminderArmed(meetingId: Long): Boolean =
             store.inNewTransaction {

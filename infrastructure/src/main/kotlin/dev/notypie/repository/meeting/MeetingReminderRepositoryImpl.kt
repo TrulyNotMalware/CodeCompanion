@@ -6,6 +6,7 @@ import dev.notypie.repository.meeting.schema.toMeetingReminderDto
 import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDateTime
@@ -32,7 +33,6 @@ open class MeetingReminderRepositoryImpl(
                 )
             }
 
-    // No transaction may span the read and the write: under MariaDB snapshot isolation a lost race then fails (1020).
     override fun ensureReminder(
         meetingId: Long,
         offsetMinutes: Int,
@@ -40,6 +40,10 @@ open class MeetingReminderRepositoryImpl(
         startAt: LocalDateTime,
         now: Instant,
     ): Boolean {
+        check(!TransactionSynchronizationManager.isActualTransactionActive()) {
+            "MeetingReminderRepository.ensureReminder must run outside a transaction: under MariaDB snapshot " +
+                "isolation a write after its read in one transaction fails with 1020 (meetingId=$meetingId)"
+        }
         val existing =
             jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(
                 meetingId = meetingId,

@@ -6,6 +6,7 @@ import org.springframework.data.repository.findByIdOrNull
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 
 open class CveTopicRepositoryImpl(
@@ -20,8 +21,14 @@ open class CveTopicRepositoryImpl(
             propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
         }
 
-    override fun upsert(definition: CveTopicDefinition): Boolean =
-        syncExisting(definition = definition) ?: insertOrSyncRacedRow(definition = definition)
+    override fun upsert(definition: CveTopicDefinition): Boolean {
+        check(!TransactionSynchronizationManager.isActualTransactionActive()) {
+            "CveTopicRepository.upsert must run outside a transaction: it opens its own so that the locked read is " +
+                "each one's first statement, and its REQUIRES_NEW insert would wait on a gap lock the caller holds " +
+                "(topicKey=${definition.topicKey})"
+        }
+        return syncExisting(definition = definition) ?: insertOrSyncRacedRow(definition = definition)
+    }
 
     private fun syncExisting(definition: CveTopicDefinition): Boolean? =
         syncTemplate.execute {

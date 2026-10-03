@@ -8,6 +8,7 @@ import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingReminderSchema
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -15,6 +16,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.beans.factory.annotation.Autowired
@@ -62,15 +64,13 @@ class MeetingReminderRepositoryImplTest
             }
 
             fun arm(meeting: MeetingSchema, scheduledAt: Instant, startAt: LocalDateTime = meeting.startAt) =
-                inTx {
-                    repository.ensureReminder(
-                        meetingId = meeting.id,
-                        offsetMinutes = 10,
-                        scheduledAt = scheduledAt,
-                        startAt = startAt,
-                        now = now,
-                    )
-                }
+                repository.ensureReminder(
+                    meetingId = meeting.id,
+                    offsetMinutes = 10,
+                    scheduledAt = scheduledAt,
+                    startAt = startAt,
+                    now = now,
+                )
 
             fun reminderOf(meeting: MeetingSchema) =
                 jpaMeetingReminderRepository.findByMeetingIdAndOffsetMinutes(meetingId = meeting.id, offsetMinutes = 10)
@@ -213,6 +213,27 @@ class MeetingReminderRepositoryImplTest
                     then("the CAS misses and the row keeps its value") {
                         updated shouldBe 0
                         reminderOf(meeting = meeting)!!.scheduledAt shouldBe currentAt
+                    }
+                }
+            }
+
+            given("a meeting whose reminder a caller tries to arm inside its own transaction") {
+                val meeting =
+                    persistMeeting(
+                        name = "joined",
+                        startAt = LocalDateTime.of(2031, 5, 1, 15, 0),
+                        attending = listOf("U_J"),
+                    )
+
+                `when`("ensureReminder runs in that transaction") {
+                    val failure =
+                        shouldThrow<IllegalStateException> {
+                            inTx { arm(meeting = meeting, scheduledAt = Instant.parse("2031-05-01T05:50:00Z")) }
+                        }
+
+                    then("it fails fast instead of reading and writing in one transaction, and arms nothing") {
+                        failure.message shouldContain "outside a transaction"
+                        reminderOf(meeting = meeting) shouldBe null
                     }
                 }
             }

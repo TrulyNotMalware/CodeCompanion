@@ -3,11 +3,13 @@ package dev.notypie.repository.cve
 import dev.notypie.repository.cve.schema.CveTopicSchema
 import dev.notypie.schema.createCveTopicDefinition
 import dev.notypie.schema.createCveTopicSchema
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.jdbc.core.JdbcTemplate
@@ -31,68 +33,62 @@ class JpaCveTopicRepositoryTest
 
             afterSpec {
                 committed.executeWithoutResult {
-                    jdbcTemplate.update("DELETE FROM cve_topic WHERE topic_key = ?", "replica-race")
+                    jdbcTemplate.update(
+                        "DELETE FROM cve_topic WHERE topic_key IN (?, ?)",
+                        "replica-race",
+                        "joined-topic",
+                    )
                 }
             }
 
-            given("a bootstrap upsert holding a topic read before an admin deactivated it") {
-                `when`("the upsert renames the topic after the deactivation committed") {
-                    then("its UPDATE writes only the changed columns, so the deactivation survives") {
-                        repository.saveAndFlush(createCveTopicSchema(topicKey = "race-topic", active = true))
-                        repository.findByTopicKey(topicKey = "race-topic")
-                        jdbcTemplate.update("UPDATE cve_topic SET active = FALSE WHERE topic_key = ?", "race-topic")
+            given("a bootstrap upsert called inside a transaction that already read the topic") {
+                `when`("the upsert would lock the row after that read") {
+                    val original = repository.saveAndFlush(createCveTopicSchema(topicKey = "joined-topic"))
+                    val failure =
+                        shouldThrow<IllegalStateException> {
+                            TransactionTemplate(transactionManager).executeWithoutResult {
+                                repository.findByTopicKey(topicKey = "joined-topic")
+                                CveTopicRepositoryImpl(
+                                    jpaCveTopicRepository = repository,
+                                    transactionManager = transactionManager,
+                                ).upsert(
+                                    definition =
+                                        createCveTopicDefinition(topicKey = "joined-topic", displayName = "Renamed"),
+                                )
+                            }
+                        }
 
-                        CveTopicRepositoryImpl(
-                            jpaCveTopicRepository = repository,
-                            transactionManager = transactionManager,
-                        ).upsert(
-                            definition = createCveTopicDefinition(topicKey = "race-topic", displayName = "Renamed"),
-                        )
-                        repository.flush()
-
-                        jdbcTemplate.queryForObject(
-                            "SELECT active FROM cve_topic WHERE topic_key = ?",
-                            Boolean::class.java,
-                            "race-topic",
-                        ) shouldBe false
+                    then("it fails fast instead of joining that transaction, and the row keeps its name") {
+                        failure.message shouldContain "outside a transaction"
                         jdbcTemplate.queryForObject(
                             "SELECT display_name FROM cve_topic WHERE topic_key = ?",
                             String::class.java,
-                            "race-topic",
-                        ) shouldBe "Renamed"
+                            "joined-topic",
+                        ) shouldBe original.displayName
                     }
                 }
             }
 
             given("two replicas booting together, the other one committing the topic between the read and the insert") {
                 `when`("this replica's insert loses the unique key") {
-                    then("the bootstrap transaction survives and syncs the committed row, keeping its active flag") {
-                        committed.executeWithoutResult {
-                            repository.saveAndFlush(createCveTopicSchema(topicKey = "replica-race", active = false))
+                    committed.executeWithoutResult {
+                        repository.saveAndFlush(createCveTopicSchema(topicKey = "replica-race", active = false))
+                    }
+                    var lockedReads = 0
+                    val lockedBeforeTheOtherCommit =
+                        object : JpaCveTopicRepository by repository {
+                            override fun findLockedByTopicKey(topicKey: String): CveTopicSchema? =
+                                if (lockedReads++ == 0) null else repository.findLockedByTopicKey(topicKey = topicKey)
                         }
-                        var lockedReads = 0
-                        val lockedBeforeTheOtherCommit =
-                            object : JpaCveTopicRepository by repository {
-                                override fun findLockedByTopicKey(topicKey: String): CveTopicSchema? =
-                                    if (lockedReads++ ==
-                                        0
-                                    ) {
-                                        null
-                                    } else {
-                                        repository.findLockedByTopicKey(topicKey = topicKey)
-                                    }
-                            }
+                    val written =
+                        CveTopicRepositoryImpl(
+                            jpaCveTopicRepository = lockedBeforeTheOtherCommit,
+                            transactionManager = transactionManager,
+                        ).upsert(
+                            definition = createCveTopicDefinition(topicKey = "replica-race", displayName = "Renamed"),
+                        )
 
-                        val written =
-                            CveTopicRepositoryImpl(
-                                jpaCveTopicRepository = lockedBeforeTheOtherCommit,
-                                transactionManager = transactionManager,
-                            ).upsert(
-                                definition =
-                                    createCveTopicDefinition(topicKey = "replica-race", displayName = "Renamed"),
-                            )
-                        repository.flush()
-
+                    then("the bootstrap survives and syncs the committed row, keeping its active flag") {
                         written shouldBe true
                         lockedReads shouldBe 2
                         jdbcTemplate.queryForObject(

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-03 -->
 
 # application/service/cve
 
@@ -15,7 +15,7 @@ The whole lane is **feature-gated**: every bean here is declared conditionally i
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, upserts the YAML-declared topics into `cve_topic` (keyed by topic key) Keys must be unique ignoring case (`/latest` and `cve topic activate` lower-case the argument and match ignoring case; MariaDB's `_ci` collation rejects such a pair on the UNIQUE key anyway); a clash fails the boot before any upsert. A display name over `DISPLAY_NAME_MAX_LENGTH` (128, `cve_topic.display_name VARCHAR(128)`, counted in code points as utf8mb4 does) fails the boot; longer-than-75 names are fine because the picker cuts the label. |
+| `CveTopicBootstrap.kt` | On `ApplicationReadyEvent`, upserts the YAML-declared topics into `cve_topic` (keyed by topic key) outside any transaction (`CveTopicRepository.upsert` refuses one) Keys must be unique ignoring case (`/latest` and `cve topic activate` lower-case the argument and match ignoring case; MariaDB's `_ci` collation rejects such a pair on the UNIQUE key anyway); a clash fails the boot before any upsert. A display name over `DISPLAY_NAME_MAX_LENGTH` (128, `cve_topic.display_name VARCHAR(128)`, counted in code points as utf8mb4 does) fails the boot; longer-than-75 names are fine because the picker cuts the label. |
 
 ## Subdirectories
 | Directory | Purpose |

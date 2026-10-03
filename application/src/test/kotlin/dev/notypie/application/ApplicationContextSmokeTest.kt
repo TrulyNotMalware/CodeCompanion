@@ -3,9 +3,11 @@ package dev.notypie.application
 import com.ninjasquad.springmockk.MockkBean
 import com.sun.net.httpserver.HttpServer
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.application.configurations.createCveTopicConfigDefinition
 import dev.notypie.application.security.SlackRetryDeduplicator
 import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.cve.CveTopicBootstrap
 import dev.notypie.application.service.meeting.DailyAgendaSchedulingService
 import dev.notypie.application.service.meeting.MeetingReminderSchedulingService
 import dev.notypie.application.service.ops.OpsStatusService
@@ -31,8 +33,12 @@ import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
 import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.repository.createRawSnapshotIsolationFailure
+import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.repository.meeting.JpaMeetingRepository
+import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.schema.createMeetingSchemaWithParticipant
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
@@ -62,6 +68,7 @@ import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.support.TransactionTemplate
 import java.net.InetSocketAddress
 import java.time.Clock
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -188,6 +195,34 @@ class ApplicationContextSmokeTest
                         scrape shouldContain "outbox_pending_oldest_age_seconds 0.0"
                         scrape shouldContain "outbox_in_progress_oldest_claim_age_seconds 0.0"
                         scrape shouldContain "outbox_retrying_messages 0.0"
+                    }
+                }
+            }
+
+            given("the CVE topic bootstrap and the reminder materialize pass over the real repositories") {
+                `when`("they run the way their event listener and scheduler call them, outside any transaction") {
+                    val topicKey = "smoke-${UUID.randomUUID()}"
+                    CveTopicBootstrap(
+                        topics = listOf(createCveTopicConfigDefinition(key = topicKey)),
+                        cveTopicRepository = context.getBean(CveTopicRepository::class.java),
+                    ).bootstrapTopics()
+                    val reminders = context.getBean(MeetingReminderRepository::class.java)
+                    val meeting =
+                        context.getBean(JpaMeetingRepository::class.java).save(
+                            createMeetingSchemaWithParticipant(
+                                publisherId = "U_SMOKE_HOST",
+                                participantUserId = "U_SMOKE_GUEST",
+                                startAt = LocalDateTime.now(context.getBean(Clock::class.java)).plusMinutes(8L),
+                            ),
+                        )
+                    context.getBean(MeetingReminderSchedulingService::class.java).materializeReminders()
+
+                    then("both write, so their transaction guards hold on the production call paths") {
+                        context
+                            .getBean(CveTopicRepository::class.java)
+                            .findAllTopics()
+                            .map { it.topicKey } shouldContain topicKey
+                        reminders.reminderExists(meetingId = meeting.id, offsetMinutes = 5) shouldBe true
                     }
                 }
             }
