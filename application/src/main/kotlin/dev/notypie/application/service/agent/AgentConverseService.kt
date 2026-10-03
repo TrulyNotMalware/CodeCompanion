@@ -35,6 +35,7 @@ import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Duration
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.Executor
@@ -227,6 +228,7 @@ class AgentConverseService(
                     agentSessionRepository.saveProviderSessionId(
                         sessionKey = sessionKey,
                         providerSessionId = it,
+                        now = LocalDateTime.now(clock),
                     )
                 }
                 agentTurnHistoryRepository.record(

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository
 
@@ -21,7 +21,7 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `agent/` | `AgentSessionRepositoryImplTest` — replacing a thread's provider session id (see `agent/AGENTS.md`) |
+| `agent/` | `AgentSessionRepositoryImplTest` — the provider-session upsert on H2 MariaDB mode and its no-read-before-write shape (see `agent/AGENTS.md`) |
 | `authorization/` | `UserCommandRoleRepositoryImplTest` — changing a user's grant in place (see `authorization/AGENTS.md`) |
 | `cve/` | Four `Jpa*` H2 specs + five `*Impl` delegation specs for topics, events, subscriptions, deliveries, collect ledger (see `cve/AGENTS.md`) |
 | `meeting/` | `JpaMeetingRepositoryTest`, `MeetingRepositoryImplTest`, and the Spring-booting `MeetingRepositoryWriteTest` (see `meeting/AGENTS.md`) |

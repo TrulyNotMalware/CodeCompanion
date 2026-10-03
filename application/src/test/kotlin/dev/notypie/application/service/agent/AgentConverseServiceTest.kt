@@ -174,6 +174,7 @@ class AgentConverseServiceTest :
                         sessionRepository.saveProviderSessionId(
                             sessionKey = expectedSessionKey,
                             providerSessionId = "sess-next",
+                            now = fixedNow,
                         )
                     }
                 }
@@ -239,7 +240,11 @@ class AgentConverseServiceTest :
 
                 then("no session id is stored when the backend returned none") {
                     verify(exactly = 0) {
-                        sessionRepository.saveProviderSessionId(sessionKey = any(), providerSessionId = any())
+                        sessionRepository.saveProviderSessionId(
+                            sessionKey = any(),
+                            providerSessionId = any(),
+                            now = any(),
+                        )
                     }
                 }
             }

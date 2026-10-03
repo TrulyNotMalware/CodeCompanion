@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # application/service/agent
 
@@ -36,7 +36,10 @@ notice (`agent.turns{outcome=discarded}`, WARN log).
 - `stageReply` is `checkNotNull` on `outboundStager.stage(...)`: a null stage means the reply would
   vanish, so the turn's transaction must fail instead. Keep that check when adding reply kinds.
 - Session continuity is two keys: `sessionKey` (sidecar workspace, derived from channel, thread and requester)
-  and the provider session id stored in `agent_session`, echoed back as `sessionId` on the next turn.
+  and the provider session id stored in `agent_session`, echoed back as `sessionId` on the next turn. It is
+  stored by a single upsert (`now = LocalDateTime.now(clock)`) as the **first** statement of the answer
+  transaction; a read before it in that transaction makes MariaDB's snapshot isolation (1020) roll the answer's
+  outbox rows back (see `infrastructure/repository/agent/AGENTS.md`).
   Change the `sessionKey` formula and every open conversation loses its context. The requester is part of it
   because a provider session remembers the tool results fetched under that user's role: another participant in
   the same thread resuming it would read them without the per-call permission check. Sessions stored under the
