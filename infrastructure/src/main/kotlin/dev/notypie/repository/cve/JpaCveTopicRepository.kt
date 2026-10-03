@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional
 interface JpaCveTopicRepository : JpaRepository<CveTopicSchema, Long> {
     fun findByTopicKey(topicKey: String): CveTopicSchema?
 
-    // A locking read sees the latest committed row; a plain re-read under REPEATABLE READ still sees the old snapshot.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM cve_topic t WHERE t.topicKey = :topicKey")
     fun findLockedByTopicKey(

@@ -12,18 +12,38 @@ open class CveTopicRepositoryImpl(
     private val jpaCveTopicRepository: JpaCveTopicRepository,
     transactionManager: PlatformTransactionManager,
 ) : CveTopicRepository {
+    private val syncTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
+
     // A failed INSERT poisons the session it ran in, so the insert that may lose a replica race gets its own.
     private val insertTemplate: TransactionTemplate =
         TransactionTemplate(transactionManager).apply {
             propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
         }
 
-    @Transactional
-    override fun upsert(definition: CveTopicDefinition): Boolean {
-        val existing =
-            jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey)
-                ?: insertOrLoadRacedRow(definition = definition)
-                ?: return true
+    override fun upsert(definition: CveTopicDefinition): Boolean =
+        syncExisting(definition = definition) ?: insertOrSyncRacedRow(definition = definition)
+
+    private fun syncExisting(definition: CveTopicDefinition): Boolean? =
+        syncTemplate.execute {
+            // Lock first: under MariaDB snapshot isolation a locking read or UPDATE after a plain read fails (1020).
+            jpaCveTopicRepository
+                .findLockedByTopicKey(topicKey = definition.topicKey)
+                ?.let { existing -> sync(existing = existing, definition = definition) }
+        }
+
+    private fun insertOrSyncRacedRow(definition: CveTopicDefinition): Boolean =
+        try {
+            insertTemplate.executeWithoutResult {
+                jpaCveTopicRepository.saveAndFlush(
+                    newSchema(definition = definition),
+                )
+            }
+            true
+        } catch (exception: DataIntegrityViolationException) {
+            syncExisting(definition = definition) ?: throw exception
+        }
+
+    private fun sync(existing: CveTopicSchema, definition: CveTopicDefinition): Boolean {
         if (matches(schema = existing, definition = definition)) return false
         // active is never overwritten here — a yaml reboot must not undo a chat activate|deactivate toggle.
         existing.redefine(
@@ -36,18 +56,6 @@ open class CveTopicRepositoryImpl(
         jpaCveTopicRepository.save(existing)
         return true
     }
-
-    private fun insertOrLoadRacedRow(definition: CveTopicDefinition): CveTopicSchema? =
-        try {
-            insertTemplate.executeWithoutResult {
-                jpaCveTopicRepository.saveAndFlush(
-                    newSchema(definition = definition),
-                )
-            }
-            null
-        } catch (exception: DataIntegrityViolationException) {
-            jpaCveTopicRepository.findLockedByTopicKey(topicKey = definition.topicKey) ?: throw exception
-        }
 
     private fun newSchema(definition: CveTopicDefinition): CveTopicSchema =
         CveTopicSchema(

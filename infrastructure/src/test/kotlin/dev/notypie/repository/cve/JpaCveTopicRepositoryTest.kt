@@ -70,14 +70,22 @@ class JpaCveTopicRepositoryTest
                         committed.executeWithoutResult {
                             repository.saveAndFlush(createCveTopicSchema(topicKey = "replica-race", active = false))
                         }
-                        val readBeforeTheOtherCommit =
+                        var lockedReads = 0
+                        val lockedBeforeTheOtherCommit =
                             object : JpaCveTopicRepository by repository {
-                                override fun findByTopicKey(topicKey: String): CveTopicSchema? = null
+                                override fun findLockedByTopicKey(topicKey: String): CveTopicSchema? =
+                                    if (lockedReads++ ==
+                                        0
+                                    ) {
+                                        null
+                                    } else {
+                                        repository.findLockedByTopicKey(topicKey = topicKey)
+                                    }
                             }
 
                         val written =
                             CveTopicRepositoryImpl(
-                                jpaCveTopicRepository = readBeforeTheOtherCommit,
+                                jpaCveTopicRepository = lockedBeforeTheOtherCommit,
                                 transactionManager = transactionManager,
                             ).upsert(
                                 definition =
@@ -86,6 +94,7 @@ class JpaCveTopicRepositoryTest
                         repository.flush()
 
                         written shouldBe true
+                        lockedReads shouldBe 2
                         jdbcTemplate.queryForObject(
                             "SELECT display_name FROM cve_topic WHERE topic_key = ?",
                             String::class.java,

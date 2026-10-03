@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-03 -->
 
 # infrastructure/repository/cve
 
@@ -14,8 +14,8 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 | File | Description |
 |------|-------------|
 | `CveTopicRepository.kt` | `data class CveTopic(id, topicKey, displayName, category, sourceType, sourceConfig?, deliveryMode, active)`, `data class CveTopicDefinition(...)` (the yaml shape, `active = true` default); port `upsert(definition): Boolean`, `findActiveTopics()`, `findAllTopics()`, `findById(id)`, `countActive()`, `setActive(topicKey, active): Int` |
-| `CveTopicRepositoryImpl.kt` | `upsert` inserts when `findByTopicKey` is null, otherwise syncs every field **except `active`** onto the managed row and returns `false` on a no-op match (`matches()` ignores `active` too) Built with the `PlatformTransactionManager`: when the key is absent the insert runs in its own `REQUIRES_NEW` transaction (`saveAndFlush`), so a replica that inserted the same key meanwhile only fails that insert; the unique-key `DataIntegrityViolationException` is absorbed by re-reading the row with `findLockedByTopicKey` in the bootstrap transaction and syncing it like any existing row (a violation with no row behind it is rethrown). |
-| `JpaCveTopicRepository.kt` | Derived `findByTopicKey`, `findByActiveTrueOrderByTopicKey`; JPQL `findAllOrderByTopicKey`, `countActive`, `@Modifying setActive`. Not `@Repository`-annotated (still registered by `@EnableJpaRepositories`) `findLockedByTopicKey` (`PESSIMISTIC_WRITE`) is the race re-read: a locking read returns the latest committed row, while a plain re-read under MariaDB `REPEATABLE READ` keeps the transaction's first snapshot, in which the row did not exist. |
+| `CveTopicRepositoryImpl.kt` | `upsert` has no transaction of its own (call it outside one; `CveTopicBootstrap` runs on `ApplicationReadyEvent`). It first runs `findLockedByTopicKey` in a transaction and, when the row exists, syncs every field **except `active`** onto it there, returning `false` on a no-op match (`matches()` ignores `active` too). When the key is absent the insert runs in its own `REQUIRES_NEW` transaction (`saveAndFlush`), so a replica that inserted the same key meanwhile only fails that insert; the unique-key `DataIntegrityViolationException` is absorbed by running the locked find-and-sync again in a fresh transaction (a violation with no row behind it is rethrown). |
+| `JpaCveTopicRepository.kt` | Derived `findByTopicKey`, `findByActiveTrueOrderByTopicKey`; JPQL `findAllOrderByTopicKey`, `countActive`, `@Modifying setActive`. Not `@Repository`-annotated (still registered by `@EnableJpaRepositories`) `findLockedByTopicKey` (`PESSIMISTIC_WRITE`) is the first statement of every `upsert` transaction. |
 | `CveEventRepository.kt` | Records `CveEvent(id, topicId, externalId, title, rawContent, aiSummary?, summaryStatus, retryCount)`, `TopicEventCount(topicId, count)`, `CveRecentEvent(topicDisplayName, title, aiSummary?)`; port `insertIgnore(topicId, externalId, title, rawContent, publishedAt?): Int`, `findClaimable(now, maxRetries, limit)`, `claimForSummary(id, token, now, maxRetries): Int`, `markDone(id, token, summary, now)`, `markFailed(id, token, nextAttemptAt, now)`, `releaseClaim(id, token, nextAttemptAt, now)`, `resetStuck(olderThan, nextAttemptAt, now)`, `countByStatus`, `countFailedRetryable(maxRetries)`, `countDeadLetter(maxRetries)`, `countEventsByTopic(topicIds)`, `findRecentDoneEvents(topicIds, limit)`, `resetDeadLetters(maxRetries)`, `resetDeadLetter(id, maxRetries)` `markFailed`, `releaseClaim` and `resetStuck` take the caller's `now` for `updated_at`. |
 | `CveEventRepositoryImpl.kt` | Truncates `title` to `TITLE_MAX_LENGTH = 512` and `rawContent` to `RAW_CONTENT_MAX_LENGTH = 60_000` before `insertIgnore`; `limit` → `PageRequest.of(0, limit)`; empty `topicIds` short-circuits to `emptyList()`, otherwise `distinct()` `markDone` cuts the summary to `AI_SUMMARY_MAX_BYTES` (65,535 UTF-8 bytes, the MariaDB `TEXT` limit) on a code point boundary. |
 | `JpaCveEventRepository.kt` | Native `INSERT IGNORE` ingestion; JPQL `findClaimable` (PENDING / FAILED, `retryCount < :maxRetries`, backoff elapsed, id ASC); native CAS `claimForSummary` / `releaseClaim` / `markDone` / `markFailed` / `resetStuck`; JPQL counters, `countEventsByTopic` (constructor projection), `findRecentDoneEvents` (entity join to `cve_topic`), `resetDeadLetters` / `resetDeadLetter` (JPQL bulk update) |
@@ -57,8 +57,16 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 - **`upsert` never syncs `active` after the first insert.** Chat toggles (`setActive`) own that flag; a yaml
   reboot must not reactivate what an admin deactivated, and a row differing only in `active` is a no-op.
   Not writing the field is not enough on its own: Hibernate's default UPDATE sets every column, so an upsert
-  holding a row read before a concurrent `setActive` (rolling deploy) would write the stale `active` back.
-  `CveTopicSchema` is `@DynamicUpdate` for that reason (pinned by `JpaCveTopicRepositoryTest`).
+  holding a stale managed row would write the old `active` back. The locked read keeps a concurrent
+  `setActive` waiting until the sync commits, and `CveTopicSchema` stays `@DynamicUpdate` as the second guard
+  (pinned by `JpaCveTopicRepositoryTest`).
+- **Every `upsert` transaction starts with the locking read.** Production MariaDB (12.0.2) runs REPEATABLE READ
+  with `innodb_snapshot_isolation` ON (default since 11.6.2): once a transaction has done a plain read, a
+  locking read or UPDATE of a row another transaction committed after it fails with ER_CHECKREAD 1020
+  (Hibernate `SnapshotIsolationException`, translated by Spring to `JpaSystemException`). A plain
+  `findByTopicKey` before the lock, or one transaction around the insert and the re-read, brings the failure
+  back on a two-replica boot. `CveTopicRepositoryImplTest` models the rule with
+  `SnapshotIsolationTransactionManager`; H2 cannot raise 1020.
 - **Native bulk updates bypass `@UpdateTimestamp`**, so every CAS sets `updated_at` explicitly. The
   dead-letter revives (`resetDeadLetters` / `resetDeadLetter`) deliberately do not — nothing reads
   `updated_at` on PENDING rows and the next claim re-stamps it.
