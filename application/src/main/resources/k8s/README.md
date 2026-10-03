@@ -51,7 +51,8 @@ Defines the application deployment with:
   that block is removed, the default rolling update briefly runs 3 Pods (2 replicas + 1 surge) and needs
   3 × 1536Mi = 4.5Gi of requestable memory at once; see Prerequisites
 - Shutdown: a 5s `preStop` sleep, then Spring's graceful shutdown (scheduler and web server phases 10s each, the
-  Kafka listener phase up to one dispatch, 46s, so a record in hand finishes), three Kafka producer closes (5s each)
+  Kafka listener phase up to one dispatch, 46s, so a record in hand finishes while the pool and database answer
+  promptly), three Kafka producer closes (5s each)
   and the executor waits (relay up to one dispatch, 46s; AI turns 20s, then up to 8s of notices for the turns still
   queued; default 10s): 170s within a 180s
   `terminationGracePeriodSeconds`

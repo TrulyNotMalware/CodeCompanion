@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-10-02_
+_type: guide · updated: 2026-10-03_
 
 > JDK 25 · Gradle 9.7.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -213,11 +213,11 @@ _type: guide · updated: 2026-10-02_
   producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기
   (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 큐에 남은 턴의 안내 예산 3초 + 예산 안에 시작해 넘긴 안내 하나의 `connection-timeout`
   5초, 기본 10초) = 170초 ⊂ `terminationGracePeriodSeconds` 180초, 여유 10초
-  (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더하고 여유가 10초 아래면 실패). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
-  끝까지 보내고 상태를 기록한다. AI 턴은 닫기가 시작되면 새로 받지 않고(과부하 안내), 20초 대기가 끝날 때까지 시작하지
+  (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더하고 여유가 10초 아래면 실패). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀과 DB가
+  정상이면 끝까지 보내고 상태를 기록한다(예산은 상태 기록의 SQL 시간을 0으로 센다). AI 턴은 닫기가 시작되면 새로 받지 않고(과부하 안내), 20초 대기가 끝날 때까지 시작하지
   못한 큐의 턴은 버리면서 같은 안내를 outbox에 남긴다(`AgentTurnExecutor`). 안내는 3초 예산(`AGENT_TURN_DISCARD_BUDGET`) 안에서만
   쓰고, 예산이 끝나면 남은 턴은 안내 없이 버린다(ERROR 한 줄, `agent.turns{outcome=dropped}`). 대기 뒤에도 돌고 있던 턴의 답은 여전히 잃는다.
-  풀이 고갈되면 문장마다 `connection-timeout`이 더해져 예산을 넘을 수 있고, 크래시·SIGKILL은
+  풀이 고갈되면 문장마다 `connection-timeout`이 더해지고 상태 UPDATE가 잠금을 오래 기다려도 예산을 넘을 수 있으며, 크래시·SIGKILL은
   여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 전략은 V20 릴리스 동안 `Recreate`라(이전 파드와 겹치면 안 됨) 롤아웃마다 이전 파드
   종료(최대 유예 180초) + 새 파드 기동(최대 startup 180초) + 첫 readiness(10초)만큼 중단되고, 워크플로 롤아웃 타임아웃 450초·

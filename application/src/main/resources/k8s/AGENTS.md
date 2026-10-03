@@ -88,8 +88,9 @@ adds what an agent editing the manifests needs to know.
   5 + 2 x 10 + 46 + 3 x 5 + 46 + 20 + 3 + 5 + 10 = 170, leaving 10s; `configurations/ShutdownBudgetTest` recomputes every
   term from code, this manifest and the prod profile and fails when the grace leaves less than a 10s margin. So a dispatch running at
   SIGTERM, on the listener thread or a relay thread, finishes and records its status before the DataSource closes,
-  with a healthy pool; a starved pool adds a `connection-timeout` per statement that the budget does not cover
-  (`service/relay/AGENTS.md`, "Per-record time budget"). Not counted, and only inferred from source: a poison record
+  with a healthy pool and database only: the budget counts the status write's SQL time as zero, so a starved pool
+  (a `connection-timeout` per statement) or a long row-lock wait is not covered (`service/relay/AGENTS.md`,
+  "Per-record time budget"). Not counted, and only inferred from source: a poison record
   in its retry back-off can create one more dead-letter producer to close, and HikariCP's pool shutdown can wait
   several seconds when the database is unreachable; both come out of the margin. A crash or SIGKILL still cuts a
   dispatch, and the sweep can then post it twice. `management.endpoint.health.probes.enabled: true` in the prod profile is what makes

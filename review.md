@@ -2135,8 +2135,9 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
 
 ### 15.4 사용자 결정
 
-- **종료 시 진행 중 디스패치를 끝까지 기다린다.** 디스패치 하나의 예산을 `RECORD_SHUTDOWN_WAIT`로 둔다. 이 값은 코드 상수에서 계산하며, 프로필 조회 6초 + Slack 호출 상한 39.64초 + 상태 기록 백오프로 약 46초다.
+- **종료 시 진행 중 디스패치를 끝까지 기다린다(풀과 DB가 정상일 때).** 디스패치 하나의 예산을 `RECORD_SHUTDOWN_WAIT`로 둔다. 이 값은 코드 상수에서 계산하며, 프로필 조회 6초 + Slack 호출 상한 39.64초 + 상태 기록 백오프로 약 46초다.
   - 리스너 단계와 relay 실행기가 이만큼 기다린다.
+  - 이 예산은 상태 기록의 SQL 시간(연결 획득, 잠금 대기, 커밋, 다음 조각 INSERT)을 0으로 센다(`retryTimeBound(attemptTimeout = Duration.ZERO)`). 그 시간이 길어지면 대기가 먼저 끝나 EntityManagerFactory가 닫히고, 상태를 기록하지 못한 행은 스윕이 다시 보내 중복 게시가 될 수 있다. `@DependsOn`은 파괴 순서만 보장한다. 풀 고갈의 한계는 15.7과 같다.
   - 정지 시 큐에 남은 claim은 새로 보내지 않는다. 스윕이 회수한다.
   - 직렬 합계는 170초, `terminationGracePeriodSeconds`는 180초다. 170초에는 큐에 남은 AI 턴의 안내 예산 3초와, 예산 안에 시작해 넘긴 안내 하나의 `connection-timeout` 5초가 들어 있다(15.9). `ShutdownBudgetTest`는 코드·매니페스트·prod 프로파일로 합계를 다시 더하고, 여유가 10초 아래면 실패한다.
   - 이로써 `review_skill.md` 7장의 "결정 필요"가 해소됐다.
@@ -2181,7 +2182,7 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
   - Slack: REFUSED_STREAM 재시도(가짜 리셋 주입으로만 시험), 메시지당 약 13,200자 한도(커뮤니티 실측), 봇 게시물 안의 `<!channel>` 발화.
   - Kafka 브로커 왕복(DLT, MEDIUMTEXT 크기 행의 CDC 레코드), 실제 클러스터의 Recreate 롤아웃.
 - **설계상 잔여**:
-  - 커넥션 풀이 고갈되면 문장마다 `connection-timeout`이 더해져 종료 예산을 넘을 수 있다. 크래시·SIGKILL에서는 여전히 중복 게시가 날 수 있다.
+  - 종료 예산은 상태 기록의 SQL 시간을 0으로 센다(15.4). 커넥션 풀이 고갈되면 문장마다 `connection-timeout`이 더해지고, 상태 UPDATE가 행 잠금을 오래 기다려도 예산을 넘을 수 있다. 크래시·SIGKILL에서는 여전히 중복 게시가 날 수 있다.
   - 종료 대기 뒤에도 실행 중이던 AI 턴의 답은 잃는다.
   - access_blocked 신호는 복제본별 메모리라 재시작하면 사라진다.
   - 복제본 간 Slack 재시도 dedup은 미결이다(결정 #34).

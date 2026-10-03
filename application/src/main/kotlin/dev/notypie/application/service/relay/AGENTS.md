@@ -80,7 +80,11 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   (in `SlackMessageRelayServiceImpl.kt`) is computed from `RestClientRequester.DEFAULT_READ_TIMEOUT` (the profile
   lookup's whole-call bound), `SLACK_DISPATCH_TIME_BOUND` and `retryTimeBound` of the status write, and
   `configurations/AsyncConfig.kt`'s `RECORD_SHUTDOWN_WAIT` rounds it up for the Kafka listener phase and the relay
-  executor's wait; change any of those timeouts and the shutdown budget follows (`ShutdownBudgetTest`).
+  executor's wait; change any of those timeouts and the shutdown budget follows (`ShutdownBudgetTest`). The status
+  write's attempts count as zero time there (`attemptTimeout = Duration.ZERO`): connection acquisition, a row-lock
+  wait, the commit and a chained part's insert are outside the bound. When they take long, the wait ends first, the
+  EntityManagerFactory closes under the dispatch, the status is never written and the sweep resends a post that may
+  already be on Slack.
 - **A chained reply's next part is staged only by the CAS that recorded the current one** (2026-10-02). The
   insert shares the status write's transaction and runs only when `completeClaim` returned 1, so the parts post
   strictly one after another in both reader modes (the new `PENDING` row is an ordinary row to the poller and a
