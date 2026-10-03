@@ -2176,7 +2176,7 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
   - 레인마다 건드린 모듈의 전체 테스트와 ktlint를 통과했다. 통합 단계마다(B+D, B+C+D, A~D, 최종) 전체 `./gradlew build`를 다시 돌렸다.
   - 최종 결과는 domain 383 · infrastructure 742 · application 674, 실패 0이다.
 - **되돌림 검증:** 항목마다 수정을 되돌리거나 끄면 새 테스트가 실패하는 것을 확인했다. 예외는 각 커밋 본문에 있다(계약 심볼 추가처럼 되돌리면 컴파일만 실패하는 경우 등).
-- **독립 리뷰·스킬 대조·Codex 교차 리뷰:** 15.8에 기록한다.
+- **독립 리뷰·스킬 대조·Codex 교차 리뷰:** 15.8과 15.9에 기록한다.
 
 ### 15.7 남은 위험과 미검증
 
@@ -2215,6 +2215,35 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
   - 실제 Hibernate·Spring 경로로도 전후를 확인했다. 번역기가 없으면 회의 취소가 `JpaSystemException`이 되어 재시도하지 않는다. 번역기가 있으면 충돌로 분류되고 재시도해 취소가 커밋된다.
   - 재현 스크립트는 레인 F worktree의 `build/tmp-lane-f/snapshot-repro/`에 있다.
 - **미검증**: 운영 12.0.2에서는 실측하지 않았다(MDEV-39263 탐지 누락 수정 이전 버전이다). 인덱스 없는 UPDATE(요약 마커)의 잠금 범위도 실측하지 않았다.
+
+### 15.9 Codex 교차 리뷰 (2026-10-03)
+
+**방법**: 15장 범위(`7f2c45b0^..HEAD`, 약 105커밋) 전체를 맡긴 실행 두 번은 답을 내기 전에 멈췄다. 그래서 읽기 전용 실행 세 번으로 나눴다. ① 연쇄 발송·V3·종료, ② 스냅숏 격리·스탠드업, ③ 디스패처·역할·문서 주장이다. 실행마다 커밋 목록과 번호 붙은 질문을 주고, 라이브러리 동작은 `~/.gradle/caches`의 소스 jar로 확인하게 했다. Gradle과 컨테이너는 돌리지 않았다. 지적은 모두 소스로 다시 판정한 뒤 항목마다 커밋 하나로 반영했다(수정 전 실패 확인은 커밋 본문).
+
+**Codex가 확인한 것**:
+- 연쇄 발송: 다음 조각은 상태 CAS가 1인 트랜잭션에서만 들어간다. 커밋 응답을 잃은 재시도, CDC 재전달, 스윕 재소유 어느 경우에도 두 번 넣지 않는다.
+- V3 표시는 V3을 모르는 바이너리가 머리 조각만 보내고 나머지를 조용히 버리는 일을 막는다.
+- 종료 순서: relay 단계는 CDC 컨테이너 뒤에 멈추고, drain은 예약 슬롯을 돌려준다. `retryTimeBound`의 지터 계산은 Spring 7 소스와 같다.
+- 1020 번역기는 Hibernate 예외와 커밋 경로 모두에 적용되고, 다른 오류의 번역은 그대로다.
+- REFUSED_STREAM 분기, access_blocked 보류의 24시간 상한, 트랜잭션 밖 역할 조회와 USER만 캐시, 생성자 DM 전환(`eb8b5bed`)에서는 결함을 찾지 못했다.
+
+**지적과 처리**:
+
+| 지적 | 판정 | 처리 |
+|---|---|---|
+| [P1] 큐에 남은 AI 턴의 안내(`discard()`)가 20초 대기 뒤 직렬로 돌고, `ShutdownBudgetTest` 합계에 없다 | 맞음 | `287b5271`. 안내는 3초 예산 안에서만 시작하고, 남은 턴은 ERROR 한 줄과 `agent.turns{outcome=dropped}`로 버린다. 합계에 예산 3초와 넘긴 안내 하나의 `connection-timeout` 5초를 더해 170초(여유 10초) |
+| [P1] `RECORD_SHUTDOWN_WAIT`가 상태 기록의 DB 시간을 0으로 센다 | 맞음 | `5327bbad`. 코드는 두고 15.4·15.7과 관련 문서에 "풀과 DB가 정상일 때만"을 붙였다 |
+| 15.5 #3 "이 릴리스 이후 바이너리는 V3 행을 보류" | 맞음(이 릴리스는 V3을 지원) | `21213c06`. main, 보류 가드만 있는 바이너리, 이미 들어간 V2 조각으로 나눠 다시 썼다 |
+| CVE upsert와 `ensureReminder`가 바깥 트랜잭션에 합류할 수 있다(CVE는 gap lock 자기 차단까지) | 맞음(현재 호출 경로는 안전) | `236d816b`. 활성 트랜잭션이면 SQL 전에 `IllegalStateException`을 던진다. 실제 호출자 경로는 스모크 테스트로 고정했다. 합류를 전제한 `@DynamicUpdate` 경합 테스트는 거부 테스트로 바꿨다 |
+| 스탠드업 테스트가 앞선 읽기 뒤 `SESSION_CLOSED`를 기대한다(MariaDB는 1020) | 맞음 | `fe782cc7`. 같은 결함이 있는 두 케이스를 H2 전용으로 이름을 바꾸고 운영 순서 케이스를 더했다. AGENTS에 "`recordAnswer`는 트랜잭션의 첫 문장"을 적었다 |
+| `accesslimited`는 토큰·워크스페이스 전역이 아니라 네트워크 단위다 | 맞음(`invalid_auth`도 IP 제한을 포함) | `a400aeb7`. 주석·로그·문서만 고쳤다. 그 복제본의 모든 행이 같은 오류를 받으므로 보류는 유지한다 |
+| `fatal_error`가 영구 실패다 | 맞음 | `08da5107`. `internal_error`와 같이 분류한다. 비멱등 호출은 결과 불명, `chat.update`는 재시도(전에는 영구 실패) |
+| `response_url` 2xx의 예상 밖 본문이 결과 불명 카운터에서 빠진다 | 맞음 | `1357ffe1`. `outcome_unknown: unexpected_body: …`로 기록하고 `method=response_url`로 센다 |
+
+**남긴 것**:
+- 역할 조회와 에이전트 세션 저장도 바깥 트랜잭션에 합류하면 같은 문제가 생길 수 있다. 지금은 그런 호출자가 없어 가드를 두지 않았다.
+- 스탠드업 테이블의 1020과 CVE의 gap lock 자기 차단은 실행하지 않았다. 앞의 것은 같은 순서를 15.8에서 다른 테이블로 실측했고, 뒤의 것은 InnoDB 잠금 규칙에서 추론했다. 이번에는 로컬 MariaDB가 꺼져 있었다.
+- 검증: 전체 `./gradlew build` 통과, 테스트 domain 383 · infrastructure 761 · application 683, 실패 0(infrastructure·application은 `--rerun`으로 다시 실행).
 
 ---
 
