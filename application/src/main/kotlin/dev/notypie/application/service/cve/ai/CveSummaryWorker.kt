@@ -88,7 +88,6 @@ class CveSummaryWorker(
                 releaseForBackpressure(event = event, token = token, cause = busy)
                 return
             } catch (interrupted: InterruptedException) {
-                // Shutdown: leave the claim to resetStuck instead of recording a summary failure here.
                 Thread.currentThread().interrupt()
                 throw interrupted
             } catch (ex: Exception) {

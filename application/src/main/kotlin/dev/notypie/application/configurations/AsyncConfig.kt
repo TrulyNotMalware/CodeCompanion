@@ -15,7 +15,6 @@ import java.util.concurrent.ThreadPoolExecutor
 // Destroy-time waits run one after another; k8s/deployment.yaml terminationGracePeriodSeconds must cover their sum.
 const val DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS = 10
 
-// Cut shorter, a dispatch still running is killed after Slack may have posted, and another pod's sweep posts it again.
 val RECORD_SHUTDOWN_WAIT: Duration = Duration.ofSeconds(Math.ceilDiv(RELAY_RECORD_TIME_BOUND.toMillis(), 1_000L))
 
 fun relayQueueCapacity(appConfig: AppConfig): Int = appConfig.outbox.polling.batchSize
@@ -37,7 +36,6 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
             initialize()
         }
 
-    // Never CallerRunsPolicy: the callers are taskScheduler threads shared by every @Scheduled job.
     @Bean(name = ["relayTaskExecutor"])
     @DependsOn("entityManagerFactory")
     fun relayTaskExecutor(appConfig: AppConfig): Executor =

@@ -53,7 +53,6 @@ class SlackInteractionHandlerImpl(
     override fun handleInteraction(headers: MultiValueMap<String, String>, payload: String): String? {
         val interactionPayload = interactionPayloadParser.parseStringPayload(payload = payload)
 
-        // A blank "Other" detail needs a synchronous inline error and must not persist, so gate here.
         declineDetailErrorOrNull(payload = interactionPayload)?.let { return it }
 
         val command = commandFor(interactionPayload = interactionPayload) ?: return null

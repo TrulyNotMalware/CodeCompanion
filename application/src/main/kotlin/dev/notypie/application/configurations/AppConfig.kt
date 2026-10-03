@@ -96,7 +96,6 @@ data class AppConfig(
         data class Health(
             val stuckThresholdSeconds: Long = 300L,
             val retryingSendThreshold: Int = 3,
-            // Longer than a held row takes to come back (15 min wait + 2 min spread + one sweep), or DOWN flaps.
             val accessBlockedWindowSeconds: Long = 1_200L,
         ) {
             init {

@@ -83,7 +83,6 @@ open class StandupRepositoryImpl(
             .findBySessionUid(sessionUid = sessionUid)
             ?.toStandupSessionDto()
 
-    // The caller's transaction must hold the row lock while it saves the summary and flips the status.
     @Transactional(propagation = Propagation.MANDATORY)
     override fun findSessionForSummary(sessionUid: UUID): StandupSessionDto? =
         jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)?.let { session ->

@@ -189,7 +189,6 @@ class CveNotificationDispatcher(
         return capBody(body = if (summary.isNullOrBlank()) head else "$head\n\n${summary.escapeMrkdwn()}")
     }
 
-    // A claimed pair already has its delivery row, so an event cut off the end of a body is never sent again.
     private fun digestParts(events: List<UndeliveredCveEvent>): List<String> {
         val parts = mutableListOf<String>()
         val current = StringBuilder()

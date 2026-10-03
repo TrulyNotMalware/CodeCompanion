@@ -6,7 +6,6 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 
-// The chain head carries every part; its CDC update record holds that payload twice, re-escaped, within 1 MiB.
 const val CHAIN_TEXT_BUDGET: Int = 40_000
 
 data class OutboundEnvelope(

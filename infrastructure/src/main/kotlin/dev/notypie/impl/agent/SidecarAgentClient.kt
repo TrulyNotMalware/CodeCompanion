@@ -60,7 +60,6 @@ class SidecarAgentClient(
             Thread.currentThread().interrupt()
             throw exception
         } catch (exception: Exception) {
-            // The JDK client reports an interrupt during the body read as an IOException and leaves the flag set.
             if (Thread.currentThread().isInterrupted) {
                 throw InterruptedException("Sidecar turn interrupted while streaming").apply { initCause(exception) }
             }

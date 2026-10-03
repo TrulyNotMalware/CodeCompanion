@@ -122,7 +122,6 @@ open class CveEventRepositoryImpl(
         const val TITLE_MAX_LENGTH = 512
         const val RAW_CONTENT_MAX_LENGTH = 60_000
 
-        // ai_summary is TEXT: MariaDB caps it at 65,535 bytes, not characters, and strict mode rejects the excess.
         const val AI_SUMMARY_MAX_BYTES = 65_535
 
         private fun String.takeUtf8Bytes(maxBytes: Int): String {

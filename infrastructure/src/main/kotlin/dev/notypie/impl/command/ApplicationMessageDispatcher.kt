@@ -579,6 +579,5 @@ class ApplicationMessageDispatcher(
     }
 }
 
-// Two RetryService runs of whole-call-bounded Slack calls around at most one inline rate-limit wait.
 val SLACK_DISPATCH_TIME_BOUND: Duration =
     retryTimeBound(attemptTimeout = SLACK_CALL_TIMEOUT).multipliedBy(2L).plus(MAX_INLINE_RETRY_AFTER)

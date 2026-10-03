@@ -51,7 +51,6 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         pageable: Pageable,
     ): List<CveEventSchema>
 
-    // Native bulk updates bypass @UpdateTimestamp: every CAS below stamps updated_at from the caller's app-clock :now.
     // Re-checks retry_count here (not just in findClaimable) so a stale candidate can't revive a dead-lettered row.
     @Modifying
     @Transactional

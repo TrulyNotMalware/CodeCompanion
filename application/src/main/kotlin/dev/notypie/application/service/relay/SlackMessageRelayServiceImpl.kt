@@ -51,16 +51,13 @@ private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
 internal val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
 internal val ACCESS_BLOCKED_DEFER: Duration = Duration.ofMinutes(15L)
 
-// Each attempt can wait a full Hikari connection-timeout; the per-record budget in relay AGENTS.md counts three.
 private const val STATUS_WRITE_ATTEMPTS = 3L
 
-// One dispatch with a healthy pool: render's profile lookup, the Slack calls, the status write's retries.
 val RELAY_RECORD_TIME_BOUND: Duration =
     RestClientRequester.DEFAULT_READ_TIMEOUT
         .plus(SLACK_DISPATCH_TIME_BOUND)
         .plus(retryTimeBound(attemptTimeout = Duration.ZERO, maxAttempts = STATUS_WRITE_ATTEMPTS))
 
-// A held row is invisible to every outbox count (defer takes its send back and moves updated_at), so health reads this.
 @Component
 class AccessBlockedTracker {
     private val lastBlockedAt = AtomicReference<Instant?>(null)
@@ -102,7 +99,6 @@ class SlackMessageRelayServiceImpl(
         stopping = false
     }
 
-    // Without the drain the pool keeps starting queued claims until it is destroyed, sending them past the grace period.
     override fun stop() {
         stopping = true
         val dropped = ArrayList<Runnable>()
@@ -167,7 +163,6 @@ class SlackMessageRelayServiceImpl(
                     writeTerminal(claim = claim, status = MessageStatus.FAILURE)
                     return
                 }
-        // Every reader funnels here, so the give-up bound also holds for a CDC backlog replayed after an outage.
         if (row.createdAt < now().minus(giveUpAfter)) {
             logger.error {
                 "Failing outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} unsent: created at " +
@@ -180,7 +175,6 @@ class SlackMessageRelayServiceImpl(
             )
             return
         }
-        // A newer release's row waits, unsent and unfailed, for a binary that reads it or the give-up bound.
         if (row.schemaVersion !in OutboxSchemaVersion.SUPPORTED) {
             logger.error {
                 "Outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} has schemaVersion=" +

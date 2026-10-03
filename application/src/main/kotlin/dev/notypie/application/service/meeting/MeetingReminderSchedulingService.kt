@@ -152,7 +152,6 @@ class MeetingReminderSchedulingService(
                         sentAt = sentAt,
                     )
                 ) {
-                    // Re-claimed, reset, or the meeting was canceled after the claim — roll the DMs back.
                     error(
                         "markReminderSent had no effect for reminder $reminderId (re-claimed, reset or meeting " +
                             "canceled) — rolling back.",

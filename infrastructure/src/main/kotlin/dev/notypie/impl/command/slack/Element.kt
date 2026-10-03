@@ -24,7 +24,6 @@ data class Element(
     val actionId: String? = null,
     @field:JsonProperty("value")
     val value: String? = null,
-    // A string on buttons and lists ("primary", "ordered") but an object on rich_text leaves ({"bold": true}).
     @field:JsonProperty("style")
     val style: JsonNode? = null,
     val elements: List<Element> = listOf(),

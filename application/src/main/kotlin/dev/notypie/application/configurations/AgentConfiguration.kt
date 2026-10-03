@@ -82,7 +82,6 @@ class AgentConfiguration(
         )
 }
 
-// Spring's wait ends without shutdownNow, so a turn still queued then would vanish with the JVM, unanswered.
 class AgentTurnExecutor : ThreadPoolTaskExecutor() {
     override fun shutdown() {
         super.shutdown()
@@ -92,8 +91,6 @@ class AgentTurnExecutor : ThreadPoolTaskExecutor() {
     }
 }
 
-// From the start of the close a new turn is refused, so its mention gets the busy notice instead of queueing behind
-// turns that may not finish before the pod is killed; turns already queued still run during the executor's wait.
 class AgentTurnIntake(
     private val executor: ThreadPoolTaskExecutor,
 ) : SmartLifecycle {

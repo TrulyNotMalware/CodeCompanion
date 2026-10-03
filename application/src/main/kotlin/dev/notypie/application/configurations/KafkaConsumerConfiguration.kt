@@ -53,10 +53,8 @@ const val DEAD_LETTER_HANDOFFS_METRIC = "kafka.dead.letter.handoffs"
 
 const val DEAD_LETTER_PUBLISH_FAILURES_METRIC = "kafka.dead.letter.publish.failures"
 
-// Producer.close waits this long for unsent records (30s by default); ShutdownBudgetTest counts three closes.
 const val PRODUCER_CLOSE_TIMEOUT_SECONDS = 5
 
-// A dead-letter send blocks the listener thread while it waits for topic metadata; kafka-clients' default is 60 s.
 internal val DEAD_LETTER_MAX_BLOCK: Duration = Duration.ofSeconds(5L)
 
 internal fun deadLetterTopic(topic: String): String = "$topic$DEAD_LETTER_TOPIC_SUFFIX"
@@ -92,7 +90,6 @@ private class MeteredDeadLetterPublishingRecoverer(
         templates,
         { record, _ -> TopicPartition(deadLetterTopic(topic = record.topic()), -1) },
     ) {
-    // The library logs a send that throws or fails later and returns normally, so the template is wrapped to count both.
     override fun publish(
         outRecord: ProducerRecord<Any, Any>,
         kafkaTemplate: KafkaOperations<Any, Any>,
@@ -266,7 +263,6 @@ class KafkaConsumerConfiguration(
         containerProperties.isObservationEnabled = true
         containerProperties.isMicrometerEnabled = false
         containerProperties.ackMode = ContainerProperties.AckMode.RECORD
-        // Stop after the record in hand, not after the rest of the poll; the listener phase waits for that record.
         containerProperties.isStopImmediate = true
         containerProperties.shutdownTimeout = RECORD_SHUTDOWN_WAIT.toMillis()
         setCommonErrorHandler(
