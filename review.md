@@ -2198,7 +2198,19 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
 - **요약 마커 치환**(`e554bcd4`): 이 UPDATE는 인덱스 없이 `standup_session` 전체를 잠근다. 성공 이벤트에 `commandDetailType`을 실어 `STANDUP_SUMMARY` 성공에서만 실행한다. 마이그레이션은 추가하지 않았다.
 - **역할 조회 실패**(`10432255`): USER 폴백마다 `codecompanion_role_lookup_failures_total`을 올린다(15.5의 카운터 목록에 추가). MCP는 폴백 때문에 거부된 호출을 DENIED가 아니라 `FAILED`/`RoleLookupFailed`로 감사한다.
 - **문서·잔여**(`cb7b7ba8`, `9d90af42`): CDC가 고착되면 연쇄 응답은 조각마다 스윕 지연(약 5–6분)을 겪는다는 런북을 추가했다(8조각이면 약 40–48분). k8s AGENTS의 유예 값을 180초로 고쳤다. `.orElse(null)`은 `getOrNull()`로 바꾸고 픽스처 주석은 지웠다.
-- **미검증**: 실제 MariaDB에서 1020 재현과 해소를 확인하지 못했다. 테스트는 스냅숏 격리 규칙을 모델링한 가짜 트랜잭션 매니저와 실제 `TransactionInterceptor` 프록시로만 했다. 특히 INSERT 중복 검사가 read view 뒤에서 1062 대신 1020을 내는지는 가정이다. 인덱스 없는 UPDATE의 잠금 범위도 실측하지 않았다.
+- **스냅숏 격리 감사 반영**(`audit-snapshot-isolation.md`):
+  - **전역 번역**(`dc78ab5b`): `SnapshotIsolationExceptionTranslator`를 유일한 `SQLExceptionTranslator` 빈으로 둔다. 1020을 `OptimisticLockingFailureException`의 하위 예외로 바꾼다. Boot가 이 빈을 `HibernateJpaDialect`와 `JdbcTemplate`에 연결한다. 다른 오류의 번역은 그대로다. 이제 회의 쓰기(cancel·addParticipants·reschedule)의 1회 재시도가 운영에서 동작한다.
+  - **에이전트 세션**(`71e44ba6`): 저장을 단일 `INSERT … ON DUPLICATE KEY UPDATE`로 바꿨다. 1020 때문에 답변 outbox 행이 함께 롤백되던 문제와, 새 키에서 나던 1062 경합이 없어진다.
+  - **리마인더**(`39e5cdf5`): 회의별·단계별로 실패를 격리한다. 한 회의가 실패해도 그 틱과 `sendDueReminders`가 멈추지 않는다. 삽입 경로의 1020은 FK 부모 검사에서 나므로 테스트 모델을 그에 맞게 고쳤다.
+  - **수용**(코드 변경 없음): `CveOpsService.setActive`, 역할 `saveRole`·`deleteRole`, CVE 구독 해지.
+    - 앞의 둘은 멘션 트랜잭션이 충돌 예외로 롤백되고 500이 난다. Slack이 재전송하면 새 트랜잭션에서 회복된다(dedup은 5xx를 잊는다).
+    - 구독 해지는 상호작용이라 재전송이 없어 실패로 끝난다. 다만 스냅숏 격리 이전에도 같은 결과였다.
+- **실측**(로컬 `~/infra` MariaDB **12.3.3**, `@@innodb_snapshot_isolation = 1`, REPEATABLE READ; 운영 버전은 12.0.2라 다르다):
+  - 예전 순서는 모두 1020이 났다. CVE upsert 경합 삽입·redefine, 리마인더 재정렬·FK 삽입, 회의 버전 UPDATE, 에이전트 세션, 역할 부여가 해당한다.
+  - 새 순서는 모두 성공했다. 보조 unique 중복은 read view 뒤에서도 1062다. upsert도 앞에 일반 읽기가 있으면 1020이 나므로, 트랜잭션의 첫 문장이어야 한다.
+  - 실제 Hibernate·Spring 경로로도 전후를 확인했다. 번역기가 없으면 회의 취소가 `JpaSystemException`이 되어 재시도하지 않는다. 번역기가 있으면 충돌로 분류되고 재시도해 취소가 커밋된다.
+  - 재현 스크립트는 레인 F worktree의 `build/tmp-lane-f/snapshot-repro/`에 있다.
+- **미검증**: 운영 12.0.2에서는 실측하지 않았다(MDEV-39263 탐지 누락 수정 이전 버전이다). 인덱스 없는 UPDATE(요약 마커)의 잠금 범위도 실측하지 않았다.
 
 ---
 
