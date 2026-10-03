@@ -2186,6 +2186,20 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
   - access_blocked 신호는 복제본별 메모리라 재시작하면 사라진다.
   - 복제본 간 Slack 재시도 dedup은 미결이다(결정 #34).
 
+### 15.8 최종 리뷰 반영 (2026-10-03, 레인 F)
+
+운영 MariaDB 12.0.2는 REPEATABLE READ에 `innodb_snapshot_isolation`이 기본 ON이다(11.6.2부터). 한 트랜잭션이 일반 읽기를 한 뒤 다른 트랜잭션이 그 뒤에 커밋한 행을 잠금 읽기·UPDATE하면 ER_CHECKREAD 1020이 난다. Hibernate 7.4.5는 이를 `SnapshotIsolationException`으로, Spring은 `JpaSystemException`으로 바꾼다. 설정은 그대로 두고 코드로 고쳤다.
+
+- **CVE 토픽 upsert**(`77ac0e52`): 트랜잭션마다 잠금 읽기를 첫 문장으로 실행한다. 삽입은 REQUIRES_NEW로 하고, 유니크 키에 지면 새 트랜잭션에서 다시 잠금 읽기를 한다. `@DynamicUpdate`·`redefine()`은 그대로 둔다. 두 복제본이 함께 기동해도 1020으로 기동이 실패하지 않는다.
+- **리마인더 재정렬 CAS**(`23bc9355`): `ensureReminder`의 트랜잭션을 걷어 조회와 쓰기를 분리했다. 동시 변경은 0행 CAS 미스가 되어 틱이 계속 돈다.
+- **relay 정지 순서**(`cdd86bb5`): relay 단계를 `AbstractMessageListenerContainer.DEFAULT_PHASE - 1`로 낮췄다. 이제 CDC 컨테이너가 먼저 멈추므로, 멈추는 동안 claim한 레코드도 발송된다. 종료 합계 162초는 그대로다.
+- **`retryTimeBound`**(`d2ac1f4d`): Spring 7의 지터 배율(간격/초기 간격)을 반영했다. Slack 호출 상한은 39.64초에서 39.66초로 바뀌었다(15.4의 39.64초). 레코드 상한은 45.99초이고 `RECORD_SHUTDOWN_WAIT`은 46초 그대로다.
+- **스탠드업 셋업 회신**(`eb8b5bed`): 커맨드 채널 ephemeral 대신 생성자 DM으로 보낸다. 봇이 채널 멤버가 아니면 postEphemeral이 `no_permission`으로 실패하기 때문이다.
+- **요약 마커 치환**(`e554bcd4`): 이 UPDATE는 인덱스 없이 `standup_session` 전체를 잠근다. 성공 이벤트에 `commandDetailType`을 실어 `STANDUP_SUMMARY` 성공에서만 실행한다. 마이그레이션은 추가하지 않았다.
+- **역할 조회 실패**(`10432255`): USER 폴백마다 `codecompanion_role_lookup_failures_total`을 올린다(15.5의 카운터 목록에 추가). MCP는 폴백 때문에 거부된 호출을 DENIED가 아니라 `FAILED`/`RoleLookupFailed`로 감사한다.
+- **문서·잔여**(`cb7b7ba8`, `9d90af42`): CDC가 고착되면 연쇄 응답은 조각마다 스윕 지연(약 5–6분)을 겪는다는 런북을 추가했다(8조각이면 약 40–48분). k8s AGENTS의 유예 값을 180초로 고쳤다. `.orElse(null)`은 `getOrNull()`로 바꾸고 픽스처 주석은 지웠다.
+- **미검증**: 실제 MariaDB에서 1020 재현과 해소를 확인하지 못했다. 테스트는 스냅숏 격리 규칙을 모델링한 가짜 트랜잭션 매니저와 실제 `TransactionInterceptor` 프록시로만 했다. 특히 INSERT 중복 검사가 read view 뒤에서 1062 대신 1020을 내는지는 가정이다. 인덱스 없는 UPDATE의 잠금 범위도 실측하지 않았다.
+
 ---
 
 ## 부록: 재현용 확인 명령
