@@ -16,6 +16,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.CapturingSlot
 import io.mockk.every
 import io.mockk.mockk
@@ -38,6 +39,7 @@ class RoleManagementServiceTest :
                     appConfig = AppConfig(authorization = AppConfig.Authorization(bootstrapAdmins = bootstrapAdmins)),
                     userCommandRoleRepository = roleRepository,
                     clock = Clock.systemUTC(),
+                    meterRegistry = SimpleMeterRegistry(),
                 ),
         ): Pair<RoleManagementService, EventPublisher> {
             val stager = mockk<OutboundMessageStager>()
@@ -277,6 +279,7 @@ class RoleManagementServiceTest :
                         appConfig = AppConfig(),
                         userCommandRoleRepository = roleRepository,
                         clock = Clock.systemUTC(),
+                        meterRegistry = SimpleMeterRegistry(),
                     )
                 val (service, _) =
                     serviceWith(
@@ -320,6 +323,7 @@ class RoleManagementServiceTest :
                         appConfig = AppConfig(),
                         userCommandRoleRepository = roleRepository,
                         clock = Clock.systemUTC(),
+                        meterRegistry = SimpleMeterRegistry(),
                     )
                 val (service, _) =
                     serviceWith(
@@ -359,6 +363,7 @@ class RoleManagementServiceTest :
                         appConfig = AppConfig(),
                         userCommandRoleRepository = roleRepository,
                         clock = Clock.systemUTC(),
+                        meterRegistry = SimpleMeterRegistry(),
                     )
                 val (service, _) =
                     serviceWith(

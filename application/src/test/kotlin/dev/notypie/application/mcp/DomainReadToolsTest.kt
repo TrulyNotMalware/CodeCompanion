@@ -4,6 +4,7 @@ import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.createScopedTurnToken
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
+import dev.notypie.application.service.command.RoleResolution
 import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.meet.createMeetingDto
@@ -44,7 +45,8 @@ class DomainReadToolsTest :
             meetingRepository: MeetingRepository = mockk(),
         ): DomainReadTools {
             val roleResolver = mockk<CommandRoleResolver>()
-            every { roleResolver.resolve(userId = token.userId) } returns role
+            every { roleResolver.resolution(userId = token.userId) } returns
+                RoleResolution(role = role, lookupFailed = false)
             return DomainReadTools(
                 mcpToolGate =
                     McpToolGate(

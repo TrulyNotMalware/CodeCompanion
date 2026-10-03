@@ -14,6 +14,8 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult
 
 private val log = KotlinLogging.logger {}
 
+private const val ROLE_LOOKUP_FAILED = "RoleLookupFailed"
+
 class McpToolGate(
     private val commandRoleResolver: CommandRoleResolver,
     private val mcpToolCallHistoryRepository: McpToolCallHistoryRepository,
@@ -50,19 +52,14 @@ class McpToolGate(
                 )
             }.onFailure { log.error(it) { "MCP tool audit write failed: tool=$toolName outcome=$outcome" } }
 
-        val resolvedRole =
-            runCatching { commandRoleResolver.resolve(userId = token.userId) }
-                .getOrElse { failure ->
-                    log.error(failure) { "MCP role resolution failed: tool=$toolName" }
-                    audit(
-                        role = UserRole.USER,
-                        outcome = McpToolCallOutcome.FAILED,
-                        errorCode = failure.javaClass.simpleName,
-                    )
-                    return errorResult(text = "`$toolName` failed to execute. Try again or contact an admin.")
-                }
+        val resolution = commandRoleResolver.resolution(userId = token.userId)
+        val resolvedRole = resolution.role
 
         if (!resolvedRole.grants(permission = requiredPermission)) {
+            if (resolution.lookupFailed) {
+                audit(role = resolvedRole, outcome = McpToolCallOutcome.FAILED, errorCode = ROLE_LOOKUP_FAILED)
+                return errorResult(text = "`$toolName` failed to execute. Try again or contact an admin.")
+            }
             audit(role = resolvedRole, outcome = McpToolCallOutcome.DENIED)
             return errorResult(
                 text =

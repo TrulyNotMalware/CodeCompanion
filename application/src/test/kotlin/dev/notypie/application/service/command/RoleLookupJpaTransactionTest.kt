@@ -20,6 +20,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
@@ -181,6 +182,7 @@ private class RoleStore(
                     appConfig = AppConfig(),
                     userCommandRoleRepository = repository,
                     clock = Clock.systemUTC(),
+                    meterRegistry = SimpleMeterRegistry(),
                 ),
         ).also { spy ->
             every { spy.resolve(userId = any()) } answers

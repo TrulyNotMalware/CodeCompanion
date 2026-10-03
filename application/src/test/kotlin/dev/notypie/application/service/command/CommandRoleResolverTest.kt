@@ -5,6 +5,8 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.authorization.UserCommandRoleRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -20,15 +22,19 @@ class CommandRoleResolverTest :
         val unknownUserId = "U_NOBODY"
         val start = Instant.ofEpochSecond(1714280000)
 
-        fun resolverWith(roleRepository: UserCommandRoleRepository, clock: Clock = Clock.fixed(start, ZoneOffset.UTC)) =
-            CommandRoleResolver(
-                appConfig =
-                    AppConfig(
-                        authorization = AppConfig.Authorization(bootstrapAdmins = listOf(bootstrapAdminId)),
-                    ),
-                userCommandRoleRepository = roleRepository,
-                clock = clock,
-            )
+        fun resolverWith(
+            roleRepository: UserCommandRoleRepository,
+            clock: Clock = Clock.fixed(start, ZoneOffset.UTC),
+            meterRegistry: MeterRegistry = SimpleMeterRegistry(),
+        ) = CommandRoleResolver(
+            appConfig =
+                AppConfig(
+                    authorization = AppConfig.Authorization(bootstrapAdmins = listOf(bootstrapAdminId)),
+                ),
+            userCommandRoleRepository = roleRepository,
+            clock = clock,
+            meterRegistry = meterRegistry,
+        )
 
         given("resolve") {
             val roleRepository = mockk<UserCommandRoleRepository>()
@@ -155,15 +161,22 @@ class CommandRoleResolverTest :
             val roleRepository = mockk<UserCommandRoleRepository>()
             every { roleRepository.findRole(userId = grantedDeveloperId) } throws
                 IllegalStateException("db down") andThen UserRole.DEVELOPER
-            val resolver = resolverWith(roleRepository = roleRepository)
+            val meterRegistry = SimpleMeterRegistry()
+            val resolver = resolverWith(roleRepository = roleRepository, meterRegistry = meterRegistry)
 
             `when`("the repository throws") {
-                val degraded = resolver.resolve(userId = grantedDeveloperId)
-                val recovered = resolver.resolve(userId = grantedDeveloperId)
+                val degraded = resolver.resolution(userId = grantedDeveloperId)
+                val recovered = resolver.resolution(userId = grantedDeveloperId)
 
                 then("the user degrades to USER and the failure is not cached") {
-                    degraded shouldBe UserRole.USER
-                    recovered shouldBe UserRole.DEVELOPER
+                    degraded.role shouldBe UserRole.USER
+                    recovered.role shouldBe UserRole.DEVELOPER
+                }
+
+                then("the fallback is marked and counted, so an outage is visible") {
+                    degraded.lookupFailed shouldBe true
+                    recovered.lookupFailed shouldBe false
+                    meterRegistry.get(CommandRoleResolver.METRIC_ROLE_LOOKUP_FAILURES).counter().count() shouldBe 1.0
                 }
             }
         }
