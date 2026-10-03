@@ -10,6 +10,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.time.Duration
 import java.time.Instant
+import kotlin.jvm.optionals.getOrNull
 
 private val log = KotlinLogging.logger {}
 
@@ -69,8 +70,8 @@ class GithubReleaseSourceAdapter(
 
     private fun logFailure(response: SourceResponse, topic: CveTopic) {
         val status = response.statusCode
-        val remaining = response.headers.firstValue("x-ratelimit-remaining").orElse(null)
-        val retryAfter = response.headers.firstValue("retry-after").orElse(null)
+        val remaining = response.headers.firstValue("x-ratelimit-remaining").getOrNull()
+        val retryAfter = response.headers.firstValue("retry-after").getOrNull()
         if (status !in RATE_LIMIT_STATUSES || (remaining != "0" && retryAfter == null)) {
             log.warn { "GitHub releases returned $status for topic=${topic.topicKey}" }
             return
@@ -78,7 +79,7 @@ class GithubReleaseSourceAdapter(
         val resetAt =
             response.headers
                 .firstValue("x-ratelimit-reset")
-                .orElse(null)
+                .getOrNull()
                 ?.toLongOrNull()
                 ?.let { Instant.ofEpochSecond(it) }
         val auth = if (token.isBlank()) "anonymous, $ANONYMOUS_HOURLY_LIMIT requests/hour" else "token"

@@ -30,7 +30,6 @@ fun createProfile(
         statusTextCanonical = "",
     )
 
-// A users.profile.get body as Slack sends it: snake_case keys, plus keys the DTO does not model.
 fun createUserProfileResponseJson(displayName: String = "testuser"): String =
     """
     {
