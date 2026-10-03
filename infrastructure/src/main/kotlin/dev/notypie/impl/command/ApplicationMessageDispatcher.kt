@@ -512,9 +512,9 @@ class ApplicationMessageDispatcher(
                     failOutput(event = event, reason = "http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}")
                 slackError != null -> failOutput(event = event, reason = slackError.take(MAX_FAILURE_REASON_CHARS))
                 !isAcknowledgement(body = body) ->
-                    failOutput(
+                    outcomeUnknown(
                         event = event,
-                        reason = "unexpected_body: http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}",
+                        what = "unexpected_body: http_${response.code}: ${body.take(MAX_FAILURE_REASON_CHARS)}",
                     )
                 else -> successOutput(payload = event, commandType = CommandType.RESPONSE)
             }

@@ -83,7 +83,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     every other `IOException` (the call timeout included), any HTTP 5xx, `internal_error` and `fatal_error`.
   - Outcome unknown — on the three non-idempotent calls, an `IOException` after the request was written (call
     timeout, reset, dropped connection), `ok=false internal_error` or `fatal_error` (Slack, for both: "possible
-    some aspect of the operation succeeded"), and HTTP 5xx other than 503 → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type|code>")`, and
+    some aspect of the operation succeeded"), HTTP 5xx other than 503, and a `response_url` 2xx body that is not an
+    acknowledgement (`unexpected_body: http_<code>: <body prefix>`) → no retry, `failOutput("$OUTCOME_UNKNOWN_REASON: <type|code>")`, and
     the relay writes `FAILURE`. Slack may already have posted the message and has no idempotency key, so
     resending would duplicate it; the row and the warning log (which names the Slack method) are the
     reconciliation record, and `onOutcomeUnknown` feeds the per-method counter. `isOutcomeUnknown()` matches the
@@ -102,7 +103,7 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
     this channel" and as a suspension, so it is not taken as global), `no_permission` ("make sure your app is a
     member of the conversation"), `not_in_channel`, `is_archived`, `restricted_action*`, `access_denied`.
   - Permanent — any other `ok=false` (including `request_timeout`, a truncated POST), `chat.*` non-429 HTTP 3xx/4xx (`http_<code>: <body prefix>`, no retry)
-    and `response_url` 3xx / 4xx / JSON `ok=false` / a 2xx body that is not an acknowledgement →
+    and `response_url` 3xx / 4xx / JSON `ok=false` →
     `failOutput(<error>)`, once. The relay writes `FAILURE`.
   - Anything else (a non-transient exception inside the retry, or thrown outside it) propagates as-is; the
     relay treats it like a transient outcome.
@@ -131,7 +132,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   canonicalised; anything else is `failOutput("response_url_rejected: …")`. The client never follows
   redirects, so the allowlist is final and a 3xx is a permanent failure. Only the first 4 KiB of the response
   are read (`peekBody`); success is plain-text `ok` or JSON `ok=true`, and any other 2xx body (an HTML page, an
-  empty body) is a permanent `unexpected_body: http_<code>: <body prefix>` failure, once, never resent.
+  empty body) is outcome unknown (`outcome_unknown: unexpected_body: http_<code>: <body prefix>`, counted under
+  `response_url`), once, never resent: the hook may already have applied it.
 - The invalid `PostEventPayloadContents`/action-response pairing is unrepresentable — `MessageType` has no
   `ACTION_RESPONSE`.
 - **`dispatchImmediate` fallbacks need `participantUserId`.** Every `open*ModalRequest` sets it (requester,

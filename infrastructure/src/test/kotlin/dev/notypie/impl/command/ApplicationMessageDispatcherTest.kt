@@ -910,9 +910,12 @@ class ApplicationMessageDispatcherTest :
             `when`("an action response is dispatched") {
                 val output = defaultDispatcher.dispatch(event = actionResponse())
 
-                then("only the documented acknowledgements count as success, so it fails once for good") {
+                then("it is not a documented acknowledgement but may have been applied: outcome unknown, not resent") {
                     output.ok shouldBe false
-                    output.errorReason shouldBe "unexpected_body: http_200: <html>maintenance</html>"
+                    output.errorReason shouldBe
+                        "$OUTCOME_UNKNOWN_REASON: unexpected_body: http_200: <html>maintenance</html>"
+                    output.isOutcomeUnknown() shouldBe true
+                    unknownOutcomes.toList() shouldBe listOf("response_url")
                     calls.get() shouldBe 1
                 }
             }
