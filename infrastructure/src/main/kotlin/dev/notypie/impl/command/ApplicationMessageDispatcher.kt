@@ -54,7 +54,7 @@ private val dispatcherLog = KotlinLogging.logger {}
 private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "service_unavailable")
 private val NOT_SENT_SLACK_ERRORS = setOf("service_unavailable")
 
-// Token- or workspace-wide codes only: a channel-scoped code would hold its rows for 24 h and keep health DOWN.
+// Codes that fail every call from this replica (token, workspace or its network); channel-scoped ones would hold 24 h.
 private val SLACK_ACCESS_ERRORS =
     setOf(
         "invalid_auth",
@@ -566,8 +566,8 @@ class ApplicationMessageDispatcher(
         if (error in TRANSIENT_SLACK_ERRORS) return outcomeUnknown(event = event, what = error)
         if (error in SLACK_ACCESS_ERRORS) {
             dispatcherLog.error {
-                "Slack refused the bot token or workspace for ${event.commandDetailType}: error=$error; " +
-                    "holding idempotencyKey=${event.idempotencyKey} until the configuration is fixed"
+                "Slack refused the bot token, workspace or this replica's network for ${event.commandDetailType}: " +
+                    "error=$error; holding idempotencyKey=${event.idempotencyKey} until the configuration is fixed"
             }
             onAccessBlocked(error)
             return failOutput(event = event, reason = ACCESS_BLOCKED_REASON)

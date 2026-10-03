@@ -37,8 +37,8 @@ alerting reads. It is also `DOWN` while the relay held a row for a Slack access 
   its send back), so a row whose sends keep failing keeps the indicator `DOWN` until it is abandoned
   (`outbox.polling.max-sends`, default 10) or succeeds, while a merely rate-limited row, which the relay
   defers past `Retry-After`, stays `UP`.
-- **Why access blocks need their own signal:** the relay holds a row Slack refused for the bot's token or
-  workspace with `defer`, which takes the send back and pushes `updated_at` past the stuck threshold, so no count
+- **Why access blocks need their own signal:** the relay holds a row Slack refused for the bot's token, its
+  workspace or this replica's network (`accesslimited`, so another replica may still send) with `defer`, which takes the send back and pushes `updated_at` past the stuck threshold, so no count
   above ever sees it and the verdict would stay `UP` for up to 24 h of held messages. The relay records each hold in
   `service/relay/AccessBlockedTracker` (in memory, per replica); the verdict is `DOWN` while the last hold is younger
   than `slack.app.outbox.health.access-blocked-window-seconds` (default 1200), which outlasts the time a held row takes

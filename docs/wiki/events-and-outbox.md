@@ -63,7 +63,7 @@ _type: architecture · updated: 2026-10-03_
   소진(`TRANSIENT_EXHAUSTED_REASON`: 5xx, `IOException`·call timeout, `internal_error`/`service_unavailable`가 짧은
   재시도를 다 쓴 경우) → 아무것도 쓰지 않고 `IN_PROGRESS`로 둬 stuck 임계 뒤 스윕이 재발송한다. 예전에는 ③이
   예외로 올라가 `FAILURE`가 되어 1초짜리 Slack 장애에도 메시지를 잃었다. dispatcher가 예상 밖 예외를 던져도 ③과
-  같이 다룬다. ④ 접근 차단(`isAccessBlocked()`: 토큰·스코프·워크스페이스 전역 거부, 분류는 dispatcher) → 행 단위
+  같이 다룬다. ④ 접근 차단(`isAccessBlocked()`: 토큰·스코프·워크스페이스 전역 거부 또는 이 복제본의 네트워크 단위 거부(`accesslimited`), 분류는 dispatcher) → 행 단위
   `FAILURE` 대신 ②와 같은 `deferClaim`으로 `ACCESS_BLOCKED_DEFER`(15분) 뒤로 미루고(24시간 상한까지 보류),
   `AccessBlockedTracker`에 시각을 남긴다. 토큰을 고치면 보류된 행이 다음 회수 때 나간다.
 - **한 번의 dispatch는 시간 상한이 있다.** Slack SDK 클라이언트와 `response_url` 클라이언트 모두 OkHttp
@@ -278,7 +278,7 @@ _type: architecture · updated: 2026-10-03_
   - `outbox_messages{status="pending"|"in_progress"}`, `outbox_pending_oldest_age_seconds`(`created_at` 기준),
     `outbox_in_progress_oldest_claim_age_seconds`(`updated_at` = 마지막 claim·갱신 기준), `outbox_retrying_messages`
   - `codecompanion_slack_dispatch_outcome_unknown_total{method}`: 보냈을 수도 있어 다시 보내지 않고 `FAILURE`로 남긴 발송 수
-    (게시됐는지 모름). `codecompanion_slack_dispatch_access_blocked_total{error}`: 토큰·스코프·워크스페이스 전역 거부(행은
+    (게시됐는지 모름). `codecompanion_slack_dispatch_access_blocked_total{error}`: 토큰·스코프·워크스페이스 전역 거부 또는 네트워크 단위 거부(행은
     보류). 둘 다 디스패처 훅에서 올라가며 레플리카별이다.
   - `kafka_dead_letter_handoffs_total{topic}`: 리스너 컨테이너의 recoverer가 레코드를 DLT 발행기에 **넘긴** 수다.
     `setFailIfSendResultIsError(false)`라 DLT 전송 실패(토픽 없음, ACL 거부)는 여기서는 성공처럼 세어지고, 대신
