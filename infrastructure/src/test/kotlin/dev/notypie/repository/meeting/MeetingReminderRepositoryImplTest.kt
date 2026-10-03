@@ -8,7 +8,6 @@ import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingReminderSchema
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -21,7 +20,6 @@ import io.mockk.mockk
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
@@ -272,7 +270,7 @@ class MeetingReminderRepositoryImplTest
                 }
             }
 
-            given("a reminder another replica inserts between this pass's read and its insert") {
+            given("a meeting the host changes between this pass's read and its reminder insert") {
                 val isolation = SnapshotIsolationTransactionManager()
                 val reminders = mockk<JpaMeetingReminderRepository>()
                 val meetings = mockk<JpaMeetingRepository>()
@@ -292,21 +290,24 @@ class MeetingReminderRepositoryImplTest
                 }
                 every { meetings.getReferenceById(42L) } returns createMeetingSchema()
                 every { reminders.save(any<MeetingReminderSchema>()) } answers {
-                    isolation.lockingAccessToRowChangedConcurrently(table = "meeting_reminder")
-                    throw DataIntegrityViolationException("Duplicate entry '42-10' for key 'uk_meeting_reminder'")
+                    isolation.lockingAccessToRowChangedConcurrently(table = "meetings")
+                    firstArg()
                 }
 
-                `when`("the insert runs under MariaDB snapshot isolation") {
-                    then("it fails on the unique key, which the scheduler already absorbs as a lost race") {
-                        shouldThrow<DataIntegrityViolationException> {
-                            isolated.ensureReminder(
-                                meetingId = 42L,
-                                offsetMinutes = 10,
-                                scheduledAt = Instant.parse("2031-04-02T05:50:00Z"),
-                                startAt = LocalDateTime.of(2031, 4, 2, 15, 0),
-                                now = now,
-                            )
-                        }
+                `when`(
+                    "the insert's foreign-key check locks the changed meeting row under MariaDB snapshot isolation",
+                ) {
+                    val inserted =
+                        isolated.ensureReminder(
+                            meetingId = 42L,
+                            offsetMinutes = 10,
+                            scheduledAt = Instant.parse("2031-04-02T05:50:00Z"),
+                            startAt = LocalDateTime.of(2031, 4, 2, 15, 0),
+                            now = now,
+                        )
+
+                    then("the insert runs first in its own transaction and arms the reminder") {
+                        inserted shouldBe true
                     }
                 }
             }

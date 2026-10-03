@@ -8,6 +8,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.createMeetingReminderDto
+import dev.notypie.repository.createSnapshotIsolationFailure
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -176,35 +177,126 @@ class MeetingReminderSchedulingServiceTest :
                 }
             }
 
-            `when`("ensureReminder throws DataIntegrityViolationException but NO row exists (real bug)") {
+            `when`("one meeting's ensureReminder fails for real (DataIntegrityViolationException, no row behind it)") {
                 val repo = mockk<MeetingReminderRepository>()
                 val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
-                val meeting =
-                    createReminderCandidateMeeting(
-                        meetingId = 7L,
-                        startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L),
-                        attendingUserIds = listOf("U_A"),
+                val startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L)
+                every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns
+                    listOf(
+                        createReminderCandidateMeeting(
+                            meetingId = 7L,
+                            startAt = startAt,
+                            attendingUserIds = listOf("U_A"),
+                        ),
+                        createReminderCandidateMeeting(
+                            meetingId = 8L,
+                            startAt = startAt,
+                            attendingUserIds = listOf("U_B"),
+                        ),
                     )
-                every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns listOf(meeting)
                 every {
                     repo.ensureReminder(
-                        meetingId = any(),
+                        meetingId = 7L,
                         offsetMinutes = any(),
                         scheduledAt = any(),
                         startAt = any(),
                         now = any(),
                     )
-                } throws
-                    DataIntegrityViolationException("FK violation on meeting_id")
+                } throws DataIntegrityViolationException("FK violation on meeting_id")
+                every {
+                    repo.ensureReminder(
+                        meetingId = 8L,
+                        offsetMinutes = any(),
+                        scheduledAt = any(),
+                        startAt = any(),
+                        now = any(),
+                    )
+                } returns true
                 every { repo.reminderExists(meetingId = any(), offsetMinutes = any()) } returns false
 
-                then("the exception propagates so the underlying schema/data bug is not hidden") {
-                    try {
+                val errors =
+                    captureErrorLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
                         service.materializeReminders()
-                        throw AssertionError("expected DataIntegrityViolationException to propagate")
-                    } catch (ex: DataIntegrityViolationException) {
-                        ex.message?.contains("FK violation") shouldBe true
                     }
+
+                then("the bug is logged at ERROR for that meeting and the next meeting is still materialized") {
+                    errors.map { it.formattedMessage } shouldBe
+                        listOf("Meeting reminder materialize failed: meetingId=7")
+                    errors.single().throwableProxy.message shouldBe "FK violation on meeting_id"
+                    verify(exactly = 1) {
+                        repo.ensureReminder(
+                            meetingId = 8L,
+                            offsetMinutes = 5,
+                            scheduledAt = any(),
+                            startAt = any(),
+                            now = any(),
+                        )
+                    }
+                }
+            }
+
+            `when`("one meeting's ensureReminder hits a MariaDB snapshot-isolation conflict") {
+                val repo = mockk<MeetingReminderRepository>()
+                val service = buildService(repo = repo, outboxRepo = mockk(relaxed = true))
+                val startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(10L)
+                every { repo.findActiveMeetingsInWindow(from = any(), to = any()) } returns
+                    listOf(
+                        createReminderCandidateMeeting(
+                            meetingId = 7L,
+                            startAt = startAt,
+                            attendingUserIds = listOf("U_A"),
+                        ),
+                        createReminderCandidateMeeting(
+                            meetingId = 8L,
+                            startAt = startAt,
+                            attendingUserIds = listOf("U_B"),
+                        ),
+                    )
+                every {
+                    repo.ensureReminder(
+                        meetingId = 7L,
+                        offsetMinutes = any(),
+                        scheduledAt = any(),
+                        startAt = any(),
+                        now = any(),
+                    )
+                } throws createSnapshotIsolationFailure(table = "meeting_reminder")
+                every {
+                    repo.ensureReminder(
+                        meetingId = 8L,
+                        offsetMinutes = any(),
+                        scheduledAt = any(),
+                        startAt = any(),
+                        now = any(),
+                    )
+                } returns true
+
+                service.materializeReminders()
+
+                then("the rest of the tick goes on and the next tick retries that meeting") {
+                    verify(exactly = 1) {
+                        repo.ensureReminder(
+                            meetingId = 8L,
+                            offsetMinutes = 5,
+                            scheduledAt = any(),
+                            startAt = any(),
+                            now = any(),
+                        )
+                    }
+                }
+            }
+        }
+
+        given("the reminder scheduler tick") {
+            `when`("materializing fails as a whole") {
+                val schedulingService = mockk<MeetingReminderSchedulingService>()
+                every { schedulingService.materializeReminders() } throws IllegalStateException("window query failed")
+                every { schedulingService.sendDueReminders() } just Runs
+
+                MeetingReminderScheduler(schedulingService = schedulingService).tick()
+
+                then("due reminders are still sent in the same tick") {
+                    verify(exactly = 1) { schedulingService.sendDueReminders() }
                 }
             }
         }

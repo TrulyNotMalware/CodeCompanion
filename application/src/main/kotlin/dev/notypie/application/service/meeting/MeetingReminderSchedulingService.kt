@@ -2,6 +2,7 @@ package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.standup.containFailure
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -56,7 +57,13 @@ class MeetingReminderSchedulingService(
         val windowTo = LocalDateTime.ofInstant(now.plus(Duration.ofMinutes(maxOffsetMinutes.toLong())), zone)
 
         reminderRepository.findActiveMeetingsInWindow(from = windowFrom, to = windowTo).forEach { meeting ->
-            materializeMeeting(meeting = meeting, now = now, zone = clock.zone)
+            containFailure(
+                onFailure = { ex ->
+                    log.error(ex) { "Meeting reminder materialize failed: meetingId=${meeting.meetingId}" }
+                },
+            ) {
+                materializeMeeting(meeting = meeting, now = now, zone = clock.zone)
+            }
         }
     }
 

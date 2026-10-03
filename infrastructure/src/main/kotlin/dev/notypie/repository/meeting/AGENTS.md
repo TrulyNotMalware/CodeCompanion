@@ -70,8 +70,10 @@ retry uses.
   next materialisation tick sees exactly one row. **Never wrap the find and the write in one transaction**:
   production MariaDB runs REPEATABLE READ with `innodb_snapshot_isolation` ON, so after the find's plain read
   a `realignPending` on a row another replica claimed, realigned or deleted meanwhile fails with ER_CHECKREAD
-  1020 (`JpaSystemException`) instead of matching 0 rows, and the scheduler, which absorbs only
-  `DataIntegrityViolationException`, stops that tick. Each write runs first in its own transaction. Reschedule uses `deleteByMeetingId` and re-materialises.
+  1020 (now `SnapshotIsolationConflictException`) instead of matching 0 rows, and an INSERT whose foreign-key
+  check meets a `meetings` row the host changed meanwhile fails the same way (both reproduced on MariaDB
+  12.3.3; a duplicate on the secondary unique key still answers 1062). Each write runs first in its own
+  transaction, and the scheduler contains any remaining failure per meeting. Reschedule uses `deleteByMeetingId` and re-materialises.
   A pass that read the start before the reschedule can still insert after the delete; the row it leaves is
   repaired on both sides: the next `ensureReminder` for the current start moves the `PENDING` row
   (`realignPending`), and the sender drops a row that is not armed for the current start

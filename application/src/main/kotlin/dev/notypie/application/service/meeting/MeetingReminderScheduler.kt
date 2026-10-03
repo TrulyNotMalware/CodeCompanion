@@ -1,5 +1,6 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.application.service.standup.containFailure
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -12,11 +13,11 @@ class MeetingReminderScheduler(
 ) {
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
-        runCatching {
+        containFailure(onFailure = { ex -> log.error(ex) { "Meeting reminder materialize phase failed" } }) {
             schedulingService.materializeReminders()
+        }
+        containFailure(onFailure = { ex -> log.error(ex) { "Meeting reminder send phase failed" } }) {
             schedulingService.sendDueReminders()
-        }.onFailure { ex ->
-            log.error(ex) { "Meeting reminder scheduler tick failed" }
         }
     }
 }
