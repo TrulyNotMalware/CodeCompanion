@@ -24,9 +24,9 @@ spec:
       # Covers the whole shutdown, one step after another: preStop sleep (5s); the scheduler and web-drain phases
       # (spring.lifecycle.timeout-per-shutdown-phase, 10s each) and the Kafka listener phase, which waits for the
       # record in hand (RECORD_SHUTDOWN_WAIT, one dispatch derived from the Slack and retry timeouts, 46s today); three
-      # Kafka producer closes (5s each); the destroy-time executor waits (relay RECORD_SHUTDOWN_WAIT, agent turns 20s,
-      # default 10s) = 162s, 18s under this grace. ShutdownBudgetTest recomputes the sum from code and fails when it
-      # leaves less than 10s.
+      # Kafka producer closes (5s each); the destroy-time executor waits (relay RECORD_SHUTDOWN_WAIT, agent turns 20s
+      # then the notices for turns still queued, a 3s budget plus one 5s connection-timeout, default 10s) = 170s, 10s
+      # under this grace. ShutdownBudgetTest recomputes the sum from code and fails when it leaves less than 10s.
       terminationGracePeriodSeconds: 180
       imagePullSecrets:
         - name: dockercred

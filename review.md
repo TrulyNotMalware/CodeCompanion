@@ -2138,7 +2138,7 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
 - **종료 시 진행 중 디스패치를 끝까지 기다린다.** 디스패치 하나의 예산을 `RECORD_SHUTDOWN_WAIT`로 둔다. 이 값은 코드 상수에서 계산하며, 프로필 조회 6초 + Slack 호출 상한 39.64초 + 상태 기록 백오프로 약 46초다.
   - 리스너 단계와 relay 실행기가 이만큼 기다린다.
   - 정지 시 큐에 남은 claim은 새로 보내지 않는다. 스윕이 회수한다.
-  - 직렬 합계는 162초, `terminationGracePeriodSeconds`는 180초다. `ShutdownBudgetTest`는 코드·매니페스트·prod 프로파일로 합계를 다시 더하고, 여유가 10초 아래면 실패한다.
+  - 직렬 합계는 170초, `terminationGracePeriodSeconds`는 180초다. 170초에는 큐에 남은 AI 턴의 안내 예산 3초와, 예산 안에 시작해 넘긴 안내 하나의 `connection-timeout` 5초가 들어 있다(15.9). `ShutdownBudgetTest`는 코드·매니페스트·prod 프로파일로 합계를 다시 더하고, 여유가 10초 아래면 실패한다.
   - 이로써 `review_skill.md` 7장의 "결정 필요"가 해소됐다.
 - **나눠 보내는 메시지는 연쇄 발송**(15.3).
 
@@ -2161,7 +2161,7 @@ printf 'java.time.Instant.now().plus(java.time.Duration.ofMinutes(10000000000000
      - `codecompanion_slack_dispatch_outcome_unknown_total{method}`
      - `codecompanion_slack_dispatch_access_blocked_total{error}`
      - DLT 발행 실패 `kafka.dead.letter.publish.failures{topic}`
-     - `agent.turns{outcome=discarded}`
+     - `agent.turns{outcome=discarded}`, `agent.turns{outcome=dropped}`(안내 예산이 끝나 안내 없이 버린 턴)
    - 알림 규칙은 `health/AGENTS.md` 런북 참고.
 6. **다음 마이그레이션 번호는 V24다.** V23은 이번 MEDIUMTEXT가 썼다. 복제본 간 dedup 테이블(결정 #34)과 nullable 컬럼 패치(`review_skill.md` 7장)는 V24 이후에 둔다.
 7. **13.5에서 이어지는 확인 항목**: 배포 계정 RBAC, configmap/secret 새 키, Kafka `<topic>-dlt` 생성 권한, 노드 메모리 여유.

@@ -211,10 +211,12 @@ _type: guide · updated: 2026-10-02_
   46초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초. 릴레이는 스케줄러와 Kafka 리스너 단계 바로 뒤에 동기로
   멈춰 큐에 남은 claim을 보내지 않고 `IN_PROGRESS`로 둔다 — 대기 없음) → Kafka
   producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기
-  (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 기본 10초) = 162초 ⊂ `terminationGracePeriodSeconds` 180초, 여유 18초
+  (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 큐에 남은 턴의 안내 예산 3초 + 예산 안에 시작해 넘긴 안내 하나의 `connection-timeout`
+  5초, 기본 10초) = 170초 ⊂ `terminationGracePeriodSeconds` 180초, 여유 10초
   (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더하고 여유가 10초 아래면 실패). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀이 정상이면
   끝까지 보내고 상태를 기록한다. AI 턴은 닫기가 시작되면 새로 받지 않고(과부하 안내), 20초 대기가 끝날 때까지 시작하지
-  못한 큐의 턴은 버리면서 같은 안내를 outbox에 남긴다(`AgentTurnExecutor`). 대기 뒤에도 돌고 있던 턴의 답은 여전히 잃는다.
+  못한 큐의 턴은 버리면서 같은 안내를 outbox에 남긴다(`AgentTurnExecutor`). 안내는 3초 예산(`AGENT_TURN_DISCARD_BUDGET`) 안에서만
+  쓰고, 예산이 끝나면 남은 턴은 안내 없이 버린다(ERROR 한 줄, `agent.turns{outcome=dropped}`). 대기 뒤에도 돌고 있던 턴의 답은 여전히 잃는다.
   풀이 고갈되면 문장마다 `connection-timeout`이 더해져 예산을 넘을 수 있고, 크래시·SIGKILL은
   여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 전략은 V20 릴리스 동안 `Recreate`라(이전 파드와 겹치면 안 됨) 롤아웃마다 이전 파드

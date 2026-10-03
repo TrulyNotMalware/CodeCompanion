@@ -1,6 +1,7 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.outbox.createRelayService
+import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.application.service.agent.AgentTurn
 import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
 import dev.notypie.impl.command.RestClientRequester
@@ -13,6 +14,8 @@ import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.beans.factory.DisposableBean
@@ -82,11 +85,19 @@ class ShutdownBudgetTest :
             }
         }
 
-        given("the production profile and the Kubernetes Deployment") {
+        given("the production profile, the Kubernetes Deployment and its ConfigMap") {
             val prod = YamlPropertySourceLoader().load("prod", ClassPathResource("application-prod.yaml")).single()
             val deployment =
                 ClassPathResource("k8s/deployment.yaml").inputStream.use { stream ->
                     Yaml().loadAll(stream).toList().single { it.at("kind") == "Deployment" }
+                }
+            val configMapData =
+                ClassPathResource("k8s/configmap.yaml").inputStream.use { stream ->
+                    Yaml()
+                        .loadAll(stream)
+                        .toList()
+                        .single { it.at("kind") == "ConfigMap" }
+                        .at("data")
                 }
             val podSpec = deployment.at("spec").at("template").at("spec")
 
@@ -122,12 +133,28 @@ class ShutdownBudgetTest :
                             "awaitTerminationMillis",
                         ) as Long
                     ) / 1_000L
+                val discardBudget =
+                    ReflectionTestUtils.getField(
+                        AgentConfiguration(appConfig = AppConfig()).agentTurnExecutor(
+                            meterRegistry = SimpleMeterRegistry(),
+                        ),
+                        "discardBudget",
+                    ) as Duration
+                val discardBudgetSeconds = Math.ceilDiv(discardBudget.toMillis(), 1_000L).toInt()
+                val connectionTimeoutKey =
+                    Regex("""\$\{(\w+)}""")
+                        .matchEntire(prod.getProperty("spring.datasource.hikari.connection-timeout").toString())!!
+                        .groupValues[1]
+                val connectionTimeoutSeconds =
+                    Math.ceilDiv(configMapData.at(connectionTimeoutKey).toString().toLong(), 1_000L).toInt()
                 val recordSeconds = RECORD_SHUTDOWN_WAIT.seconds.toInt()
                 val producerCloses = 3
                 val margin = 10
                 val lifecyclePhases = 2 * phaseSeconds + recordSeconds
+                val discardPhase = discardBudgetSeconds + connectionTimeoutSeconds
                 val executorWaits =
-                    relayAwaitSeconds.toInt() + agentTurnSeconds + DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS
+                    relayAwaitSeconds.toInt() + agentTurnSeconds + discardPhase +
+                        DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS
                 val required =
                     preStopSeconds + lifecyclePhases + producerCloses * PRODUCER_CLOSE_TIMEOUT_SECONDS + executorWaits +
                         margin
@@ -187,6 +214,7 @@ class ShutdownBudgetTest :
                 AnnotationConfigApplicationContext().apply {
                     addBeanFactoryPostProcessor(LazyInitializationBeanFactoryPostProcessor())
                     registerBean(AppConfig::class.java, Supplier { AppConfig() })
+                    registerBean(MeterRegistry::class.java, Supplier { SimpleMeterRegistry() })
                     registerBean(
                         "entityManagerFactory",
                         DisposableBean::class.java,
@@ -256,7 +284,7 @@ class ShutdownBudgetTest :
                                 AppConfig.Agent(turns = AppConfig.Agent.Turns(shutdownAwaitSeconds = 1L)),
                         ),
                 )
-            val executor = configuration.agentTurnExecutor().apply { initialize() }
+            val executor = configuration.agentTurnExecutor(meterRegistry = SimpleMeterRegistry()).apply { initialize() }
             val intake = configuration.agentTurnIntake(agentTurnExecutor = executor).apply { start() }
             val release = CountDownLatch(1)
             val outcomes = CopyOnWriteArrayList<String>()
@@ -292,7 +320,7 @@ class ShutdownBudgetTest :
 
         given("the agent-turn executor with one turn running and one queued when the context begins to close") {
             val configuration = AgentConfiguration(appConfig = AppConfig())
-            val executor = configuration.agentTurnExecutor().apply { initialize() }
+            val executor = configuration.agentTurnExecutor(meterRegistry = SimpleMeterRegistry()).apply { initialize() }
             val intake = configuration.agentTurnIntake(agentTurnExecutor = executor).apply { start() }
             val release = CountDownLatch(1)
             val ran = CopyOnWriteArrayList<String>()
@@ -316,6 +344,49 @@ class ShutdownBudgetTest :
                     ran.count { it == "running" } shouldBe executor.corePoolSize
                     ran shouldContain "queued"
                     ran shouldNotContain "after stop"
+                }
+            }
+        }
+
+        given("queued turns when the shutdown wait ends and a discard notice that outlasts the discard budget") {
+            val meterRegistry = SimpleMeterRegistry()
+            val executor =
+                AgentTurnExecutor(discardBudget = Duration.ofMillis(200L), meterRegistry = meterRegistry).apply {
+                    corePoolSize = 1
+                    maxPoolSize = 1
+                    queueCapacity = 5
+                    setWaitForTasksToCompleteOnShutdown(true)
+                    setAwaitTerminationMillis(100L)
+                    initialize()
+                }
+            val release = CountDownLatch(1)
+            val outcomes = CopyOnWriteArrayList<String>()
+            executor.execute(AgentTurn(start = { release.await(5L, TimeUnit.SECONDS) }, onDiscard = {}))
+            executor.execute(
+                AgentTurn(
+                    start = { outcomes.add("slow ran") },
+                    onDiscard = {
+                        Thread.sleep(400L)
+                        outcomes.add("slow discarded")
+                    },
+                ),
+            )
+            listOf("second", "third").forEach { name ->
+                executor.execute(
+                    AgentTurn(start = { outcomes.add("$name ran") }, onDiscard = { outcomes.add("$name discarded") }),
+                )
+            }
+
+            `when`("the executor is destroyed") {
+                executor.destroy()
+                release.countDown()
+                executor.threadPoolExecutor.awaitTermination(5L, TimeUnit.SECONDS)
+
+                then("the notices stop at the budget and the turns left are dropped and counted, never started") {
+                    outcomes shouldBe listOf("slow discarded")
+                    meterRegistry
+                        .counter(AgentConverseService.METRIC_TURNS, "outcome", "dropped")
+                        .count() shouldBe 2.0
                 }
             }
         }

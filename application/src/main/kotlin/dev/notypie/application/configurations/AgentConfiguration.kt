@@ -9,6 +9,7 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.SidecarAgentClient
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Qualifier
@@ -22,6 +23,10 @@ import org.springframework.transaction.PlatformTransactionManager
 import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.Executor
+
+private val log = KotlinLogging.logger {}
+
+val AGENT_TURN_DISCARD_BUDGET: Duration = Duration.ofSeconds(3L)
 
 @Configuration
 class AgentConfiguration(
@@ -38,8 +43,8 @@ class AgentConfiguration(
 
     @Bean
     @DependsOn("entityManagerFactory")
-    fun agentTurnExecutor(): ThreadPoolTaskExecutor =
-        AgentTurnExecutor().apply {
+    fun agentTurnExecutor(meterRegistry: MeterRegistry): ThreadPoolTaskExecutor =
+        AgentTurnExecutor(discardBudget = AGENT_TURN_DISCARD_BUDGET, meterRegistry = meterRegistry).apply {
             val turns = appConfig.agent.turns
             corePoolSize = turns.maxConcurrent
             maxPoolSize = turns.maxConcurrent
@@ -82,12 +87,29 @@ class AgentConfiguration(
         )
 }
 
-class AgentTurnExecutor : ThreadPoolTaskExecutor() {
+class AgentTurnExecutor(
+    private val discardBudget: Duration,
+    private val meterRegistry: MeterRegistry,
+) : ThreadPoolTaskExecutor() {
     override fun shutdown() {
         super.shutdown()
         val unstarted = ArrayList<Runnable>()
         threadPoolExecutor.queue.drainTo(unstarted)
-        unstarted.filterIsInstance<AgentTurn>().forEach { it.discard() }
+        val turns = unstarted.filterIsInstance<AgentTurn>()
+        val deadline = System.nanoTime() + discardBudget.toNanos()
+        val discarded =
+            turns
+                .asSequence()
+                .takeWhile { System.nanoTime() - deadline < 0L }
+                .onEach { it.discard() }
+                .count()
+        val dropped = turns.size - discarded
+        if (dropped == 0) return
+        log.error {
+            "Agent turn discard budget of ${discardBudget.toMillis()} ms ran out at shutdown; " +
+                "dropping $dropped unstarted turn(s) without a notice"
+        }
+        meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "dropped").increment(dropped.toDouble())
     }
 }
 

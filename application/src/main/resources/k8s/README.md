@@ -52,7 +52,8 @@ Defines the application deployment with:
   3 × 1536Mi = 4.5Gi of requestable memory at once; see Prerequisites
 - Shutdown: a 5s `preStop` sleep, then Spring's graceful shutdown (scheduler and web server phases 10s each, the
   Kafka listener phase up to one dispatch, 46s, so a record in hand finishes), three Kafka producer closes (5s each)
-  and the executor waits (relay up to one dispatch, 46s; AI turns 20s; default 10s): 162s within a 180s
+  and the executor waits (relay up to one dispatch, 46s; AI turns 20s, then up to 8s of notices for the turns still
+  queued; default 10s): 170s within a 180s
   `terminationGracePeriodSeconds`
 - Container `securityContext` with `allowPrivilegeEscalation: false` (the container still runs as root to bind port 80)
 - PodDisruptionBudget ensuring at least 1 pod remains available during disruptions
@@ -293,7 +294,7 @@ k8s/
   readiness 확인(10초), 최악 약 6분에 스케줄링·이미지 풀 시간이 더해집니다. 요청은 2 × 1536Mi만 있으면 됩니다. 그 블록을 지운
   뒤의 기본 롤링 업데이트는 롤아웃 중 파드 3개(레플리카 2 + surge 1)를 띄우므로 요청 기준 3 × 1536Mi = 4.5Gi가 동시에 들어갈
   자리가 있어야 합니다(사전 요구사항 참고)
-- 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(스케줄러·웹 서버 단계 각 10초, 처리 중인 레코드를 끝내도록 Kafka 리스너 단계는 디스패치 하나 46초), Kafka producer 종료 세 번(각 5초), executor 대기(릴레이 디스패치 하나 46초, AI 턴 20초, 기본 10초), 합계 162초 ⊂ `terminationGracePeriodSeconds` 180초
+- 종료: 5초 `preStop` sleep 후 Spring graceful shutdown(스케줄러·웹 서버 단계 각 10초, 처리 중인 레코드를 끝내도록 Kafka 리스너 단계는 디스패치 하나 46초), Kafka producer 종료 세 번(각 5초), executor 대기(릴레이 디스패치 하나 46초, AI 턴 20초와 큐에 남은 턴의 안내 최대 8초, 기본 10초), 합계 170초 ⊂ `terminationGracePeriodSeconds` 180초
 - 컨테이너 `securityContext` `allowPrivilegeEscalation: false` (80 포트 바인딩 때문에 여전히 root로 실행)
 - 중단 시 최소 1개의 파드를 유지하는 PodDisruptionBudget
 

@@ -13,7 +13,9 @@ shutdown wait), which the AFTER_COMMIT listener submits to directly rather than 
 executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own transaction) and
 `agent.turns{outcome=rejected}` counts it. Each submission is an `AgentTurn(start, onDiscard)`: a turn still
 queued when the executor's shutdown wait ends is discarded by `AgentTurnExecutor`, and its requester gets the same
-notice (`agent.turns{outcome=discarded}`, WARN log).
+notice (`agent.turns{outcome=discarded}`, WARN log). The notices stop at `AGENT_TURN_DISCARD_BUDGET` (3 s from the
+end of the wait); the turns left then are dropped without a notice (one ERROR log, `agent.turns{outcome=dropped}`
+by their count).
 
 ## Key Files
 | File | Description |

@@ -82,8 +82,10 @@ adds what an agent editing the manifests needs to know.
   `PRODUCER_CLOSE_TIMEOUT_SECONDS` (5s) instead of spring-kafka's 30s. Then the destroy-time executor waits run one
   after another, all before the EntityManagerFactory and the DataSource close (`@DependsOn("entityManagerFactory")` on
   the relay and agent-turn executors): relay `RECORD_SHUTDOWN_WAIT`, agent turns 20s
-  (`slack.app.agent.turns.shutdown-await-seconds`), default 10s. `terminationGracePeriodSeconds` (180) must cover
-  5 + 2 x 10 + 46 + 3 x 5 + 46 + 20 + 10 = 162, leaving 18s; `configurations/ShutdownBudgetTest` recomputes every
+  (`slack.app.agent.turns.shutdown-await-seconds`) and then the notices for turns still queued
+  (`AGENT_TURN_DISCARD_BUDGET` 3s, plus the 5s `connection-timeout` of the one notice it lets overrun), default 10s.
+  `terminationGracePeriodSeconds` (180) must cover
+  5 + 2 x 10 + 46 + 3 x 5 + 46 + 20 + 3 + 5 + 10 = 170, leaving 10s; `configurations/ShutdownBudgetTest` recomputes every
   term from code, this manifest and the prod profile and fails when the grace leaves less than a 10s margin. So a dispatch running at
   SIGTERM, on the listener thread or a relay thread, finishes and records its status before the DataSource closes,
   with a healthy pool; a starved pool adds a `connection-timeout` per statement that the budget does not cover
