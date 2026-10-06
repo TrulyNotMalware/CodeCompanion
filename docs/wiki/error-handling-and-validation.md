@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-08-28_
+_type: pattern · updated: 2026-10-02_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -75,6 +75,8 @@ _type: pattern · updated: 2026-08-28_
 5. **서비스 내부 관례.** `TransactionTemplate.runInTx`는 예외를 `Result.failure`로 바꾸고 `setRollbackOnly`만 한다 —
    throw 여부는 호출자가 정한다. `StandupSchedulingService`/`MeetingReminderSchedulingService`는
    `DataIntegrityViolationException`을 "예상된 레이스"로 잡되 **행이 실제로 존재하는지 확인한 뒤에만** 삼킨다.
+   스탠드업 스케줄러는 루틴·세션·단계 단위로 `containFailure`(`Exception`만 잡아 로그, `InterruptedException`은
+   플래그를 복원해 다시 던지고 `Error`는 전파)로 격리해 한 루틴의 나쁜 데이터가 다른 루틴과 이후 단계를 막지 않게 한다.
    `CveCollector`는 토픽마다 `runCatching`으로 격리한다. `CommandExecutor`는 로그 후 재throw하고 인텐트를 재큐잉하지
    않는다 — 재시도는 `idempotencyKey` 아래 상류(아웃박스 릴레이, Kafka, Slack 재전송)가 맡는다.
    `ApplicationMessageDispatcher`는 Slack `ok=false`를 예외가 아니라 `failOutput(reason)`으로 되돌리고 WARN을 남긴다.
@@ -82,21 +84,30 @@ _type: pattern · updated: 2026-08-28_
 ## 재시도: `RetryService` / `RetryOptions`
 
 - `RetryService.execute(action, recoveryCallBack?, maxAttempts = 3, initialDelay = 100ms, multiplier = 2.0,
-  maxDelay = 10s, jitter = 10ms, exceptions = [Exception])`가 호출마다 `RetryPolicy`를 새로 만든다. 기본값은
-  `RetryOptions` enum(`internal val default`)에 있고 `RetryConfiguration.retryTemplate()`도 같은 값으로 빈을 만든다.
-- **함정 1 — 공유 템플릿의 정책을 갈아끼운다.** `retryTemplate.retryPolicy = policy`는 `@ConditionalOnMissingBean`으로
-  등록된 싱글턴 `RetryTemplate`을 변경한다. `SlackMessageRelayServiceImpl.updateMessage`가 `maxAttempts = 5`로 부르면
-  동시에 실행 중인 `MeetingServiceImpl`/`ApplicationMessageDispatcher` 호출도 그 정책을 볼 수 있고, `RetryConfiguration`의
-  기본 정책은 첫 호출에서 덮인다. Spring 문서는 `RetryTemplate`을 호출마다 가볍게 생성하라고 하므로 고칠 때는
-  `RetryTemplate(policy)`를 호출 단위로 만든다.
-- **함정 2 — `maxAttempts`는 사실 `maxRetries`다.** 인자가 그대로 `RetryPolicy.Builder.maxRetries`에 들어가는데, Spring
-  Framework 7의 `maxRetries`는 최초 시도 이후의 재시도 횟수다. 총 시도는 `maxAttempts + 1`(기본 4회, 릴레이 6회).
-  `RetryServiceTest`는 `maxAttempts = maxFailures + 1`을 주기 때문에 이 off-by-one을 잡지 못한다.
+  maxDelay = 10s, jitter = 10ms, exceptions = [Exception])`. 기본값은 `RetryOptions` enum(`internal val default`)에
+  있고, 빈은 `RetryConfiguration.retryService()` 하나다.
+- **정책마다 템플릿 하나(예전 함정, 해소됨).** `RetryTemplate.retryPolicy`는 바꿀 수 있는 공유 상태라, 예전처럼
+  싱글턴 템플릿의 정책을 호출마다 갈아끼우면 다른 스레드의 호출이 그 정책을 본다. 지금 `RetryService`는 정책 키(시도 수·
+  지연·배수·상한·jitter·예외 목록)마다 템플릿을 `ConcurrentHashMap`에 하나씩 두고, `RetryServiceTest`가 서로 다른 정책의
+  동시 호출이 섞이지 않음을 고정한다.
+- **`maxAttempts`는 총 실행 횟수다.** Spring Framework 7의 `maxRetries`는 최초 시도 뒤의 재실행 횟수라 `RetryService`가
+  `maxAttempts - 1`을 넘긴다(예전 off-by-one은 고쳐졌고 `RetryServiceTest`가 고정). 기본 3회, 릴레이 상태 기록도
+  `STATUS_WRITE_ATTEMPTS` = 3회다(시도마다 한 트랜잭션, 연쇄 발송의 다음 조각 저장 포함). 최악 소요는
+  `retryTimeBound(attemptTimeout, maxAttempts)`가 코드로 계산한다.
 - `recoveryCallBack`은 재시도가 소진돼 `RetryException`이 났을 때만 실행되고, 없으면 그 `RetryException`(마지막 원인을 감쌈)이
   전파된다. 기본 `includes(Exception)`은 `DataIntegrityViolationException`·검증 예외처럼 재시도해도 소용없는 실패까지
   재시도하므로 비일시적 실패가 섞이는 호출은 `exceptions`를 명시한다.
-- `@EnableResilientMethods`는 켜져 있지만 저장소에 `@Retryable`은 없다. `createFixedBackOffPolicy`는 미사용 private이다.
-  `RetryServiceTest`는 맨 `RetryTemplate()`로 돌아 `RetryConfiguration`의 기본 정책은 어떤 스펙도 보지 않는다.
+- `@EnableResilientMethods`는 켜져 있지만 저장소에 `@Retryable`은 없다.
+- **MariaDB 스냅숏 격리(2026-10-03).** MariaDB ≥ 11.6.2의 REPEATABLE READ는 `innodb_snapshot_isolation`이 기본 ON이다
+  (운영 12.0.2, 로컬 실측 12.3.3 = 1). 같은 트랜잭션에서 일관 읽기 뒤에 다른 트랜잭션이 그 뒤 커밋한 행을 잠금 읽기·
+  UPDATE·DELETE·FK 부모 검사·PK 중복 검사로 건드리면 ER_CHECKREAD 1020이 나고 트랜잭션 전체가 롤백된다(보조 unique 중복은
+  계속 1062). 규칙: CAS·잠금 문장을 트랜잭션의 첫 문장으로 두거나 자기 트랜잭션을 준다(`CveTopicRepositoryImpl.upsert`,
+  `MeetingReminderRepositoryImpl.ensureReminder`, `AgentSessionRepositoryImpl.saveProviderSessionId`의 단일 upsert). 1020은
+  `SnapshotIsolationExceptionTranslator`(`JpaConfiguration`의 유일한 `SQLExceptionTranslator` 빈 — Boot가 유일할 때만
+  `HibernateJpaDialect`와 `JdbcTemplate`에 연결)가 `OptimisticLockingFailureException` 하위인
+  `SnapshotIsolationConflictException`으로 바꾼다. 서버가 이미 롤백했으므로 잡으면 트랜잭션을 통째로 다시 실행해야 한다 —
+  회의 쓰기의 `executeRetryingOnConflict`가 그렇게 한 번 재시도한다. H2는 1020을 낼 수 없어 testFixtures의
+  `SnapshotIsolationTransactionManager`로 경계를 시험한다.
 
 ## 알려진 공백
 
@@ -114,7 +125,7 @@ _type: pattern · updated: 2026-08-28_
 
 ## 근거
 
-- `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Utils.kt`, `AGENTS.md`)
+- `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Validation.kt`, `AGENTS.md`)
 - `domain/src/main/kotlin/dev/notypie/domain/command/exceptions/` (`CommandErrorCode.kt`, `CommandException.kt`)
 - `domain/src/main/kotlin/dev/notypie/domain/command/entity/Command.kt` (`handleEvent`),
   `.../entity/context/CommandContext.kt` (`createErrorResponse`, `errorEphemeral`),

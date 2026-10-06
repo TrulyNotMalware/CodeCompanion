@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie
 
@@ -13,6 +13,7 @@ from `domain/src/testFixtures/kotlin/dev/notypie/domain/Constants.kt`, not from 
 |-----------|---------|
 | `dto/` | Request/response shapes for the live `RestClientRequesterTest` (jsonplaceholder API) (see `dto/AGENTS.md`) |
 | `impl/` | Slack payload JSON, typed `InteractionPayload`, Events API request graphs, infra event creators (see `impl/AGENTS.md`) |
+| `repository/` | Snapshot-isolation transaction fake and a transactional proxy for `*Impl` unit specs (see `repository/AGENTS.md`) |
 | `schema/` | JPA schema-row and record creators for the meeting and CVE lanes (see `schema/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

@@ -4,6 +4,15 @@ metadata:
   name: code-companion-deploy
 spec:
   replicas: 2 # Change replicas
+  # Recreate while a pre-V20 revision may still serve or be rolled back to: it re-dispatches IN_PROGRESS rows it does
+  # not own, so old and new Pods must never overlap, and a `rollout undo` keeps the strategy (it is not in the pod
+  # template). Cost: every deploy is an outage — the old Pods' shutdown (at most the 180s grace below) plus the new
+  # Pod's startup (at most 180s) and first readiness check (10s). For this release only: a follow-up PR deletes the
+  # block, and with it the outage, once every Pod runs V20+ and no rollback to a pre-V20 revision is wanted.
+  # `rollingUpdate: null` clears the defaulted block the API server rejects next to it.
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       app: code-companion-deploy
@@ -12,6 +21,13 @@ spec:
       labels:
         app: code-companion-deploy
     spec:
+      # Covers the whole shutdown, one step after another: preStop sleep (5s); the scheduler and web-drain phases
+      # (spring.lifecycle.timeout-per-shutdown-phase, 10s each) and the Kafka listener phase, which waits for the
+      # record in hand (RECORD_SHUTDOWN_WAIT, one dispatch derived from the Slack and retry timeouts, 46s today); three
+      # Kafka producer closes (5s each); the destroy-time executor waits (relay RECORD_SHUTDOWN_WAIT, agent turns 20s
+      # then the notices for turns still queued, a 3s budget plus one 5s connection-timeout, default 10s) = 170s, 10s
+      # under this grace. ShutdownBudgetTest recomputes the sum from code and fails when it leaves less than 10s.
+      terminationGracePeriodSeconds: 180
       imagePullSecrets:
         - name: dockercred
       containers:
@@ -20,6 +36,39 @@ spec:
           ports:
             - containerPort: 80
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+          # Keeps serving while endpoint removal propagates to kube-proxy and the gateway before SIGTERM.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          # Liveness/readiness groups come from management.endpoint.health.probes.enabled in application-prod.yaml.
+          # Without readiness the Service keeps routing to Pods that are still booting or already draining.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 80
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 80
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1536Mi
+            limits:
+              memory: 2Gi
           volumeMounts:
             - name: tz-seoul
               mountPath: /etc/localtime

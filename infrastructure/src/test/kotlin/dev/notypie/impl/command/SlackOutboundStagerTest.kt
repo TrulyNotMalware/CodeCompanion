@@ -16,9 +16,11 @@ import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.repository.standup.StandupRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -35,8 +37,52 @@ class SlackOutboundStagerTest :
                 standupRepository = standupRepository,
             )
 
+        beforeContainer { testCase -> if (testCase.parent == null) clearMocks(slackEventBuilder, standupRepository) }
+
         val basicInfo = createCommandBasicInfo()
         val target = ConversationTarget(id = basicInfo.channel)
+
+        given("messages staged in order") {
+            val parts =
+                (1..3).map { index ->
+                    OutboundMessage.ChannelMessage(
+                        target = target,
+                        content = MessageContent.Text(headline = "($index/3)", markdown = "part $index"),
+                    )
+                }
+
+            `when`("stageInOrder is called") {
+                val event = stager.stageInOrder(messages = parts, basicInfo = basicInfo)
+
+                then("one event carries the first part with the rest as its continuation") {
+                    val enqueued = event.shouldBeInstanceOf<OutboundMessageEnqueued>()
+                    enqueued.payload.message shouldBe parts[0]
+                    enqueued.payload.continuation shouldBe parts.drop(n = 1)
+                    enqueued.payload.basicInfo shouldBe basicInfo
+                    enqueued.idempotencyKey shouldBe basicInfo.idempotencyKey
+                }
+            }
+
+            `when`("the list is empty or holds a modal") {
+                then("it is refused, since neither can ride the outbox") {
+                    shouldThrow<IllegalArgumentException> {
+                        stager.stageInOrder(messages = emptyList(), basicInfo = basicInfo)
+                    }
+                    shouldThrow<IllegalArgumentException> {
+                        stager.stageInOrder(
+                            messages =
+                                listOf(
+                                    OutboundMessage.OpenModal(
+                                        handle = ModalOpenHandle(raw = "trigger"),
+                                        form = ModalForm.CveSubscribe(topics = emptyList()),
+                                    ),
+                                ),
+                            basicInfo = basicInfo,
+                        )
+                    }
+                }
+            }
+        }
 
         given("a ChannelMessage with Text content") {
             val message =

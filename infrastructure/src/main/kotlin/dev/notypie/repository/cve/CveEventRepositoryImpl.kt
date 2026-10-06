@@ -25,6 +25,7 @@ open class CveEventRepositoryImpl(
             publishedAt = publishedAt,
         )
 
+    @Transactional(readOnly = true)
     override fun findClaimable(now: LocalDateTime, maxRetries: Int, limit: Int): List<CveEvent> =
         jpaCveEventRepository
             .findClaimable(now = now, maxRetries = maxRetries, pageable = PageRequest.of(0, limit))
@@ -44,31 +45,50 @@ open class CveEventRepositoryImpl(
         token: String,
         summary: String,
         now: LocalDateTime,
-    ): Int = jpaCveEventRepository.markDone(id = id, token = token, summary = summary, now = now)
+    ): Int =
+        jpaCveEventRepository.markDone(
+            id = id,
+            token = token,
+            summary = summary.takeUtf8Bytes(maxBytes = AI_SUMMARY_MAX_BYTES),
+            now = now,
+        )
 
     @Transactional
-    override fun markFailed(id: Long, token: String, nextAttemptAt: LocalDateTime): Int =
-        jpaCveEventRepository.markFailed(id = id, token = token, nextAttemptAt = nextAttemptAt)
+    override fun markFailed(
+        id: Long,
+        token: String,
+        nextAttemptAt: LocalDateTime,
+        now: LocalDateTime,
+    ): Int = jpaCveEventRepository.markFailed(id = id, token = token, nextAttemptAt = nextAttemptAt, now = now)
 
     @Transactional
-    override fun releaseClaim(id: Long, token: String, nextAttemptAt: LocalDateTime): Int =
-        jpaCveEventRepository.releaseClaim(id = id, token = token, nextAttemptAt = nextAttemptAt)
+    override fun releaseClaim(
+        id: Long,
+        token: String,
+        nextAttemptAt: LocalDateTime,
+        now: LocalDateTime,
+    ): Int = jpaCveEventRepository.releaseClaim(id = id, token = token, nextAttemptAt = nextAttemptAt, now = now)
 
     @Transactional
-    override fun resetStuck(olderThan: LocalDateTime): Int = jpaCveEventRepository.resetStuck(olderThan = olderThan)
+    override fun resetStuck(olderThan: LocalDateTime, nextAttemptAt: LocalDateTime, now: LocalDateTime): Int =
+        jpaCveEventRepository.resetStuck(olderThan = olderThan, nextAttemptAt = nextAttemptAt, now = now)
 
     override fun countByStatus(status: CveSummaryStatus): Long = jpaCveEventRepository.countByStatus(status = status)
 
+    @Transactional(readOnly = true)
     override fun countFailedRetryable(maxRetries: Int): Long =
         jpaCveEventRepository.countFailedRetryable(maxRetries = maxRetries)
 
+    @Transactional(readOnly = true)
     override fun countDeadLetter(maxRetries: Int): Long = jpaCveEventRepository.countDeadLetter(maxRetries = maxRetries)
 
+    @Transactional(readOnly = true)
     override fun countEventsByTopic(topicIds: List<Long>): List<TopicEventCount> {
         if (topicIds.isEmpty()) return emptyList()
         return jpaCveEventRepository.countEventsByTopic(topicIds = topicIds.distinct())
     }
 
+    @Transactional(readOnly = true)
     override fun findRecentDoneEvents(topicIds: List<Long>, limit: Int): List<CveRecentEvent> {
         if (topicIds.isEmpty()) return emptyList()
         return jpaCveEventRepository.findRecentDoneEvents(
@@ -101,5 +121,26 @@ open class CveEventRepositoryImpl(
         // Match the cve_event column limits so an over-long feed payload never overflows the insert.
         const val TITLE_MAX_LENGTH = 512
         const val RAW_CONTENT_MAX_LENGTH = 60_000
+
+        const val AI_SUMMARY_MAX_BYTES = 65_535
+
+        private fun String.takeUtf8Bytes(maxBytes: Int): String {
+            var bytes = 0
+            var end = 0
+            while (end < length) {
+                val codePoint = codePointAt(end)
+                val size =
+                    when {
+                        codePoint < 0x80 -> 1
+                        codePoint < 0x800 -> 2
+                        codePoint < 0x10000 -> 3
+                        else -> 4
+                    }
+                if (bytes + size > maxBytes) return substring(0, end)
+                bytes += size
+                end += Character.charCount(codePoint)
+            }
+            return this
+        }
     }
 }

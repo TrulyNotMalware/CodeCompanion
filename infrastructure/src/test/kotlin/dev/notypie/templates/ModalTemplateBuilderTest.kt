@@ -1,5 +1,6 @@
 package dev.notypie.templates
 
+import com.slack.api.model.block.ContextBlock
 import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
 import com.slack.api.model.block.SectionBlock
@@ -15,18 +16,28 @@ import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.domain.standup.createRoutineMemberDto
+import dev.notypie.domain.standup.createStandupAnswerDto
 import dev.notypie.impl.command.RestRequester
-import dev.notypie.impl.command.dto.Profile
 import dev.notypie.impl.command.dto.SlackUserProfileDto
+import dev.notypie.impl.command.dto.createProfile
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import org.springframework.http.ResponseEntity
+import org.springframework.web.client.RestClientException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
@@ -48,6 +59,236 @@ class ModalTemplateBuilderTest :
                 idempotencyKey = testIdempotencyKey,
                 reason = "Test Reason",
             )
+
+        given("standupSummaryTemplate for a routine larger than one Slack message") {
+            val questions = listOf("Yesterday?", "Today?", "Blockers?")
+            val members = (1..60).map { createRoutineMemberDto(userId = "U$it") }
+            val answers =
+                members.map { member ->
+                    createStandupAnswerDto(userId = member.userId, responses = List(size = 3) { "가".repeat(2_000) })
+                }
+
+            `when`("the summary is rendered") {
+                val blocks =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "Daily",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members = members,
+                            answers = answers,
+                            questions = questions,
+                        ).template
+                val texts = blocks.map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("it stays within Slack's 50 blocks and 3,000 characters per section") {
+                    blocks.size shouldBe 50
+                    texts.forEach { it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                }
+
+                then("each shown member has a section and the rest are counted, not dropped silently") {
+                    texts[1] shouldContain "<@U1>"
+                    texts[48] shouldContain "<@U48>"
+                    texts.last() shouldContain "12 more members"
+                }
+            }
+
+            `when`("a small routine is rendered") {
+                val texts =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "Daily",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members =
+                                listOf(
+                                    createRoutineMemberDto(userId = "U1"),
+                                    createRoutineMemberDto(userId = "U2"),
+                                ),
+                            answers =
+                                listOf(
+                                    createStandupAnswerDto(userId = "U1", responses = listOf("shipped", "")),
+                                ),
+                            questions = listOf("Yesterday?", "Today?"),
+                        ).template
+                        .map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("a title section and one section per member, with blanks and missing answers marked") {
+                    texts shouldBe
+                        listOf(
+                            "*Daily — 2026-05-01*",
+                            "<@U1>\n• *Yesterday?* shipped\n• *Today?* (blank)",
+                            "<@U2> _(no response)_",
+                        )
+                }
+            }
+        }
+
+        given("standupSummaryTemplate escaping and section budget") {
+            val sessionDate = LocalDate.of(2026, 5, 4)
+
+            `when`("the routine name, a question and an answer carry mrkdwn control sequences") {
+                val hostile = "<!channel> R&D <https://evil.example|docs>"
+                val escaped = "&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;"
+                val texts =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = hostile,
+                            sessionDate = sessionDate,
+                            members = listOf(createRoutineMemberDto(userId = "U_ESC")),
+                            answers = listOf(createStandupAnswerDto(userId = "U_ESC", responses = listOf(hostile))),
+                            questions = listOf(hostile),
+                        ).template
+                        .map { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
+
+                then("each value is escaped while the bold markers and the member mention stay markup") {
+                    texts[0] shouldBe "*$escaped — 2026-05-04*"
+                    texts[1] shouldBe "<@U_ESC>\n• *$escaped* $escaped"
+                }
+            }
+
+            `when`("a full routine answers the longest questions at the modal's answer cap") {
+                val questions = (1..8).map { index -> "Q$index " + "q".repeat(n = 196) }
+                val answerCap =
+                    standupAnswerMaxLengths(
+                        json =
+                            templateBuilder.standupModalViewJson(
+                                routineName = "Daily",
+                                sessionDate = sessionDate,
+                                sessionUid = UUID.randomUUID(),
+                                userId = "U_ANY",
+                                noticeChannel = "D_NOTICE",
+                                noticeMessageTs = "1700000000.000400",
+                                questions = questions,
+                            ),
+                    ).first()
+                val members = (1..30).map { createRoutineMemberDto(userId = "U0123456789$it") }
+                val texts =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "R".repeat(n = 59),
+                            sessionDate = sessionDate,
+                            members = members,
+                            answers =
+                                members.map { member ->
+                                    createStandupAnswerDto(
+                                        userId = member.userId,
+                                        responses = questions.map { "b".repeat(n = answerCap) },
+                                    )
+                                },
+                            questions = questions,
+                        ).template
+                        .map { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
+
+                then("every member section fits the section budget without being cut") {
+                    texts.size shouldBe 31
+                    texts.forEach {
+                        it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                        it shouldNotContain SlackBlockLimits.TRUNCATION_MARKER
+                    }
+                }
+            }
+
+            `when`("a stored answer is longer than a section, written before the modal capped it") {
+                val memberText =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "Daily",
+                            sessionDate = sessionDate,
+                            members = listOf(createRoutineMemberDto(userId = "U_LONG")),
+                            answers =
+                                listOf(
+                                    createStandupAnswerDto(
+                                        userId = "U_LONG",
+                                        responses = listOf("c".repeat(n = 5_000)),
+                                    ),
+                                ),
+                            questions = listOf("Yesterday?"),
+                        ).template[1]
+                        .let { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
+
+                then("that member's section is cut to the budget and marked") {
+                    memberText.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    memberText shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+        }
+
+        given("standupSummaryParts") {
+            val sessionDate = LocalDate.of(2026, 5, 4)
+
+            `when`("a full routine's answers do not fit one message") {
+                val questions = (1..8).map { index -> "Q$index " + "q".repeat(n = 196) }
+                val members = (1..30).map { createRoutineMemberDto(userId = "U0123456789$it") }
+                val answers =
+                    members.map { member ->
+                        createStandupAnswerDto(
+                            userId = member.userId,
+                            responses = questions.map { "b".repeat(n = 300) },
+                        )
+                    }
+                val parts =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = members,
+                        answers = answers,
+                        questions = questions,
+                    )
+
+                then("every part renders within the message block-text budget and block count") {
+                    (parts.size > 1) shouldBe true
+                    parts.forEach { part ->
+                        val blocks =
+                            templateBuilder
+                                .standupSummaryTemplate(
+                                    routineName = part.routineName,
+                                    sessionDate = part.sessionDate,
+                                    members = part.members,
+                                    answers = part.answers,
+                                    questions = part.questions,
+                                ).template
+                        blocks.size shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_MAX_BLOCKS
+                        blocks.sumOf {
+                            (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text.length
+                        } shouldBeLessThanOrEqual
+                            SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                    }
+                }
+
+                then(
+                    "members keep their order across parts, each carrying only its own answers, and parts are labelled",
+                ) {
+                    parts.flatMap { part -> part.members.map { it.userId } } shouldBe members.map { it.userId }
+                    parts.forEach { part -> part.answers.map { it.userId } shouldBe part.members.map { it.userId } }
+                    parts.mapIndexed { index, part -> part.routineName shouldBe "Daily (${index + 1}/${parts.size})" }
+                }
+            }
+
+            `when`("a small routine fits one message, or the routine has no members") {
+                val small =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = listOf(createRoutineMemberDto(userId = "U1"), createRoutineMemberDto(userId = "U2")),
+                        answers = listOf(createStandupAnswerDto(userId = "U1", responses = listOf("shipped"))),
+                        questions = listOf("Yesterday?"),
+                    )
+                val empty =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = emptyList(),
+                        answers = emptyList(),
+                        questions = listOf("Yesterday?"),
+                    )
+
+                then("there is exactly one part with the plain routine name") {
+                    small.map { it.routineName } shouldBe listOf("Daily")
+                    small.single().members.map { it.userId } shouldBe listOf("U1", "U2")
+                    empty.map { it.routineName } shouldBe listOf("Daily")
+                    empty.single().members shouldBe emptyList()
+                }
+            }
+        }
 
         given("requestApprovalFormTemplate") {
             `when`("called with selection fields") {
@@ -175,38 +416,15 @@ class ModalTemplateBuilderTest :
 
         given("approvalTemplate") {
             `when`("called with valid parameters") {
-                val mockProfile =
-                    Profile(
-                        title = "",
-                        phone = "",
-                        skype = "",
-                        realName = "Test User",
-                        realNameNormalized = "Test User",
-                        displayName = "testuser",
-                        displayNameNormalized = "testuser",
-                        fields = emptyMap(),
-                        statusText = "",
-                        statusEmoji = "",
-                        statusExpiration = 0,
-                        avatarHash = "abc123",
-                        email = "test@example.com",
-                        firstName = "Test",
-                        lastName = "User",
-                        imageSize24 = "https://example.com/img24.png",
-                        imageSize32 = "https://example.com/img32.png",
-                        imageSize48 = "https://example.com/img48.png",
-                        imageSize72 = "https://example.com/img72.png",
-                        imageSize192 = "https://example.com/img192.png",
-                        imageSize512 = "https://example.com/img512.png",
-                        statusTextCanonical = "",
-                    )
+                val mockProfile = createProfile()
                 every {
-                    restRequester.get(
-                        uri = "users.profile.get?user=$TEST_USER_ID",
+                    restRequester.safeGet(
+                        uri = "users.profile.get?user={user}",
                         authorizationHeader = TEST_BOT_TOKEN,
                         responseType = SlackUserProfileDto::class.java,
+                        uriVariables = mapOf("user" to TEST_USER_ID),
                     )
-                } returns SlackUserProfileDto(ok = true, profile = mockProfile)
+                } returns Result.success(ResponseEntity.ok(SlackUserProfileDto(ok = true, profile = mockProfile)))
 
                 val result =
                     templateBuilder.approvalTemplate(
@@ -230,6 +448,83 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, userThumbnail, text, and approval blocks") {
                     result.template.size shouldBe 5
+                }
+            }
+
+            `when`("the profile name and the subtitle carry Slack control sequences") {
+                val profileRequester = mockk<RestRequester>()
+                every {
+                    profileRequester.safeGet(
+                        uri = any(),
+                        authorizationHeader = any(),
+                        responseType = SlackUserProfileDto::class.java,
+                        uriVariables = any(),
+                    )
+                } returns
+                    Result.success(
+                        ResponseEntity.ok(
+                            SlackUserProfileDto(ok = true, profile = createProfile(displayName = "<!here> R&D")),
+                        ),
+                    )
+                val result =
+                    ModalTemplateBuilder(
+                        modalBlockBuilder = ModalBlockBuilder(),
+                        restRequester = profileRequester,
+                        slackApiToken = TEST_BOT_TOKEN,
+                    ).approvalTemplate(
+                        headLineText = "Approval Request",
+                        approvalContents = testApprovalContents.copy(subTitle = "<!channel> <https://evil.example|x>"),
+                        idempotencyKey = testIdempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+
+                then("both are escaped") {
+                    result.template[2]
+                        .shouldBeInstanceOf<ContextBlock>()
+                        .elements
+                        .filterIsInstance<MarkdownTextObject>()
+                        .map { it.text } shouldContain "*&lt;!here&gt; R&amp;D* "
+                    result.template[3]
+                        .shouldBeInstanceOf<SectionBlock>()
+                        .fields
+                        .single()
+                        .text shouldBe "*&lt;!channel&gt; &lt;https://evil.example|x&gt;*"
+                }
+            }
+
+            `when`("the profile lookup fails") {
+                val failingRequester = mockk<RestRequester>()
+                every {
+                    failingRequester.safeGet(
+                        uri = any(),
+                        authorizationHeader = any(),
+                        responseType = SlackUserProfileDto::class.java,
+                        uriVariables = any(),
+                    )
+                } returns Result.failure(RestClientException("429 Too Many Requests"))
+                val degradedBuilder =
+                    ModalTemplateBuilder(
+                        modalBlockBuilder = ModalBlockBuilder(),
+                        restRequester = failingRequester,
+                        slackApiToken = TEST_BOT_TOKEN,
+                    )
+
+                val result =
+                    degradedBuilder.approvalTemplate(
+                        headLineText = "Approval Request",
+                        approvalContents = testApprovalContents,
+                        idempotencyKey = testIdempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+
+                then("the message still renders, naming the publisher by mention and without a thumbnail") {
+                    result.template.size shouldBe 5
+                    val publisherBlock = result.template[2].shouldBeInstanceOf<ContextBlock>()
+                    publisherBlock.elements.size shouldBe 2
+                    publisherBlock.elements
+                        .filterIsInstance<MarkdownTextObject>()
+                        .map { it.text }
+                        .contains("*<@$TEST_USER_ID>* ") shouldBe true
                 }
             }
         }
@@ -263,6 +558,81 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, and text blocks") {
                     result.template.size shouldBe 3
+                }
+            }
+
+            `when`("the body is longer than one section") {
+                val body = (1..200).joinToString(separator = "\n") { "- step $it: ${"detail ".repeat(n = 5)}" }
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(headLineText = "Title", body = body, isMarkDown = true)
+                val sectionTexts = result.template.drop(n = 2).map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("the body is split into sections within the budget, in order, with nothing dropped") {
+                    sectionTexts.size shouldBeGreaterThan 1
+                    sectionTexts.forEach { it.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                    sectionTexts.joinToString(separator = "\n") shouldBe body
+                }
+            }
+
+            `when`("the headline is blank") {
+                val result =
+                    templateBuilder.simpleTextResponseTemplate(headLineText = "", body = "Body", isMarkDown = true)
+
+                then("no header or divider is rendered, only the body section") {
+                    result.template shouldHaveSize 1
+                    result.template.single().shouldBeInstanceOf<SectionBlock>()
+                }
+            }
+
+            `when`("each part of a split 40,000-character answer is rendered") {
+                val answer =
+                    buildString {
+                        var index = 0
+                        while (length < 40_000) {
+                            append("Step $index: see <https://example.com/$index|docs> and run `make $index`\n")
+                            if (index % 40 == 0) append("```\n").append("x".repeat(n = 2_000)).append("\n```\n")
+                            index++
+                        }
+                    }.take(n = 40_000)
+                val parts = splitMessageText(text = answer, maxMessages = 8)
+                val rendered =
+                    parts.mapIndexed { index, part ->
+                        templateBuilder.simpleTextResponseTemplate(
+                            headLineText = "CodeCompanion — AI assistant (${index + 1}/${parts.size})",
+                            body = part,
+                            isMarkDown = true,
+                        )
+                    }
+
+                then("every message keeps its whole part and stays within the message text budget") {
+                    parts.size shouldBeGreaterThan 1
+                    rendered.forEach { layout ->
+                        val texts =
+                            layout.template.mapNotNull { block ->
+                                when (block) {
+                                    is HeaderBlock -> block.text.text
+                                    is SectionBlock -> block.text.text
+                                    else -> null
+                                }
+                            }
+                        texts.sumOf { it.length } shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                        texts.forEach { it shouldNotContain SlackBlockLimits.TRUNCATION_MARKER }
+                    }
+                }
+            }
+        }
+
+        given("onlyTextTemplate with a body longer than one section") {
+            `when`("the message is rendered") {
+                val message = (1..300).joinToString(separator = "\n") { "entry $it ${"z".repeat(n = 30)}" }
+                val result = templateBuilder.onlyTextTemplate(message = message, isMarkDown = true)
+
+                then("it renders as several sections within the budget and no other blocks") {
+                    result.template.size shouldBeGreaterThan 1
+                    result.template.forEach { block ->
+                        val text = block.shouldBeInstanceOf<SectionBlock>().text.text
+                        text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    }
                 }
             }
         }
@@ -403,6 +773,36 @@ class ModalTemplateBuilderTest :
                     val mrkdwn = section.text.shouldBeInstanceOf<MarkdownTextObject>()
                     mrkdwn.text shouldContain "<@U2> — ${RejectReason.OTHER.showMessage}"
                     mrkdwn.text shouldContain "Visa appointment overseas"
+                }
+            }
+
+            `when`("the title and a decline detail carry Slack control sequences") {
+                val meeting =
+                    createMeetingDto(
+                        title = "<!channel> R&D",
+                        participants =
+                            listOf(
+                                createMeetingParticipantDto(
+                                    userId = "U2",
+                                    isAttending = false,
+                                    absentReason = RejectReason.OTHER,
+                                    absentReasonDetail = "<https://evil.example|agenda>",
+                                ),
+                            ),
+                    )
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = listOf(meeting),
+                        currentUserId = "U_OTHER",
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+
+                then("both are escaped while the template's own emphasis and mentions stay markup") {
+                    val text = (result.template[2] as SectionBlock).text.text
+                    text shouldContain "*&lt;!channel&gt; R&amp;D*"
+                    text shouldContain
+                        "<@U2> — ${RejectReason.OTHER.showMessage} (_&lt;https://evil.example|agenda&gt;_)"
                 }
             }
 
@@ -686,6 +1086,41 @@ class ModalTemplateBuilderTest :
                 }
             }
 
+            `when`("the meetings fit the count cap but their sections overflow one message's text budget") {
+                val meetings =
+                    (1..ModalTemplateBuilder.MAX_MEETINGS_PER_LIST).map { index ->
+                        createMeetingDto(
+                            title = "D$index",
+                            participants =
+                                (1..10).map { participant ->
+                                    createMeetingParticipantDto(
+                                        userId = "U%010d".format(participant),
+                                        isAttending = false,
+                                        absentReason = RejectReason.OTHER,
+                                        absentReasonDetail = "d".repeat(n = RejectReason.MAX_DETAIL_LENGTH),
+                                    )
+                                },
+                        )
+                    }
+
+                val result =
+                    templateBuilder.meetingListFormTemplate(
+                        meetings = meetings,
+                        currentUserId = TEST_USER_ID,
+                        listIdempotencyKey = UUID.randomUUID(),
+                    )
+                val sections = result.template.filterIsInstance<SectionBlock>()
+                val shown = sections.size - 1
+
+                then("it stops before the meeting that would pass the budget and says how many it left out") {
+                    (shown in 1 until meetings.size) shouldBe true
+                    sections.last().text.text shouldBe
+                        "_Showing the first $shown of ${meetings.size} meetings. " +
+                        "${meetings.size - shown} more omitted — narrow the range to see them._"
+                    sections.sumOf { it.text.text.length } shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_TEXT_BUDGET
+                }
+            }
+
             `when`("meeting has no endAt") {
                 val meeting =
                     createMeetingDto(
@@ -734,6 +1169,43 @@ class ModalTemplateBuilderTest :
 
                 then("template should contain header, divider, text, and detail blocks") {
                     result.template.size shouldBe 4
+                }
+            }
+
+            `when`("the error message is longer than a section field") {
+                val result =
+                    templateBuilder.errorNoticeTemplate(
+                        headLineText = "Error",
+                        errorMessage = "e".repeat(n = 5_000),
+                        details = null,
+                    )
+                val reason =
+                    result.template[2]
+                        .shouldBeInstanceOf<SectionBlock>()
+                        .fields
+                        .last()
+                        .text
+
+                then("the reason field is cut to the field limit with an ellipsis") {
+                    reason.length shouldBe SlackBlockLimits.SECTION_FIELD_MAX_LENGTH
+                    reason shouldEndWith "…"
+                }
+            }
+
+            `when`("the details are longer than one section") {
+                val result =
+                    templateBuilder.errorNoticeTemplate(
+                        headLineText = "Error",
+                        errorMessage = "Err",
+                        details = "at frame\n".repeat(n = 1_000),
+                    )
+
+                then("the details become several sections within the budget") {
+                    result.template.size shouldBeGreaterThan 4
+                    result.template.drop(n = 3).forEach { block ->
+                        val text = block.shouldBeInstanceOf<SectionBlock>().text.text
+                        text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    }
                 }
             }
         }
@@ -869,6 +1341,42 @@ class ModalTemplateBuilderTest :
                         detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
                     textInput.actionId shouldBe DeclineReasonModalIds.DETAIL_ACTION_ID
                 }
+
+                then("the detail input is capped at the stored detail length") {
+                    val detailBlock =
+                        view.blocks
+                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
+                    val textInput =
+                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    textInput.maxLength shouldBe RejectReason.MAX_DETAIL_LENGTH
+                }
+            }
+
+            `when`("the meeting title carries mrkdwn control sequences") {
+                val view =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(
+                            templateBuilder.declineReasonModalViewJson(
+                                meetingTitle = "<!channel> R&D <https://evil.example|docs>",
+                                meetingIdempotencyKey = meetingKey,
+                                participantUserId = participantUserId,
+                                noticeChannel = noticeChannel,
+                                noticeMessageTs = noticeMessageTs,
+                            ),
+                            com.slack.api.model.view.View::class.java,
+                        )
+
+                then("the title section shows it as literal text") {
+                    (
+                        view.blocks
+                            .first()
+                            .shouldBeInstanceOf<SectionBlock>()
+                            .text as MarkdownTextObject
+                    ).text shouldBe
+                        "*&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;*"
+                }
             }
         }
 
@@ -978,6 +1486,89 @@ class ModalTemplateBuilderTest :
                     view.callbackId shouldBe StandupModalIds.CALLBACK_ID
                     inputs.size shouldBe 2
                 }
+
+                then("each answer input carries a max_length sized so the member's summary section fits") {
+                    val maxLengths = standupAnswerMaxLengths(json = json)
+                    maxLengths.distinct().size shouldBe 1
+                    val fixed =
+                        32 + listOf("What did you do yesterday?", "What are you doing today?").sumOf { it.length + 6 }
+                    (fixed + maxLengths.sum()) shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    maxLengths.first() shouldBeLessThanOrEqual SlackBlockLimits.PLAIN_TEXT_INPUT_MAX_LENGTH
+                }
+            }
+
+            `when`("the questions escape to more than the whole section budget") {
+                val questions = (1..8).map { "&".repeat(n = 199) }
+                val json =
+                    templateBuilder.standupModalViewJson(
+                        routineName = "Daily",
+                        sessionDate = LocalDate.of(2026, 5, 4),
+                        sessionUid = sessionUid,
+                        userId = "U_STANDUP",
+                        noticeChannel = "D_NOTICE",
+                        noticeMessageTs = "1700000000.000400",
+                        questions = questions,
+                    )
+
+                then("each answer keeps the usable floor instead of collapsing to one character") {
+                    standupAnswerMaxLengths(json = json).distinct() shouldBe
+                        listOf(ModalTemplateBuilder.STANDUP_ANSWER_MIN_LENGTH)
+                }
+
+                then("a member answering at that floor is cut to the section budget by the summary instead") {
+                    val text =
+                        templateBuilder
+                            .standupSummaryTemplate(
+                                routineName = "Daily",
+                                sessionDate = LocalDate.of(2026, 5, 4),
+                                members = listOf(createRoutineMemberDto(userId = "U_MEMBER")),
+                                answers =
+                                    listOf(
+                                        createStandupAnswerDto(
+                                            userId = "U_MEMBER",
+                                            responses =
+                                                questions.map {
+                                                    "a".repeat(
+                                                        n = ModalTemplateBuilder.STANDUP_ANSWER_MIN_LENGTH,
+                                                    )
+                                                },
+                                        ),
+                                    ),
+                                questions = questions,
+                            ).template
+                            .last()
+                            .let { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
+                    text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET
+                    text shouldContain SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+
+            `when`("the routine name carries mrkdwn control sequences") {
+                val view =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(
+                            templateBuilder.standupModalViewJson(
+                                routineName = "<!channel> R&D <https://evil.example|docs>",
+                                sessionDate = LocalDate.of(2026, 5, 4),
+                                sessionUid = sessionUid,
+                                userId = "U_STANDUP",
+                                noticeChannel = "D_NOTICE",
+                                noticeMessageTs = "1700000000.000400",
+                                questions = listOf("Q1"),
+                            ),
+                            com.slack.api.model.view.View::class.java,
+                        )
+
+                then("the header section shows it as literal text") {
+                    (
+                        view.blocks
+                            .first()
+                            .shouldBeInstanceOf<SectionBlock>()
+                            .text as MarkdownTextObject
+                    ).text shouldBe
+                        "*&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;* — 2026-05-04"
+                }
             }
         }
 
@@ -1074,6 +1665,36 @@ class ModalTemplateBuilderTest :
             }
         }
 
+        given("a topic picker with more topics than a select holds and names longer than an option") {
+            `when`("the subscribe modal is rendered") {
+                val json =
+                    templateBuilder.cveSubscribeModalViewJson(
+                        idempotencyKey = UUID.randomUUID(),
+                        topics =
+                            (1..120).map { index ->
+                                TopicOption(key = "topic-$index", label = "Topic $index " + "n".repeat(n = 110))
+                            },
+                    )
+                val options =
+                    com.slack.api.util.json.GsonFactory
+                        .createSnakeCase()
+                        .fromJson(json, com.slack.api.model.view.View::class.java)
+                        .blocks
+                        .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                        .single()
+                        .element
+                        .shouldBeInstanceOf<com.slack.api.model.block.element.MultiStaticSelectElement>()
+                        .options
+
+                then("the first 100 topics are offered, labels cut to 75 characters and keys unchanged") {
+                    options.size shouldBe SlackBlockLimits.MAX_OPTIONS
+                    options.forEach { it.text.text.length shouldBe SlackBlockLimits.OPTION_TEXT_MAX_LENGTH }
+                    options.first().text.text shouldEndWith "…"
+                    options.map { it.value } shouldBe (1..100).map { "topic-$it" }
+                }
+            }
+        }
+
         given("cveUnsubscribeModalViewJson") {
             val unsubscribeKey = UUID.randomUUID()
 
@@ -1107,3 +1728,12 @@ class ModalTemplateBuilderTest :
             }
         }
     })
+
+private fun standupAnswerMaxLengths(json: String): List<Int> =
+    com.slack.api.util.json.GsonFactory
+        .createSnakeCase()
+        .fromJson(json, com.slack.api.model.view.View::class.java)
+        .blocks
+        .filterIsInstance<com.slack.api.model.block.InputBlock>()
+        .filter { it.blockId.startsWith(StandupModalIds.BLOCK_ID_PREFIX) }
+        .map { (it.element as com.slack.api.model.block.element.PlainTextInputElement).maxLength }

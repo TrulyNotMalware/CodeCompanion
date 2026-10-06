@@ -23,10 +23,11 @@ spring:
     driver-class-name: org.mariadb.jdbc.Driver
     url: ${DATABASE_URL:jdbc:mariadb://localhost:3306/code_companion}
     username: ${DATABASE_USER_NAME:root}
-    password: ${DATABASE_USER_PWD:root_password}
+    # No default: export DATABASE_USER_PWD. A committed default is a credential in the repository.
+    password: ${DATABASE_USER_PWD}
     hikari:
       transaction-isolation: TRANSACTION_REPEATABLE_READ
-      maximum-pool-size: 10
+      maximum-pool-size: 20
       connection-timeout: 5000
       keepalive-time: 30000
       max-lifetime: 600000
@@ -50,20 +51,20 @@ logging:
 management:
   endpoint:
     health:
-      show-details: always
+      # This profile is tunnelled to the internet; with no Spring Security, details stay hidden.
+      show-details: when_authorized
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        # Health only: the tunnel exposes the port publicly and nothing here authenticates.
+        include: health
       base-path: /api/actuator
 
 slack:
   app:
     api:
       token: ${SLACK_API_TOKEN}
-      # Leave blank to disable request-signature verification (local testing only). Set the real
-      # signing secret to enforce Slack's X-Slack-Signature check (SlackRequestVerificationFilter).
-      signing-secret: ${SLACK_SIGNING_SECRET:}
+      signing-secret: ${SLACK_SIGNING_SECRET}
     mode:
       # POLLING + APPLICATION_EVENT keeps the whole relay in-process — no Kafka, no Debezium.
       outbox-reading-strategy: polling

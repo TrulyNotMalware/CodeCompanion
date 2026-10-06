@@ -5,6 +5,7 @@ import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.standup.StandupSlashService
+import dev.notypie.impl.command.ViewOpenDeferral
 import org.springframework.http.MediaType
 import org.springframework.util.MultiValueMap
 import org.springframework.web.bind.annotation.*
@@ -17,33 +18,37 @@ class SlashCommandController(
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
     private val cveQuerySlashService: CveQuerySlashService,
 ) {
-    @PostMapping(value = ["/meet"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/meet"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestMeeting(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        meetingService.handleMeeting(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            meetingService.handleMeeting(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
-    @PostMapping(value = ["/standup"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/standup"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun setupStandup(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        standupSlashService.handleStandup(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            standupSlashService.handleStandup(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
-    @PostMapping(value = ["/task"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/task"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestTasks(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
@@ -51,55 +56,63 @@ class SlashCommandController(
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
     }
 
-    @PostMapping(value = ["/subscribe"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/subscribe"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun subscribe(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveSubscriptionSlashService.handleSubscribe(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveSubscriptionSlashService.handleSubscribe(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
-    @PostMapping(value = ["/unsubscribe"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/unsubscribe"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun unsubscribe(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveSubscriptionSlashService.handleUnsubscribe(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveSubscriptionSlashService.handleUnsubscribe(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
-    @PostMapping(value = ["/subscriptions"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/subscriptions"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun subscriptions(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveSubscriptionSlashService.handleSubscriptions(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveSubscriptionSlashService.handleSubscriptions(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 
-    @PostMapping(value = ["/latest"], produces = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    @PostMapping(value = ["/latest"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun latest(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-        cveQuerySlashService.handleLatest(
-            headers = headers,
-            payload = payload,
-            commandData = commandData,
-        )
+        ViewOpenDeferral.afterBoundary {
+            cveQuerySlashService.handleLatest(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
     }
 }

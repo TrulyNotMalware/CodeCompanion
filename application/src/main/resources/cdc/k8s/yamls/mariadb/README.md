@@ -121,6 +121,12 @@ kubectl exec -it mariadb-1 -n database -- mariadb -u root -p -e "SHOW SLAVE STAT
 Change these before any non-local use — they are placeholders, and the replication password is also
 base64-encoded in `mariadb-config.yaml`.
 
+### Time zone
+The StatefulSet sets no `TZ` or `default_time_zone`, so the servers run in UTC while the application Pod runs
+Asia/Seoul. Outbox timestamps are written from the application clock; do not rely on the DB session time zone
+(`NOW()`, `CURRENT_TIMESTAMP`) when comparing against them. Check a live server with
+`SELECT @@global.time_zone, @@session.time_zone, NOW();`.
+
 ## Verification Commands
 
 ```bash
@@ -261,6 +267,11 @@ kubectl exec -it mariadb-1 -n database -- mariadb -u root -p -e "SHOW SLAVE STAT
 로컬 외 용도로 쓰기 전에 반드시 변경하세요. 플레이스홀더이며, 복제 비밀번호는
 `mariadb-config.yaml`에도 base64로 인코딩되어 들어 있습니다.
 
+
+### 시간대
+StatefulSet이 `TZ`·`default_time_zone`을 지정하지 않아 서버는 UTC, 애플리케이션 파드는 Asia/Seoul로 돕니다. 아웃박스
+시각은 애플리케이션 시계로 기록되므로 DB 세션 시간대(`NOW()`, `CURRENT_TIMESTAMP`)를 비교 기준으로 쓰지 마세요.
+실제 서버는 `SELECT @@global.time_zone, @@session.time_zone, NOW();`로 확인합니다.
 
 ## 검증 명령어
 

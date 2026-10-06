@@ -96,3 +96,13 @@ fun createUndeliveredCveEvent(
         title = title,
         aiSummary = aiSummary,
     )
+
+fun createNvdPageJson(cveIds: List<String>, totalResults: Int): String =
+    """
+    {
+      "totalResults": $totalResults,
+      "vulnerabilities": [${cveIds.joinToString(separator = ",") {
+        """{"cve": {"id": "$it", "descriptions": [{"lang": "en", "value": "Flaw $it"}]}}"""
+    }}]
+    }
+    """.trimIndent()

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/impl/command/slack
 
@@ -12,7 +12,7 @@ Typed creators for the parsed Slack models in main `impl/command/slack/`: an alr
 | File | Description |
 |------|-------------|
 | `InteractionPayloadCreator.kt` | `createTestContainer()` → `Container(type = BLOCK_ACTIONS, isEphemeral = false, messageTime = now)`; `createInteractionPayloadInput(commandDetailType, currentAction: States, states: List<States>, user, team, channel, container, enterprise = null, apiAppId, botId, token, responseUrl, idempotencyKey: UUID, triggerId = "", isEnterprise = false): InteractionPayload`; `selectedApplyButtonStates()` (`APPLY_BUTTON`, selected, value `"apply"`), `selectedRejectButtonStates()` (`REJECT_BUTTON`, selected). Private `TEST_USER` / `TEST_TEAM` / `TEST_CHANNEL` defaults built from `:domain` constants |
-| `SlackEventCallBackRequestCreator.kt` | `createSlackEventCallBackRequest(token, teamId, apiAppId, type = "event_callback", eventId = "Ev0001", eventTime, eventContext, isExtSharedChannel, event = createEventCallbackData(), authorizations = [createAuthorization()])`; `createAuthorization(enterpriseId = null, teamId, userId, isBot = true, isEnterpriseInstall = false)`; `createEventCallbackData(type = "app_mention", userId, appId = null, botId = null, channel, teamId, blocks = [], ts = TEST_MESSAGE_TS, threadTs = null)` — builds a `BotProfile` only when `botId` is given; `createRichTextBlock(vararg elements)` wraps elements in a `rich_text_section`; `createUserElement(userId)`, `createTextElement(text)` |
+| `SlackEventCallBackRequestCreator.kt` | `createSlackEventCallBackRequest(token, teamId, apiAppId, type = "event_callback", eventId = "Ev0001", eventTime, eventContext, isExtSharedChannel, event = createEventCallbackData(), authorizations = [createAuthorization()])`; `createAuthorization(enterpriseId = null, teamId, userId, isBot = true, isEnterpriseInstall = false)`; `createEventCallbackData(type = "app_mention", userId, appId = null, botId = null, channel, teamId, blocks = [], ts = TEST_MESSAGE_TS, threadTs = null)` — builds a `BotProfile` only when `botId` is given; `createRichTextBlock(vararg elements)` wraps elements in a `rich_text_section`; `createUserElement(userId)`, `createTextElement(text)` `createEventCallbackData(userId: String? = TEST_USER_ID, …)`; `createWorkflowAppMentionJson(botUserId)`: a raw Events API body whose event carries `bot_id` / `app_id` but no `user` or `blocks`. `createRichAppMentionJson(botUserId)`: a raw Events API body whose rich_text mixes styles, links, a user, a channel, an emoji, a code block, a quote and an ordered list. |
 
 ## For AI Agents
 

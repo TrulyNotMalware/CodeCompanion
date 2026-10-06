@@ -4,7 +4,12 @@ import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 
 interface RestRequester {
-    fun <T : Any> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>): Result<ResponseEntity<T>>
+    fun <T : Any> safeGet(
+        uri: String,
+        authorizationHeader: String?,
+        responseType: Class<T>,
+        uriVariables: Map<String, Any> = emptyMap(),
+    ): Result<ResponseEntity<T>>
 
     fun <T : Any> safePost(
         uri: String,

@@ -30,6 +30,24 @@ class SlackOutboundStager(
                 )
         }
 
+    override fun stageInOrder(
+        messages: List<OutboundMessage>,
+        basicInfo: CommandBasicInfo,
+    ): CommandEvent<EventPayload> {
+        require(messages.isNotEmpty() && messages.none { it is OutboundMessage.OpenModal }) {
+            "stageInOrder needs at least one message and no modal"
+        }
+        return OutboundMessageEnqueued(
+            idempotencyKey = basicInfo.idempotencyKey,
+            payload =
+                OutboundMessageEnqueuedPayload(
+                    message = messages.first(),
+                    basicInfo = basicInfo,
+                    continuation = messages.drop(n = 1),
+                ),
+        )
+    }
+
     private fun stageModal(
         message: OutboundMessage.OpenModal,
         basicInfo: CommandBasicInfo,

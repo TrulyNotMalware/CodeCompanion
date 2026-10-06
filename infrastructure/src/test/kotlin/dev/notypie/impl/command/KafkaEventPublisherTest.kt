@@ -9,6 +9,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.clearMocks
 import io.mockk.mockk
 import io.mockk.verify
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -63,12 +64,15 @@ class KafkaEventPublisherTest
                     applicationEventPublisher = applicationEventPublisher,
                 )
 
+            beforeContainer { testCase -> if (testCase.parent == null) clearMocks(applicationEventPublisher) }
+
             fun createTestConsumer(): org.apache.kafka.clients.consumer.Consumer<String, Any> {
                 val consumerProps =
                     KafkaTestUtils.consumerProps(embeddedKafkaBroker, "test-group-${UUID.randomUUID()}", true)
                 consumerProps[ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java
                 consumerProps[ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG] = JacksonJsonDeserializer::class.java
                 consumerProps["spring.json.trusted.packages"] = "*"
+                consumerProps["spring.json.remove.type.headers"] = false
                 consumerProps[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "earliest"
                 val factory = DefaultKafkaConsumerFactory<String, Any>(consumerProps)
                 return factory.createConsumer()
@@ -93,13 +97,20 @@ class KafkaEventPublisherTest
                 `when`("publishing") {
                     publisher.publishEvent(events = events)
 
-                    then("kafka consumer should receive the message with correct key") {
+                    then("kafka consumer should receive the payload under the idempotency key with its type header") {
                         val records = KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10))
-                        records.count() shouldNotBe 0
+                        records.count() shouldBe 1
 
                         val record = records.first()
                         record.topic() shouldBe TEST_TOPIC
                         record.key() shouldBe idempotencyKey.toString()
+                        record.value() shouldBe externalEvent.payload
+                        record
+                            .headers()
+                            .lastHeader("__TypeId__")
+                            .value()
+                            .decodeToString() shouldBe
+                            TestKafkaPayload::class.java.name
                     }
 
                     then("should not publish via applicationEventPublisher") {

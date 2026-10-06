@@ -6,7 +6,9 @@ import dev.notypie.schema.createCveTopicSchema
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -70,7 +72,13 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("markFailed runs with the owning token") {
-                    val marked = repository.markFailed(id = id, token = "owner", nextAttemptAt = now.plusMinutes(10))
+                    val marked =
+                        repository.markFailed(
+                            id = id,
+                            token = "owner",
+                            nextAttemptAt = now.plusMinutes(10),
+                            now = now.plusMinutes(1),
+                        )
 
                     then("the retry budget is consumed and the next attempt is scheduled") {
                         marked shouldBe 1
@@ -79,6 +87,7 @@ class JpaCveEventRepositoryTest
                         row.retryCount shouldBe 1
                         row.nextAttemptAt shouldBe now.plusMinutes(10)
                         row.claimToken.shouldBeNull()
+                        row.updatedAt shouldBe now.plusMinutes(1)
                     }
                 }
             }
@@ -88,7 +97,13 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = id, token = "owner", now = now, maxRetries = 5)
 
                 `when`("releaseClaim runs with the owning token") {
-                    val released = repository.releaseClaim(id = id, token = "owner", nextAttemptAt = now.plusMinutes(2))
+                    val released =
+                        repository.releaseClaim(
+                            id = id,
+                            token = "owner",
+                            nextAttemptAt = now.plusMinutes(2),
+                            now = now.plusMinutes(1),
+                        )
 
                     then("the row returns to PENDING with its retry budget intact") {
                         released shouldBe 1
@@ -97,6 +112,7 @@ class JpaCveEventRepositoryTest
                         row.retryCount shouldBe 0
                         row.nextAttemptAt shouldBe now.plusMinutes(2)
                         row.claimToken.shouldBeNull()
+                        row.updatedAt shouldBe now.plusMinutes(1)
                     }
                 }
             }
@@ -164,14 +180,80 @@ class JpaCveEventRepositoryTest
                 repository.claimForSummary(id = live, token = "working", now = now.minusMinutes(1), maxRetries = 5)
 
                 `when`("resetStuck runs with a 15-minute threshold") {
-                    val reset = repository.resetStuck(olderThan = now.minusMinutes(15))
+                    val reset =
+                        repository.resetStuck(
+                            olderThan = now.minusMinutes(15),
+                            nextAttemptAt = now.plusMinutes(10),
+                            now = now,
+                        )
 
-                    then("only the stale row returns to PENDING; the live claim keeps its token") {
+                    then(
+                        "only the stale row fails, spending one retry and waiting a backoff; the live claim keeps its token",
+                    ) {
                         reset shouldBe 1
-                        repository.findById(stale).orElseThrow().summaryStatus shouldBe CveSummaryStatus.PENDING
+                        val staleRow = repository.findById(stale).orElseThrow()
+                        staleRow.summaryStatus shouldBe CveSummaryStatus.FAILED
+                        staleRow.retryCount shouldBe 1
+                        staleRow.nextAttemptAt shouldBe now.plusMinutes(10)
+                        staleRow.claimToken.shouldBeNull()
+                        staleRow.updatedAt shouldBe now
                         val liveRow = repository.findById(live).orElseThrow()
                         liveRow.summaryStatus shouldBe CveSummaryStatus.SUMMARIZING
                         liveRow.claimToken.shouldNotBeNull()
+                    }
+                }
+            }
+
+            given("a stale claim on its last retry") {
+                val id =
+                    repository
+                        .saveAndFlush(
+                            createCveEventSchema(
+                                externalId = "stuck-last-retry",
+                                summaryStatus = CveSummaryStatus.FAILED,
+                                retryCount = 4,
+                            ),
+                        ).id
+                repository.claimForSummary(id = id, token = "crashed", now = now.minusMinutes(30), maxRetries = 5)
+                val deadBefore = repository.countDeadLetter(maxRetries = 5)
+
+                `when`("resetStuck runs and the backoff elapses") {
+                    repository.resetStuck(olderThan = now.minusMinutes(15), nextAttemptAt = now, now = now)
+                    val claimable =
+                        repository.findClaimable(
+                            now = now.plusMinutes(60),
+                            maxRetries = 5,
+                            pageable = PageRequest.of(0, 50),
+                        )
+
+                    then("the row is dead-lettered instead of being summarized again") {
+                        claimable.map { it.id } shouldNotContain id
+                        repository.countDeadLetter(maxRetries = 5) shouldBe deadBefore + 1
+                    }
+                }
+            }
+
+            given("a stale claim reset with a backoff") {
+                val id = freshRow(externalId = "stuck-backoff")
+                repository.claimForSummary(id = id, token = "crashed", now = now.minusMinutes(30), maxRetries = 5)
+
+                `when`("findClaimable runs in the same tick and after the backoff") {
+                    repository.resetStuck(
+                        olderThan = now.minusMinutes(15),
+                        nextAttemptAt = now.plusMinutes(10),
+                        now = now,
+                    )
+                    val sameTick = repository.findClaimable(now = now, maxRetries = 5, pageable = PageRequest.of(0, 50))
+                    val afterBackoff =
+                        repository.findClaimable(
+                            now = now.plusMinutes(10),
+                            maxRetries = 5,
+                            pageable = PageRequest.of(0, 50),
+                        )
+
+                    then("the row is not picked straight back up, only once the backoff has passed") {
+                        sameTick.map { it.id } shouldNotContain id
+                        afterBackoff.map { it.id } shouldContain id
                     }
                 }
             }

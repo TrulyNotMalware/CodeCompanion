@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-03 -->
 
 # infrastructure/repository/cve
 
@@ -14,17 +14,17 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 | File | Description |
 |------|-------------|
 | `CveTopicRepository.kt` | `data class CveTopic(id, topicKey, displayName, category, sourceType, sourceConfig?, deliveryMode, active)`, `data class CveTopicDefinition(...)` (the yaml shape, `active = true` default); port `upsert(definition): Boolean`, `findActiveTopics()`, `findAllTopics()`, `findById(id)`, `countActive()`, `setActive(topicKey, active): Int` |
-| `CveTopicRepositoryImpl.kt` | `upsert` inserts when `findByTopicKey` is null, otherwise syncs every field **except `active`** onto the managed row and returns `false` on a no-op match (`matches()` ignores `active` too) |
-| `JpaCveTopicRepository.kt` | Derived `findByTopicKey`, `findByActiveTrueOrderByTopicKey`; JPQL `findAllOrderByTopicKey`, `countActive`, `@Modifying setActive`. Not `@Repository`-annotated (still registered by `@EnableJpaRepositories`) |
-| `CveEventRepository.kt` | Records `CveEvent(id, topicId, externalId, title, rawContent, aiSummary?, summaryStatus, retryCount)`, `TopicEventCount(topicId, count)`, `CveRecentEvent(topicDisplayName, title, aiSummary?)`; port `insertIgnore(topicId, externalId, title, rawContent, publishedAt?): Int`, `findClaimable(now, maxRetries, limit)`, `claimForSummary(id, token, now, maxRetries): Int`, `markDone(id, token, summary, now)`, `markFailed(id, token, nextAttemptAt)`, `releaseClaim(id, token, nextAttemptAt)`, `resetStuck(olderThan)`, `countByStatus`, `countFailedRetryable(maxRetries)`, `countDeadLetter(maxRetries)`, `countEventsByTopic(topicIds)`, `findRecentDoneEvents(topicIds, limit)`, `resetDeadLetters(maxRetries)`, `resetDeadLetter(id, maxRetries)` |
-| `CveEventRepositoryImpl.kt` | Truncates `title` to `TITLE_MAX_LENGTH = 512` and `rawContent` to `RAW_CONTENT_MAX_LENGTH = 60_000` before `insertIgnore`; `limit` → `PageRequest.of(0, limit)`; empty `topicIds` short-circuits to `emptyList()`, otherwise `distinct()` |
+| `CveTopicRepositoryImpl.kt` | `upsert` has no transaction of its own and must be called outside one (`CveTopicBootstrap` runs on `ApplicationReadyEvent`): with a transaction active (`TransactionSynchronizationManager.isActualTransactionActive()`) it throws `IllegalStateException` before any SQL. It first runs `findLockedByTopicKey` in a transaction and, when the row exists, syncs every field **except `active`** onto it there, returning `false` on a no-op match (`matches()` ignores `active` too). When the key is absent the insert runs in its own `REQUIRES_NEW` transaction (`saveAndFlush`), so a replica that inserted the same key meanwhile only fails that insert; the unique-key `DataIntegrityViolationException` is absorbed by running the locked find-and-sync again in a fresh transaction (a violation with no row behind it is rethrown). |
+| `JpaCveTopicRepository.kt` | Derived `findByTopicKey`, `findByActiveTrueOrderByTopicKey`; JPQL `findAllOrderByTopicKey`, `countActive`, `@Modifying setActive`. Not `@Repository`-annotated (still registered by `@EnableJpaRepositories`) `findLockedByTopicKey` (`PESSIMISTIC_WRITE`) is the first statement of every `upsert` transaction. |
+| `CveEventRepository.kt` | Records `CveEvent(id, topicId, externalId, title, rawContent, aiSummary?, summaryStatus, retryCount)`, `TopicEventCount(topicId, count)`, `CveRecentEvent(topicDisplayName, title, aiSummary?)`; port `insertIgnore(topicId, externalId, title, rawContent, publishedAt?): Int`, `findClaimable(now, maxRetries, limit)`, `claimForSummary(id, token, now, maxRetries): Int`, `markDone(id, token, summary, now)`, `markFailed(id, token, nextAttemptAt, now)`, `releaseClaim(id, token, nextAttemptAt, now)`, `resetStuck(olderThan, nextAttemptAt, now)`, `countByStatus`, `countFailedRetryable(maxRetries)`, `countDeadLetter(maxRetries)`, `countEventsByTopic(topicIds)`, `findRecentDoneEvents(topicIds, limit)`, `resetDeadLetters(maxRetries)`, `resetDeadLetter(id, maxRetries)` `markFailed`, `releaseClaim` and `resetStuck` take the caller's `now` for `updated_at`. |
+| `CveEventRepositoryImpl.kt` | Truncates `title` to `TITLE_MAX_LENGTH = 512` and `rawContent` to `RAW_CONTENT_MAX_LENGTH = 60_000` before `insertIgnore`; `limit` → `PageRequest.of(0, limit)`; empty `topicIds` short-circuits to `emptyList()`, otherwise `distinct()` `markDone` cuts the summary to `AI_SUMMARY_MAX_BYTES` (65,535 UTF-8 bytes, the MariaDB `TEXT` limit) on a code point boundary. |
 | `JpaCveEventRepository.kt` | Native `INSERT IGNORE` ingestion; JPQL `findClaimable` (PENDING / FAILED, `retryCount < :maxRetries`, backoff elapsed, id ASC); native CAS `claimForSummary` / `releaseClaim` / `markDone` / `markFailed` / `resetStuck`; JPQL counters, `countEventsByTopic` (constructor projection), `findRecentDoneEvents` (entity join to `cve_topic`), `resetDeadLetters` / `resetDeadLetter` (JPQL bulk update) |
 | `CveSubscriptionRepository.kt` | Port `subscribe(userId, topicIds): Int`, `unsubscribe(userId, topicIds): Int`, `findSubscribedTopics(userId): List<CveTopic>` |
 | `CveSubscriptionRepositoryImpl.kt` | `subscribe` loops `insertIgnore` per distinct topic and sums the inserted count; `unsubscribe` → `deleteByUserIdAndTopicIdIn`; `findSubscribedTopics` reads ids then `findAllById` on the topic repo, sorted by `topicKey` |
 | `JpaCveSubscriptionRepository.kt` | Derived `findByUserId`, `deleteByUserIdAndTopicIdIn(): Long`; native `insertIgnore(userId, topicId): Int`. Not `@Repository`-annotated |
-| `CveDeliveryRepository.kt` | `data class UndeliveredCveEvent(eventId, userId, topicKey, topicDisplayName, title, aiSummary?)`; port `claim(eventId, userId): Boolean`, `findUndelivered(deliveryMode, since, doneBefore, limit)`, `dbNow(): LocalDateTime` |
-| `CveDeliveryRepositoryImpl.kt` | `claim` = affected rows `== 1`; `findUndelivered` wraps `limit` into a `PageRequest` |
-| `JpaCveDeliveryRepository.kt` | Native `INSERT IGNORE ... 'SENT'` claim; JPQL `findUndelivered` joining `cve_topic` and `cve_subscription` to `cve_event` by unrelated-entity `ON`, anti-joining `cve_delivery` (`d.id IS NULL`), filtering `DONE`, `deliveryMode`, `active = true`, `createdAt >= :since`, `updatedAt < :doneBefore`, ordered by event id then user id; native `dbNow()` = `SELECT LOCALTIMESTAMP(6)` |
+| `CveDeliveryRepository.kt` | `data class UndeliveredCveEvent(eventId, userId, topicKey, topicDisplayName, title, aiSummary?)`; port `claim(eventId, userId): Boolean`, `findUndelivered(deliveryMode, since, doneBefore, limit)` (event-major), `findUndeliveredByUser(...)` (same filter, user-major), `findUndeliveredForUser(deliveryMode, userId, since, doneBefore, limit)` (one user, event order), `dbNow(): LocalDateTime` |
+| `CveDeliveryRepositoryImpl.kt` | `claim` = affected rows `== 1`; the three reads are `@Transactional(readOnly = true)` and wrap `limit` into a `PageRequest` |
+| `JpaCveDeliveryRepository.kt` | Native `INSERT IGNORE ... 'SENT'` claim; JPQL `findUndelivered` joining `cve_topic` and `cve_subscription` to `cve_event` by unrelated-entity `ON`, anti-joining `cve_delivery` (`d.id IS NULL`), filtering `DONE`, `deliveryMode`, `active = true`, `createdAt >= :since`, `updatedAt < :doneBefore`, ordered by event id then user id; native `dbNow()` = `SELECT LOCALTIMESTAMP(6)` The three reads share one `UNDELIVERED_SELECT` and differ only in order: `findUndelivered` `e.id, s.userId` (immediate: oldest events first across users), `findUndeliveredByUser` `s.userId, e.id` (digest: a page cut can split only its last user), `findUndeliveredForUser` adds `s.userId = :userId`. |
 | `CveCollectLedgerRepository.kt` | Port `claimWindow(topicId, windowStart): Boolean`, `deleteOlderThan(cutoff): Int`, `latestWindowStart(): LocalDateTime?` |
 | `CveCollectLedgerRepositoryImpl.kt` | Thin delegation; `claimWindow` = affected rows `== 1` |
 | `JpaCveCollectLedgerRepository.kt` | Native `INSERT IGNORE` on `(topic_id, window_start)`; JPQL `deleteOlderThan`, `findLatestWindowStart` (`MAX(windowStart)`) |
@@ -45,13 +45,32 @@ statement: `INSERT IGNORE` on a unique key or a claim-token CAS.
 - **The summary worker's safety is `claimForSummary` plus token-guarded `markDone` / `markFailed` /
   `releaseClaim`.** The claim re-checks `retry_count < :maxRetries` so a stale candidate cannot revive a
   dead-letter row; `releaseClaim` returns the row to PENDING **without** consuming the retry budget
-  (sidecar backpressure is not a failure). Never replace a guarded UPDATE with load-modify-save.
-- **Two clocks.** `claimForSummary` and `markDone` stamp `updated_at` from the app clock (`:now`) because
+  (sidecar backpressure is not a failure). `resetStuck` treats a stale `SUMMARIZING` claim as a failed attempt:
+  `FAILED`, `retry_count + 1`, `next_attempt_at = :nextAttemptAt`, so a row whose `markDone` keeps failing reaches
+  the dead-letter ceiling instead of being re-summarized every `stuckMinutes`, and the same tick's
+  `findClaimable` does not pick it straight back up. Never replace a guarded UPDATE with load-modify-save.
+- **Two clocks.** Every summary CAS (`claimForSummary`, `markDone`, `markFailed`, `releaseClaim`, `resetStuck`) stamps
+  `updated_at` from the caller's app clock (`:now`, never `CURRENT_TIMESTAMP`) because
   `resetStuck` and the notification dispatcher's `doneBefore` cutoff compare against app-clock values;
   `created_at` is DB-stamped (`CURRENT_TIMESTAMP(6)`), so `findUndelivered`'s `since` horizon must be derived
   from `dbNow()`, never from `LocalDateTime.now()` — the DB (UTC) and JVM (KST) zones can differ by hours.
 - **`upsert` never syncs `active` after the first insert.** Chat toggles (`setActive`) own that flag; a yaml
   reboot must not reactivate what an admin deactivated, and a row differing only in `active` is a no-op.
+  Not writing the field is not enough on its own: Hibernate's default UPDATE sets every column, so an upsert
+  holding a stale managed row would write the old `active` back. The locked read keeps a concurrent
+  `setActive` waiting until the sync commits, and `CveTopicSchema` stays `@DynamicUpdate` as the second guard.
+  A stale managed row needs the upsert to join a transaction that already loaded it, which `upsert` now refuses
+  (`JpaCveTopicRepositoryTest` pins the refusal), so no test reaches `@DynamicUpdate` any more.
+- **Every `upsert` transaction starts with the locking read.** Production MariaDB (12.0.2) runs REPEATABLE READ
+  with `innodb_snapshot_isolation` ON (default since 11.6.2): once a transaction has done a plain read, a
+  locking read or UPDATE of a row another transaction committed after it fails with ER_CHECKREAD 1020
+  (Hibernate `SnapshotIsolationException`, which `configurations/SnapshotIsolationExceptionTranslator` hands
+  callers as `SnapshotIsolationConflictException`; both old orders reproduced on MariaDB 12.3.3). A plain
+  `findByTopicKey` before the lock, or one transaction around the insert and the re-read, brings the failure
+  back on a two-replica boot; so does a caller's transaction, which `upsert` joins under `REQUIRED`, and there
+  its `REQUIRES_NEW` insert can also wait on the gap lock the caller's locked read of a missing key holds, until
+  `innodb_lock_wait_timeout` (inferred from InnoDB locking, not run). Hence the fail-fast check. `CveTopicRepositoryImplTest` models the rule with
+  `SnapshotIsolationTransactionManager`; H2 cannot raise 1020.
 - **Native bulk updates bypass `@UpdateTimestamp`**, so every CAS sets `updated_at` explicitly. The
   dead-letter revives (`resetDeadLetters` / `resetDeadLetter`) deliberately do not — nothing reads
   `updated_at` on PENDING rows and the next claim re-stamps it.

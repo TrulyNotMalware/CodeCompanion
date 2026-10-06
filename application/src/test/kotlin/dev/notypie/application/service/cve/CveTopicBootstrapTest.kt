@@ -41,6 +41,60 @@ class CveTopicBootstrapTest :
             }
         }
 
+        given("two declarations whose keys differ only in case") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            val bootstrap =
+                CveTopicBootstrap(
+                    topics =
+                        listOf(
+                            createCveTopicConfigDefinition(key = "springBoot"),
+                            createCveTopicConfigDefinition(key = "springboot"),
+                        ),
+                    cveTopicRepository = cveTopicRepository,
+                )
+
+            `when`("the boot sync runs") {
+                then("boot fails before touching the repository, since keys are matched ignoring case") {
+                    shouldThrow<IllegalArgumentException> { bootstrap.bootstrapTopics() }
+                    verify(exactly = 0) { cveTopicRepository.upsert(definition = any()) }
+                }
+            }
+        }
+
+        given("display names measured against the 128-character column") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            every { cveTopicRepository.upsert(definition = any()) } returns true
+
+            `when`("a name has 128 emoji, 256 UTF-16 units but 128 characters") {
+                val bootstrap =
+                    CveTopicBootstrap(
+                        topics = listOf(createCveTopicConfigDefinition(displayName = "😀".repeat(n = 128))),
+                        cveTopicRepository = cveTopicRepository,
+                    )
+
+                then("it is accepted") {
+                    bootstrap.bootstrapTopics()
+                    verify(exactly = 1) { cveTopicRepository.upsert(definition = any()) }
+                }
+            }
+
+            `when`("a name has 129 characters") {
+                val bootstrap =
+                    CveTopicBootstrap(
+                        topics =
+                            listOf(
+                                createCveTopicConfigDefinition(key = "long", displayName = "n".repeat(n = 129)),
+                            ),
+                        cveTopicRepository = cveTopicRepository,
+                    )
+
+                then("boot fails before touching the repository") {
+                    shouldThrow<IllegalArgumentException> { bootstrap.bootstrapTopics() }
+                    verify(exactly = 0) { cveTopicRepository.upsert(definition = match { it.topicKey == "long" }) }
+                }
+            }
+        }
+
         given("a declaration with a blank key") {
             val cveTopicRepository = mockk<CveTopicRepository>()
             val bootstrap =

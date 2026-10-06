@@ -12,6 +12,7 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.RoutineMember
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -29,33 +30,43 @@ class StandupRoutineSetupService(
     @EventListener
     fun createRoutine(event: CreateStandupRoutineEvent) {
         val payload = event.payload
+        // Only input validation is caught: a failed write has already marked the caller's transaction rollback-only.
         val message =
-            runCatching { persistRoutine(payload = payload) }
+            runCatching { buildRoutine(payload = payload) }
                 .fold(
-                    onSuccess = { routine -> confirmationMessage(routine = routine) },
+                    onSuccess = { routine ->
+                        confirmationMessage(routine = standupRepository.createRoutine(routine = routine))
+                    },
                     onFailure = { exception ->
                         setupLog.warn(exception) {
                             "Standup routine setup rejected: name=${payload.name} creatorId=${payload.creatorId} " +
                                 "idempotencyKey=${event.idempotencyKey}"
                         }
-                        "Couldn't create the standup routine: ${exception.message ?: "invalid input"}. " +
+                        val reason = exception.message?.escapeMrkdwn() ?: "invalid input"
+                        "Couldn't create the standup routine: $reason. " +
                             "_Please run /standup setup again and review your inputs._"
                     },
                 )
+        // A DM: an ephemeral in the command channel fails with no_permission when the bot is not a member there.
+        val replyInfo = payload.responseBasicInfo.copy(channel = payload.creatorId)
         outboundStager
             .stage(
                 message =
-                    OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = payload.responseBasicInfo.channel),
-                        recipient = null,
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = replyInfo.channel),
                         content = MessageContent.Text(headline = null, markdown = message),
                         detailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
                     ),
-                basicInfo = payload.responseBasicInfo,
+                basicInfo = replyInfo,
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    private fun persistRoutine(payload: CreateStandupRoutinePayload): Routine {
+    private fun buildRoutine(payload: CreateStandupRoutinePayload): Routine {
+        val cutoffMinutes =
+            requireNotNull(payload.cutoffMinutes) {
+                "cutoff must be a whole number of minutes between ${Routine.MIN_CUTOFF_MINUTES} and " +
+                    "${Routine.MAX_CUTOFF_MINUTES}"
+            }
         val routine =
             Routine(
                 name = payload.name,
@@ -64,7 +75,7 @@ class StandupRoutineSetupService(
                 summaryChannel = payload.summaryChannel,
                 questions = payload.questions,
                 triggerLocalTime = payload.triggerLocalTime,
-                cutoffOffset = Duration.ofMinutes(payload.cutoffMinutes),
+                cutoffOffset = Duration.ofMinutes(cutoffMinutes),
                 weekdays = payload.weekdays,
                 routineTimezone = payload.timezone,
             )
@@ -73,7 +84,7 @@ class StandupRoutineSetupService(
                 member = RoutineMember(userId = memberId, userTimezone = payload.timezone),
             )
         }
-        return standupRepository.createRoutine(routine = routine)
+        return routine
     }
 
     private fun confirmationMessage(routine: Routine): String {
@@ -83,7 +94,7 @@ class StandupRoutineSetupService(
                 .sortedBy { it.value }
                 .joinToString(", ") { day -> day.name.lowercase().replaceFirstChar { it.uppercase() } }
         val triggerTime = routine.triggerLocalTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-        return "Standup routine *${routine.name}* created — ${routine.questions.size} questions, " +
+        return "Standup routine *${routine.name.escapeMrkdwn()}* created — ${routine.questions.size} questions, " +
             "members $members, weekdays $weekdays, daily at $triggerTime."
     }
 }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # application/mcp
 
@@ -17,8 +17,8 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
 ## Key Files
 | File | Description |
 |------|-------------|
-| `McpToolGate.kt` | `class McpToolGate(commandRoleResolver, mcpToolCallHistoryRepository)`. `execute(transportContext, toolName, requiredPermission, argumentsSummary = null, body: (ScopedTurnToken) -> String): CallToolResult` — reads the token under `SCOPED_TURN_TOKEN_CONTEXT_KEY` (missing → "Unauthenticated tool call." error), resolves `UserRole` via `CommandRoleResolver.resolve(userId)`, checks `role.grants(permission)`, runs `body`, and writes one `McpToolCallRecord` (`COMPLETED` / `DENIED` / `FAILED`, duration, `argumentsJson`) per call. Audit writes are `runCatching` — they never fail the tool |
-| `DomainReadTools.kt` | `class DomainReadTools(mcpToolGate, opsStatusService, roleManagementService, meetingRepository, clock = Clock.systemDefaultZone())`. `@McpTool get_status` (`OPERATIONS`) → `OpsStatusService.renderReport()`; `@McpTool list_meetings(daysAhead: Int?)` (`BASIC`, window coerced to `1..31`, default 7) → `meetingRepository.getMeetingsByUserIdInRange(userId = token.userId, ...)` rendered as `• title — yyyy-MM-dd HH:mm (host <@id>, N participant(s))`, canceled meetings dropped; `@McpTool list_roles` (`ADMINISTRATION`) → `RoleManagementService.renderGrants()` |
+| `McpToolGate.kt` | `class McpToolGate(commandRoleResolver, mcpToolCallHistoryRepository)`. `execute(transportContext, toolName, requiredPermission, argumentsSummary = null, body: (ScopedTurnToken) -> String): CallToolResult` — reads the token under `SCOPED_TURN_TOKEN_CONTEXT_KEY` (missing → "Unauthenticated tool call." error), resolves the role via `CommandRoleResolver.resolution(userId)`, checks `role.grants(permission)`, runs `body`, and writes one `McpToolCallRecord` (`COMPLETED` / `DENIED` / `FAILED`, duration, `argumentsJson`) per call. A denial whose role is the resolver's lookup-failure fallback (`lookupFailed`) is answered as an execution failure ("failed to execute. Try again…") and audited `FAILED` with `errorCode = "RoleLookupFailed"`, so a role-store outage never reads as an ADMIN being refused; a fallback `USER` still runs tools `USER` may use. Audit writes are `runCatching` — they never fail the tool |
+| `DomainReadTools.kt` | `class DomainReadTools(mcpToolGate, opsStatusService, roleManagementService, meetingRepository, clock)`. `@McpTool get_status` (`OPERATIONS`) → `OpsStatusService.renderReport()`; `@McpTool list_meetings(daysAhead: Int?)` (`BASIC`, window coerced to `1..31`, default 7) → `meetingRepository.getMeetingsByUserIdInRange(userId = token.userId, ...)` rendered as `• title — yyyy-MM-dd HH:mm (host <@id>, N participant(s))`, canceled meetings dropped; `@McpTool list_roles` (`ADMINISTRATION`) → `RoleManagementService.renderGrants()` Meeting titles in `list_meetings` output go through `domain/common/escapeMarkup()`: the model often echoes tool text, and the AI reply path only neutralises `<!…>` broadcasts, so an unescaped `<https://evil|label>` title would reach Slack as a disguised link. |
 
 ## For AI Agents
 
@@ -28,7 +28,9 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
   through `mcpToolGate.execute { token -> ... }`.
 - The token carries no role on purpose. `McpToolGate` calls `CommandRoleResolver.resolve` on every
   invocation so a `@bot revoke` mid-conversation takes effect on the next tool call. Never cache the
-  role or move the check into the token claims.
+  role or move the check into the token claims. The resolver caches only `USER` answers
+  (`CommandRoleResolver.CACHE_TTL` 60 s per JVM), so a revoke applies to the next tool call on every
+  replica; only a grant can lag up to 60 s on a replica that still caches the user as `USER`.
 - Pass `argumentsSummary` for any tool with parameters (`list_meetings` sends
   `{"daysAhead":N}`); it is what lands in `mcp_tool_call_history.arguments_json`.
 - Error text returned to the model is deliberately generic ("`tool` failed to execute...").

@@ -1,36 +1,146 @@
 package dev.notypie.application.security
 
+import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
 
 data class SlackRequestFingerprint(
     val method: String,
-    val requestUri: String,
-    val timestamp: String,
-    val signature: String,
+    val requestPath: String,
+    val bodyHash: String,
+) {
+    companion object {
+        fun of(method: String, requestPath: String, body: ByteArray): SlackRequestFingerprint =
+            SlackRequestFingerprint(
+                method = method,
+                requestPath = requestPath,
+                bodyHash = MessageDigest.getInstance("SHA-256").digest(body).toHexString(),
+            )
+    }
+}
+
+data class SlackRetryTicket(
+    val fingerprint: SlackRequestFingerprint,
+    val generation: Long,
 )
 
+sealed interface SlackRetryAdmission {
+    data class FirstAttempt(
+        val ticket: SlackRetryTicket,
+    ) : SlackRetryAdmission
+
+    data object Untracked : SlackRetryAdmission
+
+    data object RetryOfInFlight : SlackRetryAdmission
+
+    data object RetryOfCompleted : SlackRetryAdmission
+}
+
 interface SlackRetryDeduplicator {
-    fun isDuplicateRetry(fingerprint: SlackRequestFingerprint, retryNum: String?): Boolean
+    fun admit(fingerprint: SlackRequestFingerprint, retryNum: String?): SlackRetryAdmission
+
+    fun markCompleted(ticket: SlackRetryTicket)
+
+    fun markFailed(ticket: SlackRetryTicket)
 }
 
 class InMemorySlackRetryDeduplicator(
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
     private val ttl: Duration = Duration.ofMinutes(10),
+    private val maxEntries: Int = 10_000,
 ) : SlackRetryDeduplicator {
-    private val seen = ConcurrentHashMap<SlackRequestFingerprint, Long>()
+    private enum class State { IN_FLIGHT, COMPLETED }
 
-    override fun isDuplicateRetry(fingerprint: SlackRequestFingerprint, retryNum: String?): Boolean {
-        val now = clock.millis()
-        evictExpired(now = now)
+    private data class Entry(
+        val state: State,
+        val recordedAt: Long,
+        val generation: Long,
+    )
 
-        val previous = seen.putIfAbsent(fingerprint, now)
-        return previous != null && retryNum != null
+    private val entries = ConcurrentHashMap<SlackRequestFingerprint, Entry>()
+    private val generations = AtomicLong(0L)
+    private val lastSweepAt = AtomicLong(0L)
+    private val trimLock = ReentrantLock()
+    private val trimTarget: Int
+
+    init {
+        require(maxEntries > 0) { "maxEntries must be positive: $maxEntries" }
+        trimTarget = maxEntries * 9 / 10
     }
 
-    private fun evictExpired(now: Long) {
-        val cutoff = now - ttl.toMillis()
-        seen.entries.removeIf { (_, seenAt) -> seenAt < cutoff }
+    override fun admit(fingerprint: SlackRequestFingerprint, retryNum: String?): SlackRetryAdmission {
+        val now = clock.millis()
+        sweepIfDue(now = now)
+        if (entries.size >= maxEntries) trimCompleted()
+        var admission: SlackRetryAdmission = SlackRetryAdmission.Untracked
+        entries.compute(fingerprint) { _, existing ->
+            when {
+                existing == null && entries.size >= maxEntries -> {
+                    admission = SlackRetryAdmission.Untracked
+                    null
+                }
+
+                existing == null || isExpired(entry = existing, now = now) -> {
+                    val ticket = SlackRetryTicket(fingerprint = fingerprint, generation = generations.incrementAndGet())
+                    admission = SlackRetryAdmission.FirstAttempt(ticket = ticket)
+                    Entry(state = State.IN_FLIGHT, recordedAt = now, generation = ticket.generation)
+                }
+
+                existing.state == State.IN_FLIGHT -> {
+                    admission = SlackRetryAdmission.RetryOfInFlight
+                    existing
+                }
+
+                else -> {
+                    admission = SlackRetryAdmission.RetryOfCompleted
+                    existing
+                }
+            }
+        }
+        return admission
+    }
+
+    override fun markCompleted(ticket: SlackRetryTicket) {
+        entries.computeIfPresent(ticket.fingerprint) { _, entry ->
+            if (entry.generation == ticket.generation) {
+                entry.copy(state = State.COMPLETED, recordedAt = clock.millis())
+            } else {
+                entry
+            }
+        }
+    }
+
+    override fun markFailed(ticket: SlackRetryTicket) {
+        entries.computeIfPresent(ticket.fingerprint) { _, entry ->
+            if (entry.generation == ticket.generation) null else entry
+        }
+    }
+
+    internal fun trackedEntries(): Int = entries.size
+
+    private fun isExpired(entry: Entry, now: Long): Boolean = entry.recordedAt < now - ttl.toMillis()
+
+    private fun sweepIfDue(now: Long) {
+        val last = lastSweepAt.get()
+        if (now - last < ttl.toMillis() / 2 || !lastSweepAt.compareAndSet(last, now)) return
+        entries.entries.removeIf { (_, entry) -> isExpired(entry = entry, now = now) }
+    }
+
+    private fun trimCompleted() {
+        if (!trimLock.tryLock()) return
+        try {
+            val excess = entries.size - trimTarget
+            if (excess <= 0) return
+            entries.entries
+                .filter { (_, entry) -> entry.state == State.COMPLETED }
+                .sortedBy { (_, entry) -> entry.recordedAt }
+                .take(excess)
+                .forEach { (fingerprint, entry) -> entries.remove(fingerprint, entry) }
+        } finally {
+            trimLock.unlock()
+        }
     }
 }

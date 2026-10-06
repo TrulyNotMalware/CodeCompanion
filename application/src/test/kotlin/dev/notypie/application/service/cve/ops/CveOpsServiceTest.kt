@@ -129,6 +129,74 @@ class CveOpsServiceTest :
             }
         }
 
+        given("topic names and keys carrying Slack control sequences") {
+            val topicRepository = mockk<CveTopicRepository>(relaxed = true)
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findAllTopics() } returns
+                listOf(createCveTopic(id = 1L, topicKey = "r&d", displayName = "<!channel>", active = true))
+            every { eventRepository.countEventsByTopic(topicIds = listOf(1L)) } returns emptyList()
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stagedMessage = staged,
+                )
+
+            `when`("the topics are listed") {
+                service.handleCveOps(event = createCveOpsRequestEvent(action = CveOpsAction.LIST_TOPICS))
+
+                then("the name and key are escaped") {
+                    staged.markdown() shouldContain "• *&lt;!channel&gt;* (`r&amp;d`) — "
+                }
+            }
+
+            `when`("the topic is toggled") {
+                service.handleCveOps(
+                    event = createCveOpsRequestEvent(action = CveOpsAction.DEACTIVATE_TOPIC, topicKey = "r&d"),
+                )
+
+                then("the echoed name and key are escaped") {
+                    staged.markdown() shouldBe "Topic *&lt;!channel&gt;* (`r&amp;d`): active → inactive."
+                }
+            }
+
+            `when`("an unknown key is typed") {
+                service.handleCveOps(
+                    event = createCveOpsRequestEvent(action = CveOpsAction.ACTIVATE_TOPIC, topicKey = "<!here>"),
+                )
+
+                then("the echoed key is escaped") {
+                    staged.markdown() shouldBe "No CVE topic with key `&lt;!here&gt;`."
+                }
+            }
+        }
+
+        given("a DEACTIVATE_TOPIC event whose key the mention parser lower-cased") {
+            val topicRepository = mockk<CveTopicRepository>(relaxed = true)
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findAllTopics() } returns
+                listOf(createCveTopic(id = 1L, topicKey = "springBoot", displayName = "Spring Boot", active = true))
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stagedMessage = staged,
+                )
+
+            `when`("handled") {
+                service.handleCveOps(
+                    event = createCveOpsRequestEvent(action = CveOpsAction.DEACTIVATE_TOPIC, topicKey = "springboot"),
+                )
+
+                then("the stored mixed-case key is found and toggled") {
+                    verify(exactly = 1) { topicRepository.setActive(topicKey = "springBoot", active = false) }
+                    staged.markdown() shouldBe "Topic *Spring Boot* (`springBoot`): active → inactive."
+                }
+            }
+        }
+
         given("an ACTIVATE_TOPIC event for an unknown key") {
             val topicRepository = mockk<CveTopicRepository>(relaxed = true)
             val eventRepository = mockk<CveEventRepository>()

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # k8s/route
 
@@ -11,8 +11,8 @@ applied by CI.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `httpRoute.yaml` | `gateway.networking.k8s.io/v1` HTTPRoute `code-companion-http-route`; `PathPrefix /` → `code-companion-svc:80`. Placeholders: `metadata.namespace` (`your-namespace`), `parentRefs[0].name` (`api-gateway-name`), `.namespace` (`gateway-vendor-namespace`), `.sectionName` (`gateway-section-name`), `hostnames[0]` (`your.uri`) |
-| `ingress.yaml` | `networking.k8s.io/v1` Ingress `code-companion-ingress` with `kubernetes.io/ingress.class: nginx`, TLS via `cert-manager.io/cluster-issuer`; `Prefix /` → `code-companion-svc:80`. Placeholders: `cert-manager.io/cluster-issuer` (`your-cluster-issuer`), `tls[0].hosts[0]` and `rules[0].host` (`your.uri`), `tls[0].secretName` (`your-secret-tls`) |
+| `httpRoute.yaml` | `gateway.networking.k8s.io/v1` HTTPRoute `code-companion-http-route`; one rule matching `PathPrefix /api/slack` or `PathPrefix /api/slash` → `code-companion-svc:80`. Placeholders: `metadata.namespace` (`your-namespace`), `parentRefs[0].name` (`api-gateway-name`), `.namespace` (`gateway-vendor-namespace`), `.sectionName` (`gateway-section-name`), `hostnames[0]` (`your.uri`) |
+| `ingress.yaml` | `networking.k8s.io/v1` Ingress `code-companion-ingress` with `kubernetes.io/ingress.class: nginx`, TLS via `cert-manager.io/cluster-issuer`; two `Prefix` paths, `/api/slack` and `/api/slash` → `code-companion-svc:80`. Placeholders: `cert-manager.io/cluster-issuer` (`your-cluster-issuer`), `tls[0].hosts[0]` and `rules[0].host` (`your.uri`), `tls[0].secretName` (`your-secret-tls`) |
 
 ## For AI Agents
 
@@ -27,9 +27,16 @@ applied by CI.
   will not pick the object up.
 - The TLS host and the rule host are the same placeholder value and have to be replaced together; cert-manager
   writes the certificate into `secretName`, so that Secret must not pre-exist with other content.
-- Both routes forward everything under `/`. The deploy workflow probes `/api/slack/actuator/health`, so the
-  production edge does prefix handling these samples do not express; do not "fix" the samples to add a
-  rewrite without checking the live Gateway.
+- Both routes forward only `/api/slack` and `/api/slash` (the paths `SlackEventController` and
+  `SlashCommandController` serve), without any rewrite. Both match types are element-wise, so `/api/slackx` does
+  not match. **Do not widen them to `/api` or `/`:** the app serves the unauthenticated actuator at `/actuator`
+  (prod) or `/api/actuator` (dev, local and slack-live, where local also exposes `loggers` and `threaddump`), and
+  `/mcp`, on the same port, and none of them may be reachable from outside. A new public controller path needs a
+  new entry in both files. The production host is not served by these samples:
+  it is fronted by a bearer-authenticating layer outside this repository (on 2026-09-28 every probed path, nonexistent
+  ones included, answered `401` with `WWW-Authenticate: Bearer`, except `GET /actuator/health`, which answered a
+  `404` JSON body that is not this application's error format), so which paths it forwards to the app is unknown
+  from outside and has to be confirmed by whoever operates it.
 - The backend name and port are hard-coded to `code-companion-svc` / `80`; renaming the Service in
   `../service.yaml` breaks both files silently (the objects apply fine and return 503).
 - Same CI caveat as the parent: YAML here counts as source for the lint, test and deploy triggers.
@@ -38,7 +45,10 @@ applied by CI.
 - No automated coverage. `kubectl apply --dry-run=server -f <file>` validates against the installed CRDs;
   for the HTTPRoute, check `kubectl get httproute -n <ns> -o yaml` shows `Accepted=True` and
   `ResolvedRefs=True` after applying.
-- End-to-end, the deploy workflow's health probe is the only check that traffic actually reaches the Pod.
+- The deploy workflow's health check goes through the API server's service proxy, not through these routes,
+  so it does not prove external reachability. A signed Slack request that shows up in the app's logs does; a `401`
+  from outside does not, because the edge in front of the production host answered `401` for every probed path
+  but one (`GET /actuator/health`, a `404` that did not come from this app either).
 
 ### Common Patterns
 - Placeholders are lower-case `your-*` / `your.uri`; keep that convention so README's "Configure:" lists

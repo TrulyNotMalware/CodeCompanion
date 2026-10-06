@@ -40,6 +40,14 @@ class RoutineTest :
                     routine.memberSnapshot().size shouldBe 0
                 }
             }
+
+            `when`("cutoffOffset sits exactly on the one-day upper bound") {
+                val routine = createRoutine(cutoffOffset = Duration.ofMinutes(Routine.MAX_CUTOFF_MINUTES))
+
+                then("it is accepted") {
+                    routine.cutoffOffset shouldBe Duration.ofMinutes(Routine.MAX_CUTOFF_MINUTES)
+                }
+            }
         }
 
         given("Routine creation with invalid data") {
@@ -99,6 +107,22 @@ class RoutineTest :
                 }
             }
 
+            `when`("cutoffOffset exceeds one day") {
+                then("rejects — a cutoff past 24 h would overlap the next day's session") {
+                    shouldThrow<ValidationExceptionWithName> {
+                        createRoutine(cutoffOffset = Duration.ofMinutes(Routine.MAX_CUTOFF_MINUTES + 1L))
+                    }
+                }
+            }
+
+            `when`("cutoffOffset is far past what Instant arithmetic can add") {
+                then("rejects before it can reach the scheduler") {
+                    shouldThrow<ValidationExceptionWithName> {
+                        createRoutine(cutoffOffset = Duration.ofMinutes(1_000_000_000_000_000L))
+                    }
+                }
+            }
+
             `when`("too many questions are provided") {
                 then("rejects beyond MAX_QUESTIONS to keep the modal compact") {
                     shouldThrow<ValidationExceptionWithName> {
@@ -136,6 +160,21 @@ class RoutineTest :
                             member = createRoutineMember(userId = "U_OVER", userTimezone = ZoneId.of("UTC")),
                         )
                     }
+                }
+            }
+
+            `when`("a routine already at MAX_MEMBERS re-adds one of its existing members") {
+                val routine = createRoutine()
+                (1..Routine.MAX_MEMBERS).forEach { idx ->
+                    routine.addMember(
+                        member = createRoutineMember(userId = "U_$idx", userTimezone = ZoneId.of("UTC")),
+                    )
+                }
+                routine.addMember(member = createRoutineMember(userId = "U_1", userTimezone = ZoneId.of("Asia/Tokyo")))
+
+                then("the duplicate replaces the entry instead of failing the capacity check") {
+                    routine.memberSnapshot().size shouldBe Routine.MAX_MEMBERS
+                    routine.memberSnapshot().single { it.userId == "U_1" }.userTimezone shouldBe ZoneId.of("Asia/Tokyo")
                 }
             }
         }

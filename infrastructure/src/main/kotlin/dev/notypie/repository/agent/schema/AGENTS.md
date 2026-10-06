@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
 
 # infrastructure/repository/agent/schema
 
@@ -9,7 +9,7 @@ JPA entities for the agent lane.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentSessionSchema.kt` | `@Entity(name = "agent_session")`, `uk_agent_session_session_key` on `session_key` (160). `id` IDENTITY, `session_key`, `provider_session_id` (255, `var`), `created_at` (`@CreationTimestamp`), `updated_at` (`@UpdateTimestamp`) |
+| `AgentSessionSchema.kt` | `@Entity(name = "agent_session")`, `uk_agent_session_session_key` on `session_key` (160). `id` IDENTITY, `session_key`, `provider_session_id` (255, `val` — rows are written only by the native upsert in `JpaAgentSessionRepository`), `created_at` (`@CreationTimestamp`), `updated_at` (`@UpdateTimestamp`); the upsert sets both timestamps from the caller's `now`, so the annotations apply only to a JPA insert, which nothing does today |
 | `AgentTurnHistorySchema.kt` | `enum AgentTurnOutcome { COMPLETED, BUSY, FAILED }`; `@Entity(name = "agent_turn_history")` with indexes on `created_at` and `session_key`. Columns: `session_key` (160), `requester_id` (255), `channel` (255), `idempotency_key` (36), `outcome` `@Enumerated(STRING)` (16), `error_code?` (64), `input_tokens?`, `output_tokens?`, `duration_ms`, `created_at` |
 
 ## For AI Agents

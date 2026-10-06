@@ -1,19 +1,23 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-09-21_
+_type: guide · updated: 2026-10-03_
 
-> JDK 25 · Gradle 9.7.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
+> JDK 25 · Gradle 9.8.0 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
 ## 툴체인과 Gradle 프리셋
 
 - **JDK 25 (Adoptium)는 필수다.** 루트 `build.gradle.kts`가 `toolchain { languageVersion = 25, vendor = ADOPTIUM }`과
   `sourceCompatibility`/`targetCompatibility = 25`를 고정하고, `settings.gradle.kts`의 foojay resolver가 없는 JDK를 받아
   온다. Kotlin 2.4.10 · Spring Boot 4.1.1 · ktlint 14.2.0의 원본은 루트 빌드의 `plugins` 블록이다.
-- Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.7.1로 고정한다. 항상 `./gradlew`를 쓴다.
+- Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.8.0으로 고정한다. 항상 `./gradlew`를 쓴다.
 - `gradle.properties`는 **생성물이며 git-ignored**다. `./gradle-config/apply.sh`가 `uname -s`로 OS를 판별해
   `gradle-config/gradle-{macos,linux}.properties` 중 하나를 루트로 복사하고, 프리셋이 없는 OS(Windows 등)와
   `apply.sh common`은 `gradle-common.properties`로 폴백한다. 공유 빌드 설정을 바꿀 때는 루트 파일이 아니라 프리셋을 고치고
-  다시 적용한다. 재실행 시 남는 `gradle.properties.backup.*`도 git-ignored다. CI 테스트 워크플로도 같은 스크립트를 먼저 돌린다.
+  다시 적용한다. 재실행 시 남는 `gradle.properties.backup.*`도 git-ignored다. CI 테스트·배포 빌드는 같은 스크립트를
+  `apply.sh ci`로 돌려 16GB 러너용 `gradle-ci.properties`(Gradle 3g · Kotlin 3g 데몬, `workers.max=4`, `testMaxHeap=2g`)를
+  쓴다 — Linux 프리셋의 8g + 6g 데몬에 포크 테스트 JVM까지 얹으면 러너 메모리를 넘는다. 모듈 세 개의 테스트 JVM이 병렬로
+  뜨므로 기본 `-Xmx4g`면 3g + 3g + 3 x 4g = 18GB라, CI는 `testMaxHeap=2g`로 12GB 이내에 둔다(2026-10-01, 로컬에서 2g로
+  전체 스위트 통과 확인). `ci`는 OS 판별로는 절대 선택되지 않는다.
 - 프리셋 안의 `kotlin.version` 키는 어떤 빌드 스크립트도 읽지 않는 메타데이터다. 플러그인 버전과 맞춰 두되 원본으로 믿지 않는다.
 - ktlint 훅은 `./gradlew addKtlintCheckGitPreCommitHook`이 `.git/hooks/pre-commit`으로 설치한다. 스테이지된 `.kt`/`.kts`만
   검사하며, 검사 동안 **unstaged diff를 잠시 되돌렸다가 복원**한다(`git apply -R`). 포맷 규칙 원본은 `.editorconfig`(120 컬럼,
@@ -37,7 +41,6 @@ _type: guide · updated: 2026-09-21_
   맡는다 — 상세는 [events-and-outbox.md](events-and-outbox.md).
 - `local`만 `slack.app.api.app-token`(Socket Mode app-level token)과 `slack.app.socket.meeting-command` /
   `standup-command`를 가진다. 수신기 `SocketModeReceiver`는 `@Profile("local")`이라 다른 프로파일에서는 빈 자체가 없다.
-  루트 `AGENTS.md`와 `application/build.gradle.kts` 주석이 말하는 `socket` 프로파일은 존재하지 않는다 — 코드가 원본이다.
 - AI 사이드카 설정 키(`slack.app.agent.sidecar.base-url` / `bearer-secret` / `request-timeout-seconds`)는 `local`과
   `prod` YAML에만 있다. 빈 자체(`AgentGateway`, `AgentConverseService`)는 `AgentConfiguration`이 프로파일과 무관하게
   만들고 `AppConfig`의 루프백 기본 URL을 쓰므로, 키가 없는 프로파일은 "미연결"이 아니라 "기본값으로 연결 시도"다.
@@ -47,8 +50,35 @@ _type: guide · updated: 2026-09-21_
   (`AI_PROVIDER`, 기본 `noop`)로 조정하지만, **`slack.app.cve.enabled`는 어떤 프로파일도 켜지 않는다**(코드 기본 false) —
   켜려면 env 또는 `--slack.app.cve.enabled=true` 인자가 필요하다. `spring.lifecycle.timeout-per-shutdown-phase` 10s,
   `spring.kafka.consumer.isolation-level: read_committed`도 `prod` 전용이다.
-- `spring.threads.virtual.enabled`는 네 프로파일 모두 on. `slack.app.api.signing-secret`이 비면
-  `SlackRequestVerificationFilter`가 경고만 남기고 서명 검증을 끈다 — `slack-live`는 의도적으로 선택, `dev`는 키가 아예 없다.
+- `spring.threads.virtual.enabled`는 네 프로파일 모두 on. `slack.app.api.signing-secret`은 `dev`·`prod`·`slack-live`에서
+  `${SLACK_SIGNING_SECRET}`(기본값 없음)이다. 2026-09-28에 `slack-live`의 빈 기본값을 제거했다 — 그 프로파일은 터널로 실제
+  Slack 앱에 연결되는데 빈 시크릿이면 필터가 검증을 끈다. 기본값이 없다는 것만으로는 fail-fast가 아니다(Boot 바인더는 미해결
+  플레이스홀더를 리터럴로 보존) — 기동 거부는 `local` 외 프로파일에서 빈 값·미해결 값을 거절하는 애플리케이션 검증이 맡는다.
+  `local`만 빈 기본값을 유지한다(Socket Mode라 HTTP 수신이 없다).
+- actuator: `prod`와 `dev`는 `health,info,metrics,prometheus` + `show-details: when_authorized`(Spring Security가 없어 상세는 항상
+  가려지므로 outbox 상태는 `/actuator/prometheus`의 게이지로 본다).
+  `local`은 개발자 편의를 위해 `loggers`·`threaddump`·`mappings`·`conditions`까지 열고 `show-details: always`다 — 인증이 없으므로
+  `local`은 `server.address: 127.0.0.1`로 루프백에만 바인드한다(`run`의 기본 환경이 `local`이라 서버에서 `-e` 없이 띄워도 외부에 열리지
+  않게). `run`은 기본값을 바꾸지 않고 `local`로 띄울 때 그 사실과 서버에서는 `-e dev`/`-e prod`를 쓰라는 경고 두 줄을 찍는다. `heapdump`는 어느 프로파일에도 없다(덤프에 토큰이 실림).
+  `run` 스크립트는 더 이상 `-Dmanagement.endpoints.web.exposure.include`로 YAML을 덮지 않는다.
+- Kafka 컨슈머(`local`·`dev`·`prod`): `max-poll-records: 5`, `max.poll.interval.ms: 300000`. 한 번에 받은 5건을 300초 안에
+  끝내야 하므로 레코드당 평균 예산은 60초다. PENDING 행 레코드 1건은 Slack 디스패치 1회이고(나머지 CDC 이벤트는 즉시 반환),
+  레코드 1건의 최악 시간은 Slack HTTP 상한(산식과 합계는 `infrastructure/.../impl/command/AGENTS.md`에만 있다)과 SQL 대기
+  (풀 고갈 시 6 × Hikari `connection-timeout` + 약 0.3초, `application/.../service/relay/AGENTS.md`의 "Per-record
+  time budget")의 합이다. 풀이 고갈되면 60초를 넘을 수 있고, 그때는 리밸런스·재전달이 일어나지만 PENDING만 claim하므로
+  중복 발송은 없다. Slack 타임아웃·재시도 정책·`connection-timeout`·위 두 값을 바꾸거나 리스너 안에 대기를 넣을 때는
+  두 문서의 계산부터 다시 한다. 배치가 초과되면 컨슈머가
+  그룹에서 빠졌다가 재전달받는데, 이미 claim된 행은 PENDING이 아니므로 CDC 프로세서가 건너뛴다.
+- Hikari 풀: 모든 프로파일 `maximum-pool-size: 20`. 회의 cancel/reschedule/참가자 추가는 커넥션을 한 번에 하나만 쓴다: 핸들러가
+  `isolatedWriteTemplate`의 `REQUIRES_NEW` 쓰기를 interaction 트랜잭션이 커밋해 커넥션을 돌려준 뒤로 미룬다(핸들러 밖 인라인
+  호출만 둘을 잡는다). `agentTurnExecutor`가 가득 차 거절된 `@bot` 멘션은 둘을 잡는다: 과부하 안내는 `afterCompletion` 안의
+  `REQUIRES_NEW` 쓰기인데, 그때 커밋된 멘션 트랜잭션이 아직 커넥션을 쥐고 있다.
+  릴레이 executor·스케줄러·CDC 리스너가 같은 풀을 쓴다.
+  산정식: 동시 회의 interaction 수 + 같은 순간 거절된 멘션 수 × 2 + 릴레이 워커(`relayTaskExecutor` 4) + 스케줄러
+  스레드(4) + CDC 리스너(1) + DB를 쓰는 AI 턴(`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent` 4). 요청 스레드는 가상 스레드라 동시 interaction을
+  막는 것은 스레드 수가 아니라 풀이며, 커넥션을 못 얻은 요청은 `connection-timeout` 뒤 실패한다. MariaDB `max_connections`는
+  풀 × 파드 수를 담아야 한다: 레플리카 2 × 20 = 40(`Recreate` 블록이 있는 동안의 상한), 블록을 지운 뒤 롤링 업데이트 surge 중 60,
+  여기에 Debezium과 운영자 세션을 더한다.
 
 ## 로컬 실행 레시피
 
@@ -66,8 +96,9 @@ _type: guide · updated: 2026-09-21_
 - Kafka·Debezium 없이 orbstack MariaDB만 있으면 된다. `ngrok`/`cloudflared`로 9000 포트를 노출하고 Slack 앱의 Request URL
   세 개 — slash(`/api/slash/meet`, `/api/slash/standup`), Interactivity(`/api/slack/interaction`), Events(`/api/slack/events`)
   — 를 터널 주소로 잡는다. Events URL 검증(`url_verification`)은 앱이 먼저 떠 있어야 통과한다.
-- `SLACK_API_TOKEN`(선택 `SLACK_SIGNING_SECRET`)으로 `bootRun --args='--spring.profiles.active=slack-live'`. 헬스는
-  `/api/actuator/health`. devtools의 restart classloader가 기동을 깨면 `--spring.devtools.restart.enabled=false`를 붙인다.
+- `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `DATABASE_USER_PWD`(모두 필수, 기본값 없음)로
+  `bootRun --args='--spring.profiles.active=slack-live'`. 터널로 공개되는 포트라 actuator는 `/api/actuator/health`만 연다
+  (2026-10-01: DB 비밀번호 기본값 제거, `metrics`·`info` 노출 제거). devtools의 restart classloader가 기동을 깨면 `--spring.devtools.restart.enabled=false`를 붙인다.
 - 기능별 시나리오, 시간 단축용 `--slack.app.meeting.reminder.offsets-minutes` 류 오버라이드, DB 조회 스니펫은 git-ignored
   `RealTestSetup.md`(로컬 전용)에 있다.
 
@@ -84,6 +115,10 @@ _type: guide · updated: 2026-09-21_
   쓰려면 포트를 바꾼다(cdc README "Connecting the Application").
 - `cdc/k8s/yamls/mariadb/`는 클러스터용 MariaDB master/slave StatefulSet(1+2, `database` 네임스페이스, Pod ordinal 기반
   server-id, 복제 설정 Job)이다. 스토리지 클래스와 비밀번호가 플레이스홀더이고 `mariadb-headless` 이름이 세 파일에 걸쳐 맞물린다.
+- **시간대:** `cdc/`의 MariaDB(compose·k8s 모두)는 `TZ`·`default_time_zone`을 지정하지 않아 UTC로 돈다. 앱 파드는
+  `-Duser.timezone=Asia/Seoul` + `/etc/localtime` 마운트로 서울 시간이다. 아웃박스 시각(`updated_at` 등)은 이제 애플리케이션
+  시계(`Clock`)로 기록되므로 DB 세션 시간대(`NOW()`, `CURRENT_TIMESTAMP`)에 기대는 쿼리·운영 비교를 하지 않는다. 운영 DB의
+  실제 값은 `SELECT @@session.time_zone, NOW()`로 확인한다(미확인).
 
 ## 데이터베이스와 마이그레이션
 
@@ -94,8 +129,17 @@ _type: guide · updated: 2026-09-21_
   (무효 키였던 `enabled: false`는 2026-09-21에 제거). `db/migration/V*.sql`은 **사람이 수동으로 적용**한다.
 - 스키마 기동 방식: `local`/`slack-live`/`dev`는 `ddl-auto: update`로 Hibernate가 베이스 테이블을 만들고 `V*` 스크립트는 그 위에 얹는
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
-- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V17**(로컬 트리와 `origin/main` 모두), 다음은 **V18**. 번호를 정하기
+- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V23**(2026-10-02 작업 트리; 마지막으로 fetch한 `origin/main`은 V17), 다음은 **V24**. 번호를 정하기
   전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
+- **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈췄고 다음 릴리스가 V18~V23을 한꺼번에 싣는다.
+  운영 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
+  구 파드 종료 → 배포 → V21**이다. V21을 뺀 나머지는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 구 바이너리는 그것에 의존하지
+  않으므로 이전 릴리스가 떠 있는 동안 적용한다. V23은 헤더대로 크기를 재고 온라인 형식을 먼저 시도하며, 거부되고 테이블이 크면
+  배포와 보존 정리 뒤로 미룬다. "구 파드 종료 → 배포"는 `deployment.yaml`의 `Recreate` 롤아웃 한 번이 순서대로 수행한다. V21(뒤집힌
+  `end_at` 정리)은 모든 파드가 새 바이너리가 된 뒤에만 돌린다 — 구 바이너리의 일정 변경은 `version` 검사 없이 `start_at`만 옮겨
+  뒤집힌 행을 다시 만든다. readiness는 스키마를 검사하지 않으므로 V18이 빠지면 모든 `meetings` 조회가, V20·V22가 빠지면 모든
+  아웃박스 claim이 실패하는데도 배포 게이트는 통과한다. 머지 전에 `SHOW COLUMNS`로 `meetings.version`,
+  `outbox_message.attempt_count`·`send_count`를 확인한다. 절차 원본은 `k8s/README.md`와 `db/migration/AGENTS.md`다.
 - 새 엔티티는 JPA 스키마 클래스(`infrastructure/repository/*/schema/`)와 마이그레이션을 **둘 다** 추가한다. H2/`ddl-auto` 테스트는
   MariaDB 전용 문법 오류를 잡지 못하므로 `slack-live` DB에 한 번 적용해 본다.
 
@@ -105,8 +149,8 @@ _type: guide · updated: 2026-09-21_
   토큰을 채워 두었다면 그 hunk를 절대 스테이징하지 않는다(`git add -p`). 명시적 요청이 없으면 작업 트리 값을 되돌리지도 않는다.
 - git-ignored 로컬 파일: `gradle.properties`(+`.backup.*`), `logs/`, `*.hprof`, `.omc/`, `.claude/`, 그리고 로컬 작업 문서
   `RealTestSetup.md` · `Handoff.md` · `Refactor.md` · `STYLE_GUIDE.local.md` · `CveBotPlan.md`.
-- k8s: `k8s/secret.yaml`(DB URL/계정, `SLACK_API_TOKEN`)과 `k8s/configmap.yaml`(격리 수준, 타임아웃, `ACTUATOR_BASE_PATH`,
-  배치 크기)은 플레이스홀더 템플릿이다. 실제 값은 클러스터에만 있고, 새 env는 `application-prod.yaml`의 `${VAR}`와 매니페스트
+- k8s: `k8s/secret.yaml`(`stringData:` — DB URL/계정, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`)과 `k8s/configmap.yaml`(격리 수준,
+  타임아웃, 배치 크기, `KAFKA_BOOTSTRAP_SERVERS`, `SLACK_CDC_TOPIC`)은 플레이스홀더 템플릿이다. 실제 값은 클러스터에만 있고, 새 env는 `application-prod.yaml`의 `${VAR}`와 매니페스트
   키 등록이 한 쌍이다.
 - gitleaks: `.gitleaks.toml`은 기본 룰을 확장하고 `cdc/k8s/yamls/mariadb/mariadb-config.yaml`만 경로 allowlist한다(샘플 Secret의
   플레이스홀더가 kubernetes-secret 룰에 걸리기 때문). 실제 유출은 allowlist가 아니라 회전 + 히스토리 재작성으로 처리한다. 테스트
@@ -118,13 +162,20 @@ _type: guide · updated: 2026-09-21_
 
 | 워크플로 | 트리거 | 하는 일 |
 |---|---|---|
-| `lint.yaml` | `feature/*` · `feat/*` · `features/*` · `dependabot/**` push | `./gradlew ktlintCheck` |
-| `simple_test_action.yaml` | 같은 브랜치 push | `apply.sh` 후 **변경된 모듈만** 테스트, gradle 파일 변경 시 전체 `test`; 실패 시 `build-reports.zip` |
+| `lint.yaml` | `feature/*` · `feat/*` · `features/*` · `dependabot/**` push, `main` 대상 모든 PR | `./gradlew ktlintCheck` |
+| `simple_test_action.yaml` | 같은 트리거 | `apply.sh ci` 후 **변경 모듈과 그 의존 모듈** 테스트, gradle·`gradle-config`·`domain` 변경 시 전체 `test`; 실패 시 `build-reports.zip` |
 | `security_check.yaml` | `main` push/PR, 매주 월 09:00 KST, 수동 | CodeQL(`java-kotlin`, 실제 컴파일), dependency-submission + PR review(`high` 이상 실패), gitleaks |
-| `deploy_action.yaml` | `main`으로 **머지된** PR | jar 빌드 → 멀티 아키 이미지 → Harbor push → `envsubst`로 `k8s/deployment.yaml` 적용(OKE) → rollout + 헬스 체크 → 실패 시 롤백 |
+| `deploy_action.yaml` | `main`으로 **머지된** PR | 전체 `build` → 멀티 아키 이미지 → Harbor push → `envsubst '${IMAGE_NAME}'`로 `k8s/deployment.yaml` 적용(OKE) → rollout + 클러스터 내부 readiness 확인(service proxy, 실패 시 `kubectl exec … wget`) → 배포 단계 실패 시 `rollout undo` |
 
-- 배포 빌드는 `:application:build -x test -PjarName=…`, 이미지는 QEMU/Buildx로 `linux/amd64,linux/arm64`. 배포 전에 현재 이미지를
-  기록해 두고 실패하면 `kubectl set image`로 되돌린다 — `Backup current deployment` 단계를 지우면 롤백이 조용히 no-op이 된다.
+- 배포 빌드는 테스트·`ktlintCheck`를 포함한 전체 `./gradlew build -PjarName=…`(잡 타임아웃 40분), 이미지는 QEMU/Buildx로
+  `linux/amd64,linux/arm64`. 워크플로는 `deploy-production` concurrency 그룹으로 직렬화된다(취소 없음, 대기 중인 실행은 더 새 머지로 대체될 수 있음).
+  머지되지 않고 닫힌 PR은 실행마다 별도 그룹(`deploy-skip-<run_id>`)을 받아 대기 중인 배포를 밀어내지 않는다. 배포 빌드는
+  `apply.sh ci`가 검증용 `./gradlew help`로 띄운 데몬을 그대로 재사용한다.
+- 롤백: 배포 전에 Deployment의 `deployment.kubernetes.io/revision`과 `.spec.template`의 sha256(`jq -cS`)을 기록하고, 실패 시
+  **파드 템플릿 해시 또는 리비전이 백업과 달라졌을 때만** `kubectl rollout undo --to-revision=<기록값>`으로 파드 템플릿 전체(이미지·
+  프로브·리소스)를 되돌린다. 템플릿을 비교하는 이유는 apply 직후 실패하면 리비전 주석(컨트롤러가 나중에 씀)이 아직 옛 값일 수 있어서다.
+  같은 SHA 재배포처럼 둘 다 그대로면 되돌리지 않고 그렇게 로그를 남기며, Deployment 조회가 3번 실패하면 비교 없이 undo한다(예전
+  `kubectl set image`는 매니페스트 변경을 못 되돌리고 거짓 성공 로그를 냈다).
 - Dependabot: gradle(`/`) · github-actions(`/`) · docker(`/application`) · docker-compose(CDC compose 디렉터리) 네 생태계, 매주 월 09:00 KST, 커밋 프리픽스 `chore :`.
   Kotlin 플러그인 3종 · Spring · 테스트 라이브러리는 그룹으로 묶여 한 PR로 온다. 루트 빌드의 버전은 `extra["x"] = "…"` 형태여야
   Dependabot이 읽는다. `dependabot/**` 브랜치 패턴이 lint·test 워크플로에 있어야 그 PR이 검증된다.
@@ -141,18 +192,55 @@ _type: guide · updated: 2026-09-21_
   ClusterIP Service, 라우팅은 HTTPRoute 또는 NGINX Ingress 중 택일. 클러스터가 ARM 인스턴스라 멀티 아키 이미지가 필수다.
 - AI 사이드카는 매니페스트에 없다. 켜려면 `restartPolicy: Always`인 native sidecar(`initContainers`)로 추가하고 `BEARER_SECRET`을
   `slack.app.agent.sidecar.bearer-secret`과 맞춘다(`k8s/README.md`).
-- 헬스: 배포 워크플로는 `K8S_APP_INGRESS_HOST` + `HEALTH_CHECK_ENDPOINT`(`/api/slack/actuator/health`)를 10회 재시도한다. 저장소의
-  `configmap.yaml`은 `ACTUATOR_BASE_PATH`를 `/actuator`로 두므로 `/api/slack` 접두는 저장소 밖 게이트웨이 설정에 달려 있다(미확인).
+- 헬스: 배포 워크플로는 공개 URL을 쓰지 않는다. 2026-09-28 `https://api.notypie.dev` 실측에서 존재하지 않는 경로까지 포함해
+  조사한 모든 경로가 GET/POST 모두 `401`(`WWW-Authenticate: Bearer`, `server: istio-envoy`)을 돌려줬고, `GET /actuator/health`만
+  이 앱의 형식이 아닌 JSON `404`를 돌려줬다. 즉 공개 호스트 앞에 이 저장소 밖의 bearer 인증 계층이 있고, 그 계층이 어떤 경로를
+  앱으로 넘기는지는 밖에서 알 수 없다(게이트웨이 운영자가 확인할 일). 401은 이 앱의 Slack 서명 필터가 응답했다는 증거가 아니다.
+  그래서 배포 잡은 클러스터 안에서 `/actuator/health/readiness`를 약 2분간 폴링해 `jq -e '.status == "UP"'`을 요구한다. 매 시도마다
+  API 서버 service proxy(`kubectl get --raw /api/v1/namespaces/api-service/services/code-companion-svc:80/proxy/...`, `services/proxy`
+  `get` 권한, `resourceNames`를 쓰면 이름은 `code-companion-svc:80`)를 먼저, 실패하면 현재 리비전 ReplicaSet의
+  `pod-template-hash`로 고른 파드 중 `deletionTimestamp`가 없는 **모든** 파드에 `kubectl exec <pod> -c code-companion-deploy --
+  wget -qO- http://localhost:80/...`(`pods/exec` `create`, `replicasets`·`pods` `list` 권한)를 시도하고 어느 쪽이 응답했는지 로그에
+  남긴다. 예전의 `kubectl exec deploy/<name>`은 종료 중인 파드를 거르지 않아, `rollout status` 직후 `preStop` 5초 동안 UP을
+  답하는 이전 파드로 게이트가 통과할 수 있었다. 집계 `/actuator/health`는 로그용으로 한 번만 읽는다 — 아웃박스 헬스 인디케이터가 릴리스와 무관하게 DOWN일 수 있어서다.
+  롤백은 apply·rollout·verify·health 단계가 실패했을 때만 돌고, 배포 전 백업과 비교해 파드 템플릿 해시나 리비전이 달라졌으면
+  `rollout undo`한다(리비전 주석은 컨트롤러가 나중에 쓰므로 템플릿을 비교한다. 조회가 3번 실패하면 비교 없이 undo). 샘플 라우트(`k8s/route/`)는 `/api/slack`·`/api/slash` 접두만 넘긴다 —
+  `/actuator`·`/api/actuator`(dev·local·slack-live)·`/mcp`는 무인증이라 외부로 라우팅하면 안 된다. prod의 actuator base path는 `application-prod.yaml`에 `/actuator`로 고정이다.
+- 파드 종료 예산: `preStop` 5초 sleep → Spring graceful shutdown(Kafka 리스너 단계는 처리 중인 레코드 하나를
+  `RECORD_SHUTDOWN_WAIT`만큼 기다림 — 프로필 조회·Slack 재시도·상태 기록 백오프 상수에서 코드로 계산한 디스패치 하나, 지금
+  46초; 웹 서버 드레인과 실행 중인 잡이 있는 스케줄러는 단계당 10초. 릴레이는 스케줄러와 Kafka 리스너 단계 바로 뒤에 동기로
+  멈춰 큐에 남은 claim을 보내지 않고 `IN_PROGRESS`로 둔다 — 대기 없음) → Kafka
+  producer 종료 세 번(앱 JSON producer와 DLT JSON·bytes producer, 각 5초, 단계 타임아웃 밖에서 동기로 닫힘) → executor 대기
+  (릴레이 `RECORD_SHUTDOWN_WAIT`, AI 턴 20초, 큐에 남은 턴의 안내 예산 3초 + 예산 안에 시작해 넘긴 안내 하나의 `connection-timeout`
+  5초, 기본 10초) = 170초 ⊂ `terminationGracePeriodSeconds` 180초, 여유 10초
+  (`ShutdownBudgetTest`가 코드·매니페스트·prod 프로파일로 다시 더하고 여유가 10초 아래면 실패). 그래서 SIGTERM 때 진행 중이던 디스패치는 풀과 DB가
+  정상이면 끝까지 보내고 상태를 기록한다(예산은 상태 기록의 SQL 시간을 0으로 센다). AI 턴은 닫기가 시작되면 새로 받지 않고(과부하 안내), 20초 대기가 끝날 때까지 시작하지
+  못한 큐의 턴은 버리면서 같은 안내를 outbox에 남긴다(`AgentTurnExecutor`). 안내는 3초 예산(`AGENT_TURN_DISCARD_BUDGET`) 안에서만
+  쓰고, 예산이 끝나면 남은 턴은 안내 없이 버린다(ERROR 한 줄, `agent.turns{outcome=dropped}`). 대기 뒤에도 돌고 있던 턴의 답은 여전히 잃는다.
+  풀이 고갈되면 문장마다 `connection-timeout`이 더해지고 상태 UPDATE가 잠금을 오래 기다려도 예산을 넘을 수 있으며, 크래시·SIGKILL은
+  여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
+  힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 전략은 V20 릴리스 동안 `Recreate`라(이전 파드와 겹치면 안 됨) 롤아웃마다 이전 파드
+  종료(최대 유예 180초) + 새 파드 기동(최대 startup 180초) + 첫 readiness(10초)만큼 중단되고, 워크플로 롤아웃 타임아웃 450초·
+  deploy job 25분이 그 합에서 나온다(`ShutdownBudgetTest`가 확인). 요청은 2 × 1536Mi. 블록을 지운 뒤 기본 롤링 업데이트(surge 1)에서는
+  롤아웃 중 요청 기준 3 × 1536Mi = 4.5Gi가 동시에 스케줄돼야 한다(`kubectl describe nodes`의 Allocated resources로 확인; 부족하면
+  surge 파드가 Pending → 타임아웃 → 롤백). 컨테이너는 80 포트 때문에 아직 root로 돈다(`allowPrivilegeEscalation: false`만 적용).
 - `run`은 **빌드된 jar를 손으로 띄우는** 스크립트다(`./run [-e local|dev|prod] <jar>`). 환경별 힙·GC(local/dev G1, prod ZGC) ·
-  JDWP 디버그 포트(기본 5005) · devtools · prod 확인 프롬프트 · JMX(기본 9010, 인증 없음)를 붙이고 `-Dspring.profiles.active`를
+  JDWP 디버그 포트(기본 5005, 인증 없음, `127.0.0.1`에만 바인드) · devtools · prod 확인 프롬프트 · JMX(기본 9010, 인증 없음,
+  `127.0.0.1`에만 바인드, RMI 포트를 레지스트리 포트와 같게 고정해 포트 하나짜리 SSH 터널로 접근)를 붙이고 `-Dspring.profiles.active`를
   세팅한다. `slack-live`는 받지 않으므로 `bootRun --args`로 띄운다. 컨테이너 배포는 이 스크립트를 쓰지 않는다.
 
 ## 함정
 
-- **docs-only 머지는 배포되지 않는다.** lint/test/deploy 모두 `paths`에 `!**/*.md`가 있다. 반대로 새 최상위 소스 디렉터리는 모든
-  필터(+ `security_check.yaml`의 `source`)에 추가하기 전까지 CI가 조용히 건너뛴다.
-- lint·test는 `feature/*` 계열 push에서만 돈다. `main`으로 가는 PR 자체는 `security_check`만 트리거하고 배포 빌드는 `-x test`다.
-  즉 `hotfix/*` 같은 이름의 브랜치는 테스트 없이 머지·배포될 수 있다.
+- **docs-only 머지는 배포되지 않는다.** deploy 트리거와 lint/test의 **push** 트리거는 `paths`에 `!**/*.md`가 있다(`pull_request`
+  트리거는 아래 이유로 필터가 없다). 반대로 새 최상위 소스 디렉터리는 모든 필터(+ `security_check.yaml`의 `source`)에 추가하기 전까지
+  CI가 조용히 건너뛴다.
+- lint·test는 `feature/*` 계열 push **와 `main`으로 가는 모든 PR**에서 돈다(2026-09-22부터). 배포 빌드도 `-x test` 없이
+  전체 `build`를 돌린다. 단 GitHub 브랜치 보호의 required check 등록은 레포 밖 설정이라, 체크가 pending인 채로 머지되면
+  배포 빌드가 마지막 게이트가 된다. `pull_request` 트리거에는 일부러 `paths` 필터가 없다 — required check가 트리거조차
+  안 되면(docs-only PR) 영원히 pending이라 머지가 막히기 때문. docs-only PR은 test 잡이 모듈 0개로 수 초 만에 끝나지만 lint 잡은
+  전체 `ktlintCheck`를 돈다. lint·test는 같은 ref의 이전 실행을 취소한다(`concurrency`).
+- test 워크플로는 변경 모듈에 **의존하는** 모듈까지 돌린다: `domain`·gradle·`gradle-config` 변경 → 전체, `infrastructure` → infrastructure + application,
+  `application` → application만.
 - `src/main/resources` 아래는 **전부 jar에 들어간다.** `processResources`에 exclude가 없어 `AGENTS.md`, `k8s/`·`cdc/` README와
   매니페스트, `application-local.yaml`까지 `BOOT-INF/classes/`에 포함된다(기존 빌드 산출물로 확인). 거기에 실제 값을 두지 않는 이유다.
 - `deploy_action.yaml`의 `dorny/paths-filter@v4` 블록에는 `!` 패턴을 넣지 않는다(무효). 마크다운 제외는 워크플로 레벨 `paths`에만.
@@ -160,9 +248,9 @@ _type: guide · updated: 2026-09-21_
 ## 근거
 
 - `build.gradle.kts`, `settings.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`, `.editorconfig`, `.gitignore`, `run`
-- `gradle-config/apply.sh`, `gradle-config/gradle-{macos,linux,common}.properties`, `gradle-config/README.md`
+- `gradle-config/apply.sh`, `gradle-config/gradle-{macos,linux,common,ci}.properties`, `gradle-config/README.md`
 - `application/build.gradle.kts`, `infrastructure/build.gradle.kts`, `application/Dockerfile`
-- `application/src/main/resources/application.yaml`, `application-{local,real,dev,prod}.yaml`, `db/migration/V1__…`~`V17__…`,
+- `application/src/main/resources/application.yaml`, `application-{local,slack-live,dev,prod}.yaml`, `db/migration/V1__…`~`V22__…`,
   `k8s/**`, `cdc/**`; `infrastructure/src/test/resources/application.yaml`
 - `application/src/main/kotlin/dev/notypie/application/configurations/AppConfig.kt`, `CveConfiguration.kt`,
   `conditions/Conditions.kt`, `socket/SocketModeReceiver.kt`, `security/SlackRequestVerificationFilter.kt`

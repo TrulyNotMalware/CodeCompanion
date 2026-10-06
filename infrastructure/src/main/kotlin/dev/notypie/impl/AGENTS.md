@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
 
 # infrastructure/impl
 
@@ -28,10 +28,10 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 | `command/SlackOutboundStager.kt` | Implements `OutboundMessageStager`: stages modals synchronously, enqueues everything else unrendered |
 | `command/OutboundRenderer.kt` | `OutboundRenderer` port + `SlackOutboundRenderer` — renders message-family effects at deliver time |
 | `command/SlackApiEventConstructor.kt` | Shared builder used by both the stager and the renderer so their wire output is byte-identical |
-| `command/ApplicationMessageDispatcher.kt` / `SlackViewOpenDispatcher.kt` | Actual Slack Web API calls (`chat.*`, `views.open`) |
+| `command/ApplicationMessageDispatcher.kt` / `SlackViewOpenDispatcher.kt` | Actual Slack Web API calls (`chat.*`, `response_url`, `views.open`) on a time-bounded, stats-off `Slack` client and a non-redirecting `response_url` client; reports done / rate-limited / transient-exhausted to the outbox relay |
 | `command/KafkaEventPublisher.kt` / `AppEventPublisher.kt` | `EventPublisher` implementations — Kafka for external events, Spring bus for internal ones |
 | `command/InteractionPayloadParser.kt` / `SlackInteractionRequestParser.kt` | Raw Slack request → typed payload |
-| `command/RestRequester.kt` / `RestClientRequester.kt` | Thin Slack Web API HTTP client |
+| `command/RestRequester.kt` / `RestClientRequester.kt` | Thin Slack Web API HTTP client with explicit connect/read timeouts; its only consumer is `templates/SlackUserProfileResolver` |
 
 ## For AI Agents
 
@@ -53,10 +53,13 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
   `runCatching` is the second line of defense). Adapters are selected by `supports(sourceType)`; add a
   source by adding an adapter bean, not by editing the collector.
 - **`SidecarAgentClient` folds an SSE stream** (`session` → N×`text`/`tool_use`/`tool_result` → terminal
-  `done`|`error`) into one `AgentTurnResult`. Wire field names are camelCase per the sidecar's
+  `done`|`error`) into one `AgentTurnResult`. LF, CRLF and bare-CR line endings are all accepted without
+  reading ahead past a CR. Wire field names are camelCase per the sidecar's
   `openapi.yaml`, which is the contract source of truth. The client-side `requestTimeout` is a safety
   net only — the real turn ceiling is server-side (`TURN_TIMEOUT_SEC`), so keep the client timeout
   comfortably above it.
+- **Every outbound HTTP call is time-bounded**, because the outbox relay's per-record budget and stuck
+  threshold assume it; the arithmetic lives in `command/AGENTS.md`.
 - **`KafkaEventPublisher` awaits sends with a bounded timeout on purpose**, so broker failures surface
   as exceptions to `CommandExecutor` and can roll back transactionally. Do not make sends fire-and-forget.
 - Slack vocabulary stops at this package boundary. Anything crossing into `domain` must already be
@@ -68,8 +71,10 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 ```
 Specs live beside their subject: `SlackInboundMapperTest`, `SlackIntentResolverTest`,
 `SlackOutboundStagerTest`, `SlackOutboundRendererTest`, `SlackApiEventConstructorTest`,
-`SlackInteractionRequestParserTest`, `slack/ElementTest`, `slack/SlackMentionMapperTest`,
-`agent/SidecarAgentClientTest`, `cve/*SourceAdapterTest`, `retry/RetryServiceTest`,
+`SlackInteractionRequestParserTest`, `ViewSubmissionChannelRoutingRegressionTest`,
+`ApplicationMessageDispatcherTest` (fake Slack over `com.sun.net.httpserver`), `slack/ElementTest`,
+`slack/SlackMentionMapperTest`, `agent/SidecarAgentClientTest`, `cve/GithubReleaseSourceAdapterTest`,
+`cve/NvdCveSourceAdapterTest`, `cve/SourceAdapterTest`, `retry/RetryServiceTest`,
 `KafkaEventPublisherTest` (EmbeddedKafka), `RestClientRequesterTest`.
 When you add an `OutboundMessage` or `CommandIntent` variant in the domain, the resolver/stager/renderer
 `when` branches here are what make it real — add all three plus their specs, or the effect is silently

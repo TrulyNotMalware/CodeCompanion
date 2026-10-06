@@ -4,6 +4,7 @@ import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.ScopedTurnToken
 import dev.notypie.application.security.mcp.createScopedTurnToken
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.command.RoleResolution
 import dev.notypie.domain.command.authorization.CommandPermission
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository
@@ -13,6 +14,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
@@ -36,7 +38,8 @@ class McpToolGateTest :
             auditRepository: McpToolCallHistoryRepository = mockk(relaxed = true),
         ): McpToolGate {
             val roleResolver = mockk<CommandRoleResolver>()
-            every { roleResolver.resolve(userId = token.userId) } returns role
+            every { roleResolver.resolution(userId = token.userId) } returns
+                RoleResolution(role = role, lookupFailed = false)
             return McpToolGate(
                 commandRoleResolver = roleResolver,
                 mcpToolCallHistoryRepository = auditRepository,
@@ -121,7 +124,7 @@ class McpToolGateTest :
                 then("it fails closed without resolving a role or auditing") {
                     result.isError shouldBe true
                     result.text() shouldContain "Unauthenticated"
-                    verify(exactly = 0) { roleResolver.resolve(userId = any()) }
+                    verify(exactly = 0) { roleResolver.resolution(userId = any()) }
                     verify(exactly = 0) { auditRepository.record(call = any()) }
                 }
             }
@@ -169,10 +172,11 @@ class McpToolGateTest :
             }
         }
 
-        given("a role resolver that throws") {
+        given("a role lookup that failed, so the resolver fell back to USER") {
             val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
             val roleResolver = mockk<CommandRoleResolver>()
-            every { roleResolver.resolve(userId = token.userId) } throws IllegalStateException("role lookup down")
+            every { roleResolver.resolution(userId = token.userId) } returns
+                RoleResolution(role = UserRole.USER, lookupFailed = true)
             val gate =
                 McpToolGate(
                     commandRoleResolver = roleResolver,
@@ -187,17 +191,19 @@ class McpToolGateTest :
                         requiredPermission = CommandPermission.OPERATIONS,
                     ) { "must not run" }
 
-                then("it fails closed as a tool error without running the body") {
+                then("it fails closed as an execution failure, not a permission denial, without running the body") {
                     result.isError shouldBe true
                     result.text() shouldContain "get_status"
+                    result.text() shouldContain "failed to execute"
+                    result.text() shouldNotContain "permission"
                 }
 
-                then("a FAILED audit row records the floor role and the error code") {
+                then("a FAILED audit row records the floor role and the lookup failure, not a DENIED one") {
                     val recorded = slot<McpToolCallRecord>()
                     verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
                     recorded.captured.outcome shouldBe McpToolCallOutcome.FAILED
                     recorded.captured.resolvedRole shouldBe UserRole.USER
-                    recorded.captured.errorCode shouldBe "IllegalStateException"
+                    recorded.captured.errorCode shouldBe "RoleLookupFailed"
                 }
             }
         }

@@ -23,26 +23,31 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
-import dev.notypie.impl.retry.RetryService
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.repository.meeting.isMeetingWriteConflict
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.MultiValueMap
 
 @Service
 class MeetingServiceImpl(
     private val meetingRepository: MeetingRepository,
-    private val retryService: RetryService,
     private val commandExecutor: CommandExecutor,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
+    transactionManager: PlatformTransactionManager,
 ) : MeetingService {
     private val log = KotlinLogging.logger {}
+    private val writeTemplate = isolatedWriteTemplate(transactionManager = transactionManager)
+    private val replyTemplate = TransactionTemplate(transactionManager)
 
     @Transactional
     override fun handleMeeting(
@@ -61,14 +66,10 @@ class MeetingServiceImpl(
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
     fun createNewMeeting(event: RequestMeetingContextResult) {
-        retryService.execute(
-            action = {
-                meetingRepository.createNewMeeting(
-                    meeting = event.meeting,
-                    idempotencyKey = event.idempotencyKey,
-                    channel = event.commandBasicInfo.channel,
-                )
-            },
+        meetingRepository.createNewMeeting(
+            meeting = event.meeting,
+            idempotencyKey = event.idempotencyKey,
+            channel = event.commandBasicInfo.channel,
         )
     }
 
@@ -77,18 +78,14 @@ class MeetingServiceImpl(
     fun updateParticipantAttendance(event: UpdateMeetingAttendanceEvent) {
         val payload = event.payload
         val rowsUpdated =
-            retryService.execute(
-                action = {
-                    meetingRepository.updateParticipantAttendance(
-                        meetingIdempotencyKey = payload.meetingIdempotencyKey,
-                        userId = payload.participantUserId,
-                        isAttending = payload.isAttending,
-                        absentReason = payload.absentReason,
-                        absentReasonDetail = payload.absentReasonDetail,
-                    )
-                },
+            meetingRepository.updateParticipantAttendance(
+                meetingIdempotencyKey = payload.meetingIdempotencyKey,
+                userId = payload.participantUserId,
+                isAttending = payload.isAttending,
+                absentReason = payload.absentReason,
+                absentReasonDetail = payload.absentReasonDetail,
             )
-        // MariaDB CLIENT_FOUND_ROWS=false: UPDATE returns 0 for "no match" and "no-op" alike.
+        // A JDBC URL with useAffectedRows=true makes a no-op UPDATE return 0, so 0 alone is not "no match".
         if (rowsUpdated == 0 &&
             !meetingRepository.participantExists(
                 meetingIdempotencyKey = payload.meetingIdempotencyKey,
@@ -104,6 +101,7 @@ class MeetingServiceImpl(
 
     // Decline is already persisted elsewhere (OTHER); this only notifies, never re-publishes.
     @EventListener
+    @Transactional
     fun onDeclineModalOpenFailed(event: DeclineModalOpenFailedEvent) {
         log.warn {
             "views.open fallback triggered: meetingIdempotencyKey=${event.meetingIdempotencyKey} " +
@@ -134,39 +132,47 @@ class MeetingServiceImpl(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    // Authorization enforced atomically via the repository's WHERE clause, not a separate check.
     @EventListener
-    fun cancelMeeting(event: CancelMeetingEvent) {
+    fun cancelMeeting(event: CancelMeetingEvent) = MeetingWriteDeferral.runOrDefer { cancel(event = event) }
+
+    private fun cancel(event: CancelMeetingEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        val message =
-            runCatching {
-                meetingRepository.markMeetingCanceled(
-                    meetingUid = payload.meetingUid,
-                    requesterId = payload.requesterId,
+        writeTemplate
+            .executeRetryingOnConflict {
+                val canceled =
+                    meetingRepository.markMeetingCanceled(
+                        meetingUid = payload.meetingUid,
+                        requesterId = payload.requesterId,
+                    )
+                publishCancelEphemeral(
+                    message =
+                        if (canceled) "Meeting canceled." else "Meeting was already canceled, or you are not the host.",
+                    basicInfo = basicInfo,
+                    targetUserId = payload.requesterId,
                 )
-            }.fold(
-                onSuccess = { canceled ->
-                    if (canceled) {
-                        "Meeting canceled."
-                    } else {
-                        "Meeting was already canceled, or you are not the host."
-                    }
-                },
-                onFailure = { exception ->
-                    log.error(exception) {
-                        "Failed to cancel meeting meetingUid=${payload.meetingUid} " +
-                            "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
-                    }
-                    "Failed to cancel the meeting. Please try again later."
-                },
-            )
+            }.onFailure { exception ->
+                replyTemplate.stageFailureReply(failure = exception) {
+                    publishCancelEphemeral(
+                        message = "Failed to cancel the meeting. Please try again later.",
+                        basicInfo = basicInfo,
+                        targetUserId = payload.requesterId,
+                    )
+                }
+                log.error(exception) {
+                    "Failed to cancel meeting meetingUid=${payload.meetingUid} " +
+                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
+                }
+            }
+    }
+
+    private fun publishCancelEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
         outboundStager
             .stage(
                 message =
                     OutboundMessage.Ephemeral(
                         target = ConversationTarget(id = basicInfo.channel),
-                        recipient = UserRef(id = payload.requesterId),
+                        recipient = UserRef(id = targetUserId),
                         content = MessageContent.Text(headline = null, markdown = message),
                         detailType = CommandDetailType.CANCEL_MEETING,
                     ),
@@ -175,38 +181,46 @@ class MeetingServiceImpl(
     }
 
     @EventListener
-    fun addParticipants(event: AddParticipantEvent) {
+    fun addParticipants(event: AddParticipantEvent) =
+        MeetingWriteDeferral.runOrDefer { addParticipantsNow(event = event) }
+
+    private fun addParticipantsNow(event: AddParticipantEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        val result =
-            runCatching {
-                meetingRepository.addParticipants(
-                    meetingUid = payload.meetingUid,
-                    requesterId = payload.requesterId,
-                    participantUserIds = payload.participantUserIds,
+        writeTemplate
+            .executeRetryingOnConflict {
+                val result =
+                    meetingRepository.addParticipants(
+                        meetingUid = payload.meetingUid,
+                        requesterId = payload.requesterId,
+                        participantUserIds = payload.participantUserIds,
+                    )
+                val meeting = result.meeting
+                if (result.outcome == AddParticipantResult.Outcome.ADDED && meeting != null) {
+                    notifyAddedParticipants(
+                        meeting = meeting,
+                        addedUserIds = result.addedUserIds,
+                        basicInfo = basicInfo,
+                    )
+                }
+                publishHostEphemeral(
+                    message = addParticipantMessage(result = result),
+                    basicInfo = basicInfo,
+                    targetUserId = payload.requesterId,
                 )
-            }.getOrElse { exception ->
+            }.onFailure { exception ->
+                replyTemplate.stageFailureReply(failure = exception) {
+                    publishHostEphemeral(
+                        message = "Failed to add participants. Please try again later.",
+                        basicInfo = basicInfo,
+                        targetUserId = payload.requesterId,
+                    )
+                }
                 log.error(exception) {
                     "Failed to add participants meetingUid=${payload.meetingUid} " +
                         "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
                 }
-                publishHostEphemeral(
-                    message = "Failed to add participants. Please try again later.",
-                    basicInfo = basicInfo,
-                    targetUserId = payload.requesterId,
-                )
-                return
             }
-
-        val meeting = result.meeting
-        if (result.outcome == AddParticipantResult.Outcome.ADDED && meeting != null) {
-            notifyAddedParticipants(meeting = meeting, addedUserIds = result.addedUserIds, basicInfo = basicInfo)
-        }
-        publishHostEphemeral(
-            message = addParticipantMessage(result = result),
-            basicInfo = basicInfo,
-            targetUserId = payload.requesterId,
-        )
     }
 
     private fun addParticipantMessage(result: AddParticipantResult): String =
@@ -282,40 +296,46 @@ class MeetingServiceImpl(
     fun getMeetingListEvent(event: GetMeetingListEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        val target = ConversationTarget(id = basicInfo.channel)
+        // Not caught: the read joins the caller's transaction, so a failure leaves it rollback-only and no reply commits.
+        val meetings =
+            meetingRepository.getMeetingsByUserIdInRange(
+                userId = payload.publisherId,
+                startAt = payload.startDate,
+                endAt = payload.endDate,
+            )
         val message =
-            runCatching {
-                meetingRepository.getMeetingsByUserIdInRange(
-                    userId = payload.publisherId,
-                    startAt = payload.startDate,
-                    endAt = payload.endDate,
-                )
-            }.fold(
-                onSuccess = { meetings ->
-                    OutboundMessage.Ephemeral(
-                        target = target,
-                        content =
-                            MessageContent.MeetingList(
-                                meetings = meetings,
-                                currentUserId = basicInfo.publisherId,
-                            ),
-                    )
-                },
-                onFailure = { exception ->
-                    log.error(exception) {
-                        "Failed to fetch meeting list for publisherId=${payload.publisherId} idempotencyKey=${event.idempotencyKey}"
-                    }
-                    OutboundMessage.Ephemeral(
-                        target = target,
-                        content =
-                            MessageContent.Text(
-                                headline = null,
-                                markdown = "Failed to fetch your meetings. Please try again later.",
-                            ),
-                        detailType = CommandDetailType.ERROR_RESPONSE,
-                    )
-                },
+            OutboundMessage.Ephemeral(
+                target = ConversationTarget(id = basicInfo.channel),
+                content = MessageContent.MeetingList(meetings = meetings, currentUserId = basicInfo.publisherId),
             )
         outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }
 }
+
+internal fun isolatedWriteTemplate(transactionManager: PlatformTransactionManager): TransactionTemplate =
+    TransactionTemplate(transactionManager).apply {
+        propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+    }
+
+internal fun TransactionTemplate.executeRetryingOnConflict(action: () -> Unit): Result<Unit> {
+    val firstAttempt = attempt(action = action)
+    val failure = firstAttempt.exceptionOrNull()
+    if (failure !is RuntimeException || !failure.isMeetingWriteConflict()) return firstAttempt
+    return attempt(action = action)
+}
+
+internal fun TransactionTemplate.stageFailureReply(failure: Throwable, reply: () -> Unit) {
+    try {
+        executeWithoutResult { reply() }
+    } catch (replyFailure: RuntimeException) {
+        failure.addSuppressed(replyFailure)
+    }
+}
+
+private fun TransactionTemplate.attempt(action: () -> Unit): Result<Unit> =
+    try {
+        executeWithoutResult { action() }
+        Result.success(Unit)
+    } catch (exception: RuntimeException) {
+        Result.failure(exception)
+    }

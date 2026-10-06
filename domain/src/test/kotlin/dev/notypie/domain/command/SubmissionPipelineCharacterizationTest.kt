@@ -141,7 +141,7 @@ class SubmissionPipelineCharacterizationTest :
                             InboundSubmission.RescheduleMeeting(
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
-                                date = "2026-10-01",
+                                date = "2099-10-01",
                                 time = "14:30",
                             ),
                     )
@@ -151,7 +151,29 @@ class SubmissionPipelineCharacterizationTest :
                     val intent = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
                     intent.meetingUid shouldBe meetingUid
                     intent.requesterId shouldBe "U_HOST"
-                    intent.newStartAt shouldBe LocalDateTime.of(2026, 10, 1, 14, 30)
+                    intent.newStartAt shouldBe LocalDateTime.of(2099, 10, 1, 14, 30)
+                }
+            }
+
+            `when`("the submission carries a start in the past") {
+                val meetingUid = UUID.randomUUID()
+                val (output, effects) =
+                    execute(
+                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                        submission =
+                            InboundSubmission.RescheduleMeeting(
+                                meetingUidRaw = meetingUid.toString(),
+                                requesterId = "U_HOST",
+                                date = "2000-01-01",
+                                time = "09:00",
+                            ),
+                    )
+
+                then("it is not dropped: the intent reaches the reschedule service, which answers the host") {
+                    output.ok shouldBe true
+                    val intent = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
+                    intent.meetingUid shouldBe meetingUid
+                    intent.newStartAt shouldBe LocalDateTime.of(2000, 1, 1, 9, 0)
                 }
             }
 
@@ -161,7 +183,7 @@ class SubmissionPipelineCharacterizationTest :
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = "broken",
                             requesterId = "U_HOST",
-                            date = "2026-10-01",
+                            date = "2099-10-01",
                             time = "14:30",
                         ),
                         InboundSubmission.RescheduleMeeting(
@@ -173,7 +195,7 @@ class SubmissionPipelineCharacterizationTest :
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = UUID.randomUUID().toString(),
                             requesterId = "U_HOST",
-                            date = "2026-10-01",
+                            date = "2099-10-01",
                             time = "25:99",
                         ),
                     )
@@ -263,8 +285,7 @@ class SubmissionPipelineCharacterizationTest :
                     withDetail.second
                         .filterIsInstance<OutboundMessage.UpdateMessage>()
                         .single()
-                        .let { it.content }
-                        .let { it as dev.notypie.domain.command.outbound.MessageContent.Text }
+                        .content
                         .markdown shouldContain "family matters"
                 }
             }
@@ -313,13 +334,15 @@ class SubmissionPipelineCharacterizationTest :
             `when`("answers are present with notice routing") {
                 val (output, effects) = answer(answers = listOf("did X", "will do Y"))
 
-                then("the record intent and the notice update are both emitted") {
+                then("the record intent carries the notice; the outcome update is left to the application") {
                     output.ok shouldBe true
                     val intent = effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single()
                     intent.sessionUid shouldBe sessionUid
                     intent.userId shouldBe "U_MEMBER"
                     intent.responses shouldContainExactly listOf("did X", "will do Y")
-                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    intent.notice?.conversation?.id shouldBe "C_STANDUP"
+                    intent.notice?.messageId shouldBe "777.888"
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
 
@@ -409,9 +432,16 @@ class SubmissionPipelineCharacterizationTest :
                     val intent = effects.filterIsInstance<CommandIntent.CreateStandupRoutine>().single()
                     intent.weekdays shouldBe setOf(DayOfWeek.MONDAY)
                     intent.triggerLocalTime shouldBe LocalTime.of(10, 0)
-                    intent.cutoffMinutes shouldBe 120L
                     intent.timezone shouldBe ZoneId.of("Asia/Seoul")
                     intent.creatorId shouldBe TEST_USER_ID
+                }
+
+                then("the non-numeric cutoff is carried as null so the setup service rejects it") {
+                    effects
+                        .filterIsInstance<CommandIntent.CreateStandupRoutine>()
+                        .single()
+                        .cutoffMinutes
+                        .shouldBeNull()
                 }
             }
         }

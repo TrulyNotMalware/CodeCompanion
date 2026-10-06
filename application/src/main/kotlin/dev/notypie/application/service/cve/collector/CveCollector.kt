@@ -7,6 +7,7 @@ import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.CveTopicRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
+import java.time.Clock
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
@@ -18,12 +19,17 @@ class CveCollector(
     private val cveCollectLedgerRepository: CveCollectLedgerRepository,
     private val adapters: List<SourceAdapter>,
     private val windowMinutes: Long,
+    private val clock: Clock,
 ) {
     @Scheduled(fixedDelay = 300_000)
     fun tick() {
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(clock)
         val windowStart = windowStart(now = now)
-        cveTopicRepository.findActiveTopics().forEach { topic ->
+        for (topic in cveTopicRepository.findActiveTopics()) {
+            if (Thread.currentThread().isInterrupted) {
+                log.warn { "CVE collection interrupted before topic=${topic.topicKey}; stopping this tick" }
+                return
+            }
             runCatching { collectTopic(topic = topic, windowStart = windowStart) }
                 .onFailure { ex -> log.error(ex) { "CVE collection failed for topic=${topic.topicKey}" } }
         }

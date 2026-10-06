@@ -14,6 +14,8 @@ import dev.notypie.repository.authorization.UserCommandRoleRepository
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @Service
 class RoleManagementService(
@@ -58,6 +60,7 @@ class RoleManagementService(
             return bootstrapImmutableMessage(targetUserId = targetUserId)
         }
         userCommandRoleRepository.saveRole(userId = targetUserId, role = role)
+        evictAfterCommit(userId = targetUserId)
         return "Granted `${role.name.lowercase()}` to <@$targetUserId>."
     }
 
@@ -66,7 +69,9 @@ class RoleManagementService(
         if (commandRoleResolver.isBootstrapAdmin(userId = targetUserId)) {
             return bootstrapImmutableMessage(targetUserId = targetUserId)
         }
-        return if (userCommandRoleRepository.deleteRole(userId = targetUserId)) {
+        val deleted = userCommandRoleRepository.deleteRole(userId = targetUserId)
+        evictAfterCommit(userId = targetUserId)
+        return if (deleted) {
             "Revoked the role grant of <@$targetUserId>. They fall back to `${UserRole.USER.name.lowercase()}`."
         } else {
             "<@$targetUserId> has no role grant."
@@ -87,6 +92,18 @@ class RoleManagementService(
         val lines = bootstrapLines + grantLines
         if (lines.isEmpty()) return "No role grants. Everyone defaults to `${UserRole.USER.name.lowercase()}`."
         return lines.joinToString(separator = "\n")
+    }
+
+    private fun evictAfterCommit(userId: String) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            commandRoleResolver.evict(userId = userId)
+            return
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = commandRoleResolver.evict(userId = userId)
+            },
+        )
     }
 
     private fun bootstrapImmutableMessage(targetUserId: String): String =

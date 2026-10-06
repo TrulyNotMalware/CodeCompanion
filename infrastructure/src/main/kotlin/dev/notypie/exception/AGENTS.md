@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
 
 # infrastructure/exception
 
 ## Purpose
-Infrastructure-side error types: the `ErrorBroadcaster` port with its `StdoutErrorBroadcaster` and
-`KafkaErrorBroadcaster` implementations, and the persistence-facing `DatabaseException` family under
+Infrastructure-side error types: the `ErrorBroadcaster` port with its `StdoutErrorBroadcaster`
+implementation, and the persistence-facing `DatabaseException` family under
 `meeting/` — the exception, its `JpaErrorCode`, a `schemaNotFound { }` builder DSL, and the
 `throwIfSchemaNotFound` extension that repositories use to turn a `null` lookup into a structured
 not-found error. `DatabaseException` extends the domain's `CodeCompanionRuntimeException` but lives here
@@ -17,7 +17,6 @@ because it is a JPA concern; `:application`'s `ControllerAdvice` imports it from
 |------|-------------|
 | `ErrorBroadcaster.kt` | `interface ErrorBroadcaster { fun broadcastError(message: String) }` |
 | `StdoutErrorBroadcaster.kt` | `logger.error { message }` through a file-level `KotlinLogging.logger { }` |
-| `KafkaErrorBroadcaster.kt` | `class KafkaErrorBroadcaster(val kafkaTemplate: KafkaTemplate<String, Any>)`; `broadcastError` is `TODO("Not yet implemented")` and throws `NotImplementedError` when called |
 | `meeting/DatabaseException.kt` | `DatabaseException(val tableName: String, errorCode: ErrorCode, details: List<ExceptionArgument>)`; `enum JpaErrorCode { TABLE_NOT_FOUND(404, "Table not found.") }`; `NotFoundExceptionBuilder` (`table(KClass)` / `table(String)`, `field(name) withValue value`, `reason(message)`, `internal build()`); `schemaNotFound(init): Nothing`; `inline fun <reified T : Any> T?.throwIfSchemaNotFound(fieldName: String, fieldValue: Any, reason: String? = null): T` |
 
 ## Subdirectories
@@ -29,12 +28,10 @@ because it is a JPA concern; `:application`'s `ControllerAdvice` imports it from
 
 ### Working In This Directory
 - **`ErrorBroadcaster` is wired but dormant.** `:application`'s `ConsumerConfig.kt` registers
-  `KafkaErrorBroadcaster` when `slack.app.mode.event-publisher` is `KAFKA`
-  (`KafkaEventPublisherConfig`) and `StdoutErrorBroadcaster` under `@ConditionalOnMissingBean` when it is
-  `APPLICATION_EVENT` (`ApplicationEventPublisherConfig`, the default). Nothing injects the port or calls
-  `broadcastError` anywhere in the codebase. If you become the first caller, implement
-  `KafkaErrorBroadcaster` first — in Kafka mode the bean that would answer is the `TODO` stub, and
-  `NotImplementedError` is an `Error`, so a `catch (e: Exception)` will not contain it.
+  `StdoutErrorBroadcaster` in every mode (`ErrorBroadcasterConfig`, `@ConditionalOnMissingBean`). Nothing
+  injects the port or calls `broadcastError` anywhere in the codebase. The former `KafkaErrorBroadcaster`
+  was a `TODO()` stub that would have thrown `NotImplementedError` from an error path and was removed on
+  2026-09-22; a Kafka-backed implementation needs a real error topic and must never throw.
 - **`throwIfSchemaNotFound` names the receiver's static type, not the table.** `tableName` is
   `T::class.simpleName`, and both current callers invoke it after mapping: `MeetingRepositoryImpl.getMeeting`
   (`?.toMeetingDto().throwIfSchemaNotFound(fieldName = "id", ...)`) reports `MeetingDto`, and
@@ -75,7 +72,6 @@ either broadcaster.
 - `domain/common/error/Errors.kt` — `CodeCompanionRuntimeException`, `ErrorCode`, `ExceptionArgument`
 
 ### External
-Spring Kafka `KafkaTemplate` (constructor dependency of `KafkaErrorBroadcaster`), `kotlin-logging`
-(`io.github.oshai.kotlinlogging`).
+`kotlin-logging` (`io.github.oshai.kotlinlogging`).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

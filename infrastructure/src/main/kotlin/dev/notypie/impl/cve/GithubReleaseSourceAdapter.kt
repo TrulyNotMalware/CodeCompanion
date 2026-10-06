@@ -8,8 +8,9 @@ import tools.jackson.databind.JsonNode
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.time.Duration
+import java.time.Instant
+import kotlin.jvm.optionals.getOrNull
 
 private val log = KotlinLogging.logger {}
 
@@ -18,6 +19,7 @@ class GithubReleaseSourceAdapter(
     private val perPage: Int,
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
+    private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
 ) : SourceAdapter {
     private val httpClient: HttpClient =
         HttpClient
@@ -27,6 +29,15 @@ class GithubReleaseSourceAdapter(
             .build()
 
     override fun supports(sourceType: CveSourceType): Boolean = sourceType == CveSourceType.GITHUB_RELEASE
+
+    fun anonymousLimitWarning(topicCount: Int, requestsPerTopicPerHour: Long): String? {
+        if (token.isNotBlank()) return null
+        val hourly = topicCount * requestsPerTopicPerHour
+        if (hourly < ANONYMOUS_HOURLY_LIMIT) return null
+        return "slack.app.cve.github.token is blank: $topicCount GitHub topic(s) need ~$hourly requests/hour " +
+            "against GitHub's anonymous limit of $ANONYMOUS_HOURLY_LIMIT; set GITHUB_TOKEN or collection will be " +
+            "rate limited (403) and those windows come back empty"
+    }
 
     override fun fetch(topic: CveTopic): List<RawSourceEvent> {
         val repo = parseRepo(topic = topic) ?: return emptyList()
@@ -40,16 +51,42 @@ class GithubReleaseSourceAdapter(
                 .build()
 
         val response =
-            runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "GitHub releases request failed for topic=${topic.topicKey}" }
-                    return emptyList()
+            runCatching {
+                httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
+            }.getOrElse { ex ->
+                if (ex is InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw ex
                 }
-        if (response.statusCode() !in 200..299) {
-            log.warn { "GitHub releases returned ${response.statusCode()} for topic=${topic.topicKey}" }
+                log.warn(ex) { "GitHub releases request failed for topic=${topic.topicKey}" }
+                return emptyList()
+            }
+        if (response.statusCode !in 200..299) {
+            logFailure(response = response, topic = topic)
             return emptyList()
         }
-        return parseReleases(body = response.body(), topic = topic)
+        return parseReleases(body = response.body, topic = topic)
+    }
+
+    private fun logFailure(response: SourceResponse, topic: CveTopic) {
+        val status = response.statusCode
+        val remaining = response.headers.firstValue("x-ratelimit-remaining").getOrNull()
+        val retryAfter = response.headers.firstValue("retry-after").getOrNull()
+        if (status !in RATE_LIMIT_STATUSES || (remaining != "0" && retryAfter == null)) {
+            log.warn { "GitHub releases returned $status for topic=${topic.topicKey}" }
+            return
+        }
+        val resetAt =
+            response.headers
+                .firstValue("x-ratelimit-reset")
+                .getOrNull()
+                ?.toLongOrNull()
+                ?.let { Instant.ofEpochSecond(it) }
+        val auth = if (token.isBlank()) "anonymous, $ANONYMOUS_HOURLY_LIMIT requests/hour" else "token"
+        log.warn {
+            "GitHub rate limit exhausted for topic=${topic.topicKey} (status=$status, $auth, " +
+                "resets at ${resetAt ?: "unknown"}, retry-after=${retryAfter ?: "-"}); this window is skipped"
+        }
     }
 
     private fun parseRepo(topic: CveTopic): String? {
@@ -103,6 +140,9 @@ class GithubReleaseSourceAdapter(
 
     companion object {
         const val DEFAULT_API_BASE_URL = "https://api.github.com"
+        const val DEFAULT_MAX_BODY_BYTES = 8 * 1024 * 1024
+        const val ANONYMOUS_HOURLY_LIMIT = 60L
+        private val RATE_LIMIT_STATUSES = setOf(403, 429)
 
         private val REPO_PATTERN = Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     }

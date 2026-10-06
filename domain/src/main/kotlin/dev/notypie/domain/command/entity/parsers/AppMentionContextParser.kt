@@ -103,7 +103,7 @@ internal class AppMentionContextParser(
                 )
             }
 
-            CommandSet.ASK -> agentChatContext(promptTokens = mention.commandTokens.drop(1))
+            CommandSet.ASK -> agentChatContext(prompt = agentPrompt(dropCommandWord = true))
 
             CommandSet.GRANT -> grantRoleContext()
 
@@ -118,7 +118,7 @@ internal class AppMentionContextParser(
 
             CommandSet.CVE -> cveOpsContext()
 
-            CommandSet.UNKNOWN -> agentChatContext(promptTokens = mention.commandTokens)
+            CommandSet.UNKNOWN -> agentChatContext(prompt = agentPrompt(dropCommandWord = false))
         }
     }
 
@@ -176,9 +176,20 @@ internal class AppMentionContextParser(
             intents = intents,
         )
 
-    private fun agentChatContext(promptTokens: List<String>): AgentChatContext =
+    private fun agentPrompt(dropCommandWord: Boolean): String {
+        val text = mention.text.trim()
+        if (text.isEmpty()) {
+            val tokens = if (dropCommandWord) mention.commandTokens.drop(1) else mention.commandTokens
+            return tokens.joinToString(separator = " ")
+        }
+        if (!dropCommandWord) return text
+        val commandWord = Regex("(?<!\\S)${Regex.escape(mention.commandTokens.first())}(?!\\S)[ \\t]*")
+        return commandWord.replaceFirst(input = text, replacement = "").trim()
+    }
+
+    private fun agentChatContext(prompt: String): AgentChatContext =
         AgentChatContext(
-            prompt = promptTokens.joinToString(separator = " "),
+            prompt = prompt,
             threadId = (mention.thread ?: mention.message)?.raw,
             requesterName = commandData.actorName,
             channelName = commandData.channelName,

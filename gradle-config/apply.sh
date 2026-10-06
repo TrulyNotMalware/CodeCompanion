@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Usage: ./scripts/setup-gradle.sh [force|common]
+# Usage: ./gradle-config/apply.sh [force|common|ci]
 
 set -e
 
@@ -141,6 +141,22 @@ apply_common_config() {
     log_info "Safe default configuration for all OS."
 }
 
+# Apply CI config
+apply_ci_config() {
+    local config_file="$GRADLE_CONFIG_DIR/gradle-ci.properties"
+
+    if [ ! -f "$config_file" ]; then
+        log_error "CI configuration file not found: $config_file"
+        exit 1
+    fi
+
+    backup_existing_config
+    cp "$config_file" "$GRADLE_PROPERTIES"
+
+    log_success "CI configuration applied!"
+    log_info "Applied config file: gradle-ci.properties"
+}
+
 # Verify config
 verify_config() {
     log_info "Verifying configuration..."
@@ -151,9 +167,11 @@ verify_config() {
         ./gradlew --stop &> /dev/null || true
     fi
 
-    if [ -f "./gradlew" ] && ./gradlew help &> /dev/null; then
+    local output
+    if [ -f "./gradlew" ] && output=$(./gradlew help 2>&1); then
         log_success "Configuration applied correctly!"
     else
+        echo "$output"
         log_error "Configuration has issues. Please check gradle.properties."
         return 1
     fi
@@ -169,6 +187,7 @@ show_usage() {
     echo "  (none)    Automatically apply OS-optimized configuration"
     echo "  force     Apply configuration without backing up existing file"
     echo "  common    Apply OS-independent common configuration"
+    echo "  ci        Apply the CI runner configuration (gradle-ci.properties)"
     echo "  --help    Show this help message"
     echo ""
     echo "Supported OS:"
@@ -189,6 +208,21 @@ main() {
         exit 0
     fi
 
+    # A typo such as `ci` -> `cii` must not fall through to OS detection and install a desktop preset.
+    if [ $# -gt 1 ]; then
+        log_error "Too many arguments: $*"
+        show_usage
+        exit 2
+    fi
+    case "$option" in
+        ""|force|common|ci) ;;
+        *)
+            log_error "Unknown option: $option"
+            show_usage
+            exit 2
+            ;;
+    esac
+
     if [ ! -d "$GRADLE_CONFIG_DIR" ]; then
         log_error "gradle-config directory not found: $GRADLE_CONFIG_DIR"
         log_info "Please run this from the project root."
@@ -197,6 +231,12 @@ main() {
 
     if [ "$option" = "common" ]; then
         apply_common_config
+        verify_config
+        exit 0
+    fi
+
+    if [ "$option" = "ci" ]; then
+        apply_ci_config
         verify_config
         exit 0
     fi

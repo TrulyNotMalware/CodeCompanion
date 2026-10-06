@@ -1,43 +1,25 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/exception
 
 ## Purpose
-Mirror of main `exception/`. Contains one file, and that file is an empty placeholder.
+Mirror of main `exception/`: the spec for the `DatabaseException` helpers in `exception/meeting/DatabaseException.kt`.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `DatabaseExceptionTest.kt` | **Placeholder — exercises nothing.** A `BehaviorSpec` whose only content is an empty `given("Nullable Schema") { }`; there is no `` `when` ``/`then`, so Kotest reports zero tests for it. Do not read its presence as coverage of `DatabaseException`. |
+| `DatabaseExceptionTest.kt` | `throwIfSchemaNotFound` on a null receiver → `DatabaseException` with `tableName` = the receiver's static type, `errorCode = JpaErrorCode.TABLE_NOT_FOUND`, message from the code, one `ExceptionArgument` (`fieldName`, stringified `value`, default reason); on a non-null receiver → returned unchanged. `schemaNotFound { table(...); field(...) withValue ...; reason(...) }` → every builder call lands on the exception |
 
 ## For AI Agents
 
 ### Working In This Directory
-- `DatabaseException` (main `exception/meeting/DatabaseException.kt`) is actually asserted only indirectly:
-  `repository/meeting/MeetingRepositoryImplTest` expects it from `getMeeting` / `getParticipants` on a
-  missing row.
-- Either give this spec real cases (construction, message, cause propagation, and whichever `exception/`
-  types have behaviour) or delete it. Leaving it as-is is the kind of stub the project's completion rules
-  treat as a blocker.
-- If you fill it in, keep the file in this package and the class under test's package aligned
-  (`dev.notypie.exception` vs `dev.notypie.exception.meeting`) — rename or move the spec accordingly.
+- `MeetingRepositoryImplTest` still covers the repository-side throw (`getMeeting` / `getParticipants` on a
+  missing row); this spec covers the helper contract itself. Until 2026-09-22 it was an empty placeholder.
+- `CodeCompanionRuntimeException.errorCode` is a property now; assert on it rather than on the message string
+  when the code is what matters.
 
 ### Testing Requirements
 ```bash
-./gradlew :infrastructure:test --tests 'dev.notypie.exception.*'
+./gradlew :infrastructure:test --tests '*DatabaseExceptionTest*'
 ```
-Currently passes trivially with zero executed tests.
-
-### Common Patterns
-None yet; follow `common/` for the plain-unit-spec shape.
-
-## Dependencies
-
-### Internal
-- `infrastructure/src/main/kotlin/dev/notypie/exception/` — the classes this package is meant to cover
-
-### External
-Kotest only.
-
-<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

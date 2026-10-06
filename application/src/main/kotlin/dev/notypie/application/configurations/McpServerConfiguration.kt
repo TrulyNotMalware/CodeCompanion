@@ -20,13 +20,14 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.Ordered
 import tools.jackson.databind.json.JsonMapper
+import java.time.Clock
 import java.time.Duration
 
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.mcp", name = ["enabled"], havingValue = "true")
 class McpServerConfiguration {
     @Bean
-    fun scopedTurnTokenCodec(appConfig: AppConfig): ScopedTurnTokenCodec {
+    fun scopedTurnTokenCodec(appConfig: AppConfig, clock: Clock): ScopedTurnTokenCodec {
         require(appConfig.mcp.signingSecret.isNotBlank()) {
             "slack.app.mcp.signing-secret must be set when MCP is enabled"
         }
@@ -34,6 +35,7 @@ class McpServerConfiguration {
             signingSecret = appConfig.mcp.signingSecret,
             tokenTtl = Duration.ofSeconds(appConfig.mcp.tokenTtlSeconds),
             clockSkew = Duration.ofSeconds(appConfig.mcp.clockSkewSeconds),
+            clock = clock,
         )
     }
 
@@ -53,12 +55,14 @@ class McpServerConfiguration {
         opsStatusService: OpsStatusService,
         roleManagementService: RoleManagementService,
         meetingRepository: MeetingRepository,
+        clock: Clock,
     ): DomainReadTools =
         DomainReadTools(
             mcpToolGate = mcpToolGate,
             opsStatusService = opsStatusService,
             roleManagementService = roleManagementService,
             meetingRepository = meetingRepository,
+            clock = clock,
         )
 
     @Bean
@@ -81,10 +85,11 @@ class McpServerConfiguration {
     fun webMvcStreamableServerTransportProvider(
         properties: McpServerStreamableHttpProperties,
         scopedTurnTokenCodec: ScopedTurnTokenCodec,
+        jsonMapper: JsonMapper,
     ): WebMvcStreamableServerTransportProvider =
         WebMvcStreamableServerTransportProvider
             .builder()
-            .jsonMapper(JacksonMcpJsonMapper(JsonMapper.builder().build()))
+            .jsonMapper(JacksonMcpJsonMapper(jsonMapper))
             .mcpEndpoint(properties.mcpEndpoint)
             .disallowDelete(properties.isDisallowDelete)
             .apply { properties.keepAliveInterval?.let { keepAliveInterval(it) } }

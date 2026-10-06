@@ -21,7 +21,8 @@ import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionCon
 import dev.notypie.domain.command.entity.context.form.StandupSetupParsed
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
-import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
@@ -131,7 +132,7 @@ class SubmissionContextsTest :
                     intent.absentReasonDetail shouldBe "family matters"
                     val update = effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
                     update.ref.conversation.id shouldBe "C_N"
-                    (update.content as MessageContent.Text).markdown shouldContain "family matters"
+                    update.content.markdown shouldContain "family matters"
                 }
             }
 
@@ -149,6 +150,26 @@ class SubmissionContextsTest :
                     val effects = intents.drainSnapshot()
                     effects.filterIsInstance<CommandIntent.MeetingAttendanceUpdate>().shouldHaveSize(1)
                     effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
+                }
+            }
+
+            `when`("the note was too long to store") {
+                val intents = createIntentQueue()
+                DeclineReasonSubmissionContext(
+                    commandBasicInfo = createCommandBasicInfo(),
+                    intents = intents,
+                    model =
+                        model(notice = NoticeTarget.Update(channel = "C_N", messageTs = "1.2"))
+                            .copy(reasonDetail = null, detailTooLong = true),
+                ).handleInteraction(interaction = interaction)
+
+                then("the decline is recorded without a detail and the participant is told the note was not saved") {
+                    val effects = intents.drainSnapshot()
+                    val intent = effects.filterIsInstance<CommandIntent.MeetingAttendanceUpdate>().single()
+                    intent.absentReason shouldBe RejectReason.OTHER
+                    intent.absentReasonDetail shouldBe null
+                    val update = effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
+                    update.content.markdown shouldContain "was not saved"
                 }
             }
         }
@@ -176,10 +197,11 @@ class SubmissionContextsTest :
                         ),
                 ).handleInteraction(interaction = interaction)
 
-                then("both the record intent and the update go out") {
+                then("the record intent carries the notice and no update goes out before the outcome is known") {
                     val effects = intents.drainSnapshot()
-                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().shouldHaveSize(1)
-                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldHaveSize(1)
+                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single().notice shouldBe
+                        MessageRef(conversation = ConversationTarget(id = "C"), messageId = "1")
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
 

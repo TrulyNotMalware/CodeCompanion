@@ -1,23 +1,29 @@
 package dev.notypie.application.service.relay
 
-import dev.notypie.impl.command.event.MessageDispatcher
-import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
-import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
-import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
+import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.kafka.annotation.KafkaListener
+import org.springframework.messaging.handler.annotation.Payload
+import java.time.Clock
+import java.time.LocalDateTime
 import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
+// Deterministic: the record can never be processed, so the error handler must not retry it before the DLT.
+class CdcRecordParseException(
+    message: String,
+    cause: Throwable? = null,
+) : RuntimeException(message, cause)
+
 class DebeziumLogTailingProcessor(
-    private val messageDispatcher: MessageDispatcher,
-    private val payloadRenderer: OutboxPayloadRenderer,
-    private val eventPublisher: ApplicationEventPublisher,
+    private val outboxRepository: MessageOutboxRepository,
+    private val relayService: MessageRelayService,
+    private val clock: Clock,
 ) : MessageProcessor {
     @KafkaListener(
         topics = ["\${slack.app.mode.cdc.topic}"],
@@ -27,40 +33,42 @@ class DebeziumLogTailingProcessor(
             "spring.json.value.default.type=dev.notypie.application.service.relay.Envelope",
         ],
     )
-    fun consume(envelope: Envelope) {
-        val outboxMessage: OutboxMessage =
+    fun consume(
+        @Payload(required = false) envelope: Envelope?,
+    ) {
+        if (envelope == null) {
+            logger.warn { "Skipping CDC tombstone record." }
+            return
+        }
+        // No `after` = delete event; non-PENDING = the UPDATE events this processor itself causes.
+        val afterImage = envelope.payload.after ?: return
+        val snapshot: OutboxMessage =
             try {
-                envelope.payload.after
-                    ?.toMutableMap()
-                    ?.toOutboxMessage()
-                    ?: return
+                afterImage.toMutableMap().toOutboxMessage()
             } catch (exception: Exception) {
-                logger.error(exception) { "Failed to parse CDC payload; skipping record." }
-                return
+                throw CdcRecordParseException(message = "Failed to parse CDC after-image", cause = exception)
             }
-        if (outboxMessage.status != MessageStatus.PENDING.name) return
+        if (snapshot.status != MessageStatus.PENDING.name) return
 
         val eventId =
-            runCatching { UUID.fromString(outboxMessage.eventId) }
+            runCatching { UUID.fromString(snapshot.eventId) }
                 .getOrElse { parseFailure ->
-                    logger.error(parseFailure) {
-                        "Skipping CDC record with malformed eventId='${outboxMessage.eventId}' " +
-                            "idempotencyKey=${outboxMessage.idempotencyKey}"
-                    }
-                    return
+                    throw CdcRecordParseException(
+                        message = "Malformed eventId='${snapshot.eventId}' idempotencyKey=${snapshot.idempotencyKey}",
+                        cause = parseFailure,
+                    )
                 }
 
-        val updateEvent: OutboxUpdateEvent =
-            try {
-                val rendered = payloadRenderer.render(row = outboxMessage)
-                val dispatchResult = messageDispatcher.dispatch(event = rendered)
-                dispatchResult.toOutboxUpdateEvent(eventId = eventId)
-            } catch (exception: Exception) {
-                logger.error(exception) {
-                    "CDC dispatch failed for eventId=$eventId idempotencyKey=${outboxMessage.idempotencyKey}"
-                }
-                MessagePublishFailedEvent(eventId = eventId, reason = exception.toString())
-            }
-        eventPublisher.publishEvent(updateEvent)
+        val current = outboxRepository.findByIdOrNull(eventId.toString())
+        if (current == null) {
+            logger.warn { "Outbox row missing for eventId=$eventId idempotencyKey=${snapshot.idempotencyKey}" }
+            return
+        }
+        if (current.status != MessageStatus.PENDING.name) {
+            logger.info { "Skipping eventId=$eventId already ${current.status}; only a PENDING row is claimed here" }
+            return
+        }
+        val claim = outboxRepository.claim(row = current, now = LocalDateTime.now(clock)) ?: return
+        relayService.dispatchClaimed(claim = claim)
     }
 }

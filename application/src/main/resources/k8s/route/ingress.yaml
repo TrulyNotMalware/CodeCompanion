@@ -16,8 +16,16 @@ spec:
     - host: your.uri
       http:
         paths:
+          # Slack endpoints only. Not /api: dev/local/slack-live serve the unauthenticated actuator at /api/actuator.
           - pathType: Prefix
-            path: /
+            path: /api/slack
+            backend:
+              service:
+                name: code-companion-svc
+                port:
+                  number: 80
+          - pathType: Prefix
+            path: /api/slash
             backend:
               service:
                 name: code-companion-svc

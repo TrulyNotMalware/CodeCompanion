@@ -2,19 +2,25 @@ package dev.notypie.repository.meeting
 
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.exception.meeting.DatabaseException
+import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import java.time.Clock
+import java.time.LocalDateTime
 import java.util.UUID
 
 class MeetingRepositoryImplTest :
     BehaviorSpec({
         val jpaMeetingRepository = mockk<JpaMeetingRepository>()
-        val repository = MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+        val repository =
+            MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
 
         given("getMeeting") {
             val meetingSchema =
@@ -153,6 +159,134 @@ class MeetingRepositoryImplTest :
 
                 then("returns false so callers can distinguish a truly-missing row from a no-op UPDATE") {
                     repository.participantExists(meetingKey, "U_MISSING") shouldBe false
+                }
+            }
+        }
+
+        given("rescheduleMeeting") {
+            val meetingUid = UUID.randomUUID()
+            val originalStart = LocalDateTime.of(2026, 8, 1, 10, 0)
+            every { jpaMeetingRepository.saveAndFlush(any<MeetingSchema>()) } answers { firstArg() }
+
+            `when`("the meeting lasts 90 minutes and is moved two hours later") {
+                val schema =
+                    createMeetingSchema(
+                        meetingUid = meetingUid,
+                        startAt = originalStart,
+                        endAt = originalStart.plusMinutes(90L),
+                    )
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns schema
+
+                val result =
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                    )
+
+                then("the managed row is moved with its duration preserved and flushed") {
+                    (result as RescheduleResult.Rescheduled).meeting.startAt shouldBe originalStart.plusHours(2L)
+                    schema.startAt shouldBe originalStart.plusHours(2L)
+                    schema.endAt shouldBe originalStart.plusHours(2L).plusMinutes(90L)
+                    verify(exactly = 1) { jpaMeetingRepository.saveAndFlush(schema) }
+                }
+            }
+
+            `when`("the meeting has no explicit end") {
+                val schema = createMeetingSchema(meetingUid = meetingUid, startAt = originalStart, endAt = null)
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns schema
+
+                repository.rescheduleMeeting(
+                    meetingUid = meetingUid,
+                    requesterId = TEST_USER_ID,
+                    newStartAt = originalStart.plusHours(2L),
+                )
+
+                then("endAt stays null") {
+                    schema.startAt shouldBe originalStart.plusHours(2L)
+                    schema.endAt shouldBe null
+                }
+            }
+
+            `when`("the requester is not the host") {
+                val schema = createMeetingSchema(meetingUid = meetingUid, startAt = originalStart)
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns schema
+                clearMocks(jpaMeetingRepository, answers = false)
+
+                val result =
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = "U_NOT_THE_HOST",
+                        newStartAt = originalStart.plusHours(2L),
+                    )
+
+                then("the row is left untouched and nothing is flushed") {
+                    result shouldBe RescheduleResult.NotAuthorized
+                    schema.startAt shouldBe originalStart
+                    verify(exactly = 0) { jpaMeetingRepository.saveAndFlush(any<MeetingSchema>()) }
+                }
+            }
+
+            `when`("the meeting already starts at the requested time") {
+                val schema =
+                    createMeetingSchema(
+                        meetingUid = meetingUid,
+                        startAt = originalStart,
+                        endAt = originalStart.plusMinutes(90L),
+                    )
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns schema
+                clearMocks(jpaMeetingRepository, answers = false)
+
+                val result =
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart,
+                    )
+
+                then("it reports the no-op and flushes nothing") {
+                    result shouldBe RescheduleResult.AlreadyAtRequestedTime
+                    schema.endAt shouldBe originalStart.plusMinutes(90L)
+                    verify(exactly = 0) { jpaMeetingRepository.saveAndFlush(any<MeetingSchema>()) }
+                }
+            }
+
+            `when`("the meeting does not exist") {
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns null
+
+                then("nothing is updated and the caller sees NotAuthorized") {
+                    repository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = TEST_USER_ID,
+                        newStartAt = originalStart.plusHours(2L),
+                    ) shouldBe RescheduleResult.NotAuthorized
+                }
+            }
+        }
+
+        given("markMeetingCanceled") {
+            val meetingUid = UUID.randomUUID()
+            every { jpaMeetingRepository.saveAndFlush(any<MeetingSchema>()) } answers { firstArg() }
+
+            `when`("the host cancels an active meeting") {
+                val schema = createMeetingSchema(meetingUid = meetingUid)
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns schema
+
+                val result = repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID)
+
+                then("the managed row is flagged and flushed") {
+                    result shouldBe true
+                    schema.isCanceled shouldBe true
+                    verify(exactly = 1) { jpaMeetingRepository.saveAndFlush(schema) }
+                }
+            }
+
+            `when`("the meeting is already canceled") {
+                every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns
+                    createMeetingSchema(meetingUid = meetingUid, isCanceled = true)
+
+                then("the caller sees false") {
+                    repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID) shouldBe false
                 }
             }
         }

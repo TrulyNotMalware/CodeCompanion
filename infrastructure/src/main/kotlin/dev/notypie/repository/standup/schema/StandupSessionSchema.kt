@@ -47,7 +47,7 @@ class StandupSessionSchema(
     val summaryMessageTs: String? = null,
     @field:Column(name = "nudged_at")
     val nudgedAt: Instant? = null,
-    // Set, not List: Hibernate throws MultipleBagFetchException when JOIN FETCH-ing two bags in one query.
+    // Sets, not Lists: one query JOIN FETCHes both, so rows repeat per dispatch x answer; a List keeps them.
     @field:OneToMany(
         mappedBy = "session",
         fetch = FetchType.LAZY,
@@ -61,7 +61,7 @@ class StandupSessionSchema(
         orphanRemoval = true,
         cascade = [CascadeType.ALL],
     )
-    val answers: MutableList<StandupAnswerSchema> = mutableListOf(),
+    val answers: MutableSet<StandupAnswerSchema> = mutableSetOf(),
     @field:CreationTimestamp
     @field:JsonProperty("created_at")
     @field:Column(name = "created_at", nullable = false, updatable = false)

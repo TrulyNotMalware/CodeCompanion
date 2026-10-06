@@ -63,7 +63,7 @@ class SubmissionRouterTest :
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = UUID.randomUUID().toString(),
                             requesterId = "U",
-                            date = "2026-10-01",
+                            date = "2099-10-01",
                             time = "10:00",
                         ),
                     ).shouldBeInstanceOf<RescheduleMeetingSubmissionContext>()

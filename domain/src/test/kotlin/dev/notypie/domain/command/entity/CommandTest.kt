@@ -116,6 +116,38 @@ class CommandTest :
             }
         }
 
+        given("Command.handleEvent when executeCommand is interrupted or hits an Error") {
+            fun commandThrowing(failure: Throwable) =
+                object : Command<NoSubCommands>(
+                    idempotencyKey = UUID.randomUUID(),
+                    commandData = createMentionInboundCommand(),
+                ) {
+                    override fun parseContext(
+                        subCommand: SubCommand<NoSubCommands>,
+                    ): CommandContext<out NoSubCommands> = throw failure
+
+                    override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
+                }
+
+            `when`("an InterruptedException is thrown") {
+                val outcome = runCatching { commandThrowing(failure = InterruptedException("shutdown")).handleEvent() }
+                val keptInterrupt = Thread.interrupted()
+
+                then("it propagates with the interrupt flag instead of becoming an error reply") {
+                    (outcome.exceptionOrNull() is InterruptedException) shouldBe true
+                    keptInterrupt shouldBe true
+                }
+            }
+
+            `when`("an Error is thrown") {
+                val outcome = runCatching { commandThrowing(failure = NotImplementedError("simulated")).handleEvent() }
+
+                then("it propagates instead of becoming an error reply") {
+                    (outcome.exceptionOrNull() is NotImplementedError) shouldBe true
+                }
+            }
+        }
+
         given("Command.handleEvent when executeCommand throws") {
             val commandData = createMentionInboundCommand()
             val idempotencyKey = UUID.randomUUID()

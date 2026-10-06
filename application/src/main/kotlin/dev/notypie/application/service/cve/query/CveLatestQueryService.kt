@@ -14,6 +14,9 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveRecentEvent
 import dev.notypie.repository.cve.CveSubscriptionRepository
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.templates.SlackBlockLimits
+import dev.notypie.templates.escapeMrkdwn
+import dev.notypie.templates.truncateSectionText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -81,18 +84,25 @@ class CveLatestQueryService(
             emptyMessage = "No recent CVE updates for your subscribed topics yet."
         } else {
             val topic =
-                cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey == topicKey }
-                    ?: return "Topic `$topicKey` is not available."
+                cveTopicRepository.findActiveTopics().firstOrNull { it.topicKey.equals(topicKey, ignoreCase = true) }
+                    ?: return "Topic `${topicKey.escapeMrkdwn()}` is not available."
             topicIds = listOf(topic.id)
-            emptyMessage = "No recent CVE updates for *${topic.displayName}* yet."
+            emptyMessage = "No recent CVE updates for *${topic.displayName.escapeMrkdwn()}* yet."
         }
 
         val recent = cveEventRepository.findRecentDoneEvents(topicIds = topicIds, limit = LATEST_LIMIT)
         if (recent.isEmpty()) return emptyMessage
-        val body = recent.joinToString(separator = "\n\n") { render(event = it) }
-        return if (body.length > BODY_MAX_LENGTH) "${body.take(BODY_MAX_LENGTH)}\n…(truncated)" else body
+        return recent
+            .joinToString(separator = "\n\n") { render(event = it) }
+            .truncateSectionText(limit = BODY_MAX_LENGTH + 1 + SlackBlockLimits.TRUNCATION_MARKER.length)
     }
 
-    private fun render(event: CveRecentEvent): String =
-        "*${event.topicDisplayName}* — *${event.title}*\n${event.aiSummary.orEmpty().take(SUMMARY_MAX_LENGTH)}"
+    private fun render(event: CveRecentEvent): String {
+        val summary =
+            event.aiSummary
+                .orEmpty()
+                .take(SUMMARY_MAX_LENGTH)
+                .escapeMrkdwn()
+        return "*${event.topicDisplayName.escapeMrkdwn()}* — *${event.title.escapeMrkdwn()}*\n$summary"
+    }
 }

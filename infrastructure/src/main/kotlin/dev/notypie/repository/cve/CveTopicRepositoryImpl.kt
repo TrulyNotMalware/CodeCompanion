@@ -1,48 +1,92 @@
 package dev.notypie.repository.cve
 
 import dev.notypie.repository.cve.schema.CveTopicSchema
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.repository.findByIdOrNull
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 
 open class CveTopicRepositoryImpl(
     private val jpaCveTopicRepository: JpaCveTopicRepository,
+    transactionManager: PlatformTransactionManager,
 ) : CveTopicRepository {
-    @Transactional
-    override fun upsert(definition: CveTopicDefinition): Boolean {
-        val existing = jpaCveTopicRepository.findByTopicKey(topicKey = definition.topicKey)
-        if (existing == null) {
-            jpaCveTopicRepository.save(
-                CveTopicSchema(
-                    topicKey = definition.topicKey,
-                    displayName = definition.displayName,
-                    category = definition.category,
-                    sourceType = definition.sourceType,
-                    sourceConfig = definition.sourceConfig,
-                    deliveryMode = definition.deliveryMode,
-                    active = definition.active,
-                ),
-            )
-            return true
+    private val syncTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
+
+    // A failed INSERT poisons the session it ran in, so the insert that may lose a replica race gets its own.
+    private val insertTemplate: TransactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
         }
+
+    override fun upsert(definition: CveTopicDefinition): Boolean {
+        check(!TransactionSynchronizationManager.isActualTransactionActive()) {
+            "CveTopicRepository.upsert must run outside a transaction: it opens its own so that the locked read is " +
+                "each one's first statement, and its REQUIRES_NEW insert would wait on a gap lock the caller holds " +
+                "(topicKey=${definition.topicKey})"
+        }
+        return syncExisting(definition = definition) ?: insertOrSyncRacedRow(definition = definition)
+    }
+
+    private fun syncExisting(definition: CveTopicDefinition): Boolean? =
+        syncTemplate.execute {
+            // Lock first: under MariaDB snapshot isolation a locking read or UPDATE after a plain read fails (1020).
+            jpaCveTopicRepository
+                .findLockedByTopicKey(topicKey = definition.topicKey)
+                ?.let { existing -> sync(existing = existing, definition = definition) }
+        }
+
+    private fun insertOrSyncRacedRow(definition: CveTopicDefinition): Boolean =
+        try {
+            insertTemplate.executeWithoutResult {
+                jpaCveTopicRepository.saveAndFlush(
+                    newSchema(definition = definition),
+                )
+            }
+            true
+        } catch (exception: DataIntegrityViolationException) {
+            syncExisting(definition = definition) ?: throw exception
+        }
+
+    private fun sync(existing: CveTopicSchema, definition: CveTopicDefinition): Boolean {
         if (matches(schema = existing, definition = definition)) return false
         // active is never overwritten here — a yaml reboot must not undo a chat activate|deactivate toggle.
-        existing.displayName = definition.displayName
-        existing.category = definition.category
-        existing.sourceType = definition.sourceType
-        existing.sourceConfig = definition.sourceConfig
-        existing.deliveryMode = definition.deliveryMode
+        existing.redefine(
+            displayName = definition.displayName,
+            category = definition.category,
+            sourceType = definition.sourceType,
+            sourceConfig = definition.sourceConfig,
+            deliveryMode = definition.deliveryMode,
+        )
         jpaCveTopicRepository.save(existing)
         return true
     }
 
+    private fun newSchema(definition: CveTopicDefinition): CveTopicSchema =
+        CveTopicSchema(
+            topicKey = definition.topicKey,
+            displayName = definition.displayName,
+            category = definition.category,
+            sourceType = definition.sourceType,
+            sourceConfig = definition.sourceConfig,
+            deliveryMode = definition.deliveryMode,
+            active = definition.active,
+        )
+
+    @Transactional(readOnly = true)
     override fun findActiveTopics(): List<CveTopic> =
         jpaCveTopicRepository.findByActiveTrueOrderByTopicKey().map { toRecord(schema = it) }
 
+    @Transactional(readOnly = true)
     override fun findAllTopics(): List<CveTopic> =
         jpaCveTopicRepository.findAllOrderByTopicKey().map { toRecord(schema = it) }
 
-    override fun findById(id: Long): CveTopic? =
-        jpaCveTopicRepository.findById(id).map { toRecord(schema = it) }.orElse(null)
+    @Transactional(readOnly = true)
+    override fun findById(id: Long): CveTopic? = jpaCveTopicRepository.findByIdOrNull(id)?.let { toRecord(schema = it) }
 
+    @Transactional(readOnly = true)
     override fun countActive(): Long = jpaCveTopicRepository.countActive()
 
     @Transactional

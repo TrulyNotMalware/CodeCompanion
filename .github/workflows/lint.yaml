@@ -4,11 +4,25 @@ on:
     branches: ["feature/*", "feat/*", "features/*", "dependabot/**"]
     # ktlint has nothing to say about markdown, so docs-only pushes should not burn a CI run.
     paths:
-      ["application/**", "domain/**", "infrastructure/**", "*.gradle.kts", "!**/*.md"]
+      ["application/**", "domain/**", "infrastructure/**", "*.gradle.kts", "gradle/**", "!**/*.md"]
+  # Every PR into main gets linted regardless of the source branch name; the push trigger above
+  # only covers feature-style prefixes, so hotfix/, chore/, refactor/ branches used to reach main
+  # without a single ktlint run. No `paths` filter here on purpose: a branch-protection required
+  # check that never triggers (docs-only PR) stays pending forever and blocks the merge.
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 25

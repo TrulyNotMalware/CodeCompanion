@@ -9,13 +9,15 @@ import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 private val log = KotlinLogging.logger {}
 
@@ -24,8 +26,14 @@ class NvdCveSourceAdapter(
     private val lookbackMinutes: Long,
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
+    private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
+    private val requestInterval: Duration = DEFAULT_REQUEST_INTERVAL,
+    private val onPageCapReached: (CveTopic) -> Unit = {},
 ) : SourceAdapter {
+    private val pacing = ReentrantLock()
+    private var nextRequestAtNanos: Long = System.nanoTime()
+
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
@@ -42,10 +50,30 @@ class NvdCveSourceAdapter(
         val query =
             listOf(
                 matchParam,
+                "resultsPerPage=$RESULTS_PER_PAGE",
                 "lastModStartDate=${encode(value = now.minusMinutes(lookbackMinutes).format(NVD_DATE_FORMAT))}",
                 "lastModEndDate=${encode(value = now.format(NVD_DATE_FORMAT))}",
             ).joinToString(separator = "&")
 
+        val events = mutableListOf<RawSourceEvent>()
+        var startIndex = 0
+        repeat(MAX_PAGES) {
+            val root = fetchPage(query = "$query&startIndex=$startIndex", topic = topic) ?: return events
+            val vulnerabilities = root["vulnerabilities"]
+            vulnerabilities?.mapNotNullTo(events) { toRawEvent(node = it) }
+            val pageSize = vulnerabilities?.size() ?: 0
+            startIndex += pageSize
+            val totalResults = root["totalResults"]?.stringOrNull()?.toIntOrNull()
+            if (pageSize == 0 || totalResults == null || startIndex >= totalResults) return events
+        }
+        log.warn {
+            "NVD results for topic=${topic.topicKey} exceed $MAX_PAGES pages; stopped at startIndex=$startIndex"
+        }
+        onPageCapReached(topic)
+        return events
+    }
+
+    private fun fetchPage(query: String, topic: CveTopic): JsonNode? {
         val request =
             HttpRequest
                 .newBuilder(URI.create("$apiBaseUrl?$query"))
@@ -55,17 +83,50 @@ class NvdCveSourceAdapter(
                 .GET()
                 .build()
 
+        awaitRequestSlot()
         val response =
-            runCatching { httpClient.send(request, HttpResponse.BodyHandlers.ofString()) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "NVD request failed for topic=${topic.topicKey}" }
-                    return emptyList()
-                }
-        if (response.statusCode() !in 200..299) {
-            log.warn { "NVD returned ${response.statusCode()} for topic=${topic.topicKey}" }
-            return emptyList()
+            try {
+                httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
+            } catch (exception: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw exception
+            } catch (exception: Exception) {
+                log.warn(exception) { "NVD request failed for topic=${topic.topicKey}" }
+                return null
+            }
+        if (response.statusCode in REFUSED_STATUSES) {
+            log.warn {
+                "NVD refused topic=${topic.topicKey} with ${response.statusCode} (rate limit or outage); " +
+                    "a later window's $lookbackMinutes-minute lookback re-reads this period"
+            }
+            return null
         }
-        return parseVulnerabilities(body = response.body(), topic = topic)
+        if (response.statusCode !in 200..299) {
+            log.warn { "NVD returned ${response.statusCode} for topic=${topic.topicKey}" }
+            return null
+        }
+        return try {
+            jsonMapper.readTree(response.body)
+        } catch (exception: Exception) {
+            log.warn(exception) { "NVD response was not valid JSON for topic=${topic.topicKey}" }
+            null
+        }
+    }
+
+    // Topics are fetched in a fixed order each tick, so without spacing the same topics past the quota fail every time.
+    private fun awaitRequestSlot() {
+        pacing.withLock {
+            val waitNanos = nextRequestAtNanos - System.nanoTime()
+            if (waitNanos > 0L) {
+                try {
+                    TimeUnit.NANOSECONDS.sleep(waitNanos)
+                } catch (exception: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw exception
+                }
+            }
+            nextRequestAtNanos = System.nanoTime() + requestInterval.toNanos()
+        }
     }
 
     private fun parseMatchParam(topic: CveTopic): String? {
@@ -86,17 +147,6 @@ class NvdCveSourceAdapter(
         if (!keyword.isNullOrBlank()) return "keywordSearch=${encode(value = keyword)}"
         log.error { "NVD topic=${topic.topicKey} source_config needs 'cpe' or 'keyword'" }
         return null
-    }
-
-    private fun parseVulnerabilities(body: String, topic: CveTopic): List<RawSourceEvent> {
-        val root =
-            runCatching { jsonMapper.readTree(body) }
-                .getOrElse { ex ->
-                    log.warn(ex) { "NVD response was not valid JSON for topic=${topic.topicKey}" }
-                    return emptyList()
-                }
-        val vulnerabilities = root["vulnerabilities"] ?: return emptyList()
-        return vulnerabilities.mapNotNull { toRawEvent(node = it) }
     }
 
     private fun toRawEvent(node: JsonNode): RawSourceEvent? {
@@ -149,6 +199,15 @@ class NvdCveSourceAdapter(
 
     companion object {
         const val DEFAULT_API_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        const val DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024
+
+        // Half of NVD's 2,000 maximum: each page is read whole, and a page past maxBodyBytes is dropped.
+        const val RESULTS_PER_PAGE = 1_000
+        const val MAX_PAGES = 10
+
+        // NVD: 5 requests per rolling 30 s without an API key (50 with one); its guidance is 6 s between requests.
+        val DEFAULT_REQUEST_INTERVAL: Duration = Duration.ofSeconds(6L)
+        private val REFUSED_STATUSES = setOf(403, 429, 503)
 
         // NVD expects ISO-8601 extended with milliseconds; a bare seconds form is rejected.
         private val NVD_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")

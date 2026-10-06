@@ -4,6 +4,7 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
+import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -12,11 +13,17 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.repository.meeting.RescheduleResult
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
+import java.time.Clock
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 @Service
 class MeetingRescheduleService(
@@ -24,73 +31,89 @@ class MeetingRescheduleService(
     private val reminderRepository: MeetingReminderRepository,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
+    transactionManager: PlatformTransactionManager,
+    private val clock: Clock,
 ) {
     private val log = KotlinLogging.logger {}
+    private val writeTemplate = isolatedWriteTemplate(transactionManager = transactionManager)
+    private val replyTemplate = TransactionTemplate(transactionManager)
 
-    @Transactional
     @EventListener
     fun rescheduleMeeting(event: RescheduleMeetingEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-
-        val rescheduled =
-            runCatching {
-                meetingRepository.rescheduleMeeting(
-                    meetingUid = payload.meetingUid,
-                    requesterId = payload.requesterId,
-                    newStartAt = payload.newStartAt,
-                )
-            }.getOrElse { exception ->
-                log.error(exception) {
-                    "Failed to reschedule meeting meetingUid=${payload.meetingUid} " +
-                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
-                }
-                publishEphemeral(
-                    message = "Failed to reschedule the meeting. Please try again later.",
-                    basicInfo = basicInfo,
-                    targetUserId = payload.requesterId,
-                )
-                return
-            }
-
-        if (!rescheduled) {
+        if (!payload.newStartAt.isAfter(LocalDateTime.now(clock).truncatedTo(ChronoUnit.MINUTES))) {
             publishEphemeral(
-                message = "Meeting was canceled, or you are not the host.",
+                message = "Pick a future time. The meeting was not rescheduled.",
                 basicInfo = basicInfo,
                 targetUserId = payload.requesterId,
             )
             return
         }
+        MeetingWriteDeferral.runOrDefer { reschedule(event = event) }
+    }
 
-        val meeting = meetingRepository.findMeetingByUid(meetingUid = payload.meetingUid)
-        if (meeting != null) {
-            reminderRepository.deleteByMeetingId(meetingId = meeting.meetingId)
-            publishParticipantReNotification(
-                meetingTitle = meeting.title,
-                participantUserIds = meeting.participants.map { it.userId },
+    private fun reschedule(event: RescheduleMeetingEvent) {
+        val payload = event.payload
+        val basicInfo = payload.responseBasicInfo
+        writeTemplate
+            .executeRetryingOnConflict { applyReschedule(payload = payload) }
+            .onFailure { exception ->
+                replyTemplate.stageFailureReply(failure = exception) {
+                    publishEphemeral(
+                        message = "Failed to reschedule the meeting. Please try again later.",
+                        basicInfo = basicInfo,
+                        targetUserId = payload.requesterId,
+                    )
+                }
+                log.error(exception) {
+                    "Failed to reschedule meeting meetingUid=${payload.meetingUid} " +
+                        "requesterId=${payload.requesterId} idempotencyKey=${event.idempotencyKey}"
+                }
+            }
+    }
+
+    private fun applyReschedule(payload: RescheduleMeetingPayload) {
+        val basicInfo = payload.responseBasicInfo
+        val formattedStart = payload.newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT)
+        val result =
+            meetingRepository.rescheduleMeeting(
+                meetingUid = payload.meetingUid,
+                requesterId = payload.requesterId,
                 newStartAt = payload.newStartAt,
-                basicInfo = basicInfo,
             )
-        }
+        val hostMessage =
+            when (result) {
+                RescheduleResult.NotAuthorized ->
+                    "Meeting was canceled, or you are not the host."
 
-        publishEphemeral(
-            message =
-                "Meeting rescheduled to ${payload.newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT)}.",
-            basicInfo = basicInfo,
-            targetUserId = payload.requesterId,
-        )
+                RescheduleResult.AlreadyAtRequestedTime ->
+                    "The meeting is already scheduled for $formattedStart. Nothing was changed."
+
+                is RescheduleResult.Rescheduled -> {
+                    reminderRepository.deleteByMeetingId(meetingId = result.meeting.meetingId)
+                    publishParticipantReNotification(
+                        meetingTitle = result.meeting.title,
+                        participantUserIds = result.meeting.participants.map { it.userId },
+                        newStartAt = payload.newStartAt,
+                        basicInfo = basicInfo,
+                    )
+                    "Meeting rescheduled to $formattedStart."
+                }
+            }
+        publishEphemeral(message = hostMessage, basicInfo = basicInfo, targetUserId = payload.requesterId)
     }
 
     private fun publishParticipantReNotification(
         meetingTitle: String,
         participantUserIds: List<String>,
-        newStartAt: java.time.LocalDateTime,
+        newStartAt: LocalDateTime,
         basicInfo: CommandBasicInfo,
     ) {
         if (participantUserIds.isEmpty()) return
         val mentions = participantUserIds.joinToString(" ") { "<@$it>" }
         val notice =
-            "[Notice] $mentions *$meetingTitle* has been rescheduled to " +
+            "[Notice] $mentions *${meetingTitle.escapeMrkdwn()}* has been rescheduled to " +
                 newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT) + "."
         outboundStager
             .stage(

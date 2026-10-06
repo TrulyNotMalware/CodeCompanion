@@ -14,6 +14,7 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.repository.cve.CveSubscriptionRepository
 import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -103,17 +104,20 @@ class CveSubscriptionService(
     private fun renderSubscriptions(userId: String): String {
         val topics = cveSubscriptionRepository.findSubscribedTopics(userId = userId)
         if (topics.isEmpty()) return "You have no CVE topic subscriptions."
-        val lines = topics.joinToString(separator = "\n") { "• *${it.displayName}* (`${it.topicKey}`)" }
+        val lines =
+            topics.joinToString(separator = "\n") {
+                "• *${it.displayName.escapeMrkdwn()}* (`${it.topicKey.escapeMrkdwn()}`)"
+            }
         return "You're subscribed to ${topics.size} topic(s):\n$lines"
     }
 
     private fun topicNames(topics: List<CveTopic>): String =
-        topics.joinToString(separator = ", ") { "*${it.displayName}*" }
+        topics.joinToString(separator = ", ") { "*${it.displayName.escapeMrkdwn()}*" }
 
     private fun skippedSuffix(unknownKeys: List<String>, reason: String): String =
         if (unknownKeys.isEmpty()) {
             ""
         } else {
-            " Skipped $reason topics: ${unknownKeys.joinToString(separator = ", ") { "`$it`" }}."
+            " Skipped $reason topics: ${unknownKeys.joinToString(separator = ", ") { "`${it.escapeMrkdwn()}`" }}."
         }
 }

@@ -16,8 +16,12 @@ import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.CheckBoxOptions
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.LocalDateTime
 
@@ -63,6 +67,59 @@ class ModalBlockBuilderTest :
                 then("returns SectionBlock with markdown text") {
                     result.shouldBeInstanceOf<SectionBlock>()
                     result.text.text shouldBe "*bold*"
+                }
+            }
+
+            `when`("called with text over the section cap") {
+                val result = builder.simpleText(text = "q".repeat(n = 4_000), isMarkDown = true)
+
+                then("the text is cut to the cap and marked") {
+                    result.text.text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_MAX_LENGTH
+                    result.text.text shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+        }
+
+        given("textSections") {
+            `when`("the text fits one section") {
+                val result = builder.textSections(text = "short", isMarkDown = true)
+
+                then("one section carries it unchanged") {
+                    result.map { it.text.text } shouldBe listOf("short")
+                }
+            }
+
+            `when`("the text is longer than one section") {
+                val text = (1..300).joinToString(separator = "\n") { "row $it " + "-".repeat(n = 20) }
+                val result = builder.textSections(text = text, isMarkDown = false)
+
+                then("it becomes several sections within the budget that rejoin to the text") {
+                    result.size shouldBeGreaterThan 1
+                    result.forEach { it.text.text.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET }
+                    result.joinToString(separator = "\n") { it.text.text } shouldBe text
+                }
+            }
+
+            `when`("the text is longer than one message body") {
+                val text = (1..2_000).joinToString(separator = "\n") { "row $it " + "-".repeat(n = 20) }
+                val result = builder.textSections(text = text, isMarkDown = true)
+
+                then("it is cut to the message body budget and marked") {
+                    result.sumOf { it.text.text.length } shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_BODY_BUDGET
+                    result.last().text.text shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+
+            `when`("the body fills the budget with lines that each need their own section inside a code block") {
+                val line = "c".repeat(n = 1_447)
+                val text = "```\n" + List(size = 7) { line }.joinToString(separator = "\n") + "\n```"
+                val result = builder.textSections(text = text, isMarkDown = true)
+
+                then("nothing is cut and the re-opened code fences stay within the message budget") {
+                    result shouldHaveSize 7
+                    result.forEach { it.text.text shouldBe "```\n$line\n```" }
+                    result.sumOf { it.text.text.length } shouldBeLessThanOrEqual
+                        SlackBlockLimits.MESSAGE_TEXT_BUDGET - SlackBlockLimits.HEADER_TEXT_MAX_LENGTH
                 }
             }
         }

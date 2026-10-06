@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # domain/command/intent
 
@@ -12,7 +12,7 @@ emission order until the application layer drains the command.
 | File | Description |
 |------|-------------|
 | `CommandEffect.kt` | Marker interface implemented by `CommandIntent` and `outbound/OutboundMessage`. Not `sealed` because the two implementors live in different packages |
-| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer`, `CreateStandupRoutine`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`. Each KDoc names who triggers it and where its invariant is enforced |
+| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer` (with `notice: MessageRef?`, the DM prompt to collapse once the outcome is known), `CreateStandupRoutine`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`. Each KDoc names who triggers it and where its invariant is enforced |
 | `IntentQueue.kt` | `IntentQueue` (`offer`, `snapshot`, `drainSnapshot`, `isEmpty`, `size`) and `internal DefaultIntentQueue` over an `ArrayDeque`; thread-unsafe by design |
 
 ## For AI Agents
@@ -33,7 +33,8 @@ emission order until the application layer drains the command.
 - `MeetingListRequest` defaults `startDate` / `endDate` to `now()` / `now() + 1 week` at construction;
   `RequestMeetingContext` always passes explicit bounds from `MeetingListRange`.
 - `CreateStandupRoutine` is the v1 shape: every member gets the single `timezone`, and `cutoffMinutes`
-  is a `Long` that the application converts to the entity's `Duration`.
+  is a `Long?` (`null` = not a whole number within the `Routine` bounds) that the application converts to the
+  entity's `Duration` or rejects.
 - `DefaultIntentQueue.drainSnapshot()` copies then clears — that is what `Command.drainIntents()` exposes
   and why a retry after a publish failure does not re-deliver stale effects. `Nothing` is the explicit
   no-op variant for paths that must emit something.

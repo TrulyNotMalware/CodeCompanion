@@ -49,6 +49,154 @@ class ValidationBuilderTest :
                 }
             }
 
+            `when`("the left rule fails and the right rule passes") {
+                val validationResult =
+                    validateAndReturn {
+                        "long" of "12345678901" shouldBeShorterThan 5 or { it shouldBeLongerThan 10 }
+                    }
+                then("OR is satisfied and no error remains") {
+                    validationResult.size shouldBe 0
+                }
+            }
+
+            `when`("an earlier field failed and a satisfied OR runs inside shouldNotBeNullAnd") {
+                val nullable: String? = "12345678901"
+                val validationResult =
+                    validateAndReturn {
+                        "earlier" of "" shouldBeLongerThan 5
+                        "nested" of nullable shouldNotBeNullAnd {
+                            it shouldBeShorterThan 5 or { right -> right shouldBeLongerThan 10 }
+                        }
+                    }
+                then("only the nested field's errors are cleared") {
+                    validationResult.map { it.fieldName } shouldBe listOf("earlier")
+                }
+            }
+
+            `when`("an earlier field failed and a satisfied OR runs inside ifNotNull") {
+                val nullable: String? = "12345678901"
+                val validationResult =
+                    validateAndReturn {
+                        "earlier" of "" shouldBeLongerThan 5
+                        "nested" of nullable ifNotNull {
+                            it shouldBeShorterThan 5 or { right -> right shouldBeLongerThan 10 }
+                        }
+                    }
+                then("only the nested field's errors are cleared") {
+                    validationResult.map { it.fieldName } shouldBe listOf("earlier")
+                }
+            }
+
+            `when`("an earlier field failed and both OR sides fail inside ifNotNull") {
+                val nullable: String? = "123456"
+                val validationResult =
+                    validateAndReturn {
+                        "earlier" of "" shouldBeLongerThan 5
+                        "nested" of nullable ifNotNull {
+                            it shouldBeShorterThan 5 or { right -> right shouldBeLongerThan 10 }
+                        }
+                    }
+                then("the earlier error and the nested left-hand error remain") {
+                    validationResult.map { it.fieldName } shouldBe listOf("earlier", "nested")
+                    validationResult.last().reason shouldBe "length must be less than 5 (current: 6)"
+                }
+            }
+
+            `when`("a stored field is OR-ed after another field failed and its right rule passes") {
+                val validationResult =
+                    validateAndReturn {
+                        val stored = "stored" of "12345678901" shouldBeShorterThan 5
+                        "other" of 7 shouldBeLessThan 3
+                        stored or { it shouldBeLongerThan 10 }
+                    }
+                then("only the stored field's own error is cleared") {
+                    validationResult.map { it.fieldName } shouldBe listOf("other")
+                }
+            }
+
+            `when`("a stored passing field is OR-ed after another field failed and its right rule fails") {
+                val validationResult =
+                    validateAndReturn {
+                        val stored = "stored" of "1234" shouldBeShorterThan 5
+                        "other" of 7 shouldBeLessThan 3
+                        stored or { it shouldBeLongerThan 10 }
+                    }
+                then("the other field's error stays and the right-hand error is dropped") {
+                    validationResult.map { it.fieldName } shouldBe listOf("other")
+                }
+            }
+
+            `when`("a stored field is OR-ed after another field failed and both of its sides fail") {
+                val validationResult =
+                    validateAndReturn {
+                        val stored = "stored" of "123456" shouldBeShorterThan 5
+                        "other" of 7 shouldBeLessThan 3
+                        stored or { it shouldBeLongerThan 10 }
+                    }
+                then("the stored left-hand error and the other field's error remain in order") {
+                    validationResult.map { it.fieldName } shouldBe listOf("stored", "other")
+                    validationResult.first().reason shouldBe "length must be less than 5 (current: 6)"
+                }
+            }
+
+            `when`("an identical error from another field precedes a satisfied OR") {
+                val validationResult =
+                    validateAndReturn {
+                        "same" of "123456" shouldBeShorterThan 5
+                        "same" of "123456" shouldBeShorterThan 5 or { it shouldBeLongerThan 3 }
+                    }
+                then("the equal but separate earlier error is kept") {
+                    validationResult.size shouldBe 1
+                }
+            }
+
+            `when`("the left chain includes an AND block that failed and the right rule passes") {
+                val validationResult =
+                    validateAndReturn {
+                        "earlier" of "" shouldBeLongerThan 5
+                        "chained" of "12345678901" and { it shouldBeShorterThan 5 } or { it shouldBeLongerThan 10 }
+                    }
+                then("the AND block's error counts as the left operand and is cleared") {
+                    validationResult.map { it.fieldName } shouldBe listOf("earlier")
+                }
+            }
+
+            `when`("the field failed before an AND block whose inner OR is satisfied") {
+                val validationResult =
+                    validateAndReturn {
+                        ("x" of 3).shouldSatisfy("must be even") { it % 2 == 0 } and {
+                            it shouldBeGreaterThan 100 or { right -> right shouldBeGreaterThan 0 }
+                        }
+                    }
+                then("the inner OR clears only its own left operand, so p1 AND (p2 OR p3) stays false") {
+                    validationResult.map { it.reason } shouldBe listOf("must be even")
+                }
+            }
+
+            `when`("the field failed before an ifNotNull block whose inner OR passes on both sides") {
+                val nullable: Int? = 3
+                val validationResult =
+                    validateAndReturn {
+                        val x = ("x" of nullable).shouldSatisfy("must be even") { it != null && it % 2 == 0 }
+                        x ifNotNull { it shouldBeGreaterThan 0 or { right -> right shouldBeLessThan 100 } }
+                    }
+                then("the earlier error of the same field is kept") {
+                    validationResult.map { it.reason } shouldBe listOf("must be even")
+                }
+            }
+
+            `when`("the field failed before a shouldNotBeNullAnd block whose inner OR is satisfied") {
+                val nullable: Int? = 3
+                val validationResult =
+                    validateAndReturn {
+                        val x = ("x" of nullable).shouldSatisfy("must be even") { it != null && it % 2 == 0 }
+                        x shouldNotBeNullAnd { it shouldBeGreaterThan 100 or { right -> right shouldBeGreaterThan 0 } }
+                    }
+                then("the earlier error of the same field is kept") {
+                    validationResult.map { it.reason } shouldBe listOf("must be even")
+                }
+            }
+
             `when`("assert OR operations with validate") {
                 then("should throw validationExceptions") {
                     shouldThrowExactly<ValidationException> {
@@ -77,6 +225,9 @@ class ValidationBuilderTest :
                     validationResult.size shouldBe 3
                     validationResult.first().fieldName shouldBe "emptyString"
                     validationResult.last().fieldName shouldBe "nullString"
+                }
+                then("the reason is a user-facing sentence, not the Field's toString()") {
+                    validationResult.first().reason shouldBe "must not be blank"
                 }
             }
 

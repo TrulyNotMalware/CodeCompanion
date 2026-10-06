@@ -11,11 +11,10 @@ import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
-class CachedBodyHttpServletRequest(
+class CachedBodyHttpServletRequest private constructor(
     request: HttpServletRequest,
+    val body: ByteArray,
 ) : HttpServletRequestWrapper(request) {
-    val body: ByteArray = request.inputStream.readAllBytes()
-
     private val cachedParameterMap: Map<String, Array<String>> by lazy { buildParameterMap() }
 
     override fun getInputStream(): ServletInputStream =
@@ -36,12 +35,12 @@ class CachedBodyHttpServletRequest(
     override fun getParameterNames(): java.util.Enumeration<String> =
         java.util.Collections.enumeration(cachedParameterMap.keys)
 
+    override fun getQueryString(): String? = null
+
     private fun buildParameterMap(): Map<String, Array<String>> {
         val values = linkedMapOf<String, MutableList<String>>()
-        appendFormParameters(values = values, encoded = queryString.orEmpty())
-
-        if (contentType?.startsWith(FORM_URLENCODED_CONTENT_TYPE, ignoreCase = true) == true) {
-            appendFormParameters(values = values, encoded = String(body, requestCharset()))
+        if (contentType?.startsWith(prefix = FORM_URLENCODED_CONTENT_TYPE, ignoreCase = true) == true) {
+            appendFormParameters(values = values, encoded = String(bytes = body, charset = requestCharset()))
         }
 
         return values.mapValues { (_, value) -> value.toTypedArray() }
@@ -75,7 +74,15 @@ class CachedBodyHttpServletRequest(
             ?: StandardCharsets.UTF_8
 
     companion object {
+        const val MAX_BODY_BYTES = 1024 * 1024
         private const val FORM_URLENCODED_CONTENT_TYPE = "application/x-www-form-urlencoded"
+
+        fun cacheWithinLimit(request: HttpServletRequest): CachedBodyHttpServletRequest? {
+            if (request.contentLengthLong > MAX_BODY_BYTES) return null
+            val body = request.inputStream.readNBytes(MAX_BODY_BYTES + 1)
+            if (body.size > MAX_BODY_BYTES) return null
+            return CachedBodyHttpServletRequest(request = request, body = body)
+        }
     }
 }
 

@@ -2,6 +2,8 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createOutboxRow
+import dev.notypie.application.service.meeting.createH2DataSource
+import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -18,16 +20,20 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
@@ -61,9 +67,8 @@ class StandupSchedulingServiceTest :
             return port
         }
 
-        fun stubTransactionManager(): PlatformTransactionManager {
+        fun stubTransactionManager(status: TransactionStatus = mockk(relaxed = true)): PlatformTransactionManager {
             val tm = mockk<PlatformTransactionManager>()
-            val status = mockk<TransactionStatus>(relaxed = true)
             every { tm.getTransaction(any()) } returns status
             every { tm.commit(any()) } just Runs
             every { tm.rollback(any()) } just Runs
@@ -81,6 +86,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -138,6 +144,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 every { repo.listActiveRoutines() } returns
                     listOf(
@@ -165,6 +172,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -191,6 +199,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
@@ -220,23 +229,26 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
                         weekdays = setOf(DayOfWeek.MONDAY),
                         routineTimezone = seoul,
                     )
-                every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
-                every { repo.createSession(session = any()) } throws
+                val healthy = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                every { repo.listActiveRoutines() } returns listOf(routine, healthy)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } answers { firstArg() }
+                every { repo.createSession(session = match { it.routineUid == routine.routineUid }) } throws
                     DataIntegrityViolationException("UUID collision on session_uid")
 
-                then("the exception propagates so the underlying schema/data bug is not hidden") {
-                    try {
-                        service.openSessionsForToday()
-                        throw AssertionError("expected DataIntegrityViolationException to propagate")
-                    } catch (ex: DataIntegrityViolationException) {
-                        ex.message?.contains("UUID collision") shouldBe true
+                service.openSessionsForToday()
+
+                then("the violation is re-raised for its own routine only, so the next routine still opens") {
+                    verify(exactly = 2) { repo.findSession(routineUid = routine.routineUid, sessionDate = today) }
+                    verify(exactly = 1) {
+                        repo.createSession(session = match { it.routineUid == healthy.routineUid })
                     }
                 }
             }
@@ -250,23 +262,89 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val routine =
                     createRoutineDto(
                         weekdays = setOf(DayOfWeek.MONDAY),
                         routineTimezone = seoul,
                     )
-                every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.findSession(routineUid = routine.routineUid, sessionDate = today) } returns null
-                every { repo.createSession(session = any()) } throws RuntimeException("DB outage")
+                val healthy = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                every { repo.listActiveRoutines() } returns listOf(routine, healthy)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } answers { firstArg() }
+                every { repo.createSession(session = match { it.routineUid == routine.routineUid }) } throws
+                    RuntimeException("DB outage")
 
-                then("the exception propagates so it can be caught by the scheduler tick wrapper") {
-                    try {
-                        service.openSessionsForToday()
-                        throw AssertionError("expected RuntimeException to propagate")
-                    } catch (ex: RuntimeException) {
-                        ex.message shouldBe "DB outage"
+                then("the failure is contained to its routine instead of aborting every routine's session") {
+                    shouldNotThrowAny { service.openSessionsForToday() }
+                    verify(exactly = 1) {
+                        repo.createSession(session = match { it.routineUid == healthy.routineUid })
                     }
+                }
+            }
+
+            `when`("one routine's stored cutoff overflows Instant arithmetic") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val overflowing =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                        cutoffOffset = Duration.ofMinutes(1_000_000_000_000_000L),
+                        members = listOf(createRoutineMemberDto(userId = "U_A", userTimezone = seoul)),
+                    )
+                val healthy =
+                    createRoutineDto(
+                        weekdays = setOf(DayOfWeek.MONDAY),
+                        routineTimezone = seoul,
+                        members = listOf(createRoutineMemberDto(userId = "U_B", userTimezone = seoul)),
+                    )
+                every { repo.listActiveRoutines() } returns listOf(overflowing, healthy)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                val created = slot<StandupSession>()
+                every { repo.createSession(session = capture(created)) } answers { firstArg() }
+
+                service.openSessionsForToday()
+
+                then("only the broken routine is skipped; the healthy routine's session is still created") {
+                    verify(exactly = 1) { repo.createSession(session = any()) }
+                    created.captured.routineUid shouldBe healthy.routineUid
+                }
+            }
+
+            `when`("opening a routine's session is interrupted") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val first = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                val second = createRoutineDto(weekdays = setOf(DayOfWeek.MONDAY), routineTimezone = seoul)
+                every { repo.listActiveRoutines() } returns listOf(first, second)
+                every { repo.findSession(routineUid = any(), sessionDate = today) } returns null
+                every { repo.createSession(session = any()) } throws InterruptedException("shutdown")
+
+                val escaped = runCatching { service.openSessionsForToday() }.exceptionOrNull()
+                val interruptFlag = Thread.interrupted()
+
+                then("the interrupt is rethrown with the flag restored and no further routine is tried") {
+                    escaped.shouldBeInstanceOf<InterruptedException>()
+                    interruptFlag shouldBe true
+                    verify(exactly = 1) { repo.createSession(session = any()) }
                 }
             }
         }
@@ -309,15 +387,17 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
                 val claimedToken = slot<String>()
                 val sentToken = slot<String>()
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.claimDispatch(dispatchId = 42L, claimToken = capture(claimedToken)) } returns true
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = capture(claimedToken), now = any()) } returns
+                    true
                 every {
                     repo.markDispatchSent(dispatchId = 42L, claimToken = capture(sentToken), sentAt = any())
                 } returns true
@@ -326,12 +406,9 @@ class StandupSchedulingServiceTest :
                 service.sendPendingDispatches()
 
                 then("dispatch is claimed, outbox row persisted, markSent called") {
-                    verify(exactly = 1) { repo.claimDispatch(dispatchId = 42L, claimToken = any()) }
+                    verify(exactly = 1) { repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any()) }
                     verify(exactly = 1) { outboxRepo.save(any()) }
                     verify(exactly = 1) { repo.markDispatchSent(dispatchId = 42L, claimToken = any(), sentAt = any()) }
-                    verify(
-                        exactly = 0,
-                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
                 }
 
                 then("the same claim token is threaded from claim through markDispatchSent") {
@@ -364,64 +441,109 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns false
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any()) } returns false
 
                 service.sendPendingDispatches()
 
-                then("no outbox save, no markSent, no markFailed") {
+                then("no outbox save, no markSent") {
                     verify(exactly = 0) { outboxRepo.save(any()) }
                     verify(
                         exactly = 0,
                     ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
-                    verify(
-                        exactly = 0,
-                    ) { repo.markDispatchFailed(dispatchId = any(), claimToken = any(), reason = any()) }
                 }
             }
 
-            `when`("the row build throws") {
+            `when`("the row build throws after the claim") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
                 val port = mockk<OutboundMessagePort>()
                 every {
                     port.toRow(message = any(), basicInfo = any())
                 } throws RuntimeException("Slack API error")
+                val status = mockk<TransactionStatus>(relaxed = true)
+                val transactionManager = stubTransactionManager(status = status)
                 val service =
                     StandupSchedulingService(
                         standupRepository = repo,
                         outboxRepository = outboxRepo,
                         outboundMessagePort = port,
-                        transactionManager = stubTransactionManager(),
+                        transactionManager = transactionManager,
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 42L, userId = "U_A", triggerOffsetSeconds = -60L)
 
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns listOf(routine)
-                every { repo.claimDispatch(dispatchId = 42L, claimToken = any()) } returns true
-                every { repo.markDispatchFailed(dispatchId = 42L, claimToken = any(), reason = any()) } returns true
+                every { repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any()) } returns true
+                every { repo.recordDispatchFailure(dispatchId = 42L, reason = any(), now = any()) } returns true
 
                 service.sendPendingDispatches()
 
-                then("dispatch is marked FAILED with the exception message") {
-                    verify(exactly = 1) {
-                        repo.markDispatchFailed(
-                            dispatchId = 42L,
-                            claimToken = any(),
-                            reason = match { it.contains("Slack API error") },
-                        )
+                then("the claim runs inside the enqueue transaction and rolls back instead of ending in FAILED") {
+                    verifyOrder {
+                        transactionManager.getTransaction(any())
+                        repo.claimDispatch(dispatchId = 42L, claimToken = any(), now = any())
                     }
+                    verify(exactly = 1) { status.setRollbackOnly() }
                     verify(
                         exactly = 0,
                     ) { repo.markDispatchSent(dispatchId = any(), claimToken = any(), sentAt = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+
+                then("the cause is kept on the still-PENDING row for the next tick or the cutoff to report") {
+                    verify(exactly = 1) {
+                        repo.recordDispatchFailure(
+                            dispatchId = 42L,
+                            reason = match { it.contains("Slack API error") },
+                            now = nowInstant,
+                        )
+                    }
+                }
+            }
+
+            `when`("a dispatch that kept failing reaches its session's cutoff") {
+                val repo = mockk<StandupRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val failing =
+                    readyDispatchOf(dispatchId = 43L, userId = "U_A", triggerOffsetSeconds = -3_600L).let { item ->
+                        item.copy(
+                            dispatch = item.dispatch.copy(failureReason = "connection timeout"),
+                            cutoffAt = nowInstant,
+                        )
+                    }
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(failing)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.markDispatchSkipped(dispatchId = 43L, reason = any(), now = any()) } returns true
+
+                service.sendPendingDispatches()
+
+                then("it is retired with the last failure, not as a DM the session closed before") {
+                    verify(exactly = 1) {
+                        repo.markDispatchSkipped(
+                            dispatchId = 43L,
+                            reason = "enqueue failed until cutoff: connection timeout",
+                            now = nowInstant,
+                        )
+                    }
                 }
             }
 
@@ -435,15 +557,16 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns emptyList()
 
                 service.sendPendingDispatches()
 
                 then("no work is done downstream") {
                     verify(exactly = 0) { repo.listActiveRoutines() }
-                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
                 }
             }
@@ -458,18 +581,204 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val ready = readyDispatchOf(dispatchId = 99L, userId = "U_A", triggerOffsetSeconds = -60L)
 
-                every { repo.resetStuckDispatches(olderThan = any()) } returns 0
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
                 every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(ready)
                 every { repo.listActiveRoutines() } returns emptyList()
+                every { repo.markDispatchSkipped(dispatchId = 99L, reason = any(), now = any()) } returns true
 
                 service.sendPendingDispatches()
 
-                then("the dispatch is skipped, no claim attempted") {
-                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any()) }
+                then("no claim is attempted and the row is retired so it leaves the PENDING queue") {
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
+                    verify(exactly = 1) {
+                        repo.markDispatchSkipped(dispatchId = 99L, reason = "routine inactive", now = nowInstant)
+                    }
+                }
+            }
+
+            `when`("an inactive routine's stale dispatch sits ahead of an active routine's dispatch in the batch") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val stale =
+                    readyDispatchOf(dispatchId = 1L, userId = "U_OLD", triggerOffsetSeconds = -86_400L)
+                        .copy(routineUid = UUID.randomUUID())
+                val active = readyDispatchOf(dispatchId = 2L, userId = "U_A", triggerOffsetSeconds = -60L)
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns listOf(stale, active)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.markDispatchSkipped(dispatchId = 1L, reason = any(), now = any()) } returns true
+                every { repo.claimDispatch(dispatchId = 2L, claimToken = any(), now = any()) } returns true
+                every { repo.markDispatchSent(dispatchId = 2L, claimToken = any(), sentAt = any()) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.sendPendingDispatches()
+
+                then("the stale row is retired and the active routine's member is still DM'd in the same tick") {
+                    verify(exactly = 1) { repo.markDispatchSkipped(dispatchId = 1L, reason = any(), now = any()) }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = 1L, claimToken = any(), now = any()) }
+                    verify(exactly = 1) { repo.markDispatchSent(dispatchId = 2L, claimToken = any(), sentAt = any()) }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("a ready dispatch belongs to a session that is summarized or past its cutoff") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val summarized =
+                    readyDispatchOf(dispatchId = 3L, userId = "U_A", triggerOffsetSeconds = -60L)
+                        .copy(sessionStatus = SessionStatus.SUMMARIZED)
+                val pastCutoff =
+                    readyDispatchOf(dispatchId = 4L, userId = "U_A", triggerOffsetSeconds = -60L)
+                        .copy(cutoffAt = nowInstant)
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns
+                    listOf(summarized, pastCutoff)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.markDispatchSkipped(dispatchId = any(), reason = any(), now = any()) } returns true
+
+                service.sendPendingDispatches()
+
+                then("neither is DM'd: both are retired as skipped because their answer could no longer count") {
+                    listOf(3L, 4L).forEach { id ->
+                        verify(exactly = 1) {
+                            repo.markDispatchSkipped(
+                                dispatchId = id,
+                                reason = "session closed before the DM was sent",
+                                now = nowInstant,
+                            )
+                        }
+                    }
+                    verify(exactly = 0) { repo.claimDispatch(dispatchId = any(), claimToken = any(), now = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+        }
+
+        given("the dispatch and nudge claims run against a real transaction manager") {
+            val dataSource = createH2DataSource()
+            val jdbc = JdbcTemplate(dataSource)
+            jdbc.execute("CREATE TABLE dispatch_claim (id BIGINT PRIMARY KEY, dm_status VARCHAR(16))")
+            jdbc.execute("CREATE TABLE nudge_claim (id BIGINT PRIMARY KEY, nudged BOOLEAN)")
+            val transactionManager = createH2TransactionManager(dataSource = dataSource)
+            val routineUid = UUID.randomUUID()
+            val routine = createRoutineDto(routineUid = routineUid, name = "Daily Standup", routineTimezone = seoul)
+
+            fun dispatchStatus(id: Long): String =
+                jdbc.queryForObject("SELECT dm_status FROM dispatch_claim WHERE id = ?", String::class.java, id)!!
+
+            fun nudged(id: Long): Boolean =
+                jdbc.queryForObject("SELECT nudged FROM nudge_claim WHERE id = ?", Boolean::class.java, id)!!
+
+            fun claimingRepo(dispatchId: Long, sessionId: Long): StandupRepository {
+                jdbc.update("INSERT INTO dispatch_claim (id, dm_status) VALUES (?, 'PENDING')", dispatchId)
+                jdbc.update("INSERT INTO nudge_claim (id, nudged) VALUES (?, FALSE)", sessionId)
+                val repo = mockk<StandupRepository>()
+                every { repo.resetStuckDispatches(olderThan = any(), now = any()) } returns 0
+                every { repo.findPendingDispatchesBefore(before = any(), limit = any()) } returns
+                    listOf(
+                        ReadyDispatch(
+                            dispatch =
+                                createSessionDispatchDto(
+                                    id = dispatchId,
+                                    userId = "U_A",
+                                    dmTriggerAt = nowInstant,
+                                ),
+                            sessionUid = UUID.randomUUID(),
+                            sessionDate = today,
+                            cutoffAt = nowInstant.plusSeconds(3_600L),
+                            sessionStatus = SessionStatus.COLLECTING,
+                            summaryMessageTs = null,
+                            routineUid = routineUid,
+                        ),
+                    )
+                every { repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any()) } returns
+                    listOf(
+                        createNudgeCandidateSession(
+                            sessionId = sessionId,
+                            routineUid = routineUid,
+                            cutoffAt = nowInstant.plusSeconds(600L),
+                            sentMemberIds = setOf("U_A"),
+                        ),
+                    )
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimDispatch(dispatchId = dispatchId, claimToken = any(), now = any()) } answers {
+                    jdbc.update(
+                        "UPDATE dispatch_claim SET dm_status = 'SENDING' WHERE id = ? AND dm_status = 'PENDING'",
+                        dispatchId,
+                    ) == 1
+                }
+                every { repo.markDispatchSent(dispatchId = dispatchId, claimToken = any(), sentAt = any()) } answers {
+                    jdbc.update(
+                        "UPDATE dispatch_claim SET dm_status = 'SENT' WHERE id = ? AND dm_status = 'SENDING'",
+                        dispatchId,
+                    ) == 1
+                }
+                every { repo.recordDispatchFailure(dispatchId = dispatchId, reason = any(), now = any()) } returns true
+                every { repo.claimNudge(sessionId = sessionId) } answers {
+                    jdbc.update("UPDATE nudge_claim SET nudged = TRUE WHERE id = ? AND nudged = FALSE", sessionId) == 1
+                }
+                return repo
+            }
+
+            fun serviceOf(repo: StandupRepository, outboxRepo: MessageOutboxRepository) =
+                StandupSchedulingService(
+                    standupRepository = repo,
+                    outboxRepository = outboxRepo,
+                    outboundMessagePort = stubPort(),
+                    transactionManager = transactionManager,
+                    clock = clock,
+                    appConfig = AppConfig(),
+                )
+
+            `when`("the outbox write fails after both claims were taken") {
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                every { outboxRepo.save(any()) } throws IllegalStateException("connection timeout")
+                val service = serviceOf(repo = claimingRepo(dispatchId = 1L, sessionId = 1L), outboxRepo = outboxRepo)
+
+                service.sendPendingDispatches()
+                service.nudgeNonResponders()
+
+                then("both claims roll back: the dispatch stays PENDING and the session un-nudged for the next tick") {
+                    dispatchStatus(id = 1L) shouldBe "PENDING"
+                    nudged(id = 1L) shouldBe false
+                }
+            }
+
+            `when`("the outbox write succeeds") {
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                every { outboxRepo.save(any()) } answers { firstArg() }
+                val service = serviceOf(repo = claimingRepo(dispatchId = 2L, sessionId = 2L), outboxRepo = outboxRepo)
+
+                service.sendPendingDispatches()
+                service.nudgeNonResponders()
+
+                then("both claims commit together with their outbox rows") {
+                    dispatchStatus(id = 2L) shouldBe "SENT"
+                    nudged(id = 2L) shouldBe true
+                    verify(exactly = 2) { outboxRepo.save(any()) }
                 }
             }
         }
@@ -486,6 +795,7 @@ class StandupSchedulingServiceTest :
                         transactionManager = stubTransactionManager(),
                         applicationEventPublisher = publisher,
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val sessionUid = UUID.randomUUID()
                 val routineUid = UUID.randomUUID()
@@ -515,6 +825,34 @@ class StandupSchedulingServiceTest :
                     }
                 }
             }
+
+            `when`("the synchronous summary listener throws for the first of two sessions") {
+                val repo = mockk<StandupRepository>()
+                val publisher = mockk<ApplicationEventPublisher>()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = mockk(relaxed = true),
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        applicationEventPublisher = publisher,
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val broken = createStandupSessionDto(sessionId = 1L)
+                val healthy = createStandupSessionDto(sessionId = 2L)
+                every { repo.findCollectingSessionsPastCutoff(before = any()) } returns listOf(broken, healthy)
+                every { publisher.publishEvent(any<Any>()) } just Runs
+                every { publisher.publishEvent(match<Any> { (it as StandupCutoffEvent).sessionId == 1L }) } throws
+                    IllegalStateException("routine row missing")
+
+                then("the failure is contained and the next session is still summarized") {
+                    shouldNotThrowAny { service.detectCutoffs() }
+                    verify(exactly = 1) {
+                        publisher.publishEvent(match<Any> { (it as StandupCutoffEvent).sessionId == 2L })
+                    }
+                }
+            }
         }
 
         given("nudgeNonResponders") {
@@ -537,6 +875,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = port,
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val candidate =
                     createNudgeCandidateSession(
@@ -595,6 +934,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val candidate =
                     createNudgeCandidateSession(
@@ -628,6 +968,7 @@ class StandupSchedulingServiceTest :
                         outboundMessagePort = stubPort(),
                         transactionManager = stubTransactionManager(),
                         clock = clock,
+                        appConfig = AppConfig(),
                     )
                 val candidate =
                     createNudgeCandidateSession(

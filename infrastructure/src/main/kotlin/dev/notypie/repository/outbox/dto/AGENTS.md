@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-03 -->
 
 # infrastructure/repository/outbox/dto
 
@@ -10,7 +10,7 @@ row from `IN_PROGRESS` to its terminal state. One file, one sealed hierarchy.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxMessageEvents.kt` | `sealed class OutboxUpdateEvent(eventId: UUID, status: MessageStatus)`; `MessagePublishFailedEvent(eventId, reason)` → `FAILURE`; `MessagePublishSuccessEvent(eventId, messageTs = "")` → `SUCCESS`; `fun CommandOutput.toOutboxUpdateEvent(eventId: UUID): OutboxUpdateEvent` picks by `ok`, carrying `messageTs` or `errorReason` |
+| `OutboxMessageEvents.kt` | `sealed class OutboxUpdateEvent(eventId: UUID, status: MessageStatus)`; `MessagePublishFailedEvent(eventId, reason)` → `FAILURE`; `MessagePublishSuccessEvent(eventId, commandDetailType, messageTs = "")` → `SUCCESS`; `fun CommandOutput.toOutboxUpdateEvent(eventId: UUID): OutboxUpdateEvent` picks by `ok`, carrying the dispatch output's `commandDetailType` and `messageTs`, or `errorReason` (the standup summary listener acts only on `STANDUP_SUMMARY`) |
 
 ## For AI Agents
 

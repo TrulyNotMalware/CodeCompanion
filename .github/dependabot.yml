@@ -24,6 +24,7 @@ updates:
         patterns:
           - "io.kotest*"
           - "io.mockk*"
+          - "com.ninja-squad*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -48,6 +49,11 @@ updates:
       timezone: "Asia/Seoul"
     commit-message:
       prefix: "chore :"
+    ignore:
+      # The runtime image must stay on the Java 25 line the Gradle toolchain compiles for. Without this,
+      # a `@dependabot rebase` re-resolved a 25.0.4.1 bump to 27_35 and it was merged by mistake (#23, 2026-10-06).
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker-compose"
     directory: "/application/src/main/resources/cdc/docker-compose"

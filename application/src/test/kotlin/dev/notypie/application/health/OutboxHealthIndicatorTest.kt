@@ -2,13 +2,21 @@ package dev.notypie.application.health
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
+import dev.notypie.application.outbox.OutboxStatusRow
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.createOutboxRepositoryOver
 import dev.notypie.application.outbox.stubOutboxStatus
+import dev.notypie.application.service.ops.OpsStatusService
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.mockk
+import io.mockk.verify
 import org.springframework.boot.health.contributor.Status
+import java.util.concurrent.TimeUnit
 
 class OutboxHealthIndicatorTest :
     BehaviorSpec({
@@ -20,9 +28,17 @@ class OutboxHealthIndicatorTest :
                 OutboxHealthIndicator(
                     outboxRepository = repository,
                     clock = clock,
+                    accessBlockedTracker = AccessBlockedTracker(),
                     appConfig =
                         AppConfig(
-                            outbox = AppConfig.Outbox(health = AppConfig.Outbox.Health(stuckThresholdSeconds = 300L)),
+                            outbox =
+                                AppConfig.Outbox(
+                                    health =
+                                        AppConfig.Outbox.Health(
+                                            stuckThresholdSeconds = 300L,
+                                            retryingSendThreshold = 3,
+                                        ),
+                                ),
                         ),
                 )
 
@@ -41,6 +57,8 @@ class OutboxHealthIndicatorTest :
                     result.details["stuckInFlightCount"] shouldBe 0L
                     result.details["oldestInFlightAgeSeconds"] shouldBe 0L
                     result.details["stuckThresholdSeconds"] shouldBe 300L
+                    result.details["retryingCount"] shouldBe 0L
+                    result.details["retryingSendThreshold"] shouldBe 3
                 }
             }
 
@@ -128,6 +146,164 @@ class OutboxHealthIndicatorTest :
                     result.details["inFlightCount"] shouldBe 4L
                     result.details["stuckInFlightCount"] shouldBe 0L
                     result.details["oldestInFlightAgeSeconds"] shouldBe 15L
+                }
+            }
+
+            `when`("a rate-limited row was deferred and waits for the recovery sweep") {
+                repository.stubOutboxStatus(inProgressCount = 1L, oldestInProgressUpdatedAt = now.minusSeconds(320L))
+
+                val result = indicator.health()
+
+                then("a row the sweep may still pick up within one period is not stuck, and sends are the budget") {
+                    result.status shouldBe Status.UP
+                    verify { repository.countInProgressOlderThan(threshold = now.minusSeconds(360L)) }
+                    verify { repository.countInProgressWithSendsAtLeast(sends = 3) }
+                }
+            }
+
+            `when`("a row keeps being reclaimed and was just re-claimed, so its age looks fresh") {
+                val freshReclaim = now.minusSeconds(5L)
+                repository.stubOutboxStatus(
+                    inProgressCount = 1L,
+                    oldestInProgressUpdatedAt = freshReclaim,
+                    retryingCount = 1L,
+                )
+
+                val result = indicator.health()
+
+                then("status stays DOWN on the send count instead of flapping back to UP") {
+                    result.status shouldBe Status.DOWN
+                    result.details["stuckInFlightCount"] shouldBe 0L
+                    result.details["retryingCount"] shouldBe 1L
+                    verify(atLeast = 1) { repository.countInProgressWithSendsAtLeast(sends = 3) }
+                }
+            }
+        }
+
+        given("the relay held rows because Slack refused the bot's access") {
+            val clock = createFixedUtcClock()
+            val repository = mockk<MessageOutboxRepository>()
+            repository.stubOutboxStatus()
+
+            fun healthAfterHoldAgo(seconds: Long) =
+                OutboxHealthIndicator(
+                    outboxRepository = repository,
+                    clock = clock,
+                    accessBlockedTracker =
+                        AccessBlockedTracker().apply { record(at = clock.instant().minusSeconds(seconds)) },
+                    appConfig = AppConfig(),
+                ).health()
+
+            `when`("the last hold is inside the window") {
+                val health = healthAfterHoldAgo(seconds = 600L)
+
+                then("the indicator is DOWN and says so, although no outbox count moved") {
+                    health.status shouldBe Status.DOWN
+                    health.details["accessBlocked"] shouldBe true
+                    health.details["lastAccessBlockedAt"] shouldBe clock.instant().minusSeconds(600L).toString()
+                    health.details["accessBlockedWindowSeconds"] shouldBe 1_200L
+                }
+            }
+
+            `when`("the last hold is older than the window") {
+                val health = healthAfterHoldAgo(seconds = 1_800L)
+
+                then("the indicator is UP again") {
+                    health.status shouldBe Status.UP
+                    health.details["accessBlocked"] shouldBe false
+                }
+            }
+        }
+
+        given("outbox states on either side of every DOWN rule") {
+            val states =
+                mapOf(
+                    "empty" to emptyList(),
+                    "a deferred row 330 s old, inside the sweep's grace period" to
+                        listOf(
+                            OutboxStatusRow(
+                                status = MessageStatus.IN_PROGRESS,
+                                updatedAt = DEFAULT_TEST_NOW.minusSeconds(330L),
+                            ),
+                        ),
+                    "an in-flight row the sweep failed to take for a full period" to
+                        listOf(
+                            OutboxStatusRow(
+                                status = MessageStatus.IN_PROGRESS,
+                                updatedAt = DEFAULT_TEST_NOW.minusSeconds(400L),
+                            ),
+                        ),
+                    "a just-reclaimed row that has already been sent three times" to
+                        listOf(OutboxStatusRow(status = MessageStatus.IN_PROGRESS, sendCount = 3)),
+                    "a PENDING row older than the stuck threshold" to
+                        listOf(
+                            OutboxStatusRow(
+                                status = MessageStatus.PENDING,
+                                createdAt = DEFAULT_TEST_NOW.minusSeconds(400L),
+                            ),
+                        ),
+                    "a fresh PENDING row" to listOf(OutboxStatusRow(status = MessageStatus.PENDING)),
+                )
+
+            val clock = createFixedUtcClock()
+            val accessBlocked = AccessBlockedTracker().apply { record(at = clock.instant().minusSeconds(600L)) }
+            val cases =
+                states.map { (name, rows) -> Triple(name, rows, AccessBlockedTracker()) } +
+                    Triple("no rows, but a Slack access block 10 minutes ago", emptyList(), accessBlocked)
+
+            cases.forEach { (name, rows, tracker) ->
+                `when`("the outbox holds $name") {
+                    val repository = createOutboxRepositoryOver(rows = rows)
+                    val appConfig = AppConfig()
+                    val health =
+                        OutboxHealthIndicator(
+                            outboxRepository = repository,
+                            clock = clock,
+                            accessBlockedTracker = tracker,
+                            appConfig = appConfig,
+                        ).health()
+                    val report =
+                        OpsStatusService(
+                            outboxRepository = repository,
+                            outboundStager = mockk(),
+                            eventPublisher = mockk(),
+                            cveTopicRepository = mockk(),
+                            cveEventRepository = mockk(),
+                            cveCollectLedgerRepository = mockk(),
+                            accessBlockedTracker = tracker,
+                            clock = clock,
+                            appConfig = appConfig,
+                        ).renderReport()
+                    val registry = SimpleMeterRegistry()
+                    OutboxMetrics(
+                        outboxRepository = repository,
+                        clock = clock,
+                        accessBlockedTracker = tracker,
+                        appConfig = appConfig,
+                        meterRegistry = registry,
+                    )
+
+                    then("@bot status, the actuator indicator and the gauges report the same outbox") {
+                        fun detail(key: String): Double = (health.details[key] as Long).toDouble()
+
+                        fun gauge(name: String, vararg tags: String): Double =
+                            registry
+                                .get(name)
+                                .tags(*tags)
+                                .gauge()
+                                .value()
+
+                        report.contains("UP") shouldBe (health.status == Status.UP)
+                        gauge(OUTBOX_MESSAGES_METRIC, "status", "pending") shouldBe detail("pendingCount")
+                        gauge(OUTBOX_MESSAGES_METRIC, "status", "in_progress") shouldBe detail("inFlightCount")
+                        gauge(OUTBOX_RETRYING_METRIC) shouldBe detail("retryingCount")
+                        gauge(OUTBOX_ACCESS_BLOCKED_METRIC) shouldBe
+                            (if (health.details["accessBlocked"] == true) 1.0 else 0.0)
+                        registry
+                            .get(OUTBOX_IN_PROGRESS_OLDEST_CLAIM_AGE_METRIC)
+                            .timeGauge()
+                            .value(TimeUnit.SECONDS) shouldBe detail("oldestInFlightAgeSeconds")
+                    }
                 }
             }
         }

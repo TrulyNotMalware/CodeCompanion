@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/service/cve/ai
 
@@ -14,7 +14,7 @@ working (deterministically) with no LLM. Which implementation exists is decided 
 | File | Description |
 |------|-------------|
 | `AiSummarizer.kt` | `interface AiSummarizer { fun summarize(request: SummaryRequest): String }`, `data class SummaryRequest(eventId, topicDisplayName, category: CveTopicCategory, eventTitle, rawContent)`, `open class AiSummarizationException` and `class AiSummarizerBusyException` (backpressure — released without spending the retry budget) |
-| `CveSummaryWorker.kt` | `class CveSummaryWorker(cveEventRepository, cveTopicRepository, aiSummarizer, batchSize, maxRetries, backoffMinutes, stuckMinutes)`. `@Scheduled(fixedDelay = 60_000) tick()`: `resetStuck(olderThan = now - stuckMinutes)` then `findClaimable(now, maxRetries, limit = batchSize)` → per event `claimForSummary(id, token = UUID, now, maxRetries)` (0 rows → skip), `summarize`, `markDone(id, token, summary, now)`; `AiSummarizerBusyException` → `releaseClaim(nextAttemptAt = now + 2 min)`; any other exception → `markFailed(nextAttemptAt = now + backoffMinutes * attempt)`, logged as dead-lettered once `attempt >= maxRetries` |
+| `CveSummaryWorker.kt` | `class CveSummaryWorker(cveEventRepository, cveTopicRepository, aiSummarizer, batchSize, maxRetries, backoffMinutes, stuckMinutes)`. `@Scheduled(fixedDelay = 60_000) tick()`: `resetStuck(olderThan = now - stuckMinutes, nextAttemptAt = now + backoffMinutes, now)` (each reset claim spends one retry; a non-zero count is logged at WARN) then `findClaimable(now, maxRetries, limit = batchSize)` → per event `claimForSummary(id, token = UUID, now, maxRetries)` (0 rows → skip), `summarize`, `markDone(id, token, summary, now)`; `AiSummarizerBusyException` → `releaseClaim(nextAttemptAt = now + 2 min)`; any other exception → `markFailed(nextAttemptAt = now + backoffMinutes * attempt)`, logged as dead-lettered once `attempt >= maxRetries` |
 | `CveSummaryPromptBuilder.kt` | `build(request)`: category instructions (`CVE` → `CVE_INSTRUCTIONS`; `LANGUAGE` / `FRAMEWORK` / `ETC` → `RELEASE_INSTRUCTIONS`, both ending in `OUTPUT_RULES`: Korean, Slack mrkdwn, ≤ ~30 lines), the trusted topic name, then the untrusted title + content inside `UNTRUSTED_BEGIN` / `UNTRUSTED_END` fences with `UNTRUSTED_GUARD` above; `neutralizeFences` replaces fence strings found in source data with `FENCE_REPLACEMENT` |
 | `SidecarAiSummarizer.kt` | `class SidecarAiSummarizer(agentGateway, promptBuilder)`: one-shot `AgentTurnRequest(sessionKey = "cve:summary:$eventId", prompt)` — no resume id, no MCP token. `Completed` → `finalText`; `Failed` → `AiSummarizationException`; `Busy` → `AiSummarizerBusyException` |
 | `NoopAiSummarizer.kt` | Returns the title plus the first `MAX_CONTENT_CHARS` (1500) characters of `rawContent`, or the title alone when the body is blank |
@@ -26,12 +26,14 @@ working (deterministically) with no LLM. Which implementation exists is decided 
   keyed on the token the worker generated; a `0` row count means the row was reset and re-owned, and
   the worker logs and walks away rather than burning the new owner's retry budget. Preserve that on any
   new transition.
-- The worker uses `LocalDateTime.now()` directly — no injected `Clock`. `CveSummaryWorkerTest`
-  therefore matches repository calls with `any()` for timestamps; a `Clock` refactor must update the
-  spec and `CveConfiguration.cveSummaryWorker`.
+- Every timestamp (`resetStuck` cutoff, claim horizon, backoff, and the `now` passed to `markDone` / `markFailed` /
+  `releaseClaim` / `resetStuck` for `updated_at`) comes from the injected `Clock` (the context
+  bean, passed by `CveConfiguration`; 2026-10-02). `CveSummaryWorkerTest` pins the stuck cutoff, the claim horizon and the
+  failure / release stamps with a fixed clock; older cases still match timestamps with `any()` or a `before`/`after` window.
 - Busy is not failure. The sidecar serialises turns, so `AiSummarizerBusyException` re-schedules in
   2 minutes (`BUSY_RETRY_DELAY_MINUTES`) with `retryCount` untouched; only real exceptions consume the
-  `maxRetries` budget. `service/ops/OpsStatusService` and `service/cve/ops/CveOpsService` use the same
+  `maxRetries` budget. An interrupt is rethrown with the flag restored and the tick stops; the claim is left to
+  `resetStuck`, which after `stuckMinutes` fails it like any stuck claim (one retry spent). `service/ops/OpsStatusService` and `service/cve/ops/CveOpsService` use the same
   `slack.app.ai.max-retries` to classify dead letters and to `retry` them.
 - `CveConfiguration` enforces `stuckMinutes * 60 > sidecar.requestTimeoutSeconds` for the `sidecar`
   provider so `resetStuck` cannot reclaim a row whose summarize call is still in flight. Keep that

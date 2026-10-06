@@ -1,6 +1,6 @@
 # DDD와 계층 원칙 — 도메인 순수성과 전송 중립성
 
-_type: decision · updated: 2026-08-30_
+_type: decision · updated: 2026-10-01_
 
 > 도메인 순수성은 규율이 아니라 **빌드 제약과 가드 테스트**로 강제하고, 전송 중립성은 **각 단계가 그 자체로
 > 이득을 낼 때만** 점진적으로 밀어붙인다.
@@ -42,7 +42,7 @@ _type: decision · updated: 2026-08-30_
   **영속성 관심사**가 계속 쌓였고, 도메인 모델에는 그것들이 없어야 한다. 변환 계층은 그 차이를 흡수하는
   자리다.
 - 같은 이유로 리포지토리는 **3종 세트**다: `XxxRepository`(인터페이스 + DTO) / `JpaXxxRepository`(Spring Data
-  쿼리) / `XxxRepositoryImpl`(매핑, `open class`, 변이 메서드에 `@Transactional`).
+  쿼리) / `XxxRepositoryImpl`(매핑, `open class`, 변이 메서드에 `@Transactional`, 읽기 메서드에 `@Transactional(readOnly = true)`). `spring.jpa.open-in-view`는 꺼 두었으므로(2026-10-01) 엔티티 → 도메인/DTO 매핑은 이 읽기 트랜잭션 안에서 끝나야 한다.
 
 ## 포트 소유권 — 도메인이 포트와 중립 모델을, 인프라가 어댑터를
 

@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import dev.notypie.schema.createParticipants
@@ -11,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -20,6 +22,7 @@ class JpaMeetingRepositoryTest
     @Autowired
     constructor(
         private val repository: JpaMeetingRepository,
+        private val jdbcTemplate: JdbcTemplate,
     ) : BehaviorSpec({
 
             given("save and findById") {
@@ -97,6 +100,19 @@ class JpaMeetingRepositoryTest
                     then("should return the meeting where user is participant") {
                         result.size shouldBe 1
                         result.first().participants.any { it.userId == participantId } shouldBe true
+                    }
+                }
+
+                `when`("user is one of five participants") {
+                    val meeting = createMeetingSchema(member = 5, startIterator = 300)
+                    repository.save(meeting)
+                    val participantId = meeting.participants.last().userId
+
+                    val result = repository.findAllMeetingByUserId(userId = participantId)
+
+                    then("the fetched participant collection is complete, not filtered down to the caller") {
+                        result.size shouldBe 1
+                        result.first().participants.size shouldBe 5
                     }
                 }
 
@@ -189,6 +205,31 @@ class JpaMeetingRepositoryTest
                     }
                 }
 
+                `when`("querying as a participant of a crowded meeting") {
+                    val meeting =
+                        createMeetingSchema(
+                            publisherId = outsider,
+                            name = "crowded",
+                            startAt = now.plusDays(4L),
+                        )
+                    listOf("U_RANGE_P1", "U_RANGE_P2", "U_RANGE_P3", owner).forEach { userId ->
+                        meeting.participants.add(createParticipants(meeting = meeting, userId = userId))
+                    }
+                    repository.save(meeting)
+
+                    val result =
+                        repository.findMeetingsByUserIdAndDateRange(
+                            userId = owner,
+                            startAt = now.plusDays(4L).minusHours(1L),
+                            endAt = now.plusDays(4L).plusHours(1L),
+                        )
+
+                    then("the crowded meeting carries all four participants, not only the caller") {
+                        result.map { it.name } shouldBe listOf("crowded")
+                        result.first().participants.size shouldBe 4
+                    }
+                }
+
                 `when`("querying a narrow window that excludes all matching meetings") {
                     val result =
                         repository.findMeetingsByUserIdAndDateRange(
@@ -243,6 +284,49 @@ class JpaMeetingRepositoryTest
                     }
                 }
 
+                `when`("the detail is exactly RejectReason.MAX_DETAIL_LENGTH characters") {
+                    val meetingKey = UUID.randomUUID()
+                    val participantUserId = "U_ATTENDANCE_LIMIT"
+                    val meeting = createMeetingSchema(idempotencyKey = meetingKey, publisherId = "U_LIMIT_PUB")
+                    meeting.participants.add(createParticipants(meeting = meeting, userId = participantUserId))
+                    repository.save(meeting)
+
+                    fun decline(detail: String) =
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = participantUserId,
+                            isAttending = false,
+                            absentReason = RejectReason.OTHER,
+                            absentReasonDetail = detail,
+                        )
+
+                    fun storedDetail() =
+                        repository
+                            .findMeetingWithParticipants(meetingId = meeting.id)!!
+                            .participants
+                            .single()
+                            .absentReasonDetail
+
+                    then(
+                        "the mapped column is exactly the domain limit wide and a note of that length is stored intact",
+                    ) {
+                        jdbcTemplate.queryForObject(
+                            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS " +
+                                "WHERE TABLE_NAME = 'MEETING_PARTICIPANTS' AND COLUMN_NAME = 'ABSENT_REASON_DETAIL'",
+                            Int::class.java,
+                        ) shouldBe RejectReason.MAX_DETAIL_LENGTH
+                        decline(detail = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)) shouldBe 1
+                        storedDetail() shouldBe "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
+                    }
+
+                    then("H2 counts UTF-16 units: a note at the limit in emoji is cut to the column width") {
+                        val emojiAtLimit = "😀".repeat(RejectReason.MAX_DETAIL_LENGTH)
+                        decline(detail = emojiAtLimit) shouldBe 1
+                        storedDetail()!!.length shouldBe RejectReason.MAX_DETAIL_LENGTH
+                        storedDetail() shouldNotBe emojiAtLimit
+                    }
+                }
+
                 `when`("no participant matches (stale/unknown meeting or user)") {
                     val rowsUpdated =
                         repository.updateParticipantAttendance(
@@ -259,180 +343,104 @@ class JpaMeetingRepositoryTest
                 }
             }
 
-            given("markMeetingCanceled") {
-                `when`("the host cancels their own active meeting") {
-                    val saved =
-                        repository.save(
-                            createMeetingSchemaWithParticipant(
-                                publisherId = "U_HOST",
-                                participantUserId = "U_PARTICIPANT",
-                            ),
-                        )
-
-                    val rowsUpdated =
-                        repository.markMeetingCanceled(
-                            meetingUid = saved.meetingUid,
-                            requesterId = "U_HOST",
-                        )
-
-                    then("should report exactly one row updated") {
-                        rowsUpdated shouldBe 1
-                    }
-
-                    then("subsequent reads should reflect the canceled flag") {
-                        val refreshed = repository.findMeetingWithParticipants(meetingId = saved.id)
-                        refreshed!!.isCanceled shouldBe true
-                    }
-                }
-
-                `when`("a non-host requests cancellation") {
-                    val saved =
-                        repository.save(
-                            createMeetingSchemaWithParticipant(
-                                publisherId = "U_HOST",
-                                participantUserId = "U_PARTICIPANT",
-                            ),
-                        )
-
-                    val rowsUpdated =
-                        repository.markMeetingCanceled(
-                            meetingUid = saved.meetingUid,
-                            requesterId = "U_PARTICIPANT",
-                        )
-
-                    then("should report 0 rows updated and leave the meeting active") {
-                        rowsUpdated shouldBe 0
-                        val refreshed = repository.findMeetingWithParticipants(meetingId = saved.id)
-                        refreshed!!.isCanceled shouldBe false
-                    }
-                }
-
-                `when`("the meeting was already canceled") {
-                    val saved =
-                        repository.save(
-                            createMeetingSchemaWithParticipant(
-                                publisherId = "U_HOST",
-                                participantUserId = "U_PARTICIPANT",
-                            ),
-                        )
-                    repository.markMeetingCanceled(
-                        meetingUid = saved.meetingUid,
-                        requesterId = "U_HOST",
+            given("a meeting whose host picked nobody else") {
+                val soloStart = LocalDateTime.of(2030, 3, 4, 10, 0)
+                val solo =
+                    repository.save(
+                        createMeetingSchema(publisherId = "U_SOLO_HOST", name = "solo", startAt = soloStart),
                     )
 
-                    val rowsUpdated =
-                        repository.markMeetingCanceled(
-                            meetingUid = saved.meetingUid,
-                            requesterId = "U_HOST",
-                        )
+                `when`("it is read by id") {
+                    val result = repository.findMeetingWithParticipants(meetingId = solo.id)
 
-                    then("the second cancellation should be a no-op") {
-                        rowsUpdated shouldBe 0
+                    then("it is found with an empty participant list") {
+                        result!!.name shouldBe "solo"
+                        result.participants shouldBe emptyList()
                     }
                 }
 
-                `when`("no meeting matches the meetingUid") {
-                    val rowsUpdated =
-                        repository.markMeetingCanceled(
-                            meetingUid = UUID.randomUUID(),
-                            requesterId = "U_HOST",
+                `when`("it is read by uid") {
+                    val result = repository.findMeetingByUidWithParticipants(meetingUid = solo.meetingUid)
+
+                    then("it is found with an empty participant list") {
+                        result!!.participants shouldBe emptyList()
+                    }
+                }
+
+                `when`("the host lists all their meetings") {
+                    val result = repository.findAllMeetingByUserId(userId = "U_SOLO_HOST")
+
+                    then("the meeting is listed") {
+                        result.map { it.name } shouldBe listOf("solo")
+                    }
+                }
+
+                `when`("the host lists meetings in a range that covers it") {
+                    val result =
+                        repository.findMeetingsByUserIdAndDateRange(
+                            userId = "U_SOLO_HOST",
+                            startAt = soloStart.minusHours(1L),
+                            endAt = soloStart.plusHours(1L),
                         )
 
-                    then("should report 0 rows updated") {
-                        rowsUpdated shouldBe 0
+                    then("the meeting is listed") {
+                        result.map { it.name } shouldBe listOf("solo")
+                    }
+                }
+
+                `when`("the scheduler sweeps active meetings in a window that covers it") {
+                    val result =
+                        repository.findActiveByStartAtBetween(
+                            startAt = soloStart.minusMinutes(1L),
+                            endAt = soloStart.plusMinutes(1L),
+                        )
+
+                    then("the meeting is swept with no participants") {
+                        result.map { it.name } shouldBe listOf("solo")
+                        result.single().participants shouldBe emptyList()
                     }
                 }
             }
 
-            given("rescheduleMeeting") {
-                val newStartAt = LocalDateTime.of(2026, 8, 1, 9, 0)
-
-                `when`("the host reschedules their own active meeting") {
-                    val saved =
-                        repository.save(
-                            createMeetingSchemaWithParticipant(
-                                publisherId = "U_HOST",
-                                participantUserId = "U_PARTICIPANT",
-                            ),
-                        )
-
-                    val rowsUpdated =
-                        repository.rescheduleMeeting(
-                            meetingUid = saved.meetingUid,
-                            requesterId = "U_HOST",
-                            newStartAt = newStartAt,
-                        )
-
-                    then("should report exactly one row updated") {
-                        rowsUpdated shouldBe 1
-                    }
-
-                    then("subsequent reads should reflect the new start time") {
-                        val refreshed = repository.findMeetingByUidWithParticipants(meetingUid = saved.meetingUid)
-                        refreshed!!.startAt shouldBe newStartAt
-                    }
-                }
-
-                `when`("a non-host requests the reschedule") {
-                    val originalStart = LocalDateTime.of(2026, 1, 1, 10, 0)
-                    val saved =
-                        repository.save(
-                            createMeetingSchemaWithParticipant(
-                                publisherId = "U_HOST",
-                                participantUserId = "U_PARTICIPANT",
-                                startAt = originalStart,
-                            ),
-                        )
-
-                    val rowsUpdated =
-                        repository.rescheduleMeeting(
-                            meetingUid = saved.meetingUid,
-                            requesterId = "U_PARTICIPANT",
-                            newStartAt = newStartAt,
-                        )
-
-                    then("should report 0 rows updated and leave the start time unchanged") {
-                        rowsUpdated shouldBe 0
-                        val refreshed = repository.findMeetingByUidWithParticipants(meetingUid = saved.meetingUid)
-                        refreshed!!.startAt shouldBe originalStart
-                    }
-                }
-
-                `when`("the meeting is already canceled") {
-                    val saved =
-                        repository.save(
-                            createMeetingSchemaWithParticipant(
-                                publisherId = "U_HOST",
-                                participantUserId = "U_PARTICIPANT",
-                            ),
-                        )
-                    repository.markMeetingCanceled(
-                        meetingUid = saved.meetingUid,
-                        requesterId = "U_HOST",
+            given("findActiveByStartAtBetween over active and canceled meetings") {
+                val windowStart = LocalDateTime.of(2030, 5, 6, 0, 0)
+                repository.save(
+                    createMeetingSchemaWithParticipant(
+                        publisherId = "U_SWEEP_HOST",
+                        participantUserId = "U_SWEEP_A",
+                        name = "active",
+                        startAt = windowStart.plusHours(9L),
+                    ),
+                )
+                repository.save(
+                    createMeetingSchema(
+                        publisherId = "U_SWEEP_HOST",
+                        name = "canceled",
+                        startAt = windowStart.plusHours(10L),
+                        isCanceled = true,
+                    ),
+                )
+                val crowded =
+                    createMeetingSchema(
+                        publisherId = "U_SWEEP_HOST",
+                        name = "crowded",
+                        startAt = windowStart.plusHours(11L),
                     )
-
-                    val rowsUpdated =
-                        repository.rescheduleMeeting(
-                            meetingUid = saved.meetingUid,
-                            requesterId = "U_HOST",
-                            newStartAt = newStartAt,
-                        )
-
-                    then("the reschedule should be a no-op") {
-                        rowsUpdated shouldBe 0
-                    }
+                listOf("U_SWEEP_C", "U_SWEEP_D", "U_SWEEP_E").forEach { userId ->
+                    crowded.participants.add(createParticipants(meeting = crowded, userId = userId))
                 }
+                repository.save(crowded)
 
-                `when`("no meeting matches the meetingUid") {
-                    val rowsUpdated =
-                        repository.rescheduleMeeting(
-                            meetingUid = UUID.randomUUID(),
-                            requesterId = "U_HOST",
-                            newStartAt = newStartAt,
+                `when`("the window covers all of them") {
+                    val result =
+                        repository.findActiveByStartAtBetween(
+                            startAt = windowStart,
+                            endAt = windowStart.plusDays(1L),
                         )
 
-                    then("should report 0 rows updated") {
-                        rowsUpdated shouldBe 0
+                    then("canceled meetings are excluded and each active meeting appears once, ordered by start") {
+                        result.map { it.name } shouldBe listOf("active", "crowded")
+                        result.last().participants.size shouldBe 3
                     }
                 }
             }

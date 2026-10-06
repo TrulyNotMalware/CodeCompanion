@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/mention
 
@@ -11,7 +11,7 @@ is not exercised here.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, `appToken == TEST_BOT_TOKEN`; `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`. |
+| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK; the handler gets a real H2 `createH2TransactionManager()`. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, `appToken == TEST_BOT_TOKEN`; `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`. `handleEvent(headers, payload)`: a message posted by this app (`botAppId = TEST_APP_ID`), one whose only `bot_profile.app_id` names this app, and one without `user` (and `blocks`) → `Status.DO_NOTHING` with no role lookup and no execution; a plain human mention and a person posting through another app (`botAppId = "A_OTHER_APP"`) → the role is resolved for `TEST_USER_ID` and the command runs once. |
 
 ## For AI Agents
 

@@ -7,11 +7,19 @@ import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.domain.meet.entity.RejectReason
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.OptimisticLock
 import org.hibernate.annotations.UpdateTimestamp
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 
 @Entity(name = "meetings")
+@Table(
+    indexes = [
+        Index(name = "idx_meetings_canceled_start_at", columnList = "is_canceled, start_at"),
+        Index(name = "idx_meetings_publisher_start_at", columnList = "publisher_id, start_at"),
+    ],
+)
 class MeetingSchema(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,12 +31,10 @@ class MeetingSchema(
     val idempotencyKey: UUID,
     @field:Column(name = "name", nullable = false)
     val name: String,
-    @field:Column(name = "start_at", nullable = false)
-    val startAt: LocalDateTime,
-    @field:Column(name = "end_at")
-    val endAt: LocalDateTime? = null,
-    @field:Column(name = "is_canceled", nullable = false)
-    val isCanceled: Boolean = false,
+    startAt: LocalDateTime,
+    endAt: LocalDateTime? = null,
+    isCanceled: Boolean = false,
+    @field:OptimisticLock(excluded = false)
     @field:OneToMany(
         mappedBy = "meeting",
         fetch = FetchType.LAZY,
@@ -49,7 +55,37 @@ class MeetingSchema(
     @field:UpdateTimestamp
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
-)
+) {
+    @field:Column(name = "start_at", nullable = false)
+    var startAt: LocalDateTime = startAt
+        protected set
+
+    @field:Column(name = "end_at")
+    var endAt: LocalDateTime? = endAt
+        protected set
+
+    @field:Column(name = "is_canceled", nullable = false)
+    var isCanceled: Boolean = isCanceled
+        protected set
+
+    @field:Version
+    @field:Column(name = "version", nullable = false)
+    var version: Long = 0L
+        protected set
+
+    fun reschedule(newStartAt: LocalDateTime) {
+        endAt = endAt?.takeIf { it.isAfter(startAt) }?.let { newStartAt.plus(Duration.between(startAt, it)) }
+        startAt = newStartAt
+    }
+
+    fun cancel() {
+        isCanceled = true
+    }
+
+    fun addParticipants(userIds: Collection<String>) {
+        userIds.forEach { participants.add(ParticipantsSchema(meeting = this, userId = it)) }
+    }
+}
 
 fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
     val meetingSchema =
@@ -110,7 +146,17 @@ fun MeetingSchema.toMeetingDto() =
             },
     )
 
+const val PARTICIPANT_UNIQUE_KEY = "uk_meeting_participants_meeting_user"
+
 @Entity(name = "meeting_participants")
+@Table(
+    uniqueConstraints = [
+        UniqueConstraint(name = PARTICIPANT_UNIQUE_KEY, columnNames = ["meeting_id", "user_id"]),
+    ],
+    indexes = [
+        Index(name = "idx_meeting_participants_user_id", columnList = "user_id"),
+    ],
+)
 class ParticipantsSchema(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -123,9 +169,9 @@ class ParticipantsSchema(
     @field:Column(name = "is_attending", nullable = false)
     val isAttending: Boolean = true,
     @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "absent_reason")
+    @field:Column(name = "absent_reason", nullable = false)
     val absentReason: RejectReason = RejectReason.ATTENDING,
-    @field:Column(name = "absent_reason_detail")
+    @field:Column(name = "absent_reason_detail", length = RejectReason.MAX_DETAIL_LENGTH)
     val absentReasonDetail: String? = null,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)

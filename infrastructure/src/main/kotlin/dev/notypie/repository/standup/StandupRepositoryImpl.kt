@@ -6,15 +6,16 @@ import dev.notypie.domain.standup.dto.StandupSessionDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
 import dev.notypie.repository.standup.schema.SessionDispatchSchema
-import dev.notypie.repository.standup.schema.StandupAnswerSchema
 import dev.notypie.repository.standup.schema.StandupSessionSchema
 import dev.notypie.repository.standup.schema.toDomainEntity
 import dev.notypie.repository.standup.schema.toRoutineDto
 import dev.notypie.repository.standup.schema.toSchema
 import dev.notypie.repository.standup.schema.toStandupSessionDto
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
@@ -41,17 +42,20 @@ open class StandupRepositoryImpl(
             .save(routine.toSchema())
             .toDomainEntity()
 
+    @Transactional(readOnly = true)
     override fun getRoutine(routineUid: UUID): RoutineDto =
         jpaRoutineRepository
             .findByRoutineUid(routineUid = routineUid)
             ?.toRoutineDto()
             .throwIfSchemaNotFound(fieldName = "routineUid", fieldValue = routineUid)
 
+    @Transactional(readOnly = true)
     override fun findActiveRoutinesByChannel(commandChannel: String): List<RoutineDto> =
         jpaRoutineRepository
             .findActiveByCommandChannel(channel = commandChannel)
             .map { it.toRoutineDto() }
 
+    @Transactional(readOnly = true)
     override fun listActiveRoutines(): List<RoutineDto> =
         jpaRoutineRepository
             .findAllActive()
@@ -67,15 +71,23 @@ open class StandupRepositoryImpl(
             .save(session.toSchema())
             .toDomainEntity()
 
+    @Transactional(readOnly = true)
     override fun findSession(routineUid: UUID, sessionDate: LocalDate): StandupSessionDto? =
         jpaStandupSessionRepository
             .findByRoutineUidAndSessionDate(routineUid = routineUid, sessionDate = sessionDate)
             ?.toStandupSessionDto()
 
+    @Transactional(readOnly = true)
     override fun findSession(sessionUid: UUID): StandupSessionDto? =
         jpaStandupSessionRepository
             .findBySessionUid(sessionUid = sessionUid)
             ?.toStandupSessionDto()
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun findSessionForSummary(sessionUid: UUID): StandupSessionDto? =
+        jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)?.let { session ->
+            session.toStandupSessionDto().copy(status = lockedStatusOf(session = session))
+        }
 
     @Transactional
     override fun recordAnswer(
@@ -83,37 +95,48 @@ open class StandupRepositoryImpl(
         userId: String,
         responses: List<String>,
         submittedAt: Instant,
-    ): Boolean {
+    ): AnswerRecordResult {
         val session =
-            jpaStandupSessionRepository.findBySessionUid(sessionUid = sessionUid)
-                ?: return false
-        session.answers.removeIf { it.userId == userId }
-        session.answers.add(
-            StandupAnswerSchema(
-                session = session,
-                userId = userId,
-                responsesRaw = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER),
-                submittedAt = submittedAt,
-            ),
+            jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)
+                ?: return AnswerRecordResult.SESSION_NOT_FOUND
+        if (lockedStatusOf(session = session) != SessionStatus.COLLECTING || !submittedAt.isBefore(session.cutoffAt)) {
+            return AnswerRecordResult.SESSION_CLOSED
+        }
+        jpaStandupSessionRepository.upsertAnswer(
+            sessionId = session.id,
+            userId = userId,
+            responses = responses.joinToString(separator = StandupSessionSchema.RESPONSE_DELIMITER),
+            submittedAt = submittedAt,
         )
-        jpaStandupSessionRepository.save(session)
-        return true
+        return AnswerRecordResult.RECORDED
     }
 
-    override fun claimDispatch(dispatchId: Long, claimToken: String): Boolean =
-        jpaSessionDispatchRepository.claimDispatch(id = dispatchId, token = claimToken) == 1
+    private fun lockedStatusOf(session: StandupSessionSchema): SessionStatus =
+        SessionStatus.valueOf(jpaStandupSessionRepository.findLockedStatus(id = session.id))
+
+    override fun claimDispatch(dispatchId: Long, claimToken: String, now: Instant): Boolean =
+        jpaSessionDispatchRepository.claimDispatch(id = dispatchId, token = claimToken, now = now) == 1
 
     @Transactional
     override fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean =
         jpaSessionDispatchRepository.markSent(id = dispatchId, token = claimToken, sentAt = sentAt) == 1
 
     @Transactional
-    override fun markDispatchFailed(dispatchId: Long, claimToken: String, reason: String): Boolean =
-        jpaSessionDispatchRepository.markFailed(id = dispatchId, token = claimToken, reason = reason) == 1
+    override fun recordDispatchFailure(dispatchId: Long, reason: String, now: Instant): Boolean =
+        jpaSessionDispatchRepository.recordFailure(id = dispatchId, reason = reason, now = now) == 1
 
-    override fun resetStuckDispatches(olderThan: Instant): Int =
-        jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan)
+    @Transactional
+    override fun markDispatchSkipped(dispatchId: Long, reason: String, now: Instant): Boolean =
+        jpaSessionDispatchRepository.markSkipped(
+            id = dispatchId,
+            reason = DispatchStatus.SKIPPED_REASON_PREFIX + reason,
+            now = now,
+        ) == 1
 
+    override fun resetStuckDispatches(olderThan: Instant, now: Instant): Int =
+        jpaSessionDispatchRepository.resetStuckSending(olderThan = olderThan, now = now)
+
+    @Transactional(readOnly = true)
     override fun findPendingDispatchesBefore(before: Instant, limit: Int): List<ReadyDispatch> =
         jpaSessionDispatchRepository
             .findPendingBefore(before = before, pageable = PageRequest.of(0, limit))
@@ -129,6 +152,7 @@ open class StandupRepositoryImpl(
                 )
             }
 
+    @Transactional(readOnly = true)
     override fun findCollectingSessionsPastCutoff(before: Instant): List<StandupSessionDto> =
         jpaStandupSessionRepository
             .findCollectingPastCutoff(before = before)
@@ -137,6 +161,7 @@ open class StandupRepositoryImpl(
     override fun markSessionSummarized(sessionId: Long, messageTs: String): Boolean =
         jpaStandupSessionRepository.markSummarized(id = sessionId, messageTs = messageTs) == 1
 
+    @Transactional(readOnly = true)
     override fun findCollectingSessionsForNudge(now: Instant, nudgeWindowEnd: Instant): List<NudgeCandidateSession> =
         jpaStandupSessionRepository
             .findCollectingForNudge(now = now, nudgeWindowEnd = nudgeWindowEnd)

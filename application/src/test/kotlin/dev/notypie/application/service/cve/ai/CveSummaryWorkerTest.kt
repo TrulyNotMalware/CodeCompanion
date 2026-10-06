@@ -10,7 +10,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.Clock
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 class CveSummaryWorkerTest :
     BehaviorSpec({
@@ -21,6 +23,7 @@ class CveSummaryWorkerTest :
             eventRepository: CveEventRepository,
             topicRepository: CveTopicRepository = mockk(),
             summarizer: AiSummarizer = mockk(),
+            clock: Clock = Clock.systemDefaultZone(),
         ): CveSummaryWorker =
             CveSummaryWorker(
                 cveEventRepository = eventRepository,
@@ -30,6 +33,7 @@ class CveSummaryWorkerTest :
                 maxRetries = 5,
                 backoffMinutes = backoffMinutes,
                 stuckMinutes = stuckMinutes,
+                clock = clock,
             )
 
         given("a claimable event that summarizes cleanly") {
@@ -38,7 +42,7 @@ class CveSummaryWorkerTest :
             val summarizer = mockk<AiSummarizer>()
             val claimToken = slot<String>()
             val doneToken = slot<String>()
-            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every {
@@ -56,7 +60,9 @@ class CveSummaryWorkerTest :
                 worker.tick()
 
                 then("stuck rows are reset once and the batch is claimed with the configured knobs") {
-                    verify(exactly = 1) { eventRepository.resetStuck(olderThan = any()) }
+                    verify(
+                        exactly = 1,
+                    ) { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) }
                     verify(exactly = 1) { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) }
                 }
 
@@ -65,7 +71,9 @@ class CveSummaryWorkerTest :
                         eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY", now = any())
                     }
                     claimToken.captured shouldBe doneToken.captured
-                    verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
                 }
             }
         }
@@ -74,7 +82,7 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>(relaxed = true)
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 0
@@ -89,7 +97,9 @@ class CveSummaryWorkerTest :
                     verify(exactly = 0) {
                         eventRepository.markDone(id = any(), token = any(), summary = any(), now = any())
                     }
-                    verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
                 }
             }
         }
@@ -100,7 +110,7 @@ class CveSummaryWorkerTest :
             val summarizer = mockk<AiSummarizer>()
             val failToken = slot<String>()
             val nextAttemptAt = slot<LocalDateTime>()
-            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(
                     createCveEvent(id = 1L, topicId = 10L, retryCount = 2),
@@ -115,7 +125,12 @@ class CveSummaryWorkerTest :
                 AiSummarizationException(message = "boom")
             every { summarizer.summarize(request = match { it.eventId == 2L }) } returns "OK"
             every {
-                eventRepository.markFailed(id = 1L, token = capture(failToken), nextAttemptAt = capture(nextAttemptAt))
+                eventRepository.markFailed(
+                    id = 1L,
+                    token = capture(failToken),
+                    nextAttemptAt = capture(nextAttemptAt),
+                    now = any(),
+                )
             } returns 1
             every { eventRepository.markDone(id = 2L, token = any(), summary = "OK", now = any()) } returns 1
             val worker = workerWith(eventRepository, topicRepository, summarizer)
@@ -127,7 +142,7 @@ class CveSummaryWorkerTest :
 
                 then("the failing event is marked failed with backoff = backoffMinutes * (retryCount + 1)") {
                     verify(exactly = 1) {
-                        eventRepository.markFailed(id = 1L, token = any(), nextAttemptAt = any())
+                        eventRepository.markFailed(id = 1L, token = any(), nextAttemptAt = any(), now = any())
                     }
                     val lowerBound = before.plusMinutes(backoffMinutes * 3).minusSeconds(5)
                     val upperBound = after.plusMinutes(backoffMinutes * 3).plusSeconds(5)
@@ -143,9 +158,116 @@ class CveSummaryWorkerTest :
             }
         }
 
+        given("an event whose summary call is interrupted, followed by another event") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val topicRepository = mockk<CveTopicRepository>()
+            val summarizer = mockk<AiSummarizer>()
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
+                listOf(
+                    createCveEvent(id = 1L, topicId = 10L, retryCount = 0),
+                    createCveEvent(id = 2L, topicId = 10L, retryCount = 0),
+                )
+            every { eventRepository.claimForSummary(id = any(), token = any(), now = any(), maxRetries = 5) } returns 1
+            every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
+            every { summarizer.summarize(request = any()) } throws InterruptedException("shutting down")
+            val worker = workerWith(eventRepository, topicRepository, summarizer)
+
+            `when`("the tick runs") {
+                worker.tick()
+                val keptInterrupt = Thread.interrupted()
+
+                then("the retry budget is not spent and the tick stops before the next event") {
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) }
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
+        given("a tick on a clock fixed far from the wall clock") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val fixedNow = LocalDateTime.of(2030, 3, 4, 5, 6)
+            val clock = Clock.fixed(fixedNow.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault())
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns emptyList()
+
+            `when`("the tick runs") {
+                workerWith(eventRepository = eventRepository, clock = clock).tick()
+
+                then("the stuck cutoff, the reset backoff and the claim horizon come from that clock") {
+                    verify(
+                        exactly = 1,
+                    ) {
+                        eventRepository.resetStuck(
+                            olderThan = fixedNow.minusMinutes(stuckMinutes),
+                            nextAttemptAt = fixedNow.plusMinutes(backoffMinutes),
+                            now = fixedNow,
+                        )
+                    }
+                    verify(exactly = 1) { eventRepository.findClaimable(now = fixedNow, maxRetries = 5, limit = 10) }
+                }
+            }
+        }
+
+        given("a failing and a busy event on a clock fixed far from the wall clock") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val topicRepository = mockk<CveTopicRepository>()
+            val summarizer = mockk<AiSummarizer>()
+            val fixedNow = LocalDateTime.of(2030, 3, 4, 5, 6)
+            val clock = Clock.fixed(fixedNow.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault())
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
+                listOf(createCveEvent(id = 1L, topicId = 10L), createCveEvent(id = 2L, topicId = 10L))
+            every { eventRepository.claimForSummary(id = any(), token = any(), now = any(), maxRetries = 5) } returns 1
+            every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
+            every { summarizer.summarize(request = match { it.eventId == 1L }) } throws
+                AiSummarizationException(message = "boom")
+            every { summarizer.summarize(request = match { it.eventId == 2L }) } throws
+                AiSummarizerBusyException(message = "busy")
+            every { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) } returns
+                1
+            every {
+                eventRepository.releaseClaim(
+                    id = any(),
+                    token = any(),
+                    nextAttemptAt = any(),
+                    now = any(),
+                )
+            } returns
+                1
+
+            `when`("the tick runs") {
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                    clock = clock,
+                ).tick()
+
+                then("the failure and the release stamp the row with that clock's now") {
+                    verify(exactly = 1) {
+                        eventRepository.markFailed(
+                            id = 1L,
+                            token = any(),
+                            nextAttemptAt = fixedNow.plusMinutes(backoffMinutes),
+                            now = fixedNow,
+                        )
+                    }
+                    verify(exactly = 1) {
+                        eventRepository.releaseClaim(id = 2L, token = any(), nextAttemptAt = any(), now = fixedNow)
+                    }
+                }
+            }
+        }
+
         given("a tick with no claimable events") {
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
-            every { eventRepository.resetStuck(olderThan = any()) } returns 4
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 4
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns emptyList()
             val worker = workerWith(eventRepository)
 
@@ -153,7 +275,9 @@ class CveSummaryWorkerTest :
                 worker.tick()
 
                 then("stuck recovery still runs exactly once") {
-                    verify(exactly = 1) { eventRepository.resetStuck(olderThan = any()) }
+                    verify(
+                        exactly = 1,
+                    ) { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) }
                 }
             }
         }
@@ -161,14 +285,14 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>()
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L, retryCount = 3))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 1
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = any()) } throws
                 AiSummarizerBusyException(message = "Sidecar busy (code=busy) for event=1")
-            every { eventRepository.releaseClaim(id = 1L, token = any(), nextAttemptAt = any()) } returns 1
+            every { eventRepository.releaseClaim(id = 1L, token = any(), nextAttemptAt = any(), now = any()) } returns 1
             val worker = workerWith(eventRepository, topicRepository, summarizer)
 
             `when`("the tick runs") {
@@ -176,9 +300,11 @@ class CveSummaryWorkerTest :
 
                 then("the claim is released without consuming the retry budget") {
                     verify(exactly = 1) {
-                        eventRepository.releaseClaim(id = 1L, token = any(), nextAttemptAt = any())
+                        eventRepository.releaseClaim(id = 1L, token = any(), nextAttemptAt = any(), now = any())
                     }
-                    verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
                     verify(exactly = 0) {
                         eventRepository.markDone(id = any(), token = any(), summary = any(), now = any())
                     }
@@ -190,7 +316,7 @@ class CveSummaryWorkerTest :
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>()
             val summarizer = mockk<AiSummarizer>()
-            every { eventRepository.resetStuck(olderThan = any()) } returns 0
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 1
@@ -203,10 +329,12 @@ class CveSummaryWorkerTest :
                 worker.tick()
 
                 then("the lost claim is not treated as a failure — the retry budget stays intact") {
-                    verify(exactly = 0) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any()) }
                     verify(
                         exactly = 0,
-                    ) { eventRepository.releaseClaim(id = any(), token = any(), nextAttemptAt = any()) }
+                    ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.releaseClaim(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
                 }
             }
         }

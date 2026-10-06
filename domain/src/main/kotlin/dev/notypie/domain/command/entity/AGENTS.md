@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # domain/command/entity
 
 ## Purpose
 The `Command` aggregate and its routing tables. A `Command` owns an `IntentQueue`, resolves a
-`CommandContext` for its inbound payload, runs it once inside `runCatching`, and hands the drained
+`CommandContext` for its inbound payload, runs it once inside a `try` that turns exceptions (not `Error`s or interrupts) into a failed output, and hands the drained
 effects to the application layer. `CommandType` / `CommandDetailType` are the routing enums; `CommandSet`
 is the mention vocabulary.
 
@@ -46,9 +46,10 @@ is the mention vocabulary.
 - `subCommands` layout is `[identifier, option, option, ...]`: `findSubCommandDefinition` reads index
   0, `createSubCommand` hands the rest to `SubCommand.options`. `RequestMeetingContext` validates the
   `list` option itself; `SubCommandDefinition.validateArguments` only checks a minimum count.
-- `handleEvent()` catches everything — including the `IllegalArgumentException("Command Queue is
-  empty")` the mention parser throws — and reports `exception.toString()` as `errorReason`. There is no
-  path where a `Command` throws to its caller.
+- `handleEvent()` catches every `Exception` — including the `IllegalArgumentException("Command Queue is
+  empty")` the mention parser throws — and reports `exception.toString()` as `errorReason`. Two things
+  propagate instead (2026-10-01): an `InterruptedException`, rethrown with the interrupt flag restored, and
+  any `Error` (an out-of-memory or stack overflow is not a command failure to reply about).
 - Visibility policy: `Command`, `InteractionCommand`, `ReplaceTextResponseCommand`, the slash commands,
   `CommandType` and `CommandDetailType` are public (the application builds and reads them);
   `intents`, `parseContext`, `findSubCommandDefinition`, `CommandSet` and `createContext` are
@@ -64,7 +65,7 @@ is the mention vocabulary.
 ```
 Specs: `CommandTest` (queue draining, error wrapping), `InteractionCommandTest` (parser selection,
 unsupported payloads), `ReplaceTextResponseCommandTest`, `RequestMeetingCommandTest`, plus
-`slash/MeetingListRangeTest`. `CommandSetTest` and `CommandDomainTest` live one level up in
+`slash/MeetingListRangeTest`. `CommandSetTest` lives one level up in
 `domain/src/test/kotlin/dev/notypie/domain/command/`. Fixtures: `TestCommandFactory`,
 `CommandDomainInputCreator`, `UnknownSubCommandDefinition`, `createIntentQueue()`.
 

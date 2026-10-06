@@ -77,7 +77,7 @@ class ParsedSubmissionsTest :
                     time = time,
                 )
 
-            `when`("date and time parse") {
+            `when`("date and time parse to a start") {
                 val parsed = RescheduleMeetingParsed.from(raw = raw(), actorId = ACTOR)
 
                 then("they combine into the new start and the actor fills the blank requester") {
@@ -92,6 +92,16 @@ class ParsedSubmissionsTest :
                     RescheduleMeetingParsed.from(raw = raw(uidRaw = "nope"), actorId = ACTOR).shouldBeNull()
                     RescheduleMeetingParsed.from(raw = raw(date = ""), actorId = ACTOR).shouldBeNull()
                     RescheduleMeetingParsed.from(raw = raw(time = "25:99"), actorId = ACTOR).shouldBeNull()
+                }
+            }
+
+            `when`("the new start is in the past") {
+                val parsed =
+                    RescheduleMeetingParsed.from(raw = raw(date = "2000-01-01", time = "09:00"), actorId = ACTOR)
+
+                then("parsing keeps it so the reschedule service can tell the host to pick a future time") {
+                    parsed.shouldNotBeNull()
+                    parsed.newStartAt shouldBe LocalDateTime.of(2000, 1, 1, 9, 0)
                 }
             }
         }
@@ -153,6 +163,79 @@ class ParsedSubmissionsTest :
                     blank.shouldNotBeNull().reasonDetail shouldBe ""
                     blank.noticeSummaryMarkdown() shouldBe
                         "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage}"
+                }
+            }
+
+            `when`("an OTHER detail carries Slack control characters") {
+                val parsed =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = "<https://evil.example|Zoom> <!here> & co"),
+                        actorId = ACTOR,
+                    )
+
+                then("the stored detail is raw and the notice markdown is escaped") {
+                    parsed.shouldNotBeNull().reasonDetail shouldBe "<https://evil.example|Zoom> <!here> & co"
+                    parsed.noticeSummaryMarkdown() shouldBe
+                        "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
+                        "&lt;https://evil.example|Zoom&gt; &lt;!here&gt; &amp; co"
+                }
+            }
+
+            `when`("an OTHER detail is exactly the stored length, or one character longer") {
+                val atLimit = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
+                val fits =
+                    DeclineReasonParsed.from(raw = raw(reasonRaw = "OTHER", detailRaw = " $atLimit "), actorId = ACTOR)
+                val tooLong =
+                    DeclineReasonParsed.from(raw = raw(reasonRaw = "OTHER", detailRaw = atLimit + "b"), actorId = ACTOR)
+
+                then("the fitting note is kept (trimmed before measuring)") {
+                    fits.shouldNotBeNull().reasonDetail shouldBe atLimit
+                    fits.detailTooLong shouldBe false
+                }
+
+                then("the longer note is dropped, the decline still parses as OTHER and its notice says why") {
+                    tooLong.shouldNotBeNull()
+                    tooLong.reason shouldBe RejectReason.OTHER
+                    tooLong.reasonDetail.shouldBeNull()
+                    tooLong.detailTooLong shouldBe true
+                    tooLong.noticeSummaryMarkdown() shouldBe
+                        "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
+                        "_Your note was longer than 255 characters and was not saved._"
+                }
+            }
+
+            `when`("an OTHER detail of emoji is at the stored length in code points, or one past it") {
+                val emoji = "😀"
+                val atLimit = emoji.repeat(RejectReason.MAX_DETAIL_LENGTH)
+                val fits =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = atLimit),
+                        actorId = ACTOR,
+                    )
+                val tooLong =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = atLimit + emoji),
+                        actorId = ACTOR,
+                    )
+
+                then("the length is measured in code points, the unit utf8mb4 VARCHAR counts") {
+                    fits.shouldNotBeNull().reasonDetail shouldBe atLimit
+                    fits.detailTooLong shouldBe false
+                    tooLong.shouldNotBeNull().reasonDetail.shouldBeNull()
+                    tooLong.detailTooLong shouldBe true
+                }
+            }
+
+            `when`("a non-OTHER reason arrives with a long detail") {
+                val parsed =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "VACATION", detailRaw = "a".repeat(RejectReason.MAX_DETAIL_LENGTH + 1)),
+                        actorId = ACTOR,
+                    )
+
+                then("the detail is ignored as before, so nothing is flagged") {
+                    parsed.shouldNotBeNull().reasonDetail.shouldBeNull()
+                    parsed.detailTooLong shouldBe false
                 }
             }
 
@@ -264,8 +347,38 @@ class ParsedSubmissionsTest :
                     parsed.summaryChannel shouldBe "C_SUM"
                     parsed.weekdays shouldBe setOf(DayOfWeek.MONDAY)
                     parsed.triggerLocalTime shouldBe LocalTime.of(10, 0)
-                    parsed.cutoffMinutes shouldBe StandupSetupParsed.DEFAULT_CUTOFF_MINUTES
                     parsed.timezone shouldBe ZoneId.of("Asia/Seoul")
+                }
+
+                then("a non-numeric cutoff is flagged as invalid instead of silently becoming the default") {
+                    parsed.cutoffMinutes.shouldBeNull()
+                }
+            }
+
+            `when`("the cutoff is blank") {
+                val parsed = StandupSetupParsed.from(raw = raw(cutoffRaw = "  "), actorId = ACTOR)
+
+                then("the modal's default is used") {
+                    parsed.cutoffMinutes shouldBe StandupSetupParsed.DEFAULT_CUTOFF_MINUTES
+                }
+            }
+
+            `when`("the cutoff is a whole number outside the Routine bounds") {
+                then("zero, a negative value, a value past one day and an overflowing value are all flagged") {
+                    listOf("0", "-5", "1441", "1000000000000000", "99999999999999999999").forEach { cutoff ->
+                        StandupSetupParsed
+                            .from(raw = raw(cutoffRaw = cutoff), actorId = ACTOR)
+                            .cutoffMinutes
+                            .shouldBeNull()
+                    }
+                }
+            }
+
+            `when`("the cutoff sits on the Routine bounds") {
+                then("1 and 1440 minutes are accepted") {
+                    StandupSetupParsed.from(raw = raw(cutoffRaw = "1"), actorId = ACTOR).cutoffMinutes shouldBe 1L
+                    StandupSetupParsed.from(raw = raw(cutoffRaw = "1440"), actorId = ACTOR).cutoffMinutes shouldBe
+                        1440L
                 }
             }
 

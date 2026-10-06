@@ -25,7 +25,7 @@ class AgentSessionSchema(
     @field:Column(name = "session_key", nullable = false, length = 160)
     val sessionKey: String,
     @field:Column(name = "provider_session_id", nullable = false, length = 255)
-    var providerSessionId: String,
+    val providerSessionId: String,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),

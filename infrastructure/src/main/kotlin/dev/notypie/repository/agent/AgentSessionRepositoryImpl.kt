@@ -1,6 +1,6 @@
 package dev.notypie.repository.agent
 
-import dev.notypie.repository.agent.schema.AgentSessionSchema
+import java.time.LocalDateTime
 
 class AgentSessionRepositoryImpl(
     private val jpaAgentSessionRepository: JpaAgentSessionRepository,
@@ -8,18 +8,11 @@ class AgentSessionRepositoryImpl(
     override fun findProviderSessionId(sessionKey: String): String? =
         jpaAgentSessionRepository.findBySessionKey(sessionKey = sessionKey)?.providerSessionId
 
-    override fun saveProviderSessionId(sessionKey: String, providerSessionId: String) {
-        val existing = jpaAgentSessionRepository.findBySessionKey(sessionKey = sessionKey)
-        if (existing == null) {
-            jpaAgentSessionRepository.save(
-                AgentSessionSchema(
-                    sessionKey = sessionKey,
-                    providerSessionId = providerSessionId,
-                ),
-            )
-        } else if (existing.providerSessionId != providerSessionId) {
-            existing.providerSessionId = providerSessionId
-            jpaAgentSessionRepository.save(existing)
-        }
+    override fun saveProviderSessionId(sessionKey: String, providerSessionId: String, now: LocalDateTime) {
+        jpaAgentSessionRepository.upsertProviderSessionId(
+            sessionKey = sessionKey,
+            providerSessionId = providerSessionId,
+            now = now,
+        )
     }
 }

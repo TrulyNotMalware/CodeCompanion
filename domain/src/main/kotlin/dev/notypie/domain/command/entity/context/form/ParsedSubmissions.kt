@@ -1,7 +1,9 @@
 package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.domain.standup.entity.Routine
 import java.time.DayOfWeek
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -90,23 +92,31 @@ internal data class DeclineReasonParsed(
     val reason: RejectReason,
     val reasonDetail: String?,
     val notice: NoticeTarget,
+    val detailTooLong: Boolean = false,
 ) {
     fun noticeSummaryMarkdown(): String =
         buildString {
             append("You declined the meeting — *Reason:* ${reason.showMessage}")
-            if (!reasonDetail.isNullOrBlank()) append(" — $reasonDetail")
+            if (!reasonDetail.isNullOrBlank()) append(" — ${reasonDetail.escapeMarkup()}")
+            if (detailTooLong) {
+                append(" — _Your note was longer than ${RejectReason.MAX_DETAIL_LENGTH} characters and was not saved._")
+            }
         }
 
     companion object {
         fun from(raw: InboundSubmission.DeclineReason, actorId: String): DeclineReasonParsed? {
             val meetingIdempotencyKey = raw.meetingIdempotencyKeyRaw.toUuidOrNull() ?: return null
             val reason = parseReason(raw = raw.reasonRaw)
+            val detail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER }
+            val detailTooLong =
+                detail != null && detail.codePointCount(0, detail.length) > RejectReason.MAX_DETAIL_LENGTH
             return DeclineReasonParsed(
                 meetingIdempotencyKey = meetingIdempotencyKey,
                 participantUserId = raw.participantUserId.ifBlank { actorId },
                 reason = reason,
-                reasonDetail = raw.detailRaw.trim().takeIf { reason == RejectReason.OTHER },
+                reasonDetail = detail.takeUnless { detailTooLong },
                 notice = NoticeTarget.of(channel = raw.noticeChannel, messageTs = raw.noticeMessageTs),
+                detailTooLong = detailTooLong,
             )
         }
 
@@ -145,13 +155,19 @@ internal data class StandupSetupParsed(
     val memberIds: List<String>,
     val weekdays: Set<DayOfWeek>,
     val triggerLocalTime: LocalTime,
-    val cutoffMinutes: Long,
+    val cutoffMinutes: Long?,
     val timezone: ZoneId,
 ) {
     companion object {
         const val DEFAULT_CUTOFF_MINUTES: Long = 120L
         private val DEFAULT_TRIGGER_TIME: LocalTime = LocalTime.of(10, 0)
         private val DEFAULT_TIMEZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
+        private fun parseCutoffMinutes(raw: String): Long? {
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) return DEFAULT_CUTOFF_MINUTES
+            return trimmed.toLongOrNull()?.takeIf { it in Routine.MIN_CUTOFF_MINUTES..Routine.MAX_CUTOFF_MINUTES }
+        }
 
         fun from(raw: InboundSubmission.StandupSetup, actorId: String): StandupSetupParsed =
             StandupSetupParsed(
@@ -175,7 +191,7 @@ internal data class StandupSetupParsed(
                         .mapNotNull { token -> runCatching { DayOfWeek.valueOf(token.trim()) }.getOrNull() }
                         .toSet(),
                 triggerLocalTime = runCatching { LocalTime.parse(raw.timeRaw) }.getOrDefault(DEFAULT_TRIGGER_TIME),
-                cutoffMinutes = raw.cutoffRaw.trim().toLongOrNull() ?: DEFAULT_CUTOFF_MINUTES,
+                cutoffMinutes = parseCutoffMinutes(raw = raw.cutoffRaw),
                 timezone = runCatching { ZoneId.of(raw.timezoneRaw.trim()) }.getOrDefault(DEFAULT_TIMEZONE),
             )
     }

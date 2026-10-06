@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # domain/command/entity/event
 
@@ -24,8 +24,9 @@ implements to deliver them.
   an event `data class`, and the resolver branch; keep the naming pair `XxxPayload` / `XxxRequestEvent`
   (or `XxxEvent` for state changes).
 - Every payload that expects an asynchronous reply carries `responseBasicInfo: CommandBasicInfo` — the
-  channel/app the listener answers on. `RecordStandupAnswerPayload` and `UpdateMeetingAttendancePayload`
-  omit it because their listeners do not post.
+  channel/app the listener answers on. `UpdateMeetingAttendancePayload` omits it because its listener does not
+  post; `RecordStandupAnswerPayload` carries `notice: MessageRef?` instead — the DM prompt the listener
+  collapses with the outcome.
 - `type: CommandDetailType` on the event is the routing token that later interactions use to find
   their context again; it must match what the emitting context declared.
 - `name` defaults to the event's simple class name and `timestamp` to `System.currentTimeMillis()` at
@@ -36,6 +37,8 @@ implements to deliver them.
   `*ModalOpenFailedEvent`s by `infrastructure/impl/command/ApplicationMessageDispatcher.kt` when
   `views.open` fails. They are the fallback path for an expired trigger.
 - Prefer `publishOne(event)` (30 call sites) over building a queue by hand.
+- `CreateStandupRoutinePayload.cutoffMinutes` is `Long?`: `null` carries an unusable cutoff from the modal to
+  `StandupRoutineSetupService`, which answers it with the accepted range instead of a default.
 - This package is where `command` legitimately depends on `meet` (`RejectReason`) and on
   `authorization/UserRole`; the reverse edge is guard-forbidden.
 

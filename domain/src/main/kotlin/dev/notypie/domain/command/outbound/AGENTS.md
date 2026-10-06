@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # domain/command/outbound
 
@@ -17,7 +17,7 @@ adapter implements to turn these into staged events.
 | `ModalForm.kt` | `sealed interface` — `Reschedule`, `AddParticipant` (both `meetingUid`, `requesterId`, `channel`), `StandupFill(sessionUid, routineUid, requesterId, originNotice)`, `StandupSetup(creatorId, commandChannel)`, `DeclineReason(meetingIdempotencyKey, participantUserId, meetingTitle, originNotice?)`, `CveSubscribe(topics)`, `CveUnsubscribe(topics)`; `TopicOption(key, label)` |
 | `OutboundTargets.kt` | Value classes `ConversationTarget(id)`, `UserRef(id)`; `MessageRef(conversation, messageId)` |
 | `InteractionHandles.kt` | Value classes `ModalOpenHandle(raw)` (Slack `trigger_id`, ~3 s lifetime) and `ResponseReplaceHandle(raw)` (Slack `response_url`) |
-| `OutboundMessageStager.kt` | `stage(message, basicInfo): CommandEvent<EventPayload>?` — null when the message produces no event |
+| `OutboundMessageStager.kt` | `stage(message, basicInfo): CommandEvent<EventPayload>?` — null when the message produces no event; `stageInOrder(messages, basicInfo): CommandEvent<EventPayload>` — one event for several messages that must post one after another (a reply split past one message's budget): the transport sends each only after the previous one went out |
 
 ## For AI Agents
 

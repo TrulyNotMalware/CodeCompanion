@@ -1,6 +1,6 @@
 # 코딩 스타일 가이드
 
-_type: guide · updated: 2026-08-28_
+_type: guide · updated: 2026-10-01_
 
 > Kotlin답게, non-null 우선으로, 주석 대신 코드가 설명하게, 파일은 적게 — 그리고 리팩토링에는 반드시
 > 테스트가 따라온다.
@@ -27,11 +27,11 @@ _type: guide · updated: 2026-08-28_
 | `this` 생략 | 불필요한 `this.`는 쓰지 않는다. 의도적인 스타일이며 ktlint 규칙이 아니다 |
 | 인터페이스 + `Impl` | 유스케이스와 어댑터는 `MeetingService` / `MeetingServiceImpl`처럼 짝을 이루고, 다른 코드는 인터페이스에만 의존한다 |
 | 스케줄러 분리 | `@Scheduled`는 얇은 `*Scheduler`에, 로직은 `*SchedulingService`에 — 로직을 스케줄러 없이 단위 테스트하기 위해 |
-| 리포지토리 3종 | `XxxRepository`(인터페이스 + DTO) / `JpaXxxRepository` / `XxxRepositoryImpl`(`open class`, 변이 메서드 `@Transactional`), 스키마는 `schema/XxxSchema` |
+| 리포지토리 3종 | `XxxRepository`(인터페이스 + DTO) / `JpaXxxRepository` / `XxxRepositoryImpl`(`open class`, 변이 메서드 `@Transactional`, 엔티티를 매핑하는 읽기 메서드 `@Transactional(readOnly = true)` — open-in-view를 껐으므로 매핑은 트랜잭션 안에서), 스키마는 `schema/XxxSchema`. 스키마의 변경 가능한 컬럼은 `var ... protected set`이고 바꾸는 길은 행위 메서드(`redefine`, `changeRole`, `cancel` 등)나 CAS 문뿐이다(2026-10-01) |
 | 빈 등록 | 어댑터·서비스는 `@Component` 스캔보다 `configurations/`의 명시적 `@Bean`(named argument)으로 등록한다. `@ConditionalOnBean`과 스캔의 순서 의존을 피하기 위해 |
 | 설정 바인딩 | `@ConfigurationProperties` 클래스는 `application/.../configurations/`에, 메인 클래스의 `@ConfigurationPropertiesScan`이 잡는다 |
-| 시간 | 시간에 의존하는 서비스는 `Clock`을 주입받는다(기본 `Clock.systemDefaultZone()`). 테스트가 시각을 고정할 수 있어야 한다 |
-| 로깅 | 파일 수준 `private val logger = KotlinLogging.logger {}`, 호출은 람다 형태 `logger.info { ... }` |
+| 시간 | 시간에 의존하는 서비스는 `Clock`을 기본값 없이 생성자로 받고, `@Bean` 팩토리는 컨텍스트의 `Clock` 빈을 넘긴다(2026-10-01). 생성자 기본값은 빈이 있으면 무시되고, 팩토리가 인자를 빼먹으면 조용히 다른 시계를 쓴다. 테스트가 시각을 고정할 수 있어야 한다 |
+| 로깅 | 파일 수준 `private val log = KotlinLogging.logger {}`, 호출은 람다 형태 `log.info { ... }`. `logger`라는 이름은 쓰지 않는다 — `OncePerRequestFilter`·`ResponseEntityExceptionHandler`처럼 `protected logger`(commons-logging)를 가진 Spring 기반 클래스 안에서는 상속 멤버가 파일 수준 `logger`를 가려 `Log.warn(Object)`에 람다 객체가 넘어가고, 로그에는 사유 대신 `…$$Lambda@hash`가 찍힌다(2026-10-01 Slack 서명 필터에서 실제 발생) |
 | Jackson | 모듈 공용 `dev.notypie.common.jsonMapper` 하나를 import한다. 별도 인스턴스는 다른 설정이 꼭 필요한 곳(MCP 전송, 스코프 토큰 코덱)에만 |
 | 트랜잭션 | `@Transactional`은 Repository `Impl`에. 앰비언트 트랜잭션이 없는 스케줄러·비동기 경로는 `TransactionTemplate.runInTx`로 경계를 명시 |
 | 예외 | `CodeCompanionRuntimeException` + `ErrorCode` enum + `exceptionDetails {}` — [error-handling-and-validation.md](error-handling-and-validation.md) |

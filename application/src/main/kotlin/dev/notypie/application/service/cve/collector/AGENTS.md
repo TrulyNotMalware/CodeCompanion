@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
 
 # application/service/cve/collector
 
@@ -12,7 +12,7 @@ collect ledger, fetches, and `insertIgnore`s each raw event as a `PENDING` `cve_
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveCollector.kt` | `class CveCollector(cveTopicRepository, cveEventRepository, cveCollectLedgerRepository, adapters: List<SourceAdapter>, windowMinutes)`. `@Scheduled(fixedDelay = 300_000) tick()`: `windowStart(now)` buckets the minute-of-hour to a multiple of `windowMinutes`; for each `findActiveTopics()` row, `collectTopic` picks `adapters.firstOrNull { it.supports(sourceType) }` (none → warn, skip), `claimWindow(topicId, windowStart)` (lost → skip), `adapter.fetch(topic)`, then `insertIgnore(topicId, externalId, title, rawContent, publishedAt)` per raw event and logs `fetched` / `inserted`; finally prunes the ledger with `deleteOlderThan(now - LEDGER_RETENTION_DAYS (7))`. Each topic and the prune run inside their own `runCatching` |
+| `CveCollector.kt` | `class CveCollector(cveTopicRepository, cveEventRepository, cveCollectLedgerRepository, adapters: List<SourceAdapter>, windowMinutes)`. `@Scheduled(fixedDelay = 300_000) tick()`: `windowStart(now)` buckets the minute-of-hour to a multiple of `windowMinutes`; for each `findActiveTopics()` row, `collectTopic` picks `adapters.firstOrNull { it.supports(sourceType) }` (none → warn, skip), `claimWindow(topicId, windowStart)` (lost → skip), `adapter.fetch(topic)`, then `insertIgnore(topicId, externalId, title, rawContent, publishedAt)` per raw event and logs `fetched` / `inserted`; finally prunes the ledger with `deleteOlderThan(now - LEDGER_RETENTION_DAYS (7))`. Each topic and the prune run inside their own `runCatching`; the loop stops (and skips the prune) once the thread is interrupted |
 
 ## For AI Agents
 
@@ -21,10 +21,16 @@ collect ledger, fetches, and `insertIgnore`s each raw event as a `PENDING` `cve_
   rate-limited feed is not hammered by retries inside the same bucket. Dedup (`insertIgnore` on
   `externalId`) plus the adapters' own lookback self-heal the gap. `CveConfiguration` enforces
   `nvd.lookback-minutes >= 2 * collector.window-minutes` for exactly this reason.
+- The lookback heals a miss only when it does not repeat. A refusal that hits the same topics every tick (the
+  topics past NVD's quota, fetched in the same order each time) is what `NvdCveSourceAdapter`'s pacing
+  prevents; releasing the claim would not help, because the next tick would be refused the same way.
+- **Interrupts end the tick.** The NVD pacing wait rethrows `InterruptedException` with the flag still set;
+  `runCatching` logs it, and the loop checks `Thread.currentThread().isInterrupted` before the next topic.
 - `windowMinutes` must divide 60 (`CveConfiguration` rejects anything else); `windowStart` is what makes
   every instance ticking inside the same bucket race for one ledger row, so multi-replica deployments
   do not double-fetch. The tick cadence (5 minutes) is hard-coded and independent of the window size.
-- `LocalDateTime.now()` is used directly; there is no injected `Clock`. `windowStart` is `internal` so
+- `now` comes from the injected `Clock` (the context bean, passed by `CveConfiguration`; 2026-10-02), so the window
+  and the ledger prune cutoff are pinned in specs with a fixed clock. `windowStart` is `internal` so
   the bucket math is unit-tested in isolation.
 - A new source is a new `SourceAdapter` in `infrastructure/impl/cve/` registered as a `@Bean` in
   `CveConfiguration` — the collector receives every `SourceAdapter` bean and needs no change.

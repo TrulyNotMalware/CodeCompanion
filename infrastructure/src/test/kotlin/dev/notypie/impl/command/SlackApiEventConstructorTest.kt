@@ -14,9 +14,11 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.time.LocalDate
 
 class SlackApiEventConstructorTest :
     BehaviorSpec({
@@ -28,6 +30,8 @@ class SlackApiEventConstructorTest :
                 botToken = TEST_BOT_TOKEN,
                 templateBuilder = templateBuilder,
             )
+
+        beforeContainer { testCase -> if (testCase.parent == null) clearMocks(templateBuilder) }
 
         val commandBasicInfo = createCommandBasicInfo()
         val idempotencyKey = commandBasicInfo.idempotencyKey
@@ -68,11 +72,40 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with CHANNEL_ALERT messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.CHANNEL_ALERT
                     payload.channel shouldBe commandBasicInfo.channel
                     payload.publisherId shouldBe commandBasicInfo.publisherId
                     payload.apiAppId shouldBe commandBasicInfo.appId
+                }
+            }
+        }
+
+        given("standupSummaryRequest") {
+            `when`("a summary part is built") {
+                every {
+                    templateBuilder.standupSummaryTemplate(
+                        routineName = any(),
+                        sessionDate = any(),
+                        members = any(),
+                        answers = any(),
+                        questions = any(),
+                    )
+                } returns emptyLayout
+
+                val result =
+                    constructor.standupSummaryRequest(
+                        commandBasicInfo = commandBasicInfo,
+                        routineName = "Daily Standup",
+                        sessionDate = LocalDate.of(2026, 5, 1),
+                        members = emptyList(),
+                        answers = emptyList(),
+                        questions = listOf("What did you do yesterday?"),
+                    )
+
+                then("the payload carries STANDUP_SUMMARY, which the success event hands the marker listener") {
+                    result.type shouldBe CommandDetailType.STANDUP_SUMMARY
+                    result.payload.commandDetailType shouldBe CommandDetailType.STANDUP_SUMMARY
                 }
             }
         }
@@ -95,7 +128,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with EPHEMERAL_MESSAGE messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                 }
 
@@ -123,7 +156,7 @@ class SlackApiEventConstructorTest :
 
                 then("ephemeral posts into commandBasicInfo.channel and only `user` targets targetUserId") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                     payload.body["channel"] shouldBe commandBasicInfo.channel
                     payload.body["user"] shouldBe targetUserId
@@ -162,7 +195,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with CHANNEL_ALERT messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.CHANNEL_ALERT
                 }
             }
@@ -188,7 +221,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is ActionEventPayloadContents with matching responseUrl") {
                     result.payload.shouldBeInstanceOf<ActionEventPayloadContents>()
-                    val payload = result.payload as ActionEventPayloadContents
+                    val payload = result.payload
                     payload.responseUrl shouldBe responseUrl
                     payload.channel shouldBe commandBasicInfo.channel
                     payload.publisherId shouldBe commandBasicInfo.publisherId
@@ -222,7 +255,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with EPHEMERAL_MESSAGE messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                 }
             }

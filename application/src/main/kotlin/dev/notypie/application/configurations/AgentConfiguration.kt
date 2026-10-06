@@ -2,21 +2,32 @@ package dev.notypie.application.configurations
 
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.application.service.agent.AgentConverseService
+import dev.notypie.application.service.agent.AgentTurn
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.SidecarAgentClient
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.DependsOn
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.transaction.PlatformTransactionManager
+import java.time.Clock
 import java.time.Duration
+import java.util.concurrent.Executor
 
-// Explicit @Bean, not component-scanned — class-level @Async needs a CGLIB subclass proxy.
+private val log = KotlinLogging.logger {}
+
+val AGENT_TURN_DISCARD_BUDGET: Duration = Duration.ofSeconds(3L)
+
 @Configuration
 class AgentConfiguration(
     private val appConfig: AppConfig,
@@ -31,6 +42,24 @@ class AgentConfiguration(
         )
 
     @Bean
+    @DependsOn("entityManagerFactory")
+    fun agentTurnExecutor(meterRegistry: MeterRegistry): ThreadPoolTaskExecutor =
+        AgentTurnExecutor(discardBudget = AGENT_TURN_DISCARD_BUDGET, meterRegistry = meterRegistry).apply {
+            val turns = appConfig.agent.turns
+            corePoolSize = turns.maxConcurrent
+            maxPoolSize = turns.maxConcurrent
+            queueCapacity = turns.queueCapacity
+            setThreadNamePrefix("agent-turn-")
+            setWaitForTasksToCompleteOnShutdown(true)
+            setAwaitTerminationSeconds(turns.shutdownAwaitSeconds.toInt())
+        }
+
+    @Bean
+    fun agentTurnIntake(
+        @Qualifier("agentTurnExecutor") agentTurnExecutor: ThreadPoolTaskExecutor,
+    ): AgentTurnIntake = AgentTurnIntake(executor = agentTurnExecutor)
+
+    @Bean
     @ConditionalOnMissingBean(AgentConverseService::class)
     fun agentConverseService(
         agentGateway: AgentGateway,
@@ -40,7 +69,9 @@ class AgentConfiguration(
         eventPublisher: EventPublisher,
         meterRegistry: MeterRegistry,
         transactionManager: PlatformTransactionManager,
+        @Qualifier("agentTurnExecutor") agentTurnExecutor: Executor,
         scopedTurnTokenCodec: ObjectProvider<ScopedTurnTokenCodec>,
+        clock: Clock,
     ): AgentConverseService =
         AgentConverseService(
             agentGateway = agentGateway,
@@ -50,6 +81,52 @@ class AgentConfiguration(
             eventPublisher = eventPublisher,
             meterRegistry = meterRegistry,
             transactionManager = transactionManager,
+            turnExecutor = agentTurnExecutor,
             scopedTurnTokenCodec = scopedTurnTokenCodec.getIfAvailable(),
+            clock = clock,
         )
+}
+
+class AgentTurnExecutor(
+    private val discardBudget: Duration,
+    private val meterRegistry: MeterRegistry,
+) : ThreadPoolTaskExecutor() {
+    override fun shutdown() {
+        super.shutdown()
+        val unstarted = ArrayList<Runnable>()
+        threadPoolExecutor.queue.drainTo(unstarted)
+        val turns = unstarted.filterIsInstance<AgentTurn>()
+        val deadline = System.nanoTime() + discardBudget.toNanos()
+        val discarded =
+            turns
+                .asSequence()
+                .takeWhile { System.nanoTime() - deadline < 0L }
+                .onEach { it.discard() }
+                .count()
+        val dropped = turns.size - discarded
+        if (dropped == 0) return
+        log.error {
+            "Agent turn discard budget of ${discardBudget.toMillis()} ms ran out at shutdown; " +
+                "dropping $dropped unstarted turn(s) without a notice"
+        }
+        meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "dropped").increment(dropped.toDouble())
+    }
+}
+
+class AgentTurnIntake(
+    private val executor: ThreadPoolTaskExecutor,
+) : SmartLifecycle {
+    @Volatile
+    private var running = false
+
+    override fun start() {
+        running = true
+    }
+
+    override fun stop() {
+        running = false
+        executor.threadPoolExecutor.shutdown()
+    }
+
+    override fun isRunning(): Boolean = running
 }

@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # CodeCompanion
 
@@ -17,8 +17,8 @@ flow **application → infrastructure → domain** (and **application → domain
 |------|-------------|
 | `settings.gradle.kts` | Declares root project `CodeCompanion` and the three modules |
 | `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.10, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
-| `gradlew` / `gradlew.bat` | Gradle 9.7.1 wrapper entry points |
-| `run` | Bash launcher for the built Spring Boot jar (`./run -e prod build/libs/app.jar`); handles profile, heap, GC, JMX, heap dump, GC log |
+| `gradlew` / `gradlew.bat` | Gradle 9.8.0 wrapper entry points |
+| `run` | Bash launcher for the built Spring Boot jar (`./run -e prod build/libs/app.jar`); handles profile, heap, GC, JDWP (local/dev) and JMX (prod, RMI on the same port), both bound to 127.0.0.1, heap dump, GC log; leaves actuator exposure to the profile YAML. Defaults to `-e local` (only warns: that profile binds HTTP to 127.0.0.1 and may run without signature verification) |
 | `.editorconfig` | Formatting contract enforced by ktlint (120 cols, LF, 4-space indent, wildcard imports allowed) |
 | `.gitmessage` | Korean commit-message template — `<타입> : <제목>`, types: `feat`, `fix`, `docs`, `test`, `refact`, `style`, `chore` |
 | `README.md` | Human-facing docs (English + Korean): features, tech stack, architecture, command/role table |
@@ -32,7 +32,7 @@ flow **application → infrastructure → domain** (and **application → domain
 | `domain/` | Framework-free, transport-neutral Kotlin core (see `domain/AGENTS.md`) |
 | `application/` | Spring Boot bootstrap, controllers, use-case services (see `application/AGENTS.md`) |
 | `infrastructure/` | Concrete adapters: Slack, JPA, Kafka, AI sidecar (see `infrastructure/AGENTS.md`) |
-| `gradle-config/` | OS-specific `gradle.properties` presets and `apply.sh` (see `gradle-config/AGENTS.md`) |
+| `gradle-config/` | OS-specific and CI (`apply.sh ci`) `gradle.properties` presets and `apply.sh` (see `gradle-config/AGENTS.md`) |
 | `scripts/` | Operational shell probes (see `scripts/AGENTS.md`) |
 | `.github/` | CI/CD and security workflows plus Dependabot config (see `.github/AGENTS.md`) |
 | `docs/wiki/` | Design philosophy and decision records for humans; complements, does not duplicate, the `AGENTS.md` tree |
@@ -43,7 +43,7 @@ flow **application → infrastructure → domain** (and **application → domain
 ## For AI Agents
 
 ### Working In This Directory
-- **Every directory carries an `AGENTS.md`** (222 files). Line 1 points at the nearest parent
+- **Every directory carries an `AGENTS.md`** (234 files). Line 1 points at the nearest parent
   (`<!-- Parent: ../AGENTS.md -->`), line 2 carries `Generated | Updated` dates, and text below the
   `<!-- MANUAL:` marker survives regeneration. When you add a directory, add its `AGENTS.md` and a row in the
   parent's `## Subdirectories` table; when you change a directory's contents, update its file and bump `Updated`.
@@ -54,10 +54,10 @@ flow **application → infrastructure → domain** (and **application → domain
 - **Do not add dependencies to the root `subprojects` block** unless every module — `domain`
   included — should get them. Jackson is deliberately declared per-module for this reason.
 - Dependency versions live in the root `extra["…"] = "…"` declarations (`kotestVersion`,
-  `slackSdkVersion`, `mockkVersion`, `springBootVersion`, `jacksonVersion`, `kotlinLoggingVersion`,
-  `springAiVersion`). Bump them there, not in module build files. Build scripts read them as
+  `slackSdkVersion`, `mockkVersion`, `springMockkVersion`, `springBootVersion`, `jacksonVersion`,
+  `kotlinLoggingVersion`, `springAiVersion`). Bump them there, not in module build files. Build scripts read them as
   `val x = extra["x"] as String` (root) / `val x = rootProject.extra["x"] as String` (modules) — the
-  `by extra` delegate is deprecated (Gradle 9.7.1 warns; removal scheduled for Gradle 10) — and reference them
+  `by extra` delegate is deprecated (Gradle 9.7+ warns; removal scheduled for Gradle 10) — and reference them
   as plain `$x` string templates — keep both forms: Dependabot's Gradle parser resolves `$x` against
   `extra["x"] = "…"` / `extra.set("x", "…")` declarations only; an `ext { set(…) }` block,
   `by extra("…")` initialisers and `${rootProject.extra.get("x")}` references are invisible to it.
@@ -77,7 +77,7 @@ flow **application → infrastructure → domain** (and **application → domain
 ./gradlew ktlintFormat          # autofix
 ```
 Integration tests are self-contained: `EmbeddedKafka` + H2, no external infrastructure needed.
-Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.lang` and
+Tests run on JUnit Platform with `-Xmx` from the `testMaxHeap` Gradle property (default `4g`; the CI preset sets `2g`) and `--add-opens` for `java.base/java.lang` and
 `java.base/java.util` (MockK requirement) — configured once in the root build.
 
 ### Common Patterns
@@ -86,9 +86,12 @@ Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.
 - Each module publishes `src/testFixtures/kotlin/` factories via Gradle `java-test-fixtures`, consumed
   cross-module as `testImplementation(testFixtures(project(":domain")))`.
 - Logging is kotlin-logging: `private val log = KotlinLogging.logger {}`.
-- Kotlin compiler args are strict: `-Xjsr305=strict`, `-Xjvm-default=all`,
-  `-Xannotation-default-target=param-property`. Annotation targets on constructor properties resolve
-  to `param-property`, so `@field:` prefixes are usually unnecessary.
+- The root `build.gradle.kts` declares strict Kotlin compiler args (`-Xjsr305=strict`, `-Xjvm-default=all`,
+  `-Xannotation-default-target=param-property`) and an Adoptium 25 toolchain, **but only on the root project**:
+  the blocks sit outside `subprojects`, so none of the three modules gets them (measured 2026-09-22; a local
+  build uses the Gradle daemon's JDK). Moving them into `subprojects` is a standalone PR because enabling
+  `-Xjsr305=strict` will surface platform-type errors (`review.md` C6). Until then keep the explicit
+  `@field:` targets the code already uses.
 - Commit subjects follow `.gitmessage`: `feat : ...`, `fix : ...`, `refact : ...` (space before the colon).
 
 ## Dependencies
@@ -98,10 +101,10 @@ Tests run on JUnit Platform with `-Xmx4g` and `--add-opens` for `java.base/java.
 - Spring Boot 4.1.1 — Web on **Jetty** (Tomcat excluded; Undertow unsupported on Boot 4), Actuator,
   AOP/AspectJ, Data JPA
 - Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC — outbox relay
-- MariaDB (runtime) / H2 (local + tests) — persistence
-- Slack Java SDK 1.51.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
-- Jackson 3 (`tools.jackson`, BOM 3.2.0) — serialization, application/infrastructure only
-- Spring AI 2.0.0 — MCP server starter (streamable HTTP on `/mcp`)
+- MariaDB (runtime, every profile) / H2 (tests only) — persistence
+- Slack Java SDK 1.52.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
+- Jackson 3 (`tools.jackson`, BOM 3.2.3) — serialization, application/infrastructure only
+- Spring AI 2.0.1 (BOM) — MCP server as four modules, not the webmvc starter (streamable HTTP on `/mcp`)
 - Kotest 6.2.5 + MockK 1.14.11 — testing
 - ktlint 14.2.0 — formatting/lint gate
 

@@ -1,5 +1,6 @@
 package dev.notypie.impl.command.slack
 
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.MentionInvocation
@@ -20,6 +21,48 @@ class SlackMentionMapperTest :
             val command =
                 request.toMentionInboundCommand(appId = TEST_APP_ID, channelName = "general", actorName = "tester")
             return command.payload.shouldBeInstanceOf<MentionInvocation>()
+        }
+
+        given("an app_mention posted by a workflow with text only") {
+            `when`("the callback is parsed and mapped") {
+                val command =
+                    jsonMapper
+                        .readValue(
+                            createWorkflowAppMentionJson(botUserId = botId),
+                            SlackEventCallBackRequest::class.java,
+                        ).toMentionInboundCommand(appId = TEST_APP_ID, channelName = "", actorName = "")
+
+                then("it deserializes with a blank actor and no command structure instead of throwing") {
+                    command.actorId shouldBe ""
+                    command.payload.shouldBeInstanceOf<MentionInvocation>().hasCommandStructure shouldBe false
+                }
+            }
+        }
+
+        given("an app_mention whose rich_text mixes links, styles, code, a quote and a list") {
+            `when`("the callback is parsed and mapped") {
+                val mention =
+                    jsonMapper
+                        .readValue(createRichAppMentionJson(botUserId = botId), SlackEventCallBackRequest::class.java)
+                        .toMentionInboundCommand(appId = TEST_APP_ID, channelName = "", actorName = "")
+                        .payload
+                        .shouldBeInstanceOf<MentionInvocation>()
+
+                then("the whole message is restored in order, the bot's own mention dropped") {
+                    mention.text shouldBe
+                        "ask why does `deploy` fail? see run 42 (https://ci.example/run/42) and " +
+                        "https://ci.example/log, cc <@U_ALICE> in <#C_OPS> :fire:\n" +
+                        "```\nError: exit 1\nat step build\n```\n" +
+                        "> it worked yesterday\n" +
+                        "1. retry\n" +
+                        "2. @here"
+                }
+
+                then("command tokens and mentioned users are read as before") {
+                    mention.commandTokens.take(n = 3) shouldBe listOf("ask", "why", "does")
+                    mention.mentionedUserIds shouldBe listOf("U_ALICE")
+                }
+            }
         }
 
         given("a rich_text mention mixing user mentions and command text") {

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-26 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-01 -->
 
 # application/common
 
@@ -15,7 +15,7 @@ application context.
 |------|-------------|
 | `IdempotencyCreator.kt` | `object IdempotencyCreator` with two `create(data, currentTimeMillis = System.currentTimeMillis()): UUID` overloads (`String` / `IdempotencyData`). Seed is `currentTimeMillis / 1000`; the key is `UUID.nameUUIDFromBytes("$data|$seed")`. `IdempotencyDataSerializer` + `DefaultIdempotencyDataSerializer` (`jsonMapper` bytes → SHA-256 hex) turn an `IdempotencyData` into the `String` input |
 | `SlackRequestParser.kt` | `parseRequestBodyData(data: Map<String, String>): SlashCommandRequestBody` (Jackson `convertValue`); `parseRequestBodyData(headers, data): Pair<SlashCommandRequestBody, InboundCommand>` adds `toInboundCommand()` — `headers` is accepted but unused; `Map<String, Any>.convert<T>()` is a reified `convertValue` helper with no current call sites |
-| `TransactionTemplateExt.kt` | `inline fun <T> TransactionTemplate.runInTx(crossinline action: () -> T): Result<T>` — `runCatching` inside `execute`, `setRollbackOnly()` on failure, and a `Result.failure(IllegalStateException)` fallback when `execute` returns null |
+| `TransactionTemplateExt.kt` | `inline fun <T> TransactionTemplate.runInTx(crossinline action: () -> T): Result<T>` — `runCatching` inside `execute` with `setRollbackOnly()` on failure, and an outer `runCatching` around `execute` so a commit-time failure (flush, a `BEFORE_COMMIT` listener such as the outbox write) is also returned as `Result.failure` instead of escaping past the caller's `.onFailure` (2026-10-01) |
 
 ## For AI Agents
 
@@ -37,7 +37,7 @@ application context.
 - `runInTx` is for code that runs with no ambient transaction — the scheduling services driven by the
   `*Scheduler` wrappers (`StandupSchedulingService`, `StandupSummaryService`,
   `DailyAgendaSchedulingService`, `MeetingReminderSchedulingService`), the `@Scheduled`
-  `CveNotificationDispatcher`, and the class-level `@Async` `AgentConverseService`. It gives the outbox's
+  `CveNotificationDispatcher`, and `AgentConverseService` (whose turns run on `agentTurnExecutor`). It gives the outbox's
   `BEFORE_COMMIT` listener a transaction to bind to on that worker thread through an explicit boundary,
   instead of relying on `@Transactional` proxying of async or scheduled entry points. A failed `action`
   marks the transaction rollback-only and comes back as `Result.failure` — nothing is rethrown, so
@@ -55,11 +55,10 @@ application context.
 data + same window → same UUID, window boundary (`999` vs `1000` ms) → different, plus regression cases
 built from the domain testFixtures (`createMentionInboundCommand`, `createInteractionInboundCommand`,
 `createSlashInboundCommand`). Always pass `currentTimeMillis` explicitly — never rely on the wall clock.
-`parseRequestBodyData` and `runInTx` have no direct spec. `runInTx` runs for real in
-`CveNotificationDispatcherTest` and `StandupSummaryServiceTest`: the services build
-`TransactionTemplate(transactionManager)` themselves, so the specs stub a MockK
-`PlatformTransactionManager` (`getTransaction` → relaxed `TransactionStatus`, `commit`/`rollback`
-`just Runs`). Reuse that shape. Build `InboundCommand` inputs with the testFixtures creators, not inline
+`parseRequestBodyData` has no direct spec. `runInTx` has `TransactionTemplateExtTest` on a real H2 transaction
+manager; the services build `TransactionTemplate(transactionManager)` themselves, so service specs either stub a
+MockK `PlatformTransactionManager` (`getTransaction` → relaxed `TransactionStatus`, `commit`/`rollback` `just Runs`)
+when only call order matters, or pass `createH2TransactionManager` when a case claims a rollback or a commit. Build `InboundCommand` inputs with the testFixtures creators, not inline
 constructors.
 
 ### Common Patterns

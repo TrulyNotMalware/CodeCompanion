@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # application/src
 
@@ -12,7 +12,7 @@ from. No files live at this level.
 | Directory | Purpose |
 |-----------|---------|
 | `main/` | Production Kotlin sources plus profile YAML, migrations, and k8s/CDC manifests (see `main/AGENTS.md`) |
-| `test/` | Kotest `BehaviorSpec` + MockK unit specs mirroring `main/kotlin` — no Spring context (see `test/AGENTS.md`) |
+| `test/` | Kotest `BehaviorSpec` + MockK unit specs mirroring `main/kotlin`, plus one application-context smoke test (see `test/AGENTS.md`) |
 | `testFixtures/` | Fixture creators (`createOutboxRow`, `createScopedTurnToken`, ...) and the REST Docs DSL (see `testFixtures/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

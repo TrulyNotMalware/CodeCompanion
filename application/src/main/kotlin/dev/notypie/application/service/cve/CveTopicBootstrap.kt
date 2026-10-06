@@ -15,16 +15,19 @@ class CveTopicBootstrap(
 ) {
     @EventListener(ApplicationReadyEvent::class)
     fun bootstrapTopics() {
-        val written =
-            topics
-                .map { toDefinition(topic = it) }
-                .count { cveTopicRepository.upsert(definition = it) }
+        val definitions = topics.map { toDefinition(topic = it) }
+        val caseClashes = definitions.groupBy { it.topicKey.lowercase() }.filterValues { it.size > 1 }.keys
+        require(caseClashes.isEmpty()) { "CVE topic keys must be unique ignoring case: $caseClashes" }
+        val written = definitions.count { cveTopicRepository.upsert(definition = it) }
         log.info { "CVE topic bootstrap finished: declared=${topics.size} written=$written" }
     }
 
     private fun toDefinition(topic: AppConfig.Cve.TopicDefinition): CveTopicDefinition {
         require(topic.key.isNotBlank()) { "CVE topic definition requires a non-blank key" }
         require(topic.displayName.isNotBlank()) { "CVE topic '${topic.key}' requires a non-blank display-name" }
+        require(topic.displayName.codePointCount(0, topic.displayName.length) <= DISPLAY_NAME_MAX_LENGTH) {
+            "CVE topic '${topic.key}' display-name exceeds $DISPLAY_NAME_MAX_LENGTH characters"
+        }
         return CveTopicDefinition(
             topicKey = topic.key,
             displayName = topic.displayName,
@@ -34,5 +37,9 @@ class CveTopicBootstrap(
             deliveryMode = topic.deliveryMode,
             active = topic.active,
         )
+    }
+
+    companion object {
+        const val DISPLAY_NAME_MAX_LENGTH = 128
     }
 }

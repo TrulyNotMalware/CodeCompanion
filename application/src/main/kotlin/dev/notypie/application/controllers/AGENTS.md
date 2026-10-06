@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-02 -->
 
 # application/controllers
 
@@ -14,15 +14,15 @@ only.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackEventController.kt` | `@RequestMapping("/api/slack")`. `POST /events` (JSON body as `Map<String, Any>`, `produces` JSON): echoes the payload for `url_verification`, ACKs every non-`app_mention` event with an empty 200, otherwise returns the `CommandOutput` from `AppMentionEventHandler.handleEvent(headers, payload)`. `POST /interaction`: takes the form param `payload` (JSON string) and calls `InteractionHandler.handleInteraction(headers, payload): String?`; a non-null ack is returned as `application/json`, null becomes an empty-string 200 |
-| `SlashCommandController.kt` | `@RequestMapping("/api/slash")`. Every mapping declares `produces = APPLICATION_FORM_URLENCODED_VALUE`, takes `@RequestParam data: Map<String, String>`, parses via `parseRequestBodyData(headers, data)` and returns `Unit` (empty 200). `POST /meet` → `MeetingService.handleMeeting`; `/standup` → `StandupSlashService.handleStandup`; `/subscribe`, `/unsubscribe`, `/subscriptions` → `CveSubscriptionSlashService.handleSubscribe` / `handleUnsubscribe` / `handleSubscriptions`; `/latest` → `CveQuerySlashService.handleLatest`; `/task` (`requestTasks`) parses only — no service is wired |
+| `SlackEventController.kt` | `@RequestMapping("/api/slack")`. `POST /events` (JSON body as `Map<String, Any>`, `produces` JSON): echoes only `{"challenge": ...}` for `url_verification`, ACKs every non-`app_mention` event with an empty 200, and calls `AppMentionEventHandler.handleEvent(headers, payload)` for an `app_mention`, also answering an empty 200 (a failed command is logged at `WARN`, a mention with nothing to do — `Status.DO_NOTHING`, e.g. the bot's own or a workflow's mention the handler ignores — only at `DEBUG`; its `errorReason`, which can hold `exception.toString()`, never goes into the response — 2026-10-02). Returns `ResponseEntity<Map<String, Any>>`. `POST /interaction`: takes the form param `payload` (JSON string) and calls `InteractionHandler.handleInteraction(headers, payload): String?`; a non-null ack is returned as `application/json`, null becomes an empty-string 200 (`ResponseEntity<String>`) |
+| `SlashCommandController.kt` | `@RequestMapping("/api/slash")`. Each service call runs inside `ViewOpenDeferral.afterBoundary { … }`, so a modal the command stages is opened only after the service's `@Transactional` method returned and released its connection. Every mapping declares `consumes = APPLICATION_FORM_URLENCODED_VALUE` (the request Slack sends; it was `produces` until 2026-10-02, which matched on the `Accept` header instead), takes `@RequestParam data: Map<String, String>`, parses via `parseRequestBodyData(headers, data)` and returns `Unit` (empty 200). `POST /meet` → `MeetingService.handleMeeting`; `/standup` → `StandupSlashService.handleStandup`; `/subscribe`, `/unsubscribe`, `/subscriptions` → `CveSubscriptionSlashService.handleSubscribe` / `handleUnsubscribe` / `handleSubscriptions`; `/latest` → `CveQuerySlashService.handleLatest`; `/task` (`requestTasks`) parses only — no service is wired |
 | `dto/CodeCompanionResponse.kt` | `data class CodeCompanionResponse(ok: Boolean = true, message: String)` — no current call sites |
 | `dto/ResponseDto.kt` | `EventResponseDto(message, event: Event, isAccepted)` and `Event(eventId: UUID, type: CommandDetailType, acceptedTime: Long)` — no current call sites |
 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `dto/` | Controller-layer response classes. Neither is referenced by a controller today; `handleAppMentionEvents` returns the domain `CommandOutput` directly (see `dto/AGENTS.md`) |
+| `dto/` | Controller-layer response classes. Neither is referenced by a controller today; `handleAppMentionEvents` answers with an empty body (see `dto/AGENTS.md`) |
 
 ## For AI Agents
 
@@ -57,10 +57,12 @@ only.
 ```bash
 ./gradlew :application:test
 ```
-There are no controller specs today; behaviour is covered by the service specs
-(`SlackMentionEventHandlerImplTest`, `SlackInteractionHandlerImplTest`, `MeetingServiceImplTest`,
-`CveSubscriptionSlashServiceImplTest`, `CveQuerySlashServiceImplTest`) and the filter specs under
-`security/`. When adding one, use a `@WebMvcTest` slice with MockK-backed service interfaces
+`test/.../controllers/SlackControllersTest` is a standalone `MockMvc` spec with mocked services: the response
+contract (empty ack body, challenge-only echo, `consumes` selection, 415) and, for every slash endpoint, that
+`views.open` waits until the service has returned (`ViewOpenDeferral.afterBoundary`). Use cases are covered by the
+service specs (`SlackMentionEventHandlerImplTest`, `SlackInteractionHandlerImplTest`, `MeetingServiceImplTest`,
+`CveSubscriptionSlashServiceImplTest`, `CveQuerySlashServiceImplTest`) and the filter specs under `security/`.
+When adding a controller case, use a `@WebMvcTest` slice or the same standalone setup with MockK-backed service interfaces
 (`spring-boot-starter-test` and `spring-restdocs-mockmvc` are on the test classpath;
 `src/testFixtures/kotlin/dev/notypie/docs/` holds the REST Docs DSL). Assert that a non-`app_mention`
 event returns 200 without calling `AppMentionEventHandler`, that a `url_verification` body is echoed,

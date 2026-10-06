@@ -1,44 +1,350 @@
 package dev.notypie.application.service.interaction
 
 import dev.notypie.application.service.command.CommandExecutor
+import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.meeting.CommitRecordingEventPublisher
+import dev.notypie.application.service.meeting.MeetingServiceImpl
+import dev.notypie.application.service.meeting.MeetingWriteDeferral
+import dev.notypie.application.service.meeting.createBoundedH2DataSource
+import dev.notypie.application.service.meeting.createH2TransactionManager
+import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.command.inbound.SubmissionParseObserver
+import dev.notypie.domain.meet.createAddParticipantEvent
+import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
+import dev.notypie.impl.command.SlackOutboundStager
+import dev.notypie.impl.command.SlackViewOpenDispatcher
+import dev.notypie.impl.command.event.MessageDispatcher
+import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.States
 import dev.notypie.impl.command.slack.createInteractionPayloadInput
 import dev.notypie.impl.command.slack.selectedApplyButtonStates
 import dev.notypie.impl.command.slack.selectedRejectButtonStates
+import dev.notypie.repository.meeting.AddParticipantResult
+import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.templates.DeclineReasonModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldNotContainAnyOf
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.LinkedMultiValueMap
+import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class SlackInteractionHandlerImplTest :
     BehaviorSpec({
         val payloadParser = mockk<InteractionPayloadParser>()
         val applicationEventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
         val commandExecutor = mockk<CommandExecutor>(relaxed = true)
+        val commandRoleResolver = mockk<CommandRoleResolver>()
+        every { commandRoleResolver.resolve(userId = any()) } returns UserRole.USER
         val handler =
             SlackInteractionHandlerImpl(
                 interactionPayloadParser = payloadParser,
                 applicationEventPublisher = applicationEventPublisher,
                 commandExecutor = commandExecutor,
                 submissionParseObserver = SubmissionParseObserver.NONE,
+                commandRoleResolver = commandRoleResolver,
+                transactionManager = createH2TransactionManager(),
             )
+
+        val poolSize = 3
+        val pool = createBoundedH2DataSource(maxConnections = poolSize)
+        afterSpec { pool.close() }
+
+        fun primaryPayload() =
+            createInteractionPayloadInput(
+                commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                currentAction = selectedApplyButtonStates(),
+                states = listOf(selectedApplyButtonStates()),
+                idempotencyKey = UUID.randomUUID(),
+            )
+
+        fun isolatedHandler(
+            transactionManager: PlatformTransactionManager,
+            executor: CommandExecutor,
+            roleResolver: CommandRoleResolver,
+        ): SlackInteractionHandlerImpl {
+            val parser = mockk<InteractionPayloadParser>()
+            every { parser.parseStringPayload(payload = any()) } answers { primaryPayload() }
+            return SlackInteractionHandlerImpl(
+                interactionPayloadParser = parser,
+                applicationEventPublisher = mockk(relaxed = true),
+                commandExecutor = executor,
+                submissionParseObserver = SubmissionParseObserver.NONE,
+                commandRoleResolver = roleResolver,
+                transactionManager = transactionManager,
+            )
+        }
+
+        given("a command that queues a meeting write") {
+            val events = CopyOnWriteArrayList<String>()
+            val executor = mockk<CommandExecutor>()
+            val deferringHandler =
+                isolatedHandler(
+                    transactionManager = createH2TransactionManager(),
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            fun stubExecution(failAfterQueueing: Boolean) {
+                events.clear()
+                every { executor.execute(command = any<Command<*>>()) } answers {
+                    val inTransaction = TransactionSynchronizationManager.isActualTransactionActive()
+                    events.add("command in transaction=$inTransaction")
+                    TransactionSynchronizationManager.registerSynchronization(
+                        object : TransactionSynchronization {
+                            override fun afterCompletion(status: Int) {
+                                events.add("interaction transaction completed")
+                            }
+                        },
+                    )
+                    MeetingWriteDeferral.runOrDefer {
+                        val writeInTransaction = TransactionSynchronizationManager.isActualTransactionActive()
+                        events.add("meeting write in transaction=$writeInTransaction")
+                    }
+                    if (failAfterQueueing) throw IllegalStateException("later intent failed")
+                    CommandOutput.empty()
+                }
+            }
+
+            `when`("the interaction transaction commits") {
+                stubExecution(failAfterQueueing = false)
+                deferringHandler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                then("the command runs inside it and the meeting write runs only after it has completed") {
+                    events shouldBe
+                        listOf(
+                            "command in transaction=true",
+                            "interaction transaction completed",
+                            "meeting write in transaction=false",
+                        )
+                }
+            }
+
+            `when`("the interaction transaction fails after the write was queued") {
+                stubExecution(failAfterQueueing = true)
+                val escaped =
+                    runCatching {
+                        deferringHandler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+                    }.exceptionOrNull()
+
+                then("the request fails and the meeting write never runs") {
+                    (escaped is IllegalStateException) shouldBe true
+                    events shouldBe listOf("command in transaction=true", "interaction transaction completed")
+                }
+            }
+        }
+
+        given("a command that fails with a checked exception after queueing a meeting write") {
+            val completions = CopyOnWriteArrayList<Int>()
+            val meetingWrites = CopyOnWriteArrayList<String>()
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } answers {
+                TransactionSynchronizationManager.registerSynchronization(
+                    object : TransactionSynchronization {
+                        override fun afterCompletion(status: Int) {
+                            completions.add(status)
+                        }
+                    },
+                )
+                MeetingWriteDeferral.runOrDefer { meetingWrites.add("meeting write") }
+                throw IOException("checked failure")
+            }
+            val checkedHandler =
+                isolatedHandler(
+                    transactionManager = createH2TransactionManager(),
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the interaction is handled") {
+                val escaped =
+                    runCatching {
+                        checkedHandler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+                    }.exceptionOrNull()
+
+                then("the interaction rolls back instead of committing without its queued meeting write") {
+                    escaped.shouldBeInstanceOf<IOException>()
+                    completions shouldBe listOf(TransactionSynchronization.STATUS_ROLLED_BACK)
+                    meetingWrites shouldBe emptyList()
+                }
+            }
+        }
+
+        given("an interaction whose rollback fails too") {
+            val failingTransactionManager = mockk<PlatformTransactionManager>()
+            every { failingTransactionManager.getTransaction(any()) } returns mockk<TransactionStatus>()
+            every { failingTransactionManager.rollback(any()) } throws IllegalStateException("rollback failed")
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } throws IllegalArgumentException("original failure")
+            val rollbackFailingHandler =
+                isolatedHandler(
+                    transactionManager = failingTransactionManager,
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the command throws") {
+                val escaped =
+                    runCatching {
+                        rollbackFailingHandler.handleInteraction(
+                            headers = LinkedMultiValueMap(),
+                            payload = "dummy-payload",
+                        )
+                    }.exceptionOrNull()
+
+                then("the original exception escapes with the rollback failure attached as suppressed") {
+                    escaped?.message shouldBe "original failure"
+                    escaped?.suppressed?.map { it.message } shouldBe listOf("rollback failed")
+                }
+            }
+        }
+
+        given("a command that opens a modal") {
+            val events = CopyOnWriteArrayList<String>()
+            val messageDispatcher = mockk<MessageDispatcher>()
+            every { messageDispatcher.dispatchImmediate(event = any()) } answers {
+                events.add(
+                    "view opened in transaction=${TransactionSynchronizationManager.isActualTransactionActive()}",
+                )
+                CommandOutput.empty()
+            }
+            val viewOpenDispatcher = SlackViewOpenDispatcher(messageDispatcher = messageDispatcher)
+            val executor = mockk<CommandExecutor>()
+            every { executor.execute(command = any<Command<*>>()) } answers {
+                events.add("command in transaction=${TransactionSynchronizationManager.isActualTransactionActive()}")
+                TransactionSynchronizationManager.registerSynchronization(
+                    object : TransactionSynchronization {
+                        override fun afterCompletion(status: Int) {
+                            events.add("interaction transaction completed")
+                        }
+                    },
+                )
+                viewOpenDispatcher.listenOpenViewEvent(event = createOpenViewEvent())
+                CommandOutput.empty()
+            }
+            val handler =
+                isolatedHandler(
+                    transactionManager = createH2TransactionManager(),
+                    executor = executor,
+                    roleResolver = commandRoleResolver,
+                )
+
+            `when`("the interaction transaction commits") {
+                handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                then("views.open runs only after the transaction has completed, outside it") {
+                    events shouldBe
+                        listOf(
+                            "command in transaction=true",
+                            "interaction transaction completed",
+                            "view opened in transaction=false",
+                        )
+                }
+            }
+        }
+
+        given("as many concurrent meeting interactions as the pool has connections") {
+            val transactionManager = createH2TransactionManager(dataSource = pool)
+            val publisher = CommitRecordingEventPublisher()
+            val meetingRepository = mockk<MeetingRepository>()
+            every {
+                meetingRepository.addParticipants(meetingUid = any(), requesterId = any(), participantUserIds = any())
+            } returns
+                AddParticipantResult(
+                    outcome = AddParticipantResult.Outcome.ADDED,
+                    addedUserIds = listOf("U_A"),
+                    meeting = createMeetingDto(),
+                )
+            val meetingService =
+                MeetingServiceImpl(
+                    meetingRepository = meetingRepository,
+                    commandExecutor = mockk(),
+                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    eventPublisher = publisher,
+                    transactionManager = transactionManager,
+                )
+            val event = createAddParticipantEvent(participantUserIds = listOf("U_A"))
+
+            fun runConcurrently(interaction: (CyclicBarrier) -> Unit) {
+                publisher.committedMessages.clear()
+                val allHoldAConnection = CyclicBarrier(poolSize)
+                val executor = Executors.newFixedThreadPool(poolSize)
+                try {
+                    (1..poolSize)
+                        .map { executor.submit { interaction(allHoldAConnection) } }
+                        .forEach { it.get(20L, TimeUnit.SECONDS) }
+                } finally {
+                    executor.shutdownNow()
+                }
+            }
+
+            `when`("each write runs inside its interaction transaction, as before this change") {
+                val allWritesTried = CyclicBarrier(poolSize)
+                runConcurrently { allHoldAConnection ->
+                    TransactionTemplate(transactionManager).executeWithoutResult {
+                        allHoldAConnection.await(5L, TimeUnit.SECONDS)
+                        meetingService.addParticipants(event = event)
+                        allWritesTried.await(10L, TimeUnit.SECONDS)
+                    }
+                }
+
+                then("every isolated write times out waiting for a second connection") {
+                    publisher.committedEphemeralMarkdowns shouldBe
+                        List(size = poolSize) { "Failed to add participants. Please try again later." }
+                }
+            }
+
+            `when`("the interactions go through handleInteraction") {
+                val executor = mockk<CommandExecutor>()
+                val allHoldAConnection = CyclicBarrier(poolSize)
+                every { executor.execute(command = any<Command<*>>()) } answers {
+                    allHoldAConnection.await(5L, TimeUnit.SECONDS)
+                    meetingService.addParticipants(event = event)
+                    CommandOutput.empty()
+                }
+                val poolHandler =
+                    isolatedHandler(
+                        transactionManager = transactionManager,
+                        executor = executor,
+                        roleResolver = commandRoleResolver,
+                    )
+
+                runConcurrently {
+                    poolHandler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+                }
+
+                then("every write succeeds because each thread holds at most one connection at a time") {
+                    publisher.committedEphemeralMarkdowns shouldBe
+                        List(size = poolSize) { "Added <@U_A> to the meeting." }
+                }
+            }
+        }
 
         given("legacy whitelist constant") {
             `when`("LEGACY_AUTO_REJECT_TYPES is inspected") {
@@ -65,7 +371,7 @@ class SlackInteractionHandlerImplTest :
         given("constructor") {
             `when`("handler is instantiated with required dependencies") {
                 then("resolves without error") {
-                    (handler != null) shouldBe true
+                    handler.shouldNotBeNull()
                 }
             }
         }
@@ -94,6 +400,23 @@ class SlackInteractionHandlerImplTest :
                     verify(exactly = 0) {
                         commandExecutor.execute(command = match<Command<*>> { it is ReplaceTextResponseCommand })
                     }
+                }
+
+                then("the actor's role is resolved from the repository instead of being assumed USER") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher, commandRoleResolver)
+                    val payload =
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                            currentAction = selectedApplyButtonStates(),
+                            states = listOf(selectedApplyButtonStates()),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { payloadParser.parseStringPayload(payload = any()) } returns payload
+                    every { commandRoleResolver.resolve(userId = any()) } returns UserRole.ADMIN
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) { commandRoleResolver.resolve(userId = payload.user.id) }
                 }
             }
         }

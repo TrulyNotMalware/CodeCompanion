@@ -1,6 +1,8 @@
 package dev.notypie.application.service.ops
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.health.readOutboxHealth
+import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
@@ -18,7 +20,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import java.time.Clock
-import java.time.Duration
 import java.time.format.DateTimeFormatter
 
 private val log = KotlinLogging.logger {}
@@ -33,10 +34,11 @@ class OpsStatusService(
     private val cveTopicRepository: CveTopicRepository,
     private val cveEventRepository: CveEventRepository,
     private val cveCollectLedgerRepository: CveCollectLedgerRepository,
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val accessBlockedTracker: AccessBlockedTracker,
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
-    private val stuckThresholdSeconds: Long = appConfig.outbox.health.stuckThresholdSeconds
+    private val healthConfig: AppConfig.Outbox.Health = appConfig.outbox.health
     private val cveEnabled: Boolean = appConfig.cve.enabled
     private val cveMaxRetries: Int = appConfig.ai.maxRetries
 
@@ -69,30 +71,27 @@ class OpsStatusService(
     }
 
     internal fun renderReport(): String {
-        val now = clock.instant().atZone(clock.zone).toLocalDateTime()
-        val cutoff = now.minusSeconds(stuckThresholdSeconds)
-
-        val pendingCount = outboxRepository.countPending()
-        val stuckPendingCount = outboxRepository.countPendingOlderThan(threshold = cutoff)
-        val oldestPending = outboxRepository.findOldestPendingCreatedAt()
-        val oldestPendingAgeSeconds =
-            oldestPending?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
-
-        val inFlightCount = outboxRepository.countInProgress()
-        val stuckInFlightCount = outboxRepository.countInProgressOlderThan(threshold = cutoff)
-        val oldestInFlight = outboxRepository.findOldestInProgressUpdatedAt()
-        val oldestInFlightAgeSeconds =
-            oldestInFlight?.let { Duration.between(it, now).seconds.coerceAtLeast(0L) } ?: 0L
-
-        val healthy = stuckPendingCount == 0L && stuckInFlightCount == 0L
-        val healthLine = if (healthy) "*Health:* :large_green_circle: UP" else "*Health:* :red_circle: DOWN"
+        val health =
+            outboxRepository.readOutboxHealth(
+                clock = clock,
+                health = healthConfig,
+                accessBlockedTracker = accessBlockedTracker,
+            )
+        val healthLine = if (health.healthy) "*Health:* :large_green_circle: UP" else "*Health:* :red_circle: DOWN"
 
         return buildString {
-            appendLine("• *Pending:* $pendingCount (oldest ${oldestPendingAgeSeconds}s ago, stuck $stuckPendingCount)")
-            appendLine(
-                "• *In-flight:* $inFlightCount (oldest ${oldestInFlightAgeSeconds}s ago, stuck $stuckInFlightCount)",
-            )
-            appendLine("• Stuck threshold: ${stuckThresholdSeconds}s")
+            with(health) {
+                appendLine(
+                    "• *Pending:* $pendingCount (oldest ${oldestPendingAgeSeconds}s ago, stuck $stuckPendingCount)",
+                )
+                appendLine(
+                    "• *In-flight:* $inFlightCount (oldest ${oldestInFlightAgeSeconds}s ago, stuck $stuckInFlightCount)",
+                )
+                appendLine("• *Retrying:* $retryingCount (sent at least ${retryingSendThreshold}x, still in flight)")
+                val accessLine = if (accessBlocked) "rows held, last at $lastAccessBlockedAt" else "none held"
+                appendLine("• *Slack access blocked:* $accessLine (window ${accessBlockedWindowSeconds}s)")
+                appendLine("• Stuck threshold: ${stuckThresholdSeconds}s")
+            }
             append(healthLine)
             if (cveEnabled) {
                 appendLine()

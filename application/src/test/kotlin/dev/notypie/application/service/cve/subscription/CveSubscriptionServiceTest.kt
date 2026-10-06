@@ -187,6 +187,55 @@ class CveSubscriptionServiceTest :
                 }
             }
         }
+        given("topic names and keys carrying Slack control sequences") {
+            val subscriptionRepository = mockk<CveSubscriptionRepository>(relaxed = true)
+            val topicRepository = mockk<CveTopicRepository>()
+            every { subscriptionRepository.findSubscribedTopics(userId = userId) } returns
+                listOf(
+                    createCveTopic(id = 5L, topicKey = "r&d", displayName = "<!channel> <https://evil.example|Java>"),
+                )
+            val stagedMessage = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    subscriptionRepository = subscriptionRepository,
+                    topicRepository = topicRepository,
+                    stagedMessage = stagedMessage,
+                )
+
+            `when`("an unsubscribe names the topic and a crafted unknown key") {
+                service.handleCveSubscription(
+                    event =
+                        createCveSubscriptionRequestEvent(
+                            action = CveSubscriptionAction.UNSUBSCRIBE,
+                            userId = userId,
+                            topicKeys = listOf("r&d", "<!here>"),
+                        ),
+                )
+
+                then("the echoed name and keys are escaped") {
+                    stagedMessage.dmMarkdown() shouldBe
+                        "Unsubscribed from 1 topic(s): *&lt;!channel&gt; &lt;https://evil.example|Java&gt;*. " +
+                        "Skipped not subscribed topics: `&lt;!here&gt;`."
+                }
+            }
+
+            `when`("the subscriptions are listed") {
+                service.handleCveSubscription(
+                    event =
+                        createCveSubscriptionRequestEvent(
+                            action = CveSubscriptionAction.LIST,
+                            userId = userId,
+                            topicKeys = emptyList(),
+                        ),
+                )
+
+                then("the listed name and key are escaped") {
+                    stagedMessage.dmMarkdown() shouldContain
+                        "• *&lt;!channel&gt; &lt;https://evil.example|Java&gt;* (`r&amp;d`)"
+                }
+            }
+        }
+
         given("an UNSUBSCRIBE event with a key that is not subscribed") {
             val subscriptionRepository = mockk<CveSubscriptionRepository>(relaxed = true)
             val topicRepository = mockk<CveTopicRepository>()

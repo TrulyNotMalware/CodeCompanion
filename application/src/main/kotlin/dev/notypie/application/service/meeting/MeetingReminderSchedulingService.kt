@@ -2,6 +2,7 @@ package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.standup.containFailure
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -12,6 +13,7 @@ import dev.notypie.repository.meeting.ReadyReminder
 import dev.notypie.repository.meeting.ReminderCandidateMeeting
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -35,8 +37,8 @@ class MeetingReminderSchedulingService(
     private val outboxRepository: MessageOutboxRepository,
     private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
@@ -55,7 +57,13 @@ class MeetingReminderSchedulingService(
         val windowTo = LocalDateTime.ofInstant(now.plus(Duration.ofMinutes(maxOffsetMinutes.toLong())), zone)
 
         reminderRepository.findActiveMeetingsInWindow(from = windowFrom, to = windowTo).forEach { meeting ->
-            materializeMeeting(meeting = meeting, now = now, zone = clock.zone)
+            containFailure(
+                onFailure = { ex ->
+                    log.error(ex) { "Meeting reminder materialize failed: meetingId=${meeting.meetingId}" }
+                },
+            ) {
+                materializeMeeting(meeting = meeting, now = now, zone = clock.zone)
+            }
         }
     }
 
@@ -72,10 +80,13 @@ class MeetingReminderSchedulingService(
                         meetingId = meeting.meetingId,
                         offsetMinutes = offsetMinutes,
                         scheduledAt = scheduledAt,
+                        startAt = meeting.startAt,
+                        now = now,
                     )
                 ) {
                     log.info {
-                        "Meeting reminder materialized: meetingId=${meeting.meetingId} offset=$offsetMinutes"
+                        "Meeting reminder armed: meetingId=${meeting.meetingId} offset=$offsetMinutes " +
+                            "scheduledAt=$scheduledAt"
                     }
                 }
             } catch (ex: DataIntegrityViolationException) {
@@ -93,7 +104,7 @@ class MeetingReminderSchedulingService(
     fun sendDueReminders() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
-        val reset = reminderRepository.resetStuckReminders(olderThan = stuckCutoff)
+        val reset = reminderRepository.resetStuckReminders(olderThan = stuckCutoff, now = now)
         if (reset > 0) log.warn { "Reset $reset stuck SENDING reminder(s) to PENDING" }
 
         val ready = reminderRepository.findDueBefore(before = now, limit = dispatchBatchSize)
@@ -106,9 +117,25 @@ class MeetingReminderSchedulingService(
 
     private fun processReminder(item: ReadyReminder, sentAt: Instant) {
         val reminderId = item.reminder.id
+        if (!item.isArmedFor(zone = clock.zone)) {
+            if (reminderRepository.discardReminder(reminderId = reminderId, scheduledAt = item.reminder.scheduledAt)) {
+                log.warn {
+                    "Discarded stale meeting reminder: reminderId=$reminderId meetingId=${item.meetingId} " +
+                        "scheduledAt=${item.reminder.scheduledAt} startAt=${item.startAt}"
+                }
+            }
+            return
+        }
         val claimToken = UUID.randomUUID().toString()
 
-        if (!reminderRepository.claimReminder(reminderId = reminderId, claimToken = claimToken)) return
+        if (!reminderRepository.claimReminder(
+                reminderId = reminderId,
+                claimToken = claimToken,
+                now = clock.instant(),
+            )
+        ) {
+            return
+        }
 
         val outcome: Result<Unit> =
             transactionTemplate.runInTx<Unit> {
@@ -132,8 +159,10 @@ class MeetingReminderSchedulingService(
                         sentAt = sentAt,
                     )
                 ) {
-                    // Recovery already flipped this row out of SENDING — roll back or we'd double-deliver it.
-                    error("markReminderSent had no effect for reminder $reminderId — rolling back.")
+                    error(
+                        "markReminderSent had no effect for reminder $reminderId (re-claimed, reset or meeting " +
+                            "canceled) — rolling back.",
+                    )
                 }
             }
 
@@ -144,6 +173,7 @@ class MeetingReminderSchedulingService(
                     reminderId = reminderId,
                     claimToken = claimToken,
                     reason = ex.message ?: "unknown",
+                    now = clock.instant(),
                 )
             ) {
                 log.warn { "markReminderFailed no-op for reminder $reminderId — recovery already reset or re-claimed." }
@@ -166,7 +196,7 @@ internal fun buildReminderDm(
             MessageContent.Text(
                 headline = "Meeting reminder — $meetingTitle",
                 markdown =
-                    "Your meeting *$meetingTitle* starts in $offsetMinutes minutes " +
+                    "Your meeting *${meetingTitle.escapeMrkdwn()}* starts in $offsetMinutes minutes " +
                         "(at ${startAt.format(REMINDER_TIME_FORMAT)}).",
             ),
         detailType = CommandDetailType.MEETING_REMINDER,

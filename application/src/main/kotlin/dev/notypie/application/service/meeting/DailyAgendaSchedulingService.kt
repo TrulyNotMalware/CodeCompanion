@@ -11,6 +11,7 @@ import dev.notypie.repository.meeting.AgendaCandidateMeeting
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
@@ -31,8 +32,8 @@ class DailyAgendaSchedulingService(
     private val outboxRepository: MessageOutboxRepository,
     private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
@@ -49,20 +50,19 @@ class DailyAgendaSchedulingService(
 
         if (localTime.isBefore(sendTime)) return
 
-        if (!agendaDispatchRepository.claim(agendaDate = today)) return
-
-        val dayStart = today.atStartOfDay()
-        val nextDayStart = today.plusDays(1L).atStartOfDay()
-        val meetings = agendaDispatchRepository.findAttendingMeetingsForDay(from = dayStart, to = nextDayStart)
-
-        val agendaByUser = groupByAttendingUser(meetings = meetings)
-        if (agendaByUser.isEmpty()) {
-            log.info { "Daily agenda for $today claimed but no attending meetings — no DMs sent" }
-            return
-        }
-
+        // Claim, lookup and outbox writes share one transaction: the claim row must roll back with a
+        // failed enqueue, or the next tick sees the date as taken and today's agenda is never sent.
         val outcome =
             transactionTemplate.runInTx {
+                if (!agendaDispatchRepository.claim(agendaDate = today)) return@runInTx AgendaOutcome.AlreadyClaimed
+
+                val dayStart = today.atStartOfDay()
+                val nextDayStart = today.plusDays(1L).atStartOfDay()
+                val meetings = agendaDispatchRepository.findAttendingMeetingsForDay(from = dayStart, to = nextDayStart)
+
+                val agendaByUser = groupByAttendingUser(meetings = meetings)
+                if (agendaByUser.isEmpty()) return@runInTx AgendaOutcome.NothingToSend
+
                 agendaByUser.forEach { (userId, items) ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
@@ -76,14 +76,34 @@ class DailyAgendaSchedulingService(
                         outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
                     )
                 }
+                AgendaOutcome.Enqueued(users = agendaByUser.size, meetings = agendaByUser.values.sumOf { it.size })
             }
 
-        if (outcome.isFailure) {
-            log.error(outcome.exceptionOrNull()) { "Daily agenda dispatch failed for $today" }
-        } else {
-            val meetingCount = agendaByUser.values.sumOf { it.size }
-            log.info { "Daily agenda enqueued for $today: users=${agendaByUser.size} meetings=$meetingCount" }
-        }
+        outcome
+            .onFailure { exception ->
+                log.error(
+                    exception,
+                ) { "Daily agenda dispatch failed for $today — claim rolled back, next tick retries" }
+            }.onSuccess {
+                when (it) {
+                    AgendaOutcome.AlreadyClaimed -> Unit
+                    AgendaOutcome.NothingToSend ->
+                        log.info { "Daily agenda for $today claimed but no attending meetings — no DMs sent" }
+                    is AgendaOutcome.Enqueued ->
+                        log.info { "Daily agenda enqueued for $today: users=${it.users} meetings=${it.meetings}" }
+                }
+            }
+    }
+
+    private sealed interface AgendaOutcome {
+        data object AlreadyClaimed : AgendaOutcome
+
+        data object NothingToSend : AgendaOutcome
+
+        data class Enqueued(
+            val users: Int,
+            val meetings: Int,
+        ) : AgendaOutcome
     }
 
     private fun groupByAttendingUser(meetings: List<AgendaCandidateMeeting>): Map<String, List<AgendaItem>> {
@@ -108,7 +128,7 @@ internal fun buildAgendaDm(
         meetings
             .sortedBy { it.startAt }
             .joinToString(separator = "\n") { item ->
-                "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title}"
+                "• ${item.startAt.format(AGENDA_TIME_FORMAT)} — ${item.title.escapeMrkdwn()}"
             }
     return OutboundMessage.ChannelMessage(
         target = ConversationTarget(id = commandBasicInfo.channel),

@@ -103,7 +103,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   스테이저와 렌더러는 같은 `SlackApiEventConstructor`를 쓰므로 wire 출력이 동일하다. 세 번째 렌더 경로는 금지다.
 - **모달 예외의 이유**: `views.open`은 요청 스레드의 `trigger_id`가 필요하고 발급 후 약 3초에 만료된다. 그래서
   `OpenViewEvent`는 아웃박스를 거치지 않고 `SlackViewOpenDispatcher`(`@EventListener`, 의도적으로 `@Async` 없음)가
-  `MessageDispatcher.dispatchImmediate`로 즉시 호출한다. 실패는 재시도 대신 `DeclineModalOpenFailedEvent` /
+  `MessageDispatcher.dispatchImmediate`로 호출한다 — 트랜잭션 경계를 가진 호출자 안에서는 `ViewOpenDeferral`이 경계가
+  커밋된 뒤로 미룬다(2026-10-01, DB 커넥션을 쥔 채 Slack을 부르지 않기 위해). 실패는 재시도 대신 `DeclineModalOpenFailedEvent` /
   `StandupModalOpenFailedEvent`로 알려 안내 ephemeral을 보낸다. 빈 핸들이면 스테이저는 경고 후 `null`을 돌려준다.
 - `SlackOutboundRenderer`는 `OpenModal`/`DirectMessage`에서 **일부러** `error()`를 던진다. 조용한 폴백을 넣지 말 것.
 - `CommandExecutor`는 resolve/publish 실패를 로그 후 재던져 호출자 `@Transactional`을 롤백시키며 큐를 재적재하지

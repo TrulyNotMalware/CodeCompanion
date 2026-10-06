@@ -16,7 +16,7 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
     @Query(
         """
             SELECT m FROM meetings m
-            JOIN FETCH m.participants
+            LEFT JOIN FETCH m.participants
             WHERE m.id = :meetingId
         """,
     )
@@ -24,23 +24,26 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingId") meetingId: Long,
     ): MeetingSchema?
 
+    // The user filter lives in a subquery, never on the fetch-join alias: filtering the alias makes Hibernate
+    // initialise `participants` with only the matching rows, so a participant would see themselves alone.
     @Query(
         """
-        SELECT DISTINCT m
+        SELECT m
         FROM meetings m
-        JOIN FETCH m.participants p
+        LEFT JOIN FETCH m.participants
         WHERE m.publisherId = :userId
-        OR p.userId = :userId
+           OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting = m AND p.userId = :userId)
     """,
     )
     fun findAllMeetingByUserId(userId: String): List<MeetingSchema>
 
     @Query(
         """
-        SELECT DISTINCT m
+        SELECT m
         FROM meetings m
-        JOIN FETCH m.participants p
-        WHERE (m.publisherId = :userId OR p.userId = :userId)
+        LEFT JOIN FETCH m.participants
+        WHERE (m.publisherId = :userId
+               OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting = m AND p.userId = :userId))
           AND m.startAt >= :startAt
           AND m.startAt < :endAt
         ORDER BY m.startAt ASC
@@ -52,12 +55,11 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("endAt") endAt: LocalDateTime,
     ): List<MeetingSchema>
 
-    // Not user-scoped, unlike findMeetingsByUserIdAndDateRange — the reminder scheduler sweeps all meetings.
     @Query(
         """
-        SELECT DISTINCT m
+        SELECT m
         FROM meetings m
-        JOIN FETCH m.participants
+        LEFT JOIN FETCH m.participants
         WHERE m.isCanceled = false
           AND m.startAt >= :startAt
           AND m.startAt < :endAt
@@ -101,39 +103,6 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingIdempotencyKey") meetingIdempotencyKey: UUID,
         @Param("userId") userId: String,
     ): Boolean
-
-    @Modifying
-    @Transactional
-    @Query(
-        """
-        UPDATE meetings m
-        SET m.isCanceled = true
-        WHERE m.meetingUid = :meetingUid
-          AND m.publisherId = :requesterId
-          AND m.isCanceled = false
-    """,
-    )
-    fun markMeetingCanceled(
-        @Param("meetingUid") meetingUid: UUID,
-        @Param("requesterId") requesterId: String,
-    ): Int
-
-    @Modifying
-    @Transactional
-    @Query(
-        """
-        UPDATE meetings m
-        SET m.startAt = :newStartAt
-        WHERE m.meetingUid = :meetingUid
-          AND m.publisherId = :requesterId
-          AND m.isCanceled = false
-    """,
-    )
-    fun rescheduleMeeting(
-        @Param("meetingUid") meetingUid: UUID,
-        @Param("requesterId") requesterId: String,
-        @Param("newStartAt") newStartAt: LocalDateTime,
-    ): Int
 
     @Query(
         """

@@ -7,9 +7,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.*
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
-import java.time.Instant
+import org.springframework.data.domain.Persistable
 import java.time.LocalDateTime
-import java.time.ZoneId
+import java.time.ZoneOffset
 
 private val logger = KotlinLogging.logger { }
 
@@ -18,6 +18,8 @@ private val logger = KotlinLogging.logger { }
     name = "outbox_message",
     indexes = [
         Index(name = "idx_outbox_idempotency_key", columnList = "idempotency_key"),
+        Index(name = "idx_outbox_status_created_at", columnList = "status, created_at"),
+        Index(name = "idx_outbox_status_updated_at", columnList = "status, updated_at"),
     ],
 )
 class OutboxMessage(
@@ -34,7 +36,7 @@ class OutboxMessage(
     // Debezium CDC delivers enum types as null, so transport rides as a plain string column.
     @field:Column(name = "transport", nullable = false)
     val transport: String = Transport.SLACK.name,
-    @field:Column(name = "payload", columnDefinition = "TEXT", nullable = false)
+    @field:Column(name = "payload", columnDefinition = "MEDIUMTEXT", nullable = false)
     val payload: String,
     @field:CreationTimestamp
     @field:JsonProperty("created_at")
@@ -50,14 +52,44 @@ class OutboxMessage(
         nullable = false,
         columnDefinition = "INT NOT NULL DEFAULT ${OutboxSchemaVersion.V2}",
     )
-    val schemaVersion: Int = OutboxSchemaVersion.CURRENT,
-) {
+    val schemaVersion: Int = OutboxSchemaVersion.V2,
+    @field:JsonProperty("attempt_count")
+    @field:Column(
+        name = "attempt_count",
+        nullable = false,
+        updatable = false,
+        columnDefinition = "INT NOT NULL DEFAULT 0",
+    )
+    val attemptCount: Int = 0,
+    @field:JsonProperty("send_count")
+    @field:Column(
+        name = "send_count",
+        nullable = false,
+        updatable = false,
+        columnDefinition = "INT NOT NULL DEFAULT 0",
+    )
+    val sendCount: Int = 0,
+) : Persistable<String> {
+    // The id is assigned by the application, so without this save() would merge: a SELECT before every INSERT.
+    @field:Transient
+    private var newRow: Boolean = true
+
+    override fun getId(): String = eventId
+
+    override fun isNew(): Boolean = newRow
+
+    @PostPersist
+    @PostLoad
+    protected fun markPersisted() {
+        newRow = false
+    }
+
     @field:Version
     @field:Column(name = "version", nullable = false)
     var version: Long = 0L
         protected set
 
-    @field:Column(name = "status")
+    @field:Column(name = "status", nullable = false)
     var status: String = MessageStatus.PENDING.name
         protected set
 
@@ -70,17 +102,25 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
     runCatching {
         val createdAt = this["created_at"]
         val updatedAt = this["updated_at"]
-        if (createdAt is Long) this["created_at"] = createdAt.toLocalDateTime()
-        if (updatedAt is Long) this["updated_at"] = updatedAt.toLocalDateTime()
+        if (createdAt is Long) this["created_at"] = createdAt.debeziumDateTime()
+        if (updatedAt is Long) this["updated_at"] = updatedAt.debeziumDateTime()
 
         jsonMapper.convertValue(this, OutboxMessage::class.java)
     }.getOrElse { e ->
-        logger.error { "Failed to convert to OutboxMessage. ${e.message}" }
+        logger.error(e) { "Failed to convert to OutboxMessage" }
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }
 
-private fun Long.toLocalDateTime(): LocalDateTime {
-    val seconds = this / 1_000_000
-    val nanos = (this % 1_000_000) * 1_000
-    return Instant.ofEpochSecond(seconds, nanos).atZone(ZoneId.systemDefault()).toLocalDateTime()
+// Milliseconds since the epoch reach 1e14 only in the year 5138, so anything at or above it is microseconds.
+private const val EPOCH_MICROS_FLOOR = 100_000_000_000_000L
+
+// Debezium writes DATETIME as epoch time read as UTC (no zone): Timestamp (millis) for DATETIME(0-3),
+// MicroTimestamp (micros) for DATETIME(4-6).
+internal fun Long.debeziumDateTime(): LocalDateTime {
+    val micros = if (this >= EPOCH_MICROS_FLOOR) this else this * 1_000
+    return LocalDateTime.ofEpochSecond(
+        Math.floorDiv(micros, 1_000_000L),
+        (Math.floorMod(micros, 1_000_000L) * 1_000).toInt(),
+        ZoneOffset.UTC,
+    )
 }

@@ -6,4 +6,6 @@ import dev.notypie.domain.command.entity.event.EventPayload
 
 interface OutboundMessageStager {
     fun stage(message: OutboundMessage, basicInfo: CommandBasicInfo): CommandEvent<EventPayload>?
+
+    fun stageInOrder(messages: List<OutboundMessage>, basicInfo: CommandBasicInfo): CommandEvent<EventPayload>
 }

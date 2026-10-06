@@ -38,7 +38,7 @@ class OutboxPayloadRendererTest :
                 val result = payloadRenderer.render(row = row)
 
                 then("the envelope is decoded and handed to the transport's renderer") {
-                    result shouldBe rendered
+                    result shouldBe RenderedRow(payload = rendered, next = null)
                     verify(exactly = 1) {
                         slackRenderer.render(
                             message = message,

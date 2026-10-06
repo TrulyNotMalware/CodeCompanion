@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
 
 # infrastructure/repository
 
@@ -33,8 +33,9 @@ subpackage of `@Entity` classes.
   **unregistered**: neither is outbox-bound, so encoding or decoding one fails fast with an unresolved
   type id instead of silently round-tripping. Do not "complete" the subtype list.
 - **`OutboxSchemaVersion` is the compatibility gate.** Writers stamp `CURRENT`; readers validate against
-  `SUPPORTED` before decoding, so a relay binary that cannot parse a shape leaves a stuck row (which the
-  health indicator surfaces) rather than sending a malformed request. Bump `CURRENT` **and** extend
+  `SUPPORTED` before decoding, so a relay binary that cannot parse a shape leaves the row `IN_PROGRESS` unsent
+  (no send budget spent, ERROR log, reclaimed by the sweep until a binary that reads it sends it or the 24 h
+  bound ends it) rather than sending a malformed request or failing it. Bump `CURRENT` **and** extend
   `SUPPORTED` for a new shape; remove a version from `SUPPORTED` only after a guaranteed-drained
   migration window.
 - **Status transitions are atomic CAS, not read-then-write.** `claimPending`'s `WHERE status = 'PENDING'`
@@ -65,6 +66,10 @@ Note that H2 will not catch MariaDB-specific native-SQL syntax — verify those 
 ### Common Patterns
 - Native queries for atomic CAS / `INSERT ... IGNORE`; derived or JPQL queries otherwise.
 - `@Modifying @Transactional` on state transitions, returning the affected row count.
+- In `*RepositoryImpl`, read overrides that load and map entities carry `@Transactional(readOnly = true)`.
+  `spring.jpa.open-in-view` is off (`application.yaml`), so a lazy association touched while mapping outside
+  a transaction throws in every caller, HTTP or scheduler alike. Only `open class` Impls can take method-level
+  annotations; `plugin.spring` does not open a class for them.
 - DTO projections (`dev.notypie.domain.*.dto`) cross the boundary outward; JPA schema classes never leak
   into `application` or `domain`.
 - `JPAJsonConverter` (in `infrastructure/common/`) for JSON columns; `PartitionKeyUtil` for Kafka

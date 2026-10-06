@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
 
 # test/kotlin/dev/notypie/application/service/cve/collector
 
@@ -11,7 +11,7 @@ event table. Also pins the `windowStart` bucket arithmetic that the ledger's uni
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveCollectorTest.kt` | Plain Kotest `BehaviorSpec` + MockK, no Spring context. `tick()`: window claimed → `adapter.fetch(topic)` once, `insertIgnore(topicId = 7L, externalId = "R1", title = "Title", rawContent = "Body", publishedAt = null)` once, `deleteOlderThan(cutoff)` once; window already claimed → zero fetch and zero insert; first of two topics throws `source down` → second topic still ingested; `RSS` topic no adapter `supports` → no `claimWindow`, no fetch. `windowStart(now)`: 10:44:47.123 with 5-minute windows → 10:40:00; exactly 10:45 → 10:45; 10:59:59 → 10:55 (never crosses the hour); 60-minute window at 10:31 → 10:00. |
+| `CveCollectorTest.kt` | Plain Kotest `BehaviorSpec` + MockK, no Spring context. `tick()`: window claimed → `adapter.fetch(topic)` once, `insertIgnore(topicId = 7L, externalId = "R1", title = "Title", rawContent = "Body", publishedAt = null)` once, `deleteOlderThan(cutoff)` once; window already claimed → zero fetch and zero insert; first of two topics throws `source down` → second topic still ingested; `RSS` topic no adapter `supports` → no `claimWindow`, no fetch; the first of two NVD topics re-sets the interrupt and throws `InterruptedException` → no claim or fetch for the second, and the flag is still set (the spec clears it with `Thread.interrupted()`). `windowStart(now)`: 10:44:47.123 with 5-minute windows → 10:40:00; exactly 10:45 → 10:45; 10:59:59 → 10:55 (never crosses the hour); 60-minute window at 10:31 → 10:00. |
 
 ## For AI Agents
 

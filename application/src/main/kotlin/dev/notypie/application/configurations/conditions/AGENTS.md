@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
 
 # application/configurations/conditions
 
@@ -20,8 +20,8 @@ classes in `../ConsumerConfig.kt`.
 ### Working In This Directory
 - Consumers: `PoolingPublisherConfig` (`OnPollingConsumer`) and `CdcPublisherConfig` (`OnCdcConsumer`)
   choose the `MessageProcessor`; `KafkaEventPublisherConfig` (`OnKafkaEventPublisher`) and
-  `ApplicationEventPublisherConfig` (`OnApplicationEventPublisher`) choose the `EventPublisher` and
-  `ErrorBroadcaster`. The two pairs are independent axes — CDC + application events is a valid combo.
+  `ApplicationEventPublisherConfig` (`OnApplicationEventPublisher`) choose the `EventPublisher`; the
+  `ErrorBroadcaster` is registered regardless of mode. The two pairs are independent axes — CDC + application events is a valid combo.
 - Keep the `orElseGet { AppConfig() }` fallback: a profile with no `slack.app.mode` block must evaluate
   to the defaults (`POLLING`, `APPLICATION_EVENT`), not throw during condition evaluation.
 - Every `matches` call re-binds the whole `AppConfig` tree. That is fine at startup (a handful of

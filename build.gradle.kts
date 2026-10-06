@@ -23,6 +23,7 @@ java {
 extra["kotestVersion"] = "6.2.5"
 extra["slackSdkVersion"] = "1.52.0"
 extra["mockkVersion"] = "1.14.11"
+extra["springMockkVersion"] = "5.0.1"
 extra["springBootVersion"] = "4.1.1"
 extra["jacksonVersion"] = "3.2.3"
 extra["kotlinLoggingVersion"] = "8.0.4"
@@ -64,7 +65,7 @@ allprojects {
         }
     }
 
-    tasks.withType<GenerateReportsTask> {
+    tasks.withType<GenerateReportsTask>().configureEach {
         reportsOutputDirectory.set(
             rootProject.layout.buildDirectory.dir(
                 "reports/ktlint/${project.name}",
@@ -72,10 +73,12 @@ allprojects {
         )
     }
 
-    tasks.withType<Test> {
+    // CI sets testMaxHeap lower: two daemons plus one test JVM per module must fit a 16 GB runner.
+    val testMaxHeap = providers.gradleProperty("testMaxHeap").getOrElse("4g")
+    tasks.withType<Test>().configureEach {
         useJUnitPlatform()
         jvmArgs(
-            "-Xmx4g",
+            "-Xmx$testMaxHeap",
             "-Dfile.encoding=UTF-8",
             "-XX:+EnableDynamicAgentLoading",
             "--add-opens",
@@ -96,7 +99,8 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.plugin.jpa")
 
     dependencies {
-        api(platform("io.kotest:kotest-bom:$kotestVersion"))
+        testImplementation(platform("io.kotest:kotest-bom:$kotestVersion"))
+        testFixturesImplementation(platform("io.kotest:kotest-bom:$kotestVersion"))
 
         implementation(kotlin("reflect"))
 

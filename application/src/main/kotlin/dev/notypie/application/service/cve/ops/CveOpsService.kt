@@ -13,6 +13,7 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.templates.escapeMrkdwn
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -72,8 +73,9 @@ class CveOpsService(
                 .associate { it.topicId to it.count }
         val lines =
             topics.joinToString(separator = "\n") { topic ->
-                "• *${topic.displayName}* (`${topic.topicKey}`) — ${topic.deliveryMode.name.lowercase()}, " +
-                    "${stateOf(topic = topic)}, ${counts[topic.id] ?: 0L} event(s)"
+                "• *${topic.displayName.escapeMrkdwn()}* (`${topic.topicKey.escapeMrkdwn()}`) — " +
+                    "${topic.deliveryMode.name.lowercase()}, ${stateOf(topic = topic)}, " +
+                    "${counts[topic.id] ?: 0L} event(s)"
             }
         return "CVE topics (${topics.size}):\n$lines"
     }
@@ -81,12 +83,13 @@ class CveOpsService(
     private fun setActive(payload: CveOpsPayload, active: Boolean): String {
         val topicKey = checkNotNull(payload.topicKey) { "ACTIVATE_TOPIC/DEACTIVATE_TOPIC requires a topic key" }
         val topic =
-            cveTopicRepository.findAllTopics().firstOrNull { it.topicKey == topicKey }
-                ?: return "No CVE topic with key `$topicKey`."
-        cveTopicRepository.setActive(topicKey = topicKey, active = active)
+            cveTopicRepository.findAllTopics().firstOrNull { it.topicKey.equals(topicKey, ignoreCase = true) }
+                ?: return "No CVE topic with key `${topicKey.escapeMrkdwn()}`."
+        cveTopicRepository.setActive(topicKey = topic.topicKey, active = active)
         val oldState = stateOf(topic = topic)
         val newState = if (active) "active" else "inactive"
-        return "Topic *${topic.displayName}* (`$topicKey`): $oldState → $newState."
+        return "Topic *${topic.displayName.escapeMrkdwn()}* (`${topic.topicKey.escapeMrkdwn()}`): " +
+            "$oldState → $newState."
     }
 
     private fun retryAll(): String {

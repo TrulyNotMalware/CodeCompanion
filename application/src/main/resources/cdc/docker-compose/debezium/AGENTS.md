@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
 
 # cdc/docker-compose/debezium
 
@@ -11,7 +11,7 @@ equivalent manifest for the Kubernetes side.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `connect_mariadb.sh` | `curl -X POST` of a connector JSON to the Connect REST `URL`. Connector `mariadb-event-connector`, class `io.debezium.connector.mariadb.MariaDbConnector`, `database.hostname: mariadb` (compose service name), `database.include.list: code_companion`, `table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`, schema-history topic `schema-history.code_companion.outbox_message`, `database.ssl.mode: disabled`, `column.propagate.source.type: true`, `schema.history.internal.store.only.captured.tables.ddl: true` |
+| `connect_mariadb.sh` | `curl -X POST` of a connector JSON to the Connect REST `URL`. Connector `mariadb-event-connector`, class `io.debezium.connector.mariadb.MariaDbConnector`, `database.hostname: mariadb` (compose service name), `database.include.list: code_companion`, `table.include.list: code_companion.outbox_message`, `topic.prefix: cdc`, `heartbeat.interval.ms: 10000`, schema-history topic `schema-history.code_companion.outbox_message`, `database.ssl.mode: disabled`, `column.propagate.source.type: true`, `schema.history.internal.store.only.captured.tables.ddl: true` |
 
 ## For AI Agents
 
@@ -36,6 +36,24 @@ equivalent manifest for the Kubernetes side.
   the brokers on `docker compose down` and must be registered again.
 - The database user needs `REPLICATION SLAVE`, `REPLICATION CLIENT`, `SELECT` and `RELOAD`; the compose
   file only creates `root`, so either use root locally or create the user before running this.
+- **Why the heartbeat:** the connector commits its binlog offset only when it emits a record. With
+  `outbox_message` quiet and other tables busy, the stored position stops moving while the server keeps
+  purging binlogs (`expire_logs_days=7` in the cluster MariaDB config), and after a restart the connector
+  cannot resume. A heartbeat every 10 s emits to `__debezium-heartbeat.cdc` and commits the current position.
+  Nothing in the application consumes that topic.
+- **Runbook, lost binlog position** (task `FAILED` with an error that the binlog position is no longer
+  available). Not rehearsed in this repository; the options are from the Debezium reference.
+  1. `PUT /connectors/mariadb-event-connector/config` with the current config plus `"snapshot.mode":
+     "when_needed"`, then restart the task. The connector snapshots `outbox_message` and streams from the
+     current position.
+  2. The snapshot emits every row as a read (`op=r`). `DebeziumLogTailingProcessor` has no operation filter:
+     non-PENDING after-images are skipped and a PENDING row is claimed by the same CAS as the recovery sweep,
+     so a snapshot read cannot win a row that the sweep or the stream has already claimed.
+  3. Rows written during the outage were already delivered by `OutboxRecoveryScheduler`, which claims PENDING
+     rows older than `slack.app.outbox.polling.stuck-in-progress-seconds` in every mode. Watch
+     `outbox_pending_oldest_age_seconds` fall back to near zero.
+  4. Leave `snapshot.mode` as it was afterwards, or keep `when_needed` deliberately; `no_data` is the
+     alternative when the table is large, since the sweep covers PENDING rows anyway.
 - `schema.history.internal.store.only.captured.tables.ddl: true` keeps the history topic small but means DDL
   on non-captured tables is not tracked; adding a table to `table.include.list` later may need a fresh
   snapshot.
@@ -44,7 +62,8 @@ equivalent manifest for the Kubernetes side.
 
 ### Testing Requirements
 - `curl localhost:8083/connectors/mariadb-event-connector/status` must show the connector and its task as
-  `RUNNING`; a `FAILED` task with a binlog error usually means `my.cnf` was not mounted (`log_bin` off) or
+  `RUNNING` (the application cannot see this; poll it from the cluster's monitoring, or alert on
+  `outbox_pending_oldest_age_seconds`, which rises when the connector stops); a `FAILED` task with a binlog error usually means `my.cnf` was not mounted (`log_bin` off) or
   the server-id collides.
 - Insert a row into `code_companion.outbox_message` and confirm a record on
   `cdc.code_companion.outbox_message`; Kafka UI on `localhost:9090` lists it under topics prefixed `cdc.`.

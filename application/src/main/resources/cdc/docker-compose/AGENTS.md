@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
 
 # cdc/docker-compose
 
@@ -13,8 +13,8 @@ records what the compose file actually wires and where it bites.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `README.md` | Placeholder list, start/verify/cleanup commands, port table, how to point `application-local.yaml` at this stack, troubleshooting |
-| `docker-compose.yml` | Services `mariadb` (untagged `mariadb` image, database `code_companion`, `my.cnf` bind-mounted into `/etc/mysql/conf.d/`), `kafka-00/01/02` (`apache/kafka:3.8.1`, combined broker+controller, listeners `PLAINTEXT` 1909x in-network, `CONTROLLER` 2909x, `EXTERNAL` 909x published to the host), `kafka-ui` (`provectuslabs/kafka-ui:latest` on 9090, login form), `debezium` (`debezium/connect:3.0.0.Final` on 8083, JSON converters, group `debezium-00`, `DEBEZIUM_CONNECT_*` storage topics), `debezium-ui` (`debezium/debezium-ui:2.2` on 9091); all on the `local-infra` bridge network |
+| `README.md` | Placeholder list, start/verify/cleanup commands, port table, how to point `application-local.yaml` at this stack, time-zone caveat (MariaDB runs UTC), troubleshooting |
+| `docker-compose.yml` | Services `mariadb` (untagged `mariadb` image, database `code_companion`, `my.cnf` bind-mounted into `/etc/mysql/conf.d/`), `kafka-00/01/02` (`apache/kafka:3.8.1`, combined broker+controller, listeners `PLAINTEXT` 1909x in-network, `CONTROLLER` 2909x, `EXTERNAL` 909x published to the host), `kafka-ui` (`provectuslabs/kafka-ui:latest` on 9090, login form), `debezium` (`debezium/connect:3.0.0.Final` on 8083, JSON converters, group `debezium-00`, `DEBEZIUM_CONNECT_*` storage topics), `debezium-ui` (`debezium/debezium-ui:2.5` on 9091); all on the `local-infra` bridge network |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -75,6 +75,6 @@ records what the compose file actually wires and where it bites.
 
 ### External
 Docker Engine 20.10+ / Compose 2.0+, `apache/kafka:3.8.1`, `debezium/connect:3.0.0.Final`,
-`debezium/debezium-ui:2.2`, `provectuslabs/kafka-ui`, `mariadb`.
+`debezium/debezium-ui:2.5`, `provectuslabs/kafka-ui`, `mariadb`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

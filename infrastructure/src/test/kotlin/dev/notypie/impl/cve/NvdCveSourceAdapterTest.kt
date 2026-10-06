@@ -2,28 +2,37 @@ package dev.notypie.impl.cve
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.schema.createCveTopic
+import dev.notypie.schema.createNvdPageJson
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetSocketAddress
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class NvdCveSourceAdapterTest :
     BehaviorSpec({
         lateinit var respond: (HttpExchange) -> Unit
         var capturedUri = ""
         var capturedApiKey: String? = null
+        val arrivalNanos = ConcurrentLinkedQueue<Long>()
 
         val server =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
                 createContext("/") { exchange ->
+                    arrivalNanos += System.nanoTime()
                     capturedUri = exchange.requestURI.toString()
                     capturedApiKey = exchange.requestHeaders.getFirst("apiKey")
                     respond(exchange)
@@ -197,6 +206,236 @@ class NvdCveSourceAdapterTest :
 
                 then("it returns an empty list rather than throwing") {
                     events shouldBe emptyList()
+                }
+            }
+        }
+
+        given("a source that sends the headers and then stalls") {
+            val release = CountDownLatch(1)
+            respond = { exchange ->
+                exchange.responseHeaders.add("Content-Type", "application/json")
+                exchange.sendResponseHeaders(200, 0)
+                exchange.responseBody.write("""{"vulnerabilities": [""".toByteArray())
+                exchange.responseBody.flush()
+                release.await(10L, TimeUnit.SECONDS)
+                exchange.close()
+            }
+            val impatientAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(1L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    clock = Clock.systemUTC(),
+                )
+
+            `when`("fetch") {
+                val startedAt = System.nanoTime()
+                val events = impatientAdapter.fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+                val elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
+                release.countDown()
+
+                then("it gives up within the request budget instead of blocking the scheduler") {
+                    events shouldBe emptyList()
+                    (elapsed < Duration.ofSeconds(5L)) shouldBe true
+                }
+            }
+        }
+
+        given("a response body larger than the configured limit") {
+            respond = jsonResponse(status = 200, body = oneVulnerability)
+            val smallLimitAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    maxBodyBytes = 64,
+                    clock = Clock.systemUTC(),
+                )
+
+            `when`("fetch") {
+                val events = smallLimitAdapter.fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+
+                then("it drops the response instead of buffering it") {
+                    events shouldBe emptyList()
+                }
+            }
+        }
+
+        given("one adapter asked for two topics in a row") {
+            respond = jsonResponse(status = 200, body = """{"vulnerabilities": []}""")
+            val pacedAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    requestInterval = Duration.ofMillis(500L),
+                    clock = Clock.systemUTC(),
+                )
+            val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
+
+            `when`("both fetches run") {
+                arrivalNanos.clear()
+                pacedAdapter.fetch(topic = topic)
+                pacedAdapter.fetch(topic = topic)
+                val (first, second) = arrivalNanos.toList()
+
+                then("the second request reaches NVD about the configured interval after the first") {
+                    Duration.ofNanos(second - first) shouldBeGreaterThanOrEqualTo Duration.ofMillis(450L)
+                }
+            }
+        }
+
+        given("a paced adapter whose caller is interrupted while it waits for the next slot") {
+            respond = jsonResponse(status = 200, body = """{"vulnerabilities": []}""")
+            val pacedAdapter =
+                NvdCveSourceAdapter(
+                    apiKey = "",
+                    lookbackMinutes = 120,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                    requestInterval = Duration.ofSeconds(30L),
+                    clock = Clock.systemUTC(),
+                )
+            val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
+
+            `when`("the second fetch is interrupted") {
+                arrivalNanos.clear()
+                pacedAdapter.fetch(topic = topic)
+                Thread.currentThread().interrupt()
+                val outcome = runCatching { pacedAdapter.fetch(topic = topic) }
+                val keptInterrupt = Thread.interrupted()
+
+                then("it throws at once, keeps the interrupt for the caller and sends nothing") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                    arrivalNanos.size shouldBe 1
+                }
+            }
+        }
+
+        given("a fetch whose HTTP call is interrupted") {
+            respond = jsonResponse(status = 200, body = """{"vulnerabilities": []}""")
+
+            `when`("fetch runs on an interrupted thread with no pacing wait") {
+                arrivalNanos.clear()
+                Thread.currentThread().interrupt()
+                val outcome =
+                    runCatching {
+                        adapter(apiKey = "").fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+                    }
+                val keptInterrupt = Thread.interrupted()
+
+                then("the interrupt propagates with its flag, so the collector can stop the tick") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+        }
+
+        fun pagedAdapter(
+            requestInterval: Duration = Duration.ZERO,
+            onPageCapReached: (CveTopic) -> Unit = {},
+        ): NvdCveSourceAdapter =
+            NvdCveSourceAdapter(
+                apiKey = "",
+                lookbackMinutes = 120,
+                requestTimeout = Duration.ofSeconds(5L),
+                apiBaseUrl = "http://127.0.0.1:${server.address.port}",
+                clock = Clock.systemUTC(),
+                requestInterval = requestInterval,
+                onPageCapReached = onPageCapReached,
+            )
+
+        fun pagedResponses(totalResults: Int, pageSize: Int, failFrom: Int = Int.MAX_VALUE): (HttpExchange) -> Unit =
+            { exchange ->
+                val startIndex =
+                    exchange.requestURI.query
+                        .split("&")
+                        .first { it.startsWith("startIndex=") }
+                        .substringAfter("=")
+                        .toInt()
+                if (startIndex >= failFrom) {
+                    jsonResponse(status = 500, body = "boom")(exchange)
+                } else {
+                    val ids = (startIndex until minOf(startIndex + pageSize, totalResults)).map { "CVE-2026-$it" }
+                    jsonResponse(status = 200, body = createNvdPageJson(cveIds = ids, totalResults = totalResults))(
+                        exchange,
+                    )
+                }
+            }
+
+        given("a window whose results span several pages") {
+            respond = pagedResponses(totalResults = 5, pageSize = 2)
+
+            `when`("fetch") {
+                arrivalNanos.clear()
+                val events = pagedAdapter().fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+
+                then("it follows startIndex until totalResults and keeps every page's events") {
+                    events.map { it.externalId } shouldBe (0 until 5).map { "CVE-2026-$it" }
+                    arrivalNanos.size shouldBe 3
+                    capturedUri shouldContain "resultsPerPage=${NvdCveSourceAdapter.RESULTS_PER_PAGE}"
+                    capturedUri shouldContain "startIndex=4"
+                }
+            }
+        }
+
+        given("a window whose second page fails") {
+            respond = pagedResponses(totalResults = 5, pageSize = 2, failFrom = 2)
+
+            `when`("fetch") {
+                val events = pagedAdapter().fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+
+                then("the first page's events are kept and fetch does not throw") {
+                    events.map { it.externalId } shouldBe listOf("CVE-2026-0", "CVE-2026-1")
+                }
+            }
+        }
+
+        given("a window with more results than the page cap reads") {
+            respond = pagedResponses(totalResults = 1_000_000, pageSize = 1)
+            val capped = ConcurrentLinkedQueue<String>()
+            val topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}""")
+
+            `when`("fetch") {
+                arrivalNanos.clear()
+                val events = pagedAdapter(onPageCapReached = { capped += it.topicKey }).fetch(topic = topic)
+
+                then("it stops at the cap and reports the topic once") {
+                    arrivalNanos.size shouldBe NvdCveSourceAdapter.MAX_PAGES
+                    events.size shouldBe NvdCveSourceAdapter.MAX_PAGES
+                    capped.toList() shouldBe listOf(topic.topicKey)
+                }
+            }
+        }
+
+        given("a paged fetch interrupted while it waits for the next page's slot") {
+            respond = pagedResponses(totalResults = 5, pageSize = 2)
+
+            `when`("the caller is interrupted during the wait") {
+                arrivalNanos.clear()
+                val caller = Thread.currentThread()
+                val interrupter =
+                    Thread {
+                        while (arrivalNanos.isEmpty()) Thread.sleep(10L)
+                        Thread.sleep(200L)
+                        caller.interrupt()
+                    }.apply { start() }
+                val outcome =
+                    runCatching {
+                        pagedAdapter(requestInterval = Duration.ofSeconds(30L))
+                            .fetch(topic = nvdTopic(sourceConfig = """{"cpe":"cpe:2.3:a:x:y"}"""))
+                    }
+                val keptInterrupt = Thread.interrupted()
+                interrupter.join()
+
+                then("the interrupt propagates with its flag after the first page only") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                    arrivalNanos.size shouldBe 1
                 }
             }
         }

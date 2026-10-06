@@ -29,6 +29,12 @@ data class NudgeCandidateSession(
     val answeredUserIds: Set<String>,
 )
 
+enum class AnswerRecordResult {
+    RECORDED,
+    SESSION_CLOSED,
+    SESSION_NOT_FOUND,
+}
+
 interface StandupRepository {
     fun createRoutine(routine: Routine): Routine
 
@@ -46,20 +52,24 @@ interface StandupRepository {
 
     fun findSession(sessionUid: UUID): StandupSessionDto?
 
+    fun findSessionForSummary(sessionUid: UUID): StandupSessionDto?
+
     fun recordAnswer(
         sessionUid: UUID,
         userId: String,
         responses: List<String>,
         submittedAt: Instant,
-    ): Boolean
+    ): AnswerRecordResult
 
-    fun claimDispatch(dispatchId: Long, claimToken: String): Boolean
+    fun claimDispatch(dispatchId: Long, claimToken: String, now: Instant): Boolean
 
     fun markDispatchSent(dispatchId: Long, claimToken: String, sentAt: Instant): Boolean
 
-    fun markDispatchFailed(dispatchId: Long, claimToken: String, reason: String): Boolean
+    fun recordDispatchFailure(dispatchId: Long, reason: String, now: Instant): Boolean
 
-    fun resetStuckDispatches(olderThan: Instant): Int
+    fun markDispatchSkipped(dispatchId: Long, reason: String, now: Instant): Boolean
+
+    fun resetStuckDispatches(olderThan: Instant, now: Instant): Int
 
     fun findPendingDispatchesBefore(before: Instant, limit: Int): List<ReadyDispatch>
 

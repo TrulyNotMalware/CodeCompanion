@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
 
 # infrastructure
 
@@ -44,8 +44,10 @@ repository contracts) and is consumed by `:application`. Produces a plain `jar` 
 - **The outbox status transition is the concurrency contract.** `claimPending`'s `WHERE status = 'PENDING'`
   is the source of truth; only rows that actually transitioned may be dispatched. `updated_at` is touched
   on claim so health indicators age `IN_PROGRESS` rows from claim time, not creation time.
-- **Host-only meeting authorization is enforced here**, atomically, in the repository `WHERE` clause —
-  not in the domain and not in the UI. Keep it that way when adding host-scoped operations.
+- **Host-only meeting authorization is enforced here**, in `MeetingRepositoryImpl` — not in the domain and
+  not in the UI. Writes load the managed row, check host and state, then mutate and flush; the `@Version` check
+  on flush rejects a concurrent writer that read the same version. Keep that shape for new host-scoped writes and
+  do not add a bulk `UPDATE meetings`, which skips `@Version` (see `repository/meeting/AGENTS.md`).
 - Jackson is declared per-module on purpose so `:domain`'s classpath stays Jackson-free. Do not move it
   to the root `subprojects` block.
 - Spring Data JPA and Kafka are exposed as `api` here so `testFixtures` and `:application` inherit them.

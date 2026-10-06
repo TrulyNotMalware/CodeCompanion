@@ -22,5 +22,20 @@ interface CveDeliveryRepository {
         limit: Int,
     ): List<UndeliveredCveEvent>
 
+    fun findUndeliveredByUser(
+        deliveryMode: CveDeliveryMode,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent>
+
+    fun findUndeliveredForUser(
+        deliveryMode: CveDeliveryMode,
+        userId: String,
+        since: LocalDateTime,
+        doneBefore: LocalDateTime,
+        limit: Int,
+    ): List<UndeliveredCveEvent>
+
     fun dbNow(): LocalDateTime
 }

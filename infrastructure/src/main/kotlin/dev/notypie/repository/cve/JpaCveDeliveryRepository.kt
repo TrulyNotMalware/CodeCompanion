@@ -11,6 +11,22 @@ import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
+private const val UNDELIVERED_SELECT = """
+    SELECT new dev.notypie.repository.cve.UndeliveredCveEvent(
+        e.id, s.userId, t.topicKey, t.displayName, e.title, e.aiSummary
+    )
+    FROM cve_event e
+    JOIN cve_topic t ON t.id = e.topicId
+    JOIN cve_subscription s ON s.topicId = e.topicId
+    LEFT JOIN cve_delivery d ON d.eventId = e.id AND d.userId = s.userId
+    WHERE e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.DONE
+      AND t.deliveryMode = :deliveryMode
+      AND t.active = true
+      AND e.createdAt >= :since
+      AND e.updatedAt < :doneBefore
+      AND d.id IS NULL
+"""
+
 @Repository
 interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
     // MariaDB-only INSERT IGNORE (untestable on H2) on unique(event_id,user_id) — the only guard against a double DM.
@@ -28,26 +44,26 @@ interface JpaCveDeliveryRepository : JpaRepository<CveDeliverySchema, Long> {
         @Param("userId") userId: String,
     ): Int
 
-    @Query(
-        """
-        SELECT new dev.notypie.repository.cve.UndeliveredCveEvent(
-            e.id, s.userId, t.topicKey, t.displayName, e.title, e.aiSummary
-        )
-        FROM cve_event e
-        JOIN cve_topic t ON t.id = e.topicId
-        JOIN cve_subscription s ON s.topicId = e.topicId
-        LEFT JOIN cve_delivery d ON d.eventId = e.id AND d.userId = s.userId
-        WHERE e.summaryStatus = dev.notypie.repository.cve.schema.CveSummaryStatus.DONE
-          AND t.deliveryMode = :deliveryMode
-          AND t.active = true
-          AND e.createdAt >= :since
-          AND e.updatedAt < :doneBefore
-          AND d.id IS NULL
-        ORDER BY e.id ASC, s.userId ASC
-        """,
-    )
+    @Query("$UNDELIVERED_SELECT ORDER BY e.id ASC, s.userId ASC")
     fun findUndelivered(
         @Param("deliveryMode") deliveryMode: CveDeliveryMode,
+        @Param("since") since: LocalDateTime,
+        @Param("doneBefore") doneBefore: LocalDateTime,
+        pageable: Pageable,
+    ): List<UndeliveredCveEvent>
+
+    @Query("$UNDELIVERED_SELECT ORDER BY s.userId ASC, e.id ASC")
+    fun findUndeliveredByUser(
+        @Param("deliveryMode") deliveryMode: CveDeliveryMode,
+        @Param("since") since: LocalDateTime,
+        @Param("doneBefore") doneBefore: LocalDateTime,
+        pageable: Pageable,
+    ): List<UndeliveredCveEvent>
+
+    @Query("$UNDELIVERED_SELECT AND s.userId = :userId ORDER BY e.id ASC")
+    fun findUndeliveredForUser(
+        @Param("deliveryMode") deliveryMode: CveDeliveryMode,
+        @Param("userId") userId: String,
         @Param("since") since: LocalDateTime,
         @Param("doneBefore") doneBefore: LocalDateTime,
         pageable: Pageable,

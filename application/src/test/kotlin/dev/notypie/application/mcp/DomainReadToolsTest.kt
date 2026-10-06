@@ -4,6 +4,7 @@ import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.createScopedTurnToken
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
+import dev.notypie.application.service.command.RoleResolution
 import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.meet.createMeetingDto
@@ -44,7 +45,8 @@ class DomainReadToolsTest :
             meetingRepository: MeetingRepository = mockk(),
         ): DomainReadTools {
             val roleResolver = mockk<CommandRoleResolver>()
-            every { roleResolver.resolve(userId = token.userId) } returns role
+            every { roleResolver.resolution(userId = token.userId) } returns
+                RoleResolution(role = role, lookupFailed = false)
             return DomainReadTools(
                 mcpToolGate =
                     McpToolGate(
@@ -110,6 +112,24 @@ class DomainReadToolsTest :
 
                 then("cancelled meetings are filtered out") {
                     result.text() shouldNotContain "Cancelled retro"
+                }
+            }
+
+            `when`("a meeting title carries Slack control sequences") {
+                val meetingRepository = mockk<MeetingRepository>()
+                every {
+                    meetingRepository.getMeetingsByUserIdInRange(userId = any(), startAt = any(), endAt = any())
+                } returns
+                    listOf(
+                        createMeetingDto(title = "<!channel> <https://evil.example|Sync>", startAt = now.plusDays(1L)),
+                    )
+                val result =
+                    toolsWith(role = UserRole.USER, meetingRepository = meetingRepository)
+                        .listMeetings(daysAhead = null, context = requestContext)
+
+                then("the title reaches the model escaped, so an echoed title stays literal text in Slack") {
+                    result.text() shouldContain "• &lt;!channel&gt; &lt;https://evil.example|Sync&gt; — "
+                    result.text() shouldNotContain "<!channel>"
                 }
             }
 

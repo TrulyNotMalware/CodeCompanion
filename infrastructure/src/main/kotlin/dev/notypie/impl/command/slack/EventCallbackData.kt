@@ -10,7 +10,7 @@ data class EventCallbackData(
     @field:JsonProperty("text")
     val rawText: String? = null,
     @field:JsonProperty("user")
-    val userId: String,
+    val userId: String? = null,
     @field:JsonProperty("app_id")
     val appId: String? = null,
     @field:JsonProperty("bot_id")
@@ -22,7 +22,7 @@ data class EventCallbackData(
     @field:JsonProperty("thread_ts")
     val threadTs: String? = null,
     @field:JsonProperty("blocks")
-    val blocks: List<Block>,
+    val blocks: List<Block> = emptyList(),
     @field:JsonProperty("team")
     val team: String,
     @field:JsonProperty("channel")

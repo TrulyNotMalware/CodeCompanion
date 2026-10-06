@@ -10,18 +10,18 @@ documented in `../AGENTS.md`; this file is the per-file index.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**`; source-path filtered, `!**/*.md` |
-| `simple_test_action.yaml` | Same triggers; runs `gradle-config/apply.sh`, then only the changed modules' tests via `dorny/paths-filter@v4` (full `test` when Gradle files change); uploads `build-reports.zip` on failure |
+| `lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**` (source-path filtered incl. `gradle/**`, `!**/*.md`) and on every PR into `main` (no path filter); 15-minute timeout, cancels superseded runs |
+| `simple_test_action.yaml` | Same triggers, plus `gradle-config/**` in the push paths; 30-minute timeout, cancels superseded runs; runs `gradle-config/apply.sh ci`, then the changed modules' tests **and their dependants'** via `dorny/paths-filter@v4` (full `test` when Gradle, `gradle-config` or `domain` files change); uploads `build-reports.zip` on failure |
 | `security_check.yaml` | Push/PR to `main`, weekly, manual: `changes` gate (`dorny/paths-filter@v4`, `some-with-excludes`), CodeQL `java-kotlin` with a manual `./gradlew classes --no-daemon --no-build-cache` compile, Gradle dependency-graph submission (every push to `main`; source-gated on PRs) + dependency review on PRs, gitleaks secret scan with `GITLEAKS_VERSION` pinned (8.25.0+ for `[[allowlists]]`) |
 | `claude-code-review.yml` | Claude Code review on PRs; `if` skips Dependabot PRs, whose runs only receive Dependabot secrets |
 | `claude.yml` | `@claude` mention handler for issues, PR comments and reviews |
-| `deploy_action.yaml` | Merged PR to `main` only: build jar → multi-arch image → Harbor → `envsubst` apply to OKE → rollout + health check → rollback on failure |
+| `deploy_action.yaml` | Merged PR to `main` only, serialised by the `deploy-production` concurrency group (an unmerged close gets a throwaway group); every `run:` step under `defaults.run.shell: bash` (`-eo pipefail`): full `build` (tests included, `apply.sh ci`, 40-minute timeout) → multi-arch image → Harbor → `envsubst '${IMAGE_NAME}'` apply to OKE (`-n api-service`; the manifest's `Recreate` strategy stops the old Pods first) → rollout (`DEPLOYMENT_ROLLOUT_TIMEOUT` 450s, deploy job 25 minutes) + Ready-pod count + in-cluster readiness check (service proxy, falling back to `kubectl exec … wget` on every non-terminating Pod of the current revision; parsed with `jq`) → `rollout undo` to the recorded revision when one of those steps failed |
 
 ## For AI Agents
 
 ### Working In This Directory
-- Read `../AGENTS.md` first — it holds the non-obvious rules (why `!` patterns are useless inside the v3 paths-filter
-  block, why CodeQL cannot use `build-mode: none`, why the `changes` job needs `pull-requests: read`, why fork PRs skip
+- Read `../AGENTS.md` first — it holds the non-obvious rules (why `!` patterns are useless inside the deploy workflow's
+  paths-filter block, why CodeQL cannot use `build-mode: none`, why the `changes` job needs `pull-requests: read`, why fork PRs skip
   dependency submission, why `dependabot/**` must stay in the branch lists).
 - Keep permissions least-privilege and declared per job; the workflow-level default is `contents: read`.
 - Pin action majors (`@v6`, `@v4`, …); Dependabot's `github-actions` ecosystem bumps them in one grouped PR.
@@ -33,8 +33,8 @@ documented in `../AGENTS.md`; this file is the per-file index.
 
 ### Common Patterns
 - `dorny/paths-filter` outputs gate jobs; `if:` expressions compare to the string `'true'`.
-- Long-running builds use `--no-daemon` and explicit `GRADLE_OPTS` rather than `gradle.properties`, which is
-  git-ignored and absent on a fresh runner unless `apply.sh` runs.
+- `gradle.properties` is git-ignored and absent on a fresh runner: the test and deploy jobs install the CI
+  preset with `./gradle-config/apply.sh ci`; the CodeQL compile passes explicit heaps on the command line instead.
 
 ## Dependencies
 

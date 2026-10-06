@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.intent
 
 import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
@@ -64,6 +65,7 @@ sealed class CommandIntent : CommandEffect {
         val sessionUid: UUID,
         val userId: String,
         val responses: List<String>,
+        val notice: MessageRef?,
     ) : CommandIntent()
 
     data class CreateStandupRoutine(
@@ -75,7 +77,7 @@ sealed class CommandIntent : CommandEffect {
         val memberIds: List<String>,
         val weekdays: Set<java.time.DayOfWeek>,
         val triggerLocalTime: java.time.LocalTime,
-        val cutoffMinutes: Long,
+        val cutoffMinutes: Long?,
         val timezone: java.time.ZoneId,
     ) : CommandIntent()
 

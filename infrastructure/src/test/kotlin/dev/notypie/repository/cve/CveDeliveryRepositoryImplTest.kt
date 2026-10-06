@@ -79,6 +79,53 @@ class CveDeliveryRepositoryImplTest :
             }
         }
 
+        given("user-major and single-user digest reads") {
+            val jpa = mockk<JpaCveDeliveryRepository>()
+            val repository = CveDeliveryRepositoryImpl(jpaCveDeliveryRepository = jpa)
+            val since = LocalDateTime.of(2026, 7, 7, 9, 0)
+            val doneBefore = LocalDateTime.of(2026, 7, 14, 9, 0)
+            every {
+                jpa.findUndeliveredByUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    since = since,
+                    doneBefore = doneBefore,
+                    pageable = PageRequest.of(0, 5),
+                )
+            } returns listOf(createUndeliveredCveEvent(eventId = 8L, userId = "U8"))
+            every {
+                jpa.findUndeliveredForUser(
+                    deliveryMode = CveDeliveryMode.DIGEST,
+                    userId = "U8",
+                    since = since,
+                    doneBefore = doneBefore,
+                    pageable = PageRequest.of(0, 50),
+                )
+            } returns listOf(createUndeliveredCveEvent(eventId = 9L, userId = "U8"))
+
+            `when`("querying with limits") {
+                val byUser =
+                    repository.findUndeliveredByUser(
+                        deliveryMode = CveDeliveryMode.DIGEST,
+                        since = since,
+                        doneBefore = doneBefore,
+                        limit = 5,
+                    )
+                val forUser =
+                    repository.findUndeliveredForUser(
+                        deliveryMode = CveDeliveryMode.DIGEST,
+                        userId = "U8",
+                        since = since,
+                        doneBefore = doneBefore,
+                        limit = 50,
+                    )
+
+                then("each limit is wrapped into a page request and the bounds are forwarded unchanged") {
+                    byUser.map { it.eventId } shouldContainExactly listOf(8L)
+                    forUser.map { it.eventId } shouldContainExactly listOf(9L)
+                }
+            }
+        }
+
         given("the database clock") {
             val jpa = mockk<JpaCveDeliveryRepository>()
             val repository = CveDeliveryRepositoryImpl(jpaCveDeliveryRepository = jpa)

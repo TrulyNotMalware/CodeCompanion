@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # domain/meet/entity
 
@@ -14,7 +14,7 @@ or rehydrated from JPA.
 |------|-------------|
 | `Meeting.kt` | `Meeting(title, publisher, members: Set<String>, reason, startAt, endAt = startAt + 1h, isCanceled = false, meetingUid = random)`; limits `MAX_PARTICIPANTS = 20`, `MAX_TITLE_LENGTH = 20`, `MAX_REASON_LENGTH = 200`; `startAt` after `now()`, `endAt` after `startAt`; `host` built from `publisher`; `addParticipant(Member)` re-checks the cap; `memberSnapshot()` / `memberIdSnapshot()`. `Member(userId, isGuest = false, isHost = false)` requires a non-blank `userId` |
 | `MeetingReminder.kt` | `MeetingReminder(offsetMinutes, scheduledAt: Instant, sentAt?, status = PENDING, failureReason?)`; `offsetMinutes > 0`; `SENT` requires `sentAt`, `FAILED` requires a non-blank `failureReason`. `scheduledAt` is pre-computed as `startAt - offsetMinutes` in UTC |
-| `RejectReason.kt` | `enum RejectReason(showMessage)`: `ATTENDING` (the "not absent" value) plus `SCHEDULE_CONFLICT`, `UNEXPECTED_EMERGENCY`, `HEALTH_ISSUE`, `PRIOR_COMMITMENT`, `REQUEST_DELAY`, `VACATION`, `PERSONAL_REASON`, `OTHER` |
+| `RejectReason.kt` | `enum RejectReason(showMessage)`: `ATTENDING` (the "not absent" value) plus `SCHEDULE_CONFLICT`, `UNEXPECTED_EMERGENCY`, `HEALTH_ISSUE`, `PRIOR_COMMITMENT`, `REQUEST_DELAY`, `VACATION`, `PERSONAL_REASON`, `OTHER`; `companion MAX_DETAIL_LENGTH = 255`, the longest stored `OTHER` note (`meeting_participants.absent_reason_detail` is `VARCHAR(255)` since V8, and the JPA mapping, the parser and the decline modal's `max_length` all read this constant) |
 
 ## Subdirectories
 | Directory | Purpose |

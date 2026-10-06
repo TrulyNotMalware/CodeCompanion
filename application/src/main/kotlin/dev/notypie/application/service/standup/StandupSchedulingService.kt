@@ -13,11 +13,13 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.dto.RoutineDto
 import dev.notypie.domain.standup.entity.SessionDispatch
 import dev.notypie.domain.standup.entity.StandupSession
+import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.NudgeCandidateSession
 import dev.notypie.repository.standup.ReadyDispatch
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
@@ -45,8 +47,8 @@ class StandupSchedulingService(
     private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
     private val applicationEventPublisher: ApplicationEventPublisher = ApplicationEventPublisher { },
-    private val clock: Clock = Clock.systemDefaultZone(),
-    appConfig: AppConfig = AppConfig(),
+    private val clock: Clock,
+    appConfig: AppConfig,
 ) {
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
@@ -57,7 +59,11 @@ class StandupSchedulingService(
     fun openSessionsForToday() {
         val now = clock.instant()
         standupRepository.listActiveRoutines().forEach { routine ->
-            openSessionForRoutine(routine = routine, now = now)
+            containFailure(
+                onFailure = { ex -> log.error(ex) { "Standup session open failed: routine=${routine.routineUid}" } },
+            ) {
+                openSessionForRoutine(routine = routine, now = now)
+            }
         }
     }
 
@@ -111,7 +117,7 @@ class StandupSchedulingService(
     fun sendPendingDispatches() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
-        val reset = standupRepository.resetStuckDispatches(olderThan = stuckCutoff)
+        val reset = standupRepository.resetStuckDispatches(olderThan = stuckCutoff, now = now)
         if (reset > 0) log.warn { "Reset $reset stuck SENDING dispatch(es) to PENDING" }
 
         val ready = standupRepository.findPendingDispatchesBefore(before = now, limit = dispatchBatchSize)
@@ -120,28 +126,49 @@ class StandupSchedulingService(
         val routinesByUid = standupRepository.listActiveRoutines().associateBy { it.routineUid }
 
         ready.forEach { item ->
+            if (item.sessionStatus != SessionStatus.COLLECTING || !now.isBefore(item.cutoffAt)) {
+                val reason =
+                    item.dispatch.failureReason?.let { cause -> "enqueue failed until cutoff: $cause" }
+                        ?: "session closed before the DM was sent"
+                skipDispatch(item = item, reason = reason, now = now)
+                return@forEach
+            }
             val routine = routinesByUid[item.routineUid]
             if (routine == null) {
                 log.warn {
                     "Pending dispatch points at unknown/inactive routine: " +
                         "dispatchId=${item.dispatch.id} routineUid=${item.routineUid}"
                 }
+                skipDispatch(item = item, reason = "routine inactive", now = now)
                 return@forEach
             }
             processDispatch(item = item, routine = routine, sentAt = now)
         }
     }
 
-    // Claim, save+markSent, and failure-record each run in their own tx; the claim token gates the CAS.
+    private fun skipDispatch(item: ReadyDispatch, reason: String, now: Instant) {
+        if (standupRepository.markDispatchSkipped(dispatchId = item.dispatch.id, reason = reason, now = now)) {
+            log.info {
+                "Standup DM skipped: dispatchId=${item.dispatch.id} sessionUid=${item.sessionUid} reason=$reason"
+            }
+        }
+    }
+
     private fun processDispatch(item: ReadyDispatch, routine: RoutineDto, sentAt: Instant) {
         val dispatchId = item.dispatch.id
         val userId = item.dispatch.userId
         val claimToken = UUID.randomUUID().toString()
 
-        if (!standupRepository.claimDispatch(dispatchId = dispatchId, claimToken = claimToken)) return
-
-        val outcome: Result<Unit> =
-            transactionTemplate.runInTx<Unit> {
+        transactionTemplate
+            .runInTx {
+                if (!standupRepository.claimDispatch(
+                        dispatchId = dispatchId,
+                        claimToken = claimToken,
+                        now = clock.instant(),
+                    )
+                ) {
+                    return@runInTx false
+                }
                 val commandBasicInfo =
                     CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
                 val message =
@@ -164,23 +191,27 @@ class StandupSchedulingService(
                 ) {
                     error("markDispatchSent had no effect for dispatch $dispatchId — rolling back.")
                 }
+                true
+            }.onSuccess { enqueued ->
+                if (enqueued) log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
+            }.onFailure { ex ->
+                log.error(ex) {
+                    "Standup DM dispatch failed, claim rolled back for retry: dispatchId=$dispatchId userId=$userId"
+                }
+                recordDispatchFailure(dispatchId = dispatchId, cause = ex, now = clock.instant())
             }
-
-        if (outcome.isFailure) {
-            val ex = outcome.exceptionOrNull()!!
-            log.error(ex) { "Standup DM dispatch failed: dispatchId=$dispatchId userId=$userId" }
-            if (!standupRepository.markDispatchFailed(
-                    dispatchId = dispatchId,
-                    claimToken = claimToken,
-                    reason = ex.message ?: "unknown",
-                )
-            ) {
-                log.warn { "markDispatchFailed no-op for dispatch $dispatchId — recovery already reset or re-claimed." }
-            }
-        } else {
-            log.info { "Standup DM enqueued: dispatchId=$dispatchId userId=$userId" }
-        }
     }
+
+    private fun recordDispatchFailure(dispatchId: Long, cause: Throwable, now: Instant) =
+        containFailure(onFailure = { ex ->
+            log.warn(ex) { "Recording the DM failure failed: dispatchId=$dispatchId" }
+        }) {
+            standupRepository.recordDispatchFailure(
+                dispatchId = dispatchId,
+                reason = cause.message ?: cause.javaClass.name,
+                now = now,
+            )
+        }
 
     fun nudgeNonResponders() {
         if (nudgeOffsetMinutes <= 0L) return
@@ -211,10 +242,9 @@ class StandupSchedulingService(
         val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
         if (nonResponders.isEmpty()) return
 
-        if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return
-
-        val outcome: Result<Unit> =
-            transactionTemplate.runInTx<Unit> {
+        val outcome: Result<Boolean> =
+            transactionTemplate.runInTx {
+                if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return@runInTx false
                 nonResponders.forEach { userId ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
@@ -229,33 +259,53 @@ class StandupSchedulingService(
                         outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
                     )
                 }
+                true
             }
 
-        if (outcome.isFailure) {
-            log.error(outcome.exceptionOrNull()) {
-                "Standup nudge enqueue failed after claim: sessionUid=${candidate.sessionUid}"
+        outcome
+            .onSuccess { enqueued ->
+                if (!enqueued) return@onSuccess
+                log.info {
+                    "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
+                        "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
+                }
+            }.onFailure { ex ->
+                log.error(ex) {
+                    "Standup nudge enqueue failed, claim rolled back for retry: sessionUid=${candidate.sessionUid}"
+                }
             }
-        } else {
-            log.info {
-                "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
-                    "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
-            }
-        }
     }
 
     fun detectCutoffs() {
         val now = clock.instant()
         standupRepository.findCollectingSessionsPastCutoff(before = now).forEach { session ->
             log.info { "Standup cutoff reached: sessionUid=${session.sessionUid} routineUid=${session.routineUid}" }
-            applicationEventPublisher.publishEvent(
-                StandupCutoffEvent(
-                    sessionId = session.sessionId,
-                    sessionUid = session.sessionUid,
-                    routineUid = session.routineUid,
-                    sessionDate = session.sessionDate,
-                ),
-            )
+            containFailure(
+                onFailure = { ex ->
+                    log.error(ex) { "Standup cutoff handling failed: sessionUid=${session.sessionUid}" }
+                },
+            ) {
+                applicationEventPublisher.publishEvent(
+                    StandupCutoffEvent(
+                        sessionId = session.sessionId,
+                        sessionUid = session.sessionUid,
+                        routineUid = session.routineUid,
+                        sessionDate = session.sessionDate,
+                    ),
+                )
+            }
         }
+    }
+}
+
+internal inline fun containFailure(onFailure: (Exception) -> Unit, block: () -> Unit) {
+    try {
+        block()
+    } catch (interrupted: InterruptedException) {
+        Thread.currentThread().interrupt()
+        throw interrupted
+    } catch (ex: Exception) {
+        onFailure(ex)
     }
 }
 
@@ -294,7 +344,7 @@ internal fun buildNudgeNotice(
 ): OutboundMessage.ChannelMessage {
     val cutoffText = NUDGE_CUTOFF_TIME_FORMAT.format(cutoffAt.atZone(routineTimezone))
     val body =
-        "⏰ Standup for *$routineName* closes at $cutoffText — you haven't responded yet. " +
+        "⏰ Standup for *${routineName.escapeMrkdwn()}* closes at $cutoffText — you haven't responded yet. " +
             "Tap the *Fill in standup* button in your DM."
     return OutboundMessage.ChannelMessage(
         target = ConversationTarget(id = commandBasicInfo.channel),

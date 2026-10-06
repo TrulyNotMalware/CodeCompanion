@@ -15,8 +15,11 @@ import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.schema.createCveRecentEvent
 import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.CapturingSlot
 import io.mockk.every
@@ -189,6 +192,117 @@ class CveLatestQueryServiceTest :
                     val markdown = staged.markdown()
                     markdown.length shouldBe 2900 + "\n…(truncated)".length
                     markdown shouldContain "…(truncated)"
+                }
+            }
+        }
+
+        given("recent events whose feed text carries Slack control sequences") {
+            val subscriptionRepository = mockk<CveSubscriptionRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            every { subscriptionRepository.findSubscribedTopics(userId = TEST_USER_ID) } returns
+                listOf(createCveTopic(id = 11L, topicKey = "kotlin", displayName = "Kotlin"))
+            every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns
+                listOf(
+                    createCveRecentEvent(
+                        topicDisplayName = "R&D",
+                        title = "<!here> v2",
+                        aiSummary = "<https://evil.example|Patch here>",
+                    ),
+                )
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = subscriptionRepository,
+                    topicRepository = mockk(),
+                    eventRepository = eventRepository,
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled") {
+                service.handleCveLatest(event = createCveLatestRequestEvent())
+
+                then("display name, title and summary are escaped") {
+                    staged.markdown() shouldBe
+                        "*R&amp;D* — *&lt;!here&gt; v2*\n&lt;https://evil.example|Patch here&gt;"
+                }
+            }
+        }
+
+        given("recent events whose summaries only overflow the section limit once escaped") {
+            val subscriptionRepository = mockk<CveSubscriptionRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            every { subscriptionRepository.findSubscribedTopics(userId = TEST_USER_ID) } returns
+                listOf(createCveTopic(id = 11L, topicKey = "kotlin", displayName = "Kotlin"))
+            every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns
+                List(2) { createCveRecentEvent(topicDisplayName = "Kotlin", title = "t", aiSummary = "<".repeat(700)) }
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = subscriptionRepository,
+                    topicRepository = mockk(),
+                    eventRepository = eventRepository,
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled") {
+                service.handleCveLatest(event = createCveLatestRequestEvent())
+
+                then("the cap is measured on the escaped body and never splits an entity") {
+                    val markdown = staged.markdown()
+                    markdown.length shouldBeLessThanOrEqual 2900 + "\n…(truncated)".length
+                    markdown shouldNotContain "<"
+                    markdown shouldEndWith "&lt;\n…(truncated)"
+                }
+            }
+        }
+
+        given("a topic argument with Slack control sequences that matches no active topic") {
+            val topicRepository = mockk<CveTopicRepository>()
+            every { topicRepository.findActiveTopics() } returns emptyList()
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = mockk(),
+                    topicRepository = topicRepository,
+                    eventRepository = mockk(),
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled") {
+                service.handleCveLatest(event = createCveLatestRequestEvent(topicKey = "<!channel>"))
+
+                then("the echoed key is escaped") {
+                    staged.markdown() shouldBe "Topic `&lt;!channel&gt;` is not available."
+                }
+            }
+        }
+
+        given("a mixed-case topic key and the lower-cased argument /latest produces") {
+            val topicRepository = mockk<CveTopicRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            every { topicRepository.findActiveTopics() } returns
+                listOf(createCveTopic(id = 21L, topicKey = "springBoot", displayName = "Spring Boot"))
+            every { eventRepository.findRecentDoneEvents(topicIds = listOf(21L), limit = 5) } returns
+                listOf(createCveRecentEvent(topicDisplayName = "Spring Boot", title = "v4.1.1", aiSummary = "Patch."))
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = mockk(),
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled with the key as the slash layer normalised it") {
+                service.handleCveLatest(
+                    event =
+                        createCveLatestRequestEvent(
+                            topicKey = CveQuerySlashServiceImpl.extractTopicKey(subCommands = listOf("springBoot")),
+                        ),
+                )
+
+                then("the topic is found regardless of case") {
+                    staged.markdown() shouldContain "*Spring Boot* — *v4.1.1*"
                 }
             }
         }

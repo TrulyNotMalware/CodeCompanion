@@ -41,17 +41,11 @@ class CveEventSchema(
     val title: String,
     @field:Column(name = "raw_content", nullable = false, columnDefinition = "TEXT")
     val rawContent: String,
-    @field:Column(name = "ai_summary", columnDefinition = "TEXT")
-    var aiSummary: String? = null,
-    @field:Enumerated(EnumType.STRING)
-    @field:Column(name = "summary_status", nullable = false, length = 16)
-    var summaryStatus: CveSummaryStatus = CveSummaryStatus.PENDING,
-    @field:Column(name = "claim_token", length = 36)
-    var claimToken: String? = null,
-    @field:Column(name = "retry_count", nullable = false)
-    var retryCount: Int = 0,
-    @field:Column(name = "next_attempt_at")
-    var nextAttemptAt: LocalDateTime? = null,
+    aiSummary: String? = null,
+    summaryStatus: CveSummaryStatus = CveSummaryStatus.PENDING,
+    claimToken: String? = null,
+    retryCount: Int = 0,
+    nextAttemptAt: LocalDateTime? = null,
     @field:Column(name = "published_at")
     val publishedAt: LocalDateTime? = null,
     @field:CreationTimestamp
@@ -60,4 +54,25 @@ class CveEventSchema(
     @field:UpdateTimestamp
     @field:Column(name = "updated_at")
     val updatedAt: LocalDateTime? = null,
-)
+) {
+    @field:Column(name = "ai_summary", columnDefinition = "TEXT")
+    var aiSummary: String? = aiSummary
+        protected set
+
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "summary_status", nullable = false, length = 16)
+    var summaryStatus: CveSummaryStatus = summaryStatus
+        protected set
+
+    @field:Column(name = "claim_token", length = 36)
+    var claimToken: String? = claimToken
+        protected set
+
+    @field:Column(name = "retry_count", nullable = false)
+    var retryCount: Int = retryCount
+        protected set
+
+    @field:Column(name = "next_attempt_at")
+    var nextAttemptAt: LocalDateTime? = nextAttemptAt
+        protected set
+}

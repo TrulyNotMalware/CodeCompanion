@@ -7,8 +7,10 @@ import org.springframework.transaction.annotation.Transactional
 open class UserCommandRoleRepositoryImpl(
     private val jpaUserCommandRoleRepository: JpaUserCommandRoleRepository,
 ) : UserCommandRoleRepository {
+    @Transactional(readOnly = true)
     override fun findRole(userId: String): UserRole? = jpaUserCommandRoleRepository.findByUserId(userId = userId)?.role
 
+    @Transactional(readOnly = true)
     override fun findAllGrants(): Map<String, UserRole> =
         jpaUserCommandRoleRepository.findAll().associate { it.userId to it.role }
 
@@ -18,7 +20,7 @@ open class UserCommandRoleRepositoryImpl(
         if (existing == null) {
             jpaUserCommandRoleRepository.save(UserCommandRoleSchema(userId = userId, role = role))
         } else if (existing.role != role) {
-            existing.role = role
+            existing.changeRole(role = role)
             jpaUserCommandRoleRepository.save(existing)
         }
     }

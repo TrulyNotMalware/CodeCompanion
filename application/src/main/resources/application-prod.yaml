@@ -13,7 +13,8 @@ spring:
   datasource:
     hikari:
       transaction-isolation: ${SQL_PROD_ISOLATION_LEVEL}
-      maximum-pool-size: 10
+      # A rejected mention's overload notice holds two connections (committed tx + REQUIRES_NEW); rule in resources/AGENTS.md.
+      maximum-pool-size: 20
 #      minimum-idle: 10
       connection-timeout: ${SQL_PROD_CONNECTION_TIMEOUT}
       validation-timeout: ${SQL_PROD_VALIDATION_TIMEOUT}
@@ -57,7 +58,9 @@ spring:
           disallow-delete: true
 
   kafka:
-    bootstrap-servers: [ "kafka:port" ]
+    # No default on purpose: the value comes from k8s/configmap.yaml, whose checked-in placeholder must be
+    # replaced in-cluster. An unset variable does not fail binding: the literal `${...}` is bound instead.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
@@ -66,9 +69,13 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       auto-offset-reset: earliest
-      enable-auto-commit: true
-      max-poll-records: 1000
+      # The listener container commits per record (AckMode.RECORD); client-side auto-commit would
+      # advance offsets past records that are still being dispatched.
+      enable-auto-commit: false
+      max-poll-records: 5
       isolation-level: read_committed
+      properties:
+        max.poll.interval.ms: 300000
 
 server:
   port: 80
@@ -83,11 +90,19 @@ management:
       external-file: ./logback.log
     health:
       show-details: when_authorized
+      # Caches the aggregate /actuator/health only (probe groups are not cached); the outbox indicator runs 7 queries.
+      cache:
+        time-to-live: 10s
+      # Explicit rather than relying on Boot's Kubernetes auto-detection: k8s/deployment.yaml probes
+      # /actuator/health/{liveness,readiness}.
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
-      base-path: ${ACTUATOR_BASE_PATH}
+        include: health,info,metrics,prometheus
+      # Fixed: k8s/deployment.yaml probes and the deploy workflow health check hard-code /actuator.
+      base-path: /actuator
       path-mapping:
         loggers: logs
         httptrace: trace
@@ -116,6 +131,11 @@ slack:
       event-publisher: kafka
       cdc:
         topic: ${SLACK_CDC_TOPIC}
+    outbox:
+      # SUCCESS/FAILURE rows older than this are purged hourly in batches; PENDING/IN_PROGRESS are kept.
+      retention:
+        days: 14
+        batch-size: 1000
     # AI agent backend — the claude-sidecar runs in the same Pod (k8s native sidecar), so the
     # base URL stays Pod-loopback. The bearer secret is shared with the sidecar via one Secret.
     agent:
@@ -123,6 +143,12 @@ slack:
         base-url: ${SIDECAR_URL:http://127.0.0.1:7300}
         bearer-secret: ${SIDECAR_BEARER_SECRET:}
         request-timeout-seconds: ${SIDECAR_REQUEST_TIMEOUT_SECONDS:120}
+      # Bounded so a burst of mentions gets an immediate "busy" reply instead of minutes of silence in an
+      # unbounded queue; the shutdown wait stays below the pod's termination grace period.
+      turns:
+        max-concurrent: ${AGENT_MAX_CONCURRENT_TURNS:4}
+        queue-capacity: ${AGENT_TURN_QUEUE_CAPACITY:20}
+        shutdown-await-seconds: 20
     # CVE summary provider. Operating choice is sidecar (reuse the agent lane), but the default
     # stays noop so summary traffic is opt-in via AI_PROVIDER once the collector rolls out.
     ai:
@@ -136,6 +162,9 @@ slack:
       nvd:
         api-key: ${NVD_API_KEY:}
         lookback-minutes: ${NVD_LOOKBACK_MINUTES:120}
+        # Spacing between NVD calls in one Pod. Replicas sharing an egress IP without an API key share the
+        # 5-per-30s quota, so a miss can still happen when two Pods collect at once; the lookback re-reads it.
+        request-interval-millis: ${NVD_REQUEST_INTERVAL_MILLIS:6000}
       collector:
         request-timeout-seconds: ${CVE_COLLECTOR_REQUEST_TIMEOUT_SECONDS:30}
         window-minutes: ${CVE_COLLECTOR_WINDOW_MINUTES:5}

@@ -37,6 +37,9 @@ class Routine(
             "questions" of questions shouldHaveMaxSize MAX_QUESTIONS
             ("weekdays" of weekdays).shouldNotBeEmpty(message = "weekdays must include at least one day")
             ("cutoffOffset" of cutoffOffset).shouldSatisfy("must be positive") { it > Duration.ZERO }
+            ("cutoffOffset" of cutoffOffset).shouldSatisfy("must be at most $MAX_CUTOFF_MINUTES minutes") {
+                it <= Duration.ofMinutes(MAX_CUTOFF_MINUTES)
+            }
 
             // Questions are joined with `\n` in persistence and rendered into Slack modal labels.
             questions.forEachIndexed { index, question ->
@@ -55,6 +58,8 @@ class Routine(
         const val MAX_QUESTIONS: Int = 8
         const val MAX_QUESTION_LENGTH: Int = 200
         const val MAX_MEMBERS: Int = 30
+        const val MIN_CUTOFF_MINUTES: Long = 1L
+        const val MAX_CUTOFF_MINUTES: Long = 1_440L
         val DEFAULT_WEEKDAYS: Set<DayOfWeek> =
             setOf(
                 DayOfWeek.MONDAY,
@@ -67,8 +72,9 @@ class Routine(
     }
 
     fun addMember(member: RoutineMember) {
+        val othersCount = members.count { it.userId != member.userId }
         validate(className = this.javaClass.simpleName) {
-            "members" of (members.size + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
+            "members" of (othersCount + 1) shouldBeLessThanOrEqualTo MAX_MEMBERS
         }
         members.removeIf { it.userId == member.userId }
         members.add(member)

@@ -21,6 +21,7 @@ import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -33,6 +34,8 @@ class SlackOutboundRendererTest :
     BehaviorSpec({
         val slackEventBuilder = mockk<SlackApiEventConstructor>()
         val renderer = SlackOutboundRenderer(slackEventBuilder = slackEventBuilder)
+
+        beforeContainer { testCase -> if (testCase.parent == null) clearMocks(slackEventBuilder) }
 
         val basicInfo = createCommandBasicInfo()
         val stubEvent =
@@ -629,6 +632,34 @@ class SlackOutboundRendererTest :
                 then("formats Slack mentions, prepends [Notice], and uses the Notice! headline") {
                     capturedHeadline.captured shouldBe "Notice!"
                     capturedText.captured shouldBe "[Notice] <@U1> <@U2> meeting soon"
+                }
+            }
+        }
+
+        given("a Notice whose body carries Slack control sequences") {
+            val message =
+                OutboundMessage.Notice(
+                    target = target,
+                    mentions = listOf(UserRef(id = "U1")),
+                    message = "<!channel> R&D <https://evil.example|agenda>",
+                )
+
+            `when`("render is called") {
+                val capturedText = slot<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(capturedText),
+                    )
+                } returns stubEvent
+
+                renderer.render(message = message, basicInfo = basicInfo)
+
+                then("the sender's words are escaped while the mention prefix stays markup") {
+                    capturedText.captured shouldBe
+                        "[Notice] <@U1> &lt;!channel&gt; R&amp;D &lt;https://evil.example|agenda&gt;"
                 }
             }
         }

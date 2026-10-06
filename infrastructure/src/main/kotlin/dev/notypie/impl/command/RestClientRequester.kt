@@ -4,25 +4,37 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
+import java.net.http.HttpClient
+import java.time.Duration
 
 val logger = KotlinLogging.logger { }
 
 class RestClientRequester(
     val baseUrl: String,
+    restClientBuilder: RestClient.Builder = RestClient.builder(),
     private val authorization: String? = null,
+    private val connectTimeout: Duration = DEFAULT_CONNECT_TIMEOUT,
+    private val readTimeout: Duration = DEFAULT_READ_TIMEOUT,
 ) : RestRequester {
     companion object {
         const val SLACK_API_BASE_URL = "https://slack.com/api/"
+        val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(3L)
+        val DEFAULT_READ_TIMEOUT: Duration = SLACK_CALL_TIMEOUT
         const val DEFAULT_CONTENT_TYPE = "application/json; charset=utf-8"
         const val BEARER_PREFIX = "Bearer "
     }
 
+    // The explicit factory pins these timeouts; Boot's builder (the bean passes it) adds the observation customizer,
+    // so calls are recorded as http.client.requests.
     private val restClient: RestClient =
-        RestClient
-            .builder()
-            .baseUrl(baseUrl)
+        restClientBuilder
+            .requestFactory(
+                JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(connectTimeout).build())
+                    .apply { setReadTimeout(readTimeout) },
+            ).baseUrl(baseUrl)
             .defaultHeaders { headers ->
                 headers.add(HttpHeaders.CONTENT_TYPE, DEFAULT_CONTENT_TYPE)
                 if (!authorization.isNullOrBlank()) {
@@ -33,13 +45,18 @@ class RestClientRequester(
                 }
             }.build()
 
-    override fun <T : Any> safeGet(uri: String, authorizationHeader: String?, responseType: Class<T>) =
-        performRequest(
-            method = restClient.get(),
-            uri = uri,
-            authorizationHeader = authorizationHeader,
-            responseType = responseType,
-        )
+    override fun <T : Any> safeGet(
+        uri: String,
+        authorizationHeader: String?,
+        responseType: Class<T>,
+        uriVariables: Map<String, Any>,
+    ) = performRequest(
+        method = restClient.get(),
+        uri = uri,
+        authorizationHeader = authorizationHeader,
+        responseType = responseType,
+        uriVariables = uriVariables,
+    )
 
     override fun <T : Any> safePost(
         uri: String,
@@ -62,6 +79,7 @@ class RestClientRequester(
             uri = uri,
             authorizationHeader = authorizationHeader,
             responseType = responseType,
+            uriVariables = emptyMap(),
         )
 
     override fun <T : Any> safePut(
@@ -149,11 +167,12 @@ class RestClientRequester(
         uri: String,
         authorizationHeader: String?,
         responseType: Class<T>,
+        uriVariables: Map<String, Any>,
     ) = runCatching {
         validateUri(uri)
         logger.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
         method
-            .uri(uri)
+            .uri(uri, uriVariables)
             .addAuthorizationIfPresent(authorizationHeader = authorizationHeader)
             .retrieve()
             .toEntity(responseType)

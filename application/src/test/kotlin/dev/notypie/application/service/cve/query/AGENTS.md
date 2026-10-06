@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/cve/query
 
@@ -11,7 +11,7 @@ that gates on the feature flag and normalizes the optional topic-key argument.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveLatestQueryServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → no `stage`; no subscriptions and no key → DM contains `no CVE topic subscriptions`; two subscriptions → `findRecentDoneEvents(topicIds = listOf(11L, 12L), limit = 5)` rendered as `*Kotlin* — *v2.3.0*`, `New release.`, `*Java CVE* — *CVE-2026-1111*`; subscribed but nothing summarized → `No recent CVE updates`; five events with 500-char titles and 700-char summaries → markdown length `2900 + "\n…(truncated)".length` and contains `…(truncated)`; key `ghost` not in `findActiveTopics` → `` `ghost` is not available ``; key `kotlin` → read scoped to `topicIds = listOf(11L)` verified once. |
+| `CveLatestQueryServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → no `stage`; no subscriptions and no key → DM contains `no CVE topic subscriptions`; two subscriptions → `findRecentDoneEvents(topicIds = listOf(11L, 12L), limit = 5)` rendered as `*Kotlin* — *v2.3.0*`, `New release.`, `*Java CVE* — *CVE-2026-1111*`; subscribed but nothing summarized → `No recent CVE updates`; five events with 500-char titles and 700-char summaries → markdown length `2900 + "\n…(truncated)".length` and contains `…(truncated)`; key `ghost` not in `findActiveTopics` → `` `ghost` is not available ``; key `kotlin` → read scoped to `topicIds = listOf(11L)` verified once. `R&D` / `<!here> v2` / `<https://evil.example|Patch here>` → rendered exactly escaped; two 700-character `<` summaries → capped on the escaped body, no raw `<`, ending on a whole `&lt;`; unknown key `<!channel>` → ``Topic `&lt;!channel&gt;` is not available.``. Stored key `springBoot` with the argument run through `extractTopicKey` → found. |
 | `CveQuerySlashServiceImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → `commandExecutor.execute` never; enabled with `subCommands = listOf("kotlin")` → exactly one `execute<NoSubCommands>` whose command `is CveLatestSlashCommand`; `extractTopicKey`: empty → null, `listOf("  ", "spring")` → `spring`, `Kotlin` → `kotlin`. |
 
 ## For AI Agents

@@ -2,19 +2,20 @@ package dev.notypie.repository.meeting
 
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
-import dev.notypie.domain.meet.entity.Member
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.exception.meeting.throwIfSchemaNotFound
-import dev.notypie.repository.meeting.schema.ParticipantsSchema
+import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.repository.meeting.schema.toDomainEntity
 import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.repository.meeting.schema.toSchema
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 
 open class MeetingRepositoryImpl(
     private val jpaMeetingRepository: JpaMeetingRepository,
+    private val clock: Clock,
 ) : MeetingRepository {
     @Transactional
     override fun createNewMeeting(meeting: Meeting, idempotencyKey: UUID, channel: String): Meeting =
@@ -23,18 +24,21 @@ open class MeetingRepositoryImpl(
                 meeting.toSchema(idempotencyKey = idempotencyKey, channel = channel),
             ).toDomainEntity()
 
+    @Transactional(readOnly = true)
     override fun getMeeting(meetingId: Long): MeetingDto =
         jpaMeetingRepository
             .findMeetingWithParticipants(meetingId)
             ?.toMeetingDto()
             .throwIfSchemaNotFound(fieldName = "id", fieldValue = meetingId)
 
+    @Transactional(readOnly = true)
     override fun getAllMeetingByUserId(userId: String): List<MeetingDto> =
         jpaMeetingRepository
             .findAllMeetingByUserId(userId = userId)
             .map { it.toMeetingDto() }
             .toList()
 
+    @Transactional(readOnly = true)
     override fun getMeetingsByUserIdInRange(
         userId: String,
         startAt: LocalDateTime,
@@ -46,6 +50,7 @@ open class MeetingRepositoryImpl(
             .toList()
 
     // FIXME direct select from participant table
+    @Transactional(readOnly = true)
     override fun getParticipants(meetingId: Long): List<String> =
         getMeeting(meetingId = meetingId).participants.map { it.userId }
 
@@ -65,6 +70,7 @@ open class MeetingRepositoryImpl(
             absentReasonDetail = absentReasonDetail,
         )
 
+    @Transactional(readOnly = true)
     override fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean =
         jpaMeetingRepository.existsParticipant(
             meetingIdempotencyKey = meetingIdempotencyKey,
@@ -72,24 +78,32 @@ open class MeetingRepositoryImpl(
         )
 
     @Transactional
-    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean =
-        jpaMeetingRepository.markMeetingCanceled(
-            meetingUid = meetingUid,
-            requesterId = requesterId,
-        ) == 1
+    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean {
+        val schema = findActiveMeetingOwnedBy(meetingUid = meetingUid, requesterId = requesterId) ?: return false
+        schema.cancel()
+        jpaMeetingRepository.saveAndFlush(schema)
+        return true
+    }
 
     @Transactional
-    override fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): Boolean =
-        jpaMeetingRepository.rescheduleMeeting(
-            meetingUid = meetingUid,
-            requesterId = requesterId,
-            newStartAt = newStartAt,
-        ) == 1
+    override fun rescheduleMeeting(
+        meetingUid: UUID,
+        requesterId: String,
+        newStartAt: LocalDateTime,
+    ): RescheduleResult {
+        val schema =
+            findActiveMeetingOwnedBy(meetingUid = meetingUid, requesterId = requesterId)
+                ?: return RescheduleResult.NotAuthorized
+        if (schema.startAt == newStartAt) return RescheduleResult.AlreadyAtRequestedTime
+        schema.reschedule(newStartAt = newStartAt)
+        jpaMeetingRepository.saveAndFlush(schema)
+        return RescheduleResult.Rescheduled(meeting = schema.toMeetingDto())
+    }
 
-    override fun findMeetingByUid(meetingUid: UUID): MeetingDto? =
+    private fun findActiveMeetingOwnedBy(meetingUid: UUID, requesterId: String): MeetingSchema? =
         jpaMeetingRepository
             .findMeetingByUidWithParticipants(meetingUid = meetingUid)
-            ?.toMeetingDto()
+            ?.takeIf { it.publisherId == requesterId && !it.isCanceled }
 
     @Transactional
     override fun addParticipants(
@@ -103,7 +117,7 @@ open class MeetingRepositoryImpl(
         if (schema.publisherId != requesterId || schema.isCanceled) {
             return AddParticipantResult(outcome = AddParticipantResult.Outcome.NOT_AUTHORIZED)
         }
-        if (!schema.startAt.isAfter(LocalDateTime.now())) {
+        if (!schema.startAt.isAfter(LocalDateTime.now(clock))) {
             return AddParticipantResult(
                 outcome = AddParticipantResult.Outcome.MEETING_STARTED,
                 meeting = schema.toMeetingDto(),
@@ -122,19 +136,14 @@ open class MeetingRepositoryImpl(
                 meeting = schema.toMeetingDto(),
             )
         }
-        val withinCapacity =
-            runCatching {
-                val meeting = schema.toDomainEntity()
-                newUserIds.forEach { meeting.addParticipant(user = Member(userId = it)) }
-            }.isSuccess
-        if (!withinCapacity) {
+        if (schema.participants.size + newUserIds.size > Meeting.MAX_PARTICIPANTS) {
             return AddParticipantResult(
                 outcome = AddParticipantResult.Outcome.OVER_CAPACITY,
                 meeting = schema.toMeetingDto(),
             )
         }
-        newUserIds.forEach { schema.participants.add(ParticipantsSchema(meeting = schema, userId = it)) }
-        jpaMeetingRepository.save(schema)
+        schema.addParticipants(userIds = newUserIds)
+        jpaMeetingRepository.saveAndFlush(schema)
         return AddParticipantResult(
             outcome = AddParticipantResult.Outcome.ADDED,
             addedUserIds = newUserIds,

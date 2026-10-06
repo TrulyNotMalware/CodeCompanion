@@ -4,7 +4,6 @@ import java.security.MessageDigest
 import java.time.Clock
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
-import kotlin.math.abs
 
 class SlackSignatureVerifier(
     private val clock: Clock,
@@ -16,16 +15,13 @@ class SlackSignatureVerifier(
         body: ByteArray,
         toleranceSeconds: Long,
     ): SlackSignatureVerificationResult {
-        if (requestTimestamp.isNullOrBlank()) return SlackSignatureVerificationResult.missingTimestamp()
-        if (requestSignature.isNullOrBlank()) return SlackSignatureVerificationResult.missingSignature()
-
-        val timestamp =
-            requestTimestamp.toLongOrNull()
-                ?: return SlackSignatureVerificationResult.invalidTimestamp()
-        val currentEpochSeconds = clock.instant().epochSecond
-        if (abs(currentEpochSeconds - timestamp) > toleranceSeconds) {
-            return SlackSignatureVerificationResult.expiredTimestamp()
-        }
+        val headerCheck =
+            checkHeaders(
+                requestTimestamp = requestTimestamp,
+                requestSignature = requestSignature,
+                toleranceSeconds = toleranceSeconds,
+            )
+        if (!headerCheck.valid || requestTimestamp == null || requestSignature == null) return headerCheck
 
         val expectedSignature =
             createSignature(
@@ -46,6 +42,32 @@ class SlackSignatureVerifier(
         }
     }
 
+    fun checkHeaders(
+        requestTimestamp: String?,
+        requestSignature: String?,
+        toleranceSeconds: Long,
+    ): SlackSignatureVerificationResult {
+        if (requestTimestamp.isNullOrBlank()) return SlackSignatureVerificationResult.missingTimestamp()
+        if (requestSignature.isNullOrBlank()) return SlackSignatureVerificationResult.missingSignature()
+
+        val timestamp =
+            requestTimestamp.toLongOrNull()
+                ?: return SlackSignatureVerificationResult.invalidTimestamp()
+        val skewSeconds =
+            try {
+                Math.subtractExact(clock.instant().epochSecond, timestamp)
+            } catch (_: ArithmeticException) {
+                return SlackSignatureVerificationResult.expiredTimestamp()
+            }
+        if (skewSeconds !in -toleranceSeconds..toleranceSeconds) {
+            return SlackSignatureVerificationResult.expiredTimestamp()
+        }
+        if (!SIGNATURE_FORMAT.matches(input = requestSignature)) {
+            return SlackSignatureVerificationResult.malformedSignature()
+        }
+        return SlackSignatureVerificationResult.valid()
+    }
+
     fun createSignature(signingSecret: String, requestTimestamp: String, body: ByteArray): String {
         val mac = Mac.getInstance(HMAC_SHA256)
         mac.init(SecretKeySpec(signingSecret.toByteArray(Charsets.UTF_8), HMAC_SHA256))
@@ -57,6 +79,7 @@ class SlackSignatureVerifier(
     companion object {
         private const val HMAC_SHA256 = "HmacSHA256"
         private const val SIGNATURE_VERSION = "v0"
+        private val SIGNATURE_FORMAT = Regex("$SIGNATURE_VERSION=[0-9a-f]{64}")
     }
 }
 
@@ -91,6 +114,12 @@ data class SlackSignatureVerificationResult(
                 reason = SlackSignatureVerificationFailureReason.EXPIRED_TIMESTAMP,
             )
 
+        fun malformedSignature() =
+            SlackSignatureVerificationResult(
+                valid = false,
+                reason = SlackSignatureVerificationFailureReason.MALFORMED_SIGNATURE,
+            )
+
         fun invalidSignature() =
             SlackSignatureVerificationResult(
                 valid = false,
@@ -104,7 +133,6 @@ enum class SlackSignatureVerificationFailureReason {
     MISSING_SIGNATURE,
     INVALID_TIMESTAMP,
     EXPIRED_TIMESTAMP,
+    MALFORMED_SIGNATURE,
     INVALID_SIGNATURE,
 }
-
-private fun ByteArray.toHexString(): String = joinToString(separator = "") { byte -> "%02x".format(byte) }

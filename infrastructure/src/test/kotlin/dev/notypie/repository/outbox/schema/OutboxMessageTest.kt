@@ -7,14 +7,42 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.OutboundMessageCodec
 import dev.notypie.repository.outbox.Transport
+import dev.notypie.repository.outbox.chainedParts
+import dev.notypie.repository.outbox.toChainHead
+import dev.notypie.schema.createOutboxColumnMap
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.matchers.types.shouldBeInstanceOf
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.util.TimeZone
 
 class OutboxMessageTest :
     BehaviorSpec({
         val port = CodecOutboundMessagePort()
+
+        given("a CDC after-image on a JVM whose default zone is not UTC") {
+            val previousZone = TimeZone.getDefault()
+            val expected = LocalDateTime.of(2026, 10, 1, 12, 34, 56, 123_456_000)
+            val epochMicros = expected.toEpochSecond(ZoneOffset.UTC) * 1_000_000 + 123_456
+            val epochMillis = expected.toEpochSecond(ZoneOffset.UTC) * 1_000 + 123
+
+            `when`("created_at arrives as Debezium micros and updated_at as Debezium millis") {
+                TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"))
+                val converted =
+                    try {
+                        createOutboxColumnMap(createdAt = epochMicros, updatedAt = epochMillis).toOutboxMessage()
+                    } finally {
+                        TimeZone.setDefault(previousZone)
+                    }
+
+                then("both read back as the stored wall-clock value, not shifted by the JVM zone") {
+                    converted.createdAt shouldBe expected
+                    converted.updatedAt shouldBe expected.withNano(123_000_000)
+                }
+            }
+        }
 
         given("CodecOutboundMessagePort.toRow") {
             val basicInfo = createCommandBasicInfo()
@@ -35,7 +63,7 @@ class OutboxMessageTest :
                 }
 
                 then("the row is stamped at the current schema version and starts PENDING") {
-                    row.schemaVersion shouldBe OutboxSchemaVersion.CURRENT
+                    row.schemaVersion shouldBe OutboxSchemaVersion.V2
                     row.status shouldBe MessageStatus.PENDING.name
                 }
 
@@ -51,6 +79,37 @@ class OutboxMessageTest :
                     val text = channelMessage.content.shouldBeInstanceOf<MessageContent.Text>()
                     text.headline shouldBe "hi"
                     text.markdown shouldBe "hello world"
+                }
+            }
+        }
+
+        given("CodecOutboundMessagePort.toRow with the rest of a chain") {
+            val basicInfo = createCommandBasicInfo()
+            val parts =
+                (1..3).map { index ->
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = "($index/3)", markdown = "part $index"),
+                    )
+                }
+
+            `when`("the head row is built") {
+                val head = port.toChainHead(messages = parts, basicInfo = basicInfo)
+                val single = port.toChainHead(messages = parts.take(n = 1), basicInfo = basicInfo)
+
+                then("it carries the first part with the rest queued in order behind it") {
+                    val decoded = OutboundMessageCodec.decode(json = head.payload)
+                    decoded.message shouldBe parts[0]
+                    decoded.continuation shouldBe parts.drop(n = 1)
+                    head.chainedParts() shouldBe 2
+                }
+
+                then(
+                    "only a row with a continuation is stamped V3, so an older binary holds it instead of sending part 1",
+                ) {
+                    head.schemaVersion shouldBe OutboxSchemaVersion.V3
+                    single.schemaVersion shouldBe OutboxSchemaVersion.V2
+                    single.chainedParts() shouldBe 0
                 }
             }
         }

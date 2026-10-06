@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
 
 # test/kotlin/dev/notypie/application/service/cve/subscription
 
@@ -11,7 +11,7 @@ point that decides between opening a modal through `CommandExecutor` and staging
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveSubscriptionServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. `handleCveSubscription`: SUBSCRIBE with keys `kotlin` + `ghost` against one active topic → `subscribe(userId, topicIds = listOf(10L))`, DM contains `Subscribed to 1 topic(s): *Kotlin*.` and `Skipped unavailable topics: \`ghost\`.`, `publishEvent` once; UNSUBSCRIBE → `unsubscribe(topicIds = listOf(5L))`, DM `Unsubscribed from 1 topic(s): *Java CVE*.`; UNSUBSCRIBE with an unsubscribed key → `Skipped not subscribed topics: \`ghost\`.`; LIST with two → `You're subscribed to 2 topic(s):` plus `• *Java CVE* (\`cve-java\`)` lines; LIST empty → exact `You have no CVE topic subscriptions.`; feature disabled → no write, no stage (`isCaptured shouldBe false`), no publish. |
+| `CveSubscriptionServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. `handleCveSubscription`: SUBSCRIBE with keys `kotlin` + `ghost` against one active topic → `subscribe(userId, topicIds = listOf(10L))`, DM contains `Subscribed to 1 topic(s): *Kotlin*.` and `Skipped unavailable topics: \`ghost\`.`, `publishEvent` once; UNSUBSCRIBE → `unsubscribe(topicIds = listOf(5L))`, DM `Unsubscribed from 1 topic(s): *Java CVE*.`; UNSUBSCRIBE with an unsubscribed key → `Skipped not subscribed topics: \`ghost\`.`; LIST with two → `You're subscribed to 2 topic(s):` plus `• *Java CVE* (\`cve-java\`)` lines; LIST empty → exact `You have no CVE topic subscriptions.`; feature disabled → no write, no stage (`isCaptured shouldBe false`), no publish. A topic named `<!channel> <https://evil.example|Java>` with key `r&d` → escaped in the unsubscribe reply and the list, and a crafted skipped key `<!here>` → `` `&lt;!here&gt;` ``. |
 | `CveSubscriptionSlashServiceImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → no `execute`, no `stage`, no `findActiveTopics`; `/subscribe` with active topics → `commandExecutor.execute<SubCommandDefinition>` once and no ephemeral; `/subscribe` with no active topics → no execute, `OutboundMessage.Ephemeral` containing `no CVE topics available`, `publishEvent` once; `/unsubscribe` with no subscriptions → ephemeral containing `no CVE topic subscriptions to remove`; `/subscriptions` → execute once, no stage. |
 
 ## For AI Agents

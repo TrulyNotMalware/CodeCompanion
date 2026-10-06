@@ -5,6 +5,7 @@ val springBootVersion = rootProject.extra["springBootVersion"] as String
 val jacksonVersion = rootProject.extra["jacksonVersion"] as String
 val slackSdkVersion = rootProject.extra["slackSdkVersion"] as String
 val springAiVersion = rootProject.extra["springAiVersion"] as String
+val springMockkVersion = rootProject.extra["springMockkVersion"] as String
 
 tasks.named<BootJar>("bootJar") {
     if (!jarName.isNullOrBlank()) {
@@ -23,14 +24,17 @@ dependencies {
     api(platform("tools.jackson:jackson-bom:$jacksonVersion"))
     implementation("tools.jackson.module:jackson-module-kotlin")
 
-    implementation("org.springframework.boot:spring-boot-starter-web") {
+    implementation("org.springframework.boot:spring-boot-starter-webmvc") {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
     }
     implementation("org.springframework.boot:spring-boot-starter-jetty")
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.springframework.boot:spring-boot-starter-restclient")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.kotest:kotest-extensions-spring")
+    testImplementation("com.ninja-squad:springmockk:$springMockkVersion")
 
     implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("javax.websocket:javax.websocket-api:1.1")

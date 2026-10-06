@@ -22,30 +22,32 @@ internal class StandupAnswerSubmissionContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT
 
     override fun accept(model: StandupAnswerParsed) {
+        val noticeRef =
+            when (val notice = model.notice) {
+                is NoticeTarget.Update ->
+                    MessageRef(conversation = ConversationTarget(id = notice.channel), messageId = notice.messageTs)
+
+                NoticeTarget.None -> null
+            }
         if (model.responses.isNotEmpty()) {
             addIntent(
                 CommandIntent.RecordStandupAnswer(
                     sessionUid = model.sessionUid,
                     userId = model.userId,
                     responses = model.responses,
+                    notice = noticeRef,
                 ),
             )
+            return
         }
-        when (val notice = model.notice) {
-            is NoticeTarget.Update ->
-                addOutbound(
-                    OutboundMessage.UpdateMessage(
-                        ref =
-                            MessageRef(
-                                conversation = ConversationTarget(id = notice.channel),
-                                messageId = notice.messageTs,
-                            ),
-                        content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
-                        detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                    ),
-                )
-
-            NoticeTarget.None -> Unit
+        noticeRef?.let { ref ->
+            addOutbound(
+                OutboundMessage.UpdateMessage(
+                    ref = ref,
+                    content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
+                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                ),
+            )
         }
     }
 }

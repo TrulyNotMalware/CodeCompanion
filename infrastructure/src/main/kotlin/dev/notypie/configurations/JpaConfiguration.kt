@@ -29,12 +29,17 @@ import dev.notypie.repository.standup.JpaRoutineRepository
 import dev.notypie.repository.standup.JpaSessionDispatchRepository
 import dev.notypie.repository.standup.JpaStandupSessionRepository
 import dev.notypie.repository.standup.StandupRepositoryImpl
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy
+import org.springframework.jdbc.support.SQLExceptionTranslator
+import org.springframework.transaction.PlatformTransactionManager
+import java.time.Clock
 
 const val PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"
 const val JPA_ENTITY_PACKAGES = "dev.notypie.repository"
@@ -43,6 +48,7 @@ const val JPA_ENTITY_PACKAGES = "dev.notypie.repository"
 @EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])
 class JpaConfiguration {
     @Bean
+    @ConfigurationProperties("spring.datasource.hikari")
     fun hikariDataSource(dataSourceProperties: DataSourceProperties): HikariDataSource =
         dataSourceProperties
             .initializeDataSourceBuilder()
@@ -55,18 +61,27 @@ class JpaConfiguration {
         LazyConnectionDataSourceProxy(hikariDataSource)
 
     @Bean
+    fun snapshotIsolationExceptionTranslator(): SQLExceptionTranslator = SnapshotIsolationExceptionTranslator()
+
+    @Bean
     @Primary
-    fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository) =
-        MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository)
+    fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository, clock: ObjectProvider<Clock>) =
+        MeetingRepositoryImpl(
+            jpaMeetingRepository = jpaMeetingRepository,
+            // The application declares the Clock bean; infrastructure-only JPA slices have none.
+            clock = clock.getIfAvailable { Clock.systemDefaultZone() },
+        )
 
     @Bean
     @Primary
     fun meetingReminderRepository(
         jpaMeetingRepository: JpaMeetingRepository,
         jpaMeetingReminderRepository: JpaMeetingReminderRepository,
+        transactionManager: PlatformTransactionManager,
     ) = MeetingReminderRepositoryImpl(
         jpaMeetingRepository = jpaMeetingRepository,
         jpaMeetingReminderRepository = jpaMeetingReminderRepository,
+        transactionManager = transactionManager,
     )
 
     @Bean
@@ -101,8 +116,10 @@ class JpaConfiguration {
 
     @Bean
     @Primary
-    fun cveTopicRepository(jpaCveTopicRepository: JpaCveTopicRepository) =
-        CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository)
+    fun cveTopicRepository(
+        jpaCveTopicRepository: JpaCveTopicRepository,
+        transactionManager: PlatformTransactionManager,
+    ) = CveTopicRepositoryImpl(jpaCveTopicRepository = jpaCveTopicRepository, transactionManager = transactionManager)
 
     @Bean
     @Primary

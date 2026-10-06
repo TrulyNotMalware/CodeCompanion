@@ -51,6 +51,25 @@ class ElementTest :
             }
         }
 
+        given("style") {
+            `when`("a rich_text leaf carries an object style") {
+                val element = mapper.readValue<Element>("""{"type":"text","text":"deploy","style":{"bold":true}}""")
+
+                then("it deserializes and keeps the text") {
+                    element.extractText() shouldBe "deploy"
+                    element.style?.path("bold")?.asBoolean() shouldBe true
+                }
+            }
+
+            `when`("a list carries a string style") {
+                val element = mapper.readValue<Element>("""{"type":"rich_text_list","style":"ordered","elements":[]}""")
+
+                then("the string style is kept") {
+                    element.style?.asString() shouldBe "ordered"
+                }
+            }
+        }
+
         given("TextValueDeserializer") {
             `when`("JSON value is a plain string") {
                 val json = """{"type":"text","user_id":null,"text":"hello"}"""
