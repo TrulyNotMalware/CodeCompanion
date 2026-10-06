@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-03 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-10-03 | Updated: 2026-10-06 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/repository
 

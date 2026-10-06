@@ -285,8 +285,7 @@ class SubmissionPipelineCharacterizationTest :
                     withDetail.second
                         .filterIsInstance<OutboundMessage.UpdateMessage>()
                         .single()
-                        .let { it.content }
-                        .let { it as dev.notypie.domain.command.outbound.MessageContent.Text }
+                        .content
                         .markdown shouldContain "family matters"
                 }
             }

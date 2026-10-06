@@ -186,7 +186,7 @@ private class RoleStore(
                 ),
         ).also { spy ->
             every { spy.resolve(userId = any()) } answers
-                { (callOriginal() as UserRole).also { resolvedRoles.add(it) } }
+                { callOriginal().also { resolvedRoles.add(it) } }
         }
 
     fun rolesResolvedDuring(action: () -> Unit): List<UserRole> {

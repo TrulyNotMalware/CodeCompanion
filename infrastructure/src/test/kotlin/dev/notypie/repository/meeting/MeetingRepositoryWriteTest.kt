@@ -40,7 +40,7 @@ class MeetingRepositoryWriteTest
                 MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
             val transactionTemplate = TransactionTemplate(transactionManager)
 
-            fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }!!
+            fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }
 
             fun addParticipants(meetingUid: UUID, requesterId: String, participantUserIds: List<String>) =
                 inTx {

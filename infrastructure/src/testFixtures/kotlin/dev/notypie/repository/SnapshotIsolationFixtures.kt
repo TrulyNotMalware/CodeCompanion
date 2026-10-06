@@ -8,6 +8,7 @@ import org.springframework.dao.DataAccessException
 import org.springframework.orm.jpa.vendor.HibernateJpaDialect
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.TransactionManager
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource
 import org.springframework.transaction.interceptor.TransactionInterceptor
@@ -63,7 +64,7 @@ fun createSnapshotIsolationFailure(table: String): DataAccessException =
             .translateExceptionIfPossible(createRawSnapshotIsolationFailure(table = table)),
     )
 
-inline fun <reified T : Any> createTransactionalProxy(target: T, transactionManager: PlatformTransactionManager): T =
+inline fun <reified T : Any> createTransactionalProxy(target: T, transactionManager: TransactionManager): T =
     ProxyFactory(target)
         .apply { addAdvice(TransactionInterceptor(transactionManager, AnnotationTransactionAttributeSource())) }
         .proxy as T

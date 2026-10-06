@@ -72,7 +72,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with CHANNEL_ALERT messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.CHANNEL_ALERT
                     payload.channel shouldBe commandBasicInfo.channel
                     payload.publisherId shouldBe commandBasicInfo.publisherId
@@ -128,7 +128,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with EPHEMERAL_MESSAGE messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                 }
 
@@ -156,7 +156,7 @@ class SlackApiEventConstructorTest :
 
                 then("ephemeral posts into commandBasicInfo.channel and only `user` targets targetUserId") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                     payload.body["channel"] shouldBe commandBasicInfo.channel
                     payload.body["user"] shouldBe targetUserId
@@ -195,7 +195,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with CHANNEL_ALERT messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.CHANNEL_ALERT
                 }
             }
@@ -221,7 +221,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is ActionEventPayloadContents with matching responseUrl") {
                     result.payload.shouldBeInstanceOf<ActionEventPayloadContents>()
-                    val payload = result.payload as ActionEventPayloadContents
+                    val payload = result.payload
                     payload.responseUrl shouldBe responseUrl
                     payload.channel shouldBe commandBasicInfo.channel
                     payload.publisherId shouldBe commandBasicInfo.publisherId
@@ -255,7 +255,7 @@ class SlackApiEventConstructorTest :
 
                 then("payload is PostEventPayloadContents with EPHEMERAL_MESSAGE messageType") {
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
-                    val payload = result.payload as PostEventPayloadContents
+                    val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                 }
             }

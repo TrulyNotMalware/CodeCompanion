@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-01 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-10-01 | Updated: 2026-10-06 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/standup
 

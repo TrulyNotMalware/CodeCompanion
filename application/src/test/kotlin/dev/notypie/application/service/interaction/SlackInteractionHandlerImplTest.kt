@@ -33,6 +33,7 @@ import dev.notypie.templates.DeclineReasonModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldNotContainAnyOf
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -370,7 +371,7 @@ class SlackInteractionHandlerImplTest :
         given("constructor") {
             `when`("handler is instantiated with required dependencies") {
                 then("resolves without error") {
-                    (handler != null) shouldBe true
+                    handler.shouldNotBeNull()
                 }
             }
         }

@@ -22,7 +22,6 @@ import dev.notypie.domain.command.entity.context.form.StandupSetupParsed
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.ConversationTarget
-import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.entity.RejectReason
@@ -133,7 +132,7 @@ class SubmissionContextsTest :
                     intent.absentReasonDetail shouldBe "family matters"
                     val update = effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
                     update.ref.conversation.id shouldBe "C_N"
-                    (update.content as MessageContent.Text).markdown shouldContain "family matters"
+                    update.content.markdown shouldContain "family matters"
                 }
             }
 
@@ -170,7 +169,7 @@ class SubmissionContextsTest :
                     intent.absentReason shouldBe RejectReason.OTHER
                     intent.absentReasonDetail shouldBe null
                     val update = effects.filterIsInstance<OutboundMessage.UpdateMessage>().single()
-                    (update.content as MessageContent.Text).markdown shouldContain "was not saved"
+                    update.content.markdown shouldContain "was not saved"
                 }
             }
         }

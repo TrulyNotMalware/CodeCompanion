@@ -117,7 +117,7 @@ class MeetingJpaStore(
             transactionManager = transactionManager,
         )
 
-    fun <T : Any> inNewTransaction(action: () -> T): T = TransactionTemplate(transactionManager).execute { action() }!!
+    fun <T : Any> inNewTransaction(action: () -> T): T = TransactionTemplate(transactionManager).execute { action() }
 
     fun currentEntityManager(): EntityManager =
         checkNotNull(EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagerFactory)) {

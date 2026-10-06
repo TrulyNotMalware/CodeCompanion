@@ -49,7 +49,7 @@ class StandupRepositoryImplTest
             val transactionTemplate = TransactionTemplate(transactionManager)
             val cutoffAt = Instant.parse("2026-05-04T03:00:00Z")
 
-            fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }!!
+            fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }
 
             fun openSession(status: SessionStatus = SessionStatus.COLLECTING, summaryMessageTs: String? = null): UUID =
                 inTx {
