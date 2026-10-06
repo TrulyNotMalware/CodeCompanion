@@ -1,3 +1,4 @@
+# [[allowlists]] needs gitleaks 8.25.0 or newer; security_check.yaml pins GITLEAKS_VERSION accordingly.
 [extend]
 useDefault = true
 

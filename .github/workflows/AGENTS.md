@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
 
 # .github/workflows
 
@@ -12,7 +12,9 @@ documented in `../AGENTS.md`; this file is the per-file index.
 |------|-------------|
 | `lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**`; source-path filtered, `!**/*.md` |
 | `simple_test_action.yaml` | Same triggers; runs `gradle-config/apply.sh`, then only the changed modules' tests via `dorny/paths-filter@v4` (full `test` when Gradle files change); uploads `build-reports.zip` on failure |
-| `security_check.yaml` | Push/PR to `main`, weekly, manual: `changes` gate (`dorny/paths-filter@v4`, `some-with-excludes`), CodeQL `java-kotlin` with a manual `./gradlew classes --no-daemon --no-build-cache` compile, Gradle dependency-graph submission + dependency review on PRs, gitleaks secret scan |
+| `security_check.yaml` | Push/PR to `main`, weekly, manual: `changes` gate (`dorny/paths-filter@v4`, `some-with-excludes`), CodeQL `java-kotlin` with a manual `./gradlew classes --no-daemon --no-build-cache` compile, Gradle dependency-graph submission (every push to `main`; source-gated on PRs) + dependency review on PRs, gitleaks secret scan with `GITLEAKS_VERSION` pinned (8.25.0+ for `[[allowlists]]`) |
+| `claude-code-review.yml` | Claude Code review on PRs; `if` skips Dependabot PRs, whose runs only receive Dependabot secrets |
+| `claude.yml` | `@claude` mention handler for issues, PR comments and reviews |
 | `deploy_action.yaml` | Merged PR to `main` only: build jar → multi-arch image → Harbor → `envsubst` apply to OKE → rollout + health check → rollback on failure |
 
 ## For AI Agents

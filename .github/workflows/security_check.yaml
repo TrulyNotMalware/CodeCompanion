@@ -93,8 +93,10 @@ jobs:
     needs: changes
     # The graph only changes with commits, so the weekly schedule has nothing to submit. PRs from
     # forks are skipped: their token can never hold the contents: write that submission needs.
+    # Every push to main submits, even a docs-only merge: the review on later PRs compares against
+    # the base commit's snapshot, and a base without one makes the whole graph look newly added.
     if: >-
-      needs.changes.outputs.source == 'true'
+      (github.event_name == 'push' || needs.changes.outputs.source == 'true')
       && github.event_name != 'schedule'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
@@ -143,4 +145,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # .gitleaks.toml uses [[allowlists]] (gitleaks 8.25.0+). The action otherwise ran 8.24.3, which
+          # ignores that table, so the weekly full-history scan reported the allowlisted sample manifest.
+          GITLEAKS_VERSION: "8.30.1"
           # GITLEAKS_LICENSE is only required for organization-owned repositories.

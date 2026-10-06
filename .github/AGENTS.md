@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-06 -->
 
 # .github
 
@@ -13,10 +13,12 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 |------|-------------|
 | `workflows/lint.yaml` | `ktlintCheck` on pushes to `feature/*`, `feat/*`, `features/*`, `dependabot/**` |
 | `workflows/simple_test_action.yaml` | Path-filtered module tests on the same branches; applies `gradle-config/apply.sh` first; uploads `build-reports.zip` on failure |
-| `workflows/security_check.yaml` | On push/PR to `main`, weekly and on demand: CodeQL (`java-kotlin`, manual Gradle compile), Gradle dependency-graph submission + dependency review on PRs, gitleaks secret scan |
+| `workflows/security_check.yaml` | On push/PR to `main`, weekly and on demand: CodeQL (`java-kotlin`, manual Gradle compile), Gradle dependency-graph submission (every push to `main`, source-filtered on PRs) + dependency review on PRs, gitleaks secret scan (`GITLEAKS_VERSION` pinned) |
+| `workflows/claude-code-review.yml` | Claude Code review on every non-Dependabot PR (`anthropics/claude-code-action@v1`, `code-review` plugin, inline comments); skipped for Dependabot because those runs only receive Dependabot secrets |
+| `workflows/claude.yml` | `@claude` mentions in issues, PR comments and reviews start an interactive Claude Code run |
 | `workflows/deploy_action.yaml` | On merged PR to `main`: build jar → multi-arch Docker image → push to Harbor → apply k8s manifests to Oracle OKE → rollout + health check → auto-rollback on failure |
 | `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage` |
-| `../.gitleaks.toml` | Repo-root gitleaks config (auto-loaded by the CLI): extends the default rules and allowlists the placeholder-valued sample Secret in `cdc/k8s/yamls/mariadb/mariadb-config.yaml` |
+| `../.gitleaks.toml` | Repo-root gitleaks config (auto-loaded by the CLI): extends the default rules and allowlists the placeholder-valued sample Secret in `cdc/k8s/yamls/mariadb/mariadb-config.yaml`; its `[[allowlists]]` table needs gitleaks 8.25.0+, which is why the workflow pins `GITLEAKS_VERSION` |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -63,12 +65,17 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   PR from a fork can never obtain it, so the job's `if` skips fork PRs outright rather than failing
   their submission with a 403 (CodeQL has no such gate — code scanning uploads are allowed for fork
   PRs). The review step waits for the just-submitted snapshot via `retry-on-snapshot-warnings` and
-  fails the PR on `high`+ vulnerabilities in runtime scope.
+  fails the PR on `high`+ vulnerabilities in runtime scope. The job runs on **every** push to `main`,
+  bypassing the `changes` gate: the review compares the PR head against the base commit's snapshot, and
+  after a docs-only merge left `main` without one (c2947fae, 2026-09-28) every later PR saw the whole
+  graph as newly added and failed on advisories that `main` already carried.
 - gitleaks runs without `GITLEAKS_LICENSE` because the repository belongs to a personal account; an
   organization-owned fork must add that secret. Push and PR runs scan only the new commits, but the
   weekly run scans the whole history, so a historical false positive fails every Monday: that is why
   `.gitleaks.toml` allowlists the sample MariaDB manifest (its `kind: Secret` carries
-  `YOUR_ROOT_PASSWORD`-style placeholders). Allowlist by path only for template files, never for a
+  `YOUR_ROOT_PASSWORD`-style placeholders). The allowlist is a `[[allowlists]]` table, which gitleaks
+  reads only from 8.25.0; the action defaulted to 8.24.3 and ignored it (weekly failures 2026-09-28 and
+  2026-10-05), so the step pins `GITLEAKS_VERSION` — keep it at or above 8.25.0 when bumping. Allowlist by path only for template files, never for a
   real leak — rotate and rewrite instead. Test fixtures use `xoxb-test…`-style placeholders that the
   Slack token rules do not match; keep any new fixture tokens equally obviously fake.
 - **Dependabot resolves the shared versions only through `$name` templates.** Its Gradle parser
@@ -110,7 +117,7 @@ Workflows are only exercised by pushing. Before changing one:
   `./gradlew classes --no-daemon --no-build-cache` for the CodeQL compile step);
 - lint the YAML with `actionlint` (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color`);
 - after touching `.gitleaks.toml`, replay the weekly scan locally:
-  `docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:latest git /repo --log-opts="--branches --remotes" --redact`
+  `docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --log-opts="--branches --remotes" --redact` (same version as `GITLEAKS_VERSION` in the workflow; `latest` may read the config differently)
   (`--branches --remotes` rather than `--all` so local stashes are not scanned);
 - for deploy edits, confirm the k8s manifest still renders: `IMAGE_NAME=x envsubst < application/src/main/resources/k8s/deployment.yaml`;
 - prefer a `feature/*` branch push to exercise lint and test paths before touching the deploy path;
