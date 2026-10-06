@@ -17,7 +17,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 | `workflows/claude-code-review.yml` | Claude Code review on every non-Dependabot PR (`anthropics/claude-code-action@v1`, `code-review` plugin, inline comments); skipped for Dependabot because those runs only receive Dependabot secrets |
 | `workflows/claude.yml` | `@claude` mentions in issues, PR comments and reviews start an interactive Claude Code run |
 | `workflows/deploy_action.yaml` | On merged PR to `main`: build jar → multi-arch Docker image → push to Harbor → apply `deployment.yaml` to Oracle OKE → rollout + in-cluster health check → `rollout undo` on failure |
-| `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage` |
+| `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage`; the `docker` entry ignores `eclipse-temurin` major updates so the runtime stays on the Java 25 toolchain line |
 | `../.gitleaks.toml` | Repo-root gitleaks config (auto-loaded by the CLI): extends the default rules and allowlists the placeholder-valued sample Secret in `cdc/k8s/yamls/mariadb/mariadb-config.yaml`; its `[[allowlists]]` table needs gitleaks 8.25.0+, which is why the workflow pins `GITLEAKS_VERSION` |
 
 ## Subdirectories
