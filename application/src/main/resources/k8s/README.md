@@ -144,10 +144,13 @@ this list by hand (`../db/migration/AGENTS.md` keeps the same order):
    GROUP BY meeting_id, user_id HAVING COUNT(*) > 1;
    ```
    Then apply V18.
-2. **V19** (outbox status indexes) and **V23** (outbox payload `MEDIUMTEXT`). For V23, measure the table and try
-   the online form first, as its header says; if the server rejects it and copying the table would block outbox
-   writes too long, apply V23 after step 5 instead, once the release's retention purge has shrunk the table.
-3. **V20**, then **V22** (the claim token and the send budget).
+2. **V19** (outbox status indexes) and **V23** (outbox payload `MEDIUMTEXT`). Both run against the live
+   `outbox_message` table, so run them as their headers say: `SET SESSION lock_wait_timeout = 5` and the in-place
+   form, and re-run on a timeout. For V23, measure the table first; if the server rejects the online form and
+   copying the table would block outbox writes too long, apply V23 after step 5 instead, once the release's
+   retention purge has shrunk the table.
+3. **V20**, then **V22** (the claim token and the send budget), with the same short `lock_wait_timeout` and the
+   in-place form from their headers.
 
    Steps 1–3 only add columns with defaults, indexes and a wider type, which the running pre-V20 Pods never depend
    on, so apply them while the previous release still serves. The new release needs V18, V20 and V22, and

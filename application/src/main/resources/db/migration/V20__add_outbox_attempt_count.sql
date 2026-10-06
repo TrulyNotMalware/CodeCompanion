@@ -26,6 +26,16 @@
 -- Apply this script BEFORE rolling out application code that expects the
 -- column. For dev/local with auto-ddl enabled, Hibernate applies it
 -- automatically. In prod, execute manually — schema auto-migration is disabled.
+--
+-- Online DDL (same procedure as V23): outbox_message is live while this runs,
+-- and an ALTER that waits for its metadata lock behind a long transaction makes
+-- every later outbox write (each bot reply) wait too; MariaDB's default
+-- lock_wait_timeout is a day. Run it with a short timeout and the in-place form,
+-- which the server rejects at once instead of falling back to a table copy:
+--     SET SESSION lock_wait_timeout = 5;
+--     ALTER TABLE outbox_message ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT 0,
+--       ALGORITHM=INPLACE, LOCK=NONE;
+-- Re-run it if it times out.
 -- -----------------------------------------------------------------------------
 
 ALTER TABLE outbox_message ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT 0;
