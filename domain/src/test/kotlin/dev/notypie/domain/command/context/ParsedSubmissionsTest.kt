@@ -166,6 +166,21 @@ class ParsedSubmissionsTest :
                 }
             }
 
+            `when`("an OTHER detail carries Slack control characters") {
+                val parsed =
+                    DeclineReasonParsed.from(
+                        raw = raw(reasonRaw = "OTHER", detailRaw = "<https://evil.example|Zoom> <!here> & co"),
+                        actorId = ACTOR,
+                    )
+
+                then("the stored detail is raw and the notice markdown is escaped") {
+                    parsed.shouldNotBeNull().reasonDetail shouldBe "<https://evil.example|Zoom> <!here> & co"
+                    parsed.noticeSummaryMarkdown() shouldBe
+                        "You declined the meeting — *Reason:* ${RejectReason.OTHER.showMessage} — " +
+                        "&lt;https://evil.example|Zoom&gt; &lt;!here&gt; &amp; co"
+                }
+            }
+
             `when`("an OTHER detail is exactly the stored length, or one character longer") {
                 val atLimit = "a".repeat(RejectReason.MAX_DETAIL_LENGTH)
                 val fits =
