@@ -1,7 +1,7 @@
 # OS-Specific Gradle Configuration
 
 This directory contains OS-optimized Gradle configuration files and automated setup scripts. Tuned for this
-repository's toolchain: Java 25 (Adoptium) + Kotlin 2.4.10 + Spring Boot 4.1.1 on Gradle 9.7.1.
+repository's toolchain: Java 25 (Adoptium) + Kotlin 2.4.10 + Spring Boot 4.1.1 on Gradle 9.8.0.
 
 The generated `gradle.properties` at the repository root is **git-ignored** — always edit the preset here
 and re-run `./apply.sh` rather than editing the generated file.
@@ -115,7 +115,7 @@ Fine-tune Kotlin compilation performance:
 ## Compatibility
 
 ### Supported Versions
-- **Gradle:** 9.7.1 (pinned by `gradle/wrapper/gradle-wrapper.properties`)
+- **Gradle:** 9.8.0 (pinned by `gradle/wrapper/gradle-wrapper.properties`)
 - **Java:** 25 — required, not just recommended. The root build pins an Adoptium toolchain and sets
   `sourceCompatibility`/`targetCompatibility` to 25, so an older JDK will not build this project.
 - **Kotlin:** 2.4.10 (declared by the Kotlin plugin in the root `build.gradle.kts`)
@@ -136,7 +136,7 @@ Fine-tune Kotlin compilation performance:
 # OS별 Gradle 설정
 
 OS 최적화 Gradle 설정 파일과 자동 설정 스크립트가 포함된 디렉토리입니다. 이 저장소의 툴체인 기준으로
-튜닝되어 있습니다: Java 25 (Adoptium) + Kotlin 2.4.10 + Spring Boot 4.1.1, Gradle 9.7.1.
+튜닝되어 있습니다: Java 25 (Adoptium) + Kotlin 2.4.10 + Spring Boot 4.1.1, Gradle 9.8.0.
 
 저장소 루트에 생성되는 `gradle.properties`는 **git-ignore 대상**입니다. 공유 설정을 바꿀 때는 생성된
 파일이 아니라 이 디렉토리의 프리셋을 수정하고 `./apply.sh`를 다시 실행하세요.
@@ -249,7 +249,7 @@ Kotlin 컴파일 성능 미세 조정:
 ## 호환성
 
 ### 지원 버전
-- **Gradle:** 9.7.1 (`gradle/wrapper/gradle-wrapper.properties`에 고정)
+- **Gradle:** 9.8.0 (`gradle/wrapper/gradle-wrapper.properties`에 고정)
 - **Java:** 25 — 권장이 아니라 필수입니다. 루트 빌드가 Adoptium 툴체인을 고정하고
   `sourceCompatibility`/`targetCompatibility`를 25로 설정하므로 하위 JDK로는 빌드되지 않습니다.
 - **Kotlin:** 2.4.10 (루트 `build.gradle.kts`의 Kotlin 플러그인이 선언)

@@ -2,14 +2,14 @@
 
 _type: guide · updated: 2026-10-03_
 
-> JDK 25 · Gradle 9.7.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
+> JDK 25 · Gradle 9.8.0 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
 ## 툴체인과 Gradle 프리셋
 
 - **JDK 25 (Adoptium)는 필수다.** 루트 `build.gradle.kts`가 `toolchain { languageVersion = 25, vendor = ADOPTIUM }`과
   `sourceCompatibility`/`targetCompatibility = 25`를 고정하고, `settings.gradle.kts`의 foojay resolver가 없는 JDK를 받아
   온다. Kotlin 2.4.10 · Spring Boot 4.1.1 · ktlint 14.2.0의 원본은 루트 빌드의 `plugins` 블록이다.
-- Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.7.1로 고정한다. 항상 `./gradlew`를 쓴다.
+- Gradle은 `gradle/wrapper/gradle-wrapper.properties`가 9.8.0으로 고정한다. 항상 `./gradlew`를 쓴다.
 - `gradle.properties`는 **생성물이며 git-ignored**다. `./gradle-config/apply.sh`가 `uname -s`로 OS를 판별해
   `gradle-config/gradle-{macos,linux}.properties` 중 하나를 루트로 복사하고, 프리셋이 없는 OS(Windows 등)와
   `apply.sh common`은 `gradle-common.properties`로 폴백한다. 공유 빌드 설정을 바꿀 때는 루트 파일이 아니라 프리셋을 고치고

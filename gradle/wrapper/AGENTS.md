@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
 
 # gradle/wrapper
 
@@ -10,7 +10,7 @@ the Gradle distribution so local machines and runners build with the same versio
 ## Key Files
 | File | Description |
 |------|-------------|
-| `gradle-wrapper.properties` | `distributionUrl` pinning Gradle 9.7.1 (`-bin.zip`), plus network timeout and validation settings |
+| `gradle-wrapper.properties` | `distributionUrl` pinning Gradle 9.8.0 (`-bin.zip`), plus network timeout and validation settings |
 | `gradle-wrapper.jar` | Bootstrap jar downloaded by `gradlew`; validated in CI by `gradle/actions/wrapper-validation` |
 
 ## For AI Agents

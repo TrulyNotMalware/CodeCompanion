@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-06 -->
 
 # gradle-config
 
@@ -50,7 +50,7 @@ All presets share: parallel + caching + configuration cache (`problems=warn`), i
 - All four presets (`macos`, `linux`, `common`, `ci`) declare `kotlin.version=2.4.10`, matching the Kotlin plugin in
   the root `build.gradle.kts`. The property is inert — no build script reads it — but keep the four files
   agreeing with the plugin so it does not drift back into a misleading second source of truth.
-  `README.md` states the real toolchain (Gradle 9.7.1 / Java 25 / Kotlin 2.4.10 / Boot 4.1.1).
+  `README.md` states the real toolchain (Gradle 9.8.0 / Java 25 / Kotlin 2.4.10 / Boot 4.1.1).
 - CI runs `./gradle-config/apply.sh ci` in the test workflow and in the deploy build, so a change to `apply.sh`
   or `gradle-ci.properties` changes CI build behaviour; a syntax error in `apply.sh` breaks every test run and
   every deploy. Keep the CI preset's daemon heaps small: the Linux preset (8 GB + 6 GB daemons) plus forked
@@ -84,6 +84,6 @@ new problems.
 - `.github/workflows/simple_test_action.yaml` and `deploy_action.yaml` — run `apply.sh ci` before Gradle
 
 ### External
-Bash, Gradle 9.7.1, a JDK 25 toolchain.
+Bash, Gradle 9.8.0, a JDK 25 toolchain.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

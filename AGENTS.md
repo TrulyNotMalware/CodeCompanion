@@ -17,7 +17,7 @@ flow **application → infrastructure → domain** (and **application → domain
 |------|-------------|
 | `settings.gradle.kts` | Declares root project `CodeCompanion` and the three modules |
 | `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.10, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
-| `gradlew` / `gradlew.bat` | Gradle 9.7.1 wrapper entry points |
+| `gradlew` / `gradlew.bat` | Gradle 9.8.0 wrapper entry points |
 | `run` | Bash launcher for the built Spring Boot jar (`./run -e prod build/libs/app.jar`); handles profile, heap, GC, JDWP (local/dev) and JMX (prod, RMI on the same port), both bound to 127.0.0.1, heap dump, GC log; leaves actuator exposure to the profile YAML. Defaults to `-e local` (only warns: that profile binds HTTP to 127.0.0.1 and may run without signature verification) |
 | `.editorconfig` | Formatting contract enforced by ktlint (120 cols, LF, 4-space indent, wildcard imports allowed) |
 | `.gitmessage` | Korean commit-message template — `<타입> : <제목>`, types: `feat`, `fix`, `docs`, `test`, `refact`, `style`, `chore` |
@@ -43,7 +43,7 @@ flow **application → infrastructure → domain** (and **application → domain
 ## For AI Agents
 
 ### Working In This Directory
-- **Every directory carries an `AGENTS.md`** (232 files). Line 1 points at the nearest parent
+- **Every directory carries an `AGENTS.md`** (234 files). Line 1 points at the nearest parent
   (`<!-- Parent: ../AGENTS.md -->`), line 2 carries `Generated | Updated` dates, and text below the
   `<!-- MANUAL:` marker survives regeneration. When you add a directory, add its `AGENTS.md` and a row in the
   parent's `## Subdirectories` table; when you change a directory's contents, update its file and bump `Updated`.
@@ -57,7 +57,7 @@ flow **application → infrastructure → domain** (and **application → domain
   `slackSdkVersion`, `mockkVersion`, `springMockkVersion`, `springBootVersion`, `jacksonVersion`,
   `kotlinLoggingVersion`, `springAiVersion`). Bump them there, not in module build files. Build scripts read them as
   `val x = extra["x"] as String` (root) / `val x = rootProject.extra["x"] as String` (modules) — the
-  `by extra` delegate is deprecated (Gradle 9.7.1 warns; removal scheduled for Gradle 10) — and reference them
+  `by extra` delegate is deprecated (Gradle 9.7+ warns; removal scheduled for Gradle 10) — and reference them
   as plain `$x` string templates — keep both forms: Dependabot's Gradle parser resolves `$x` against
   `extra["x"] = "…"` / `extra.set("x", "…")` declarations only; an `ext { set(…) }` block,
   `by extra("…")` initialisers and `${rootProject.extra.get("x")}` references are invisible to it.
@@ -102,8 +102,8 @@ Tests run on JUnit Platform with `-Xmx` from the `testMaxHeap` Gradle property (
   AOP/AspectJ, Data JPA
 - Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC — outbox relay
 - MariaDB (runtime, every profile) / H2 (tests only) — persistence
-- Slack Java SDK 1.51.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
-- Jackson 3 (`tools.jackson`, BOM 3.2.2) — serialization, application/infrastructure only
+- Slack Java SDK 1.52.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
+- Jackson 3 (`tools.jackson`, BOM 3.2.3) — serialization, application/infrastructure only
 - Spring AI 2.0.1 (BOM) — MCP server as four modules, not the webmvc starter (streamable HTTP on `/mcp`)
 - Kotest 6.2.5 + MockK 1.14.11 — testing
 - ktlint 14.2.0 — formatting/lint gate
