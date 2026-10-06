@@ -17,4 +17,5 @@ COPY ./build/libs/$JAR_FILE_NAME.jar /app.jar
 
 EXPOSE $SERVER_PORT
 # Heap = 50% of the 2Gi limit in k8s/deployment.yaml (1Gi); the 1536Mi request there covers heap plus non-heap memory.
-ENTRYPOINT exec java -XX:MaxRAMPercentage=50.0 -Dspring.profiles.active=${PROFILE} -Duser.timezone=Asia/Seoul -jar /app.jar
+# ExitOnOutOfMemoryError: Boot's liveness state does not reflect an OOM, so a Pod with a damaged heap would stay Ready.
+ENTRYPOINT exec java -XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError -Dspring.profiles.active=${PROFILE} -Duser.timezone=Asia/Seoul -jar /app.jar
