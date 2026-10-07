@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
 
 # infrastructure/impl
 
@@ -85,8 +85,8 @@ dropped.
   `SourceAdapter` / adapters, `AgentGateway` / `SidecarAgentClient`).
 - Exhaustive `when` over the domain's sealed hierarchies — no `else ->` catch-alls that would swallow a
   newly added variant.
-- KDoc explains the *constraint* behind a design (trigger_id expiry, timeout ownership, dedup key), not
-  the mechanics. Preserve that when editing.
+- No KDoc. A one-line `//` comment stays only for a hidden constraint (an external API quirk, a
+  trigger_id expiry) that no test, type or name pins.
 - JDK `HttpClient` for the sidecar's SSE stream; Spring `RestClient` for ordinary Slack/HTTP calls.
 
 ## Dependencies

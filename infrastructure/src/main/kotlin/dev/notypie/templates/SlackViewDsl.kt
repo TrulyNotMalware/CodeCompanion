@@ -1,6 +1,5 @@
 package dev.notypie.templates
 
-// Preserves insertion order (mutableMapOf → LinkedHashMap); round-trip tests depend on this exact key order.
 @DslMarker
 annotation class SlackViewDsl
 

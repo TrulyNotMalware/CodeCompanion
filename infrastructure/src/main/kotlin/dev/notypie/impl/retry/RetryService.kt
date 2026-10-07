@@ -8,8 +8,7 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 class RetryService {
-    // RetryTemplate.retryPolicy is mutable shared state, so one template per distinct policy: callers on
-    // different threads (relay executor, schedulers, request threads) must never see each other's settings.
+    // RetryTemplate.retryPolicy is mutable shared state; one template per policy keeps threads from swapping it.
     private val templates = ConcurrentHashMap<PolicyKey, RetryTemplate>()
 
     private data class PolicyKey(
@@ -21,7 +20,6 @@ class RetryService {
         val exceptions: Set<Class<out Throwable>>,
     )
 
-    // maxAttempts counts executions in total; Spring's maxRetries counts only the re-executions after the first.
     fun <T> execute(
         action: () -> T,
         recoveryCallBack: (() -> T)? = null,

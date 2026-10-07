@@ -584,7 +584,6 @@ class SlackApiEventConstructor(
                     extractBodyData(
                         chatPostEphemeralRequest =
                             chatPostEphemeralBuilder(
-                                // channel must be the channel id, not a user id, or Slack routes the ephemeral to a DM.
                                 channel = commandBasicInfo.channel,
                                 blocks = layout.template,
                                 idempotencyKey = commandBasicInfo.idempotencyKey,

@@ -77,7 +77,6 @@ private fun packLines(text: String, chunkBudget: Int): List<String> {
             hasLine = true
         }
     if (hasLine) chunks += current.toString()
-    // Slack rejects a section whose text is blank.
     return chunks.filter { it.isNotBlank() }.ifEmpty { listOf(text.takeSafely(limit = chunkBudget)) }
 }
 

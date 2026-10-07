@@ -58,7 +58,6 @@ class CveConfiguration {
         when (val provider = appConfig.ai.provider.lowercase()) {
             "noop" -> NoopAiSummarizer()
             "sidecar" -> {
-                // A call outlasting stuckMinutes lets resetStuck reclaim the row mid-call, double-summarizing it.
                 require(appConfig.ai.stuckMinutes * 60 > appConfig.agent.sidecar.requestTimeoutSeconds) {
                     "slack.app.ai.stuck-minutes (${appConfig.ai.stuckMinutes}m) must exceed " +
                         "slack.app.agent.sidecar.request-timeout-seconds " +
@@ -136,7 +135,6 @@ class CveConfiguration {
         sourceAdapters: List<SourceAdapter>,
         clock: Clock,
     ): CveCollector {
-        // windowMinutes must divide 60 evenly, or bucket boundaries drift across the hour (0 throws).
         val windowMinutes = appConfig.cve.collector.windowMinutes
         require(windowMinutes in 1L..60L && 60L % windowMinutes == 0L) {
             "slack.app.cve.collector.window-minutes ($windowMinutes) must be a divisor of 60 in 1..60"

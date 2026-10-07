@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # application/configurations/conditions
 
@@ -26,9 +26,8 @@ classes in `../ConsumerConfig.kt`.
   to the defaults (`POLLING`, `APPLICATION_EVENT`), not throw during condition evaluation.
 - Every `matches` call re-binds the whole `AppConfig` tree. That is fine at startup (a handful of
   calls) but these classes are not for runtime checks — services get `AppConfig` injected.
-- The KDoc on the classes still talks about a `PublisherType.POOLING` "publisher mode"; the real
-  properties are `slack.app.mode.outbox-reading-strategy` (`OutboxReaderStrategy`) and
-  `slack.app.mode.event-publisher` (`EventPublisherType`). Trust the code, not the comments.
+- The properties read here are `slack.app.mode.outbox-reading-strategy` (`OutboxReaderStrategy`) and
+  `slack.app.mode.event-publisher` (`EventPublisherType`); there is no `PublisherType.POOLING` mode.
 - A new mode is a new `Condition` here plus a `@Conditional(OnXxx::class)` configuration in
   `../ConsumerConfig.kt`; do not add `if (config.mode == ...)` branches inside services.
 

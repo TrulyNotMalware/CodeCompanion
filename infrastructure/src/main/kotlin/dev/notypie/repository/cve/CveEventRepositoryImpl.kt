@@ -118,7 +118,6 @@ open class CveEventRepositoryImpl(
         )
 
     companion object {
-        // Match the cve_event column limits so an over-long feed payload never overflows the insert.
         const val TITLE_MAX_LENGTH = 512
         const val RAW_CONTENT_MAX_LENGTH = 60_000
 

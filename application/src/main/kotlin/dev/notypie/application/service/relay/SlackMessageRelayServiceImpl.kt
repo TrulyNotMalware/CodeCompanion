@@ -96,7 +96,6 @@ class SlackMessageRelayServiceImpl(
 
     override fun isRunning(): Boolean = !stopping
 
-    // Below the Kafka listener phase: a record the CDC container claims while it stops must still be dispatched.
     override fun getPhase(): Int = AbstractMessageListenerContainer.DEFAULT_PHASE - 1
 
     override fun start() {
@@ -124,7 +123,6 @@ class SlackMessageRelayServiceImpl(
         freeSlots.updateAndGet { free -> minOf(free + count, slotCapacity) }
     }
 
-    // Can't use @Async here — self-invocation from this bean would bypass the AOP proxy.
     override fun batchPendingMessages(claims: List<OutboxClaim>) {
         if (stopping) {
             releaseDispatchSlots(count = claims.size)
@@ -151,7 +149,6 @@ class SlackMessageRelayServiceImpl(
         }
     }
 
-    // Keyed on the row's eventId, not the renderer's payload eventId, which is throwaway.
     override fun dispatchClaimed(claim: OutboxClaim) {
         val row = claim.row
         if (stopping) {
@@ -323,7 +320,6 @@ class SlackMessageRelayServiceImpl(
                         status = status.name,
                         now = now(),
                     )
-                // Only in the transaction of the CAS that won, so a retried or taken-over write never stages it twice.
                 if (completed == 1 && next != null) outboxRepository.save(nextRow(row = claim.row, next = next))
                 completed
             },
@@ -349,7 +345,6 @@ class SlackMessageRelayServiceImpl(
 
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
-    // Runs inside the command's tx via BEFORE_COMMIT so the row commits atomically with it.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun saveOutboxMessage(event: OutboundMessageEnqueued) {
         val row =

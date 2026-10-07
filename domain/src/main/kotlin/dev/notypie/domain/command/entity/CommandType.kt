@@ -127,7 +127,6 @@ internal fun CommandDetailType.createContext(
         }
 
         CommandDetailType.STANDUP_SETUP_REQUEST -> {
-            // triggerHandle="" is intentional; SetupStandupCommand sets the real one — this path is a no-op.
             RequestStandupSetupContext(
                 commandBasicInfo = commandBasicInfo,
                 triggerHandle = "",
@@ -143,8 +142,6 @@ internal fun CommandDetailType.createContext(
             )
         }
 
-        // Listed explicitly instead of `else`: a new CommandDetailType must choose a context here or fail to
-        // compile, rather than silently becoming a no-op interaction.
         CommandDetailType.NOTHING,
         CommandDetailType.SIMPLE_TEXT,
         CommandDetailType.REPLACE_TEXT,

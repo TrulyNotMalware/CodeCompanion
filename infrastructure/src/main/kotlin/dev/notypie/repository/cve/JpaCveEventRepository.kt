@@ -51,7 +51,6 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         pageable: Pageable,
     ): List<CveEventSchema>
 
-    // Re-checks retry_count here (not just in findClaimable) so a stale candidate can't revive a dead-lettered row.
     @Modifying
     @Transactional
     @Query(
@@ -71,7 +70,6 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         @Param("maxRetries") maxRetries: Int,
     ): Int
 
-    // Unlike markFailed, this doesn't increment retry_count — a busy-sidecar release must not spend the retry budget.
     @Modifying
     @Transactional
     @Query(
@@ -197,7 +195,6 @@ interface JpaCveEventRepository : JpaRepository<CveEventSchema, Long> {
         pageable: Pageable,
     ): List<CveRecentEvent>
 
-    // Loosening this guard (FAILED AND retryCount >= maxRetries) would revive a row still within its retry budget.
     @Modifying
     @Transactional
     @Query(

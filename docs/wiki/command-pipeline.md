@@ -75,7 +75,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 — 옛 `CommandIntent`는 순수 업무 요청·표현 연산·Slack 라우팅 enum을 한 sealed 타입에 섞은 "god type"이었다.
 
 - **`CommandIntent`**(`intent/CommandIntent.kt`, sealed): 상태를 바꾸거나 저장소를 읽어야 하는 요청(`CancelMeeting`,
-  `RecordStandupAnswer`, `GrantRole`, `AgentConverse` 등). KDoc에 "누가 트리거하고 불변식은 어디서 강제되는가"를 적는다.
+  `RecordStandupAnswer`, `GrantRole`, `AgentConverse` 등).
 - **`OutboundMessage`**(`outbound/OutboundMessage.kt`, sealed): 사용자에게 보이는 결과. `ChannelMessage`, `Ephemeral`,
   `UpdateMessage`, `ReplaceMessage`, `OpenModal`, `Approval`, `Notice`(그리고 `DirectMessage`, §8 참고). 내용은
   `MessageContent`(Text/ErrorNotice/Schedule/Form/MeetingRequest/MeetingList/StandupSummary), 모달은 `ModalForm`.
@@ -160,7 +160,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `parseContext`/`findSubCommandDefinition`, `CommandSet`, `MeetingListRange`, `createContext`는 `internal`이다.
   응용 계층은 `Command`를 만들어 `CommandExecutor`에 넘길 뿐 컨텍스트를 직접 만들 수 없다는 것이 의도이며, 새 배관은
   응용 계층이 정말 필요로 하지 않는 한 `internal`로 둔다.
-- **의도적으로 미룬 누수 두 가지**(`DomainLayeringGuardTest` KDoc, `domain/AGENTS.md`): ① `CommandDetailType` —
+- **의도적으로 미룬 누수 두 가지**(`domain/AGENTS.md`): ① `CommandDetailType` —
   도메인 enum이지만 값 `name`이 아웃박스 컬럼·버튼 값·`private_metadata`에 직렬화되어 Slack까지 나간다. 이름을 바꾸면
   로컬 DB 리셋이 필요하고 이미 게시된 버튼이 `valueOf`에서 깨진다. ② Slack 사용자/팀 id를 업무 식별자로 쓰는 것 —
   문서는 `slackUserId`/`slackTeamId`라 부르지만 현재 소스에 그 이름은 없고 `actorId`/`teamId`/`publisherId` 같은

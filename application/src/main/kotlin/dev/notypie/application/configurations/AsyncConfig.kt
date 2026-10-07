@@ -12,14 +12,12 @@ import java.time.Duration
 import java.util.concurrent.Executor
 import java.util.concurrent.ThreadPoolExecutor
 
-// Destroy-time waits run one after another; k8s/deployment.yaml terminationGracePeriodSeconds must cover their sum.
 const val DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS = 10
 
 val RECORD_SHUTDOWN_WAIT: Duration = Duration.ofSeconds(Math.ceilDiv(RELAY_RECORD_TIME_BOUND.toMillis(), 1_000L))
 
 fun relayQueueCapacity(appConfig: AppConfig): Int = appConfig.outbox.polling.batchSize
 
-// No async multicaster: it would detach @TransactionalEventListener(BEFORE_COMMIT) from the tx.
 @Configuration
 @EnableAsync
 class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE

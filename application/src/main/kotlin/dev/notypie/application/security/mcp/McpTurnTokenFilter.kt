@@ -9,7 +9,6 @@ import java.net.InetAddress
 
 private const val BEARER_PREFIX = "Bearer "
 
-// A proxy adds these; a caller can also forge them to make Jetty report a loopback remoteAddr.
 private val FORWARDING_HEADERS = listOf("Forwarded", "X-Forwarded-For", "X-Real-IP")
 
 // Applies to every request uniformly — do not exempt initialize/tools/list from the token check.

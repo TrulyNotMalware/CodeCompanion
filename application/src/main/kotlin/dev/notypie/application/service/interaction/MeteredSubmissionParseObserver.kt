@@ -7,7 +7,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Component
 
-// Raw form values never reach a tag or log line — keep tags low-cardinality and privacy-safe.
 @Component
 class MeteredSubmissionParseObserver(
     private val meterRegistry: MeterRegistry,

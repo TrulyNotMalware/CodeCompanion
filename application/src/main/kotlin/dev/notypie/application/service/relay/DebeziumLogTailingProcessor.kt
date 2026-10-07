@@ -14,7 +14,6 @@ import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
-// Deterministic: the record can never be processed, so the error handler must not retry it before the DLT.
 class CdcRecordParseException(
     message: String,
     cause: Throwable? = null,
@@ -40,7 +39,6 @@ class DebeziumLogTailingProcessor(
             logger.warn { "Skipping CDC tombstone record." }
             return
         }
-        // No `after` = delete event; non-PENDING = the UPDATE events this processor itself causes.
         val afterImage = envelope.payload.after ?: return
         val snapshot: OutboxMessage =
             try {

@@ -49,7 +49,6 @@ private val sourceBodyWatchdog: ScheduledExecutorService =
         Thread(runnable, "cve-source-body-watchdog").apply { isDaemon = true }
     }
 
-// HttpRequest.timeout() stops at the response headers; a source that stalls mid-body would block the scheduler.
 internal fun HttpClient.sendWithinDeadline(
     request: HttpRequest,
     deadline: Duration,
@@ -84,7 +83,6 @@ internal fun HttpClient.sendWithinDeadline(
     }
 }
 
-// Blanks fold to null (not just JSON null) — GitHub sends "name":"" for tag-only releases; ?: needs this.
 internal fun JsonNode.stringOrNull(): String? =
     if (isValueNode && !isNull && !isMissingNode) asString().takeIf { it.isNotBlank() } else null
 

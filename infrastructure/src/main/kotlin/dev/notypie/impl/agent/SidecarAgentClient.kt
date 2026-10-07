@@ -79,15 +79,12 @@ class SidecarAgentClient(
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream")
                 .apply { request.userId?.let { header("X-User-Id", it) } }
-                // Header, not body: sidecar schema forbids unknown fields, and this keeps the token out of body logs.
                 .apply { request.scopedToken?.let { header("X-Turn-Token", it) } }
                 .POST(HttpRequest.BodyPublishers.ofString(toRequestBody(request = request)))
                 .build()
 
         val startedAt = System.nanoTime()
         val response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream())
-        // HttpRequest.timeout() only covers the wait for response headers; the body is a stream the sidecar
-        // may stall indefinitely, so the same budget is enforced over the whole turn with a watchdog.
         val remaining = requestTimeout.minusNanos(System.nanoTime() - startedAt)
         return withStreamDeadline(stream = response.body(), deadline = remaining) { reader ->
             try {
@@ -133,7 +130,6 @@ class SidecarAgentClient(
         }
     }
 
-    // Hand-built map omits null optionals — the sidecar rejects unknown/extra fields.
     private fun toRequestBody(request: AgentTurnRequest): String {
         val body = mutableMapOf<String, String>("sessionKey" to request.sessionKey, "prompt" to request.prompt)
         request.sessionId?.let { body["sessionId"] = it }
@@ -199,7 +195,6 @@ class SidecarAgentClient(
                 }
             }
         }
-        // Stream may end without a trailing blank line after the terminal frame; flush once more before failing.
         flushFrame()?.let { return it }
         return AgentTurnResult.Failed(
             code = ERROR_CODE_INCOMPLETE_STREAM,

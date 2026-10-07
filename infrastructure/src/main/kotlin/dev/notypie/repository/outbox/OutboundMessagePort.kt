@@ -34,7 +34,6 @@ class CodecOutboundMessagePort : OutboundMessagePort {
             transport = transport.name,
             payload = OutboundMessageCodec.encode(envelope = envelope),
             createdAt = LocalDateTime.now(),
-            // Jackson 3 ignores unknown fields, so a binary without V3 would send the head and drop the rest.
             schemaVersion = if (continuation.isEmpty()) OutboxSchemaVersion.V2 else OutboxSchemaVersion.V3,
         )
     }

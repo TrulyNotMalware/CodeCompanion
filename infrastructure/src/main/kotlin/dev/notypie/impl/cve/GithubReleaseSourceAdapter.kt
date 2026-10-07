@@ -105,7 +105,6 @@ class GithubReleaseSourceAdapter(
             log.error { "GitHub topic=${topic.topicKey} source_config missing 'repo'" }
             return null
         }
-        // repo lands unencoded in the URL path; violating owner/name shape could break URI.create or reshape it.
         if (!REPO_PATTERN.matches(repo)) {
             log.error { "GitHub topic=${topic.topicKey} source_config 'repo' is not owner/name shaped" }
             return null

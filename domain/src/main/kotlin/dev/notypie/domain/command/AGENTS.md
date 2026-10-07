@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
 
 # domain/command
 
@@ -65,9 +65,8 @@ re-building fixtures. Input builders live in `domain/src/testFixtures/kotlin/dev
 ### Common Patterns
 - Sealed classes/interfaces for exhaustive `when` (`CommandIntent`, `OutboundMessage`, `InboundPayload`).
 - `data class` for every DTO; defaults for optional fields rather than overloads.
-- KDoc on each intent/message variant states *who triggers it* and *where the invariant is enforced*
-  (e.g. "host-only authorization enforced atomically by the repository's WHERE clause"). Keep that
-  convention — it is how the enforcement point stays discoverable from the domain side.
+- No KDoc on intent/message variants. Where an invariant is enforced is read from the repository or
+  listener that enforces it and the test that pins it, not from a comment on the domain type.
 - Threading: `OutboundMessage.ChannelMessage.threadId` non-null posts a threaded reply; the thread root
   (`thread ?: message` from a `MentionInvocation`) doubles as the stable conversation id.
 

@@ -36,7 +36,6 @@ class ControllerAdvice : ResponseEntityExceptionHandler() {
             .body(mapOf("error" to "unsupported_command_type"))
     }
 
-    // Slack resends a 5xx up to three times; a payload that cannot be read will not read on the retry either.
     @ExceptionHandler(value = [AppIdNotFoundException::class, InvalidEventPayloadException::class])
     fun handleUnreadablePayload(e: CodeCompanionRuntimeException): ResponseEntity<Map<String, String>> {
         log.warn(e) { "Rejected a Slack payload that cannot be read: ${e.errorCode.message}" }

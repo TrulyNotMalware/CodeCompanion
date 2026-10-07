@@ -68,7 +68,6 @@ class JpaConfiguration {
     fun meetingRepository(jpaMeetingRepository: JpaMeetingRepository, clock: ObjectProvider<Clock>) =
         MeetingRepositoryImpl(
             jpaMeetingRepository = jpaMeetingRepository,
-            // The application declares the Clock bean; infrastructure-only JPA slices have none.
             clock = clock.getIfAvailable { Clock.systemDefaultZone() },
         )
 

@@ -12,7 +12,6 @@ import java.time.Instant
 
 @Repository
 interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Long> {
-    // Joins the session eagerly so the scheduler doesn't re-derive the date from routine tz for other-zone members.
     @Query(
         """
         SELECT d FROM standup_session_dispatch d
@@ -76,7 +75,6 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
         @Param("now") now: Instant,
     ): Int
 
-    // Stored as FAILED + "skipped: " reason, not a new status: the previous release fails on an unknown enum value.
     @Modifying
     @Transactional
     @Query(

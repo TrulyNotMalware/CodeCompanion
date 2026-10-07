@@ -62,8 +62,6 @@ class SlackMentionEventHandlerImpl(
         val appId = resolveAppId(payload = payload)
         val body = convertBodyData(payload = payload)
         resolveCommandType(rawType = body.type)
-        // app_mention callbacks carry no display names (those keys exist only on slash-command form
-        // bodies); blank means "unknown" and consumers fall back to <@id> / <#id> mentions.
         return body.toMentionInboundCommand(
             appId = appId,
             channelName = payload["channel_name"] as? String ?: "",

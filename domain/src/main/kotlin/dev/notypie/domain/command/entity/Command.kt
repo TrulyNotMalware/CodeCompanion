@@ -30,7 +30,6 @@ abstract class Command<T : SubCommandDefinition>(
 
     internal abstract fun findSubCommandDefinition(): T
 
-    // Exceptions become an error reply; an Error or an interrupt is not a command failure and propagates.
     fun handleEvent(): CommandOutput =
         try {
             executeCommand()

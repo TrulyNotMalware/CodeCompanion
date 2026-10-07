@@ -23,7 +23,6 @@ import org.springframework.data.repository.Repository
 
 private val QUOTED_CONSTANT = Regex("""'([A-Z][A-Z_]*)'""")
 
-// Each native query compares one status column against quoted enum names; the SQL is not checked by the compiler.
 private val STATUS_ENUM_BY_REPOSITORY: Map<Class<*>, Class<out Enum<*>>> =
     mapOf(
         MessageOutboxRepository::class.java to MessageStatus::class.java,

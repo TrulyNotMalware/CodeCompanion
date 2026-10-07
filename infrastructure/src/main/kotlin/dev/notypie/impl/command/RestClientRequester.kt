@@ -27,8 +27,6 @@ class RestClientRequester(
         const val BEARER_PREFIX = "Bearer "
     }
 
-    // The explicit factory pins these timeouts; Boot's builder (the bean passes it) adds the observation customizer,
-    // so calls are recorded as http.client.requests.
     private val restClient: RestClient =
         restClientBuilder
             .requestFactory(

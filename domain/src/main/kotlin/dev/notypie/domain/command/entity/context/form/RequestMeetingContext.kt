@@ -92,7 +92,6 @@ internal class RequestMeetingContext(
     }
 
     private fun listArgumentError(commandDetailType: CommandDetailType, message: String): CommandOutput {
-        // Null recipient: chat.postEphemeral requires a channel ID, not a user ID.
         addOutbound(
             OutboundMessage.Ephemeral(
                 target = ConversationTarget(id = commandBasicInfo.channel),
@@ -149,7 +148,6 @@ internal class RequestMeetingContext(
         )
     }
 
-    // isComplete checks the raw interaction — formInput doesn't carry per-field completeness.
     private fun validationErrorOrNull(formInput: MeetingFormInput, interaction: InboundInteraction): CommandOutput? {
         val errorMessage =
             when {
@@ -193,7 +191,6 @@ internal class RequestMeetingContext(
                     subTitle = meeting.title,
                     idempotencyKey = commandBasicInfo.idempotencyKey,
                     publisherId = commandBasicInfo.publisherId,
-                    // Must match runCommand's commandDetailType below so button clicks route back here.
                     commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                 ),
             subCommand = SubCommand.empty(),

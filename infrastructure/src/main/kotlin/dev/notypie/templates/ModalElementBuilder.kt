@@ -80,7 +80,6 @@ class ModalElementBuilder {
                     .build(),
         )
 
-    // PRIMARY style makes SlackInteractionRequestParser classify this click as an APPLY_BUTTON action.
     fun rescheduleMeetingButtonElement(
         buttonName: String,
         interactionPayload: String,

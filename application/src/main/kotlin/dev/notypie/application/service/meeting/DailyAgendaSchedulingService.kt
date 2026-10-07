@@ -50,8 +50,6 @@ class DailyAgendaSchedulingService(
 
         if (localTime.isBefore(sendTime)) return
 
-        // Claim, lookup and outbox writes share one transaction: the claim row must roll back with a
-        // failed enqueue, or the next tick sees the date as taken and today's agenda is never sent.
         val outcome =
             transactionTemplate.runInTx {
                 if (!agendaDispatchRepository.claim(agendaDate = today)) return@runInTx AgendaOutcome.AlreadyClaimed

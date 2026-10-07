@@ -6,7 +6,6 @@ sealed interface ModalForm {
     data class Reschedule(
         val meetingUid: UUID,
         val requesterId: String,
-        // Ferried through the modal's private_metadata; a view_submission carries no channel.
         val channel: ConversationTarget,
     ) : ModalForm
 
@@ -20,7 +19,6 @@ sealed interface ModalForm {
         val sessionUid: UUID,
         val routineUid: UUID,
         val requesterId: String,
-        // Origin notice, so the submission handler can chat.update the original prompt.
         val originNotice: MessageRef,
     ) : ModalForm
 

@@ -17,7 +17,6 @@ data class EventCallbackData(
     val botId: String? = null,
     @field:JsonProperty("bot_profile")
     val botProfile: BotProfile? = null,
-    // ts must stay a String ("1712345678.123456"); it's a message id and a Double round-trip mangles it.
     val ts: String,
     @field:JsonProperty("thread_ts")
     val threadTs: String? = null,

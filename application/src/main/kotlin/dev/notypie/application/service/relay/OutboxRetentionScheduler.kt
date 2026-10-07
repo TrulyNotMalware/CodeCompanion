@@ -26,7 +26,6 @@ class OutboxRetentionScheduler(
             .onFailure { log.error(it) { "Outbox retention purge failed" } }
     }
 
-    // Several batches per tick so a backlog drains in hours, not weeks; still capped so one tick cannot run away.
     fun purgeOnce(): Int {
         val cutoff = LocalDateTime.now(clock).minus(retention)
         var total = 0

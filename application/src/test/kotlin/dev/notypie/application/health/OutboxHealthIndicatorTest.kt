@@ -51,7 +51,7 @@ class OutboxHealthIndicatorTest :
                     result.status shouldBe Status.UP
                     result.details["pendingCount"] shouldBe 0L
                     result.details["stuckPendingCount"] shouldBe 0L
-                    result.details["stuckCount"] shouldBe 0L // legacy alias
+                    result.details["stuckCount"] shouldBe 0L
                     result.details["oldestPendingAgeSeconds"] shouldBe 0L
                     result.details["inFlightCount"] shouldBe 0L
                     result.details["stuckInFlightCount"] shouldBe 0L

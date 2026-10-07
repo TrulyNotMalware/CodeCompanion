@@ -2,7 +2,6 @@ package dev.notypie.templates
 
 import dev.notypie.domain.command.inbound.InboundFieldKeys
 
-// Names must match Slack Block Kit style values exactly (lowercased elsewhere via .toString().lowercase()).
 enum class ButtonType {
     PRIMARY,
     DEFAULT,
@@ -53,13 +52,11 @@ object CveSubscriptionModalIds {
     const val UNSUBSCRIBE_TOPICS_ACTION_ID: String = "cve_unsubscribe_topics_select"
 }
 
-// ACTION_ID stays stable across UI changes (radio_buttons→static_select) so in-flight submissions aren't lost.
 object DeclineReasonModalIds {
     const val CALLBACK_ID: String = "decline_reason_modal"
     const val BLOCK_ID: String = "decline_reason_block"
     const val ACTION_ID: String = "decline_reason_select"
 
-    // block_id is the key Slack's response_action:errors payload uses to attach the "explain" error inline.
     const val DETAIL_BLOCK_ID: String = "decline_reason_detail_block"
     const val DETAIL_ACTION_ID: String = "decline_reason_detail_input"
 }

@@ -17,7 +17,6 @@ class CveSummaryPromptBuilder {
             append(UNTRUSTED_END)
         }
 
-    // Source data containing the fence strings could close the block early and smuggle instructions.
     private fun neutralizeFences(text: String): String =
         text
             .replace(UNTRUSTED_BEGIN, FENCE_REPLACEMENT)

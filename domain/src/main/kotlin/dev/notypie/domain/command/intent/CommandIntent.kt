@@ -13,7 +13,6 @@ sealed class CommandIntent : CommandEffect {
         val endDate: LocalDateTime = LocalDateTime.now().plusWeeks(1L),
     ) : CommandIntent()
 
-    // Persisted via a BEFORE_COMMIT listener bound to the caller's `@Transactional` boundary.
     data class MeetingAttendanceUpdate(
         val meetingIdempotencyKey: UUID,
         val participantUserId: String,
@@ -22,7 +21,6 @@ sealed class CommandIntent : CommandEffect {
         val absentReasonDetail: String? = null,
     ) : CommandIntent()
 
-    // Host-only authorization is enforced atomically by the repository's WHERE clause.
     data class CancelMeeting(
         val meetingUid: UUID,
         val requesterId: String,
@@ -53,7 +51,6 @@ sealed class CommandIntent : CommandEffect {
 
     data object ListRoles : CommandIntent()
 
-    // Runs in an async listener — must never block the inbound thread or its transaction.
     data class AgentConverse(
         val prompt: String,
         val threadId: String?,

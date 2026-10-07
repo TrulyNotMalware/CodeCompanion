@@ -45,7 +45,6 @@ class NvdCveSourceAdapter(
 
     override fun fetch(topic: CveTopic): List<RawSourceEvent> {
         val matchParam = parseMatchParam(topic = topic) ?: return emptyList()
-        // NVD treats offset-free timestamps as UTC; a zoned wall clock would shift the window and silently empty it.
         val now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)
         val query =
             listOf(
@@ -113,7 +112,6 @@ class NvdCveSourceAdapter(
         }
     }
 
-    // Topics are fetched in a fixed order each tick, so without spacing the same topics past the quota fail every time.
     private fun awaitRequestSlot() {
         pacing.withLock {
             val waitNanos = nextRequestAtNanos - System.nanoTime()
@@ -205,11 +203,9 @@ class NvdCveSourceAdapter(
         const val RESULTS_PER_PAGE = 1_000
         const val MAX_PAGES = 10
 
-        // NVD: 5 requests per rolling 30 s without an API key (50 with one); its guidance is 6 s between requests.
         val DEFAULT_REQUEST_INTERVAL: Duration = Duration.ofSeconds(6L)
         private val REFUSED_STATUSES = setOf(403, 429, 503)
 
-        // NVD expects ISO-8601 extended with milliseconds; a bare seconds form is rejected.
         private val NVD_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
     }
 }

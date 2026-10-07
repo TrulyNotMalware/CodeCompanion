@@ -21,7 +21,6 @@ class SnapshotIsolationExceptionTranslator : SQLExceptionTranslator {
             ex.isSnapshotIsolationFailure() ->
                 SnapshotIsolationConflictException(message = "$task; SQL [$sql]; ${ex.message}", cause = ex)
             task.startsWith(HIBERNATE_OPERATION_TASK) -> null
-            // Boot also hands this bean to JdbcTemplate and the JPA transaction path, whose default this is.
             else -> defaultTranslator.translate(task, sql, ex)
         }
 

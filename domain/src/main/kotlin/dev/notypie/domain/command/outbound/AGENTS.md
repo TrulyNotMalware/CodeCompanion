@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/outbound
 
@@ -53,8 +53,7 @@ downstream: `:infrastructure:test --tests '*SlackOutboundStagerTest' --tests '*S
 
 ### Common Patterns
 - Sealed interfaces for exhaustive `when` in the stager and renderer; `data class` per variant.
-- KDoc on each variant says what it maps to on Slack ("On Slack this maps to a `trigger_id`") without
-  naming a Slack type in code.
+- Variants never name a Slack type; the Slack mapping lives in infrastructure's `SlackOutboundRenderer`.
 
 ## Dependencies
 

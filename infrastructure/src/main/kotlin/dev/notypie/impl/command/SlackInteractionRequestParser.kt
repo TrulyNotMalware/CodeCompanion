@@ -46,7 +46,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 userName = viewSubmission.user?.username.orEmpty(),
             )
         val privateMetadata = viewSubmission.view?.privateMetadata.orEmpty()
-        // private_metadata is comma-tokenized (idempotencyKey,type,...routingExtras), same as block_actions.
         val tokens = privateMetadata.split(",").map { it.trim() }
         val idempotencyKey = tokens.getOrNull(0)?.takeIf { it.isNotBlank() } ?: ""
         val type =
@@ -82,7 +81,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
                 .firstOrNull { it.type == ActionElementTypes.STATIC_SELECT }
                 ?.selectedValue
                 .orEmpty()
-        // Synthetic primary action; downstream routing gates on isPrimary() (no real action in view_submission).
         val currentAction =
             States(
                 type = ActionElementTypes.APPLY_BUTTON,
@@ -141,7 +139,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
             )
 
         val currentAction = parseCurrentAction(blockActionPayload.actions)
-        // Slack omits the message section from ephemeral block_actions payloads.
         val botId = if (container.isEphemeral) blockActionPayload.apiAppId else blockActionPayload.message.botId
         val rawEmbeddedText: String =
             when {
@@ -178,7 +175,6 @@ class SlackInteractionRequestParser : InteractionPayloadParser {
         )
     }
 
-    // Only reschedule/add-participant flows carry routingExtras[1] as a delivery channel; others don't.
     private fun recoverDeliveryChannel(type: CommandDetailType, routingExtras: List<String>): String =
         when (type) {
             CommandDetailType.MEETING_RESCHEDULE_SUBMIT,

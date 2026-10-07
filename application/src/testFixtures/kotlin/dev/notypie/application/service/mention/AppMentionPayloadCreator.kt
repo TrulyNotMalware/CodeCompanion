@@ -15,7 +15,6 @@ fun createAppMentionPayload(
     eventTime: String = "1234567890",
     eventContext: String = "ctx",
     isExtSharedChannel: Boolean = false,
-    // A real app_mention callback carries neither key; they exist only on slash-command form bodies.
     userName: String? = null,
     channelName: String? = null,
     publisherId: String = TEST_USER_ID,

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/entity/context/form
 
@@ -59,7 +59,7 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
   over an empty list is `true`, so `RequestMeetingContext.sendNotice` cannot currently return `false`;
   the "Failed to send notice" branch is unreachable until the fan-out reports real failures.
 - Routing token layout (`<idempotencyKey>,<DETAIL_TYPE>,<extra...>`) is documented in
-  `command/inbound/AGENTS.md`; each context's KDoc states which extras it reads.
+  `command/inbound/AGENTS.md`.
 
 ### Testing Requirements
 ```bash

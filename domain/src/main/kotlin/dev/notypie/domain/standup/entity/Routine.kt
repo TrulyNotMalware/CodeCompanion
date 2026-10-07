@@ -41,7 +41,6 @@ class Routine(
                 it <= Duration.ofMinutes(MAX_CUTOFF_MINUTES)
             }
 
-            // Questions are joined with `\n` in persistence and rendered into Slack modal labels.
             questions.forEachIndexed { index, question ->
                 ("questions[$index]" of question).shouldSatisfy("must not be blank") { it.isNotBlank() }
                 ("questions[$index]" of question).shouldSatisfy("must not contain a newline character") {

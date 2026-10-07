@@ -65,7 +65,6 @@ internal class ApprovalCallbackContext(
         )
     }
 
-    // approvalContents.commandDetailType drives routing; this param is only CommandOutput metadata.
     private fun sendNoticeToParticipants(
         commandDetailType: CommandDetailType = this.commandDetailType,
     ): List<CommandOutput> =

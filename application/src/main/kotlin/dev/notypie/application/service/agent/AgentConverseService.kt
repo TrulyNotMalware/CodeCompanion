@@ -113,8 +113,6 @@ class AgentConverseService(
 
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
-    // The AFTER_COMMIT listener runs in afterCompletion, where the committed transaction is still bound: a
-    // REQUIRED template would join it and its outbox write would never commit.
     private val afterCompletionTemplate: TransactionTemplate =
         TransactionTemplate(transactionManager).apply {
             propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
@@ -419,7 +417,6 @@ class AgentConverseService(
             basicInfo = event.payload.responseBasicInfo,
         )
 
-    // A null here means the reply would be silently lost, so we fail fast instead of swallowing it.
     private fun stageReply(message: OutboundMessage, basicInfo: CommandBasicInfo): CommandEvent<EventPayload> =
         checkNotNull(outboundStager.stage(message = message, basicInfo = basicInfo)) {
             "Agent reply failed to stage an outbox event: $message"

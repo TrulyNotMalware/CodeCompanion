@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/meet/entity/enums
 
@@ -9,7 +9,7 @@ The reminder dispatch state machine for `MeetingReminder`: `PENDING → SENDING 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MeetingReminderStatus.kt` | `PENDING` (row materialized, nothing sent), `SENDING` (claimed by one scheduler tick), `SENT` (outbox rows persisted — not "Slack acknowledged"), `FAILED` (terminal; `failureReason` records why). The KDoc is the authoritative description of each transition |
+| `MeetingReminderStatus.kt` | `PENDING` (row materialized, nothing sent), `SENDING` (claimed by one scheduler tick), `SENT` (outbox rows persisted — not "Slack acknowledged"), `FAILED` (terminal; `failureReason` records why). |
 
 ## For AI Agents
 
@@ -37,8 +37,8 @@ State-machine behaviour is specified in `:application:test --tests '*MeetingRemi
 against `MeetingReminderDto`.
 
 ### Common Patterns
-- Plain `enum class` with no payload; the KDoc carries the state diagram. Mirror that KDoc style
-  (`DispatchStatus` in `standup/entity/enums/` is the sibling with identical semantics).
+- Plain `enum class` with no payload (`DispatchStatus` in `standup/entity/enums/` is the sibling with
+  identical semantics).
 
 ## Dependencies
 
