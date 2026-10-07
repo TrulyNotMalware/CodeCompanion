@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # application/service/agent
 
@@ -15,12 +15,14 @@ executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own tr
 queued when the executor's shutdown wait ends is discarded by `AgentTurnExecutor`, and its requester gets the same
 notice (`agent.turns{outcome=discarded}`, WARN log). The notices stop at `AGENT_TURN_DISCARD_BUDGET` (3 s from the
 end of the wait); the turns left then are dropped without a notice (one ERROR log, `agent.turns{outcome=dropped}`
-by their count).
+by their count). `AgentUsageReportService` reads that audit back: `@bot usage [days]` and the MCP tool `get_ai_usage`
+summarise the turns and MCP tool calls of the last N days.
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `AgentConverseService.kt` | `class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, turnExecutor, clock, scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the listener hands `converse` to the bounded `turnExecutor`, so the turn leaves the committing thread) builds `sessionKey = "$channel:$threadId:$publisherId"` (`"$channel:$publisherId"` without a thread or with a blank one), sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts; the answer is cut by `capAnswer` at `MAX_ANSWER_LENGTH` (`CHAIN_TEXT_BUDGET`, 40,000: every part rides in one chain head whose CDC update record must stay within 1 MiB, ending in `TRUNCATION_MARKER`, never splitting a surrogate pair), blank text → `EMPTY_RESPONSE_MESSAGE`, then `splitMessageText` cuts it into at most `MAX_ANSWER_MESSAGES` (8) bodies of `SlackBlockLimits.MESSAGE_BODY_BUDGET` with code fences closed and re-opened across the cut; each body is a thread reply headlined `RESPONSE_HEADLINE`, or `RESPONSE_HEADLINE (i/n)` when there are several, and all of them go out as one `outboundStager.stageInOrder` event (one outbox row; the relay stages each next part after the previous one is recorded)); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` The capped answer goes through `templates/neutralizeBroadcastMentions()` before the split: `<!channel>` / `<!here>` / `<!everyone>` (also echoed from user text or a tool result) stay literal while links, emphasis and `<@user>` mentions keep working. |
+| `AgentUsageReportService.kt` | `class AgentUsageReportService(agentTurnHistoryRepository, mcpToolCallHistoryRepository, outboundStager, eventPublisher, clock)`. `@EventListener handleUsageReport(AgentUsageReportRequestEvent)` stages one `ChannelMessage` headlined `CodeCompanion — AI usage`, typed `AGENT_USAGE_REPORT`, and publishes it, as `OpsStatusService.handleStatusReport` does; a render failure is logged and answered "Failed to read AI usage. Check application logs.". `internal renderReport(days)` (shared with `mcp/DomainReadTools.get_ai_usage`): `since = LocalDateTime.now(clock).minusDays(days)`, then `countByOutcomeSince`, `topRequestersSince(limit = 5)` and `countByToolSince`. No turns and no tool calls → "No AI turns or tool calls in the last N day(s)."; otherwise mrkdwn lines: header with `since` as `yyyy-MM-dd HH:mm`, `• Turns: T (completed X, busy Y, failed Z)` (outcomes present, in enum order; `• Turns: 0` when none), `• Tokens: A in / B out`, `• Avg duration: S.s s` (only with turns), `• Top requesters: <@U> N turn(s), A in / B out; …` and `• MCP tools: tool N outcome, …; …` (each only when non-empty). Counts use `%,d` with `Locale.ENGLISH` |
 
 ## For AI Agents
 
@@ -67,10 +69,12 @@ by their count).
   so the `(i/n)` headline only shows how many there are. Staging the parts as separate rows lets the parallel
   relay post them out of order.
 - Metric names are `internal const` and dashboards depend on the `outcome` / `direction` tags.
+- The usage window is computed from the injected `Clock` (`Clock.systemDefaultZone()`), and `created_at` on both
+  history tables is `@CreationTimestamp` on the JVM clock in the same zone. Changing either zone shifts the window.
 
 ### Testing Requirements
 ```bash
-./gradlew :application:test --tests '*AgentConverseServiceTest*'
+./gradlew :application:test --tests '*AgentConverseServiceTest*' --tests '*AgentUsageReportServiceTest*'
 ```
 `AgentConverseServiceTest` (Kotest `BehaviorSpec`, MockK) stubs `AgentGateway.converse` per outcome, a
 MockK `PlatformTransactionManager` (relaxed `TransactionStatus`, `commit` / `rollback` `just Runs`), a
@@ -94,8 +98,9 @@ minting; build the request event with the domain testFixtures rather than inline
 - `application/configurations/AgentConfiguration` — bean declaration, sidecar client
 - `infrastructure/impl/agent/` — `AgentGateway`, `AgentTurnRequest`, `AgentTurnResult`, `SidecarAgentClient`
 - `infrastructure/repository/agent/` — `AgentSessionRepository`, `AgentTurnHistoryRepository`,
-  `AgentTurnRecord`, `AgentTurnOutcome`
-- `infrastructure/impl/command/SlackIntentResolver` — publishes `AgentConverseRequestEvent`
+  `AgentTurnRecord`, `AgentTurnOutcome`, `AgentTurnOutcomeUsage`, `RequesterTurnUsage`
+- `infrastructure/repository/mcp/` — `McpToolCallHistoryRepository`, `ToolCallUsage`
+- `infrastructure/impl/command/SlackIntentResolver` — publishes `AgentConverseRequestEvent` and `AgentUsageReportRequestEvent`
 - `domain/command/entity/event/` — `AgentConverseRequestEvent`, `AgentConversePayload`, `EventPublisher.publishOne`
 - `domain/command/outbound/` — `OutboundMessage`, `MessageContent`, `ConversationTarget`, `UserRef`, `OutboundMessageStager`
 

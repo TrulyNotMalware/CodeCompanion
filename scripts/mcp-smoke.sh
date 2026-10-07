@@ -6,7 +6,8 @@
 # 1) unauthenticated initialize        → expect 401 from the turn-token filter
 # 2) initialize with a minted token    → expect a server info response
 # 3) tools/list on the same session    → expect get_status / list_meetings / list_roles /
-#                                        list_standups / list_cve_subscriptions / cve_latest
+#                                        list_standups / list_cve_subscriptions / cve_latest /
+#                                        get_ai_usage
 #
 # The token is minted exactly like ScopedTurnTokenCodec does (v1.<b64url(payload)>.<b64url(hmac)>),
 # so this doubles as a wire-compat check of the token format. Pass the probing user's Slack id
@@ -56,12 +57,12 @@ curl -s -o /dev/null -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
   ${session_header[@]+"${session_header[@]}"} \
   "${accept_headers[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 
-echo "3) tools/list (expect all six domain tools)"
+echo "3) tools/list (expect all seven domain tools)"
 tools=$(curl -s -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
   ${session_header[@]+"${session_header[@]}"} \
   "${accept_headers[@]}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
 printf '%s\n' "$tools"
-for tool in get_status list_meetings list_roles list_standups list_cve_subscriptions cve_latest; do
+for tool in get_status list_meetings list_roles list_standups list_cve_subscriptions cve_latest get_ai_usage; do
   grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"$tool\"" <<< "$tools" \
     || { echo "   FAIL: tools/list does not expose $tool"; exit 1; }
 done

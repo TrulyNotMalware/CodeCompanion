@@ -9,6 +9,7 @@ internal enum class CommandSet(
     NOTICE(CommandPermission.OPERATIONS),
     HELP(CommandPermission.BASIC),
     STATUS(CommandPermission.OPERATIONS),
+    USAGE(CommandPermission.OPERATIONS),
     ASK(CommandPermission.AI),
     GRANT(CommandPermission.ADMINISTRATION),
     REVOKE(CommandPermission.ADMINISTRATION),

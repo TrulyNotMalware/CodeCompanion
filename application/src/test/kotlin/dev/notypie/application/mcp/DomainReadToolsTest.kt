@@ -3,6 +3,7 @@ package dev.notypie.application.mcp
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.createScopedTurnToken
+import dev.notypie.application.service.agent.AgentUsageReportService
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
 import dev.notypie.application.service.command.RoleResolution
@@ -56,6 +57,7 @@ class DomainReadToolsTest :
             standupRepository: StandupRepository = mockk(),
             cveSubscriptionService: CveSubscriptionService = mockk(),
             cveLatestQueryService: CveLatestQueryService = mockk(),
+            agentUsageReportService: AgentUsageReportService = mockk(),
             appConfig: AppConfig = AppConfig(),
             auditRepository: McpToolCallHistoryRepository = mockk(relaxed = true),
         ): DomainReadTools {
@@ -74,6 +76,7 @@ class DomainReadToolsTest :
                 standupRepository = standupRepository,
                 cveSubscriptionService = cveSubscriptionService,
                 cveLatestQueryService = cveLatestQueryService,
+                agentUsageReportService = agentUsageReportService,
                 appConfig = appConfig,
                 clock = fixedClock,
             )
@@ -105,6 +108,72 @@ class DomainReadToolsTest :
                 then("dispatch is denied by the gate") {
                     result.isError shouldBe true
                     result.text() shouldContain "permission"
+                }
+            }
+        }
+
+        given("get_ai_usage") {
+            fun auditedArguments(auditRepository: McpToolCallHistoryRepository): String? {
+                val recorded = slot<McpToolCallRecord>()
+                verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
+                return recorded.captured.argumentsJson
+            }
+
+            `when`("called by a developer without a window") {
+                val agentUsageReportService = mockk<AgentUsageReportService>()
+                every { agentUsageReportService.renderReport(days = 7) } returns "usage-report"
+                val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
+                val result =
+                    toolsWith(
+                        role = UserRole.DEVELOPER,
+                        agentUsageReportService = agentUsageReportService,
+                        auditRepository = auditRepository,
+                    ).getAiUsage(days = null, context = requestContext)
+
+                then("the default 7-day report is returned verbatim and audited") {
+                    result.isError shouldBe false
+                    result.text() shouldBe "usage-report"
+                    auditedArguments(auditRepository = auditRepository) shouldBe """{"days":7}"""
+                }
+            }
+
+            `when`("called by a developer with an out-of-range window") {
+                val agentUsageReportService = mockk<AgentUsageReportService>()
+                every { agentUsageReportService.renderReport(days = any()) } returns "usage-report"
+                val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
+                toolsWith(
+                    role = UserRole.DEVELOPER,
+                    agentUsageReportService = agentUsageReportService,
+                    auditRepository = auditRepository,
+                ).getAiUsage(days = 365, context = requestContext)
+
+                then("the window is clamped to 90 days before delegating and auditing") {
+                    verify(exactly = 1) { agentUsageReportService.renderReport(days = 90) }
+                    auditedArguments(auditRepository = auditRepository) shouldBe """{"days":90}"""
+                }
+            }
+
+            `when`("called by a developer with a non-positive window") {
+                val agentUsageReportService = mockk<AgentUsageReportService>()
+                every { agentUsageReportService.renderReport(days = any()) } returns "usage-report"
+                toolsWith(role = UserRole.DEVELOPER, agentUsageReportService = agentUsageReportService)
+                    .getAiUsage(days = 0, context = requestContext)
+
+                then("the window is clamped up to 1 day") {
+                    verify(exactly = 1) { agentUsageReportService.renderReport(days = 1) }
+                }
+            }
+
+            `when`("called by a plain user") {
+                val agentUsageReportService = mockk<AgentUsageReportService>()
+                val result =
+                    toolsWith(role = UserRole.USER, agentUsageReportService = agentUsageReportService)
+                        .getAiUsage(days = 7, context = requestContext)
+
+                then("dispatch is denied by the gate and the report is never rendered") {
+                    result.isError shouldBe true
+                    result.text() shouldContain "permission"
+                    verify(exactly = 0) { agentUsageReportService.renderReport(days = any()) }
                 }
             }
         }

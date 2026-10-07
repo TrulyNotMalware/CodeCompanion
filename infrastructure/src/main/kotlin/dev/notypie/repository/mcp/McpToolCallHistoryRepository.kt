@@ -2,6 +2,7 @@ package dev.notypie.repository.mcp
 
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.mcp.schema.McpToolCallOutcome
+import java.time.LocalDateTime
 
 data class McpToolCallRecord(
     val toolName: String,
@@ -15,6 +16,14 @@ data class McpToolCallRecord(
     val durationMs: Long,
 )
 
+data class ToolCallUsage(
+    val toolName: String,
+    val outcome: McpToolCallOutcome,
+    val calls: Long,
+)
+
 interface McpToolCallHistoryRepository {
     fun record(call: McpToolCallRecord)
+
+    fun countByToolSince(since: LocalDateTime): List<ToolCallUsage>
 }

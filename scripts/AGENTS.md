@@ -9,7 +9,7 @@ Operational shell probes run by hand against a live application — not part of 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `mcp-smoke.sh` | Smoke-probes the MCP domain-tools endpoint: (1) unauthenticated `initialize` must return 401, (2) `initialize` with a minted token must return HTTP 200 with a `serverInfo` result, (3) `tools/list` on that session must expose `get_status`, `list_meetings`, `list_roles`, `list_standups`, `list_cve_subscriptions`, `cve_latest` (each matched as a `"name"` value). Each step exits 1 with a `FAIL:` line on a mismatch; the last line is `OK: all three steps passed` |
+| `mcp-smoke.sh` | Smoke-probes the MCP domain-tools endpoint: (1) unauthenticated `initialize` must return 401, (2) `initialize` with a minted token must return HTTP 200 with a `serverInfo` result, (3) `tools/list` on that session must expose `get_status`, `list_meetings`, `list_roles`, `list_standups`, `list_cve_subscriptions`, `cve_latest`, `get_ai_usage` (each matched as a `"name"` value). Each step exits 1 with a `FAIL:` line on a mismatch; the last line is `OK: all three steps passed` |
 
 ## For AI Agents
 

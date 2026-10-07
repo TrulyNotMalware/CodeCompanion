@@ -6,7 +6,7 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.CommandSet
 import dev.notypie.domain.command.entity.context.AgentChatContext
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.context.CveOpsContext
+import dev.notypie.domain.command.entity.context.IntentContext
 import dev.notypie.domain.command.entity.context.NoticeContext
 import dev.notypie.domain.command.entity.context.RoleManagementContext
 import dev.notypie.domain.command.entity.context.StatusContext
@@ -41,6 +41,7 @@ internal class AppMentionContextParser(
             • `@CodeCompanion notice @user1 @user2 <message>` — send a notice
             • `@CodeCompanion help` — show this help
             • `@CodeCompanion status` — show outbox lag and in-flight counts
+            • `@CodeCompanion usage [days]` — AI turn and tool-call usage for the last N days (default 7)
             • `@CodeCompanion ask <question>` — ask the AI assistant (replies in a thread; mention again in the thread to continue)
             • `@CodeCompanion grant @user <user|ai_user|developer|admin>` — grant a role (admin only)
             • `@CodeCompanion revoke @user` — remove a role grant (admin only)
@@ -50,7 +51,7 @@ internal class AppMentionContextParser(
             • `@CodeCompanion cve retry all|<event-id>` — re-queue dead-letter summaries (admin only)
 
             Anything that isn't a command above is treated as `ask`.
-            `status`, `notice` and `ask` require a granted role — ask an admin if you need access.
+            `status`, `usage`, `notice` and `ask` require a granted role — ask an admin if you need access.
             """.trimIndent()
 
         internal const val GRANT_USAGE: String =
@@ -64,6 +65,13 @@ internal class AppMentionContextParser(
         internal const val CVE_USAGE: String =
             "Usage: `@CodeCompanion cve topics` · `cve topic activate|deactivate <topic-key>` · " +
                 "`cve retry all|<event-id>`."
+
+        internal const val USAGE_USAGE: String =
+            "Usage: `@CodeCompanion usage [days]` — days between 1 and 90, default 7."
+
+        private const val DEFAULT_USAGE_DAYS: Int = 7
+
+        private val USAGE_DAYS_RANGE: IntRange = 1..90
     }
 
     override fun parseContext(idempotencyKey: UUID): CommandContext<NoSubCommands> {
@@ -97,6 +105,8 @@ internal class AppMentionContextParser(
                 )
             }
 
+            CommandSet.USAGE -> usageReportContext()
+
             CommandSet.ASK -> agentChatContext(prompt = agentPrompt(dropCommandWord = true))
 
             CommandSet.GRANT -> grantRoleContext()
@@ -119,23 +129,39 @@ internal class AppMentionContextParser(
     private fun cveOpsContext(): CommandContext<NoSubCommands> {
         val tokens = mention.commandTokens
         return when {
-            tokens.size == 2 && tokens[1] == "topics" -> cveContext(intent = CommandIntent.CveListTopics)
+            tokens.size == 2 && tokens[1] == "topics" -> intentContext(intent = CommandIntent.CveListTopics)
             tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "activate" ->
-                cveContext(intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = true))
+                intentContext(
+                    intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = true),
+                )
             tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "deactivate" ->
-                cveContext(intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = false))
+                intentContext(
+                    intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = false),
+                )
             tokens.size == 3 && tokens[1] == "retry" && tokens[2] == "all" ->
-                cveContext(intent = CommandIntent.CveRetryDeadLetters)
+                intentContext(intent = CommandIntent.CveRetryDeadLetters)
             tokens.size == 3 && tokens[1] == "retry" -> {
                 val eventId = tokens[2].toLongOrNull() ?: return usageContext(usage = CVE_USAGE)
-                cveContext(intent = CommandIntent.CveRetryDeadLetter(eventId = eventId))
+                intentContext(intent = CommandIntent.CveRetryDeadLetter(eventId = eventId))
             }
             else -> usageContext(usage = CVE_USAGE)
         }
     }
 
-    private fun cveContext(intent: CommandIntent): CveOpsContext =
-        CveOpsContext(
+    private fun usageReportContext(): CommandContext<NoSubCommands> {
+        val tokens = mention.commandTokens
+        val days =
+            when (tokens.size) {
+                1 -> DEFAULT_USAGE_DAYS
+                2 -> tokens[1].toIntOrNull()
+                else -> null
+            }
+        if (days == null || days !in USAGE_DAYS_RANGE) return usageContext(usage = USAGE_USAGE)
+        return intentContext(intent = CommandIntent.AgentUsageReport(days = days))
+    }
+
+    private fun intentContext(intent: CommandIntent): IntentContext =
+        IntentContext(
             intent = intent,
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             intents = intents,

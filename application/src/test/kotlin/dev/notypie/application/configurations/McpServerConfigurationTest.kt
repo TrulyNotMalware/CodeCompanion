@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.service.agent.AgentUsageReportService
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
 import dev.notypie.application.service.cve.query.CveLatestQueryService
@@ -44,6 +45,7 @@ class McpServerConfigurationTest :
                 .withBean(StandupRepository::class.java, { mockk(relaxed = true) })
                 .withBean(CveSubscriptionService::class.java, { mockk(relaxed = true) })
                 .withBean(CveLatestQueryService::class.java, { mockk(relaxed = true) })
+                .withBean(AgentUsageReportService::class.java, { mockk(relaxed = true) })
                 .withPropertyValues("slack.app.mcp.enabled=true", "slack.app.mcp.signing-secret=mcp-test-secret")
 
         given("the MCP server enabled") {

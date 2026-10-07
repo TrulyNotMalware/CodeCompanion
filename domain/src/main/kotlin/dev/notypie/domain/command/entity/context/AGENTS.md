@@ -17,7 +17,7 @@ live in `form/`.
 | `AgentChatContext.kt` | `@bot ask` / free text → `CommandIntent.AgentConverse` (`AGENT_CONVERSE`); blank prompt → error ephemeral `EMPTY_PROMPT_MESSAGE` |
 | `StatusContext.kt` | `@bot status` → `CommandIntent.StatusReport` (`STATUS_REPORT`) |
 | `RoleManagementContext.kt` | `grant` / `revoke` / `roles` — forwards the intent the parser built (`SIMPLE_TEXT`) |
-| `CveOpsContext.kt` | `cve ...` admin mentions — forwards the intent the parser built (`SIMPLE_TEXT`) |
+| `IntentContext.kt` | Queues the one intent the parser built (`SIMPLE_TEXT`): `cve ...` admin mentions and `usage [days]` (`AgentUsageReport`) |
 | `NoticeContext.kt` | `notice @u1 @u2 text` → `OutboundMessage.Notice(mentions, message)` (`SIMPLE_TEXT`) |
 | `TextResponseContext.kt` | Channel message with headline "Simple Text Response" (`SIMPLE_TEXT`) — help, usage, permission-denied, "Command Not supported." |
 | `EphemeralTextResponseContext.kt` | `ResponseContext`; ephemeral text, `isOk` selects `success` / `fail` |
@@ -38,7 +38,7 @@ live in `form/`.
   `Command.executeCommand` throws `UNSUPPORTED_COMMAND_TYPE` if an interaction reaches a context that
   is not a `ReactionContext`.
 - Contexts never call a repository, an HTTP client, or the agent backend. `StatusContext`,
-  `RoleManagementContext`, `CveOpsContext` and `AgentChatContext` exist only to queue an intent; the
+  `RoleManagementContext`, `IntentContext` and `AgentChatContext` exist only to queue an intent; the
   listener that owns the resource does the work and replies. Keep new behaviour on that side of the line.
 - `createErrorResponse` both queues an ephemeral and returns `fail` — the ephemeral is delivered even
   though `ok == false`. `recipient = null` on those ephemerals is deliberate (the addressee is resolved
@@ -60,7 +60,7 @@ Specs mirror file names under `domain/src/test/kotlin/dev/notypie/domain/command
 `EphemeralTextContextTest`, `NoticeContextTest`, `ReplaceMessageContextTest`,
 `TextResponseContextTest`. Extend `AbstractCommandContextTest` (or
 `AbstractReactionCommandContextTest`) and assert on the drained queue. `StatusContext`,
-`RoleManagementContext` and `CveOpsContext` have no dedicated spec; they are covered through
+`RoleManagementContext` and `IntentContext` have no dedicated spec; they are covered through
 `AppMentionContextParserTest`.
 
 ### Common Patterns

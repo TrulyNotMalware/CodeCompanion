@@ -1,6 +1,7 @@
 package dev.notypie.application.mcp
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.agent.AgentUsageReportService
 import dev.notypie.application.service.command.RoleManagementService
 import dev.notypie.application.service.cve.ops.CVE_FEATURE_DISABLED_MESSAGE
 import dev.notypie.application.service.cve.query.CveLatestQueryService
@@ -23,6 +24,8 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private const val DEFAULT_DAYS_AHEAD = 7
+private const val DEFAULT_USAGE_DAYS = 7
+private const val MAX_USAGE_DAYS = 90
 private val MEETING_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val ROUTINE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -34,6 +37,7 @@ class DomainReadTools(
     private val standupRepository: StandupRepository,
     private val cveSubscriptionService: CveSubscriptionService,
     private val cveLatestQueryService: CveLatestQueryService,
+    private val agentUsageReportService: AgentUsageReportService,
     private val appConfig: AppConfig,
     private val clock: Clock,
 ) {
@@ -47,6 +51,26 @@ class DomainReadTools(
             toolName = "get_status",
             requiredPermission = CommandPermission.OPERATIONS,
         ) { opsStatusService.renderReport() }
+
+    @McpTool(
+        name = "get_ai_usage",
+        description = "Summarise AI turns and MCP tool calls over the last N days (default 7, max 90).",
+    )
+    fun getAiUsage(
+        @McpToolParam(
+            description = "How many days back to include, 1..90. Defaults to 7.",
+            required = false,
+        ) days: Int?,
+        context: McpSyncRequestContext,
+    ): CallToolResult {
+        val window = (days ?: DEFAULT_USAGE_DAYS).coerceIn(minimumValue = 1, maximumValue = MAX_USAGE_DAYS)
+        return mcpToolGate.execute(
+            transportContext = context.transportContext(),
+            toolName = "get_ai_usage",
+            requiredPermission = CommandPermission.OPERATIONS,
+            argumentsSummary = """{"days":$window}""",
+        ) { agentUsageReportService.renderReport(days = window) }
+    }
 
     @McpTool(
         name = "list_meetings",

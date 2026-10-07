@@ -2,6 +2,7 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
@@ -135,6 +136,27 @@ class SlackIntentResolverTest :
                     event.shouldBeInstanceOf<StatusReportRequestEvent>()
                     event.idempotencyKey shouldBe basicInfo.idempotencyKey
                     event.type shouldBe CommandDetailType.STATUS_REPORT
+                    event.payload.responseBasicInfo shouldBe basicInfo
+                }
+            }
+        }
+
+        given("AgentUsageReport intent") {
+            `when`("@bot usage 30 fires the AgentUsageReport intent") {
+                val events =
+                    resolver.resolveAll(
+                        intents = listOf(CommandIntent.AgentUsageReport(days = 30)),
+                        basicInfo = basicInfo,
+                    )
+
+                then("produces an internal AgentUsageReportRequestEvent carrying the window") {
+                    events shouldHaveSize 1
+                    val event = events.first()
+                    event.shouldBeInstanceOf<AgentUsageReportRequestEvent>()
+                    event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    event.type shouldBe CommandDetailType.AGENT_USAGE_REPORT
+                    event.isInternal shouldBe true
+                    event.payload.days shouldBe 30
                     event.payload.responseBasicInfo shouldBe basicInfo
                 }
             }

@@ -40,6 +40,10 @@ sealed class CommandIntent : CommandEffect {
 
     data object StatusReport : CommandIntent()
 
+    data class AgentUsageReport(
+        val days: Int,
+    ) : CommandIntent()
+
     data class GrantRole(
         val targetUserId: String,
         val role: UserRole,

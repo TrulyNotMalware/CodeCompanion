@@ -5,6 +5,7 @@ import dev.notypie.application.mcp.McpToolGate
 import dev.notypie.application.security.mcp.McpTurnTokenFilter
 import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
+import dev.notypie.application.service.agent.AgentUsageReportService
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
 import dev.notypie.application.service.cve.query.CveLatestQueryService
@@ -61,6 +62,7 @@ class McpServerConfiguration {
         standupRepository: StandupRepository,
         cveSubscriptionService: CveSubscriptionService,
         cveLatestQueryService: CveLatestQueryService,
+        agentUsageReportService: AgentUsageReportService,
         appConfig: AppConfig,
         clock: Clock,
     ): DomainReadTools =
@@ -72,6 +74,7 @@ class McpServerConfiguration {
             standupRepository = standupRepository,
             cveSubscriptionService = cveSubscriptionService,
             cveLatestQueryService = cveLatestQueryService,
+            agentUsageReportService = agentUsageReportService,
             appConfig = appConfig,
             clock = clock,
         )

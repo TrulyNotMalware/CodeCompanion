@@ -54,7 +54,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - **`CommandContext<T>`**(`entity/context/`, internal)는 `commandBasicInfo`·`subCommand`·`intents`를 받고 효과를
   `addIntent()`/`addOutbound()`로 큐에 넣기만 한다. `createErrorResponse`는 에러 `Ephemeral`을 큐에 넣고 `fail`
   출력을 돌려준다. 인터랙션을 받는 컨텍스트는 `ReactionContext` 하위뿐이며, 아니면 `UnSupportedCommandException`이다.
-- **기능별 컨텍스트**: 멘션 → `Notice/ApprovalForm/TextResponse/Status/AgentChat/RoleManagement/CveOpsContext`;
+- **기능별 컨텍스트**: 멘션 → `Notice/TextResponse/Status/AgentChat/RoleManagement/IntentContext`
+  (`IntentContext`는 인텐트 하나만 큐에 넣는 범용 컨텍스트로 `cve …`와 `usage [days]`가 함께 쓴다);
   슬래시 → `RequestMeeting/RequestStandupSetup/RequestCve*Context`; 모달 제출 → `context/form/*SubmissionContext`.
   비제출 인터랙션 → 컨텍스트 매핑은 `CommandDetailType.createContext()`(`entity/CommandType.kt`), 미매핑은 `EmptyContext`.
 - **제출 라우팅(2026-09-21, Phase 11)**: `view_submission`은 `SubmissionRouter`(`entity/SubmissionRouting.kt`)가

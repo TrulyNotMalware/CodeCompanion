@@ -137,6 +137,22 @@ data class StatusReportRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<StatusReportPayload>
 
+class AgentUsageReportPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val days: Int,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class AgentUsageReportRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = AgentUsageReportRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: AgentUsageReportPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<AgentUsageReportPayload>
+
 enum class RoleManageAction {
     GRANT,
     REVOKE,

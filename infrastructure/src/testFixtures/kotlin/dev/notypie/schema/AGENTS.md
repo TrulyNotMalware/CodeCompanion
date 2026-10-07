@@ -1,10 +1,10 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/schema
 
 ## Purpose
-Builders for JPA schema rows and repository records in the meeting and CVE lanes. `@DataJpaTest` specs persist
+Builders for JPA schema rows and repository records in the meeting, CVE and AI-usage lanes. `@DataJpaTest` specs persist
 the schema builders on H2; `*ImplTest` and `:application` specs use the record builders as mocked-repository
 return values. No standup or outbox builders exist here.
 
@@ -15,6 +15,7 @@ return values. No standup or outbox builders exist here.
 | `OutboxMessageCreator.kt` | `createOutboxMessage(eventId = random, idempotencyKey = random, publisherId = TEST_USER_ID, payload = "{}", createdAt = now, status = PENDING)` — a real `OutboxMessage` row (not a mock) for `@DataJpaTest` specs; `status` is applied through `updateMessageStatus` because the column is not a constructor parameter; `createOutboxColumnMap(eventId, createdAt, updatedAt?)` — the snake_case column map a Debezium after-image carries, for `toOutboxMessage()` specs |
 | `CveTopicCreator.kt` | `createCveTopicSchema(id = 0, topicKey = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)`; `createCveTopicDefinition(...)` same fields minus `id`; `createCveTopic(id = 1, ...)` record; `createCveSubscriptionSchema(id = 0, userId = "U_SUBSCRIBER", topicId = 1)`; `createCveDeliverySchema(id = 0, eventId = 1, userId = "U_SUBSCRIBER", status = SENT)` |
 | `CveEventCreator.kt` | `createCveEvent(id = 1, topicId = 1, externalId = "CVE-2026-0001", title, rawContent, aiSummary = null, summaryStatus = PENDING, retryCount = 0)` record; `createCveEventSchema(id = 0, topicId, externalId, title, rawContent, aiSummary, summaryStatus, claimToken = null, retryCount = 0, nextAttemptAt = null, publishedAt = null)`; `createRawSourceEvent(externalId = "R-0001", title, rawContent, publishedAt = null)` (`impl/cve/RawSourceEvent`); `createCveRecentEvent(topicDisplayName = "Java CVE", title, aiSummary = "Sample summary")`; `createUndeliveredCveEvent(eventId = 1, userId = "U_SUBSCRIBER", topicKey = "cve-java", topicDisplayName, title, aiSummary)` `createNvdPageJson(cveIds, totalResults)`: an NVD 2.0 response page with `totalResults` and one minimal vulnerability per id. |
+| `UsageHistoryCreator.kt` | Rows: `createAgentTurnHistorySchema(id = 0, sessionKey = "thread-1", requesterId = TEST_USER_ID, channel = TEST_CHANNEL_ID, idempotencyKey = random, outcome = COMPLETED, errorCode = null, inputTokens = 100, outputTokens = 10, durationMs = 1000)`; `createMcpToolCallHistorySchema(id = 0, toolName = "get_status", requesterId = TEST_USER_ID, sessionKey = "thread-1", turnId = random, resolvedRole = DEVELOPER, outcome = COMPLETED, errorCode = null, argumentsJson = null, durationMs = 50)`. Records: `createAgentTurnOutcomeUsage(outcome = COMPLETED, turns = 1, inputTokens = 100, outputTokens = 10, totalDurationMs = 1000)`, `createRequesterTurnUsage(requesterId = TEST_USER_ID, turns = 1, inputTokens = 100, outputTokens = 10)`, `createToolCallUsage(toolName = "get_status", outcome = COMPLETED, calls = 1)` |
 
 ## For AI Agents
 
@@ -22,6 +23,8 @@ return values. No standup or outbox builders exist here.
 - **Schema builders default `id = 0`** (IDENTITY assigns on save); record builders default `id = 1`. Pass an
   explicit `id` to a schema builder only in mapping specs that simulate a persisted row — never when the row
   will be saved on H2.
+- The two history builders take no `createdAt`: `@CreationTimestamp` overwrites any constructor value on insert.
+  Window specs age a row with a JDBC `UPDATE … SET created_at` after `persistAndFlush`.
 - **Unique keys are the caller's job.** `createCveTopicSchema` always says `"cve-java"` and
   `createCveEventSchema` always says `"CVE-2026-0001"`; `@DataJpaTest` rows persist across blocks, so every
   H2 spec must override `topicKey` / `externalId` / `userId` per block or hit the unique constraints.
@@ -29,8 +32,8 @@ return values. No standup or outbox builders exist here.
   block (`TEST_USER_ID + n`); prefer it over hand-building user ids in H2 specs.
 - `createParticipants(meeting = ...)` sets only the child side; add the row to `meeting.participants`
   yourself (or use `createMeetingSchemaWithParticipant`) so the cascade persists it.
-- Record builders (`createCveEvent`, `createCveTopic`, `createCveRecentEvent`, `createRawSourceEvent`) are
-  consumed mainly from `:application`; `createUndeliveredCveEvent` is used on both sides.
+- Record builders (`createCveEvent`, `createCveTopic`, `createCveRecentEvent`, `createRawSourceEvent`, the three
+  usage records) are consumed mainly from `:application`; `createUndeliveredCveEvent` is used on both sides.
 - Missing here: `RoutineSchema` / `StandupSessionSchema` builders (the standup lane has no repository spec)
   and any `OutboxMessage` builder (`CodecOutboundMessagePort.toRow` is used directly instead).
 
@@ -53,6 +56,8 @@ schema builders; a builder default that violates a column constraint fails there
 - `infrastructure/src/main/kotlin/dev/notypie/repository/meeting/schema/` — `MeetingSchema`, `ParticipantsSchema`
 - `infrastructure/src/main/kotlin/dev/notypie/repository/cve/` (+ `schema/`) — records, `CveTopicDefinition`,
   schema classes and enums
+- `infrastructure/src/main/kotlin/dev/notypie/repository/agent/` and `repository/mcp/` (+ `schema/`) — history schemas,
+  outcome enums and usage aggregate records; `domain/command/authorization/UserRole`
 - `infrastructure/src/main/kotlin/dev/notypie/impl/cve/RawSourceEvent`
 - `domain/meet/entity/RejectReason`; `domain/src/testFixtures/.../Constants.kt`
 

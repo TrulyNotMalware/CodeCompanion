@@ -13,6 +13,8 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
+import dev.notypie.domain.command.entity.event.AgentUsageReportPayload
+import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import dev.notypie.domain.command.entity.event.CveLatestPayload
@@ -120,6 +122,16 @@ fun createAgentConverseRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.AGENT_CONVERSE,
+)
+
+fun createAgentUsageReportRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    days: Int = 7,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = AgentUsageReportRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload = AgentUsageReportPayload(days = days, responseBasicInfo = responseBasicInfo),
+    type = CommandDetailType.AGENT_USAGE_REPORT,
 )
 
 fun createRoleManageRequestEvent(
