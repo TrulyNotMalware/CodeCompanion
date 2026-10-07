@@ -18,6 +18,8 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
+internal const val CVE_FEATURE_DISABLED_MESSAGE = "The CVE feature is currently disabled."
+
 @Service
 class CveOpsService(
     private val appConfig: AppConfig,
@@ -28,7 +30,6 @@ class CveOpsService(
 ) {
     companion object {
         private const val RESPONSE_HEADLINE = "CodeCompanion — CVE operations"
-        private const val FEATURE_DISABLED_MESSAGE = "The CVE feature is currently disabled."
     }
 
     private val maxRetries: Int = appConfig.ai.maxRetries
@@ -39,7 +40,7 @@ class CveOpsService(
         val payload = event.payload
         val text =
             if (!appConfig.cve.enabled) {
-                FEATURE_DISABLED_MESSAGE
+                CVE_FEATURE_DISABLED_MESSAGE
             } else {
                 when (payload.action) {
                     CveOpsAction.LIST_TOPICS -> renderTopics()

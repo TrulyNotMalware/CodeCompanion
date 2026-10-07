@@ -9,7 +9,7 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Standup Automation** — Schedule recurring standups, collect answers, and post summaries.
 - **AI Assistant** — `@bot ask <question>` runs one agent turn against a claude/codex sidecar (HTTP+SSE) and replies in a thread; mentioning again in the thread continues the same session.
 - **CVE Watch** — Watched topics are polled from external sources (NVD, GitHub Releases) on a schedule, summarized once each by the AI lane, then delivered to subscribers as an immediate DM or a daily digest. Admins manage topics in-chat with `@bot cve ...`.
-- **MCP Server** — A role-gated Model Context Protocol endpoint (`/mcp`, streamable HTTP) exposing read-only domain tools (`get_status`, `list_meetings`, `list_roles`) to the AI agent, authenticated per turn and audited to `mcp_tool_call_history`.
+- **MCP Server** — A role-gated Model Context Protocol endpoint (`/mcp`, streamable HTTP) exposing read-only domain tools (`get_status`, `list_meetings`, `list_roles`, `list_standups`, `list_cve_subscriptions`, `cve_latest`) to the AI agent, authenticated per turn and audited to `mcp_tool_call_history`.
 - **Role-Based Access Control** — Commands are gated by per-user roles (`user` → `ai_user` → `developer` → `admin`) stored in `user_command_role`; admins manage grants in-chat via `@bot grant / revoke / roles`, and bootstrap admins come from configuration.
 - **Event-Driven Architecture** — Asynchronous processing over Kafka with a **transactional outbox** and **Debezium-driven CDC relay** for durable, at-least-once delivery with idempotent consumers (see `docs/wiki/events-and-outbox.md` for the exact guarantees).
 - **Turn Auditing** — Every AI turn is persisted to `agent_turn_history` (token usage, duration, outcome) for cost tracking and debugging.
@@ -159,7 +159,7 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **스탠드업 자동화** — 반복 스탠드업 스케줄링, 응답 수집, 요약 게시
 - **AI 어시스턴트** — `@bot ask <질문>`이 claude/codex 사이드카(HTTP+SSE)로 에이전트 턴을 실행하고 스레드로 응답. 같은 스레드에서 재멘션하면 세션이 이어짐
 - **CVE 감시** — 등록된 토픽을 외부 소스(NVD, GitHub Releases)에서 주기적으로 수집하고, AI 레인이 이벤트당 정확히 한 번 요약한 뒤, 구독자에게 즉시 DM 또는 일일 다이제스트로 전달. 관리자는 `@bot cve ...`로 채팅에서 토픽을 관리
-- **MCP 서버** — 역할로 게이트되는 Model Context Protocol 엔드포인트(`/mcp`, streamable HTTP)로 읽기 전용 도메인 도구(`get_status`, `list_meetings`, `list_roles`)를 AI 에이전트에 노출. 턴 단위로 인증하고 `mcp_tool_call_history`에 감사 기록
+- **MCP 서버** — 역할로 게이트되는 Model Context Protocol 엔드포인트(`/mcp`, streamable HTTP)로 읽기 전용 도메인 도구(`get_status`, `list_meetings`, `list_roles`, `list_standups`, `list_cve_subscriptions`, `cve_latest`)를 AI 에이전트에 노출. 턴 단위로 인증하고 `mcp_tool_call_history`에 감사 기록
 - **역할 기반 접근 제어** — 사용자별 역할(`user` → `ai_user` → `developer` → `admin`, `user_command_role` 테이블)로 명령을 게이트. 관리자는 `@bot grant / revoke / roles`로 채팅에서 직접 권한을 관리하고, 부트스트랩 관리자는 설정으로 지정
 - **이벤트 기반 아키텍처** — Kafka 비동기 처리 + **트랜잭셔널 아웃박스** + **Debezium 기반 CDC 릴레이**로 내구성 있는 at-least-once 전달(멱등 소비자; 정확한 보장은 `docs/wiki/events-and-outbox.md` 참고)
 - **턴 감사 기록** — 모든 AI 턴을 `agent_turn_history`에 영속화(토큰 사용량·소요 시간·결과)하여 비용 추적과 디버깅에 활용

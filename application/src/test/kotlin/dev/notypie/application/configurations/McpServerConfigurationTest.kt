@@ -2,9 +2,12 @@ package dev.notypie.application.configurations
 
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
+import dev.notypie.application.service.cve.query.CveLatestQueryService
+import dev.notypie.application.service.cve.subscription.CveSubscriptionService
 import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -38,6 +41,9 @@ class McpServerConfigurationTest :
                 .withBean(OpsStatusService::class.java, { mockk(relaxed = true) })
                 .withBean(RoleManagementService::class.java, { mockk(relaxed = true) })
                 .withBean(MeetingRepository::class.java, { mockk(relaxed = true) })
+                .withBean(StandupRepository::class.java, { mockk(relaxed = true) })
+                .withBean(CveSubscriptionService::class.java, { mockk(relaxed = true) })
+                .withBean(CveLatestQueryService::class.java, { mockk(relaxed = true) })
                 .withPropertyValues("slack.app.mcp.enabled=true", "slack.app.mcp.signing-secret=mcp-test-secret")
 
         given("the MCP server enabled") {

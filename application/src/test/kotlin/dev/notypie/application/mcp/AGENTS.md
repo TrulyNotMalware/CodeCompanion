@@ -1,18 +1,18 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # test/kotlin/dev/notypie/application/mcp
 
 ## Purpose
 Specs for the MCP server lane: `McpToolGate` (token → role → permission → audit wrapper around every tool body)
 and `DomainReadTools` (the read-only tools the AI sidecar can call: `get_status`, `list_meetings`,
-`list_roles`).
+`list_roles`, `list_standups`, `list_cve_subscriptions`, `cve_latest`).
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `McpToolGateTest.kt` | `McpToolGate.execute(transportContext, toolName, requiredPermission, argumentsSummary) { body }` with a MockK `CommandRoleResolver` and `McpToolCallHistoryRepository`. Cases: role lacks permission → `isError`, text names the tool and lowercase permission, `DENIED` audit row with resolved role and requester; permitted → body text returned, `COMPLETED` row carrying `turnId`, `sessionKey`, `argumentsJson`, `durationMs >= 0`; `McpTransportContext.EMPTY` → "Unauthenticated", resolver and audit never touched; body throws → `FAILED` row with `errorCode = "IllegalStateException"`; audit repository throws → tool result still succeeds; resolver fell back to `USER` after a lookup failure (`RoleResolution(USER, lookupFailed = true)`) on an `OPERATIONS` tool → fails closed with "failed to execute" and no permission wording, `FAILED` row with floor role `USER` and `errorCode = "RoleLookupFailed"` (fails without the `lookupFailed` branch: `DENIED`). |
-| `DomainReadToolsTest.kt` | `DomainReadTools` built over a real `McpToolGate` (relaxed audit repository), a MockK `McpSyncRequestContext` whose `transportContext()` carries `createScopedTurnToken()` under `SCOPED_TURN_TOKEN_CONTEXT_KEY`, and `Clock.fixed(2026-07-08T03:00Z)`. `get_status`: `DEVELOPER` gets `OpsStatusService.renderReport()` verbatim, `USER` is denied ("permission"). `list_meetings`: null `daysAhead` → `getMeetingsByUserIdInRange(userId, now, now + 7d)`, cancelled meetings filtered out; `daysAhead = 99` → clamped to 31 and "No meetings". `list_roles`: `ADMIN` gets `RoleManagementService.renderGrants()`, `DEVELOPER` denied. A meeting titled `<!channel> <https://evil.example|Sync>` → the tool text carries it escaped and no raw `<!channel>`. |
+| `DomainReadToolsTest.kt` | `DomainReadTools` built over a real `McpToolGate` (relaxed audit repository, injectable through `toolsWith(auditRepository = ...)` to capture `argumentsJson`), a MockK `McpSyncRequestContext` whose `transportContext()` carries `createScopedTurnToken()` under `SCOPED_TURN_TOKEN_CONTEXT_KEY`, and `Clock.fixed(2026-07-08T03:00Z)`. `get_status`: `DEVELOPER` gets `OpsStatusService.renderReport()` verbatim, `USER` is denied ("permission"). `list_meetings`: null `daysAhead` → `getMeetingsByUserIdInRange(userId, now, now + 7d)`, cancelled meetings filtered out; `daysAhead = 99` → clamped to 31 and "No meetings". `list_roles`: `ADMIN` gets `RoleManagementService.renderGrants()`, `DEVELOPER` denied. A meeting titled `<!channel> <https://evil.example|Sync>` → the tool text carries it escaped and no raw `<!channel>`. `list_standups` (`USER`): a routine with the token user as a member and one without → exactly the first, rendered as `• Backend sync — 10:00 Asia/Seoul, Mon/Tue/Wed/Thu/Fri, cutoff +60m, 2 member(s), channel <#C_BACKEND>, summary <#C_SUMMARY>, created by <@U012ABCDEFG>`; a routine the token user created without being a member → listed; no routines → "You are not in any active standup routine."; a routine named `<https://evil|x>` → escaped. `list_cve_subscriptions`: CVE disabled → "The CVE feature is currently disabled." and the strict service mock never called; enabled → `renderSubscriptions(userId = token.userId)` verbatim. `cve_latest`: key `kotlin` → `renderLatest(token.userId, "kotlin")` and audit `{"topicKey":"kotlin"}`; no key → `renderLatest(token.userId, null)` and `{"topicKey":null}`; blank key → `null`; key `a"b` → delegated raw, audited `{"topicKey":"a'b"}`; disabled → disabled text, service never called. CVE on/off comes from `AppConfig(cve = AppConfig.Cve(enabled = ...))`; the helper's default `AppConfig()` has it off. |
 
 Both files define an identical private `CallToolResult.text()` helper.
 
@@ -32,7 +32,8 @@ Both files define an identical private `CallToolResult.text()` helper.
 ./gradlew :application:test --tests 'dev.notypie.application.mcp.*'
 ```
 Fixtures used: `testFixtures/.../application/security/mcp/ScopedTurnTokenCreator.kt` (`createScopedTurnToken`);
-`domain` testFixtures `meet/MeetingDtoCreator.kt` (`createMeetingDto`).
+`domain` testFixtures `meet/MeetingDtoCreator.kt` (`createMeetingDto`) and `standup/StandupTestFixtures.kt`
+(`createRoutineDto`, `createRoutineMemberDto`).
 
 ### Common Patterns
 - `gateWith(role, auditRepository)` / `toolsWith(role, ...)` local factories that wire a resolver returning the
@@ -45,7 +46,10 @@ Fixtures used: `testFixtures/.../application/security/mcp/ScopedTurnTokenCreator
 - `application/mcp/McpToolGate.kt`, `application/mcp/DomainReadTools.kt`
 - `application/security/mcp/ScopedTurnToken`, `SCOPED_TURN_TOKEN_CONTEXT_KEY`
 - `application/service/command/CommandRoleResolver`, `RoleManagementService`, `application/service/ops/OpsStatusService`
-- `infrastructure/repository/mcp/*`, `infrastructure/repository/meeting/MeetingRepository`
+- `application/service/cve/subscription/CveSubscriptionService`, `application/service/cve/query/CveLatestQueryService`,
+  `application/configurations/AppConfig`
+- `infrastructure/repository/mcp/*`, `infrastructure/repository/meeting/MeetingRepository`,
+  `infrastructure/repository/standup/StandupRepository`
 
 ### External
 MCP Java SDK (`McpTransportContext`, `McpSchema.CallToolResult`), Spring AI MCP annotations, MockK, Kotest.

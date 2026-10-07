@@ -1,11 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # application/mcp
 
 ## Purpose
-The MCP tool surface the AI agent lane can call back into: three read-only domain tools
-(`get_status`, `list_meetings`, `list_roles`) and the single gate every tool call passes through.
+The MCP tool surface the AI agent lane can call back into: six read-only domain tools
+(`get_status`, `list_meetings`, `list_roles`, `list_standups`, `list_cve_subscriptions`, `cve_latest`) and the
+single gate every tool call passes through.
 Identity always comes from the verified per-turn token in the `McpTransportContext`; the gate
 re-resolves the caller's role on every call, audits the call, and converts denials and failures into
 MCP error results so the model can relay them and the turn survives.
@@ -18,7 +19,7 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
 | File | Description |
 |------|-------------|
 | `McpToolGate.kt` | `class McpToolGate(commandRoleResolver, mcpToolCallHistoryRepository)`. `execute(transportContext, toolName, requiredPermission, argumentsSummary = null, body: (ScopedTurnToken) -> String): CallToolResult` — reads the token under `SCOPED_TURN_TOKEN_CONTEXT_KEY` (missing → "Unauthenticated tool call." error), resolves the role via `CommandRoleResolver.resolution(userId)`, checks `role.grants(permission)`, runs `body`, and writes one `McpToolCallRecord` (`COMPLETED` / `DENIED` / `FAILED`, duration, `argumentsJson`) per call. A denial whose role is the resolver's lookup-failure fallback (`lookupFailed`) is answered as an execution failure ("failed to execute. Try again…") and audited `FAILED` with `errorCode = "RoleLookupFailed"`, so a role-store outage never reads as an ADMIN being refused; a fallback `USER` still runs tools `USER` may use. Audit writes are `runCatching` — they never fail the tool |
-| `DomainReadTools.kt` | `class DomainReadTools(mcpToolGate, opsStatusService, roleManagementService, meetingRepository, clock)`. `@McpTool get_status` (`OPERATIONS`) → `OpsStatusService.renderReport()`; `@McpTool list_meetings(daysAhead: Int?)` (`BASIC`, window coerced to `1..31`, default 7) → `meetingRepository.getMeetingsByUserIdInRange(userId = token.userId, ...)` rendered as `• title — yyyy-MM-dd HH:mm (host <@id>, N participant(s))`, canceled meetings dropped; `@McpTool list_roles` (`ADMINISTRATION`) → `RoleManagementService.renderGrants()` Meeting titles in `list_meetings` output go through `domain/common/escapeMarkup()`: the model often echoes tool text, and the AI reply path only neutralises `<!…>` broadcasts, so an unescaped `<https://evil|label>` title would reach Slack as a disguised link. |
+| `DomainReadTools.kt` | `class DomainReadTools(mcpToolGate, opsStatusService, roleManagementService, meetingRepository, standupRepository, cveSubscriptionService, cveLatestQueryService, appConfig, clock)`. `@McpTool get_status` (`OPERATIONS`) → `OpsStatusService.renderReport()`; `@McpTool list_meetings(daysAhead: Int?)` (`BASIC`, window coerced to `1..31`, default 7) → `meetingRepository.getMeetingsByUserIdInRange(userId = token.userId, ...)` rendered as `• title — yyyy-MM-dd HH:mm (host <@id>, N participant(s))`, canceled meetings dropped; `@McpTool list_roles` (`ADMINISTRATION`) → `RoleManagementService.renderGrants()`; `@McpTool list_standups` (`BASIC`) → `standupRepository.listActiveRoutines()` filtered in memory to routines whose `creatorId` or a member's `userId` is `token.userId`, rendered as `• name — HH:mm zone, Mon/Tue/…, cutoff +Nm, N member(s), channel <#id>, summary <#id>, created by <@id>`, or "You are not in any active standup routine."; `@McpTool list_cve_subscriptions` (`BASIC`) → `CveSubscriptionService.renderSubscriptions(userId = token.userId)`; `@McpTool cve_latest(topicKey: String?)` (`BASIC`, blank key treated as omitted, `argumentsSummary` `{"topicKey":"key"}` with `"` replaced by `'`, or `{"topicKey":null}`) → `CveLatestQueryService.renderLatest(userId = token.userId, topicKey)`. Both CVE tools answer `CVE_FEATURE_DISABLED_MESSAGE` (from `service/cve/ops`) without calling the service while `appConfig.cve.enabled` is false. Meeting titles and routine names in `list_meetings` / `list_standups` output go through `domain/common/escapeMarkup()`: the model often echoes tool text, and the AI reply path only neutralises `<!…>` broadcasts, so an unescaped `<https://evil|label>` title would reach Slack as a disguised link. |
 
 ## For AI Agents
 
@@ -41,7 +42,10 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
   gate.
 - `DomainReadTools.clock` is not passed by the bean method, so `list_meetings` uses the system zone
   while `CommandRoleResolver` / `OpsStatusService` are the same beans chat uses. Keep `renderReport()`
-  and `renderGrants()` shared so `@bot status` / `@bot roles` and the tools never diverge.
+  and `renderGrants()` shared so `@bot status` / `@bot roles` and the tools never diverge; the same goes for
+  `renderSubscriptions()` (`/subscriptions`) and `renderLatest()` (`/latest`).
+- The CVE render methods do not check `appConfig.cve.enabled` (their event listeners do), so each CVE tool
+  checks it before delegating. Keep that check when adding another CVE tool.
 - Adding a tool: `@McpTool` method here, a `CommandPermission` level, a `DomainReadToolsTest` case for
   allowed + denied, and the `scripts/mcp-smoke.sh` call list if it should be smoke-tested.
 
@@ -73,8 +77,12 @@ app with MCP enabled.
 - `application/configurations/McpServerConfiguration` — bean declarations, filter, context extractor
 - `infrastructure/repository/mcp/` — `McpToolCallHistoryRepository`, `McpToolCallRecord`, `McpToolCallOutcome`
 - `infrastructure/repository/meeting/MeetingRepository` — `getMeetingsByUserIdInRange`
+- `infrastructure/repository/standup/StandupRepository` — `listActiveRoutines`
+- `application/service/cve/subscription/CveSubscriptionService` — `renderSubscriptions(userId)`;
+  `application/service/cve/query/CveLatestQueryService` — `renderLatest(userId, topicKey)`;
+  `application/service/cve/ops/CVE_FEATURE_DISABLED_MESSAGE`; `application/configurations/AppConfig` — `cve.enabled`
 - `domain/command/authorization/` — `CommandPermission`, `UserRole.grants`
-- `domain/meet/dto/MeetingDto`
+- `domain/meet/dto/MeetingDto`, `domain/standup/dto/RoutineDto`
 
 ### External
 Spring AI MCP server annotations (`@McpTool`, `@McpToolParam`, `McpSyncRequestContext`), MCP Java SDK

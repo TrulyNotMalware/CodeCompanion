@@ -2,7 +2,6 @@ package dev.notypie.application.service.cve.query
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.entity.event.CveLatestPayload
 import dev.notypie.domain.command.entity.event.CveLatestRequestEvent
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.publishOne
@@ -48,7 +47,7 @@ class CveLatestQueryService(
             return
         }
         val payload = event.payload
-        val text = renderLatest(payload = payload)
+        val text = renderLatest(userId = payload.userId, topicKey = payload.topicKey)
 
         val dmBasicInfo =
             CommandBasicInfo.forOutbound(
@@ -71,12 +70,11 @@ class CveLatestQueryService(
         eventPublisher.publishOne(event = staged)
     }
 
-    private fun renderLatest(payload: CveLatestPayload): String {
-        val topicKey = payload.topicKey
+    internal fun renderLatest(userId: String, topicKey: String?): String {
         val topicIds: List<Long>
         val emptyMessage: String
         if (topicKey == null) {
-            val subscribed = cveSubscriptionRepository.findSubscribedTopics(userId = payload.userId)
+            val subscribed = cveSubscriptionRepository.findSubscribedTopics(userId = userId)
             if (subscribed.isEmpty()) {
                 return "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."
             }

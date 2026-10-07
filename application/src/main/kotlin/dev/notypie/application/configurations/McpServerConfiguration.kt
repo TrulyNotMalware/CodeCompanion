@@ -7,9 +7,12 @@ import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
+import dev.notypie.application.service.cve.query.CveLatestQueryService
+import dev.notypie.application.service.cve.subscription.CveSubscriptionService
 import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.repository.standup.StandupRepository
 import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties
@@ -55,6 +58,10 @@ class McpServerConfiguration {
         opsStatusService: OpsStatusService,
         roleManagementService: RoleManagementService,
         meetingRepository: MeetingRepository,
+        standupRepository: StandupRepository,
+        cveSubscriptionService: CveSubscriptionService,
+        cveLatestQueryService: CveLatestQueryService,
+        appConfig: AppConfig,
         clock: Clock,
     ): DomainReadTools =
         DomainReadTools(
@@ -62,6 +69,10 @@ class McpServerConfiguration {
             opsStatusService = opsStatusService,
             roleManagementService = roleManagementService,
             meetingRepository = meetingRepository,
+            standupRepository = standupRepository,
+            cveSubscriptionService = cveSubscriptionService,
+            cveLatestQueryService = cveLatestQueryService,
+            appConfig = appConfig,
             clock = clock,
         )
 

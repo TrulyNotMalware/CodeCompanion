@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # application/service/cve/subscription
 
@@ -15,7 +15,7 @@ beans that exist even when the CVE feature is off and fail closed on `appConfig.
 |------|-------------|
 | `CveSubscriptionSlashService.kt` | Interface: `handleSubscribe`, `handleUnsubscribe`, `handleSubscriptions`, each `(headers, payload: SlashCommandRequestBody, commandData: InboundCommand)`. Called from `controllers/SlashCommandController` and `socket/SocketModeReceiver` |
 | `CveSubscriptionSlashServiceImpl.kt` | `@Transactional` per method; feature off → `log.warn` and return. `/subscribe`: `findActiveTopics()`; empty → `publishInfo("There are no CVE topics available to subscribe to yet.")`, else `CveSubscribeSlashCommand(topics = TopicOption(key = topicKey, label = displayName))`. `/unsubscribe`: `findSubscribedTopics(actorId)`; empty → info ephemeral, else `CveUnsubscribeSlashCommand`. `/subscriptions`: always `CveSubscriptionsSlashCommand`. `publishInfo` stages an `OutboundMessage.Ephemeral` (recipient `null`) through `OutboundMessageStager` and `EventPublisher.publishOne` |
-| `CveSubscriptionService.kt` | `@Transactional @EventListener handleCveSubscription(event: CveSubscriptionRequestEvent)`. `SUBSCRIBE`: resolves requested keys against `findActiveTopics()`, `subscribe(userId, topicIds = known)`, reply "Subscribed to N topic(s): *Name*." plus "Skipped unavailable topics: `key`."; `UNSUBSCRIBE`: resolves against `findSubscribedTopics`, "Unsubscribed from …" plus "Skipped not subscribed topics: …"; `LIST`: "You're subscribed to N topic(s):" with `• *Name* (`key`)` lines, or "You have no CVE topic subscriptions.". The reply is a `ChannelMessage` to `ConversationTarget(id = userId)` with `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` — a DM without `conversations.open`; headline `CodeCompanion — CVE subscriptions` Display names, topic keys and skipped keys in the replies go through `escapeMrkdwn()`. |
+| `CveSubscriptionService.kt` | `@Transactional @EventListener handleCveSubscription(event: CveSubscriptionRequestEvent)`. `SUBSCRIBE`: resolves requested keys against `findActiveTopics()`, `subscribe(userId, topicIds = known)`, reply "Subscribed to N topic(s): *Name*." plus "Skipped unavailable topics: `key`."; `UNSUBSCRIBE`: resolves against `findSubscribedTopics`, "Unsubscribed from …" plus "Skipped not subscribed topics: …"; `LIST`: `internal fun renderSubscriptions(userId)` — "You're subscribed to N topic(s):" with `• *Name* (`key`)` lines, or "You have no CVE topic subscriptions."; the `list_cve_subscriptions` MCP tool in `application/mcp/DomainReadTools` calls it too (the tool checks `cve.enabled` itself; `renderSubscriptions` does not). The reply is a `ChannelMessage` to `ConversationTarget(id = userId)` with `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` — a DM without `conversations.open`; headline `CodeCompanion — CVE subscriptions` Display names, topic keys and skipped keys in the replies go through `escapeMrkdwn()`. |
 
 ## For AI Agents
 
