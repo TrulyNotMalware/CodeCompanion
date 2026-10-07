@@ -1,6 +1,9 @@
 package dev.notypie.application.service.standup
 
+import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.application.service.meeting.createH2TransactionManager
+import dev.notypie.application.service.meeting.failInsideParticipatingTx
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.authorization.UserRole
@@ -17,6 +20,8 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.repository.standup.StandupRepository
+import dev.notypie.schema.createRoutineStopCandidate
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -26,6 +31,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalTime
@@ -41,6 +49,7 @@ class StandupRoutineOpsServiceTest :
             standupRepository: StandupRepository,
             roleResolver: CommandRoleResolver,
             staged: CapturingSlot<OutboundMessage>,
+            transactionManager: PlatformTransactionManager = createStubTransactionManager(),
         ): Pair<StandupRoutineOpsService, EventPublisher> {
             val stager = mockk<OutboundMessageStager>()
             every { stager.stage(message = capture(staged), basicInfo = any()) } returns
@@ -52,6 +61,7 @@ class StandupRoutineOpsServiceTest :
                     commandRoleResolver = roleResolver,
                     outboundStager = stager,
                     eventPublisher = publisher,
+                    transactionManager = transactionManager,
                 )
             return service to publisher
         }
@@ -144,9 +154,9 @@ class StandupRoutineOpsServiceTest :
         }
 
         given("a STOP event from the routine's creator") {
-            val routine = createRoutineDto(name = routineName, creatorId = TEST_USER_ID)
+            val routine = createRoutineStopCandidate(name = routineName, creatorId = TEST_USER_ID)
             val standupRepository = mockk<StandupRepository>()
-            every { standupRepository.findActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
                 listOf(routine)
             every { standupRepository.deactivateRoutine(routineUid = routine.routineUid) } returns true
             val roleResolver = mockk<CommandRoleResolver>()
@@ -157,22 +167,46 @@ class StandupRoutineOpsServiceTest :
             `when`("handled with a differently-cased name") {
                 service.handleStandupOps(event = stopEvent(name = "daily sync"))
 
-                then("the routine is deactivated once without a role lookup and the requester is told") {
+                then("the routine is locked, then deactivated once without a role lookup, and the requester is told") {
+                    verifyOrder {
+                        standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID)
+                        standupRepository.deactivateRoutine(routineUid = routine.routineUid)
+                    }
                     verify(exactly = 1) { standupRepository.deactivateRoutine(routineUid = routine.routineUid) }
+                    verify(exactly = 0) { standupRepository.findActiveRoutinesByChannel(commandChannel = any()) }
                     verify(exactly = 0) { roleResolver.resolve(userId = any()) }
                     staged.ephemeral().detailType shouldBe CommandDetailType.STANDUP_ROUTINE_STOP
                     staged.markdown() shouldBe
-                        "Stopped standup routine `Daily Sync`. No new sessions will open; prompts and nudges " +
-                        "still pending for it are skipped, and a session that is already collecting will still " +
-                        "be summarized at its cutoff."
+                        "Stopped standup routine `Daily Sync`. No new sessions will open and later prompt and " +
+                        "nudge ticks skip it; messages already queued may still be delivered, and a session that " +
+                        "is already collecting is still summarized at its cutoff."
+                }
+            }
+        }
+
+        given("a STOP event whose name differs from the stored one only in whitespace") {
+            val routine = createRoutineStopCandidate(name = "Daily  Sync ", creatorId = TEST_USER_ID)
+            val standupRepository = mockk<StandupRepository>()
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+                listOf(routine)
+            every { standupRepository.deactivateRoutine(routineUid = routine.routineUid) } returns true
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(standupRepository = standupRepository, roleResolver = mockk(), staged = staged)
+
+            `when`("handled") {
+                service.handleStandupOps(event = stopEvent(name = "  daily \t sync"))
+
+                then("both sides are normalized before the comparison and the routine is stopped") {
+                    verify(exactly = 1) { standupRepository.deactivateRoutine(routineUid = routine.routineUid) }
                 }
             }
         }
 
         given("a STOP event from an admin who did not create the routine") {
-            val routine = createRoutineDto(name = routineName, creatorId = creatorId)
+            val routine = createRoutineStopCandidate(name = routineName, creatorId = creatorId)
             val standupRepository = mockk<StandupRepository>()
-            every { standupRepository.findActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
                 listOf(routine)
             every { standupRepository.deactivateRoutine(routineUid = routine.routineUid) } returns true
             val roleResolver = mockk<CommandRoleResolver>()
@@ -192,9 +226,9 @@ class StandupRoutineOpsServiceTest :
         }
 
         given("a STOP event from a plain user who did not create the routine") {
-            val routine = createRoutineDto(name = routineName, creatorId = creatorId)
+            val routine = createRoutineStopCandidate(name = routineName, creatorId = creatorId)
             val standupRepository = mockk<StandupRepository>()
-            every { standupRepository.findActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
                 listOf(routine)
             val roleResolver = mockk<CommandRoleResolver>()
             every { roleResolver.resolve(userId = TEST_USER_ID) } returns UserRole.USER
@@ -213,10 +247,98 @@ class StandupRoutineOpsServiceTest :
             }
         }
 
+        given("a STOP event from a non-creator whose role lookup fails inside a transaction") {
+            val transactionManager = createH2TransactionManager()
+            val routine = createRoutineStopCandidate(name = routineName, creatorId = creatorId)
+            val standupRepository = mockk<StandupRepository>()
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+                listOf(routine)
+            val roleResolver = mockk<CommandRoleResolver>()
+            every { roleResolver.resolve(userId = TEST_USER_ID) } answers {
+                runCatching {
+                    transactionManager.failInsideParticipatingTx(exception = IllegalStateException("role table down"))
+                }
+                UserRole.USER
+            }
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(
+                    standupRepository = standupRepository,
+                    roleResolver = roleResolver,
+                    staged = staged,
+                    transactionManager = transactionManager,
+                )
+
+            `when`("handled inside the slash command's transaction") {
+                then("the caller's transaction still commits and the requester gets the denial") {
+                    shouldNotThrowAny {
+                        TransactionTemplate(transactionManager).executeWithoutResult {
+                            service.handleStandupOps(event = stopEvent())
+                        }
+                    }
+                    verify(exactly = 0) { standupRepository.deactivateRoutine(routineUid = any()) }
+                    staged.markdown() shouldBe
+                        "Only the routine creator (<@$creatorId>) or an admin can stop `Daily Sync`."
+                }
+            }
+        }
+
+        given("a STOP event naming a routine that two creators in the channel both use") {
+            val requesterRoutine = createRoutineStopCandidate(name = "daily sync", creatorId = TEST_USER_ID)
+            val otherRoutine = createRoutineStopCandidate(name = routineName, creatorId = creatorId)
+            val standupRepository = mockk<StandupRepository>()
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+                listOf(otherRoutine, requesterRoutine)
+            every { standupRepository.deactivateRoutine(routineUid = requesterRoutine.routineUid) } returns true
+            val roleResolver = mockk<CommandRoleResolver>()
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(standupRepository = standupRepository, roleResolver = roleResolver, staged = staged)
+
+            `when`("one of them was created by the requester") {
+                service.handleStandupOps(event = stopEvent())
+
+                then("the requester's own routine is stopped and the other is left active") {
+                    verify(exactly = 1) {
+                        standupRepository.deactivateRoutine(routineUid = requesterRoutine.routineUid)
+                    }
+                    verify(exactly = 0) { standupRepository.deactivateRoutine(routineUid = otherRoutine.routineUid) }
+                    verify(exactly = 0) { roleResolver.resolve(userId = any()) }
+                    staged.markdown() shouldContain "Stopped standup routine `daily sync`."
+                }
+            }
+        }
+
+        given("a STOP event naming a routine that two other creators in the channel both use") {
+            val standupRepository = mockk<StandupRepository>()
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+                listOf(
+                    createRoutineStopCandidate(name = routineName, creatorId = creatorId),
+                    createRoutineStopCandidate(name = "DAILY SYNC", creatorId = otherUserId),
+                )
+            val roleResolver = mockk<CommandRoleResolver>()
+            every { roleResolver.resolve(userId = TEST_USER_ID) } returns UserRole.ADMIN
+            val staged = slot<OutboundMessage>()
+            val (service, _) =
+                serviceWith(standupRepository = standupRepository, roleResolver = roleResolver, staged = staged)
+
+            `when`("an admin who created neither asks to stop it") {
+                service.handleStandupOps(event = stopEvent())
+
+                then("nothing is stopped, no routine is picked arbitrarily, and the creators are pointed at") {
+                    verify(exactly = 0) { standupRepository.deactivateRoutine(routineUid = any()) }
+                    verify(exactly = 0) { roleResolver.resolve(userId = any()) }
+                    staged.markdown() shouldBe
+                        "Several active routines are named `Daily Sync` in this channel; ask their creators to " +
+                        "stop theirs."
+                }
+            }
+        }
+
         given("a STOP event naming no active routine in the channel") {
             val standupRepository = mockk<StandupRepository>()
-            every { standupRepository.findActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
-                listOf(createRoutineDto(name = routineName, creatorId = TEST_USER_ID))
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+                listOf(createRoutineStopCandidate(name = routineName, creatorId = TEST_USER_ID))
             val staged = slot<OutboundMessage>()
             val (service, _) =
                 serviceWith(standupRepository = standupRepository, roleResolver = mockk(), staged = staged)
@@ -234,9 +356,9 @@ class StandupRoutineOpsServiceTest :
         }
 
         given("a STOP event racing another stop") {
-            val routine = createRoutineDto(name = routineName, creatorId = TEST_USER_ID)
+            val routine = createRoutineStopCandidate(name = routineName, creatorId = TEST_USER_ID)
             val standupRepository = mockk<StandupRepository>()
-            every { standupRepository.findActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = TEST_CHANNEL_ID) } returns
                 listOf(routine)
             every { standupRepository.deactivateRoutine(routineUid = routine.routineUid) } returns false
             val staged = slot<OutboundMessage>()
@@ -254,7 +376,7 @@ class StandupRoutineOpsServiceTest :
 
         given("a STOP event whose basic info comes from another channel") {
             val standupRepository = mockk<StandupRepository>()
-            every { standupRepository.findActiveRoutinesByChannel(commandChannel = "C_ELSEWHERE") } returns
+            every { standupRepository.lockActiveRoutinesByChannel(commandChannel = "C_ELSEWHERE") } returns
                 emptyList()
             val staged = slot<OutboundMessage>()
             val (service, _) =
@@ -272,7 +394,7 @@ class StandupRoutineOpsServiceTest :
 
                 then("only routines of the command's own channel are considered") {
                     verify(exactly = 1) {
-                        standupRepository.findActiveRoutinesByChannel(commandChannel = "C_ELSEWHERE")
+                        standupRepository.lockActiveRoutinesByChannel(commandChannel = "C_ELSEWHERE")
                     }
                     verify(exactly = 0) { standupRepository.deactivateRoutine(routineUid = any()) }
                     val reply = staged.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-08-26 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-07 -->
 
 # infrastructure/common
 
@@ -24,7 +24,7 @@ deriving a stable Kafka partition index. Nothing here is a Spring bean.
   `repository/outbox/schema/OutboxMessage` (`MutableMap<String, Any>.toOutboxMessage()` via
   `convertValue`), `templates/ModalTemplateBuilder`, and in `:application` `IdempotencyCreator`,
   `SlackRequestParser`, `SlackInteractionHandlerImpl`, `SlackMentionEventHandlerImpl`,
-  `SocketModeReceiver`. `ORDER_MAP_ENTRIES_BY_KEYS` is what makes idempotency keys and outbox payloads
+  `SocketModeReceiver`, `mcp/DomainReadTools` (the `cve_latest` audit summary). `ORDER_MAP_ENTRIES_BY_KEYS` is what makes idempotency keys and outbox payloads
   byte-stable, so do not disable it.
 - **The one sanctioned second mapper is `repository/outbox/OutboundMessageCodec`.** It copies this base
   configuration and adds polymorphic mix-ins that must not leak into general serialization. If you change

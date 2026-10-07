@@ -4,9 +4,10 @@
 # infrastructure/src/testFixtures/kotlin/dev/notypie/schema
 
 ## Purpose
-Builders for JPA schema rows and repository records in the meeting, CVE and AI-usage lanes. `@DataJpaTest` specs persist
+Builders for JPA schema rows and repository records in the meeting, CVE, outbox, AI-usage and standup-stop lanes. `@DataJpaTest` specs persist
 the schema builders on H2; `*ImplTest` and `:application` specs use the record builders as mocked-repository
-return values. No standup or outbox builders exist here.
+return values. Standup schema rows have no builder here: H2 specs persist the domain `createRoutine` through
+`StandupRepositoryImpl`; the one standup builder is the `RoutineStopCandidate` record.
 
 ## Key Files
 | File | Description |
@@ -15,6 +16,7 @@ return values. No standup or outbox builders exist here.
 | `OutboxMessageCreator.kt` | `createOutboxMessage(eventId = random, idempotencyKey = random, publisherId = TEST_USER_ID, payload = "{}", createdAt = now, status = PENDING)` — a real `OutboxMessage` row (not a mock) for `@DataJpaTest` specs; `status` is applied through `updateMessageStatus` because the column is not a constructor parameter; `createOutboxColumnMap(eventId, createdAt, updatedAt?)` — the snake_case column map a Debezium after-image carries, for `toOutboxMessage()` specs |
 | `CveTopicCreator.kt` | `createCveTopicSchema(id = 0, topicKey = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)`; `createCveTopicDefinition(...)` same fields minus `id`; `createCveTopic(id = 1, ...)` record; `createCveSubscriptionSchema(id = 0, userId = "U_SUBSCRIBER", topicId = 1)`; `createCveDeliverySchema(id = 0, eventId = 1, userId = "U_SUBSCRIBER", status = SENT)` |
 | `CveEventCreator.kt` | `createCveEvent(id = 1, topicId = 1, externalId = "CVE-2026-0001", title, rawContent, aiSummary = null, summaryStatus = PENDING, retryCount = 0)` record; `createCveEventSchema(id = 0, topicId, externalId, title, rawContent, aiSummary, summaryStatus, claimToken = null, retryCount = 0, nextAttemptAt = null, publishedAt = null)`; `createRawSourceEvent(externalId = "R-0001", title, rawContent, publishedAt = null)` (`impl/cve/RawSourceEvent`); `createCveRecentEvent(topicDisplayName = "Java CVE", title, aiSummary = "Sample summary")`; `createUndeliveredCveEvent(eventId = 1, userId = "U_SUBSCRIBER", topicKey = "cve-java", topicDisplayName, title, aiSummary)` `createNvdPageJson(cveIds, totalResults)`: an NVD 2.0 response page with `totalResults` and one minimal vulnerability per id. |
+| `StandupRecordCreator.kt` | `createRoutineStopCandidate(routineUid = random, name = "Daily Standup", creatorId = TEST_USER_ID)` — the `lockActiveRoutinesByChannel` record, for `StandupRoutineOpsServiceTest` stubs and `StandupRepositoryImplTest` expectations |
 | `UsageHistoryCreator.kt` | Rows: `createAgentTurnHistorySchema(id = 0, sessionKey = "thread-1", requesterId = TEST_USER_ID, channel = TEST_CHANNEL_ID, idempotencyKey = random, outcome = COMPLETED, errorCode = null, inputTokens = 100, outputTokens = 10, durationMs = 1000)`; `createMcpToolCallHistorySchema(id = 0, toolName = "get_status", requesterId = TEST_USER_ID, sessionKey = "thread-1", turnId = random, resolvedRole = DEVELOPER, outcome = COMPLETED, errorCode = null, argumentsJson = null, durationMs = 50)`. Records: `createAgentTurnOutcomeUsage(outcome = COMPLETED, turns = 1, inputTokens = 100, outputTokens = 10, totalDurationMs = 1000)`, `createRequesterTurnUsage(requesterId = TEST_USER_ID, turns = 1, inputTokens = 100, outputTokens = 10)`, `createToolCallUsage(toolName = "get_status", outcome = COMPLETED, calls = 1)` |
 
 ## For AI Agents

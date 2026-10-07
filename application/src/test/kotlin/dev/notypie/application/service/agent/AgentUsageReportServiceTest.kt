@@ -1,6 +1,9 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.createStubTransactionManager
+import dev.notypie.application.service.meeting.createH2TransactionManager
+import dev.notypie.application.service.meeting.failInsideParticipatingTx
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createAgentUsageReportRequestEvent
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -20,12 +23,15 @@ import dev.notypie.repository.mcp.schema.McpToolCallOutcome
 import dev.notypie.schema.createAgentTurnOutcomeUsage
 import dev.notypie.schema.createRequesterTurnUsage
 import dev.notypie.schema.createToolCallUsage
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDateTime
 
 class AgentUsageReportServiceTest :
@@ -38,12 +44,14 @@ class AgentUsageReportServiceTest :
             mcpToolCallHistoryRepository: McpToolCallHistoryRepository,
             outboundStager: OutboundMessageStager = mockk(),
             eventPublisher: EventPublisher = mockk(relaxed = true),
+            transactionManager: PlatformTransactionManager = createStubTransactionManager(),
         ) = AgentUsageReportService(
             agentTurnHistoryRepository = agentTurnHistoryRepository,
             mcpToolCallHistoryRepository = mcpToolCallHistoryRepository,
             outboundStager = outboundStager,
             eventPublisher = eventPublisher,
             clock = createFixedUtcClock(now = now),
+            transactionManager = transactionManager,
         )
 
         given("renderReport") {
@@ -205,6 +213,37 @@ class AgentUsageReportServiceTest :
                 ).handleUsageReport(event = event)
 
                 then("the listener still stages a friendly fallback instead of crashing") {
+                    captured.captured
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe "Failed to read AI usage. Check application logs."
+                }
+            }
+
+            `when`("a transactional usage read fails while the mention's transaction is open") {
+                val transactionManager = createH2TransactionManager()
+                val turnHistory = mockk<AgentTurnHistoryRepository>()
+                every { turnHistory.countByOutcomeSince(since = any()) } answers {
+                    transactionManager.failInsideParticipatingTx(exception = IllegalStateException("db down"))
+                }
+                val stager = mockk<OutboundMessageStager>()
+                val captured = slot<OutboundMessage>()
+                every { stager.stage(message = capture(captured), basicInfo = any()) } returns outboundStub
+                val service =
+                    serviceWith(
+                        agentTurnHistoryRepository = turnHistory,
+                        mcpToolCallHistoryRepository = mockk(),
+                        outboundStager = stager,
+                        transactionManager = transactionManager,
+                    )
+
+                then("the caller's transaction still commits the fallback reply") {
+                    shouldNotThrowAny {
+                        TransactionTemplate(transactionManager).executeWithoutResult {
+                            service.handleUsageReport(event = event)
+                        }
+                    }
                     captured.captured
                         .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content

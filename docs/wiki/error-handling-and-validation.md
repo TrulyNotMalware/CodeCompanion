@@ -103,7 +103,11 @@ _type: pattern · updated: 2026-10-07_
   (운영 12.0.2, 로컬 실측 12.3.3 = 1). 같은 트랜잭션에서 일관 읽기 뒤에 다른 트랜잭션이 그 뒤 커밋한 행을 잠금 읽기·
   UPDATE·DELETE·FK 부모 검사·PK 중복 검사로 건드리면 ER_CHECKREAD 1020이 나고 트랜잭션 전체가 롤백된다(보조 unique 중복은
   계속 1062). 규칙: CAS·잠금 문장을 트랜잭션의 첫 문장으로 두거나 자기 트랜잭션을 준다(`CveTopicRepositoryImpl.upsert`,
-  `MeetingReminderRepositoryImpl.ensureReminder`, `AgentSessionRepositoryImpl.saveProviderSessionId`의 단일 upsert). 1020은
+  `MeetingReminderRepositoryImpl.ensureReminder`, `AgentSessionRepositoryImpl.saveProviderSessionId`의 단일 upsert).
+  잠금 읽기를 먼저 두는 예: `/standup stop`은 슬래시 트랜잭션 안에서 채널의 활성 루틴을
+  `StandupRepository.lockActiveRoutinesByChannel`(`SELECT … FOR UPDATE`)로 먼저 읽고 그다음 `deactivateRoutine`으로
+  UPDATE한다. 그 앞에 일반 읽기 `findActiveRoutinesByChannel`을 두지 않는다(이 일반 읽기는 읽은 행을 갱신하지 않는
+  `/standup list`와 setup의 이름 중복 검사에서만 쓴다). 1020은
   `SnapshotIsolationExceptionTranslator`(`JpaConfiguration`의 유일한 `SQLExceptionTranslator` 빈 — Boot가 유일할 때만
   `HibernateJpaDialect`와 `JdbcTemplate`에 연결)가 `OptimisticLockingFailureException` 하위인
   `SnapshotIsolationConflictException`으로 바꾼다. 서버가 이미 롤백했으므로 잡으면 트랜잭션을 통째로 다시 실행해야 한다 —

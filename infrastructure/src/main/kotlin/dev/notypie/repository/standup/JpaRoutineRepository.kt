@@ -1,7 +1,9 @@
 package dev.notypie.repository.standup
 
 import dev.notypie.repository.standup.schema.RoutineSchema
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -31,6 +33,19 @@ interface JpaRoutineRepository : JpaRepository<RoutineSchema, Long> {
     """,
     )
     fun findActiveByCommandChannel(
+        @Param("channel") channel: String,
+    ): List<RoutineSchema>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        """
+        SELECT r FROM standup_routine r
+        WHERE r.commandChannel = :channel
+          AND r.isActive = true
+        ORDER BY r.id
+    """,
+    )
+    fun findLockedActiveByCommandChannel(
         @Param("channel") channel: String,
     ): List<RoutineSchema>
 

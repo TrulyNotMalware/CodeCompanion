@@ -2,7 +2,10 @@ package dev.notypie.application.service.ops
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.outbox.stubOutboxStatus
+import dev.notypie.application.service.meeting.createH2TransactionManager
+import dev.notypie.application.service.meeting.failInsideParticipatingTx
 import dev.notypie.application.service.relay.AccessBlockedTracker
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -23,6 +26,7 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.repository.cve.schema.CveSummaryStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -31,6 +35,7 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDateTime
 
 class OpsStatusServiceTest :
@@ -57,6 +62,7 @@ class OpsStatusServiceTest :
                         AppConfig(
                             outbox = AppConfig.Outbox(health = AppConfig.Outbox.Health(stuckThresholdSeconds = 300L)),
                         ),
+                    transactionManager = createStubTransactionManager(),
                 )
 
             val basic = createCommandBasicInfo()
@@ -200,6 +206,53 @@ class OpsStatusServiceTest :
             }
         }
 
+        given("a transactional outbox read that fails while the mention's transaction is open") {
+            val transactionManager = createH2TransactionManager()
+            val outboxRepository = mockk<MessageOutboxRepository>()
+            every { outboxRepository.countPending() } answers {
+                transactionManager.failInsideParticipatingTx(exception = IllegalStateException("db down"))
+            }
+            val basic = createCommandBasicInfo()
+            val stager = mockk<OutboundMessageStager>()
+            val captured = slot<OutboundMessage>()
+            every { stager.stage(message = capture(captured), basicInfo = any()) } returns
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.STATUS_REPORT,
+                    idempotencyKey = basic.idempotencyKey,
+                )
+            val service =
+                OpsStatusService(
+                    outboxRepository = outboxRepository,
+                    outboundStager = stager,
+                    eventPublisher = mockk(relaxed = true),
+                    cveTopicRepository = mockk(),
+                    cveEventRepository = mockk(),
+                    cveCollectLedgerRepository = mockk(),
+                    accessBlockedTracker = AccessBlockedTracker(),
+                    clock = clock,
+                    appConfig = AppConfig(),
+                    transactionManager = transactionManager,
+                )
+            val event =
+                StatusReportRequestEvent(
+                    idempotencyKey = basic.idempotencyKey,
+                    payload = StatusReportPayload(responseBasicInfo = basic),
+                    type = CommandDetailType.STATUS_REPORT,
+                )
+
+            `when`("the status report is handled inside that transaction") {
+                then("the caller's transaction still commits the fallback reply") {
+                    shouldNotThrowAny {
+                        TransactionTemplate(transactionManager).executeWithoutResult {
+                            service.handleStatusReport(event = event)
+                        }
+                    }
+                    ((captured.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
+                        .markdown shouldBe "Failed to read outbox status. Check application logs."
+                }
+            }
+        }
+
         given("the CVE feature is enabled") {
             val outboxRepository = mockk<MessageOutboxRepository>()
             val stager = mockk<OutboundMessageStager>()
@@ -223,6 +276,7 @@ class OpsStatusServiceTest :
                             cve = AppConfig.Cve(enabled = true),
                             ai = AppConfig.Ai(maxRetries = 5),
                         ),
+                    transactionManager = createStubTransactionManager(),
                 )
 
             val basic = createCommandBasicInfo()

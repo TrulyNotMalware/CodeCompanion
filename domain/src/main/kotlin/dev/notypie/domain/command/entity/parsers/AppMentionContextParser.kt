@@ -44,7 +44,7 @@ internal class AppMentionContextParser(
             • `@CodeCompanion notice @user1 @user2 <message>` — send a notice
             • `@CodeCompanion help` — show this help
             • `@CodeCompanion status` — show outbox lag and in-flight counts
-            • `@CodeCompanion usage [days]` — AI turn and tool-call usage for the last N days (default 7)
+            • `@CodeCompanion usage [days]` — AI turn and tool-call usage for the last N days (default ${CommandIntent.AgentUsageReport.DEFAULT_DAYS})
             • `@CodeCompanion ask <question>` — ask the AI assistant (replies in a thread; mention again in the thread to continue)
             • `@CodeCompanion grant @user <user|ai_user|developer|admin>` — grant a role (admin only)
             • `@CodeCompanion revoke @user` — remove a role grant (admin only)
@@ -71,11 +71,8 @@ internal class AppMentionContextParser(
                 "`cve retry all|<event-id>`."
 
         internal const val USAGE_USAGE: String =
-            "Usage: `@CodeCompanion usage [days]` — days between 1 and 90, default 7."
-
-        private const val DEFAULT_USAGE_DAYS: Int = 7
-
-        private val USAGE_DAYS_RANGE: IntRange = 1..90
+            "Usage: `@CodeCompanion usage [days]` — days between 1 and ${CommandIntent.AgentUsageReport.MAX_DAYS}, " +
+                "default ${CommandIntent.AgentUsageReport.DEFAULT_DAYS}."
     }
 
     override fun parseContext(idempotencyKey: UUID): CommandContext<NoSubCommands> {
@@ -156,11 +153,11 @@ internal class AppMentionContextParser(
         val tokens = mention.commandTokens
         val days =
             when (tokens.size) {
-                1 -> DEFAULT_USAGE_DAYS
+                1 -> CommandIntent.AgentUsageReport.DEFAULT_DAYS
                 2 -> tokens[1].toIntOrNull()
                 else -> null
             }
-        if (days == null || days !in USAGE_DAYS_RANGE) return usageContext(usage = USAGE_USAGE)
+        if (days == null || days !in CommandIntent.AgentUsageReport.DAYS_RANGE) return usageContext(usage = USAGE_USAGE)
         return intentContext(intent = CommandIntent.AgentUsageReport(days = days))
     }
 

@@ -10,6 +10,7 @@ import dev.notypie.application.service.command.RoleResolution
 import dev.notypie.application.service.cve.query.CveLatestQueryService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionService
 import dev.notypie.application.service.ops.OpsStatusService
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.meet.createMeetingDto
@@ -445,9 +446,10 @@ class DomainReadToolsTest :
                 }
             }
 
-            `when`("the topic key contains a double quote") {
+            `when`("the topic key contains a double quote and a backslash") {
+                val topicKey = "a\"b\\c"
                 val cveLatestQueryService = mockk<CveLatestQueryService>()
-                every { cveLatestQueryService.renderLatest(userId = token.userId, topicKey = "a\"b") } returns
+                every { cveLatestQueryService.renderLatest(userId = token.userId, topicKey = topicKey) } returns
                     "Topic not available"
                 val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
                 toolsWith(
@@ -455,13 +457,40 @@ class DomainReadToolsTest :
                     cveLatestQueryService = cveLatestQueryService,
                     appConfig = cveEnabled,
                     auditRepository = auditRepository,
-                ).cveLatest(topicKey = "a\"b", context = requestContext)
+                ).cveLatest(topicKey = topicKey, context = requestContext)
 
-                then("the raw key is delegated and the audited summary stays valid JSON") {
-                    verify(exactly = 1) { cveLatestQueryService.renderLatest(userId = token.userId, topicKey = "a\"b") }
+                then("the raw key is delegated and the audited summary is valid JSON that parses back to it") {
+                    verify(exactly = 1) {
+                        cveLatestQueryService.renderLatest(userId = token.userId, topicKey = topicKey)
+                    }
                     val recorded = slot<McpToolCallRecord>()
                     verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
-                    recorded.captured.argumentsJson shouldBe """{"topicKey":"a'b"}"""
+                    val argumentsJson = checkNotNull(recorded.captured.argumentsJson)
+                    argumentsJson shouldBe """{"topicKey":"a\"b\\c"}"""
+                    jsonMapper.readValue(argumentsJson, Map::class.java) shouldBe mapOf("topicKey" to topicKey)
+                }
+            }
+
+            `when`("the topic key is longer than the audit keeps") {
+                val topicKey = "k".repeat(n = 100)
+                val cveLatestQueryService = mockk<CveLatestQueryService>()
+                every { cveLatestQueryService.renderLatest(userId = token.userId, topicKey = topicKey) } returns
+                    "Topic not available"
+                val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
+                toolsWith(
+                    role = UserRole.USER,
+                    cveLatestQueryService = cveLatestQueryService,
+                    appConfig = cveEnabled,
+                    auditRepository = auditRepository,
+                ).cveLatest(topicKey = topicKey, context = requestContext)
+
+                then("the full key is delegated and the audit records its first 64 characters") {
+                    verify(exactly = 1) {
+                        cveLatestQueryService.renderLatest(userId = token.userId, topicKey = topicKey)
+                    }
+                    val recorded = slot<McpToolCallRecord>()
+                    verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
+                    recorded.captured.argumentsJson shouldBe """{"topicKey":"${"k".repeat(n = 64)}"}"""
                 }
             }
 

@@ -12,7 +12,7 @@ the requester, in the channel the mention came from. The same renderer feeds the
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OpsStatusService.kt` | `@Service`. `@EventListener handleStatusReport(StatusReportRequestEvent)`: `runCatching { renderReport() }` with a fixed fallback text on failure, then stages `OutboundMessage.Ephemeral` (`STATUS_REPORT`, headline `"CodeCompanion — outbox status"`) in `payload.responseBasicInfo.channel` for `recipient = UserRef(payload.responseBasicInfo.publisherId)` and `eventPublisher.publishOne`. `internal fun renderReport(): String`: reads `readOutboxHealth` (`application/health`), the same snapshot and verdict as `OutboxHealthIndicator` — pending / in-flight counts, stuck counts, oldest-row ages, the retrying count (`*Retrying:* n (sent at least Nx, still in flight)`), the access-block line (`*Slack access blocked:* rows held, last at <instant>` or `none held`, with the window; the service takes the same `AccessBlockedTracker` bean as the indicator), the stuck threshold and `Health: UP/DOWN`; `cveSection()` appended only when `cve.enabled` — active topics, `PENDING` / `SUMMARIZING` backlog, `FAILED` split into retryable vs dead-letter at `ai.maxRetries`, latest collect window |
+| `OpsStatusService.kt` | `@Service`. `@EventListener handleStatusReport(StatusReportRequestEvent)`: `renderReport()` inside `detachedTemplate` (`application/common`, `PROPAGATION_NOT_SUPPORTED`, built from the injected `PlatformTransactionManager`) so a failing `@Transactional` outbox or CVE read cannot leave the mention's transaction rollback-only; an `Exception` gets a fixed fallback text, an `Error` propagates; then stages `OutboundMessage.Ephemeral` (`STATUS_REPORT`, headline `"CodeCompanion — outbox status"`) in `payload.responseBasicInfo.channel` for `recipient = UserRef(payload.responseBasicInfo.publisherId)` and `eventPublisher.publishOne`. `internal fun renderReport(): String`: reads `readOutboxHealth` (`application/health`), the same snapshot and verdict as `OutboxHealthIndicator` — pending / in-flight counts, stuck counts, oldest-row ages, the retrying count (`*Retrying:* n (sent at least Nx, still in flight)`), the access-block line (`*Slack access blocked:* rows held, last at <instant>` or `none held`, with the window; the service takes the same `AccessBlockedTracker` bean as the indicator), the stuck threshold and `Health: UP/DOWN`; `cveSection()` appended only when `cve.enabled` — active topics, `PENDING` / `SUMMARIZING` backlog, `FAILED` split into retryable vs dead-letter at `ai.maxRetries`, latest collect window |
 
 ## For AI Agents
 
@@ -41,13 +41,17 @@ Spec under `application/src/test/kotlin/dev/notypie/application/service/ops/`. F
 `MessageOutboxRepository.stubOutboxStatus(...)` and `createFixedUtcClock` from
 `dev.notypie.application.outbox` (application testFixtures), `createCommandBasicInfo`,
 `createSendSlackMessageEvent`. Assert the rendered text lines and that the staged `Ephemeral` (requester, headline, `STATUS_REPORT`) is
-published; build the service with an `AppConfig` whose `cve.enabled` toggles the CVE section.
+published; build the service with an `AppConfig` whose `cve.enabled` toggles the CVE section and
+`createStubTransactionManager()`. One case runs `handleStatusReport` inside an outer H2 transaction whose
+`countPending` fails inside a participating template (`createH2TransactionManager` / `failInsideParticipatingTx`,
+`dev.notypie.application.service.meeting`) and asserts the outer commit still succeeds with the fallback text.
 
 ### Common Patterns
 - Constructor-injected `Clock` and `AppConfig`, neither defaulted; `AppConfig` fields copied into
   `private val`s at construction.
 - `buildString { appendLine(...) }` for Slack markdown; bullets are `• *Label:* value`.
-- `runCatching { ... }.getOrElse { log.error(...); fallback }` for user-facing reports.
+- `try { checkNotNull(detachedTemplate.execute { render() }) } catch (exception: Exception) { log.error(...); fallback }`
+  for user-facing reports rendered inside a caller's transaction: not `runCatching`, which also swallows `Error`.
 
 ## Dependencies
 

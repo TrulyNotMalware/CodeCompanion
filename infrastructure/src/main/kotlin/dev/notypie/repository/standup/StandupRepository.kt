@@ -20,6 +20,12 @@ data class ReadyDispatch(
     val routineUid: UUID,
 )
 
+data class RoutineStopCandidate(
+    val routineUid: UUID,
+    val name: String,
+    val creatorId: String,
+)
+
 data class NudgeCandidateSession(
     val sessionId: Long,
     val sessionUid: UUID,
@@ -41,6 +47,8 @@ interface StandupRepository {
     fun getRoutine(routineUid: UUID): RoutineDto
 
     fun findActiveRoutinesByChannel(commandChannel: String): List<RoutineDto>
+
+    fun lockActiveRoutinesByChannel(commandChannel: String): List<RoutineStopCandidate>
 
     fun listActiveRoutines(): List<RoutineDto>
 

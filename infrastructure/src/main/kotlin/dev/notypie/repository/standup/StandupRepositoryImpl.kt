@@ -55,6 +55,18 @@ open class StandupRepositoryImpl(
             .findActiveByCommandChannel(channel = commandChannel)
             .map { it.toRoutineDto() }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun lockActiveRoutinesByChannel(commandChannel: String): List<RoutineStopCandidate> =
+        jpaRoutineRepository
+            .findLockedActiveByCommandChannel(channel = commandChannel)
+            .map { routine ->
+                RoutineStopCandidate(
+                    routineUid = routine.routineUid,
+                    name = routine.name,
+                    creatorId = routine.creatorId,
+                )
+            }
+
     @Transactional(readOnly = true)
     override fun listActiveRoutines(): List<RoutineDto> =
         jpaRoutineRepository

@@ -14,8 +14,8 @@ import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.core.spec.style.BehaviorSpec
-import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 
@@ -83,7 +83,7 @@ class StandupSlashContextTest :
             val context =
                 contextFor(
                     definition = StandupSubCommandDefinition.STOP,
-                    options = listOf("daily", "", "sync"),
+                    options = listOf("Daily", "", "Sync"),
                     intentQueue = intentQueue,
                 )
 
@@ -93,7 +93,26 @@ class StandupSlashContextTest :
 
                 then("blank tokens are dropped and the name is space-joined") {
                     result.ok shouldBe true
-                    effects.single() shouldBe CommandIntent.StopStandupRoutine(routineName = "daily sync")
+                    effects.single() shouldBe CommandIntent.StopStandupRoutine(routineName = "Daily Sync")
+                }
+            }
+        }
+
+        given("the STOP sub-command with options carrying surrounding and inner whitespace") {
+            val intentQueue = createIntentQueue()
+            val context =
+                contextFor(
+                    definition = StandupSubCommandDefinition.STOP,
+                    options = listOf("  Daily ", "Sync\t"),
+                    intentQueue = intentQueue,
+                )
+
+            `when`("runCommand is invoked") {
+                context.runCommand()
+                val effects = intentQueue.drainSnapshot()
+
+                then("the name is normalized the way the setup service stores it") {
+                    effects.single() shouldBe CommandIntent.StopStandupRoutine(routineName = "Daily Sync")
                 }
             }
         }
@@ -115,9 +134,9 @@ class StandupSlashContextTest :
                     result.ok shouldBe false
                     val ephemeral = effects.single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     ephemeral.target.id shouldBe TEST_CHANNEL_ID
-                    ephemeral.recipient.shouldBeNull()
+                    ephemeral.recipient shouldBe UserRef(id = TEST_USER_ID)
                     ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
-                        "Usage: /standup stop <routine-name>"
+                        "Usage: `/standup stop <routine-name>`"
                 }
             }
         }

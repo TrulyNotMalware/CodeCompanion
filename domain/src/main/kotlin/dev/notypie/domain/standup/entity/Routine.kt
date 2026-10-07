@@ -68,6 +68,9 @@ class Routine(
                 DayOfWeek.FRIDAY,
             )
         val DEFAULT_CUTOFF_OFFSET: Duration = Duration.ofHours(1L)
+        private val WHITESPACE = Regex("\\s+")
+
+        fun normalizeName(raw: String): String = raw.trim().split(WHITESPACE).joinToString(separator = " ")
     }
 
     fun addMember(member: RoutineMember) {

@@ -7,6 +7,7 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.StandupRepository
@@ -29,6 +30,7 @@ class StandupRoutineSetupServiceTest :
         given("createRoutine") {
             `when`("a valid CreateStandupRoutineEvent is received") {
                 val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
                 val stager = mockk<OutboundMessageStager>()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val service =
@@ -109,6 +111,7 @@ class StandupRoutineSetupServiceTest :
 
             `when`("the routine is valid but the repository write fails") {
                 val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
                 val stager = mockk<OutboundMessageStager>()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val service =
@@ -134,6 +137,7 @@ class StandupRoutineSetupServiceTest :
 
             `when`("the routine name carries a disguised link and an ampersand") {
                 val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
                 val stager = mockk<OutboundMessageStager>()
                 val service =
                     StandupRoutineSetupService(
@@ -167,6 +171,7 @@ class StandupRoutineSetupServiceTest :
 
             `when`("the event carries no questions (invalid input)") {
                 val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
                 val stager = mockk<OutboundMessageStager>()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
                 val service =
@@ -207,6 +212,7 @@ class StandupRoutineSetupServiceTest :
 
             `when`("the cutoff did not parse as a whole number within bounds") {
                 val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
                 val stager = mockk<OutboundMessageStager>()
                 val service =
                     StandupRoutineSetupService(
@@ -230,8 +236,68 @@ class StandupRoutineSetupServiceTest :
                 }
             }
 
+            `when`("the name repeats an active routine of the same channel up to case and whitespace") {
+                val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = "C_COMMAND") } returns
+                    listOf(createRoutineDto(name = "Daily  Standup", commandChannel = "C_COMMAND"))
+                val stager = mockk<OutboundMessageStager>()
+                val errorSlot = slot<OutboundMessage>()
+                every { stager.stage(message = capture(errorSlot), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = mockk(relaxed = true),
+                    )
+
+                service.createRoutine(
+                    event =
+                        createCreateStandupRoutineEvent(
+                            name = " daily standup ",
+                            creatorId = "U_CREATOR",
+                            commandChannel = "C_COMMAND",
+                        ),
+                )
+
+                then("nothing is persisted and the creator's DM names the clash") {
+                    verify(exactly = 0) { repo.createRoutine(routine = any()) }
+                    val reply = errorSlot.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    reply.target.id shouldBe "U_CREATOR"
+                    reply.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "Couldn't create the standup routine: a standup routine named 'daily standup' already " +
+                        "exists in this channel. _Please run /standup setup again and review your inputs._"
+                }
+            }
+
+            `when`("the name is free in this channel and carries extra whitespace") {
+                val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = "C_COMMAND") } returns
+                    listOf(createRoutineDto(name = "Retro", commandChannel = "C_COMMAND"))
+                val routineSlot = slot<Routine>()
+                every { repo.createRoutine(routine = capture(routineSlot)) } answers { routineSlot.captured }
+                val stager = mockk<OutboundMessageStager>()
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = mockk(relaxed = true),
+                    )
+
+                service.createRoutine(
+                    event = createCreateStandupRoutineEvent(name = "  Daily \t Standup ", commandChannel = "C_COMMAND"),
+                )
+
+                then("the routine is stored under its normalized name") {
+                    routineSlot.captured.name shouldBe "Daily Standup"
+                }
+            }
+
             `when`("the cutoff is a number past the one-day bound") {
                 val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
                 val stager = mockk<OutboundMessageStager>()
                 every { stager.stage(message = any(), basicInfo = any()) } returns
                     mockk<SendSlackMessageEvent>(relaxed = true)

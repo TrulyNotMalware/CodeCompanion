@@ -14,6 +14,8 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.standup.entity.Routine
 
 internal class StandupSlashContext(
     commandBasicInfo: CommandBasicInfo,
@@ -27,7 +29,7 @@ internal class StandupSlashContext(
         intents = intents,
     ) {
     companion object {
-        internal val STOP_USAGE_MESSAGE: String = "Usage: ${StandupSubCommandDefinition.STOP.usage}"
+        internal val STOP_USAGE_MESSAGE: String = "Usage: `${StandupSubCommandDefinition.STOP.usage}`"
     }
 
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
@@ -45,11 +47,7 @@ internal class StandupSlashContext(
             StandupSubCommandDefinition.LIST -> addIntent(intent = CommandIntent.ListStandupRoutines)
 
             StandupSubCommandDefinition.STOP -> {
-                val routineName =
-                    subCommand.options
-                        .filter { option -> option.isNotBlank() }
-                        .joinToString(separator = " ")
-                        .trim()
+                val routineName = Routine.normalizeName(raw = subCommand.options.joinToString(separator = " "))
                 if (routineName.isBlank()) return stopUsageError(commandDetailType = commandDetailType)
                 addIntent(intent = CommandIntent.StopStandupRoutine(routineName = routineName))
             }
@@ -80,7 +78,7 @@ internal class StandupSlashContext(
             message =
                 OutboundMessage.Ephemeral(
                     target = ConversationTarget(id = commandBasicInfo.channel),
-                    recipient = null,
+                    recipient = UserRef(id = commandBasicInfo.publisherId),
                     content = MessageContent.Text(headline = null, markdown = STOP_USAGE_MESSAGE),
                 ),
         )

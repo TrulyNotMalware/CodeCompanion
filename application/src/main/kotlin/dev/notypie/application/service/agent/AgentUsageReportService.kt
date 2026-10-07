@@ -1,5 +1,6 @@
 package dev.notypie.application.service.agent
 
+import dev.notypie.application.common.detachedTemplate
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -17,6 +18,8 @@ import dev.notypie.repository.mcp.ToolCallUsage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -36,18 +39,22 @@ class AgentUsageReportService(
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
     private val clock: Clock,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val reportTemplate: TransactionTemplate = detachedTemplate(transactionManager = transactionManager)
+
     @EventListener
     fun handleUsageReport(event: AgentUsageReportRequestEvent) {
         val payload = event.payload
         val text =
-            runCatching { renderReport(days = payload.days) }
-                .getOrElse { exception ->
-                    log.error(exception) {
-                        "Failed to render AI usage report idempotencyKey=${event.idempotencyKey}"
-                    }
-                    "Failed to read AI usage. Check application logs."
+            try {
+                checkNotNull(reportTemplate.execute { renderReport(days = payload.days) })
+            } catch (exception: Exception) {
+                log.error(exception) {
+                    "Failed to render AI usage report idempotencyKey=${event.idempotencyKey}"
                 }
+                "Failed to read AI usage. Check application logs."
+            }
 
         outboundStager
             .stage(

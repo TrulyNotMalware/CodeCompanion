@@ -1,5 +1,6 @@
 package dev.notypie.application.service.standup
 
+import dev.notypie.application.common.detachedTemplate
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.domain.command.authorization.CommandPermission
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -14,12 +15,15 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.dto.RoutineDto
+import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -34,7 +38,10 @@ class StandupRoutineOpsService(
     private val commandRoleResolver: CommandRoleResolver,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val roleLookupTemplate: TransactionTemplate = detachedTemplate(transactionManager = transactionManager)
+
     companion object {
         private const val RESPONSE_HEADLINE = "CodeCompanion — standup"
         private const val NO_ROUTINES_MESSAGE =
@@ -91,15 +98,26 @@ class StandupRoutineOpsService(
 
     private fun stopRoutine(payload: StandupOpsPayload): String {
         val basicInfo = payload.responseBasicInfo
-        val routineName = checkNotNull(payload.routineName) { "STOP requires a routine name" }
-        val routine =
-            standupRepository
-                .findActiveRoutinesByChannel(commandChannel = basicInfo.channel)
-                .firstOrNull { candidate -> candidate.name.equals(routineName, ignoreCase = true) }
-                ?: return "No active standup routine named `${routineName.escapeMrkdwn()}` in this channel. " +
-                    "Run `/standup list` to see them."
-        val escapedName = routine.name.escapeMrkdwn()
         val requesterId = basicInfo.publisherId
+        val routineName =
+            Routine.normalizeName(raw = checkNotNull(payload.routineName) { "STOP requires a routine name" })
+        val candidates =
+            standupRepository
+                .lockActiveRoutinesByChannel(commandChannel = basicInfo.channel)
+                .filter { candidate ->
+                    Routine.normalizeName(raw = candidate.name).equals(routineName, ignoreCase = true)
+                }
+        val routine =
+            when (candidates.size) {
+                0 -> return "No active standup routine named `${routineName.escapeMrkdwn()}` in this channel. " +
+                    "Run `/standup list` to see them."
+                1 -> candidates.single()
+                else ->
+                    candidates.firstOrNull { candidate -> candidate.creatorId == requesterId }
+                        ?: return "Several active routines are named `${routineName.escapeMrkdwn()}` in this " +
+                            "channel; ask their creators to stop theirs."
+            }
+        val escapedName = routine.name.escapeMrkdwn()
         if (requesterId != routine.creatorId && !isAdmin(userId = requesterId)) {
             return "Only the routine creator (<@${routine.creatorId}>) or an admin can stop `$escapedName`."
         }
@@ -107,11 +125,12 @@ class StandupRoutineOpsService(
             return "`$escapedName` was already stopped."
         }
         opsLog.info { "Standup routine stopped: routineUid=${routine.routineUid} requesterId=$requesterId" }
-        return "Stopped standup routine `$escapedName`. No new sessions will open; prompts and nudges still " +
-            "pending for it are skipped, and a session that is already collecting will still be summarized " +
-            "at its cutoff."
+        return "Stopped standup routine `$escapedName`. No new sessions will open and later prompt and nudge " +
+            "ticks skip it; messages already queued may still be delivered, and a session that is already " +
+            "collecting is still summarized at its cutoff."
     }
 
     private fun isAdmin(userId: String): Boolean =
-        commandRoleResolver.resolve(userId = userId).grants(permission = CommandPermission.ADMINISTRATION)
+        checkNotNull(roleLookupTemplate.execute { commandRoleResolver.resolve(userId = userId) })
+            .grants(permission = CommandPermission.ADMINISTRATION)
 }

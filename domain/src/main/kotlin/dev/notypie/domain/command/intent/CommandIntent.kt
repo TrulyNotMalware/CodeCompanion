@@ -42,7 +42,13 @@ sealed class CommandIntent : CommandEffect {
 
     data class AgentUsageReport(
         val days: Int,
-    ) : CommandIntent()
+    ) : CommandIntent() {
+        companion object {
+            const val DEFAULT_DAYS: Int = 7
+            const val MAX_DAYS: Int = 90
+            val DAYS_RANGE: IntRange = 1..MAX_DAYS
+        }
+    }
 
     data class GrantRole(
         val targetUserId: String,

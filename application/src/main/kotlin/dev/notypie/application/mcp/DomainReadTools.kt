@@ -7,7 +7,9 @@ import dev.notypie.application.service.cve.ops.CVE_FEATURE_DISABLED_MESSAGE
 import dev.notypie.application.service.cve.query.CveLatestQueryService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionService
 import dev.notypie.application.service.ops.OpsStatusService
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.authorization.CommandPermission
+import dev.notypie.domain.command.intent.CommandIntent.AgentUsageReport
 import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.standup.dto.RoutineDto
@@ -24,8 +26,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private const val DEFAULT_DAYS_AHEAD = 7
-private const val DEFAULT_USAGE_DAYS = 7
-private const val MAX_USAGE_DAYS = 90
+private const val MAX_TOPIC_KEY_AUDIT_LENGTH = 64
 private val MEETING_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val ROUTINE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -54,16 +55,20 @@ class DomainReadTools(
 
     @McpTool(
         name = "get_ai_usage",
-        description = "Summarise AI turns and MCP tool calls over the last N days (default 7, max 90).",
+        description =
+            "Summarise AI turns and MCP tool calls over the last N days " +
+                "(default ${AgentUsageReport.DEFAULT_DAYS}, max ${AgentUsageReport.MAX_DAYS}).",
     )
     fun getAiUsage(
         @McpToolParam(
-            description = "How many days back to include, 1..90. Defaults to 7.",
+            description =
+                "How many days back to include, 1..${AgentUsageReport.MAX_DAYS}. " +
+                    "Defaults to ${AgentUsageReport.DEFAULT_DAYS}.",
             required = false,
         ) days: Int?,
         context: McpSyncRequestContext,
     ): CallToolResult {
-        val window = (days ?: DEFAULT_USAGE_DAYS).coerceIn(minimumValue = 1, maximumValue = MAX_USAGE_DAYS)
+        val window = (days ?: AgentUsageReport.DEFAULT_DAYS).coerceIn(range = AgentUsageReport.DAYS_RANGE)
         return mcpToolGate.execute(
             transportContext = context.transportContext(),
             toolName = "get_ai_usage",
@@ -161,11 +166,7 @@ class DomainReadTools(
     ): CallToolResult {
         val key = topicKey?.takeIf { it.isNotBlank() }
         val argumentsSummary =
-            if (key == null) {
-                """{"topicKey":null}"""
-            } else {
-                """{"topicKey":"${key.replace(oldChar = '"', newChar = '\'')}"}"""
-            }
+            jsonMapper.writeValueAsString(mapOf("topicKey" to key?.take(n = MAX_TOPIC_KEY_AUDIT_LENGTH)))
         return mcpToolGate.execute(
             transportContext = context.transportContext(),
             toolName = "cve_latest",
