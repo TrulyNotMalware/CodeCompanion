@@ -297,6 +297,28 @@ data class CreateStandupRoutineEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<CreateStandupRoutinePayload>
 
+enum class StandupOpsAction {
+    LIST,
+    STOP,
+}
+
+class StandupOpsPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: StandupOpsAction,
+    val routineName: String? = null,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class StandupOpsRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = StandupOpsRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: StandupOpsPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<StandupOpsPayload>
+
 data class DeclineModalOpenFailedEvent(
     val meetingIdempotencyKey: UUID,
     val participantUserId: String,

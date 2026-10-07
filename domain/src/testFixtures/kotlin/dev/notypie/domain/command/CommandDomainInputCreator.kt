@@ -28,6 +28,9 @@ import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
+import dev.notypie.domain.command.entity.event.StandupOpsAction
+import dev.notypie.domain.command.entity.event.StandupOpsPayload
+import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.outbound.MessageRef
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -172,6 +175,26 @@ fun createCveOpsRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.SIMPLE_TEXT,
+)
+
+fun createStandupOpsRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: StandupOpsAction = StandupOpsAction.LIST,
+    routineName: String? = null,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = StandupOpsRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        StandupOpsPayload(
+            action = action,
+            routineName = routineName,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type =
+        when (action) {
+            StandupOpsAction.LIST -> CommandDetailType.STANDUP_ROUTINE_LIST
+            StandupOpsAction.STOP -> CommandDetailType.STANDUP_ROUTINE_STOP
+        },
 )
 
 fun createCveLatestRequestEvent(

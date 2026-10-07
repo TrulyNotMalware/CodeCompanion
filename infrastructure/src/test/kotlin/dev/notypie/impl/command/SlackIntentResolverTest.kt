@@ -7,6 +7,8 @@ import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
+import dev.notypie.domain.command.entity.event.StandupOpsAction
+import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
@@ -256,6 +258,44 @@ class SlackIntentResolverTest :
                     request.payload.userId shouldBe "U_SUBSCRIBER"
                     request.payload.topicKeys shouldBe emptyList()
                     request.type shouldBe CommandDetailType.CVE_SUBSCRIPTIONS_LIST
+                }
+            }
+        }
+
+        given("ListStandupRoutines intent") {
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(CommandIntent.ListStandupRoutines), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces a LIST StandupOpsRequestEvent with no routine name") {
+                    val request = event.shouldBeInstanceOf<StandupOpsRequestEvent>()
+                    request.payload.action shouldBe StandupOpsAction.LIST
+                    request.payload.routineName shouldBe null
+                    request.payload.responseBasicInfo shouldBe basicInfo
+                    request.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    request.type shouldBe CommandDetailType.STANDUP_ROUTINE_LIST
+                }
+            }
+        }
+
+        given("StopStandupRoutine intent") {
+            val intent = CommandIntent.StopStandupRoutine(routineName = "daily sync")
+
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces a STOP StandupOpsRequestEvent carrying the routine name") {
+                    val request = event.shouldBeInstanceOf<StandupOpsRequestEvent>()
+                    request.payload.action shouldBe StandupOpsAction.STOP
+                    request.payload.routineName shouldBe "daily sync"
+                    request.payload.responseBasicInfo shouldBe basicInfo
+                    request.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    request.type shouldBe CommandDetailType.STANDUP_ROUTINE_STOP
                 }
             }
         }

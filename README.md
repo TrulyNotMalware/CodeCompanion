@@ -80,6 +80,9 @@ Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_us
 | Command | Surface | Minimum role |
 |---------|---------|--------------|
 | `/meetup`, `/meetup list [today\|tomorrow\|week\|month]` | Slash command | `user` |
+| `/standup setup` — create a standup routine (modal) | Slash command | `user` |
+| `/standup list` — this channel's active standup routines | Slash command | `user` |
+| `/standup stop <routine-name>` — only the routine's creator or an admin may stop it | Slash command | `user` |
 | `@bot help` | Mention | `user` |
 | `@bot ask <question>` — any free-text mention also falls back to `ask` | Mention | `ai_user` |
 | `@bot status` | Mention | `developer` |
@@ -226,6 +229,9 @@ CodeCompanion/
 | 명령 | 진입점 | 최소 역할 |
 |------|--------|-----------|
 | `/meetup`, `/meetup list [today\|tomorrow\|week\|month]` | 슬래시 명령 | `user` |
+| `/standup setup` — 스탠드업 루틴 생성(모달) | 슬래시 명령 | `user` |
+| `/standup list` — 이 채널의 활성 스탠드업 루틴 목록 | 슬래시 명령 | `user` |
+| `/standup stop <routine-name>` — 루틴 생성자 또는 관리자만 중지 가능 | 슬래시 명령 | `user` |
 | `@bot help` | 멘션 | `user` |
 | `@bot ask <질문>` — 명령이 아닌 자유 텍스트 멘션도 `ask`로 처리 | 멘션 | `ai_user` |
 | `@bot status` | 멘션 | `developer` |

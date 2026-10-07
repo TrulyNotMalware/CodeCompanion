@@ -23,7 +23,7 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
 | `CancelMeetingContext.kt` | Cancel button on `/meetup list` (`CANCEL_MEETING`): `routingExtras[0]` → `CommandIntent.CancelMeeting` |
 | `RescheduleMeetingContext.kt` / `RescheduleMeetingSubmissionContext.kt` | Reschedule button → `OpenModal(Reschedule)`; submit parses `date time` with `yyyy-MM-dd HH:mm` → `CommandIntent.RescheduleMeeting` |
 | `AddParticipantContext.kt` / `AddParticipantSubmissionContext.kt` | Add-participant button → `OpenModal(AddParticipant)`; submit splits the comma-joined user ids → `CommandIntent.AddParticipant` |
-| `RequestStandupSetupContext.kt` / `StandupSetupSubmissionContext.kt` | `/standup setup` → `OpenModal(StandupSetup)`; submit parses name, `\n`-separated questions, comma-separated members and weekdays, `LocalTime`, cutoff minutes (blank → 120; not a whole number in `Routine.MIN_CUTOFF_MINUTES..MAX_CUTOFF_MINUTES` → `null`, which the setup service answers with a validation error), `ZoneId` (default `Asia/Seoul`) → `CommandIntent.CreateStandupRoutine` |
+| `StandupSlashContext.kt` / `StandupSetupSubmissionContext.kt` | `/standup` and `/standup setup` → `OpenModal(StandupSetup)`; `/standup list` → `CommandIntent.ListStandupRoutines`; `/standup stop <routine-name>` → `CommandIntent.StopStandupRoutine` with the non-blank options space-joined, or, when the name is blank, an `Ephemeral` `STOP_USAGE_MESSAGE` (`recipient = null`) and a failed output. Every branch reports `STANDUP_SETUP_REQUEST`. Submit parses name, `\n`-separated questions, comma-separated members and weekdays, `LocalTime`, cutoff minutes (blank → 120; not a whole number in `Routine.MIN_CUTOFF_MINUTES..MAX_CUTOFF_MINUTES` → `null`, which the setup service answers with a validation error), `ZoneId` (default `Asia/Seoul`) → `CommandIntent.CreateStandupRoutine` |
 | `StandupFillContext.kt` / `StandupAnswerSubmissionContext.kt` | "Fill in standup" button (`routingExtras = [sessionUid, routineUid]`) → `OpenModal(StandupFill)` with the origin notice; submit with answers → `CommandIntent.RecordStandupAnswer(notice = the origin DM prompt)` and no update (only the application knows whether the session still accepted the answer, so it collapses the prompt itself); submit without answers → `UpdateMessage("Standup submitted.")` only |
 | `CveSubscriptionRequestContexts.kt` | `RequestCveSubscribeContext` / `RequestCveUnsubscribeContext` open the topic modals; `RequestCveSubscriptionsContext` queues `CveListSubscriptions` |
 | `CveSubscriptionSubmissionContexts.kt` | `CveSubscribeSubmissionContext` / `CveUnsubscribeSubmissionContext` → intents keyed on `interaction.actor.id` |
@@ -68,10 +68,10 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
 Specs (all under `domain/src/test/kotlin/dev/notypie/domain/command/context/`): `MeetingContextTest`
 (for `RequestMeetingContext` + `MeetingFormInput`), `ApprovalCallbackContextTest`,
 `MeetingApprovalResponseContextTest`, `RescheduleMeetingContextTest`, `AddParticipantContextTest`,
-`StandupFillContextTest`; the submission side is `ParsedSubmissionsTest` (parse factories) plus
+`StandupFillContextTest`, `StandupSlashContextTest`; the submission side is `ParsedSubmissionsTest` (parse factories) plus
 `SubmissionContextsTest` (all seven leaves + `IgnoredSubmissionContext`), with the full path in
 `../SubmissionPipelineCharacterizationTest` and routing in `../parsers/SubmissionRouterTest`. Not covered:
-`CancelMeetingContext`, `RequestStandupSetupContext`, `RequestCveLatestContext`, the three
+`CancelMeetingContext`, `RequestCveLatestContext`, the three
 `RequestCve*Context`s — add a spec when touching them. Build interactions with
 `InboundInteractionInputCreator` (`testFixtures`), extend `AbstractReactionCommandContextTest`.
 

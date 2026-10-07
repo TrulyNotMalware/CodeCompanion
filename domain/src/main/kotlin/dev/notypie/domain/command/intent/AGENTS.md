@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/intent
 
@@ -12,7 +12,7 @@ emission order until the application layer drains the command.
 | File | Description |
 |------|-------------|
 | `CommandEffect.kt` | Marker interface implemented by `CommandIntent` and `outbound/OutboundMessage`. Not `sealed` because the two implementors live in different packages |
-| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer` (with `notice: MessageRef?`, the DM prompt to collapse once the outcome is known), `CreateStandupRoutine`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`. Each KDoc names who triggers it and where its invariant is enforced |
+| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer` (with `notice: MessageRef?`, the DM prompt to collapse once the outcome is known), `CreateStandupRoutine`, `ListStandupRoutines`, `StopStandupRoutine(routineName)`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing` |
 | `IntentQueue.kt` | `IntentQueue` (`offer`, `snapshot`, `drainSnapshot`, `isEmpty`, `size`) and `internal DefaultIntentQueue` over an `ArrayDeque`; thread-unsafe by design |
 
 ## For AI Agents
@@ -24,9 +24,10 @@ emission order until the application layer drains the command.
   `when` fails to compile until you add it), and an application listener.
 - Intents carry business data only. Channel, app id and idempotency key ride on the command's
   `CommandBasicInfo` and are added by the resolver — do not duplicate them into intent fields.
-- Enforcement points stay documented on the variant: host-only checks for `CancelMeeting` /
+- Enforcement points, documented here rather than on the variant: host-only checks for `CancelMeeting` /
   `RescheduleMeeting` live in the repository `WHERE` clause, `AddParticipant`'s cap in the application
-  service, `MeetingAttendanceUpdate` in a `BEFORE_COMMIT` listener. Keep that KDoc convention.
+  service, `MeetingAttendanceUpdate` in a `BEFORE_COMMIT` listener, and `StopStandupRoutine`'s
+  creator-or-`ADMINISTRATION` check in `application/service/standup/StandupRoutineOpsService`.
 - Order in the queue is the order effects are staged. `MeetingApprovalResponseContext.handleDecline`
   emits `OpenModal` before the provisional intent so `views.open` fires inside the trigger window; do not
   sort or re-group effects when draining.
@@ -50,7 +51,7 @@ base (`AbstractCommandContextTest` uses the `createIntentQueue()` fixture and `d
 
 ### Common Patterns
 - `data class` per variant, `data object` for payload-free ones (`StatusReport`, `ListRoles`,
-  `CveListTopics`, `CveRetryDeadLetters`, `Nothing`).
+  `ListStandupRoutines`, `CveListTopics`, `CveRetryDeadLetters`, `Nothing`).
 - `UUID` business keys (`meetingUid`, `sessionUid`) and `LocalDateTime` for user-facing times.
 
 ## Dependencies

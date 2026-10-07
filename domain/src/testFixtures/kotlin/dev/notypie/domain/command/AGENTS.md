@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/command
 
@@ -13,7 +13,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandDomainInputCreator.kt` | `createCommandBasicInfo(appId, appToken, publisherId, channel, idempotencyKey)`; events `createCreateStandupRoutineEvent(name, creatorId, commandChannel, summaryChannel, questions, memberIds, weekdays, triggerLocalTime, cutoffMinutes: Long? = 120, timezone, responseBasicInfo)` (`responseBasicInfo.channel` is `""`, as a view_submission's is), `createRecordStandupAnswerEvent(sessionUid, userId, responses, notice = null, idempotencyKey)`, `createAgentConverseRequestEvent(prompt, threadId, requesterName, channelName)`, `createRoleManageRequestEvent(action = GRANT, targetUserId, role = DEVELOPER)`, `createCveSubscriptionRequestEvent(action = SUBSCRIBE, userId, topicKeys = ["cve-java"], type)`, `createCveOpsRequestEvent(action = LIST_TOPICS, topicKey, targetEventId)`, `createCveLatestRequestEvent(userId, topicKey)`; `createApprovalContents(idempotencyKey, commandDetailType, reason, publisherId, headLineText)` |
+| `CommandDomainInputCreator.kt` | `createCommandBasicInfo(appId, appToken, publisherId, channel, idempotencyKey)`; events `createCreateStandupRoutineEvent(name, creatorId, commandChannel, summaryChannel, questions, memberIds, weekdays, triggerLocalTime, cutoffMinutes: Long? = 120, timezone, responseBasicInfo)` (`responseBasicInfo.channel` is `""`, as a view_submission's is), `createRecordStandupAnswerEvent(sessionUid, userId, responses, notice = null, idempotencyKey)`, `createAgentConverseRequestEvent(prompt, threadId, requesterName, channelName)`, `createRoleManageRequestEvent(action = GRANT, targetUserId, role = DEVELOPER)`, `createCveSubscriptionRequestEvent(action = SUBSCRIBE, userId, topicKeys = ["cve-java"], type)`, `createCveOpsRequestEvent(action = LIST_TOPICS, topicKey, targetEventId)`, `createStandupOpsRequestEvent(action = LIST, routineName = null, responseBasicInfo)` (`type` follows the action: `STANDUP_ROUTINE_LIST` / `STANDUP_ROUTINE_STOP`), `createCveLatestRequestEvent(userId, topicKey)`; `createApprovalContents(idempotencyKey, commandDetailType, reason, publisherId, headLineText)` |
 | `InboundCommandCreator.kt` | `createMentionInboundCommand(mentionedUserIds, commandTokens = ["help"], hasCommandStructure, appId, appToken, actorId, actorName, channel, channelName, teamId, message, thread)`, `createSlashInboundCommand(subCommands, triggerId, ...)`, `createInteractionInboundCommand(commandDetailType = APPROVAL_REQUEST, action = approveAction(), form, idempotencyKey, ...)`, `createInteractionResponseInboundCommand(interaction, ...)` |
 | `InboundInteractionInputCreator.kt` | `createInboundInteraction(detailType = NOTHING, action = passiveAction(), form, actor, channelId, trigger, reply, message, idempotencyKey, routingExtras, submission)`; actions `approveAction`, `rejectAction`, `passiveAction`; fields `inboundField(kind, rawValue, isSelected, key)`, `applyButtonField()`, `rejectButtonField()`, `plainTextField(text)`, `datePickerField(date, format)`, `timePickerField(time, format)`, `multiUsersField(userName, maximumSequence)`; `SEPARATOR` |
 | `MockEventBuilderCreator.kt` | `createIntentQueue(): IntentQueue` — a fresh `DefaultIntentQueue` (file name is historical; nothing here is mocked) |
@@ -43,6 +43,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
   `AgentConverseServiceTest`, `createCreateStandupRoutineEvent` → `StandupRoutineSetupServiceTest`,
   `createRoleManageRequestEvent` → `RoleManagementServiceTest`, `createCveSubscriptionRequestEvent` →
   `CveSubscriptionServiceTest`, `createCveOpsRequestEvent` → `CveOpsServiceTest`,
+  `createStandupOpsRequestEvent` → `StandupRoutineOpsServiceTest`,
   `createCveLatestRequestEvent` → `CveLatestQueryServiceTest`. Meeting-lane events live in `../meet/`. Each
   creator threads `idempotencyKey` into the nested `responseBasicInfo` — override the key, not the info,
   unless the spec is about mismatched keys.

@@ -11,9 +11,9 @@ import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
+import dev.notypie.domain.command.entity.context.form.StandupSlashContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
 
@@ -50,6 +50,8 @@ enum class CommandDetailType {
     STANDUP_SETUP_REQUEST,
     STANDUP_SETUP_SUBMIT,
     STANDUP_SUMMARY,
+    STANDUP_ROUTINE_LIST,
+    STANDUP_ROUTINE_STOP,
     APPROVAL_CALLBACK,
 
     CVE_SUBSCRIBE_REQUEST,
@@ -118,7 +120,7 @@ internal fun CommandDetailType.createContext(
         }
 
         CommandDetailType.STANDUP_SETUP_REQUEST -> {
-            RequestStandupSetupContext(
+            StandupSlashContext(
                 commandBasicInfo = commandBasicInfo,
                 triggerHandle = "",
                 intents = intents,
@@ -149,6 +151,8 @@ internal fun CommandDetailType.createContext(
         CommandDetailType.STANDUP_ANSWER_SUBMIT,
         CommandDetailType.STANDUP_SETUP_SUBMIT,
         CommandDetailType.STANDUP_SUMMARY,
+        CommandDetailType.STANDUP_ROUTINE_LIST,
+        CommandDetailType.STANDUP_ROUTINE_STOP,
         CommandDetailType.CVE_SUBSCRIBE_REQUEST,
         CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
         CommandDetailType.CVE_UNSUBSCRIBE_REQUEST,

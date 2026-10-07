@@ -29,6 +29,9 @@ import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
+import dev.notypie.domain.command.entity.event.StandupOpsAction
+import dev.notypie.domain.command.entity.event.StandupOpsPayload
+import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
@@ -210,6 +213,31 @@ class SlackIntentResolver {
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                )
+            }
+
+            is CommandIntent.ListStandupRoutines -> {
+                StandupOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        StandupOpsPayload(
+                            action = StandupOpsAction.LIST,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.STANDUP_ROUTINE_LIST,
+                )
+            }
+
+            is CommandIntent.StopStandupRoutine -> {
+                StandupOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        StandupOpsPayload(
+                            action = StandupOpsAction.STOP,
+                            routineName = intent.routineName,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.STANDUP_ROUTINE_STOP,
                 )
             }
 

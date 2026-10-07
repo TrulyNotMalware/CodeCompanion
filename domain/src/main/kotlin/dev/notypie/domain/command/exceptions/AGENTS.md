@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/exceptions
 
@@ -17,7 +17,7 @@ sealed exception hierarchy thrown while parsing sub-commands or routing an unsup
 
 ### Working In This Directory
 - Throw sites: `entity/Command.createSubCommand` (`SUBCOMMAND_NOT_VALID`),
-  `entity/slash/RequestMeetingCommand` and `SetupStandupCommand.findSubCommandDefinition`
+  `entity/slash/RequestMeetingCommand` and `StandupCommand.findSubCommandDefinition`
   (`SUBCOMMAND_NOT_FOUND`), `entity/Command.executeInteraction` and
   `entity/InteractionCommand.buildParser` (`UNSUPPORTED_COMMAND_TYPE`). The never-thrown
   `COMMAND_NOT_FOUND` / `UNKNOWN_SUBCOMMAND_TYPE` / `VALIDATION_FAILED` were removed on 2026-09-22.

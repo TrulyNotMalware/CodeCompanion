@@ -29,7 +29,7 @@ queue and hands the effects to the infrastructure resolver/stager.
 | `entity/context/` | One `CommandContext` per user-visible behaviour (notice, status, approval, agent chat, CVE ops, reaction, ...) (see `entity/context/AGENTS.md`) |
 | `entity/context/form/` | Modal-backed contexts: request/reschedule/cancel meeting, add participant, standup setup & fill, CVE subscription, decline reason (see `entity/context/form/AGENTS.md`) |
 | `entity/parsers/` | `ContextParser` and its `AppMentionContextParser` / `InteractionContextParser` implementations (see `entity/parsers/AGENTS.md`) |
-| `entity/slash/` | Slash-command definitions: `RequestMeetingCommand`, `SetupStandupCommand`, `CveLatestSlashCommand`, `CveSubscriptionCommands`, `MeetingListRange` (see `entity/slash/AGENTS.md`) |
+| `entity/slash/` | Slash-command definitions: `RequestMeetingCommand`, `StandupCommand`, `CveLatestSlashCommand`, `CveSubscriptionCommands`, `MeetingListRange` (see `entity/slash/AGENTS.md`) |
 | `entity/event/` | `Event`, `EventPublisher` contracts implemented by infrastructure (see `entity/event/AGENTS.md`) |
 | `exceptions/` | `CommandException` hierarchy and `CommandErrorCode` (see `exceptions/AGENTS.md`) |
 | `dto/` | `CommandBasicInfo`, `UrlVerificationRequest` (see `dto/AGENTS.md`) |

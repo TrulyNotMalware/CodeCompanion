@@ -78,6 +78,12 @@ sealed class CommandIntent : CommandEffect {
         val timezone: java.time.ZoneId,
     ) : CommandIntent()
 
+    data object ListStandupRoutines : CommandIntent()
+
+    data class StopStandupRoutine(
+        val routineName: String,
+    ) : CommandIntent()
+
     data class CveSubscribe(
         val userId: String,
         val topicKeys: List<String>,

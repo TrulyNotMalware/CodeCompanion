@@ -46,9 +46,9 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 `ReactionContext.handleInteraction()`, 아니면 `runCommand()`. 전체가 `runCatching`이라 예외는 `CommandOutput.fail`이 된다.
 
 - **`SubCommandDefinition`**: `subCommandIdentifier`/`requiresArguments`/`minRequiredArgs`/`usage`. 슬래시 명령은
-  enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP}`).
+  enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP, LIST, STOP}`).
   `NONE`의 식별자가 `""`인 이유는 `SlashCommandRequestBody.subCommandList()`가 빈 텍스트를 `[""]`로 만들기 때문이다.
-- **구현체**: 슬래시는 명령당 하나(`RequestMeetingCommand`, `SetupStandupCommand`, `CveLatestSlashCommand`,
+- **구현체**: 슬래시는 명령당 하나(`RequestMeetingCommand`, `StandupCommand`, `CveLatestSlashCommand`,
   `CveSubscribe/Unsubscribe/SubscriptionsSlashCommand`). 멘션과 인터랙션은 `InteractionCommand` 하나가 받아 페이로드
   타입으로 `AppMentionContextParser` / `InteractionContextParser`를 고른다. `ReplaceTextResponseCommand`는 레거시용.
 - **`CommandContext<T>`**(`entity/context/`, internal)는 `commandBasicInfo`·`subCommand`·`intents`를 받고 효과를

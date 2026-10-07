@@ -2,7 +2,7 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.common.IdempotencyCreator
 import dev.notypie.application.service.command.CommandExecutor
-import dev.notypie.domain.command.entity.slash.SetupStandupCommand
+import dev.notypie.domain.command.entity.slash.StandupCommand
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import org.springframework.stereotype.Service
@@ -21,7 +21,7 @@ class StandupSlashServiceImpl(
     ) {
         val idempotencyKey = IdempotencyCreator.create(data = commandData)
         val command =
-            SetupStandupCommand(
+            StandupCommand(
                 idempotencyKey = idempotencyKey,
                 commandData = commandData,
             )

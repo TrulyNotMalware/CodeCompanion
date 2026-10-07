@@ -3,7 +3,7 @@ package dev.notypie.domain.command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.slash.CveSubscribeSlashCommand
 import dev.notypie.domain.command.entity.slash.CveUnsubscribeSlashCommand
-import dev.notypie.domain.command.entity.slash.SetupStandupCommand
+import dev.notypie.domain.command.entity.slash.StandupCommand
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.TopicOption
@@ -21,7 +21,7 @@ class SlashPayloadResolutionTest :
         given("commands built from a genuine slash payload") {
             `when`("each command handles its event") {
                 val setup =
-                    SetupStandupCommand(
+                    StandupCommand(
                         idempotencyKey = UUID.randomUUID(),
                         commandData = createSlashInboundCommand(subCommands = listOf("setup"), triggerId = "trigger-1"),
                     )
@@ -53,7 +53,7 @@ class SlashPayloadResolutionTest :
             `when`("each command handles its event") {
                 val commands =
                     listOf(
-                        SetupStandupCommand(
+                        StandupCommand(
                             idempotencyKey = UUID.randomUUID(),
                             commandData = createMentionInboundCommand(),
                         ),

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/entity/event
 
@@ -12,7 +12,7 @@ implements to deliver them.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Event.kt` | `EventPayload { eventId }`; `CommandEvent<out T : EventPayload>` (`idempotencyKey`, `name`, `type: CommandDetailType`, `payload`, `destination`, `isInternal`, `timestamp`). Payload + `data class` event pairs: `GetMeetingEventPayload` / `GetMeetingListEvent` (via abstract `MeetingPayload`), `UpdateMeetingAttendance*`, `CancelMeeting*`, `RescheduleMeeting*`, `AddParticipant*`, `StatusReport*`, `RoleManage*` (+ `RoleManageAction`), `CveSubscription*` (+ `CveSubscriptionAction`), `CveLatest*`, `CveOps*` (+ `CveOpsAction`), `AgentConverse*`, `RecordStandupAnswer*`, `CreateStandupRoutine*`. Plain `data class`es that are **not** `CommandEvent`s: `StandupCutoffEvent`, `DeclineModalOpenFailedEvent`, `StandupModalOpenFailedEvent` |
+| `Event.kt` | `EventPayload { eventId }`; `CommandEvent<out T : EventPayload>` (`idempotencyKey`, `name`, `type: CommandDetailType`, `payload`, `destination`, `isInternal`, `timestamp`). Payload + `data class` event pairs: `GetMeetingEventPayload` / `GetMeetingListEvent` (via abstract `MeetingPayload`), `UpdateMeetingAttendance*`, `CancelMeeting*`, `RescheduleMeeting*`, `AddParticipant*`, `StatusReport*`, `RoleManage*` (+ `RoleManageAction`), `CveSubscription*` (+ `CveSubscriptionAction`), `CveLatest*`, `CveOps*` (+ `CveOpsAction`), `AgentConverse*`, `RecordStandupAnswer*`, `CreateStandupRoutine*`, `StandupOps*` (+ `StandupOpsAction` `LIST` / `STOP`; `routineName` is set for `STOP` only). Plain `data class`es that are **not** `CommandEvent`s: `StandupCutoffEvent`, `DeclineModalOpenFailedEvent`, `StandupModalOpenFailedEvent` |
 | `EventPublisher.kt` | `EventPublisher.publishEvent(EventQueue<CommandEvent<EventPayload>>)` and the `publishOne(event)` extension that wraps a single event in a one-shot `DefaultEventQueue` |
 
 ## For AI Agents
@@ -53,7 +53,7 @@ Intent → event mapping is pinned by `:infrastructure:test --tests '*SlackInten
 ### Common Patterns
 - Payload = `class` with `override val eventId = UUID.randomUUID()` as first parameter; event =
   `data class` with the six `CommandEvent` overrides defaulted, `payload` and `type` required.
-- Action enums (`RoleManageAction`, `CveSubscriptionAction`, `CveOpsAction`) collapse several intents
+- Action enums (`RoleManageAction`, `CveSubscriptionAction`, `CveOpsAction`, `StandupOpsAction`) collapse several intents
   into one event type with nullable fields documented per action.
 
 ## Dependencies

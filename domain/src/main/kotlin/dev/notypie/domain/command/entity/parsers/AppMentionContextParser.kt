@@ -33,6 +33,9 @@ internal class AppMentionContextParser(
             • `/meetup` — open the new-meeting form
             • `/meetup list` — show your upcoming meetings (host-owned rows have an inline *Cancel* button)
             • `/meetup list today|tomorrow|week|month` — filter by window
+            • `/standup setup` — create a standup routine (modal)
+            • `/standup list` — show this channel's active standup routines
+            • `/standup stop <routine-name>` — stop a routine (creator or admin)
 
             *Mentions*
             • `@CodeCompanion notice @user1 @user2 <message>` — send a notice

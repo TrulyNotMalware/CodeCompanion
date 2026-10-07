@@ -4,7 +4,7 @@ import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
+import dev.notypie.domain.command.entity.context.form.StandupSlashContext
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
@@ -12,7 +12,7 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.common.error.exceptionDetails
 import java.util.UUID
 
-class SetupStandupCommand(
+class StandupCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
 ) : Command<StandupSubCommandDefinition>(
@@ -22,8 +22,8 @@ class SetupStandupCommand(
     override fun parseContext(
         subCommand: SubCommand<StandupSubCommandDefinition>,
     ): CommandContext<StandupSubCommandDefinition> {
-        val slashPayload = commandData.slashInvocation(commandName = "SetupStandupCommand")
-        return RequestStandupSetupContext(
+        val slashPayload = commandData.slashInvocation(commandName = "StandupCommand")
+        return StandupSlashContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             triggerHandle = slashPayload.trigger.raw,
             subCommand = subCommand,
@@ -63,5 +63,13 @@ enum class StandupSubCommandDefinition(
     SETUP(
         subCommandIdentifier = "setup",
         usage = "/$STANDUP_COMMAND_IDENTIFIER setup",
+    ),
+    LIST(
+        subCommandIdentifier = "list",
+        usage = "/$STANDUP_COMMAND_IDENTIFIER list",
+    ),
+    STOP(
+        subCommandIdentifier = "stop",
+        usage = "/$STANDUP_COMMAND_IDENTIFIER stop <routine-name>",
     ),
 }
