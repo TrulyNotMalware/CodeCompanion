@@ -19,7 +19,6 @@ class StandupSession(
 
     init {
         validate(className = this.javaClass.simpleName) {
-            // Enforced at construction so a JPA-loaded row can't resurrect a broken SUMMARIZED state.
             ("summaryMessageTs" of summaryMessageTs).shouldSatisfy(
                 "SUMMARIZED session must record summaryMessageTs (message_ts of the summary post)",
             ) {

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # application/socket
 
@@ -31,8 +31,7 @@ is unchanged (Web API via the outbox relay). The bean exists only under the `loc
   this transport, so a bug that would return 400/500 over HTTP is invisible there except in the log. A failed
   interactive envelope is not acked at all, so Slack shows the user an error (as it does for the HTTP route's
   500) instead of closing the modal as if the rolled-back click or submission had succeeded.
-- The build script comment describes this as gated to a `socket` profile; the code gates on `local`.
-  `application-local.yaml` and `docs/wiki/dev-environment.md` document the `local` profile and the
+- The receiver is gated on the `local` profile (there is no `socket` profile). `application-local.yaml` and `docs/wiki/dev-environment.md` document the `local` profile and the
   `SLACK_APP_TOKEN` (`connections:write`) requirement.
 - `start()` never throws: a bad token or a connect failure is logged and `isRunning()` stays false, so
   the app boots without Socket Mode rather than failing.

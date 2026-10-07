@@ -28,7 +28,6 @@ class SlackEventController(
         private const val CHALLENGE_KEY = "challenge"
     }
 
-    // Slack needs only a 2xx: the ack carries no body, so a failed command's errorReason never leaves the server.
     @PostMapping(value = ["/events"], produces = [MediaType.APPLICATION_JSON_VALUE])
     fun handleAppMentionEvents(
         @RequestHeader headers: MultiValueMap<String, String>,
@@ -38,7 +37,6 @@ class SlackEventController(
             return ResponseEntity.ok(mapOf(CHALLENGE_KEY to payload[CHALLENGE_KEY].toString()))
         }
 
-        // Some event types lack event.user and would crash deserialization; only app_mention is processed.
         val eventType = extractEventType(payload = payload)
         if (eventType != APP_MENTION_EVENT_TYPE) {
             logger.debug { "Ignoring non-app_mention Slack event: type=$eventType" }

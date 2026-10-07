@@ -10,7 +10,6 @@ data class CommandBasicInfo(
     val idempotencyKey: UUID,
 ) {
     companion object {
-        // appToken is intentionally blank; outbound calls authenticate via the client's bot token.
         fun forOutbound(
             publisherId: String,
             channel: String,

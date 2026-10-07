@@ -1,6 +1,5 @@
 package dev.notypie.domain.common.error
 
-// Transport-neutral on purpose: HTTP status mapping belongs to the application layer's ControllerAdvice.
 interface ErrorCode {
     val message: String
 }

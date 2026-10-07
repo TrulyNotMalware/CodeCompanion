@@ -119,13 +119,11 @@ class ModalTemplateBuilder(
                 )
         }
 
-        // Must stay aligned with RescheduleMeetingSubmissionContext's DATE_PATTERN/TIME_PATTERN, which reads these.
         private val RESCHEDULE_DATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd")
         private val RESCHEDULE_TIME_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("HH:mm")
 
-        // Slack caps a message at 50 blocks; worst case is 3 blocks/meeting + 2, so 3N + 2 <= 50.
         internal const val MAX_MEETINGS_PER_LIST: Int = 16
         private const val MEETING_LIST_HEADER = "My Meetings"
 

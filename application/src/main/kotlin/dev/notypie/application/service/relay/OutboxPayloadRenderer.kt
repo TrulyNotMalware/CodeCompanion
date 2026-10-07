@@ -13,7 +13,6 @@ data class RenderedRow(
     val next: OutboundEnvelope?,
 )
 
-// Schema guard runs before decode, so a future payload shape refuses to send rather than garbling.
 class OutboxPayloadRenderer(
     private val renderers: Map<Transport, OutboundRenderer>,
 ) {

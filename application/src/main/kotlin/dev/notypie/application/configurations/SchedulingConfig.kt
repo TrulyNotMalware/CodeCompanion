@@ -6,11 +6,10 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
-// PoolingPublisherConfig also declares @EnableScheduling; Spring allows the duplicate — keep both.
+// The only @EnableScheduling in CDC mode: PoolingPublisherConfig's copy is active in polling mode only.
 @Configuration
 @EnableScheduling
 class SchedulingConfig {
-    // Boot's virtual-thread scheduler ignores pool.size and runs every fixedDelay job on one thread.
     @Bean
     fun taskScheduler(threadPoolTaskSchedulerBuilder: ThreadPoolTaskSchedulerBuilder): ThreadPoolTaskScheduler =
         threadPoolTaskSchedulerBuilder.build()

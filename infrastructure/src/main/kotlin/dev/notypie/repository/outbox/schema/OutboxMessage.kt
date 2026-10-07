@@ -70,7 +70,6 @@ class OutboxMessage(
     )
     val sendCount: Int = 0,
 ) : Persistable<String> {
-    // The id is assigned by the application, so without this save() would merge: a SELECT before every INSERT.
     @field:Transient
     private var newRow: Boolean = true
 
@@ -111,11 +110,8 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }
 
-// Milliseconds since the epoch reach 1e14 only in the year 5138, so anything at or above it is microseconds.
 private const val EPOCH_MICROS_FLOOR = 100_000_000_000_000L
 
-// Debezium writes DATETIME as epoch time read as UTC (no zone): Timestamp (millis) for DATETIME(0-3),
-// MicroTimestamp (micros) for DATETIME(4-6).
 internal fun Long.debeziumDateTime(): LocalDateTime {
     val micros = if (this >= EPOCH_MICROS_FLOOR) this else this * 1_000
     return LocalDateTime.ofEpochSecond(

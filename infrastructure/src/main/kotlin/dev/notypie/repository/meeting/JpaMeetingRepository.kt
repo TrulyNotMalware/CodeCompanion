@@ -24,8 +24,6 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingId") meetingId: Long,
     ): MeetingSchema?
 
-    // The user filter lives in a subquery, never on the fetch-join alias: filtering the alias makes Hibernate
-    // initialise `participants` with only the matching rows, so a participant would see themselves alone.
     @Query(
         """
         SELECT m

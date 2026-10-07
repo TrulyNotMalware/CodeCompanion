@@ -32,7 +32,6 @@ internal abstract class SubmissionContext<M : Any>(
     }
 }
 
-// Returns success so the modal closes (200); the default handler would wrongly queue a message.
 internal class IgnoredSubmissionContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

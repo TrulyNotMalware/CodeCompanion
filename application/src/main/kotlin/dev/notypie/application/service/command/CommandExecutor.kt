@@ -36,7 +36,6 @@ class CommandExecutor(
     }
 
     private fun <T : SubCommandDefinition> publishIntents(effects: List<CommandEffect>, command: Command<T>) {
-        // Not filterIsInstance: CommandEffect isn't sealed, so a new type must fail loudly, not vanish.
         val intents = mutableListOf<CommandIntent>()
         val outbound = mutableListOf<OutboundMessage>()
         effects.forEach { effect ->

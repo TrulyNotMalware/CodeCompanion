@@ -6,7 +6,6 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.common.error.exceptionDetails
 
-// Call only from parseContext — failures must stay inside handleEvent's exception boundary.
 internal fun InboundCommand.slashInvocation(commandName: String): SlashInvocation =
     when (val slashPayload = payload) {
         is SlashInvocation -> slashPayload

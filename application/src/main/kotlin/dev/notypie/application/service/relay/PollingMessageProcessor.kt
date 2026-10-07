@@ -6,7 +6,6 @@ import org.springframework.scheduling.annotation.Scheduled
 import java.time.Clock
 import java.time.LocalDateTime
 
-// Stuck/stale recovery lives in OutboxRecoveryScheduler, shared with CDC mode.
 class PollingMessageProcessor(
     private val outboxRepository: MessageOutboxRepository,
     private val messageRelayService: SlackMessageRelayServiceImpl,
@@ -20,7 +19,6 @@ class PollingMessageProcessor(
         claimAndDispatch()
     }
 
-    // One batch per tick (no inner loop) so the scheduler thread doesn't starve other work.
     private fun claimAndDispatch() {
         val now = LocalDateTime.now(clock)
         messageRelayService.claimWithReservedSlots(wanted = batchSize) { slots ->

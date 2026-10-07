@@ -70,7 +70,6 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 userId = routingExtras.getOrNull(0).orEmpty(),
                 noticeChannel = routingExtras.getOrNull(1).orEmpty(),
                 noticeMessageTs = routingExtras.getOrNull(2).orEmpty(),
-                // view.state.values arrives unordered; sort by block id so answers[i] aligns with questions[i].
                 answers =
                     form
                         .all(kind = InboundFieldKind.TEXT)

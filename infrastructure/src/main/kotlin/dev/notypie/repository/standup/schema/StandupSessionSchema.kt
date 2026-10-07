@@ -42,12 +42,10 @@ class StandupSessionSchema(
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "status", nullable = false, length = 16)
     val status: SessionStatus = SessionStatus.COLLECTING,
-    // Slack post ts of the summary message; lets a restarted scheduler detect "already posted" and skip resending.
     @field:Column(name = "summary_message_ts", length = 64)
     val summaryMessageTs: String? = null,
     @field:Column(name = "nudged_at")
     val nudgedAt: Instant? = null,
-    // Sets, not Lists: one query JOIN FETCHes both, so rows repeat per dispatch x answer; a List keeps them.
     @field:OneToMany(
         mappedBy = "session",
         fetch = FetchType.LAZY,
@@ -72,7 +70,7 @@ class StandupSessionSchema(
     val updatedAt: LocalDateTime? = null,
 ) {
     companion object {
-        const val RESPONSE_DELIMITER: String = "" // ASCII Unit Separator — never appears in Slack text.
+        const val RESPONSE_DELIMITER: String = "\u001F"
     }
 }
 

@@ -39,7 +39,6 @@ class SlackInteractionHandlerImpl(
     private val transactionManager: PlatformTransactionManager,
 ) : InteractionHandler {
     companion object {
-        // Legacy only — new contexts handle their own REJECT button; do NOT add new types here.
         internal val LEGACY_AUTO_REJECT_TYPES: Set<CommandDetailType> =
             setOf(
                 CommandDetailType.APPLY_REQUEST,

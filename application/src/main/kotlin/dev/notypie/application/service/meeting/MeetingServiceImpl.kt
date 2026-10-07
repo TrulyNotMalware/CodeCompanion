@@ -73,7 +73,6 @@ class MeetingServiceImpl(
         )
     }
 
-    // Throws on zero rows matched so the enclosing tx rolls back instead of silently no-op'ing.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
     fun updateParticipantAttendance(event: UpdateMeetingAttendanceEvent) {
         val payload = event.payload
@@ -85,7 +84,6 @@ class MeetingServiceImpl(
                 absentReason = payload.absentReason,
                 absentReasonDetail = payload.absentReasonDetail,
             )
-        // A JDBC URL with useAffectedRows=true makes a no-op UPDATE return 0, so 0 alone is not "no match".
         if (rowsUpdated == 0 &&
             !meetingRepository.participantExists(
                 meetingIdempotencyKey = payload.meetingIdempotencyKey,
@@ -99,7 +97,6 @@ class MeetingServiceImpl(
         }
     }
 
-    // Decline is already persisted elsewhere (OTHER); this only notifies, never re-publishes.
     @EventListener
     @Transactional
     fun onDeclineModalOpenFailed(event: DeclineModalOpenFailedEvent) {
@@ -296,7 +293,6 @@ class MeetingServiceImpl(
     fun getMeetingListEvent(event: GetMeetingListEvent) {
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
-        // Not caught: the read joins the caller's transaction, so a failure leaves it rollback-only and no reply commits.
         val meetings =
             meetingRepository.getMeetingsByUserIdInRange(
                 userId = payload.publisherId,

@@ -53,7 +53,7 @@ data class InboundField(
     val key: String?,
     val kind: InboundFieldKind,
     val isSelected: Boolean,
-    val rawValue: String, // comma-joined already when the field is a multi-select
+    val rawValue: String,
 )
 
 class InboundForm(
@@ -72,7 +72,6 @@ class InboundForm(
     fun firstValue(kind: InboundFieldKind): String? = first(kind)?.rawValue
 }
 
-// Ids must match the modal template writer's block ids; drift silently empties the field read.
 object InboundFieldKeys {
     const val ADD_PARTICIPANT_USERS: String = "add_participant_users"
 

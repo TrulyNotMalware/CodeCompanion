@@ -26,7 +26,6 @@ import java.time.ZoneId
 
 private val log = KotlinLogging.logger {}
 
-// claim() must keep REQUIRED propagation, or a save failure can't roll it back — leaking a false-delivered row.
 class CveNotificationDispatcher(
     private val cveDeliveryRepository: CveDeliveryRepository,
     private val outboxRepository: MessageOutboxRepository,
@@ -224,7 +223,6 @@ class CveNotificationDispatcher(
         return take(n = totals.count { it <= CHAIN_TEXT_BUDGET }.coerceAtLeast(minimumValue = 1))
     }
 
-    // Oversized body would be rejected by Slack post-claim and retry forever — capping prevents that.
     private fun capBody(body: String): String = body.truncateSectionText(limit = CAPPED_BODY_MAX_LENGTH)
 
     private fun digestEventLine(event: UndeliveredCveEvent): String {

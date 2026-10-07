@@ -48,7 +48,6 @@ import java.util.concurrent.CompletableFuture
 
 private const val DEAD_LETTER_TOPIC_SUFFIX = "-dlt"
 
-// Counts hand-offs: with setFailIfSendResultIsError(false) the publisher only logs a failed dead-letter send.
 const val DEAD_LETTER_HANDOFFS_METRIC = "kafka.dead.letter.handoffs"
 
 const val DEAD_LETTER_PUBLISH_FAILURES_METRIC = "kafka.dead.letter.publish.failures"
@@ -120,7 +119,6 @@ private class FailureReportingOperations(
         }
 }
 
-// Consumer-aware so DeadLetterPublishingRecoverer still receives the consumer (original group-id header).
 class CountingRecordRecoverer(
     val delegate: ConsumerAwareRecordRecoverer,
     private val meterRegistry: MeterRegistry,
@@ -140,8 +138,6 @@ private val POISON_RECORD_EXCEPTIONS: List<Class<out Throwable>> =
         MessageConversionException::class.java,
     )
 
-// The outbox row, not the record, is the source of truth: a record that failed for another reason (the database was
-// down) is acknowledged and its row delivered by OutboxRecoveryScheduler, so the DLT holds only records nobody can read.
 class PoisonOnlyDeadLetterRecoverer(
     val deadLetter: ConsumerAwareRecordRecoverer,
 ) : ConsumerAwareRecordRecoverer {
@@ -200,7 +196,6 @@ class CdcConsumerConfiguration {
     fun cdcDeadLetterTopic(appConfig: AppConfig): NewTopic =
         TopicBuilder.name(deadLetterTopic(topic = appConfig.mode.cdc.topic)).build()
 
-    // Replaces Boot's processor, which gives every phase spring.lifecycle.timeout-per-shutdown-phase.
     @Bean(name = [AbstractApplicationContext.LIFECYCLE_PROCESSOR_BEAN_NAME])
     fun lifecycleProcessor(lifecycleProperties: ObjectProvider<LifecycleProperties>): DefaultLifecycleProcessor =
         DefaultLifecycleProcessor().apply {
@@ -241,19 +236,16 @@ class KafkaConsumerConfiguration(
         return DefaultKafkaConsumerFactory(properties)
     }
 
-    // Applies to Boot's producer factory, which backs the template when the Kafka event publisher is off.
     @Bean
     fun producerCloseTimeoutCustomizer(): DefaultKafkaProducerFactoryCustomizer =
         DefaultKafkaProducerFactoryCustomizer { it.setPhysicalCloseTimeout(PRODUCER_CLOSE_TIMEOUT_SECONDS) }
 
-    // Required: without a template a poison record could only be logged and dropped.
     @Bean
     fun cdcDeadLetterRecovery(
         kafkaTemplate: KafkaTemplate<String, Any>,
         meterRegistry: MeterRegistry,
     ): CdcDeadLetterRecovery = CdcDeadLetterRecovery(jsonTemplate = kafkaTemplate, meterRegistry = meterRegistry)
 
-    // RECORD ack assumes `enable-auto-commit: false` in every CDC profile; auto-commit would commit in-flight records.
     @Bean
     @ConditionalOnMissingBean(ConcurrentKafkaListenerContainerFactory::class)
     fun concurrentKafkaListenerContainerFactory(

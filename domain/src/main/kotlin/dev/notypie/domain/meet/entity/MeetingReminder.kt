@@ -4,7 +4,6 @@ import dev.notypie.domain.common.validate
 import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import java.time.Instant
 
-// SENT means enqueued to the outbox relay, not confirmed delivered by Slack.
 class MeetingReminder(
     val offsetMinutes: Int,
     val scheduledAt: Instant,

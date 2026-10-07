@@ -73,7 +73,6 @@ internal data class MeetingFormInput(
                 ?.toSet()
                 ?: emptySet()
 
-        // Assumes the modal's TIME pickers appear in order: index 0 = start, index 1 = end.
         private fun parseStartDateTime(form: InboundForm): LocalDateTime? {
             val timeString =
                 form

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # test/kotlin/dev/notypie/application/service/interaction
 
@@ -27,8 +27,8 @@ APPLY and REJECT, and covers the decline-reason modal validation that returns a 
 - The decline-reason cases build `States(type = STATIC_SELECT / PLAIN_TEXT_INPUT, isSelected, selectedValue)`
   inline; the fixture's `selectedApplyButtonStates()`/`selectedRejectButtonStates()` cover the button cases.
 - The "constructor resolves without error" case is a no-op assertion and the only placeholder in this spec.
-- The class-level KDoc explains why the whitelist is pinned: a new `CommandDetailType` must not inherit the
-  global "Canceled." short-circuit without opting in.
+- The whitelist is pinned so a new `CommandDetailType` does not inherit the global "Canceled." short-circuit
+  without opting in.
 
 ### Testing Requirements
 ```bash

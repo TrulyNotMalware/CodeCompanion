@@ -15,7 +15,6 @@ open class CveTopicRepositoryImpl(
 ) : CveTopicRepository {
     private val syncTemplate: TransactionTemplate = TransactionTemplate(transactionManager)
 
-    // A failed INSERT poisons the session it ran in, so the insert that may lose a replica race gets its own.
     private val insertTemplate: TransactionTemplate =
         TransactionTemplate(transactionManager).apply {
             propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
@@ -32,7 +31,6 @@ open class CveTopicRepositoryImpl(
 
     private fun syncExisting(definition: CveTopicDefinition): Boolean? =
         syncTemplate.execute {
-            // Lock first: under MariaDB snapshot isolation a locking read or UPDATE after a plain read fails (1020).
             jpaCveTopicRepository
                 .findLockedByTopicKey(topicKey = definition.topicKey)
                 ?.let { existing -> sync(existing = existing, definition = definition) }
@@ -52,7 +50,6 @@ open class CveTopicRepositoryImpl(
 
     private fun sync(existing: CveTopicSchema, definition: CveTopicDefinition): Boolean {
         if (matches(schema = existing, definition = definition)) return false
-        // active is never overwritten here — a yaml reboot must not undo a chat activate|deactivate toggle.
         existing.redefine(
             displayName = definition.displayName,
             category = definition.category,

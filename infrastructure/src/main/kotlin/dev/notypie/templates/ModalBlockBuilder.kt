@@ -87,7 +87,6 @@ class ModalBlockBuilder(
         val rescheduleRoutingValue = routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)
         val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
         val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)
-        // block_id/action_id must be unique per row; Slack rejects the whole message (invalid_blocks) on collision.
         val rescheduleButton: InteractiveObject =
             modalElementBuilder.rescheduleMeetingButtonElement(
                 buttonName = RESCHEDULE_BUTTON_NAME,

@@ -50,11 +50,9 @@ import java.time.format.DateTimeFormatter
 
 private val dispatcherLog = KotlinLogging.logger {}
 
-// internal_error and fatal_error "may have partly succeeded" per Slack, so only an idempotent call retries them.
 private val TRANSIENT_SLACK_ERRORS = setOf("internal_error", "fatal_error", "service_unavailable")
 private val NOT_SENT_SLACK_ERRORS = setOf("service_unavailable")
 
-// Codes that fail every call from this replica (token, workspace or its network); channel-scoped ones would hold 24 h.
 private val SLACK_ACCESS_ERRORS =
     setOf(
         "invalid_auth",
@@ -86,7 +84,6 @@ internal val MAX_RETRY_AFTER: Duration = Duration.ofHours(24L)
 private val IDEMPOTENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(IOException::class.java, SlackApiException::class.java, SlackTransientErrorException::class.java)
 
-// A post that failed after its request was written may already be on Slack; only retry failures before that.
 private val NOT_SENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(SlackRequestNotSentException::class.java, SlackTransientErrorException::class.java)
 val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
@@ -123,7 +120,6 @@ class RateLimitedOutput(
 
 private enum class RequestProgress { UNTRACKED, NOT_WRITTEN, HEADERS_WRITTEN }
 
-// Synchronous OkHttp calls emit these events on the calling thread, so a thread-local scopes them to one attempt.
 object RequestProgressListener : EventListener() {
     private val progress = ThreadLocal.withInitial { RequestProgress.UNTRACKED }
 
@@ -135,11 +131,9 @@ object RequestProgressListener : EventListener() {
 
     override fun callStart(call: Call) = progress.set(RequestProgress.NOT_WRITTEN)
 
-    // End, not start: on HTTP/2 the header write opens the stream, which fails unsent on a connection already shut down.
     override fun requestHeadersEnd(call: Call, request: Request) = progress.set(RequestProgress.HEADERS_WRITTEN)
 }
 
-// OkHttp's own retry would re-send a written POST after a reset, behind the dispatcher's back.
 fun slackOkHttpClient(config: SlackConfig): OkHttpClient =
     buildOkHttpClient(config)
         .newBuilder()
@@ -372,7 +366,6 @@ class ApplicationMessageDispatcher(
                     responseType,
                 )
             } catch (exception: RuntimeException) {
-                // A 2xx body goes through Gson in the SDK: bad JSON throws, an empty body ends in an NPE. Slack answered.
                 val unreadable = exception is JsonParseException || exception is NullPointerException
                 if (unreadable && RequestProgressListener.requestHeadersWritten()) {
                     throw SlackResponseUnreadableException(cause = exception)

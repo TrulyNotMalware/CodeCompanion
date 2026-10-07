@@ -15,7 +15,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
-// Questions are \n-joined in one TEXT column; the domain layer rejects newlines in a question to keep this unambiguous.
 @Entity(name = "standup_routine")
 @Table(
     indexes = [

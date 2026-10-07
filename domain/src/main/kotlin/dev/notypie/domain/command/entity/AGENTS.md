@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/entity
 
@@ -39,7 +39,7 @@ is the mention vocabulary.
   needs its branch, pinned by the writer→parser regression test).
 - `CommandDetailType` values are persisted by name and embedded in buttons already posted to Slack;
   `SlackInteractionRequestParser` reads them back with `valueOf`. Renaming one means a local DB reset
-  and dead buttons — the enum KDoc says so, keep it that way.
+  and dead buttons — the comment above the enum says so, keep it.
 - Adding a mention keyword: `CommandSet` entry with its permission, a branch in
   `parsers/AppMentionContextParser` (exhaustive `when`, so the compiler reminds you), and a line in
   `HELP_MESSAGE`. Any token that is not a `CommandSet` name is `UNKNOWN` and goes to the AI assistant.

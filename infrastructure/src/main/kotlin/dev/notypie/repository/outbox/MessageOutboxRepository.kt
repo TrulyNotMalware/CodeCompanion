@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
-// Health and Prometheus read these on every probe or scrape; a stuck database must not hang the endpoint.
 const val HEALTH_QUERY_TIMEOUT_HINT = "jakarta.persistence.query.timeout"
 const val HEALTH_QUERY_TIMEOUT_MILLIS = "2000"
 
@@ -190,7 +189,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
         @Param("now") now: LocalDateTime,
     ): Int
 
-    // Retention: terminal rows only, and LIMIT keeps one purge from holding a long lock on a large backlog.
+    // LIMIT keeps one purge from holding a long lock on a large backlog.
     @Modifying
     @Transactional
     @Query(

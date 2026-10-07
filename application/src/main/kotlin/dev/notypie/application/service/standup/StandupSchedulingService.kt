@@ -102,7 +102,6 @@ class StandupSchedulingService(
                 "Standup session opened: routine=${routine.routineUid} date=$today members=${routine.members.size}"
             }
         } catch (ex: DataIntegrityViolationException) {
-            // Unique-constraint violation is the expected race; confirm the row exists before swallowing.
             val existing =
                 standupRepository.findSession(routineUid = routine.routineUid, sessionDate = today)
             if (existing != null) {
@@ -113,7 +112,6 @@ class StandupSchedulingService(
         }
     }
 
-    // Queries absolute UTC across all sessions so cross-timezone members aren't stranded on the wrong day.
     fun sendPendingDispatches() {
         val now = clock.instant()
         val stuckCutoff = now.minus(Duration.ofMinutes(stuckSendingThresholdMinutes))
@@ -309,7 +307,6 @@ internal inline fun containFailure(onFailure: (Exception) -> Unit, block: () -> 
     }
 }
 
-// Button click yields the trigger_id the follow-up modal needs — a scheduler tick has none of its own.
 internal fun buildDmNotice(
     sessionUid: UUID,
     sessionDate: LocalDate,

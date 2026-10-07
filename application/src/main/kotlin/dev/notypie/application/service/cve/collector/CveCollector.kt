@@ -43,7 +43,6 @@ class CveCollector(
             log.warn { "No source adapter for topic=${topic.topicKey} sourceType=${topic.sourceType}; skipping" }
             return
         }
-        // Claim-before-fetch is deliberate: a failed fetch burns the window rather than retry-hammer feeds.
         if (!cveCollectLedgerRepository.claimWindow(topicId = topic.id, windowStart = windowStart)) return
 
         val rawEvents = adapter.fetch(topic = topic)

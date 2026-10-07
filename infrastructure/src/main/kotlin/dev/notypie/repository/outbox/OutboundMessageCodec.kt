@@ -23,7 +23,6 @@ import tools.jackson.module.kotlin.readValue
     JsonSubTypes.Type(value = OutboundMessage.UpdateMessage::class, name = "UpdateMessage"),
     JsonSubTypes.Type(value = OutboundMessage.ReplaceMessage::class, name = "ReplaceMessage"),
 )
-// OpenModal/DirectMessage are intentionally unregistered — not outbox-bound, so (de)coding one fails fast.
 private interface OutboundMessageMixin
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
@@ -38,7 +37,6 @@ private interface OutboundMessageMixin
 )
 private interface MessageContentMixin
 
-// DateTimeFormatter has no stable JSON form or equals() — excluded so the Kotlin default reconstructs it.
 @JsonIgnoreProperties("timeFormatter")
 private interface TimeScheduleInfoMixin
 

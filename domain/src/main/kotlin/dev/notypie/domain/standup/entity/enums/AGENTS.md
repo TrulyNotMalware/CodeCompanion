@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/standup/entity/enums
 
@@ -37,7 +37,7 @@ That spec exercises `SUMMARIZED`, `SENT`, and `FAILED` through the entity invari
 transitions are specified in `:application:test --tests '*StandupSchedulingServiceTest'`.
 
 ### Common Patterns
-- Plain `enum class`, state diagram in KDoc. `DispatchStatus` mirrors
+- Plain `enum class`. `DispatchStatus` mirrors
   `meet/entity/enums/MeetingReminderStatus` exactly — keep the two in step if one changes.
 
 ## Dependencies

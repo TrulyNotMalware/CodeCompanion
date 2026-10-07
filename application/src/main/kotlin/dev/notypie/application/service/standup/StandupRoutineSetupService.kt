@@ -30,7 +30,6 @@ class StandupRoutineSetupService(
     @EventListener
     fun createRoutine(event: CreateStandupRoutineEvent) {
         val payload = event.payload
-        // Only input validation is caught: a failed write has already marked the caller's transaction rollback-only.
         val message =
             runCatching { buildRoutine(payload = payload) }
                 .fold(
@@ -47,7 +46,6 @@ class StandupRoutineSetupService(
                             "_Please run /standup setup again and review your inputs._"
                     },
                 )
-        // A DM: an ephemeral in the command channel fails with no_permission when the bot is not a member there.
         val replyInfo = payload.responseBasicInfo.copy(channel = payload.creatorId)
         outboundStager
             .stage(

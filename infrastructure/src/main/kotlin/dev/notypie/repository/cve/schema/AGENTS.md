@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # infrastructure/repository/cve/schema
 
@@ -26,7 +26,7 @@ JPA entities and enums for the CVE lane. Every unique constraint here is load-be
   length fails at insert on MariaDB; never rename a constant that has rows.
 - **`cve_event.title` is 512 and `raw_content` is `TEXT`;** `CveEventRepositoryImpl` truncates to 512 /
   60,000 before the native insert. Change the column and the constant together.
-- **Each `cve_event` index keys one hot query** (the in-file comments say which: the dispatcher's DONE scan
+- **Each `cve_event` index keys one hot query** (the dispatcher's DONE scan
   by `created_at`, `/latest`'s per-topic DONE read, `findClaimable`'s due-check). A new query shape usually
   needs a new index and a `V*` migration.
 - Mutable entity columns are `var` with `protected set` (2026-10-01): `CveTopicSchema` changes only through

@@ -29,7 +29,6 @@ internal class StandupFillContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_PROMPT
 
-    // routingExtras[0] = sessionUid, [1] = routineUid; malformed extras are a no-op.
     override fun handleInteraction(interaction: InboundInteraction): CommandOutput {
         val sessionUid =
             interaction.routingExtras

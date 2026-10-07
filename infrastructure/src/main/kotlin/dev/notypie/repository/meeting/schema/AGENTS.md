@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # infrastructure/repository/meeting/schema
 
@@ -18,8 +18,7 @@ change together.
 ## For AI Agents
 
 ### Working In This Directory
-- **`participants` has `orphanRemoval = false` and cascades only `MERGE` + `PERSIST`** (in-file comment:
-  "Delete N+1"). Removing an element from the list does not delete the row; no delete path exists today.
+- **`participants` has `orphanRemoval = false` and cascades only `MERGE` + `PERSIST`**. Removing an element from the list does not delete the row; no delete path exists today.
   `addParticipants` relies on the cascade to insert new `ParticipantsSchema` rows on `saveAndFlush(schema)`.
 - **`@OptimisticLock(excluded = false)` on `participants` is load-bearing.** Hibernate leaves `mappedBy`
   collections out of version checks by default; without the override two concurrent adds both pass the

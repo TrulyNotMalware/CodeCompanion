@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/dto/modals
 
@@ -20,9 +20,8 @@ infrastructure template builders turn them into Block Kit.
 
 ### Working In This Directory
 - `ApprovalContents.idempotencyKey` + `commandDetailType` become the button value that routes the
-  click back to a context. `RequestMeetingContext.sendNotice` sets `MEETING_APPROVAL_REQUEST` and the
-  comment there says "must match" — the value here, not the emitting context's own detail type, is what
-  `SlackInteractionRequestParser` reads.
+  click back to a context. `RequestMeetingContext.sendNotice` sets `MEETING_APPROVAL_REQUEST` here — this
+  value, not the `runCommand` detail type, is what `SlackInteractionRequestParser` reads.
 - `time` defaults to `LocalDateTime.now()` at construction, so two otherwise-identical instances are
   not equal. Pass it explicitly in specs and anywhere equality or idempotency matters.
 - These DTOs travel inside `MessageContent.Form` / `Schedule` and `OutboundMessage.Approval`, which the
