@@ -20,9 +20,10 @@ is a thin lookup from `CommandDetailType` to context.
 ### Working In This Directory
 - Parsers return a context and never run it; `entity/InteractionCommand` builds them lazily so a
   parse failure surfaces as an `ERROR_RESPONSE` output instead of a construction exception.
-- `HELP_MESSAGE` is asserted verbatim by `AppMentionContextParserTest`; it is also the only user-facing
-  documentation of the mention grammar. Change the text and the spec together, and add a line whenever
-  you add a keyword.
+- `HELP_MESSAGE` is the only in-chat documentation of the mention and slash grammar; add a line whenever
+  you add a keyword or slash command. No spec pins its wording: `AppMentionContextParserTest` checks that
+  `help` yields a `TextResponseContext` whose reply is an `Ephemeral` to the requester carrying the
+  constant itself (compared by reference), so editing the text needs no spec change.
 - The permission check runs before the `when`, so a denied `grant` never reaches the argument checks.
   Usage errors after the gate, the denial itself, `help` and "Command Not supported." are `TextResponseContext`
   ephemerals to the actor (`recipient = publisherId`).
@@ -39,10 +40,11 @@ is a thin lookup from `CommandDetailType` to context.
   no `rich_text_section`, and an empty token list with structure throws `IllegalArgumentException`
   (caught upstream).
 - `InteractionContextParser` passes an empty `SubCommand`; `createContext` substitutes
-  `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST` itself. The `else -> EmptyContext`
-  arm there resolves an unrouted non-submission interaction to `EmptyContext`, which
+  `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST` itself. `createContext` names every
+  `CommandDetailType` explicitly (no `else`), so a new value does not compile until it is placed. The
+  values placed in the `EmptyContext` group resolve an interaction of that type to `EmptyContext`, which
   `Command.executeInteraction()` turns into an `ERROR_RESPONSE` (it is not a `ReactionContext`);
-  submission routes can no longer fall through to it — `SubmissionRouter` intercepts them first.
+  submission routes never reach it — `SubmissionRouter` intercepts them first.
 
 ### Testing Requirements
 ```bash

@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-02_
+_type: pattern · updated: 2026-10-07_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -49,8 +49,9 @@ _type: pattern · updated: 2026-10-02_
 - `throwIfSchemaNotFound`는 `T?`에 대한 `inline reified` 확장이라 호출 뒤 값이 non-null로 남는다(null 경계 조기 해소
   규칙과 맞물린다). 단 `tableName`은 **수신자의 정적 타입**이라 두 호출자 모두 매핑 뒤에 부르므로 `MeetingDto`/`RoutineDto`로
   찍힌다. 엔티티 이름을 원하면 스키마 객체에서 불러야 한다. `schemaNotFound {}` DSL은 현재 호출자가 없다.
-- `ErrorBroadcaster` 포트는 `ConsumerConfig`가 모드별로 빈을 등록하지만 **아무도 주입하지 않는다.** `KafkaErrorBroadcaster.broadcastError`는
-  `TODO()`라 호출되면 `NotImplementedError`(`Error`, `Exception` 아님)가 난다. 첫 호출자가 되기 전에 구현부터 한다.
+- `ErrorBroadcaster` 포트의 구현은 `StdoutErrorBroadcaster`(`logger.error`) 하나이고, `ConsumerConfig.kt`의
+  `ErrorBroadcasterConfig`가 모드와 무관하게 빈으로 등록하지만 **아무도 주입하지 않는다.** `TODO()` 스텁이던 Kafka 구현은
+  `f9971700`(#26)에서 삭제됐다. Kafka 구현을 다시 만들면 실제 에러 토픽이 필요하고, 에러 경로에서 불리므로 던지면 안 된다.
 
 ## 에러가 사용자에게 닿는 길
 
@@ -118,7 +119,7 @@ _type: pattern · updated: 2026-10-02_
 - `Command.handleEvent`의 `runCatching` 경로는 `errorReason`에만 남고 로그·ephemeral 어디에도 나타나지 않는다.
 - `DetailErrorAlertContext`(`MessageContent.ErrorNotice`를 채널에 게시)는 스펙은 있지만 **생성하는 프로덕션 코드가 없다.**
 - Socket Mode 실패는 로그로만 남는다. 로컬 프로파일 전용이라 감수하고 있는 상태다.
-- `ErrorBroadcaster`는 주입처가 없고 Kafka 구현은 `TODO()`다. `ErrorResponse`는 참조가 없다.
+- `ErrorBroadcaster`는 주입처가 없다(구현은 `StdoutErrorBroadcaster`뿐). `ErrorResponse`는 참조가 없다.
 - `RetryService`의 공유 정책 변경과 `maxRetries` off-by-one(위 절).
 - `DatabaseExceptionTest`는 빈 스펙이고 `ControllerAdvice` 스펙은 없다 — 위 공백을 고칠 때 먼저 채운다
   ([testing-guide.md](testing-guide.md) 참고).
@@ -139,8 +140,9 @@ _type: pattern · updated: 2026-10-02_
   `controllers/SlackEventController.kt`, `socket/SocketModeReceiver.kt`, `common/TransactionTemplateExt.kt`,
   `service/standup/StandupSchedulingService.kt`, `service/meeting/MeetingReminderSchedulingService.kt`,
   `service/cve/collector/CveCollector.kt`)
-- `infrastructure/src/main/kotlin/dev/notypie/exception/` (`ErrorBroadcaster.kt`, `KafkaErrorBroadcaster.kt`,
-  `StdoutErrorBroadcaster.kt`, `meeting/DatabaseException.kt`, `AGENTS.md`),
+- `infrastructure/src/main/kotlin/dev/notypie/exception/` (`ErrorBroadcaster.kt`, `StdoutErrorBroadcaster.kt`,
+  `meeting/DatabaseException.kt`, `AGENTS.md`), `application/.../configurations/ConsumerConfig.kt`
+  (`ErrorBroadcasterConfig`),
   `infrastructure/src/main/kotlin/dev/notypie/repository/meeting/MeetingRepositoryImpl.kt`,
   `.../repository/standup/StandupRepositoryImpl.kt`
 - `infrastructure/src/main/kotlin/dev/notypie/impl/retry/RetryService.kt`, `.../configurations/RetryConfiguration.kt`,

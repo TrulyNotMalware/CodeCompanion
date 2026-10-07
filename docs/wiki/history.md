@@ -1,6 +1,6 @@
 # 프로젝트 연혁과 설계 전환점
 
-_type: history · updated: 2026-09-21_
+_type: history · updated: 2026-10-07_
 
 > 2024-06 Slack 봇 골격에서 출발해 아웃박스·CDC 릴레이, 미팅/스탠드업, transport 중립 리팩토링, 역할·에이전트·
 > MCP, CVE 봇을 거쳐 2026-08 문서/CI 하드닝에 이르는 시간순 기록이며, 각 국면이 무엇에 반응한 결정이었는지를 남긴다.
@@ -107,8 +107,10 @@ _type: history · updated: 2026-09-21_
 | delay-dispatch 경로·`commandType` 배관 | → `11515af`(2026-04-27) | 호출자 없는 dead path |
 | Refactor 4g "outbox transport 컬럼" | 연기 → Phase 8b에 흡수 | Discord 착수 전까지 미루려 했으나 사용자 결정으로 일괄 처리 |
 
-미착수로 남은 것: Handoff #15 Prometheus 메트릭, MCP 쓰기 도구(Phase 2, 설계만), 2nd transport(Discord —
-`Transport.DISCORD` + `DiscordOutboundRenderer` 구현이 남은 전부라는 것이 Phase 8b의 결론).
+미착수로 남은 것: MCP 쓰기 도구(Phase 2, 설계만), 2nd transport(Discord — `Transport.DISCORD` +
+`DiscordOutboundRenderer` 구현이 남은 전부라는 것이 Phase 8b의 결론). Handoff #15 Prometheus 메트릭은
+`f9971700`(#26, 2026-10-06)으로 들어왔다 — `micrometer-registry-prometheus` 의존성, `dev`·`prod`의 `prometheus`
+엔드포인트 노출, `OutboxMetrics`의 아웃박스 게이지, Kafka DLT·에이전트 턴·CVE 수집·Slack 디스패치 카운터.
 
 ## 근거
 
@@ -118,6 +120,11 @@ _type: history · updated: 2026-09-21_
 - `Handoff.md`, `Refactor.md`, `CveBotPlan.md`, `STYLE_GUIDE.local.md`,
   `.omc/plans/mcp-domain-tools-phase1.md` (모두 git-ignored, 로컬 작업 트리 기준)
 - `.gitignore`, `README.md`, `application/src/main/resources/db/migration/V1..V17`
+- Prometheus: `git log -S micrometer-registry-prometheus -- application/build.gradle.kts`(`f9971700`),
+  `application/build.gradle.kts`, `application-{dev,prod}.yaml`(`management.endpoints.web.exposure.include`),
+  `application/src/main/kotlin/dev/notypie/application/health/OutboxMetrics.kt`,
+  `configurations/{KafkaConsumerConfiguration,CveConfiguration,SlackRequestBuilderConfiguration}.kt`,
+  `service/agent/AgentConverseService.kt`
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

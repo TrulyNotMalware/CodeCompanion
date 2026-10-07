@@ -183,8 +183,10 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - `LEGACY_AUTO_REJECT_TYPES`(`APPROVAL_REQUEST`)의 거절 버튼은 핸들러 수준에서 "Canceled."로
   대체된다. 새 타입을 여기에 넣지 말고 각 `ReactionContext`가 자기 거절을 처리하게 한다.
 - `SlackMentionEventHandlerImpl.parseAppMentionEvent`는 `payload["channel_name"]`/`payload["user_name"]`을 읽지만
-  Events API `app_mention` 페이로드에는 그 키가 없다(`SlackEventCallBackRequest`에도 필드 없음). 결과 `actorName`/
-  `channelName`은 문자열 `"null"`이 되어 `AgentConversePayload`를 통해 에이전트 프롬프트에 들어간다(코드에 `FIXME`).
+  Events API `app_mention` 페이로드에는 그 키가 없다(`SlackEventCallBackRequest`에도 필드 없음). 키가 없으면 `""`로
+  떨어지므로 멘션 경로의 `actorName`/`channelName`은 늘 빈 문자열이다. `AgentConverseService`의 `requesterLine`/
+  `channelLine`은 이름이 비면 `<@id>`/`<#id>`만 쓰고 이름 괄호를 생략하므로 에이전트 프롬프트에 가짜 이름이 들어가지
+  않는다.
 - `IdempotencyCreator.create(InboundCommand)` = 페이로드 JSON SHA-256 + **1초 창** 시드. 같은 초의 재전송만 같은 키다.
 - 죽었거나 반쯤 죽은 조각(본보기로 삼지 말 것): `OutboundMessage.DirectMessage`(생산자 없음, 렌더러는 `error()`),
   `EphemeralTextResponseContext`/`DetailErrorAlertContext`(테스트에서만 생성),

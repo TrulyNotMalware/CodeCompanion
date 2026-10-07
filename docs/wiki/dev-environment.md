@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-10-03_
+_type: guide · updated: 2026-10-07_
 
 > JDK 25 · Gradle 9.8.0 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -94,8 +94,9 @@ _type: guide · updated: 2026-10-03_
 ### B. HTTP + 터널 (`slack-live`) — 실제 워크스페이스 e2e (구 `real`, 2026-09-21 개명)
 
 - Kafka·Debezium 없이 orbstack MariaDB만 있으면 된다. `ngrok`/`cloudflared`로 9000 포트를 노출하고 Slack 앱의 Request URL
-  세 개 — slash(`/api/slash/meet`, `/api/slash/standup`), Interactivity(`/api/slack/interaction`), Events(`/api/slack/events`)
-  — 를 터널 주소로 잡는다. Events URL 검증(`url_verification`)은 앱이 먼저 떠 있어야 통과한다.
+  세 종류 — slash(`/api/slash/{meet,standup,subscribe,unsubscribe,subscriptions,latest}`), Interactivity(`/api/slack/interaction`),
+  Events(`/api/slack/events`) — 를 터널 주소로 잡는다. [`docs/slack-app-manifest.yaml`](../slack-app-manifest.yaml)의
+  `<your-host>`를 터널 주소로 바꿔 앱을 만들면 한 번에 잡힌다. Events URL 검증(`url_verification`)은 앱이 먼저 떠 있어야 통과한다.
 - `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `DATABASE_USER_PWD`(모두 필수, 기본값 없음)로
   `bootRun --args='--spring.profiles.active=slack-live'`. 터널로 공개되는 포트라 actuator는 `/api/actuator/health`만 연다
   (2026-10-01: DB 비밀번호 기본값 제거, `metrics`·`info` 노출 제거). devtools의 restart classloader가 기동을 깨면 `--spring.devtools.restart.enabled=false`를 붙인다.
@@ -119,6 +120,57 @@ _type: guide · updated: 2026-10-03_
   `-Duser.timezone=Asia/Seoul` + `/etc/localtime` 마운트로 서울 시간이다. 아웃박스 시각(`updated_at` 등)은 이제 애플리케이션
   시계(`Clock`)로 기록되므로 DB 세션 시간대(`NOW()`, `CURRENT_TIMESTAMP`)에 기대는 쿼리·운영 비교를 하지 않는다. 운영 DB의
   실제 값은 `SELECT @@session.time_zone, NOW()`로 확인한다(미확인).
+
+### D. AI 사이드카 컨테이너 (2026-10-07 확인)
+
+`local` 프로파일 앱(A)에 [agent-sidecar](https://github.com/TrulyNotMalware/agent-sidecar)를 컨테이너로 붙여 `@bot ask`와
+MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 돌려 봤고, claude 공급자는 같은 방식에
+`CLAUDE_CODE_OAUTH_TOKEN` 또는 `ANTHROPIC_API_KEY`가 더 필요하다.
+
+1. 이미지는 agent-sidecar `main` 체크아웃에서 빌드한다. 이미지는 uid 10001로 돌고 상태를 전부 `/var/lib/claude-sidecar`
+   아래에 둔다(`CODEX_HOME=/var/lib/claude-sidecar/codex`).
+2. 그 경로에 붙일 named volume을 uid 10001 소유로 만들고, codex 공급자면 호스트의 `~/.codex/auth.json`을 볼륨의
+   `codex/auth.json`으로 복사해 둔다.
+3. 이미지의 `CLAUDE_MD_PATH` 기본값은 `/workspace/CLAUDE.md`다. 사이드카가 턴마다 이 파일을 다시 읽으므로 파일이 없으면
+   **모든 턴이 실패**한다. 짧은 `CLAUDE.md`라도 마운트한다.
+4. 실행:
+
+   ```bash
+   docker run -d --name agent-sidecar \
+     -e PROVIDER=codex \
+     -e BEARER_SECRET="$SIDECAR_BEARER_SECRET" \
+     -e MCP_SERVER_URL=http://host.docker.internal:9000/mcp \
+     -e MCP_SERVER_NAME=domain-tools \
+     -e TURN_TIMEOUT_SEC=90 \
+     -v <volume>:/var/lib/claude-sidecar \
+     -v <path>/CLAUDE.md:/workspace/CLAUDE.md:ro \
+     -p 127.0.0.1:7300:7300 \
+     <image>
+   ```
+
+   - `BEARER_SECRET`은 앱의 `slack.app.agent.sidecar.bearer-secret`과 같은 값이다. `local` yaml은 그 키를
+     `${SIDECAR_BEARER_SECRET:}`(기본값 빈 문자열)로 읽으므로 앱과 컨테이너에 같은 env를 준다.
+   - `TURN_TIMEOUT_SEC`(사이드카 기본 90)는 앱의 `slack.app.agent.sidecar.request-timeout-seconds`(`local` yaml 120) 이하로
+     둔다. 사이드카 쪽 타임아웃이 먼저 터져야 앱이 끊긴 스트림 대신 타임아웃 응답을 받는다.
+5. 앱은 A의 env에 더해 MCP 서명 시크릿을 env `SLACK_APP_MCP_SIGNINGSECRET`(`slack.app.mcp.signing-secret`의 relaxed binding)로
+   주고, 다음 플래그로 띄운다. `local` yaml은 MCP를 켜지 않으므로 플래그가 필요하다.
+
+   ```bash
+   --slack.app.mcp.enabled=true --spring.ai.mcp.server.enabled=true --spring.ai.mcp.server.protocol=STREAMABLE
+   --spring.kafka.bootstrap-servers=<tailscale-ip>:19092,<tailscale-ip>:29092,<tailscale-ip>:39092
+   ```
+
+라이브로 확인한 사실(2026-10-07):
+
+- OrbStack의 `host.docker.internal`은 앱이 `127.0.0.1`에만 바인딩해도 닿는다. `/mcp`는 `slack.app.mcp.allow-remote=false`(기본)일
+  때 loopback이 아닌 주소나 forwarding 헤더가 있는 요청을 401로 거부하므로(`McpTurnTokenFilter`), 다른 컨테이너 런타임에서
+  MCP 호출이 401이면 이 검사를 먼저 의심한다(OrbStack 외 런타임은 미확인).
+- `local` yaml의 Kafka bootstrap(`localhost:19092`·`29092`·`39092`)은 그대로 쓸 수 없다. `~/infra` Kafka가 그 포트를
+  Tailscale IP에만 바인딩하므로 `--spring.kafka.bootstrap-servers`로 덮어쓴다.
+- 성공 판정은 `agent_turn_history`·`mcp_tool_call_history` 행과 Slack 스레드로 한다. 사이드카 로그의 `force_cancelled`는
+  앱이 `done` 프레임을 받고 연결을 닫을 때도 찍히므로 실패 신호가 아니다.
+- `scripts/mcp-smoke.sh`로 `/mcp`만 따로 찔러 볼 때는 `MCP_SIGNING_SECRET`(앱의 `slack.app.mcp.signing-secret`과 같은 값)이
+  필요하다.
 
 ## 데이터베이스와 마이그레이션
 
@@ -255,7 +307,12 @@ _type: guide · updated: 2026-10-03_
 - `application/src/main/kotlin/dev/notypie/application/configurations/AppConfig.kt`, `CveConfiguration.kt`,
   `conditions/Conditions.kt`, `socket/SocketModeReceiver.kt`, `security/SlackRequestVerificationFilter.kt`
 - `.github/workflows/{lint,simple_test_action,security_check,deploy_action}.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`
-- `scripts/mcp-smoke.sh`, `README.md`, git-ignored `RealTestSetup.md`
+- `scripts/mcp-smoke.sh`, `README.md`, git-ignored `RealTestSetup.md`, `docs/slack-app-manifest.yaml`
+- `application/src/main/kotlin/dev/notypie/application/security/mcp/McpTurnTokenFilter.kt`, `application-local.yaml`
+  (`slack.app.agent.sidecar.*`, `spring.kafka.bootstrap-servers`)
+- agent-sidecar `main`(외부 저장소): `Dockerfile`(uid 10001, `/var/lib/claude-sidecar`, `CLAUDE_MD_PATH`), `sidecar/config.py`
+  (`turn_timeout_sec` 90, `mcp_server_name` 기본 `domain-tools`), `sidecar/routes/converse.py`(시스템 프롬프트 파일을 못 읽으면
+  턴 거부). 2026-10-07 로컬 라이브 실행
 
 ## 관련 페이지
 

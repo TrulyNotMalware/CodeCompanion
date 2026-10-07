@@ -31,11 +31,14 @@ internal class AppMentionContextParser(
 
             *Slash commands*
             • `/meetup` — open the new-meeting form
-            • `/meetup list` — show your upcoming meetings (host-owned rows have an inline *Cancel* button)
+            • `/meetup list` — show your upcoming meetings (host-owned rows have *Reschedule*, *Add participant* and *Cancel* buttons)
             • `/meetup list today|tomorrow|week|month` — filter by window
             • `/standup setup` — create a standup routine (modal)
             • `/standup list` — show this channel's active standup routines
             • `/standup stop <routine-name>` — stop a routine (creator or admin)
+            • `/subscribe` / `/unsubscribe` — pick CVE topics to follow (modal; replies by DM)
+            • `/subscriptions` — list your CVE subscriptions (DM)
+            • `/latest [topic-key]` — latest summarized CVE updates (DM)
 
             *Mentions*
             • `@CodeCompanion notice @user1 @user2 <message>` — send a notice
@@ -52,6 +55,7 @@ internal class AppMentionContextParser(
 
             Anything that isn't a command above is treated as `ask`.
             `status`, `usage`, `notice` and `ask` require a granted role — ask an admin if you need access.
+            Replies to mention commands are visible only to you; `ask` answers and `notice` messages are posted to the channel.
             """.trimIndent()
 
         internal const val GRANT_USAGE: String =

@@ -14,7 +14,7 @@ is the mention vocabulary.
 |------|-------------|
 | `Command.kt` | `abstract class Command<T : SubCommandDefinition>(idempotencyKey, commandData)`: `internal intents`, `commandId`, `drainIntents()`, `internal abstract parseContext(subCommand)` / `findSubCommandDefinition()`, `handleEvent()` (any throw → `CommandOutput.fail(ERROR_RESPONSE)`), interaction payloads dispatched to `ReactionContext.handleInteraction`, `createSubCommand()` (`options = subCommands.drop(1)`, invalid → `SubCommandParseException`) |
 | `CommandSet.kt` | `internal enum CommandSet(requiredPermission)`: `UNKNOWN` (AI), `NOTICE`, `STATUS`, `USAGE` (OPERATIONS), `HELP` (BASIC), `ASK` (AI), `GRANT`, `REVOKE`, `ROLES`, `CVE` (ADMINISTRATION); `parseCommand` uppercases and falls back to `UNKNOWN` |
-| `CommandType.kt` | `CommandType` (`SIMPLE`, `PIPELINE`, `RESPONSE`, `EXTERNAL_API`); `CommandDetailType` — the routing token serialized by name into the outbox column and Slack `private_metadata` / button values; `internal fun CommandDetailType.createContext(basicInfo, subCommand, intents)` maps the eight non-submission interaction types to contexts, everything else to `EmptyContext`; the seven `view_submission` routes are intercepted before it by `SubmissionRouting.kt`. `STANDUP_ROUTINE_LIST` / `STANDUP_ROUTINE_STOP` type the `/standup list|stop` events and their ephemeral replies only, and `AGENT_USAGE_REPORT` types the `@bot usage` event and its channel reply only, so they sit in the `EmptyContext` group |
+| `CommandType.kt` | `CommandType` (`SIMPLE`, `PIPELINE`, `RESPONSE`, `EXTERNAL_API`); `CommandDetailType` — the routing token serialized by name into the outbox column and Slack `private_metadata` / button values; `internal fun CommandDetailType.createContext(basicInfo, subCommand, intents)` maps the eight non-submission interaction types to contexts and lists every other value explicitly (no `else`) in one `EmptyContext` group; the seven `view_submission` routes are intercepted before it by `SubmissionRouting.kt`. `STANDUP_ROUTINE_LIST` / `STANDUP_ROUTINE_STOP` type the `/standup list|stop` events and their ephemeral replies only, and `AGENT_USAGE_REPORT` types the `@bot usage` event and its channel reply only, so they sit in the `EmptyContext` group |
 | `InteractionCommand.kt` | `InteractionCommand(appName, idempotencyKey, commandData, actorRole[, parseObserver])` — mentions and interactions; resolves a private `Route(parser, subCommandDefinition)` lazily in one exhaustive `when` over the sealed payload, so the payload is narrowed exactly once (`SlashInvocation` → `UnSupportedCommandException`); `MeetingSubCommandDefinition.NONE` for `MEETING_APPROVAL_REQUEST` / `MEETING_CREATE_REQUEST`, else `NoSubCommands` |
 | `SubmissionRouting.kt` | Phase 11 routing seam: `isSubmissionRoute`, `InboundSubmission.detailType()` (the variant derives the discriminator — the envelope's own never decides a submission route), and `SubmissionRouter` — parses the variant via its `*Parsed.from` factory, builds the leaf with the non-null model, routes rejection/missing payload to `IgnoredSubmissionContext` and reports it through `SubmissionParseObserver` |
 | `ReplaceTextResponseCommand.kt` | Wraps `ReplaceMessageContext(markdownMessage, replyHandle)`; built by `SlackInteractionHandlerImpl` to overwrite an already-posted message |
@@ -30,10 +30,11 @@ is the mention vocabulary.
 ## For AI Agents
 
 ### Working In This Directory
-- Routing a new interaction: add a `CommandDetailType` constant **and** a `createContext` branch. The
-  `else -> EmptyContext` arm means a forgotten branch still compiles — the interaction then fails at
-  runtime with `ERROR_RESPONSE`, because `EmptyContext` is not a `ReactionContext`; add a case to
-  `InteractionContextParserTest` so it cannot. A new modal submission instead means: `InboundSubmission`
+- Routing a new interaction: add a `CommandDetailType` constant **and** a `createContext` branch.
+  `createContext` has no `else`, so a new constant is a compile error until it is placed. Placing it in the
+  `EmptyContext` group compiles, but an interaction of that type then fails at runtime with
+  `ERROR_RESPONSE`, because `EmptyContext` is not a `ReactionContext`; that group is only for values that
+  type outbound messages or events. Add a case to `InteractionContextParserTest` for a routed value. A new modal submission instead means: `InboundSubmission`
   variant + `*Parsed` model + leaf + `SubmissionRouter` branch — the exhaustive `when`s in
   `SubmissionRouting.kt` refuse to compile until the wiring is complete (the mapper's `when` still
   needs its branch, pinned by the writer→parser regression test).

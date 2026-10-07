@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-09-22 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-07 -->
 
 # infrastructure/exception
 
@@ -28,10 +28,10 @@ because it is a JPA concern; `:application`'s `ControllerAdvice` imports it from
 
 ### Working In This Directory
 - **`ErrorBroadcaster` is wired but dormant.** `:application`'s `ConsumerConfig.kt` registers
-  `StdoutErrorBroadcaster` in every mode (`ErrorBroadcasterConfig`, `@ConditionalOnMissingBean`). Nothing
-  injects the port or calls `broadcastError` anywhere in the codebase. The former `KafkaErrorBroadcaster`
-  was a `TODO()` stub that would have thrown `NotImplementedError` from an error path and was removed on
-  2026-09-22; a Kafka-backed implementation needs a real error topic and must never throw.
+  `StdoutErrorBroadcaster` in every mode (`ErrorBroadcasterConfig`, a plain `@Bean` with no condition). Nothing
+  injects the port or calls `broadcastError` anywhere in the codebase. The earlier Kafka implementation was a
+  `TODO()` stub that would have thrown `NotImplementedError` from an error path; it was removed in `f9971700`
+  (#26). A Kafka-backed implementation needs a real error topic and must never throw.
 - **`throwIfSchemaNotFound` names the receiver's static type, not the table.** `tableName` is
   `T::class.simpleName`, and both current callers invoke it after mapping: `MeetingRepositoryImpl.getMeeting`
   (`?.toMeetingDto().throwIfSchemaNotFound(fieldName = "id", ...)`) reports `MeetingDto`, and
