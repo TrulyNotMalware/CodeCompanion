@@ -15,6 +15,6 @@ manifest. Per-directory guidance stays in the `AGENTS.md` tree, and user-facing 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `wiki/` | Design philosophy, layering rules, outbox/event model, coding style, decision log, history (see `wiki/AGENTS.md`) |
+| `wiki/` | Design philosophy, layering rules, outbox/event model, coding style, decision log and history (see `wiki/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

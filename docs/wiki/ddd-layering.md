@@ -1,6 +1,6 @@
 # DDD와 계층 원칙 — 도메인 순수성과 전송 중립성
 
-_type: decision · updated: 2026-10-01_
+_type: decision · updated: 2026-10-07_
 
 > 도메인 순수성은 규율이 아니라 **빌드 제약과 가드 테스트**로 강제하고, 전송 중립성은 **각 단계가 그 자체로
 > 이득을 낼 때만** 점진적으로 밀어붙인다.
@@ -106,4 +106,4 @@ _type: decision · updated: 2026-10-01_
 - [events-and-outbox.md](events-and-outbox.md) — staging과 전달 보장
 - [error-handling-and-validation.md](error-handling-and-validation.md) — `validate {}`와 에러 계약
 - [decisions.md](decisions.md) — 결정 기록
-- [history.md](history.md) — 이 원칙에 도달한 리팩토링 단계
+- [decisions.md — 연혁](decisions.md#연혁--마일스톤과-전환점) — 이 원칙에 도달한 리팩토링 단계

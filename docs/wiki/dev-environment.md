@@ -319,7 +319,7 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
 - [architecture-overview.md](architecture-overview.md) — 모듈 책임과 요청 흐름
 - [events-and-outbox.md](events-and-outbox.md) — POLLING/CDC 릴레이와 퍼블리셔 모드의 동작
 - [testing-guide.md](testing-guide.md) — EmbeddedKafka + H2 통합 테스트 실행
-- [decisions.md](decisions.md), [history.md](history.md)
+- [decisions.md](decisions.md)
 - [`.github/AGENTS.md`](../../.github/AGENTS.md), [`gradle-config/AGENTS.md`](../../gradle-config/AGENTS.md),
   [`scripts/AGENTS.md`](../../scripts/AGENTS.md),
   [`application/src/main/resources/AGENTS.md`](../../application/src/main/resources/AGENTS.md)

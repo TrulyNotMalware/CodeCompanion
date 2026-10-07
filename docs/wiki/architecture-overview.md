@@ -1,6 +1,6 @@
 # 아키텍처 개요
 
-_type: architecture · updated: 2026-09-21_
+_type: architecture · updated: 2026-10-07_
 
 > Slack 요청을 `domain` / `infrastructure` / `application` 세 모듈로 나눠 처리하는 단일 Spring Boot 앱이며,
 > 의존성은 `application → infrastructure → domain`(그리고 `application → domain`) 한 방향으로만 흐른다.
@@ -76,4 +76,4 @@ Slack ──WebSocket(local)──▶ SocketModeReceiver ───────�
 - [command-pipeline.md](command-pipeline.md) — 인바운드 정규화부터 인텐트까지
 - [events-and-outbox.md](events-and-outbox.md) — 아웃박스와 릴레이
 - [dev-environment.md](dev-environment.md) — 프로파일과 실행 모드
-- [history.md](history.md) — 이 구조에 이르기까지의 변천
+- [decisions.md — 연혁](decisions.md#연혁--마일스톤과-전환점) — 이 구조에 이르기까지의 변천

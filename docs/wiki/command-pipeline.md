@@ -213,7 +213,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - [events-and-outbox.md](events-and-outbox.md) — 아웃박스 행 이후의 relay·멱등성·CAS
 - [error-handling-and-validation.md](error-handling-and-validation.md) — `CommandException`·`exceptionDetails`
 - [testing-guide.md](testing-guide.md) — `AbstractCommandContextTest`, testFixtures 입력 빌더
-- [decisions.md](decisions.md) · [history.md](history.md)
+- [decisions.md](decisions.md)
 - [`domain/command/AGENTS.md`](../../domain/src/main/kotlin/dev/notypie/domain/command/AGENTS.md) ·
   [`impl/AGENTS.md`](../../infrastructure/src/main/kotlin/dev/notypie/impl/AGENTS.md) ·
   [`controllers/AGENTS.md`](../../application/src/main/kotlin/dev/notypie/application/controllers/AGENTS.md) ·

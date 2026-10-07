@@ -22,7 +22,7 @@ flow **application → infrastructure → domain** (and **application → domain
 | `.editorconfig` | Formatting contract enforced by ktlint (120 cols, LF, 4-space indent, wildcard imports allowed) |
 | `.gitmessage` | Korean commit-message template — `<타입> : <제목>`, types: `feat`, `fix`, `docs`, `test`, `refact`, `style`, `chore` |
 | `README.md` | Human-facing docs (English + Korean): features, tech stack, architecture, command/role table |
-| `docs/wiki/` | Project wiki (Korean): design philosophy, layering rules, outbox/event model, coding style, decision log, history — read `docs/wiki/index.md` before making an architectural change |
+| `docs/wiki/` | Project wiki (Korean): design philosophy, layering rules, outbox/event model, coding style, decision log and history — read `docs/wiki/index.md` before making an architectural change |
 | `.gitleaks.toml` | gitleaks config for the CI secret scan: default rules plus a path allowlist for the placeholder-valued sample Secret manifest (see `.github/AGENTS.md`) |
 | `LICENSE` | MIT license |
 

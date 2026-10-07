@@ -350,5 +350,5 @@ _type: architecture · updated: 2026-10-07_
 - [ddd-layering.md](ddd-layering.md) — 도메인이 Jackson·Slack 타입을 모르는 채로 아웃박스에 실리는 이유
 - [dev-environment.md](dev-environment.md) — 프로파일별 릴레이 모드, CDC 스택, `V*` 마이그레이션 관례
 - [testing-guide.md](testing-guide.md) — `OutboxTestFixtures`, `EmbeddedKafka` 슬라이스
-- [decisions.md](decisions.md) · [history.md](history.md)
+- [decisions.md](decisions.md)
 - [`../../infrastructure/AGENTS.md`](../../infrastructure/AGENTS.md) · [`../../application/AGENTS.md`](../../application/AGENTS.md)
