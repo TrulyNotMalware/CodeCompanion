@@ -5,7 +5,6 @@ import dev.notypie.domain.command.authorization.CommandPermission
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.entity.CommandSet
 import dev.notypie.domain.command.entity.context.AgentChatContext
-import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.CveOpsContext
 import dev.notypie.domain.command.entity.context.NoticeContext
@@ -37,7 +36,6 @@ internal class AppMentionContextParser(
 
             *Mentions*
             • `@CodeCompanion notice @user1 @user2 <message>` — send a notice
-            • `@CodeCompanion approval` — open the request-approval form
             • `@CodeCompanion help` — show this help
             • `@CodeCompanion status` — show outbox lag and in-flight counts
             • `@CodeCompanion ask <question>` — ask the AI assistant (replies in a thread; mention again in the thread to continue)
@@ -76,13 +74,6 @@ internal class AppMentionContextParser(
                 NoticeContext(
                     users = LinkedList(mention.mentionedUserIds),
                     commands = LinkedList(mention.commandTokens.drop(1)),
-                    commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-                    intents = intents,
-                )
-            }
-
-            CommandSet.APPROVAL -> {
-                ApprovalFormContext(
                     commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                     intents = intents,
                 )

@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-09-21_
+_type: architecture · updated: 2026-10-07_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -78,7 +78,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `RecordStandupAnswer`, `GrantRole`, `AgentConverse` 등).
 - **`OutboundMessage`**(`outbound/OutboundMessage.kt`, sealed): 사용자에게 보이는 결과. `ChannelMessage`, `Ephemeral`,
   `UpdateMessage`, `ReplaceMessage`, `OpenModal`, `Approval`, `Notice`(그리고 `DirectMessage`, §8 참고). 내용은
-  `MessageContent`(Text/ErrorNotice/Schedule/Form/MeetingRequest/MeetingList/StandupSummary), 모달은 `ModalForm`.
+  `MessageContent`(Text/ErrorNotice/Schedule/MeetingRequest/MeetingList/StandupSummary), 모달은 `ModalForm`.
 - **의도 → 이벤트**: `SlackIntentResolver.resolveAll`이 변종별로 `CommandEvent`와 라우팅용 `CommandDetailType`을
   붙인다(`MeetingListRequest` → `GetMeetingListEvent`). 이벤트는 `isInternal = true`라 Spring 버스로 가고, 리스너
   (`MeetingServiceImpl`, `RoleManagementService`, `OpsStatusService`, `AgentConverseService`, `CveOpsService`)
@@ -173,14 +173,14 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `CommandOutput.fail`로 흡수될 뿐 아웃바운드를 하나도 남기지 않고, 슬래시 서비스는 반환값을 버리므로 사용자는 아무
   답도 받지 못한다. 사용자에게 보여야 할 오류는 컨텍스트 안에서 `createErrorResponse`로 내라.
 - 파서의 `CommandDetailType.valueOf`는 알 수 없는 토큰에 예외 → enum 리네임 후 남은 옛 버튼은 500. 미매핑은 무동작.
-- `LEGACY_AUTO_REJECT_TYPES`(`APPLY_REQUEST`, `APPROVAL_REQUEST`)의 거절 버튼은 핸들러 수준에서 "Canceled."로
+- `LEGACY_AUTO_REJECT_TYPES`(`APPROVAL_REQUEST`)의 거절 버튼은 핸들러 수준에서 "Canceled."로
   대체된다. 새 타입을 여기에 넣지 말고 각 `ReactionContext`가 자기 거절을 처리하게 한다.
 - `SlackMentionEventHandlerImpl.parseAppMentionEvent`는 `payload["channel_name"]`/`payload["user_name"]`을 읽지만
   Events API `app_mention` 페이로드에는 그 키가 없다(`SlackEventCallBackRequest`에도 필드 없음). 결과 `actorName`/
   `channelName`은 문자열 `"null"`이 되어 `AgentConversePayload`를 통해 에이전트 프롬프트에 들어간다(코드에 `FIXME`).
 - `IdempotencyCreator.create(InboundCommand)` = 페이로드 JSON SHA-256 + **1초 창** 시드. 같은 초의 재전송만 같은 키다.
 - 죽었거나 반쯤 죽은 조각(본보기로 삼지 말 것): `OutboundMessage.DirectMessage`(생산자 없음, 렌더러는 `error()`),
-  `EphemeralTextResponseContext`/`DetailErrorAlertContext`(테스트에서만 생성), `/api/slash/task`(파싱 후 폐기),
+  `EphemeralTextResponseContext`/`DetailErrorAlertContext`(테스트에서만 생성),
   `controllers/dto/*`, `InteractionCommand.appName`, `InboundCommand.teamId`, `containsExternalEvent`(호출처 없음).
 
 ## 근거

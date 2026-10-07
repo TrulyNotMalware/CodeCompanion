@@ -158,24 +158,6 @@ class ModalBlockBuilder(
 
     fun dividerBlock(): DividerBlock = divider()
 
-    fun selectionBlock(selectionContents: SelectionContents): InteractionLayoutBlock {
-        val multiSelection =
-            modalElementBuilder.selectionElement(
-                placeholderText = selectionContents.placeholderText,
-                contents = selectionContents.contents,
-            )
-        val layout =
-            section {
-                it.text(
-                    modalElementBuilder.markdownTextObject(
-                        markdownText = "*${selectionContents.title}*\n${selectionContents.explanation}",
-                    ),
-                )
-                it.accessory(multiSelection.element)
-            }
-        return toInteractionLayout(multiSelection.state, layout = layout)
-    }
-
     fun multiUserSelectBlock(contents: MultiUserSelectContents): InteractionLayoutBlock {
         val multiUserSelection = modalElementBuilder.multiUserSelectionElement(contents = contents)
         val layout =

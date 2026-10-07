@@ -10,8 +10,6 @@ import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.TopicOption
@@ -139,39 +137,6 @@ class SlackApiEventConstructor(
             replaceOriginal = false,
             targetUserId = targetUserId,
             routingExtras = routingExtras,
-        )
-    }
-
-    fun simpleApprovalFormRequest(
-        commandDetailType: CommandDetailType,
-        headLineText: String,
-        commandBasicInfo: CommandBasicInfo,
-        selectionFields: List<SelectionContents>,
-        reasonInput: TextInputContents? = null,
-        approvalContents: ApprovalContents? = null,
-    ): SendSlackMessageEvent {
-        val layout =
-            templateBuilder.requestApprovalFormTemplate(
-                headLineText = headLineText,
-                selectionFields = selectionFields,
-                reasonInput = reasonInput,
-                approvalContents =
-                    approvalContents
-                        ?: ApprovalContents(
-                            reason = "Request Approval",
-                            approvalButtonName = "Send",
-                            rejectButtonName = "Cancel",
-                            idempotencyKey = commandBasicInfo.idempotencyKey,
-                            commandDetailType = commandDetailType,
-                            publisherId = commandBasicInfo.publisherId,
-                        ),
-            )
-
-        return buildMessage(
-            commandBasicInfo = commandBasicInfo,
-            commandDetailType = commandDetailType,
-            layout = layout,
-            replaceOriginal = false,
         )
     }
 

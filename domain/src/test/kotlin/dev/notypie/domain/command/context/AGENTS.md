@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # domain/command/context (test)
 
@@ -19,7 +19,6 @@ All specs are Kotest `BehaviorSpec`s.
 | `AddParticipantContextTest.kt` | `form.AddParticipantContext`: "Add participant" click → `OpenModal(ModalForm.AddParticipant)` with trigger, `meetingUid` from `routingExtras[0]`, requester, channel; malformed uid → success with no effects |
 | `AgentChatContextTest.kt` | `AgentChatContext`: `PIPELINE` / `AGENT_CONVERSE`; `CommandIntent.AgentConverse` carries prompt, `threadId` (nullable), requester and channel names; blank prompt → failed output plus an `Ephemeral` with `EMPTY_PROMPT_MESSAGE` |
 | `ApprovalCallbackContextTest.kt` | `form.ApprovalCallbackContext`: one `OutboundMessage.Approval` per participant, empty set is a vacuous success, custom `ApprovalContents` (via `createApprovalContents`) vs the default |
-| `ApprovalFormContextTest.kt` | `ApprovalFormContext`: `PIPELINE` / `APPROVAL_REQUEST`; single `ChannelMessage` whose content is a `MessageContent.Form` headlined "Approve Form" |
 | `DetailErrorAlertContextTest.kt` | `DetailErrorAlertContext`: `ChannelMessage` with `MessageContent.ErrorNotice` (`className`, `message`, nullable `details`); built from `createMentionInboundCommand` |
 | `EmptyContextTest.kt` | `EmptyContext`: `SIMPLE` / `NOTHING`, `CommandOutput.empty()` (checked with `dto.isEmpty()`), no effects |
 | `EphemeralTextContextTest.kt` | `EphemeralTextResponseContext`: `Ephemeral` to the publisher (`recipient == null`) in the command channel; `isOk = false` yields `FAILED` but still emits |
@@ -28,7 +27,6 @@ All specs are Kotest `BehaviorSpec`s.
 | `ParsedSubmissionsTest.kt` | The per-variant `*Parsed.from` factories (Phase 11): uid/date/time rejection, a past reschedule start still parses (the application service answers it), actor fallback for blank routing tokens, `RejectReason` coercion, blank-OTHER detail surviving as `""`, an OTHER note of exactly `MAX_DETAIL_LENGTH` kept and one longer dropped with `detailTooLong` and the "not saved" notice (measured in code points: 255 emoji kept, 256 dropped; a long non-OTHER detail is ignored, not flagged), a note with `< > &` kept raw in `reasonDetail` but escaped in `noticeSummaryMarkdown()`, `NoticeTarget.of` partial routing → `None`, standup-setup defaults (an unparsable or out-of-range cutoff → `null`, blank → 120, 1 and 1440 accepted), CVE parsers never rejecting |
 | `NoticeContextTest.kt` | `NoticeContext`: `OutboundMessage.Notice` with `UserRef` mentions and space-joined command text; empty inputs still succeed |
 | `ReplaceMessageContextTest.kt` | `ReplaceMessageContext`: `SIMPLE` / `REPLACE_TEXT`; both `runCommand` and `handleInteraction` enqueue a `ReplaceMessage` on the reply handle |
-| `RequestApprovalContextTest.kt` | `RequestApprovalContext`: `PIPELINE` / `APPLY_REQUEST`; one `Approval` targeted at the channel, reason taken from the commands queue. Constructor parameter is `basicInfo`, not `commandBasicInfo` |
 | `RescheduleMeetingContextTest.kt` | `form.RescheduleMeetingContext`: click → `OpenModal(ModalForm.Reschedule)`; malformed uid → no effects |
 | `StandupFillContextTest.kt` | `form.StandupFillContext`: Fill click with `routingExtras = [sessionUid, routineUid]` → `OpenModal(ModalForm.StandupFill)` carrying the origin notice ref; malformed extras → no intents |
 | `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, a standup answer with responses yielding `RecordStandupAnswer(notice = the Update target)` and no `UpdateMessage`, a dropped over-long note recorded as `OTHER` without detail and announced in the notice, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue |

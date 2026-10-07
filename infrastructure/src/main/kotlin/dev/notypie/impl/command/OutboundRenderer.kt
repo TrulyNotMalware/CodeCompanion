@@ -44,16 +44,6 @@ class SlackOutboundRenderer(
                             timeScheduleInfo = content.info,
                         )
 
-                    is MessageContent.Form ->
-                        slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = message.detailType ?: CommandDetailType.APPROVAL_REQUEST,
-                            headLineText = content.headline,
-                            commandBasicInfo = basicInfo,
-                            selectionFields = content.fields,
-                            reasonInput = content.reason,
-                            approvalContents = content.approval,
-                        )
-
                     is MessageContent.MeetingRequest ->
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,

@@ -4,7 +4,6 @@ import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantContext
@@ -32,7 +31,6 @@ enum class CommandDetailType {
     REPLACE_TEXT,
     ERROR_RESPONSE,
     APPROVAL_REQUEST,
-    APPLY_REQUEST,
 
     MEETING_CREATE_REQUEST,
     GET_MEETING_LIST,
@@ -68,13 +66,6 @@ internal fun CommandDetailType.createContext(
     intents: IntentQueue,
 ): CommandContext<out SubCommandDefinition> =
     when (this) {
-        CommandDetailType.APPROVAL_REQUEST -> {
-            ApprovalFormContext(
-                commandBasicInfo = commandBasicInfo,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.MEETING_CREATE_REQUEST -> {
             RequestMeetingContext(
                 commandBasicInfo = commandBasicInfo,
@@ -146,7 +137,7 @@ internal fun CommandDetailType.createContext(
         CommandDetailType.SIMPLE_TEXT,
         CommandDetailType.REPLACE_TEXT,
         CommandDetailType.ERROR_RESPONSE,
-        CommandDetailType.APPLY_REQUEST,
+        CommandDetailType.APPROVAL_REQUEST,
         CommandDetailType.GET_MEETING_LIST,
         CommandDetailType.MEETING_DECLINE_REASON,
         CommandDetailType.MEETING_RESCHEDULE_SUBMIT,

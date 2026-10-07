@@ -40,10 +40,15 @@ private val log = KotlinLogging.logger {}
 @ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
 class CveConfiguration {
     @Bean
-    fun cveTopicBootstrap(appConfig: AppConfig, cveTopicRepository: CveTopicRepository): CveTopicBootstrap =
+    fun cveTopicBootstrap(
+        appConfig: AppConfig,
+        cveTopicRepository: CveTopicRepository,
+        sourceAdapters: List<SourceAdapter>,
+    ): CveTopicBootstrap =
         CveTopicBootstrap(
             topics = appConfig.cve.topics,
             cveTopicRepository = cveTopicRepository,
+            adapters = sourceAdapters,
         )
 
     @Bean

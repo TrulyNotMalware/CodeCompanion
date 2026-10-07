@@ -8,7 +8,6 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.entity.context.AgentChatContext
-import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.NoticeContext
 import dev.notypie.domain.command.entity.context.StatusContext
 import dev.notypie.domain.command.entity.context.TextResponseContext
@@ -72,16 +71,6 @@ class AppMentionContextParserTest :
 
                 then("should return NoticeContext") {
                     result.shouldBeInstanceOf<NoticeContext>()
-                }
-            }
-
-            `when`("command is 'approval'") {
-                val parser = createParser(mention = mentionOf(tokens = listOf("approval")))
-
-                val result = parser.parseContext(idempotencyKey = idempotencyKey)
-
-                then("should return ApprovalFormContext") {
-                    result.shouldBeInstanceOf<ApprovalFormContext>()
                 }
             }
 

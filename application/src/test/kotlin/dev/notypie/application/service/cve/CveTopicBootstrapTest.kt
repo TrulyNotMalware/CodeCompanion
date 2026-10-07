@@ -1,17 +1,28 @@
 package dev.notypie.application.service.cve
 
 import dev.notypie.application.configurations.createCveTopicConfigDefinition
+import dev.notypie.impl.cve.SourceAdapter
 import dev.notypie.repository.cve.CveTopicDefinition
 import dev.notypie.repository.cve.CveTopicRepository
+import dev.notypie.repository.cve.schema.CveSourceType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 
 class CveTopicBootstrapTest :
     BehaviorSpec({
+        fun adapterSupporting(sourceType: CveSourceType): SourceAdapter =
+            mockk {
+                every { supports(sourceType = any()) } returns false
+                every { supports(sourceType = sourceType) } returns true
+            }
+
+        val adapters = listOf(adapterSupporting(sourceType = CveSourceType.NVD_CVE))
+
         given("two declared topics") {
             val cveTopicRepository = mockk<CveTopicRepository>()
             val declared =
@@ -19,7 +30,8 @@ class CveTopicBootstrapTest :
                     createCveTopicConfigDefinition(),
                     createCveTopicConfigDefinition(key = "kotlin", displayName = "Kotlin releases"),
                 )
-            val bootstrap = CveTopicBootstrap(topics = declared, cveTopicRepository = cveTopicRepository)
+            val bootstrap =
+                CveTopicBootstrap(topics = declared, cveTopicRepository = cveTopicRepository, adapters = adapters)
             every { cveTopicRepository.upsert(definition = any()) } returns true
 
             `when`("the boot sync runs") {
@@ -51,6 +63,7 @@ class CveTopicBootstrapTest :
                             createCveTopicConfigDefinition(key = "springboot"),
                         ),
                     cveTopicRepository = cveTopicRepository,
+                    adapters = adapters,
                 )
 
             `when`("the boot sync runs") {
@@ -70,6 +83,7 @@ class CveTopicBootstrapTest :
                     CveTopicBootstrap(
                         topics = listOf(createCveTopicConfigDefinition(displayName = "😀".repeat(n = 128))),
                         cveTopicRepository = cveTopicRepository,
+                        adapters = adapters,
                     )
 
                 then("it is accepted") {
@@ -86,6 +100,7 @@ class CveTopicBootstrapTest :
                                 createCveTopicConfigDefinition(key = "long", displayName = "n".repeat(n = 129)),
                             ),
                         cveTopicRepository = cveTopicRepository,
+                        adapters = adapters,
                     )
 
                 then("boot fails before touching the repository") {
@@ -101,6 +116,7 @@ class CveTopicBootstrapTest :
                 CveTopicBootstrap(
                     topics = listOf(createCveTopicConfigDefinition(key = " ")),
                     cveTopicRepository = cveTopicRepository,
+                    adapters = adapters,
                 )
 
             `when`("the boot sync runs") {
@@ -117,6 +133,7 @@ class CveTopicBootstrapTest :
                 CveTopicBootstrap(
                     topics = listOf(createCveTopicConfigDefinition(displayName = "")),
                     cveTopicRepository = cveTopicRepository,
+                    adapters = adapters,
                 )
 
             `when`("the boot sync runs") {
@@ -127,9 +144,32 @@ class CveTopicBootstrapTest :
             }
         }
 
+        given("a declaration whose sourceType no adapter supports") {
+            val cveTopicRepository = mockk<CveTopicRepository>()
+            val bootstrap =
+                CveTopicBootstrap(
+                    topics =
+                        listOf(
+                            createCveTopicConfigDefinition(),
+                            createCveTopicConfigDefinition(key = "rss-feed", sourceType = CveSourceType.RSS),
+                        ),
+                    cveTopicRepository = cveTopicRepository,
+                    adapters = adapters,
+                )
+
+            `when`("the boot sync runs") {
+                then("boot fails naming the topic, before touching the repository") {
+                    val error = shouldThrow<IllegalArgumentException> { bootstrap.bootstrapTopics() }
+                    error.message shouldContain "rss-feed"
+                    verify(exactly = 0) { cveTopicRepository.upsert(definition = any()) }
+                }
+            }
+        }
+
         given("no declared topics") {
             val cveTopicRepository = mockk<CveTopicRepository>()
-            val bootstrap = CveTopicBootstrap(topics = emptyList(), cveTopicRepository = cveTopicRepository)
+            val bootstrap =
+                CveTopicBootstrap(topics = emptyList(), cveTopicRepository = cveTopicRepository, adapters = adapters)
 
             `when`("the boot sync runs") {
                 bootstrap.bootstrapTopics()

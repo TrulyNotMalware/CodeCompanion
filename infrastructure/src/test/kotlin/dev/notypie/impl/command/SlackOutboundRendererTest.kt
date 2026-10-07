@@ -2,9 +2,6 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -248,59 +245,6 @@ class SlackOutboundRendererTest :
                             headLineText = "daily",
                             commandBasicInfo = basicInfo,
                             timeScheduleInfo = scheduleInfo,
-                        )
-                    }
-                }
-            }
-        }
-
-        given("a ChannelMessage with Form content") {
-            val fields =
-                listOf(
-                    SelectionContents(
-                        title = "Purpose",
-                        explanation = "Select",
-                        placeholderText = "pick one",
-                        contents = listOf(SelectBoxDetails(name = "A", value = "a")),
-                    ),
-                )
-            val reason = TextInputContents(title = "Reason", placeholderText = "why")
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content =
-                        MessageContent.Form(
-                            headline = "Approve",
-                            fields = fields,
-                            reason = reason,
-                            approval = null,
-                        ),
-                )
-
-            `when`("render is called") {
-                every {
-                    slackEventBuilder.simpleApprovalFormRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        selectionFields = any(),
-                        reasonInput = any(),
-                        approvalContents = any(),
-                    )
-                } returns stubEvent
-
-                val payload = renderer.render(message = message, basicInfo = basicInfo)
-
-                then("delegates to simpleApprovalFormRequest with APPROVAL_REQUEST and the same fields") {
-                    payload shouldBe stubEvent.payload
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
-                            headLineText = "Approve",
-                            commandBasicInfo = basicInfo,
-                            selectionFields = fields,
-                            reasonInput = reason,
-                            approvalContents = null,
                         )
                     }
                 }
@@ -569,7 +513,7 @@ class SlackOutboundRendererTest :
                     reason = "approve this",
                     publisherId = basicInfo.publisherId,
                     idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.APPLY_REQUEST,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                 )
             val message =
                 OutboundMessage.Approval(
@@ -596,7 +540,7 @@ class SlackOutboundRendererTest :
                     routingSlot.captured shouldBe emptyList()
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.APPLY_REQUEST,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             commandBasicInfo = basicInfo,
                             approvalContents = approval,
                             targetUserId = null,

@@ -48,14 +48,6 @@ class SlashCommandController(
         }
     }
 
-    @PostMapping(value = ["/task"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
-    fun requestTasks(
-        @RequestHeader headers: MultiValueMap<String, String>,
-        @RequestParam data: Map<String, String>,
-    ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
-    }
-
     @PostMapping(value = ["/subscribe"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun subscribe(
         @RequestHeader headers: MultiValueMap<String, String>,

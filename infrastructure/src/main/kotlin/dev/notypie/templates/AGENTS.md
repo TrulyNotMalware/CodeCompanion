@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
 
 # infrastructure/templates
 
@@ -66,7 +66,7 @@ paired with a check on the matching context spec in `:domain` and mapper spec in
 
 ### Internal
 - `domain/command/outbound/` — `MessageContent`, `ModalForm`
-- `domain/command/dto/modals/` — `ApprovalContents`, `SelectionContents`, `TextInputContents`, `TimeScheduleInfo`
+- `domain/command/dto/modals/` — `ApprovalContents`, `MultiUserSelectContents`, `TextInputContents`, `TimeScheduleInfo`
 - `infrastructure/common/JsonMapper.kt` — shared `jsonMapper` for serialization
 
 ### External

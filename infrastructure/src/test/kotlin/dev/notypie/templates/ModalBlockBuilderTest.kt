@@ -8,8 +8,6 @@ import com.slack.api.model.block.InputBlock
 import com.slack.api.model.block.SectionBlock
 import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.impl.command.slack.ActionElementTypes
@@ -175,31 +173,6 @@ class ModalBlockBuilderTest :
 
                 then("interactiveObjects size is 2") {
                     result.interactiveObjects.size shouldBe 2
-                }
-            }
-        }
-
-        given("selectionBlock") {
-            `when`("called with selection contents") {
-                val contents =
-                    SelectionContents(
-                        title = "Category",
-                        explanation = "Pick one",
-                        placeholderText = "SELECT",
-                        contents =
-                            listOf(
-                                SelectBoxDetails(name = "A", value = "a"),
-                            ),
-                    )
-                val result = builder.selectionBlock(selectionContents = contents)
-
-                then("layout is SectionBlock") {
-                    result.layout.shouldBeInstanceOf<SectionBlock>()
-                }
-
-                then("interactiveObjects contain MULTI_STATIC_SELECT") {
-                    result.interactiveObjects.size shouldBe 1
-                    result.interactiveObjects[0].type shouldBe ActionElementTypes.MULTI_STATIC_SELECT
                 }
             }
         }

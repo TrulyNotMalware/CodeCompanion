@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/dto
 
@@ -17,7 +17,7 @@ two sub-packages: the Block Kit-neutral modal content DTOs (`modals/`) and the c
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `modals/` | `ApprovalContents`, `SelectionContents` / `SelectBoxDetails` / `MultiUserSelectContents`, `TextInputContents`, `TimeScheduleInfo` (see `modals/AGENTS.md`) |
+| `modals/` | `ApprovalContents`, `MultiUserSelectContents`, `TextInputContents`, `TimeScheduleInfo` (see `modals/AGENTS.md`) |
 | `response/` | `CommandOutput` (`empty` / `fail` / `success`) and `Status` (see `response/AGENTS.md`) |
 
 ## For AI Agents

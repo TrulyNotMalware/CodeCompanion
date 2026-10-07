@@ -4,7 +4,6 @@ import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.createInteractionResponseInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
-import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.IgnoredSubmissionContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
@@ -37,13 +36,13 @@ class InteractionContextParserTest :
         }
 
         given("parseContext") {
-            `when`("interaction type is APPROVAL_REQUEST") {
+            `when`("interaction type is APPROVAL_REQUEST from a retired approval form") {
                 val parser = createParser(detailType = CommandDetailType.APPROVAL_REQUEST)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
-                then("should return ApprovalFormContext") {
-                    result.shouldBeInstanceOf<ApprovalFormContext>()
+                then("should return EmptyContext") {
+                    result.shouldBeInstanceOf<EmptyContext>()
                 }
             }
 

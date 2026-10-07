@@ -32,6 +32,7 @@ import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
 import dev.notypie.impl.command.event.createOpenViewEvent
+import dev.notypie.impl.cve.SourceAdapter
 import dev.notypie.repository.createRawSnapshotIsolationFailure
 import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.repository.meeting.JpaMeetingRepository
@@ -54,6 +55,7 @@ import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.every
+import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -205,6 +207,7 @@ class ApplicationContextSmokeTest
                     CveTopicBootstrap(
                         topics = listOf(createCveTopicConfigDefinition(key = topicKey)),
                         cveTopicRepository = context.getBean(CveTopicRepository::class.java),
+                        adapters = listOf(mockk<SourceAdapter> { every { supports(sourceType = any()) } returns true }),
                     ).bootstrapTopics()
                     val reminders = context.getBean(MeetingReminderRepository::class.java)
                     val meeting =

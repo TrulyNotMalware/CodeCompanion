@@ -160,7 +160,7 @@ data class AppConfig(
             val key: String = "",
             val displayName: String = "",
             val category: CveTopicCategory = CveTopicCategory.ETC,
-            val sourceType: CveSourceType = CveSourceType.RSS,
+            val sourceType: CveSourceType,
             val sourceConfig: String? = null,
             val deliveryMode: CveDeliveryMode = CveDeliveryMode.DIGEST,
             val active: Boolean = true,

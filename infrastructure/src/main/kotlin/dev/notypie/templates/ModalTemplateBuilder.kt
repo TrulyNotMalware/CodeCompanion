@@ -218,32 +218,6 @@ class ModalTemplateBuilder(
             details?.let { modalBlockBuilder.textSections(text = it, isMarkDown = false).forEach { add(block = it) } }
         }
 
-    override fun requestApprovalFormTemplate(
-        headLineText: String,
-        selectionFields: List<SelectionContents>,
-        approvalContents: ApprovalContents,
-        approvalTargetUser: MultiUserSelectContents?,
-        reasonInput: TextInputContents?,
-    ): LayoutBlocks {
-        val targetUser =
-            approvalTargetUser
-                ?: MultiUserSelectContents(
-                    title = "Select target user",
-                    placeholderText = DEFAULT_PLACEHOLDER_TEXT,
-                )
-        val selectionLayouts =
-            selectionFields.map { modalBlockBuilder.selectionBlock(selectionContents = it) }
-
-        return layoutBlocks {
-            add(block = modalBlockBuilder.headerBlock(text = headLineText))
-            add(block = modalBlockBuilder.dividerBlock())
-            addAll(layouts = selectionLayouts)
-            add(layout = modalBlockBuilder.multiUserSelectBlock(contents = targetUser))
-            reasonInput?.let { add(block = modalBlockBuilder.plainTextInputBlock(contents = it)) }
-            add(layout = modalBlockBuilder.approvalBlock(approvalContents = approvalContents))
-        }
-    }
-
     override fun meetingListFormTemplate(
         meetings: List<MeetingDto>,
         currentUserId: String,

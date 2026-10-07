@@ -30,7 +30,6 @@ private interface OutboundMessageMixin
     JsonSubTypes.Type(value = MessageContent.Text::class, name = "Text"),
     JsonSubTypes.Type(value = MessageContent.ErrorNotice::class, name = "ErrorNotice"),
     JsonSubTypes.Type(value = MessageContent.Schedule::class, name = "Schedule"),
-    JsonSubTypes.Type(value = MessageContent.Form::class, name = "Form"),
     JsonSubTypes.Type(value = MessageContent.MeetingRequest::class, name = "MeetingRequest"),
     JsonSubTypes.Type(value = MessageContent.MeetingList::class, name = "MeetingList"),
     JsonSubTypes.Type(value = MessageContent.StandupSummary::class, name = "StandupSummary"),

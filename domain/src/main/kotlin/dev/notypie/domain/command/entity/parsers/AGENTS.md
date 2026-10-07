@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/entity/parsers
 
@@ -12,7 +12,7 @@ is a thin lookup from `CommandDetailType` to context.
 | File | Description |
 |------|-------------|
 | `ContextParser.kt` | `internal interface ContextParser { parseContext(idempotencyKey): CommandContext<out SubCommandDefinition> }` |
-| `AppMentionContextParser.kt` | `internal class (commandData, mention, idempotencyKey, intents, actorRole)`. Constants `HELP_MESSAGE`, `GRANT_USAGE`, `REVOKE_USAGE`, `ROLES_USAGE`, `CVE_USAGE`. Flow: no command structure → "Command Not supported."; first token → `CommandSet`; permission gate → denial text; then per-keyword dispatch: `notice`, `approval`, `help`, `status`, `ask`, `grant @user <role>`, `revoke @user`, `roles`, `cve topics` / `cve topic activate|deactivate <key>` / `cve retry all|<event-id>`, and the free-text fallback to `AgentChatContext` |
+| `AppMentionContextParser.kt` | `internal class (commandData, mention, idempotencyKey, intents, actorRole)`. Constants `HELP_MESSAGE`, `GRANT_USAGE`, `REVOKE_USAGE`, `ROLES_USAGE`, `CVE_USAGE`. Flow: no command structure → "Command Not supported."; first token → `CommandSet`; permission gate → denial text; then per-keyword dispatch: `notice`, `help`, `status`, `ask`, `grant @user <role>`, `revoke @user`, `roles`, `cve topics` / `cve topic activate|deactivate <key>` / `cve retry all|<event-id>`, and the free-text fallback to `AgentChatContext` |
 | `InteractionContextParser.kt` | `internal class (commandData, interaction, idempotencyKey, intents[, observer])`; tries `SubmissionRouter.route(interaction)` first (submission variants win, SUBMIT-without-submission → `IgnoredSubmissionContext`), then falls back to `interaction.detailType.createContext(...)` with `SubCommand.empty()` |
 
 ## For AI Agents

@@ -28,14 +28,6 @@ interface SlackTemplateBuilder {
 
     fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks
 
-    fun requestApprovalFormTemplate(
-        headLineText: String,
-        selectionFields: List<SelectionContents>,
-        approvalContents: ApprovalContents,
-        approvalTargetUser: MultiUserSelectContents? = null,
-        reasonInput: TextInputContents? = null,
-    ): LayoutBlocks
-
     fun meetingListFormTemplate(
         meetings: List<MeetingDto>,
         currentUserId: String,

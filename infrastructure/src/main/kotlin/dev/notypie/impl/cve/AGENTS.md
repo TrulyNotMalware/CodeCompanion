@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # infrastructure/impl/cve
 
@@ -37,7 +37,9 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 - **Blank strings fold to null in `stringOrNull()`** so `name ?: tag_name` works for tag-only GitHub
   releases (`"name": ""`).
 - **Adding a source = adding an adapter bean**, not editing `CveCollector`. `CveSourceType.RSS` exists
-  in the schema and in `AppConfig` but has no adapter — the collector warns and skips such topics.
+  in the schema but has no adapter. `sourceType` has no default in the YAML topic definition, and
+  `CveTopicBootstrap` refuses to start when a declared topic's `sourceType` has no supporting adapter.
+  A stored row without an adapter is still warned about and skipped by the collector.
 - **NVD calls are paced, per adapter instance (so per Pod).** Topics are fetched in a fixed order every tick,
   so without spacing the topics past NVD's quota (5 requests per rolling 30 s without a key, 50 with one) were
   refused on every tick and never collected; the lookback cannot heal a miss that repeats. The default 6 s is

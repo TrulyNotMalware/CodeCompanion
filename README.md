@@ -80,7 +80,6 @@ Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_us
 | Command | Surface | Minimum role |
 |---------|---------|--------------|
 | `/meetup`, `/meetup list [today\|tomorrow\|week\|month]` | Slash command | `user` |
-| `@bot approval` | Mention | `user` |
 | `@bot help` | Mention | `user` |
 | `@bot ask <question>` — any free-text mention also falls back to `ask` | Mention | `ai_user` |
 | `@bot status` | Mention | `developer` |
@@ -227,7 +226,6 @@ CodeCompanion/
 | 명령 | 진입점 | 최소 역할 |
 |------|--------|-----------|
 | `/meetup`, `/meetup list [today\|tomorrow\|week\|month]` | 슬래시 명령 | `user` |
-| `@bot approval` | 멘션 | `user` |
 | `@bot help` | 멘션 | `user` |
 | `@bot ask <질문>` — 명령이 아닌 자유 텍스트 멘션도 `ask`로 처리 | 멘션 | `ai_user` |
 | `@bot status` | 멘션 | `developer` |

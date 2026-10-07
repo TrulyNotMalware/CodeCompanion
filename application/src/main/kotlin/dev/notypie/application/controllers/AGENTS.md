@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-07 -->
 
 # application/controllers
 
@@ -15,7 +15,7 @@ only.
 | File | Description |
 |------|-------------|
 | `SlackEventController.kt` | `@RequestMapping("/api/slack")`. `POST /events` (JSON body as `Map<String, Any>`, `produces` JSON): echoes only `{"challenge": ...}` for `url_verification`, ACKs every non-`app_mention` event with an empty 200, and calls `AppMentionEventHandler.handleEvent(headers, payload)` for an `app_mention`, also answering an empty 200 (a failed command is logged at `WARN`, a mention with nothing to do — `Status.DO_NOTHING`, e.g. the bot's own or a workflow's mention the handler ignores — only at `DEBUG`; its `errorReason`, which can hold `exception.toString()`, never goes into the response — 2026-10-02). Returns `ResponseEntity<Map<String, Any>>`. `POST /interaction`: takes the form param `payload` (JSON string) and calls `InteractionHandler.handleInteraction(headers, payload): String?`; a non-null ack is returned as `application/json`, null becomes an empty-string 200 (`ResponseEntity<String>`) |
-| `SlashCommandController.kt` | `@RequestMapping("/api/slash")`. Each service call runs inside `ViewOpenDeferral.afterBoundary { … }`, so a modal the command stages is opened only after the service's `@Transactional` method returned and released its connection. Every mapping declares `consumes = APPLICATION_FORM_URLENCODED_VALUE` (the request Slack sends; it was `produces` until 2026-10-02, which matched on the `Accept` header instead), takes `@RequestParam data: Map<String, String>`, parses via `parseRequestBodyData(headers, data)` and returns `Unit` (empty 200). `POST /meet` → `MeetingService.handleMeeting`; `/standup` → `StandupSlashService.handleStandup`; `/subscribe`, `/unsubscribe`, `/subscriptions` → `CveSubscriptionSlashService.handleSubscribe` / `handleUnsubscribe` / `handleSubscriptions`; `/latest` → `CveQuerySlashService.handleLatest`; `/task` (`requestTasks`) parses only — no service is wired |
+| `SlashCommandController.kt` | `@RequestMapping("/api/slash")`. Each service call runs inside `ViewOpenDeferral.afterBoundary { … }`, so a modal the command stages is opened only after the service's `@Transactional` method returned and released its connection. Every mapping declares `consumes = APPLICATION_FORM_URLENCODED_VALUE` (the request Slack sends; it was `produces` until 2026-10-02, which matched on the `Accept` header instead), takes `@RequestParam data: Map<String, String>`, parses via `parseRequestBodyData(headers, data)` and returns `Unit` (empty 200). `POST /meet` → `MeetingService.handleMeeting`; `/standup` → `StandupSlashService.handleStandup`; `/subscribe`, `/unsubscribe`, `/subscriptions` → `CveSubscriptionSlashService.handleSubscribe` / `handleUnsubscribe` / `handleSubscriptions`; `/latest` → `CveQuerySlashService.handleLatest` |
 | `dto/CodeCompanionResponse.kt` | `data class CodeCompanionResponse(ok: Boolean = true, message: String)` — no current call sites |
 | `dto/ResponseDto.kt` | `EventResponseDto(message, event: Event, isAccepted)` and `Event(eventId: UUID, type: CommandDetailType, acceptedTime: Long)` — no current call sites |
 
@@ -40,8 +40,6 @@ only.
 - A `view_submission` that needs an inline error is the only case where an interaction reply carries a
   body — `InteractionHandler` returns the `response_action` JSON and the controller must send it as
   `application/json`. Keep that branch; a plain empty 200 would drop the validation message.
-- `/api/slash/task` still parses and discards the body. Wire a service before treating it as live, or
-  remove it.
 - Adding a slash endpoint means three edits: a `@PostMapping` here, a `when` branch in
   `socket/SocketModeReceiver.handleSlash`, and a command name in `AppConfig.Socket`. The Slack command
   name (`/meetup`, `AppConfig.Socket.meetingCommand`) is independent of the HTTP path

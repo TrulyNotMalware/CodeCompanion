@@ -4,7 +4,6 @@ import com.slack.api.model.block.composition.*
 import com.slack.api.model.block.composition.BlockCompositions.*
 import com.slack.api.model.block.element.*
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.States
@@ -138,24 +137,6 @@ class ModalElementBuilder {
             it.confirm(plainTextObject(text = confirmText))
             it.deny(plainTextObject(text = denyText))
         }
-
-    fun selectionElement(placeholderText: String, contents: List<SelectBoxDetails>) =
-        toInteractiveObject(
-            state = States(type = ActionElementTypes.MULTI_STATIC_SELECT),
-            element =
-                MultiStaticSelectElement
-                    .builder()
-                    .placeholder(plainTextObject(text = placeholderText))
-                    .options(
-                        contents.map {
-                            OptionObject
-                                .builder()
-                                .text(plainTextObject(it.name))
-                                .value(it.value.toString())
-                                .build()
-                        },
-                    ).build(),
-        )
 
     fun multiUserSelectionElement(contents: MultiUserSelectContents) =
         toInteractiveObject(

@@ -33,7 +33,7 @@ queue and hands the effects to the infrastructure resolver/stager.
 | `entity/event/` | `Event`, `EventPublisher` contracts implemented by infrastructure (see `entity/event/AGENTS.md`) |
 | `exceptions/` | `CommandException` hierarchy and `CommandErrorCode` (see `exceptions/AGENTS.md`) |
 | `dto/` | `CommandBasicInfo`, `UrlVerificationRequest` (see `dto/AGENTS.md`) |
-| `dto/modals/` | Modal payload DTOs: `ApprovalContents`, `SelectionContents`, `TextInputContents`, `TimeScheduleInfo` (see `dto/modals/AGENTS.md`) |
+| `dto/modals/` | Modal payload DTOs: `ApprovalContents`, `MultiUserSelectContents`, `TextInputContents`, `TimeScheduleInfo` (see `dto/modals/AGENTS.md`) |
 | `dto/response/` | `CommandOutput` (`empty` / `fail`) and `Status` (see `dto/response/AGENTS.md`) |
 
 ## For AI Agents

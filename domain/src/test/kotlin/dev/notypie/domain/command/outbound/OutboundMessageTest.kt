@@ -1,8 +1,6 @@
 package dev.notypie.domain.command.outbound
 
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import io.kotest.core.spec.style.BehaviorSpec
@@ -56,27 +54,7 @@ class OutboundMessageTest :
                     schedule.headline shouldBe "Meeting"
                     schedule.info shouldBe info
 
-                    val selection =
-                        SelectionContents(
-                            title = "Pick",
-                            explanation = "Choose one",
-                            placeholderText = "...",
-                            contents = emptyList(),
-                        )
-                    val reason = TextInputContents(title = "Reason", placeholderText = "Why?")
                     val approval = approvalContents()
-                    val form =
-                        MessageContent.Form(
-                            headline = "Form",
-                            fields = listOf(selection),
-                            reason = reason,
-                            approval = approval,
-                        )
-                    form.headline shouldBe "Form"
-                    form.fields shouldBe listOf(selection)
-                    form.reason shouldBe reason
-                    form.approval shouldBe approval
-
                     val meetingRequest = MessageContent.MeetingRequest(approval = approval)
                     meetingRequest.approval shouldBe approval
                 }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # domain/command/entity (test)
 
@@ -13,7 +13,7 @@ All specs are Kotest `BehaviorSpec`s.
 | File | Description |
 |------|-------------|
 | `CommandTest.kt` | Abstract `Command<NoSubCommands>` via anonymous subclasses. Mention payload → result comes from `context.runCommand()` (an `EmptyContext` yields `ok = false`); interaction payload with a `ReactionContext` → success through `handleInteraction`; interaction payload with a non-reactive context → `FAILED` / `ERROR_RESPONSE`; `parseContext` throwing → caught, `FAILED`, exception message in `errorReason`. Uses `createMentionInboundCommand`, `createInboundInteraction`, `createInteractionResponseInboundCommand`, `approveAction` |
-| `InteractionCommandTest.kt` | `InteractionCommand(appName, idempotencyKey, commandData, actorRole)`. Mention `notice hello` as `ADMIN` succeeds; `APPROVAL_CALLBACK` interaction succeeds (reactive context); `APPROVAL_REQUEST` interaction fails because `ApprovalFormContext` is not a `ReactionContext`; `findSubCommandDefinition` → `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST`, `NoSubCommands` for a mention |
+| `InteractionCommandTest.kt` | `InteractionCommand(appName, idempotencyKey, commandData, actorRole)`. Mention `notice hello` as `ADMIN` succeeds; `APPROVAL_CALLBACK` interaction succeeds (reactive context); `APPROVAL_REQUEST` interaction fails because its `EmptyContext` is not a `ReactionContext`; `findSubCommandDefinition` → `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST`, `NoSubCommands` for a mention |
 | `ReplaceTextResponseCommandTest.kt` | `ReplaceTextResponseCommand(markdownMessage, replyHandle)`: `handleEvent` succeeds, definition is `NoSubCommands` |
 | `RequestMeetingCommandTest.kt` | `slash.RequestMeetingCommand`. `findSubCommandDefinition`: none → `NONE`, `list` → `LIST`, unknown → `SubCommandParseException`; `list today` → `MeetingListRequest` spanning exactly one day from start-of-day for `TEST_USER_ID`; `list bogus` → `ok = false` plus an `Ephemeral` containing "Unknown range 'bogus'"; no sub-commands → success. Uses `createSlashInboundCommand(subCommands = ...)` and `drainIntents()` |
 
