@@ -129,7 +129,7 @@ interface JpaStandupSessionRepository : JpaRepository<StandupSessionSchema, Long
         @Param("nudgeWindowEnd") nudgeWindowEnd: Instant,
     ): List<StandupSessionSchema>
 
-    // Guarded by nudged_at IS NULL AND status = 'COLLECTING' — loosening either lets a session be nudged twice.
+    // nudged_at IS NULL makes the claim once-only; status = 'COLLECTING' keeps a closed session from being nudged.
     @Modifying
     @Transactional
     @Query(
