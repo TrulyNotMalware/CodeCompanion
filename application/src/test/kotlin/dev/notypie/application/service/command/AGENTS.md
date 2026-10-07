@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # test/kotlin/dev/notypie/application/service/command
 
@@ -23,8 +23,8 @@ re-throw semantics), `CommandRoleResolver` (bootstrap admins → DB grant → `U
   are rebuilt per leaf so `every` stubs never leak. Other specs here share mocks across `when`s.
 - The "publisher throws → intents remain drained" case is the documented no-re-queue contract; do not add a
   retry inside `CommandExecutor` without changing this case first.
-- `RoleManagementServiceTest` asserts exact reply strings and its `markdown()` extension also asserts the
-  target is `TEST_CHANNEL_ID`. Wording changes must update the spec in the same commit.
+- `RoleManagementServiceTest` asserts exact reply strings and its `markdown()` extension also asserts an
+  `Ephemeral` in `TEST_CHANNEL_ID` for `UserRef(TEST_USER_ID)` headlined `CodeCompanion — role management`. Wording changes must update the spec in the same commit.
 - Each `when` shares one `slot<OutboundMessage>()`; the last staged message is what `then` sees.
 
 ### Testing Requirements

@@ -19,6 +19,7 @@ import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -76,12 +77,21 @@ class AppMentionContextParserTest :
             }
 
             `when`("command is 'help'") {
-                val parser = createParser(mention = mentionOf(tokens = listOf("help")))
+                val helpIntents = createIntentQueue()
+                val parser = createParser(mention = mentionOf(tokens = listOf("help")), intentQueue = helpIntents)
 
                 val result = parser.parseContext(idempotencyKey = idempotencyKey)
 
                 then("should return TextResponseContext for the help reply") {
                     result.shouldBeInstanceOf<TextResponseContext>()
+                }
+
+                then("the help reply is an ephemeral addressed to the requester") {
+                    result.runCommand()
+                    val reply = helpIntents.snapshot().single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    reply.recipient shouldBe UserRef(id = TEST_USER_ID)
+                    reply.content shouldBe
+                        MessageContent.Text(headline = null, markdown = AppMentionContextParser.HELP_MESSAGE)
                 }
             }
 
@@ -286,13 +296,9 @@ class AppMentionContextParserTest :
                     ).parseContext(idempotencyKey = idempotencyKey)
                 result.shouldBeInstanceOf<TextResponseContext>()
                 result.runCommand()
-                return denialIntents
-                    .snapshot()
-                    .first()
-                    .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
-                    .content
-                    .shouldBeInstanceOf<MessageContent.Text>()
-                    .markdown
+                val reply = denialIntents.snapshot().first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                reply.recipient shouldBe UserRef(id = TEST_USER_ID)
+                return reply.content.shouldBeInstanceOf<MessageContent.Text>().markdown
             }
 
             `when`("a USER runs `status`") {
@@ -403,7 +409,7 @@ class AppMentionContextParserTest :
             `when`("`grant` has no mentioned user") {
                 then("the usage text is returned instead of an intent") {
                     firstEffectOf(tokens = listOf("grant", "developer"))
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe AppMentionContextParser.GRANT_USAGE
@@ -413,7 +419,7 @@ class AppMentionContextParserTest :
             `when`("`grant` carries extra trailing tokens") {
                 then("the usage text is returned instead of mutating state") {
                     firstEffectOf(tokens = listOf("grant", "developer", "extra"), userIds = listOf(TEST_USER_ID))
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe AppMentionContextParser.GRANT_USAGE
@@ -423,7 +429,7 @@ class AppMentionContextParserTest :
             `when`("`grant` names an unknown role") {
                 then("the usage text is returned") {
                     firstEffectOf(tokens = listOf("grant", "superuser"), userIds = listOf(TEST_USER_ID))
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe AppMentionContextParser.GRANT_USAGE
@@ -440,7 +446,7 @@ class AppMentionContextParserTest :
             `when`("`revoke` has no mentioned user") {
                 then("the usage text is returned") {
                     firstEffectOf(tokens = listOf("revoke"))
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe AppMentionContextParser.REVOKE_USAGE
@@ -450,7 +456,7 @@ class AppMentionContextParserTest :
             `when`("`revoke` carries extra trailing tokens") {
                 then("the usage text is returned instead of mutating state") {
                     firstEffectOf(tokens = listOf("revoke", "extra"), userIds = listOf(TEST_USER_ID))
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe AppMentionContextParser.REVOKE_USAGE
@@ -466,7 +472,7 @@ class AppMentionContextParserTest :
             `when`("`roles` carries arguments") {
                 then("the usage text is returned") {
                     firstEffectOf(tokens = listOf("roles", "extra"))
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe AppMentionContextParser.ROLES_USAGE
@@ -485,7 +491,7 @@ class AppMentionContextParserTest :
 
             fun usageOf(tokens: List<String>): String =
                 firstEffectOf(tokens = tokens)
-                    .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     .content
                     .shouldBeInstanceOf<MessageContent.Text>()
                     .markdown
@@ -556,7 +562,7 @@ class AppMentionContextParserTest :
                     denialIntents
                         .snapshot()
                         .first()
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe "You don't have permission to use `cve`. Ask an admin to grant you access."
@@ -592,7 +598,7 @@ class AppMentionContextParserTest :
                 return queue
                     .snapshot()
                     .first()
-                    .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     .content
                     .shouldBeInstanceOf<MessageContent.Text>()
                     .markdown

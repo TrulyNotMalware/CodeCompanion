@@ -10,6 +10,7 @@ import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 
 internal class TextResponseContext(
     private val text: String,
@@ -26,10 +27,12 @@ internal class TextResponseContext(
 
     override fun runCommand(): CommandOutput {
         addOutbound(
-            OutboundMessage.ChannelMessage(
-                target = ConversationTarget(id = commandBasicInfo.channel),
-                content = MessageContent.Text(headline = "Simple Text Response", markdown = text),
-            ),
+            message =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    recipient = UserRef(id = commandBasicInfo.publisherId),
+                    content = MessageContent.Text(headline = null, markdown = text),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # test/kotlin/dev/notypie/application/service/cve/ops
 
 ## Purpose
 Spec for `CveOpsService`, the admin command handler behind `CveOpsRequestEvent`: list topics with event
-counts, flip a topic's active flag, and re-queue dead-letter events for summarization. Replies are channel
-messages to the command channel.
+counts, flip a topic's active flag, and re-queue dead-letter events for summarization. Replies are
+ephemerals to the requesting admin in the command channel.
 
 ## Key Files
 | File | Description |
@@ -16,8 +16,8 @@ messages to the command channel.
 ## For AI Agents
 
 ### Working In This Directory
-- `markdown()` asserts the reply is a `ChannelMessage` targeted at `TEST_CHANNEL_ID`, the default channel of
-  `createCveOpsRequestEvent`; the ops reply goes to the command channel, not to the admin as a DM.
+- `markdown()` asserts the reply is an `Ephemeral` in `TEST_CHANNEL_ID` for `UserRef(TEST_USER_ID)` headlined
+  `CodeCompanion — CVE operations` (the defaults of `createCveOpsRequestEvent`); it is never a DM.
 - `maxRetries` reaches the service through `AppConfig.Ai(maxRetries = 5)`, and the dead-letter stubs are
   keyed on that exact value; `AppConfig.Cve(enabled)` toggles the disabled path.
 - Unlike `cve/subscription`, the disabled path still stages and publishes a reply — the `verify(exactly = 1)`

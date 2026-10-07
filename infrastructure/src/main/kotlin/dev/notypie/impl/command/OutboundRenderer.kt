@@ -68,6 +68,7 @@ class SlackOutboundRenderer(
                 when (val content = message.content) {
                     is MessageContent.Text ->
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = content.headline,
                             textMessage = content.markdown,
                             commandBasicInfo = basicInfo,
                             commandDetailType = message.detailType ?: CommandDetailType.SIMPLE_TEXT,

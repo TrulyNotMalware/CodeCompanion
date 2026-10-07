@@ -85,6 +85,12 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   (`MeetingServiceImpl`, `RoleManagementService`, `OpsStatusService`, `AgentConverseService`, `CveOpsService`)
   가 DB 작업 후 답장을 `OutboundMessageStager.stage` + `EventPublisher.publishOne`으로 스테이징한다. 도메인은
   "무엇을 원하는지"만 말하고 답장 문구는 리스너가 만든다. `CommandIntent.Nothing`은 `null`로 사라진다.
+- **멘션 답장은 요청자 전용 ephemeral(2026-10-07)**: `TextResponseContext`(`help`, usage 안내, 권한 거부,
+  "Command Not supported.")와 `OpsStatusService`·`AgentUsageReportService`·`RoleManagementService`·`CveOpsService`의
+  답장은 `Ephemeral(target = 명령 채널, recipient = UserRef(publisherId))`이다. 헤드라인은
+  `simpleEphemeralTextRequest(headLineText)`가 채널 `Text`와 같은 `simpleTextResponseTemplate`으로 렌더한다(null이면
+  본문만). `chat.postEphemeral`은 봇이 채널 멤버여야 하는데, Slack은 앱이 들어 있지 않은 대화의 `app_mention`을 보내지
+  않으므로 멘션 답장에서는 항상 성립한다. `notice`, `ask` 스레드 답장, CVE 구독·조회 DM은 그대로다.
 - **잔존 누수**: `ApprovalContents.commandDetailType`은 표현 모델에 남은 라우팅 enum이다(Refactor.md §4.4가
   `interactionValue` 문자열은 걷어냈지만 필드는 남김). `Approval` 렌더 시 버튼 값의 라우팅 타입이 여기서 나온다.
 
@@ -118,7 +124,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `ADMIN`은 `CommandPermission.entries.toSet()`이라 앞으로 추가되는 권한도 자동 포함한다.
 - 멘션 명령 → 권한 매핑은 `CommandSet`(internal)이 갖고, `UNKNOWN`(자유 텍스트 → `ask` 폴백)은 `AI`다. 게이트는
   `AppMentionContextParser.parseContext`가 라우팅 직전에 `actorRole.grants(...)`로 검사하고, 거부 시
-  `TextResponseContext`로 "You don't have permission..."을 답한다.
+  `TextResponseContext`가 요청자에게만 보이는 ephemeral로 "You don't have permission..."을 답한다.
 - **해석 순서**는 `CommandRoleResolver.resolve`: `slack.app.authorization.bootstrap-admins`(설정, 채팅에서 불변) →
   `user_command_role` 행(`UserCommandRoleRepository.findRole`) → `USER`. `SlackMentionEventHandlerImpl`이 매 턴
   새로 해석하므로 revoke가 즉시 반영된다. 부트스트랩 admin은 DB 행 없이 첫 admin을 만들기 위한 닭-달걀 해소다.

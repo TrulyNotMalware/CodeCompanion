@@ -1,18 +1,18 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # application/service/ops
 
 ## Purpose
 Backs `@bot status`. Consumes the `StatusReportRequestEvent` the domain `StatusContext` emits, renders a
 text report of outbox lag / in-flight counts (plus a CVE feed section when that feature is on) from the
-same repository counters the actuator health indicator reads, and posts it to the channel the mention
-came from. The same renderer feeds the MCP `get_status` tool.
+same repository counters the actuator health indicator reads, and posts it as an ephemeral, visible only to
+the requester, in the channel the mention came from. The same renderer feeds the MCP `get_status` tool.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OpsStatusService.kt` | `@Service`. `@EventListener handleStatusReport(StatusReportRequestEvent)`: `runCatching { renderReport() }` with a fixed fallback text on failure, then stages `OutboundMessage.ChannelMessage` (`STATUS_REPORT`, headline `"CodeCompanion — outbox status"`) to `payload.responseBasicInfo.channel` and `eventPublisher.publishOne`. `internal fun renderReport(): String`: reads `readOutboxHealth` (`application/health`), the same snapshot and verdict as `OutboxHealthIndicator` — pending / in-flight counts, stuck counts, oldest-row ages, the retrying count (`*Retrying:* n (sent at least Nx, still in flight)`), the access-block line (`*Slack access blocked:* rows held, last at <instant>` or `none held`, with the window; the service takes the same `AccessBlockedTracker` bean as the indicator), the stuck threshold and `Health: UP/DOWN`; `cveSection()` appended only when `cve.enabled` — active topics, `PENDING` / `SUMMARIZING` backlog, `FAILED` split into retryable vs dead-letter at `ai.maxRetries`, latest collect window |
+| `OpsStatusService.kt` | `@Service`. `@EventListener handleStatusReport(StatusReportRequestEvent)`: `runCatching { renderReport() }` with a fixed fallback text on failure, then stages `OutboundMessage.Ephemeral` (`STATUS_REPORT`, headline `"CodeCompanion — outbox status"`) in `payload.responseBasicInfo.channel` for `recipient = UserRef(payload.responseBasicInfo.publisherId)` and `eventPublisher.publishOne`. `internal fun renderReport(): String`: reads `readOutboxHealth` (`application/health`), the same snapshot and verdict as `OutboxHealthIndicator` — pending / in-flight counts, stuck counts, oldest-row ages, the retrying count (`*Retrying:* n (sent at least Nx, still in flight)`), the access-block line (`*Slack access blocked:* rows held, last at <instant>` or `none held`, with the window; the service takes the same `AccessBlockedTracker` bean as the indicator), the stuck threshold and `Health: UP/DOWN`; `cveSection()` appended only when `cve.enabled` — active topics, `PENDING` / `SUMMARIZING` backlog, `FAILED` split into retryable vs dead-letter at `ai.maxRetries`, latest collect window |
 
 ## For AI Agents
 
@@ -22,9 +22,9 @@ came from. The same renderer feeds the MCP `get_status` tool.
   plus one sweep period, or a retrying row) is defined once. Do not recompute a count here.
 - **`renderReport()` is `internal` for a reason:** `application/mcp/DomainReadTools.get_status` calls it so
   chat and MCP output never disagree. Text changes affect both surfaces.
-- The reply is a regular channel message, not an ephemeral — operators scroll back through history, and
-  the only trigger is a deliberate `@bot status` mention. Role gating (`OPERATIONS`) happens upstream in
-  the command pipeline, not here.
+- The reply is an ephemeral to the requester (since 2026-10-07; it used to be a channel message kept for
+  history). Every mention reply is ephemeral, which works because Slack sends `app_mention` only from
+  channels the bot is in. Role gating (`OPERATIONS`) happens upstream in the command pipeline, not here.
 - The CVE repositories are injected unconditionally (`JpaConfiguration` registers them regardless of
   `cve.enabled`); only the *rendering* of the section is gated. Do not wrap them in `Optional` or
   `@ConditionalOnBean`.
@@ -40,7 +40,7 @@ came from. The same renderer feeds the MCP `get_status` tool.
 Spec under `application/src/test/kotlin/dev/notypie/application/service/ops/`. Fixtures:
 `MessageOutboxRepository.stubOutboxStatus(...)` and `createFixedUtcClock` from
 `dev.notypie.application.outbox` (application testFixtures), `createCommandBasicInfo`,
-`createSendSlackMessageEvent`. Assert the rendered text lines and that the staged `ChannelMessage` is
+`createSendSlackMessageEvent`. Assert the rendered text lines and that the staged `Ephemeral` (requester, headline, `STATUS_REPORT`) is
 published; build the service with an `AppConfig` whose `cve.enabled` toggles the CVE section.
 
 ### Common Patterns
@@ -59,8 +59,8 @@ published; build the service with an `AppConfig` whose `cve.enabled` toggles the
   / `countFailedRetryable` / `countDeadLetter`, `CveCollectLedgerRepository.latestWindowStart`,
   `schema/CveSummaryStatus`
 - `domain/command/entity/event/` — `StatusReportRequestEvent`, `EventPublisher.publishOne`
-- `domain/command/outbound/` — `OutboundMessage.ChannelMessage`, `MessageContent.Text`,
-  `ConversationTarget`, `OutboundMessageStager`; `domain/command/entity/CommandDetailType.STATUS_REPORT`
+- `domain/command/outbound/` — `OutboundMessage.Ephemeral`, `MessageContent.Text`,
+  `ConversationTarget`, `UserRef`, `OutboundMessageStager`; `domain/command/entity/CommandDetailType.STATUS_REPORT`
 - `application/configurations/AppConfig` — `outbox.health.stuckThresholdSeconds`, `cve.enabled`,
   `ai.maxRetries`
 - Consumers of the same output: `application/health/OutboxHealthIndicator`, `application/mcp/DomainReadTools`

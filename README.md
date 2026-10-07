@@ -95,6 +95,8 @@ Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_us
 | `@bot cve topic activate\|deactivate <topic-key>` | Mention | `admin` |
 | `@bot cve retry all\|<event-id>` | Mention | `admin` |
 
+Replies to mention commands (`help`, `status`, `usage`, role and CVE management) are ephemeral — visible only to the person who sent the command.
+
 CVE subscription and query are additionally exposed as slash commands, backed by
 `/api/slash/subscribe`, `/unsubscribe`, `/subscriptions`, and `/latest` (all `user`-level). Map them to
 whatever Slack command names you prefer when configuring the Slack app.
@@ -244,6 +246,8 @@ CodeCompanion/
 | `@bot cve topics` | 멘션 | `admin` |
 | `@bot cve topic activate\|deactivate <topic-key>` | 멘션 | `admin` |
 | `@bot cve retry all\|<event-id>` | 멘션 | `admin` |
+
+멘션 명령(`help`, `status`, `usage`, 역할·CVE 관리)의 답장은 ephemeral 메시지로, 명령을 보낸 사람에게만 보입니다.
 
 CVE 구독·조회는 슬래시 명령으로도 제공되며, `/api/slash/subscribe`, `/unsubscribe`,
 `/subscriptions`, `/latest` 엔드포인트가 처리합니다(모두 `user` 등급). 슬랙 앱 설정에서 원하는

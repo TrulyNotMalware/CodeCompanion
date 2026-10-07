@@ -60,12 +60,22 @@ class SlackApiEventConstructor(
     }
 
     fun simpleEphemeralTextRequest(
+        headLineText: String?,
         textMessage: String,
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
         targetUserId: String? = null,
     ): SendSlackMessageEvent {
-        val layout = templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
+        val layout =
+            if (headLineText == null) {
+                templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
+            } else {
+                templateBuilder.simpleTextResponseTemplate(
+                    headLineText = headLineText,
+                    body = textMessage,
+                    isMarkDown = true,
+                )
+            }
         return buildEphemeralMessage(
             commandDetailType = commandDetailType,
             commandBasicInfo = commandBasicInfo,

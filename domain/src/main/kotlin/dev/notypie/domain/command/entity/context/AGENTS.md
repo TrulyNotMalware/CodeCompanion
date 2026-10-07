@@ -19,7 +19,7 @@ live in `form/`.
 | `RoleManagementContext.kt` | `grant` / `revoke` / `roles` — forwards the intent the parser built (`SIMPLE_TEXT`) |
 | `IntentContext.kt` | Queues the one intent the parser built (`SIMPLE_TEXT`): `cve ...` admin mentions and `usage [days]` (`AgentUsageReport`) |
 | `NoticeContext.kt` | `notice @u1 @u2 text` → `OutboundMessage.Notice(mentions, message)` (`SIMPLE_TEXT`) |
-| `TextResponseContext.kt` | Channel message with headline "Simple Text Response" (`SIMPLE_TEXT`) — help, usage, permission-denied, "Command Not supported." |
+| `TextResponseContext.kt` | `Ephemeral` in the command channel to `recipient = UserRef(publisherId)`, no headline (`SIMPLE_TEXT`) — help, usage, permission-denied, "Command Not supported." |
 | `EphemeralTextResponseContext.kt` | `ResponseContext`; ephemeral text, `isOk` selects `success` / `fail` |
 | `ReplaceMessageContext.kt` | `ReplaceMessage` through a reply handle (`REPLACE_TEXT`); same behaviour from `runCommand` and `handleInteraction` |
 | `DetailErrorAlertContext.kt` | Channel `MessageContent.ErrorNotice(className, message, details)` (`SIMPLE_TEXT`) |
@@ -48,8 +48,13 @@ live in `form/`.
 - `tracking` on `CommandContext` is never read anywhere; do not build on it.
 - All contexts are `internal`. They are reached through `parsers/`, `CommandDetailType.createContext`,
   or a slash `Command`; specs can see them because the test source set shares the module.
-- `TextResponseContext` posts to the **channel**; use `EphemeralTextResponseContext` when only the
-  actor should see the text.
+- `TextResponseContext` replies only to the actor: an `Ephemeral` in the command channel with an explicit
+  `recipient = UserRef(publisherId)`, the same `user` the constructor falls back to for `recipient = null`.
+  That is safe for every mention reply: `chat.postEphemeral` needs the bot in the channel, Slack sends
+  `app_mention` only from conversations the app is in (DMs never arrive as `app_mention`), and
+  `AppMentionContextParser` is reached only through `InteractionCommand` with a `MentionInvocation`, which only
+  `SlackMentionMapper.toMentionInboundCommand` builds for an `app_mention`. Use `NoticeContext` when everyone
+  should see the text.
 
 ### Testing Requirements
 ```bash

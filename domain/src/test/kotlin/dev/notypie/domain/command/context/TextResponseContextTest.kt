@@ -8,6 +8,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.TextResponseContext
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -48,14 +49,14 @@ class TextResponseContextTest :
                     result.commandType shouldBe CommandType.SIMPLE
                 }
 
-                then("should add a ChannelMessage Text outbound to the queue") {
+                then("should add an Ephemeral Text outbound addressed to the publisher") {
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
-                    val channelMessage = intents.first().shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
-                    channelMessage.target.id shouldBe basicInfo.channel
-                    val content = channelMessage.content.shouldBeInstanceOf<MessageContent.Text>()
-                    content.headline shouldBe "Simple Text Response"
-                    content.markdown shouldBe "Hello from test"
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.target.id shouldBe basicInfo.channel
+                    ephemeral.recipient shouldBe UserRef(id = basicInfo.publisherId)
+                    ephemeral.detailType shouldBe null
+                    ephemeral.content shouldBe MessageContent.Text(headline = null, markdown = "Hello from test")
                 }
             }
         }

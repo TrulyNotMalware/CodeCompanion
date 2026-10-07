@@ -11,6 +11,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
@@ -176,9 +177,10 @@ class AgentUsageReportServiceTest :
                     eventPublisher = eventPublisher,
                 ).handleUsageReport(event = event)
 
-                then("one channel message with the usage headline and detail type is staged and published") {
-                    val message = captured.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                then("one ephemeral to the requester with the usage headline and detail type is staged and published") {
+                    val message = captured.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     message.target shouldBe ConversationTarget(id = basic.channel)
+                    message.recipient shouldBe UserRef(id = basic.publisherId)
                     message.detailType shouldBe CommandDetailType.AGENT_USAGE_REPORT
                     message.content shouldBe
                         MessageContent.Text(
@@ -204,7 +206,7 @@ class AgentUsageReportServiceTest :
 
                 then("the listener still stages a friendly fallback instead of crashing") {
                     captured.captured
-                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe "Failed to read AI usage. Check application logs."

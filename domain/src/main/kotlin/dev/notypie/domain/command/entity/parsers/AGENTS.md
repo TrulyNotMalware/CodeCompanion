@@ -24,7 +24,8 @@ is a thin lookup from `CommandDetailType` to context.
   documentation of the mention grammar. Change the text and the spec together, and add a line whenever
   you add a keyword.
 - The permission check runs before the `when`, so a denied `grant` never reaches the argument checks.
-  Usage errors after the gate are `TextResponseContext` **channel** messages, not ephemerals.
+  Usage errors after the gate, the denial itself, `help` and "Command Not supported." are `TextResponseContext`
+  ephemerals to the actor (`recipient = publisherId`).
 - The agent prompt is `mention.text` (the restored message: links, code blocks and other people's mentions
   included) when the transport supplied it, the joined `commandTokens` otherwise. `ask` drops the first
   whole-word occurrence of the keyword (the text may lead with `<@alice> ask …`, so a prefix check is not

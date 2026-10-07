@@ -338,6 +338,7 @@ class SlackOutboundRendererTest :
             `when`("render is called") {
                 every {
                     slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
                         textMessage = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
@@ -347,10 +348,11 @@ class SlackOutboundRendererTest :
 
                 val payload = renderer.render(message = message, basicInfo = basicInfo)
 
-                then("delegates to simpleEphemeralTextRequest with the recipient id") {
+                then("delegates to simpleEphemeralTextRequest with the recipient id and no headline") {
                     payload shouldBe stubEvent.payload
                     verify(exactly = 1) {
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
                             textMessage = "secret",
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.SIMPLE_TEXT,
@@ -372,6 +374,7 @@ class SlackOutboundRendererTest :
             `when`("render is called") {
                 every {
                     slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
                         textMessage = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
@@ -384,6 +387,7 @@ class SlackOutboundRendererTest :
                 then("a null recipient maps to a null targetUserId (posts to the publisher)") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
                             textMessage = "to publisher",
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.SIMPLE_TEXT,
@@ -406,6 +410,7 @@ class SlackOutboundRendererTest :
             `when`("render is called") {
                 every {
                     slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
                         textMessage = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
@@ -419,9 +424,47 @@ class SlackOutboundRendererTest :
                     payload shouldBe stubEvent.payload
                     verify(exactly = 1) {
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
                             textMessage = "canceled",
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.CANCEL_MEETING,
+                            targetUserId = "U_REQUESTER",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an Ephemeral with Text content and a headline") {
+            val message =
+                OutboundMessage.Ephemeral(
+                    target = target,
+                    recipient = UserRef(id = "U_REQUESTER"),
+                    content = MessageContent.Text(headline = "CodeCompanion — outbox status", markdown = "report"),
+                    detailType = CommandDetailType.STATUS_REPORT,
+                )
+
+            `when`("render is called") {
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
+                        textMessage = any(),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns stubEvent
+
+                val payload = renderer.render(message = message, basicInfo = basicInfo)
+
+                then("the headline is handed to simpleEphemeralTextRequest, as a channel Text hands it over") {
+                    payload shouldBe stubEvent.payload
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = "CodeCompanion — outbox status",
+                            textMessage = "report",
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.STATUS_REPORT,
                             targetUserId = "U_REQUESTER",
                         )
                     }

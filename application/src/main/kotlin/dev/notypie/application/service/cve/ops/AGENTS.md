@@ -7,12 +7,13 @@
 Admin-only CVE operations reached through `@bot cve ...` mentions: list topics with event counts, flip a
 topic's `active` flag, and re-queue dead-lettered events for summarization. `CveOpsService` is the
 `@EventListener` for `CveOpsRequestEvent`; the mention parser in `domain` has already gated the actor as
-`ADMIN` and validated the shape, so this class only applies the change and replies on the channel.
+`ADMIN` and validated the shape, so this class only applies the change and replies with an ephemeral to
+that admin in the command channel.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveOpsService.kt` | `@Service class CveOpsService(appConfig, cveTopicRepository, cveEventRepository, outboundStager, eventPublisher)`; `maxRetries = appConfig.ai.maxRetries`. `@Transactional @EventListener handleCveOps(event)`: feature off → the file-level `internal const val CVE_FEATURE_DISABLED_MESSAGE` ("The CVE feature is currently disabled.", also returned by the `list_cve_subscriptions` / `cve_latest` MCP tools in `application/mcp/DomainReadTools`); else `LIST_TOPICS` → "CVE topics (N):" with `• *Name* (`key`) — digest|immediate, active|inactive, N event(s)` from `findAllTopics()` + `countEventsByTopic` (missing count → 0); `ACTIVATE_TOPIC` / `DEACTIVATE_TOPIC` → `setActive(topicKey, active)` and "Topic *Name* (`key`): active → inactive." or "No CVE topic with key `key`."; `RETRY_ALL` → `resetDeadLetters(maxRetries)` and "Re-queued N dead-letter event(s) for summarization."; `RETRY_EVENT` → `resetDeadLetter(id, maxRetries)` and "Re-queued event #id …" or "Event #id is not a dead-letter (…)". Reply: `ChannelMessage` to `payload.responseBasicInfo.channel`, headline `CodeCompanion — CVE operations`, published via `publishOne` Every echoed display name and topic key (including a typed unknown key) goes through `escapeMrkdwn()`. `activate` / `deactivate` find the topic ignoring case (the mention parser lower-cases the key) and toggle the stored key. |
+| `CveOpsService.kt` | `@Service class CveOpsService(appConfig, cveTopicRepository, cveEventRepository, outboundStager, eventPublisher)`; `maxRetries = appConfig.ai.maxRetries`. `@Transactional @EventListener handleCveOps(event)`: feature off → the file-level `internal const val CVE_FEATURE_DISABLED_MESSAGE` ("The CVE feature is currently disabled.", also returned by the `list_cve_subscriptions` / `cve_latest` MCP tools in `application/mcp/DomainReadTools`); else `LIST_TOPICS` → "CVE topics (N):" with `• *Name* (`key`) — digest|immediate, active|inactive, N event(s)` from `findAllTopics()` + `countEventsByTopic` (missing count → 0); `ACTIVATE_TOPIC` / `DEACTIVATE_TOPIC` → `setActive(topicKey, active)` and "Topic *Name* (`key`): active → inactive." or "No CVE topic with key `key`."; `RETRY_ALL` → `resetDeadLetters(maxRetries)` and "Re-queued N dead-letter event(s) for summarization."; `RETRY_EVENT` → `resetDeadLetter(id, maxRetries)` and "Re-queued event #id …" or "Event #id is not a dead-letter (…)". Reply: `Ephemeral` in `payload.responseBasicInfo.channel` for `recipient = UserRef(payload.responseBasicInfo.publisherId)`, headline `CodeCompanion — CVE operations`, published via `publishOne` Every echoed display name and topic key (including a typed unknown key) goes through `escapeMrkdwn()`. `activate` / `deactivate` find the topic ignoring case (the mention parser lower-cases the key) and toggle the stored key. |
 
 ## For AI Agents
 
@@ -50,7 +51,7 @@ topicKey, targetEventId)` in the `domain` testFixtures (reply target is `TEST_CH
 ### Internal
 - `application/configurations/AppConfig` — `cve.enabled`, `ai.maxRetries`
 - `domain/command/entity/event/` — `CveOpsRequestEvent`, `CveOpsAction`, `CveOpsPayload`, `publishOne`;
-  `domain/command/outbound/` — `OutboundMessage.ChannelMessage`, `MessageContent.Text`,
+  `domain/command/outbound/` — `OutboundMessage.Ephemeral`, `UserRef`, `MessageContent.Text`,
   `OutboundMessageStager`
 - `infrastructure/repository/cve/` — `CveTopicRepository` (`findAllTopics`, `setActive`),
   `CveEventRepository` (`countEventsByTopic`, `resetDeadLetters`, `resetDeadLetter`), `CveTopic`

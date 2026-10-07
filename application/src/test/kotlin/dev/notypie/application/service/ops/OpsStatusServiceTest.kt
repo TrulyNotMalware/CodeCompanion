@@ -12,9 +12,11 @@ import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.repository.cve.CveCollectLedgerRepository
 import dev.notypie.repository.cve.CveEventRepository
@@ -25,6 +27,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -80,14 +83,23 @@ class OpsStatusServiceTest :
                 service.handleStatusReport(event = event)
 
                 then("the rendered text reports zero counts and UP health") {
-                    val channelMessage = captured.captured as OutboundMessage.ChannelMessage
-                    val body = (channelMessage.content as MessageContent.Text).markdown
+                    val reply = captured.captured as OutboundMessage.Ephemeral
+                    val body = (reply.content as MessageContent.Text).markdown
                     body shouldContain "*Pending:* 0"
                     body shouldContain "*In-flight:* 0"
                     body shouldContain "UP"
                 }
 
-                then("the rendered text is published as a single channel message") {
+                then("the report is an ephemeral to the requester with the status headline and detail type") {
+                    val reply = captured.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    reply.target shouldBe ConversationTarget(id = basic.channel)
+                    reply.recipient shouldBe UserRef(id = basic.publisherId)
+                    reply.detailType shouldBe CommandDetailType.STATUS_REPORT
+                    reply.content.shouldBeInstanceOf<MessageContent.Text>().headline shouldBe
+                        "CodeCompanion — outbox status"
+                }
+
+                then("the staged reply is published once") {
                     publishedQueue.captured.toList().single() shouldBe outboundStub
                 }
             }
@@ -109,8 +121,8 @@ class OpsStatusServiceTest :
                 service.handleStatusReport(event = event)
 
                 then("the report surfaces stuck counts and DOWN health") {
-                    val channelMessage = captured.captured as OutboundMessage.ChannelMessage
-                    val body = (channelMessage.content as MessageContent.Text).markdown
+                    val reply = captured.captured as OutboundMessage.Ephemeral
+                    val body = (reply.content as MessageContent.Text).markdown
                     body shouldContain "*Pending:* 7 (oldest 900s ago, stuck 2)"
                     body shouldContain "*In-flight:* 1 (oldest 600s ago, stuck 1)"
                     body shouldContain "DOWN"
@@ -128,7 +140,7 @@ class OpsStatusServiceTest :
 
                 then("the report shows the retrying count and DOWN, as the actuator indicator does") {
                     val body =
-                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                        ((captured.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
                             .markdown
                     body shouldContain "*Retrying:* 1 (sent at least 3x, still in flight)"
                     body shouldContain "DOWN"
@@ -147,7 +159,7 @@ class OpsStatusServiceTest :
 
                 then("the report names the hold and says DOWN, as the actuator indicator does") {
                     val body =
-                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                        ((captured.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
                             .markdown
                     body shouldContain "*Slack access blocked:* rows held, last at ${clock.instant().minusSeconds(60L)}"
                     body shouldContain "DOWN"
@@ -164,8 +176,8 @@ class OpsStatusServiceTest :
                 service.handleStatusReport(event = event)
 
                 then("the listener still publishes a friendly fallback instead of crashing") {
-                    val channelMessage = captured.captured as OutboundMessage.ChannelMessage
-                    val body = (channelMessage.content as MessageContent.Text).markdown
+                    val reply = captured.captured as OutboundMessage.Ephemeral
+                    val body = (reply.content as MessageContent.Text).markdown
                     body shouldContain "Failed to read outbox status"
                 }
             }
@@ -181,7 +193,7 @@ class OpsStatusServiceTest :
 
                 then("no CVE section is rendered") {
                     val body =
-                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                        ((captured.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
                             .markdown
                     body shouldNotContain "CVE"
                 }
@@ -247,7 +259,7 @@ class OpsStatusServiceTest :
 
                 then("the CVE section reports topics, event counts split by status, and the last window") {
                     val body =
-                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                        ((captured.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
                             .markdown
                     body shouldContain "*CVE topics:* 3 active"
                     body shouldContain "*CVE events:* 4 pending, 1 summarizing, 2 failed (retryable), 1 dead-letter"
@@ -268,7 +280,7 @@ class OpsStatusServiceTest :
 
                 then("the last collect window reads never") {
                     val body =
-                        ((captured.captured as OutboundMessage.ChannelMessage).content as MessageContent.Text)
+                        ((captured.captured as OutboundMessage.Ephemeral).content as MessageContent.Text)
                             .markdown
                     body shouldContain "*CVE last collect window:* never"
                 }

@@ -2,6 +2,7 @@ package dev.notypie.application.service.command
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.createRoleManageRequestEvent
 import dev.notypie.domain.command.entity.event.CommandEvent
@@ -11,6 +12,7 @@ import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.authorization.UserCommandRoleRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -55,13 +57,14 @@ class RoleManagementServiceTest :
             return service to publisher
         }
 
-        fun CapturingSlot<OutboundMessage>.markdown(): String =
-            captured
-                .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
-                .also { it.target.id shouldBe TEST_CHANNEL_ID }
-                .content
-                .shouldBeInstanceOf<MessageContent.Text>()
-                .markdown
+        fun CapturingSlot<OutboundMessage>.markdown(): String {
+            val reply = captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+            reply.target.id shouldBe TEST_CHANNEL_ID
+            reply.recipient shouldBe UserRef(id = TEST_USER_ID)
+            val content = reply.content.shouldBeInstanceOf<MessageContent.Text>()
+            content.headline shouldBe "CodeCompanion — role management"
+            return content.markdown
+        }
 
         given("a GRANT event") {
             val roleRepository = mockk<UserCommandRoleRepository>(relaxed = true)
