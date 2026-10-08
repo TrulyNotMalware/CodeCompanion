@@ -60,6 +60,10 @@ class AppConfigBindingTest :
                     google.tokenEncryptionKey shouldBe ""
                     google.stateTtlMinutes shouldBe 10L
                     google.requestTimeoutSeconds shouldBe 10L
+                    google.syncBatchSize shouldBe 20
+                    google.syncMaxAttempts shouldBe 8
+                    google.syncStuckMinutes shouldBe 10L
+                    google.syncTickBudgetSeconds shouldBe 30L
                 }
             }
 
@@ -77,6 +81,10 @@ class AppConfigBindingTest :
                                     "a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5",
                                 "slack.app.calendar.google.state-ttl-minutes" to "5",
                                 "slack.app.calendar.google.request-timeout-seconds" to "20",
+                                "slack.app.calendar.google.sync-batch-size" to "5",
+                                "slack.app.calendar.google.sync-max-attempts" to "3",
+                                "slack.app.calendar.google.sync-stuck-minutes" to "15",
+                                "slack.app.calendar.google.sync-tick-budget-seconds" to "45",
                             ),
                     ).calendar.google
 
@@ -87,6 +95,12 @@ class AppConfigBindingTest :
                     google.redirectUri shouldBe "https://bot.example.com/oauth/google/callback"
                     google.stateTtlMinutes shouldBe 5L
                     google.requestTimeoutSeconds shouldBe 20L
+                    google.syncBatchSize shouldBe 5
+                    google.syncMaxAttempts shouldBe 3
+                    google.syncStuckMinutes shouldBe 15L
+                    google.syncTickBudgetSeconds shouldBe 45L
+                    google.toString() shouldContain "syncBatchSize=5"
+                    google.toString() shouldContain "syncTickBudgetSeconds=45"
                     google.toString() shouldNotContain "GOCSPX-secret"
                     google.toString() shouldNotContain "a2V5a2V5"
                     google.toString() shouldContain "cid.apps.googleusercontent.com"
@@ -98,6 +112,48 @@ class AppConfigBindingTest :
                     shouldThrow<BindException> {
                         bind(properties = mapOf("slack.app.calendar.google.state-ttl-minutes" to "0"))
                     }
+                }
+            }
+
+            val positiveSyncKeys =
+                listOf("sync-max-attempts", "sync-batch-size", "sync-stuck-minutes", "sync-tick-budget-seconds")
+            positiveSyncKeys.forEach { key ->
+                `when`("$key is zero") {
+                    then("binding fails and names the property") {
+                        val failure =
+                            shouldThrow<BindException> {
+                                bind(properties = mapOf("slack.app.calendar.google.$key" to "0"))
+                            }
+                        generateSequence<Throwable>(failure) { it.cause }.last().message shouldContain
+                            "calendar.google.$key must be positive"
+                    }
+                }
+            }
+
+            `when`("request-timeout-seconds is so long that the default sync-stuck-minutes could reset a live row") {
+                then("binding fails and names both keys") {
+                    val failure =
+                        shouldThrow<BindException> {
+                            bind(properties = mapOf("slack.app.calendar.google.request-timeout-seconds" to "120"))
+                        }
+                    val message = checkNotNull(generateSequence<Throwable>(failure) { it.cause }.last().message)
+                    message shouldContain "calendar.google.sync-stuck-minutes must exceed the worker's worst path"
+                    message shouldContain "calendar.google.request-timeout-seconds"
+                }
+            }
+
+            `when`("request-timeout-seconds is raised together with sync-stuck-minutes") {
+                then("it binds once the stuck threshold covers the worst path again") {
+                    val google =
+                        bind(
+                            properties =
+                                mapOf(
+                                    "slack.app.calendar.google.request-timeout-seconds" to "120",
+                                    "slack.app.calendar.google.sync-stuck-minutes" to "18",
+                                ),
+                        ).calendar.google
+                    google.requestTimeoutSeconds shouldBe 120L
+                    google.syncStuckMinutes shouldBe 18L
                 }
             }
         }

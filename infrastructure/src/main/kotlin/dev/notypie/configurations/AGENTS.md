@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-08 -->
 
 # infrastructure/configurations
 
 ## Purpose
 The two Spring `@Configuration` classes owned by the infrastructure module: `JpaConfiguration` (HikariCP
-datasource, `@Primary` lazy-connection proxy, JPA repository scanning, and the fifteen `@Bean @Primary`
+datasource, `@Primary` lazy-connection proxy, JPA repository scanning, and the sixteen `@Bean @Primary`
 repository-adapter factories) and `RetryConfiguration` (a `RetryTemplate`, the `RetryService` bean, and
 the `RetryOptions` defaults enum). Slack dispatch, Kafka, the AI-agent lane, CVE, MCP, and scheduling are
 wired in `application/src/main/kotlin/dev/notypie/application/configurations/`; this package covers
@@ -15,7 +15,7 @@ persistence and retry only.
 | File | Description |
 |------|-------------|
 | `SnapshotIsolationExceptionTranslator.kt` | `SnapshotIsolationConflictException(message, cause)` (an `OptimisticLockingFailureException`, so a `ConcurrencyFailureException`) and `SnapshotIsolationExceptionTranslator : SQLExceptionTranslator` (`ER_CHECKREAD = 1020`): an `SQLException` with error code 1020 anywhere in its cause chain becomes the conflict exception; any other error returns `null` for a `"Hibernate operation: "` task (Hibernate's own instanceof mapping still decides, e.g. a unique violation stays `DataIntegrityViolationException`) and is passed to a `SQLExceptionSubclassTranslator` otherwise — the default of the Hibernate transaction path and of `JdbcTemplate`, which receive the same bean. Without it Spring 7.0.9 maps Hibernate's `SnapshotIsolationException` to `JpaSystemException`, which no conflict handler catches. |
-| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository` (also takes the `PlatformTransactionManager` for its insert transaction), `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository` (also takes the `PlatformTransactionManager` for its locked-read sync and `REQUIRES_NEW` insert), `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references Also declares `snapshotIsolationExceptionTranslator` — it must stay the **only** `SQLExceptionTranslator` bean: Boot 4.1.1 wires one into `HibernateJpaDialect.setJdbcExceptionTranslator` (repository proxies and `JpaTransactionManager` commits) and `JdbcTemplate` only when it is unique (`ifUnique`), so a second bean silently turns 1020 back into `JpaSystemException`.; `googleCalendarConnectionRepository` and `googleOAuthStateRepository` (`repository/calendar`) are registered here too, unconditionally |
+| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository` (also takes the `PlatformTransactionManager` for its insert transaction), `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository` (also takes the `PlatformTransactionManager` for its locked-read sync and `REQUIRES_NEW` insert), `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references Also declares `snapshotIsolationExceptionTranslator` — it must stay the **only** `SQLExceptionTranslator` bean: Boot 4.1.1 wires one into `HibernateJpaDialect.setJdbcExceptionTranslator` (repository proxies and `JpaTransactionManager` commits) and `JdbcTemplate` only when it is unique (`ifUnique`), so a second bean silently turns 1020 back into `JpaSystemException`.; `googleCalendarConnectionRepository`, `googleOAuthStateRepository` and `meetingCalendarEventRepository` (`repository/calendar`; the last also takes `JpaMeetingRepository` for its sync view and the `PlatformTransactionManager` for the worker transitions, which refuse an outer transaction and run in their own) are registered here too, unconditionally |
 | `RetryConfiguration.kt` | `@EnableResilientMethods @Configuration`. `retryService()` returns a parameterless `RetryService` (it builds its own per-policy templates; there is no `RetryTemplate` bean any more). The same file defines `enum class RetryOptions(internal val default: Long)`: `MAX_ATTEMPTS = 3`, `INITIAL_DELAY = 100`, `MULTIPLIER = 2`, `MAX_DELAY = 10000`, `JITTER = 10` (milliseconds) |
 
 ## For AI Agents
@@ -85,6 +85,8 @@ uses a bare `RetryTemplate()` rather than this configuration.
   `AgentSessionRepositoryImpl`, `AgentTurnHistoryRepositoryImpl`
 - `repository/authorization` — `JpaUserCommandRoleRepository`, `UserCommandRoleRepositoryImpl`
 - `repository/mcp` — `JpaMcpToolCallHistoryRepository`, `McpToolCallHistoryRepositoryImpl`
+- `repository/calendar` — `JpaGoogleCalendarConnectionRepository`, `JpaGoogleOAuthStateRepository`,
+  `JpaMeetingCalendarEventRepository` and their three `*RepositoryImpl` classes
 - `repository/cve` — `JpaCveTopicRepository`, `JpaCveEventRepository`, `JpaCveSubscriptionRepository`,
   `JpaCveCollectLedgerRepository`, `JpaCveDeliveryRepository` and their five `*RepositoryImpl` classes
 - `impl/retry` — `RetryService` (which in turn reads `RetryOptions` from this package)

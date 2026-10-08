@@ -76,16 +76,10 @@ class GoogleCalendarConnectionSchema(
         this.googleSubject = googleSubject
         this.googleEmail = googleEmail
         this.encryptedRefreshToken = encryptedRefreshToken
-        this.status = CalendarConnectionStatus.ACTIVE
-        this.connectedAt = now
-        this.revokedAt = null
-        this.lastError = null
-    }
-
-    fun revoke(now: Instant, reason: String?) {
-        this.status = CalendarConnectionStatus.REVOKED
-        this.revokedAt = now
-        this.lastError = reason
+        status = CalendarConnectionStatus.ACTIVE
+        connectedAt = now
+        revokedAt = null
+        lastError = null
     }
 }
 

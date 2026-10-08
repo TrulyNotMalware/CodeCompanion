@@ -24,6 +24,11 @@ interface JpaMeetingRepository : JpaRepository<MeetingSchema, Long> {
         @Param("meetingId") meetingId: Long,
     ): MeetingSchema?
 
+    @Query("SELECT m.id FROM meetings m WHERE m.idempotencyKey = :idempotencyKey")
+    fun findIdByIdempotencyKey(
+        @Param("idempotencyKey") idempotencyKey: UUID,
+    ): Long?
+
     @Query(
         """
         SELECT m

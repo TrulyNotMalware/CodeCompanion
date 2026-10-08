@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # db/migration
 
@@ -39,11 +39,12 @@ the release checklist below decide the order.
 | `V22__add_outbox_send_count.sql` | `outbox_message.send_count INT NOT NULL DEFAULT 0` — raised by `renewClaim` right before a send, taken back by the rate-limit deferral; the recovery sweep's abandon budget (`outbox.polling.max-sends`) and the health probe's retrying-row counter. Ships with V20 under the same rollout constraint and online-DDL procedure |
 | `V23__widen_outbox_payload_to_mediumtext.sql` | `outbox_message.payload` `TEXT` → `MEDIUMTEXT NOT NULL`: under strict `sql_mode` a payload over 65,535 bytes failed its write (a long AI answer or a full standup summary was never staged). Re-runnable. The header carries the first-run cost: the retention purge ships in the same release, so the first run meets the whole history — measure the table, try `ALGORITHM=INPLACE, LOCK=NONE` with a short `lock_wait_timeout` (rejected at once if impossible), and run the copying form only at a quiet moment or after the purge. Safe for old binaries and rollbacks |
 | `V24__add_google_calendar_tables.sql` | `google_calendar_connection` (one row per Slack user, `google_subject`/`google_email` from the id_token, `refresh_token_enc` = `TokenCipher` output, `status` ACTIVE/REVOKED, unique `slack_user_id`) and `google_oauth_state` (`state` PK, `slack_user_id`, `expires_at`, `consumed_at`; index on `expires_at`) for `/meetup calendar connect`. Independent of every existing table; `CREATE TABLE IF NOT EXISTS`, safe beside the previous release; rollback is `DROP TABLE` on both |
+| `V25__add_meeting_calendar_event.sql` | `meeting_calendar_event`, the Google Calendar mirror queue: one row per `(meeting_id, slack_user_id)` (unique `uk_meeting_calendar_event_meeting_user`, FK cascade to `meetings`), `google_event_id VARCHAR(1024)`, `status` PENDING/SYNCING/SYNCED/FAILED, `change_seq BIGINT DEFAULT 1`, `attempts`, `next_attempt_at DATETIME(6)`, `claim_token`, `last_error`, `created_at DATETIME(6) NOT NULL` and `updated_at DATETIME(6) NULL` without a database default or `ON UPDATE` (as in `V24`; every insert and transition binds them); indexes `(status, next_attempt_at)` and `(slack_user_id)`. The row is a dirty marker (the worker recomputes the desired event from the meeting) and `change_seq` is the generation the completion CAS compares, so a change during the Google call is synced again without losing the event id. Apply after `V24`; new table only, safe beside the previous release; rollback is `DROP TABLE` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V25`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V26`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Number ≠ apply order: the V18–V23 release checklist.** `main` stopped at `V17`, and the next release ships
   `V18`–`V23` together. Apply them in this order, which `../k8s/README.md` ("One-time") and
   `docs/wiki/dev-environment.md` repeat:
@@ -84,7 +85,8 @@ the release checklist below decide the order.
   for a change is recorded, since prod applies these outside any migration tool.
 - The profile YAML carries no `spring.flyway.*` keys (the inert `enabled: false` leftovers were removed
   2026-09-21). Do not add Flyway config — adopting the tool would also require a baseline for every
-  environment that already applied `V1`–`V24` by hand.
+  environment that applies these scripts by hand, each at its own last applied number. `V24` and `V25` ship
+  together with the Google Calendar feature and, as of 2026-10-08, have not been applied by hand anywhere.
 - Files here are packaged into the boot jar by `processResources` although the app never reads them.
 
 ### Testing Requirements
@@ -97,9 +99,11 @@ the release checklist below decide the order.
 
 ### Common Patterns
 - Naming: `V<n>__<snake_case_description>.sql`, one concern per script.
-- Claim/idempotency ledgers follow one shape: a `UNIQUE` key on the natural pair, a nullable `claim_token`
-  or timestamp column for the CAS, and `created_at DATETIME(6) NOT NULL` (`V4`, `V5`, `V6`, `V7`, `V14`,
-  `V15`).
+- Claim/idempotency ledgers follow one shape: a `UNIQUE` key on the natural pair and a nullable `claim_token`
+  or timestamp column for the CAS. Their `created_at` comes in two forms: `DATETIME NOT NULL DEFAULT
+  CURRENT_TIMESTAMP` (`V4`, `V5`, `V7`; `V4` and `V5` add `updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP`)
+  and `DATETIME(6) NOT NULL` with no default, bound by the application (`V14`, `V15`, `V24`, `V25`). New tables
+  use the second form.
 - Index changes use `DROP INDEX IF EXISTS … ON <table>; CREATE INDEX …` so re-application is safe (`V16`,
   `V17`).
 - Append-only audit tables (`V10`, `V13`) index `created_at` plus one lookup key and never get `updated_at`.
@@ -114,6 +118,7 @@ the release checklist below decide the order.
 - `infrastructure/repository/authorization/schema/` — `V12`
 - `infrastructure/repository/mcp/schema/` — `V13`
 - `infrastructure/repository/cve/schema/` — `V14`–`V17`
+- `infrastructure/repository/calendar/schema/` — `V24`, `V25`
 - `../../application-*.yaml` — `ddl-auto` per profile decides whether a script is applied by hand
 
 ### External

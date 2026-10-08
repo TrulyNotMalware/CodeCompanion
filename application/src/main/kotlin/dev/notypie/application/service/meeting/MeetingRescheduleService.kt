@@ -1,5 +1,6 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -33,6 +34,7 @@ class MeetingRescheduleService(
     private val eventPublisher: EventPublisher,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
+    private val calendarMirror: MeetingCalendarMirror,
 ) {
     private val log = KotlinLogging.logger {}
     private val writeTemplate = isolatedWriteTemplate(transactionManager = transactionManager)
@@ -92,6 +94,7 @@ class MeetingRescheduleService(
 
                 is RescheduleResult.Rescheduled -> {
                     reminderRepository.deleteByMeetingId(meetingId = result.meeting.meetingId)
+                    calendarMirror.onMeetingRescheduled(meetingId = result.meeting.meetingId)
                     publishParticipantReNotification(
                         meetingTitle = result.meeting.title,
                         participantUserIds = result.meeting.participants.map { it.userId },

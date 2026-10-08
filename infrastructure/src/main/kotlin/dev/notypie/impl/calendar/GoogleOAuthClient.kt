@@ -18,6 +18,7 @@ private val log = KotlinLogging.logger {}
 class GoogleOAuthException(
     message: String,
     val statusCode: Int? = null,
+    val error: String? = null,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
@@ -33,6 +34,13 @@ data class GoogleTokenGrant(
 
     override fun toString(): String =
         "GoogleTokenGrant(expiresInSeconds=$expiresInSeconds, scopes=$scopes, subject=$subject, email=$email)"
+}
+
+data class GoogleAccessToken(
+    val accessToken: String,
+    val expiresInSeconds: Long,
+) {
+    override fun toString(): String = "GoogleAccessToken(expiresInSeconds=$expiresInSeconds)"
 }
 
 class GoogleOAuthClient(
@@ -52,6 +60,7 @@ class GoogleOAuthClient(
         const val CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
         const val SCOPES = "$CALENDAR_EVENTS_SCOPE openid email"
         private const val DEFAULT_MAX_BODY_BYTES = 64 * 1024
+        private const val DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 3600L
         private const val ALREADY_INVALID_TOKEN_ERROR = "invalid_token"
         private const val FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
     }
@@ -107,6 +116,28 @@ class GoogleOAuthClient(
             subject = claims?.subject,
             email = claims?.email,
         )
+    }
+
+    fun refresh(refreshToken: String): GoogleAccessToken {
+        val body =
+            postForm(
+                endpoint = tokenEndpoint,
+                fields =
+                    listOf(
+                        "client_id" to clientId,
+                        "client_secret" to clientSecret,
+                        "refresh_token" to refreshToken,
+                        "grant_type" to "refresh_token",
+                    ),
+            )
+        val accessToken = body.path("access_token").asString("")
+        if (accessToken.isBlank()) throw GoogleOAuthException(message = "refresh response has no access_token")
+        val expiresIn = body.path("expires_in").asLong(0L)
+        if (expiresIn > 0L) return GoogleAccessToken(accessToken = accessToken, expiresInSeconds = expiresIn)
+        log.warn {
+            "Google refresh response has no positive expires_in; assuming ${DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS}s"
+        }
+        return GoogleAccessToken(accessToken = accessToken, expiresInSeconds = DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS)
     }
 
     fun revoke(token: String): Boolean {
@@ -184,10 +215,11 @@ class GoogleOAuthClient(
                 )
             }
         if (response.statusCode !in 200..299) {
-            val error = body.path("error").asString("unknown")
+            val error = body.path("error").asString("").takeIf { it.isNotBlank() }
             throw GoogleOAuthException(
-                message = "Google token request rejected: $error",
+                message = "Google token request rejected: ${error ?: "unknown"}",
                 statusCode = response.statusCode,
+                error = error,
             )
         }
         return body

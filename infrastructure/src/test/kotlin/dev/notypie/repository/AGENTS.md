@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository
 
@@ -15,7 +15,7 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `NativeQueryStatusLiteralTest.kt` | Plain `StringSpec` guard: every `'QUOTED_CONSTANT'` in a native `@Query` of the six status-CAS repositories must be a constant of that table's status enum (`MessageStatus`, `CveSummaryStatus`, `CveDeliveryStatus`, `MeetingReminderStatus`, `DispatchStatus`, `SessionStatus`), and a classpath scan of `dev.notypie.repository` fails if another repository starts quoting constants without a mapping. Renaming a constant still needs a data migration; this only stops the SQL from silently matching nothing |
+| `NativeQueryStatusLiteralTest.kt` | Plain `StringSpec` guard: every `'QUOTED_CONSTANT'` in a native `@Query` of the seven status-CAS repositories must be a constant of that table's status enum (`MessageStatus`, `CveSummaryStatus`, `CveDeliveryStatus`, `MeetingReminderStatus`, `DispatchStatus`, `SessionStatus`, `CalendarSyncStatus`), and a classpath scan of `dev.notypie.repository` fails if another repository starts quoting constants without a mapping. Renaming a constant still needs a data migration; this only stops the SQL from silently matching nothing |
 | `SchemaNullabilityTest.kt` | `@DataJpaTest` `StringSpec` reading H2's `INFORMATION_SCHEMA.COLUMNS`: `outbox_message.status` and `meeting_participants.absent_reason`, both non-null Kotlin properties, are `NOT NULL` in the schema Hibernate generates. It sees only the generated schema; an existing MariaDB column keeps whatever nullability it was created with |
 
 ## Subdirectories
@@ -28,6 +28,6 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 | `meeting/` | `JpaMeetingRepositoryTest`, `MeetingRepositoryImplTest`, and the Spring-booting `MeetingRepositoryWriteTest` (see `meeting/AGENTS.md`) |
 | `outbox/` | `MessageOutboxRepositoryTest` (H2 native statements), `OutboundMessageCodecTest`; `schema/` holds `OutboxMessageTest` (see `outbox/AGENTS.md`) |
 | `standup/` | `JpaStandupSessionRepositoryTest` (both collections map each answer once) and `StandupDispatchSweepTest` (clock-bound stuck sweep) (see `standup/AGENTS.md`) |
-| `calendar/` | `JpaGoogleOAuthStateRepositoryTest` (single-use consume CAS, per-user delete, purge) and `GoogleCalendarConnectionRepositoryImplTest` (upsert in place, delete) (see `calendar/AGENTS.md`) |
+| `calendar/` | `JpaGoogleOAuthStateRepositoryTest` (single-use consume CAS, per-user delete, purge), `GoogleCalendarConnectionRepositoryImplTest` (upsert in place, delete, active-connection check, `markRevoked`) and `JpaMeetingCalendarEventRepositoryTest` (mirror queue on its own `MODE=MariaDB` H2 database: enqueue upsert/touch, claim snapshot, generation CAS on success and failure, delete/release, retry/fail, stuck sweep, per-user fail and the id-bounded revive (`touchForUser`), worker transaction guard, sync view) (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

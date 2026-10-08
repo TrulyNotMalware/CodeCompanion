@@ -6,6 +6,7 @@ enum class CalendarConnectionOutcome {
     SCOPE_DENIED,
     INVALID_STATE,
     EXCHANGE_FAILED,
+    STORE_FAILED,
 }
 
 interface CalendarConnectionCallback {

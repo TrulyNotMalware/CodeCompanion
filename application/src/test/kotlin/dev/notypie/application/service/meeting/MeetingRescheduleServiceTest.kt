@@ -1,5 +1,7 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -34,6 +36,7 @@ class MeetingRescheduleServiceTest :
         val reminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
         val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
+        val calendarMirror = mockk<MeetingCalendarMirror>(relaxed = true)
         val service =
             MeetingRescheduleService(
                 meetingRepository = meetingRepository,
@@ -42,6 +45,7 @@ class MeetingRescheduleServiceTest :
                 eventPublisher = eventPublisher,
                 transactionManager = createH2TransactionManager(),
                 clock = clock,
+                calendarMirror = calendarMirror,
             )
 
         given("rescheduleMeeting receives a RescheduleMeetingEvent") {
@@ -93,6 +97,10 @@ class MeetingRescheduleServiceTest :
 
                 then("the meeting's reminders are cleared so the scheduler re-arms them") {
                     verify(exactly = 1) { reminderRepository.deleteByMeetingId(meetingId = meetingId) }
+                }
+
+                then("the calendar mirror is told the meeting moved, inside the write") {
+                    verify(exactly = 1) { calendarMirror.onMeetingRescheduled(meetingId = meetingId) }
                 }
 
                 then("a participant re-notification is published") {
@@ -148,6 +156,7 @@ class MeetingRescheduleServiceTest :
                         eventPublisher = recordingPublisher,
                         transactionManager = transactionManager,
                         clock = clock,
+                        calendarMirror = NoopMeetingCalendarMirror,
                     )
                 every {
                     localMeetingRepository.rescheduleMeeting(
@@ -182,6 +191,7 @@ class MeetingRescheduleServiceTest :
                 localMeetingRepository: MeetingRepository,
                 localReminderRepository: MeetingReminderRepository,
                 localStager: OutboundMessageStager,
+                localMirror: MeetingCalendarMirror = NoopMeetingCalendarMirror,
             ) = MeetingRescheduleService(
                 meetingRepository = localMeetingRepository,
                 reminderRepository = localReminderRepository,
@@ -189,12 +199,14 @@ class MeetingRescheduleServiceTest :
                 eventPublisher = mockk(relaxed = true),
                 transactionManager = createH2TransactionManager(),
                 clock = clock,
+                calendarMirror = localMirror,
             )
 
             `when`("the repository reports a no-op (non-host or canceled)") {
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
                 val localStager = mockk<OutboundMessageStager>()
+                val localMirror = mockk<MeetingCalendarMirror>(relaxed = true)
                 val capturedMessage = slot<OutboundMessage>()
                 every {
                     localMeetingRepository.rescheduleMeeting(
@@ -211,6 +223,7 @@ class MeetingRescheduleServiceTest :
                     localMeetingRepository = localMeetingRepository,
                     localReminderRepository = localReminderRepository,
                     localStager = localStager,
+                    localMirror = localMirror,
                 ).rescheduleMeeting(event = event)
 
                 then("a friendly non-host-or-canceled ephemeral is published instead of throwing") {
@@ -219,8 +232,11 @@ class MeetingRescheduleServiceTest :
                     body shouldBe "Meeting was canceled, or you are not the host."
                 }
 
-                then("reminders are NOT cleared and no re-notification is published") {
+                then(
+                    "reminders are NOT cleared, the calendar mirror is not touched and no re-notification is published",
+                ) {
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
+                    verify(exactly = 0) { localMirror.onMeetingRescheduled(meetingId = any()) }
                     verify(exactly = 0) {
                         localStager.stage(
                             message = match { it is OutboundMessage.ChannelMessage },
@@ -234,6 +250,7 @@ class MeetingRescheduleServiceTest :
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
                 val localStager = mockk<OutboundMessageStager>()
+                val localMirror = mockk<MeetingCalendarMirror>(relaxed = true)
                 val capturedMessage = slot<OutboundMessage>()
                 every {
                     localMeetingRepository.rescheduleMeeting(
@@ -250,6 +267,7 @@ class MeetingRescheduleServiceTest :
                     localMeetingRepository = localMeetingRepository,
                     localReminderRepository = localReminderRepository,
                     localStager = localStager,
+                    localMirror = localMirror,
                 ).rescheduleMeeting(event = event)
 
                 then("only a neutral ephemeral goes to the host: no notice and no reminder change") {
@@ -259,6 +277,7 @@ class MeetingRescheduleServiceTest :
                         "The meeting is already scheduled for 2026-07-01 14:30. Nothing was changed."
                     verify(exactly = 1) { localStager.stage(message = any(), basicInfo = any()) }
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
+                    verify(exactly = 0) { localMirror.onMeetingRescheduled(meetingId = any()) }
                 }
             }
 

@@ -147,6 +147,24 @@ class JpaMeetingRepositoryTest
                 }
             }
 
+            given("findIdByIdempotencyKey") {
+                `when`("a meeting carries the key") {
+                    val idempotencyKey = UUID.randomUUID()
+                    val saved =
+                        repository.save(createMeetingSchema(idempotencyKey = idempotencyKey, publisherId = "U_KEY_PUB"))
+
+                    then("that meeting's id comes back") {
+                        repository.findIdByIdempotencyKey(idempotencyKey = idempotencyKey) shouldBe saved.id
+                    }
+                }
+
+                `when`("no meeting carries the key") {
+                    then("the result is null") {
+                        repository.findIdByIdempotencyKey(idempotencyKey = UUID.randomUUID()) shouldBe null
+                    }
+                }
+            }
+
             given("findMeetingsByUserIdAndDateRange") {
                 val owner = "U_RANGE_OWNER"
                 val outsider = "U_RANGE_OUTSIDER"

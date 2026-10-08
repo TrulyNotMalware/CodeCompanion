@@ -60,6 +60,25 @@ class MeetingRepositoryImplTest :
             }
         }
 
+        given("findMeetingId") {
+            val knownKey = UUID.fromString("0b6f1c2a-5d3e-4f7a-9b8c-1d2e3f4a5b6c")
+            val unknownKey = UUID.fromString("9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b")
+            every { jpaMeetingRepository.findIdByIdempotencyKey(idempotencyKey = knownKey) } returns 7L
+            every { jpaMeetingRepository.findIdByIdempotencyKey(idempotencyKey = unknownKey) } returns null
+
+            `when`("a meeting carries the key") {
+                then("its id is returned") {
+                    repository.findMeetingId(idempotencyKey = knownKey) shouldBe 7L
+                }
+            }
+
+            `when`("no meeting carries the key") {
+                then("null is returned") {
+                    repository.findMeetingId(idempotencyKey = unknownKey) shouldBe null
+                }
+            }
+        }
+
         given("getAllMeetingByUserId") {
             `when`("user has meetings") {
                 val schema1 =

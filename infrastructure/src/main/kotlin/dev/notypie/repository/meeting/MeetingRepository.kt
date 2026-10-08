@@ -11,6 +11,8 @@ interface MeetingRepository {
 
     fun getMeeting(meetingId: Long): MeetingDto
 
+    fun findMeetingId(idempotencyKey: UUID): Long?
+
     fun getAllMeetingByUserId(userId: String): List<MeetingDto>
 
     fun getMeetingsByUserIdInRange(userId: String, startAt: LocalDateTime, endAt: LocalDateTime): List<MeetingDto>

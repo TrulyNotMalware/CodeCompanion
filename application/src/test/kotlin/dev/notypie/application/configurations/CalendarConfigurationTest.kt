@@ -3,18 +3,29 @@ package dev.notypie.application.configurations
 import dev.notypie.application.controllers.GoogleOAuthCallbackController
 import dev.notypie.application.service.calendar.CalendarConnectionDisabledResponder
 import dev.notypie.application.service.calendar.CalendarConnectionService
+import dev.notypie.application.service.calendar.CalendarSyncScheduler
+import dev.notypie.application.service.calendar.CalendarSyncService
+import dev.notypie.application.service.calendar.GoogleAccessTokenProvider
 import dev.notypie.application.service.calendar.GoogleTokenRevocationWorker
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
+import dev.notypie.application.service.calendar.MeetingCalendarMirrorService
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.createCalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
+import dev.notypie.repository.calendar.MeetingCalendarEventRepository
+import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -37,12 +48,15 @@ class CalendarConfigurationTest :
                     CalendarConfiguration::class.java,
                     CalendarDisabledConfiguration::class.java,
                     GoogleOAuthCallbackController::class.java,
+                    CalendarSyncScheduler::class.java,
                 ).withBean(Clock::class.java, { Clock.systemUTC() })
                 .withBean(PlatformTransactionManager::class.java, { mockk(relaxed = true) })
                 .withBean(OutboundMessageStager::class.java, { stager })
                 .withBean(EventPublisher::class.java, { mockk(relaxed = true) })
                 .withBean(GoogleCalendarConnectionRepository::class.java, { connections })
                 .withBean(GoogleOAuthStateRepository::class.java, { mockk(relaxed = true) })
+                .withBean(MeetingCalendarEventRepository::class.java, { mockk(relaxed = true) })
+                .withBean(MeetingRepository::class.java, { mockk(relaxed = true) })
                 .withBean("entityManagerFactory", Any::class.java, { Any() })
 
         val fullyConfigured =
@@ -143,6 +157,23 @@ class CalendarConfigurationTest :
                             context.getBeanNamesForType(CalendarConnectionDisabledResponder::class.java).size shouldBe 0
                         }
                 }
+
+                then("the mirror sync lane is wired and the meeting hooks get the queueing mirror") {
+                    contextRunner
+                        .withPropertyValues("slack.app.calendar.google.enabled=true", *fullyConfigured)
+                        .run { context ->
+                            context.startupFailure shouldBe null
+                            context
+                                .getBeansOfType(MeetingCalendarMirror::class.java)
+                                .values
+                                .single()
+                                .shouldBeInstanceOf<MeetingCalendarMirrorService>()
+                            context.getBean(CalendarSyncService::class.java)
+                            context.getBean(GoogleCalendarClient::class.java)
+                            context.getBean(GoogleAccessTokenProvider::class.java)
+                            context.getBean(CalendarSyncScheduler::class.java)
+                        }
+                }
             }
 
             `when`("the token encryption key is blank") {
@@ -193,6 +224,22 @@ class CalendarConfigurationTest :
                             context.getBeanNamesForType(CalendarConnectionService::class.java).size shouldBe 0
                             context.getBeanNamesForType(GoogleOAuthCallbackController::class.java).size shouldBe 0
                             context.getBean(CalendarConnectionDisabledResponder::class.java)
+                        }
+                }
+
+                then("the meeting hooks get the no-op mirror and no sync bean exists") {
+                    contextRunner
+                        .withPropertyValues("slack.app.calendar.google.enabled=false")
+                        .run { context ->
+                            context.startupFailure shouldBe null
+                            context
+                                .getBeansOfType(MeetingCalendarMirror::class.java)
+                                .values
+                                .single() shouldBeSameInstanceAs NoopMeetingCalendarMirror
+                            context.getBeanNamesForType(CalendarSyncService::class.java).size shouldBe 0
+                            context.getBeanNamesForType(GoogleCalendarClient::class.java).size shouldBe 0
+                            context.getBeanNamesForType(GoogleAccessTokenProvider::class.java).size shouldBe 0
+                            context.getBeanNamesForType(CalendarSyncScheduler::class.java).size shouldBe 0
                         }
                 }
             }

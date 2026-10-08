@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # infrastructure/repository
 
@@ -19,7 +19,7 @@ subpackage of `@Entity` classes.
 | `agent/` | `agent_session` and `agent_turn_history` (token usage, duration, outcome) (see `agent/AGENTS.md`) |
 | `authorization/` | `user_command_role` grants backing the role system (see `authorization/AGENTS.md`) |
 | `mcp/` | `mcp_tool_call_history` audit trail (see `mcp/AGENTS.md`) |
-| `calendar/` | `google_calendar_connection` (encrypted refresh token per Slack user) and the single-use `google_oauth_state` ledger (see `calendar/AGENTS.md`) |
+| `calendar/` | `google_calendar_connection` (encrypted refresh token per Slack user), the single-use `google_oauth_state` ledger and the `meeting_calendar_event` mirror queue (claim-token plus `change_seq` generation CAS) (see `calendar/AGENTS.md`) |
 
 ## For AI Agents
 
@@ -43,7 +43,10 @@ subpackage of `@Entity` classes.
   is the source of truth and it returns the number of rows actually transitioned; dispatch only what you
   claimed. `updated_at` is touched on claim so health indicators can age `IN_PROGRESS` rows from claim
   time. The CVE lane uses the same discipline: claim-token CAS for summaries, `insertIgnore` for
-  ingestion, `resetStuck` for crash recovery, and a window claim in the collect ledger.
+  ingestion, `resetStuck` for crash recovery, and a window claim in the collect ledger. The calendar mirror queue
+  adds a generation counter (`change_seq`) to the claim token so a change during the external call is not lost,
+  on the success path and on the failure path alike: `markSynced`, `markFailed` and `retryLater` all take the seq
+  the claim observed and leave the row `PENDING`, due at once, when a hook moved it meanwhile.
 - **Host-only meeting authorization is enforced in SQL**, e.g. `WHERE m.meetingUid = :meetingUid AND
   m.publisherId = :requesterId`. That single atomic statement is the authorization check — never
   replace it with a load-then-compare, and never rely on the UI hiding a button.

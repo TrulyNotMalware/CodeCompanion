@@ -89,5 +89,25 @@ class GoogleOAuthCallbackControllerTest :
                     response.contentAsString shouldContain "did not complete"
                 }
             }
+
+            `when`("the connection could not be stored after its retry") {
+                every { callback.completeConnection(code = "c<b>", state = "s<i>", error = null) } returns
+                    CalendarConnectionOutcome.STORE_FAILED
+                val response = callback("code" to "c<b>", "state" to "s<i>")
+
+                then("a 503 fixed-text page says the link is spent and points at connect, never cached") {
+                    response.status shouldBe 503
+                    response.contentType shouldStartWith "text/html"
+                    response.getHeader("Cache-Control") shouldBe "no-store"
+                    response.contentAsString shouldContain "The connection could not be saved"
+                    response.contentAsString shouldContain "This link cannot be used again"
+                    response.contentAsString shouldContain "/meetup calendar connect"
+                }
+
+                then("no request parameter is echoed") {
+                    response.contentAsString shouldNotContain "c<b>"
+                    response.contentAsString shouldNotContain "s<i>"
+                }
+            }
         }
     })

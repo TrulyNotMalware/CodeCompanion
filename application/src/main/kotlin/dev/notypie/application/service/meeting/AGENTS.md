@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # application/service/meeting
 
@@ -14,8 +14,8 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
 | File | Description |
 |------|-------------|
 | `MeetingService.kt` | Interface `handleMeeting(headers, payload: SlashCommandRequestBody, commandData)` taken by `SlashCommandController` and `SocketModeReceiver` |
-| `MeetingServiceImpl.kt` | `@Service`. `@Transactional handleMeeting` → `RequestMeetingCommand` → `CommandExecutor.execute`. `@TransactionalEventListener(BEFORE_COMMIT, fallbackExecution = false) createNewMeeting(RequestMeetingContextResult)` and `updateParticipantAttendance(UpdateMeetingAttendanceEvent)` (no in-listener retry: they run inside the caller's transaction, where a first failure already marks it rollback-only, so a failure propagates once and rolls the command back); `@EventListener @Transactional onDeclineModalOpenFailed` (own transaction: modals open after the caller's transaction ended, and its outbox write is BEFORE_COMMIT), `cancelMeeting(CancelMeetingEvent)`, `addParticipants(AddParticipantEvent)`, `getMeetingListEvent(GetMeetingListEvent)` — each ends in `outboundStager.stage(...)?.let { eventPublisher.publishOne(it) }`. Cancel and add-participant go through `MeetingWriteDeferral.runOrDefer` and run the repository write **and** the staging of their replies inside `executeRetryingOnConflict`; the failure reply goes through a `REQUIRED` `replyTemplate` via `stageFailureReply`. Also declares the package helpers `isolatedWriteTemplate(transactionManager)` (`TransactionTemplate` with `PROPAGATION_REQUIRES_NEW`) and `TransactionTemplate.executeRetryingOnConflict(action): Result<Unit>`: catches `RuntimeException` only, retries once in a fresh transaction when `isMeetingWriteConflict()` (infrastructure `repository/meeting/MeetingWriteConflict.kt`: any `ConcurrencyFailureException` — optimistic, pessimistic, lock-acquisition — or a `DataIntegrityViolationException` naming the participant unique key), returns any other `RuntimeException` as a failure (the generic reply) and lets an `Error` propagate; and `TransactionTemplate.stageFailureReply(failure, reply)`: a reply that throws a `RuntimeException` too is attached to the write failure with `addSuppressed` instead of escaping, and the caller then logs that failure once at ERROR |
-| `MeetingRescheduleService.kt` | `@EventListener rescheduleMeeting(RescheduleMeetingEvent)`, takes the context's `Clock`. A `newStartAt` not after `LocalDateTime.now(clock)` truncated to the minute (the modal's precision, so the current minute counts as past) → "Pick a future time. The meeting was not rescheduled." to the host, staged in the caller's transaction, no write. Otherwise, through `MeetingWriteDeferral.runOrDefer`, inside `executeRetryingOnConflict`: `MeetingRepository.rescheduleMeeting` → `RescheduleResult`: `NotAuthorized` → "Meeting was canceled, or you are not the host."; `AlreadyAtRequestedTime` → "The meeting is already scheduled for <time>. Nothing was changed." and nothing else; `Rescheduled(meeting)` → `MeetingReminderRepository.deleteByMeetingId` so reminders re-materialize, a channel re-notification to the returned participants (title passed through `escapeMrkdwn`, the `<@id>` mentions are the message's own) and "Meeting rescheduled to <time>." (`MEETING_RESCHEDULE_SUBMIT`). Failure after the retry → "Failed to reschedule the meeting. Please try again later." staged in the caller's transaction. `:domain` parses a past start on purpose so it reaches this check |
+| `MeetingServiceImpl.kt` | `@Service`; takes a `MeetingCalendarMirror` (`service/calendar`, the queueing service or `NoopMeetingCalendarMirror`) for the Google Calendar hooks listed under For AI Agents. `@Transactional handleMeeting` → `RequestMeetingCommand` → `CommandExecutor.execute`. `@TransactionalEventListener(BEFORE_COMMIT, fallbackExecution = false) createNewMeeting(RequestMeetingContextResult)` and `updateParticipantAttendance(UpdateMeetingAttendanceEvent)` (no in-listener retry: they run inside the caller's transaction, where a first failure already marks it rollback-only, so a failure propagates once and rolls the command back); `@EventListener @Transactional onDeclineModalOpenFailed` (own transaction: modals open after the caller's transaction ended, and its outbox write is BEFORE_COMMIT), `cancelMeeting(CancelMeetingEvent)`, `addParticipants(AddParticipantEvent)`, `getMeetingListEvent(GetMeetingListEvent)` — each ends in `outboundStager.stage(...)?.let { eventPublisher.publishOne(it) }`. Cancel and add-participant go through `MeetingWriteDeferral.runOrDefer` and run the repository write **and** the staging of their replies inside `executeRetryingOnConflict`; the failure reply goes through a `REQUIRED` `replyTemplate` via `stageFailureReply`. Also declares the package helpers `isolatedWriteTemplate(transactionManager)` (`TransactionTemplate` with `PROPAGATION_REQUIRES_NEW`) and `TransactionTemplate.executeRetryingOnConflict(action): Result<Unit>`: catches `RuntimeException` only, retries once in a fresh transaction when `isMeetingWriteConflict()` (infrastructure `repository/meeting/MeetingWriteConflict.kt`: any `ConcurrencyFailureException` — optimistic, pessimistic, lock-acquisition — or a `DataIntegrityViolationException` naming the participant unique key), returns any other `RuntimeException` as a failure (the generic reply) and lets an `Error` propagate; and `TransactionTemplate.stageFailureReply(failure, reply)`: a reply that throws a `RuntimeException` too is attached to the write failure with `addSuppressed` instead of escaping, and the caller then logs that failure once at ERROR |
+| `MeetingRescheduleService.kt` | `@EventListener rescheduleMeeting(RescheduleMeetingEvent)`, takes the context's `Clock` and a `MeetingCalendarMirror`. A `newStartAt` not after `LocalDateTime.now(clock)` truncated to the minute (the modal's precision, so the current minute counts as past) → "Pick a future time. The meeting was not rescheduled." to the host, staged in the caller's transaction, no write. Otherwise, through `MeetingWriteDeferral.runOrDefer`, inside `executeRetryingOnConflict`: `MeetingRepository.rescheduleMeeting` → `RescheduleResult`: `NotAuthorized` → "Meeting was canceled, or you are not the host."; `AlreadyAtRequestedTime` → "The meeting is already scheduled for <time>. Nothing was changed." and nothing else; `Rescheduled(meeting)` → `MeetingReminderRepository.deleteByMeetingId` so reminders re-materialize, `calendarMirror.onMeetingRescheduled(meetingId)`, a channel re-notification to the returned participants (title passed through `escapeMrkdwn`, the `<@id>` mentions are the message's own) and "Meeting rescheduled to <time>." (`MEETING_RESCHEDULE_SUBMIT`). Failure after the retry → "Failed to reschedule the meeting. Please try again later." staged in the caller's transaction. `:domain` parses a past start on purpose so it reaches this check |
 | `MeetingReminderScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `materializeReminders()` then `sendDueReminders()`, each in its own `containFailure` (from `service/standup`: logs an `Exception` at ERROR, restores and rethrows an interrupt), so a failed materialize no longer skips sending due reminders |
 | `MeetingReminderSchedulingService.kt` | Phase A `materializeReminders`: one `meeting_reminder` row per `meeting.reminder.offsetsMinutes` for active meetings in `[now - materializeLookbackMinutes, now + maxOffset]`, `ensureReminder(…, startAt = meeting.startAt, now)` idempotent via unique `(meeting_id, offset_minutes)` and called outside any transaction (the repository refuses one), and it realigns a `PENDING` row armed for an earlier start. Each meeting runs in its own `containFailure` (ERROR `Meeting reminder materialize failed: meetingId=…`), so one meeting's failure — a real DIVE with no row behind it, or a MariaDB 1020 — no longer ends the tick; the next tick retries it. Phase B `sendDueReminders`: `resetStuckReminders`, `findDueBefore(limit = dispatchBatchSize)`, a row not armed for the current start in the clock's zone (`ReadyReminder.isArmedFor`) is dropped with `discardReminder(id, scheduledAt read)` and never claimed, then claim-token CAS, `runInTx` outbox writes, `markReminderSent` / `markReminderFailed` (`markReminderSent` is `false` when the row was re-claimed or reset, or when the meeting was canceled after the claim; the DMs then roll back and the row is marked failed). `internal fun buildReminderDm` (`MEETING_REMINDER`; the title is escaped in the mrkdwn body, not in the `plain_text` headline, where Slack parses no `<…>`) |
 | `DailyAgendaScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()` → `sendDailyAgenda()` |
@@ -35,7 +35,8 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
   matched rows, so a no-op re-submit (same reason, or `OTHER` after the provisional-OTHER write from the Deny
   click) returns 1. A URL with `useAffectedRows=true` would return 0 for that no-op. The prod/dev URLs come from
   `SQL_DATABASE_URL` / `DATABASE_URL` and were not inspected, so `updateParticipantAttendance` fails only when
-  `participantExists` is also false. Keep that check.
+  `participantExists` is also false. Keep that check. A zero-row result with an existing participant also skips the
+  calendar hook, since the decision is already recorded.
 - **Meeting writes run after the interaction transaction, in one retryable transaction each.**
   `cancelMeeting`, `addParticipants` and `rescheduleMeeting` hand their work to
   `MeetingWriteDeferral.runOrDefer`. Under `SlackInteractionHandlerImpl.handleInteraction` the work is queued
@@ -65,6 +66,29 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
   listener was not an option: Spring runs `afterCommit` callbacks before it releases the committed
   transaction's connection (`AbstractPlatformTransactionManager.processCommit` → `cleanupAfterCompletion`
   last), so it would still hold two.
+- **Google Calendar mirror hooks ride the meeting writes.** `createNewMeeting` calls
+  `onMeetingCreated(event.idempotencyKey, host)` after the insert and `updateParticipantAttendance` calls
+  `onAttendanceChanged(meetingIdempotencyKey, participant, isAttending)` after the zero-rows check and only when the
+  `UPDATE` reported at least one row (an unrecorded decision never reaches it, a zero-row no-op skips it), both inside
+  the caller's transaction at `BEFORE_COMMIT`; `cancel` calls `onMeetingCanceled(meetingUid)` only when
+  `markMeetingCanceled` returned `true`, and `applyReschedule` calls `onMeetingRescheduled(meetingId)` only on
+  `Rescheduled`, both inside the retried `REQUIRES_NEW` write, so a retry repeats the hook in the fresh transaction and
+  a hook failure rolls the write back. `MeetingWriteJpaTransactionTest` pins all of it on a real `JpaTransactionManager`:
+  a failing cancel or reschedule hook rolls the write back (the reschedule keeps its start and its armed reminder), a
+  hook that hits a write conflict once is called again in a new transaction, and the real queueing mirror leaves one
+  `PENDING` row for a new meeting's connected host. The queueing mirror refuses to run outside a transaction and adds
+  only short indexed statements: cancel and reschedule one queue `UPDATE`; a decline two (the meeting id by
+  idempotency key, the row's `UPDATE`); an unconnected host's new meeting or an unconnected user's accept one `SELECT`
+  (the `ACTIVE` connection exists-check); a connected user's create or accept three (the exists-check, the id lookup,
+  the upsert). It never calls Google.
+  Accepted races (MariaDB snapshot isolation; details in `repository/calendar/AGENTS.md`): the accept hook's
+  foreign-key check on `meetings` fails the Accept with 1020 when the host changed the meeting after the interaction
+  transaction's snapshot; the decision is not recorded and the user clicks again. The window is milliseconds wide, and
+  the reminder lane records the same mechanism. Two Accepts of the same user are serialized by the
+  `meeting_participants` row lock; the second one's hook is skipped only when the driver reports zero affected rows
+  (`useAffectedRows=true`, above), and with the default found-rows count it bumps the queue row once more, which is
+  harmless. The first Accepts of two different users no longer deadlock, because the enqueue is one upsert with no
+  gap-locking pre-`UPDATE` (inferred from the statement shape; not yet run on MariaDB).
 - **Resubmits are no-ops.** A user may submit the same modal again (for example after a timeout). A
   reschedule to the time the meeting already has returns `AlreadyAtRequestedTime` (no version bump, no
   reminder delete, no channel notice), a second cancel returns `false`, and a second add of the same users
@@ -100,7 +124,8 @@ Specs under `application/src/test/kotlin/dev/notypie/application/service/meeting
 `MeetingServiceImplTest`, `MeetingRescheduleServiceTest`, `MeetingReminderSchedulingServiceTest`,
 `DailyAgendaSchedulingServiceTest`, `DailyAgendaMessageBuilderTest` (`buildAgendaDm`), and
 `MeetingWriteJpaTransactionTest` (real `MeetingRepositoryImpl` / `MeetingReminderRepositoryImpl` and both
-services on `JpaTransactionManager` over H2, no Spring context). Otherwise MockK the
+services on `JpaTransactionManager` over H2, no Spring context). Pass `NoopMeetingCalendarMirror` where the calendar
+hook is irrelevant and a MockK `MeetingCalendarMirror` where a case asserts it. Otherwise MockK the
 repositories, `OutboundMessagePort`, `OutboundMessageStager`, `EventPublisher`; a fixed `Clock`; assert on
 CAS calls, captured outbox rows and staged messages. Fixtures: `createAgendaItem` /
 `createAgendaCandidateMeeting` / `createReminderCandidateMeeting` (application testFixtures, same
@@ -138,6 +163,7 @@ context. Repository write semantics
 - `domain/command/entity/event/` — the events listed above, `EventPublisher.publishOne`
 - `domain/command/outbound/`, `domain/command/dto/modals/ApprovalContents`,
   `domain/command/dto/CommandBasicInfo`
+- `application/service/calendar/MeetingCalendarMirror` — the Google Calendar mirror hooks
 - `application/service/command/CommandExecutor`, `application/common/` (`IdempotencyCreator`, `runInTx`),
   `application/configurations/AppConfig`
 

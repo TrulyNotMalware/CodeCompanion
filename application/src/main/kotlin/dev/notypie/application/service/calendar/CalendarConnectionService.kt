@@ -7,16 +7,21 @@ import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.common.escapeMarkup
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.GoogleOAuthException
 import dev.notypie.impl.calendar.GoogleTokenGrant
 import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
+import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
+import dev.notypie.repository.meeting.MeetingRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
+import org.springframework.dao.ConcurrencyFailureException
+import org.springframework.dao.DataAccessException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -24,6 +29,7 @@ import java.security.SecureRandom
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDateTime
 import java.util.Base64
 
 private val log = KotlinLogging.logger {}
@@ -31,6 +37,8 @@ private val log = KotlinLogging.logger {}
 class CalendarConnectionService(
     private val connectionRepository: GoogleCalendarConnectionRepository,
     private val stateRepository: GoogleOAuthStateRepository,
+    private val queue: MeetingCalendarEventRepository,
+    private val meetingRepository: MeetingRepository,
     private val oauthClient: GoogleOAuthClient,
     private val tokenCipher: TokenCipher,
     private val outboundStager: OutboundMessageStager,
@@ -45,6 +53,10 @@ class CalendarConnectionService(
         const val CONNECT_USAGE: String = "Run `/meetup calendar connect` to link your Google Calendar."
         const val DISCONNECT_REASON: String = "disconnect"
         const val RECONNECT_REASON: String = "replaced by a new connection"
+        const val DISCONNECTED_ERROR: String = "disconnected"
+        const val BACKFILL_HORIZON_YEARS: Long = 2L
+        const val BACKFILL_LOOKBACK_DAYS: Long = 1L
+        private const val DEFAULT_MEETING_HOURS = 1L
     }
 
     private val stateTtl: Duration = Duration.ofMinutes(appConfig.calendar.google.stateTtlMinutes)
@@ -93,25 +105,37 @@ class CalendarConnectionService(
         val encrypted = tokenCipher.encrypt(plaintext = grant.refreshToken)
         try {
             storeConnection(userId = userId, grant = grant, encrypted = encrypted)
-        } catch (conflict: DataIntegrityViolationException) {
-            log.info(
-                conflict,
-            ) { "Google Calendar connection insert raced another callback, retrying as an update: userId=$userId" }
-            storeConnection(userId = userId, grant = grant, encrypted = encrypted)
+        } catch (conflict: DataAccessException) {
+            if (!conflict.isStoreConflict()) throw conflict
+            log.info(conflict) { "Google Calendar connection store conflicted, retrying once: userId=$userId" }
+            try {
+                storeConnection(userId = userId, grant = grant, encrypted = encrypted)
+            } catch (retryConflict: DataAccessException) {
+                if (!retryConflict.isStoreConflict()) throw retryConflict
+                log.error(retryConflict) {
+                    "Google Calendar connection could not be stored after one retry; the consent state is spent, so " +
+                        "the user has to connect again: userId=$userId"
+                }
+                return CalendarConnectionOutcome.STORE_FAILED
+            }
         }
         log.info { "Google Calendar connected: userId=$userId" }
         return CalendarConnectionOutcome.CONNECTED
     }
 
+    private fun DataAccessException.isStoreConflict(): Boolean =
+        this is DataIntegrityViolationException || this is ConcurrencyFailureException
+
     private fun storeConnection(userId: String, grant: GoogleTokenGrant, encrypted: String) {
         writeTemplate.executeWithoutResult {
+            val now = clock.instant()
             val saved =
                 connectionRepository.saveActive(
                     userId = userId,
                     googleSubject = grant.subject,
                     googleEmail = grant.email,
                     encryptedRefreshToken = encrypted,
-                    now = clock.instant(),
+                    now = now,
                 )
             saved.replaced
                 ?.takeIf { replaced -> replaced.isDifferentAccountFrom(subject = grant.subject, email = grant.email) }
@@ -123,6 +147,7 @@ class CalendarConnectionService(
                         reason = RECONNECT_REASON,
                     )
                 }
+            queueUpcomingMeetings(userId = userId, now = now)
             outboundStager.stageCalendarDirectMessage(
                 userId = userId,
                 text = "Google Calendar connected${saved.connection.accountSuffix()}.",
@@ -130,6 +155,29 @@ class CalendarConnectionService(
                 publisher = eventPublisher,
             )
         }
+    }
+
+    private fun queueUpcomingMeetings(userId: String, now: Instant) {
+        val localNow = LocalDateTime.now(clock)
+        val inRange =
+            meetingRepository.getMeetingsByUserIdInRange(
+                userId = userId,
+                startAt = localNow.minusDays(BACKFILL_LOOKBACK_DAYS),
+                endAt = localNow.plusYears(BACKFILL_HORIZON_YEARS),
+            )
+        val hosted = inRange.filter { meeting -> meeting.isHostedLiveMeetingOf(userId = userId, localNow = localNow) }
+        hosted.forEach { meeting -> queue.enqueue(meetingId = meeting.meetingId, slackUserId = userId, now = now) }
+        val revived =
+            queue.touchForUser(userId = userId, meetingIds = inRange.map { meeting -> meeting.meetingId }, now = now)
+        log.info {
+            "Google Calendar connection queued ${hosted.size} hosted meeting(s) and revived $revived existing " +
+                "row(s): userId=$userId"
+        }
+    }
+
+    private fun MeetingDto.isHostedLiveMeetingOf(userId: String, localNow: LocalDateTime): Boolean {
+        val effectiveEnd = endAt?.takeIf { it.isAfter(startAt) } ?: startAt.plusHours(DEFAULT_MEETING_HOURS)
+        return creator == userId && !isCanceled && effectiveEnd.isAfter(localNow)
     }
 
     private fun connect(payload: CalendarConnectionPayload) {
@@ -172,6 +220,7 @@ class CalendarConnectionService(
         }
         connectionRepository.delete(userId = payload.userId)
         stateRepository.deleteForUser(userId = payload.userId)
+        queue.failPendingForUser(userId = payload.userId, lastError = DISCONNECTED_ERROR, now = clock.instant())
         requestRevocation(
             userId = payload.userId,
             googleSubject = connection.googleSubject,

@@ -32,6 +32,10 @@ open class MeetingRepositoryImpl(
             .throwIfSchemaNotFound(fieldName = "id", fieldValue = meetingId)
 
     @Transactional(readOnly = true)
+    override fun findMeetingId(idempotencyKey: UUID): Long? =
+        jpaMeetingRepository.findIdByIdempotencyKey(idempotencyKey = idempotencyKey)
+
+    @Transactional(readOnly = true)
     override fun getAllMeetingByUserId(userId: String): List<MeetingDto> =
         jpaMeetingRepository
             .findAllMeetingByUserId(userId = userId)

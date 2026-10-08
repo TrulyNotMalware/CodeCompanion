@@ -1,10 +1,10 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/schema
 
 ## Purpose
-Builders for JPA schema rows and repository records in the meeting, CVE, outbox, AI-usage and standup-stop lanes. `@DataJpaTest` specs persist
+Builders for JPA schema rows and repository records in the meeting, calendar-mirror, CVE, outbox, AI-usage and standup-stop lanes. `@DataJpaTest` specs persist
 the schema builders on H2; `*ImplTest` and `:application` specs use the record builders as mocked-repository
 return values. Standup schema rows have no builder here: H2 specs persist the domain `createRoutine` through
 `StandupRepositoryImpl`; the one standup builder is the `RoutineStopCandidate` record.
@@ -12,7 +12,8 @@ return values. Standup schema rows have no builder here: H2 specs persist the do
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MeetingSchemaCreator.kt` | `createMeetingSchema(id = 0, meetingUid = random, idempotencyKey = random, name, startAt = now, endAt = null, isCanceled = false, publisherId = TEST_USER_ID, channel = TEST_CHANNEL_ID, participants = mutableListOf())`; `createParticipants(id = 0, meeting = createMeetingSchema(), userId = TEST_USER_ID, isAttending = true, absentReason = ATTENDING, createdAt, updatedAt)`; `createMeetingSchemaWithParticipant(publisherId, participantUserId, name, startAt)` — one participant row back-pointing to the meeting; overload `createMeetingSchema(member: Int, startIterator = 1)` — publisher `TEST_USER_ID + startIterator` and `member` participants `TEST_USER_ID + (startIterator + i)` |
+| `MeetingSchemaCreator.kt` | `createMeetingSchema(id = 0, meetingUid = random, idempotencyKey = random, name, startAt = now, endAt = null, isCanceled = false, publisherId = TEST_USER_ID, channel = TEST_CHANNEL_ID, participants = mutableListOf(), reason = null)`; `createParticipants(id = 0, meeting = createMeetingSchema(), userId = TEST_USER_ID, isAttending = true, absentReason = ATTENDING, createdAt, updatedAt)`; `createMeetingSchemaWithParticipant(publisherId, participantUserId, name, startAt)` — one participant row back-pointing to the meeting; overload `createMeetingSchema(member: Int, startIterator = 1)` — publisher `TEST_USER_ID + startIterator` and `member` participants `TEST_USER_ID + (startIterator + i)` |
+| `MeetingCalendarEventCreator.kt` | Row: `createMeetingCalendarEventSchema(meeting, slackUserId = TEST_USER_ID, status = PENDING, claimToken = null, nextAttemptAt = 2031-01-01T00:00Z)` (a row at seq 1; `status` / `claimToken` set up states no transition produces, such as a non-`SYNCING` row holding a token; the unique key `(meeting_id, slack_user_id)` is the caller's job). Records: `createMeetingCalendarEvent(id = 1, meetingId = 1, slackUserId = TEST_USER_ID, googleEventId = null, status = PENDING, changeSeq = 1, attempts = 0, nextAttemptAt = 2031-01-01T00:00Z, lastError = null)` and `createCalendarMeetingView(meetingId = 1, meetingUid = fixed, title = "test meeting schema", reason = "", startAt = 2031-01-01T10:00, endAt = startAt + 1 h, isCanceled = false, hostId = TEST_USER_ID, attendingUserIds = empty)` — expected values in `JpaMeetingCalendarEventRepositoryTest`, mocked-port return values for `:application` |
 | `OutboxMessageCreator.kt` | `createOutboxMessage(eventId = random, idempotencyKey = random, publisherId = TEST_USER_ID, payload = "{}", createdAt = now, status = PENDING)` — a real `OutboxMessage` row (not a mock) for `@DataJpaTest` specs; `status` is applied through `updateMessageStatus` because the column is not a constructor parameter; `createOutboxColumnMap(eventId, createdAt, updatedAt?)` — the snake_case column map a Debezium after-image carries, for `toOutboxMessage()` specs |
 | `CveTopicCreator.kt` | `createCveTopicSchema(id = 0, topicKey = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)`; `createCveTopicDefinition(...)` same fields minus `id`; `createCveTopic(id = 1, ...)` record; `createCveSubscriptionSchema(id = 0, userId = "U_SUBSCRIBER", topicId = 1)`; `createCveDeliverySchema(id = 0, eventId = 1, userId = "U_SUBSCRIBER", status = SENT)` |
 | `CveEventCreator.kt` | `createCveEvent(id = 1, topicId = 1, externalId = "CVE-2026-0001", title, rawContent, aiSummary = null, summaryStatus = PENDING, retryCount = 0)` record; `createCveEventSchema(id = 0, topicId, externalId, title, rawContent, aiSummary, summaryStatus, claimToken = null, retryCount = 0, nextAttemptAt = null, publishedAt = null)`; `createRawSourceEvent(externalId = "R-0001", title, rawContent, publishedAt = null)` (`impl/cve/RawSourceEvent`); `createCveRecentEvent(topicDisplayName = "Java CVE", title, aiSummary = "Sample summary")`; `createUndeliveredCveEvent(eventId = 1, userId = "U_SUBSCRIBER", topicKey = "cve-java", topicDisplayName, title, aiSummary)` `createNvdPageJson(cveIds, totalResults)`: an NVD 2.0 response page with `totalResults` and one minimal vulnerability per id. |
@@ -56,6 +57,8 @@ schema builders; a builder default that violates a column constraint fails there
 
 ### Internal
 - `infrastructure/src/main/kotlin/dev/notypie/repository/meeting/schema/` — `MeetingSchema`, `ParticipantsSchema`
+- `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/` (+ `schema/`) — `CalendarMeetingView`,
+  `MeetingCalendarEvent`, `MeetingCalendarEventSchema`, `CalendarSyncStatus`
 - `infrastructure/src/main/kotlin/dev/notypie/repository/cve/` (+ `schema/`) — records, `CveTopicDefinition`,
   schema classes and enums
 - `infrastructure/src/main/kotlin/dev/notypie/repository/agent/` and `repository/mcp/` (+ `schema/`) — history schemas,

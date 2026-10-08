@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # application/resources
 
@@ -21,7 +21,7 @@ stand up change-data-capture locally and in-cluster.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `db/migration/` | `V1__` … `V22__` SQL migrations (outbox and its indexes/attempt and send counts, meeting, standup, agenda dispatch, agent session/turn history, user command roles, MCP tool call history, CVE tables and indexes, data fixes) — see `db/migration/AGENTS.md` |
+| `db/migration/` | `V1__` … `V25__` SQL migrations (outbox and its indexes/attempt and send counts, meeting, standup, agenda dispatch, agent session/turn history, user command roles, MCP tool call history, CVE tables and indexes, data fixes, Google Calendar connection/OAuth state and mirror queue) — see `db/migration/AGENTS.md` |
 | `k8s/` | `deployment.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml` + `route/` (`ingress.yaml`, `httpRoute.yaml`) — see `k8s/README.md` (see `k8s/AGENTS.md`) |
 | `cdc/docker-compose/` | Local Debezium + MariaDB stack (`docker-compose.yml`, `debezium/connect_mariadb.sh`, `mariadb/my.cnf`) — see its `README.md` |
 | `cdc/k8s/yamls/mariadb/` | In-cluster MariaDB StatefulSet, service, config, and init job |
@@ -38,8 +38,8 @@ stand up change-data-capture locally and in-cluster.
   `ddl-auto: update` to create base tables, then the `V*` scripts patch them. Prod runs `ddl-auto: none`.
   So: a new migration must be additive and safe against a Hibernate-created base table, and any new
   entity needs *both* a JPA schema class and a migration.
-- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-02 is
-  `V23__`, so the next free one is `V24__`. Check the highest existing `V*` here and on `origin/main` before
+- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-08 is
+  `V25__`, so the next free one is `V26__`. Check the highest existing `V*` here and on `origin/main` before
   naming a new one.
 - **Prod config is env-var only** (`${SQL_DATABASE_URL}`, `${MCP_ENABLED}`, ...). Do not commit a literal
   secret or host here; add the variable to `k8s/configmap.yaml` / `k8s/secret.yaml` instead.

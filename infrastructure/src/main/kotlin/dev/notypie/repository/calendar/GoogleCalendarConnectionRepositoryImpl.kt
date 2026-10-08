@@ -1,10 +1,13 @@
 package dev.notypie.repository.calendar
 
 import dev.notypie.repository.calendar.schema.CalendarConnection
+import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
 import dev.notypie.repository.calendar.schema.GoogleCalendarConnectionSchema
 import dev.notypie.repository.calendar.schema.toCalendarConnection
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 open class GoogleCalendarConnectionRepositoryImpl(
     private val jpaGoogleCalendarConnectionRepository: JpaGoogleCalendarConnectionRepository,
@@ -51,4 +54,26 @@ open class GoogleCalendarConnectionRepositoryImpl(
     @Transactional
     override fun delete(userId: String): Boolean =
         jpaGoogleCalendarConnectionRepository.deleteBySlackUserId(slackUserId = userId) > 0L
+
+    @Transactional(readOnly = true)
+    override fun hasActiveConnection(userId: String): Boolean =
+        jpaGoogleCalendarConnectionRepository.existsBySlackUserIdAndStatus(
+            slackUserId = userId,
+            status = CalendarConnectionStatus.ACTIVE,
+        )
+
+    @Transactional
+    override fun markRevoked(
+        userId: String,
+        observedEncryptedRefreshToken: String,
+        now: Instant,
+        reason: String,
+    ): Boolean =
+        jpaGoogleCalendarConnectionRepository.markRevoked(
+            userId = userId,
+            observedEncryptedRefreshToken = observedEncryptedRefreshToken,
+            now = now,
+            updatedAt = LocalDateTime.ofInstant(now, ZoneId.systemDefault()),
+            reason = reason,
+        ) == 1
 }

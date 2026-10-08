@@ -2,6 +2,9 @@ package dev.notypie.application.service.calendar
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createStubTransactionManager
+import dev.notypie.application.service.meeting.createH2DataSource
+import dev.notypie.application.service.meeting.createH2TransactionManager
+import dev.notypie.application.service.meeting.createSnapshotIsolationConflict
 import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
@@ -13,6 +16,9 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createMeetingParticipantDto
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.GoogleOAuthException
 import dev.notypie.impl.calendar.GoogleTokenGrant
@@ -20,27 +26,38 @@ import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.ConnectionSaved
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
+import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
+import dev.notypie.repository.meeting.MeetingRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldMatch
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.Runs
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.Base64
 
@@ -98,10 +115,13 @@ class CalendarConnectionServiceTest :
         class Harness(
             val connections: GoogleCalendarConnectionRepository = mockk(),
             val states: GoogleOAuthStateRepository = mockk(),
+            val queue: MeetingCalendarEventRepository = mockk(),
+            val meetings: MeetingRepository = mockk(),
             val oauth: GoogleOAuthClient = mockk(),
             cipher: TokenCipher,
             clock: Clock,
             appConfig: AppConfig,
+            transactionManager: PlatformTransactionManager = createStubTransactionManager(),
         ) {
             val staged = mutableListOf<OutboundMessage>()
             val basicInfos = mutableListOf<CommandBasicInfo>()
@@ -120,13 +140,15 @@ class CalendarConnectionServiceTest :
                 CalendarConnectionService(
                     connectionRepository = connections,
                     stateRepository = states,
+                    queue = queue,
+                    meetingRepository = meetings,
                     oauthClient = oauth,
                     tokenCipher = cipher,
                     outboundStager = stager,
                     eventPublisher = publisher,
                     applicationEventPublisher = springEvents,
                     clock = clock,
-                    transactionManager = createStubTransactionManager(),
+                    transactionManager = transactionManager,
                     appConfig = appConfig,
                 )
 
@@ -145,7 +167,8 @@ class CalendarConnectionServiceTest :
                 content.shouldBeInstanceOf<MessageContent.Text>().markdown
         }
 
-        fun harness(): Harness = Harness(cipher = cipher, clock = clock, appConfig = appConfig)
+        fun harness(transactionManager: PlatformTransactionManager = createStubTransactionManager()): Harness =
+            Harness(cipher = cipher, clock = clock, appConfig = appConfig, transactionManager = transactionManager)
 
         given("`/meetup calendar connect`") {
             fun connectHarness(existing: CalendarConnection?): Harness =
@@ -228,6 +251,7 @@ class CalendarConnectionServiceTest :
                             "Google Calendar is not connected. ${CalendarConnectionService.CONNECT_USAGE}"
                     }
                     verify(exactly = 0) { h.connections.delete(userId = any()) }
+                    verify(exactly = 0) { h.queue.failPendingForUser(userId = any(), lastError = any(), now = any()) }
                     h.revocations.shouldBeEmpty()
                 }
             }
@@ -239,12 +263,29 @@ class CalendarConnectionServiceTest :
                         every { connections.find(userId = TEST_USER_ID) } returns connection
                         every { connections.delete(userId = TEST_USER_ID) } returns true
                         every { states.deleteForUser(userId = TEST_USER_ID) } returns 1
+                        every {
+                            queue.failPendingForUser(
+                                userId = TEST_USER_ID,
+                                lastError = CalendarConnectionService.DISCONNECTED_ERROR,
+                                now = now,
+                            )
+                        } returns 2
                     }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.DISCONNECT))
 
                 then("the row and the user's unused consent links are deleted in the slash transaction") {
                     verify(exactly = 1) { h.connections.delete(userId = TEST_USER_ID) }
                     verify(exactly = 1) { h.states.deleteForUser(userId = TEST_USER_ID) }
+                }
+
+                then(
+                    "only the user's PENDING sync rows are failed as disconnected; nothing is deleted, so the SYNCED " +
+                        "and FAILED rows stay for a later reconnect to revive",
+                ) {
+                    verify(exactly = 1) {
+                        h.queue.failPendingForUser(userId = TEST_USER_ID, lastError = "disconnected", now = now)
+                    }
+                    confirmVerified(h.queue)
                 }
 
                 then("the revoke is handed off with the account id, never called here") {
@@ -315,11 +356,20 @@ class CalendarConnectionServiceTest :
                     every { states.deleteExpired(before = now) } returns 0
                 }
 
+            fun Harness.withUpcomingMeetings(upcoming: List<MeetingDto> = emptyList()): Harness =
+                apply {
+                    every {
+                        meetings.getMeetingsByUserIdInRange(userId = TEST_USER_ID, startAt = any(), endAt = any())
+                    } returns upcoming
+                    every { queue.enqueue(meetingId = any(), slackUserId = TEST_USER_ID, now = now) } just Runs
+                    every { queue.touchForUser(userId = TEST_USER_ID, meetingIds = any(), now = now) } returns 0
+                }
+
             fun Harness.savingConnection(
                 storedToken: CapturingSlotHolder,
                 replaced: CalendarConnection? = null,
             ): Harness =
-                apply {
+                withUpcomingMeetings().apply {
                     every {
                         connections.saveActive(
                             userId = TEST_USER_ID,
@@ -510,7 +560,7 @@ class CalendarConnectionServiceTest :
             `when`("two callbacks for a first-time user race and the second insert hits the unique key") {
                 val storedToken = CapturingSlotHolder()
                 val h =
-                    harness().withConsumedState().apply {
+                    harness().withConsumedState().withUpcomingMeetings().apply {
                         every { oauth.exchangeCode(code = "good") } returns grant()
                         every {
                             connections.saveActive(
@@ -552,6 +602,322 @@ class CalendarConnectionServiceTest :
                     }
                     verify(exactly = 1) { h.oauth.exchangeCode(code = "good") }
                     h.directMessage().target.id shouldBe TEST_USER_ID
+                }
+
+                then("the upcoming meetings are read once, by the attempt that stored the connection") {
+                    verify(exactly = 1) {
+                        h.meetings.getMeetingsByUserIdInRange(userId = TEST_USER_ID, startAt = any(), endAt = any())
+                    }
+                }
+            }
+
+            `when`("storing the connection fails with anything but a unique-key or write conflict") {
+                val h =
+                    harness().withConsumedState().withUpcomingMeetings().apply {
+                        every { oauth.exchangeCode(code = "good") } returns grant()
+                        every {
+                            connections.saveActive(
+                                userId = TEST_USER_ID,
+                                googleSubject = any(),
+                                googleEmail = any(),
+                                encryptedRefreshToken = any(),
+                                now = now,
+                            )
+                        } throws IllegalStateException("database down")
+                    }
+
+                then(
+                    "the failure escapes and no upcoming meeting is read or queued, since both share its transaction",
+                ) {
+                    shouldThrow<IllegalStateException> {
+                        h.service.completeConnection(code = "good", state = "ok", error = null)
+                    }
+                    verify(exactly = 0) {
+                        h.meetings.getMeetingsByUserIdInRange(userId = any(), startAt = any(), endAt = any())
+                    }
+                    verify(exactly = 0) { h.queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) }
+                    verify(exactly = 0) { h.queue.touchForUser(userId = any(), meetingIds = any(), now = any()) }
+                    h.staged.shouldBeEmpty()
+                }
+            }
+
+            `when`("the store transaction hits a snapshot-isolation write conflict once") {
+                val storedToken = CapturingSlotHolder()
+                val h =
+                    harness().withConsumedState().savingConnection(storedToken = storedToken).apply {
+                        every { oauth.exchangeCode(code = "good") } returns grant()
+                    }
+                every {
+                    h.connections.saveActive(
+                        userId = TEST_USER_ID,
+                        googleSubject = any(),
+                        googleEmail = any(),
+                        encryptedRefreshToken = capture(storedToken.slot),
+                        now = now,
+                    )
+                } throws createSnapshotIsolationConflict() andThenAnswer {
+                    ConnectionSaved(connection = activeConnection(), replaced = null)
+                }
+                val outcome = h.service.completeConnection(code = "good", state = "ok", error = null)
+
+                then("the whole store is retried once and the user is connected") {
+                    outcome shouldBe CalendarConnectionOutcome.CONNECTED
+                    verify(exactly = 2) {
+                        h.connections.saveActive(
+                            userId = TEST_USER_ID,
+                            googleSubject = any(),
+                            googleEmail = any(),
+                            encryptedRefreshToken = any(),
+                            now = now,
+                        )
+                    }
+                    verify(exactly = 1) { h.queue.touchForUser(userId = TEST_USER_ID, meetingIds = any(), now = now) }
+                    h.directMessage().target.id shouldBe TEST_USER_ID
+                }
+            }
+
+            `when`("the store transaction hits a write conflict on the retry as well") {
+                val h =
+                    harness().withConsumedState().withUpcomingMeetings().apply {
+                        every { oauth.exchangeCode(code = "good") } returns grant()
+                        every {
+                            connections.saveActive(
+                                userId = TEST_USER_ID,
+                                googleSubject = any(),
+                                googleEmail = any(),
+                                encryptedRefreshToken = any(),
+                                now = now,
+                            )
+                        } throws createSnapshotIsolationConflict()
+                    }
+                val outcome = h.service.completeConnection(code = "good", state = "ok", error = null)
+
+                then("the outcome is STORE_FAILED instead of an escaping exception, after exactly two attempts") {
+                    outcome shouldBe CalendarConnectionOutcome.STORE_FAILED
+                    verify(exactly = 2) {
+                        h.connections.saveActive(
+                            userId = TEST_USER_ID,
+                            googleSubject = any(),
+                            googleEmail = any(),
+                            encryptedRefreshToken = any(),
+                            now = now,
+                        )
+                    }
+                    verify(exactly = 1) { h.oauth.exchangeCode(code = "good") }
+                }
+
+                then("nothing is queued or staged") {
+                    verify(exactly = 0) { h.queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) }
+                    verify(exactly = 0) { h.queue.touchForUser(userId = any(), meetingIds = any(), now = any()) }
+                    h.staged.shouldBeEmpty()
+                    h.revocations.shouldBeEmpty()
+                }
+            }
+
+            `when`("a user with hosted, attended and past meetings connects") {
+                val storedToken = CapturingSlotHolder()
+                val localNow = LocalDateTime.of(2026, 10, 7, 1, 0)
+                val lookbackBound = LocalDateTime.of(2026, 10, 6, 1, 0)
+                val tomorrow = localNow.plusDays(1L)
+                val hosted = createMeetingDto(meetingId = 11L, creator = TEST_USER_ID, startAt = tomorrow)
+                val attending =
+                    createMeetingDto(
+                        meetingId = 12L,
+                        creator = "U_OTHER_HOST",
+                        startAt = tomorrow,
+                        participants = listOf(createMeetingParticipantDto(userId = TEST_USER_ID, isAttending = true)),
+                    )
+                val declined =
+                    createMeetingDto(
+                        meetingId = 13L,
+                        creator = "U_OTHER_HOST",
+                        startAt = tomorrow,
+                        participants = listOf(createMeetingParticipantDto(userId = TEST_USER_ID, isAttending = false)),
+                    )
+                val canceled =
+                    createMeetingDto(meetingId = 14L, creator = TEST_USER_ID, startAt = tomorrow, isCanceled = true)
+                val inProgress =
+                    createMeetingDto(
+                        meetingId = 15L,
+                        creator = TEST_USER_ID,
+                        startAt = localNow.minusMinutes(30L),
+                        endAt = localNow.plusMinutes(30L),
+                    )
+                val endedEarlier =
+                    createMeetingDto(
+                        meetingId = 16L,
+                        creator = TEST_USER_ID,
+                        startAt = localNow.minusHours(3L),
+                        endAt = localNow.minusHours(2L),
+                    )
+                val inProgressWithoutEnd =
+                    createMeetingDto(
+                        meetingId = 17L,
+                        creator = TEST_USER_ID,
+                        startAt = localNow.minusMinutes(30L),
+                        endAt = null,
+                    )
+                val endedWithoutEnd =
+                    createMeetingDto(
+                        meetingId = 18L,
+                        creator = TEST_USER_ID,
+                        startAt = localNow.minusMinutes(90L),
+                        endAt = null,
+                    )
+                val revivedIds = slot<Collection<Long>>()
+                val h =
+                    harness()
+                        .withConsumedState()
+                        .savingConnection(storedToken = storedToken)
+                        .withUpcomingMeetings(
+                            upcoming =
+                                listOf(
+                                    hosted,
+                                    attending,
+                                    declined,
+                                    canceled,
+                                    inProgress,
+                                    endedEarlier,
+                                    inProgressWithoutEnd,
+                                    endedWithoutEnd,
+                                ),
+                        ).apply {
+                            every { oauth.exchangeCode(code = "good") } returns grant()
+                            every {
+                                queue.touchForUser(userId = TEST_USER_ID, meetingIds = capture(revivedIds), now = now)
+                            } returns 0
+                        }
+                h.service.completeConnection(code = "good", state = "ok", error = null)
+
+                then("the meetings starting from a day ago to two years ahead are read for that user") {
+                    verify(exactly = 1) {
+                        h.meetings.getMeetingsByUserIdInRange(
+                            userId = TEST_USER_ID,
+                            startAt = lookbackBound,
+                            endAt = LocalDateTime.of(2028, 10, 7, 1, 0),
+                        )
+                    }
+                }
+
+                then(
+                    "the revive names every meeting the read returned, the canceled and the attended-but-not-hosted " +
+                        "ones included, not only the queued ones",
+                ) {
+                    verify(exactly = 1) { h.queue.touchForUser(userId = TEST_USER_ID, meetingIds = any(), now = now) }
+                    revivedIds.captured shouldContainExactlyInAnyOrder listOf(11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L)
+                }
+
+                then(
+                    "only the hosted meetings that are not canceled and have not ended are queued, an in-progress " +
+                        "one included; attended invitations are not, whatever their isAttending",
+                ) {
+                    listOf(11L, 15L, 17L).forEach { meetingId ->
+                        verify(exactly = 1) {
+                            h.queue.enqueue(meetingId = meetingId, slackUserId = TEST_USER_ID, now = now)
+                        }
+                    }
+                    verify(exactly = 3) { h.queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) }
+                }
+
+                then("the user's existing rows are revived once, in the store transaction, before the DM") {
+                    verifyOrder {
+                        h.connections.saveActive(
+                            userId = TEST_USER_ID,
+                            googleSubject = any(),
+                            googleEmail = any(),
+                            encryptedRefreshToken = any(),
+                            now = now,
+                        )
+                        h.meetings.getMeetingsByUserIdInRange(userId = TEST_USER_ID, startAt = any(), endAt = any())
+                        h.queue.enqueue(meetingId = 11L, slackUserId = TEST_USER_ID, now = now)
+                        h.queue.enqueue(meetingId = 15L, slackUserId = TEST_USER_ID, now = now)
+                        h.queue.enqueue(meetingId = 17L, slackUserId = TEST_USER_ID, now = now)
+                        h.queue.touchForUser(userId = TEST_USER_ID, meetingIds = any(), now = now)
+                        h.stager.stage(message = any(), basicInfo = any())
+                    }
+                    verify(exactly = 1) { h.queue.touchForUser(userId = any(), meetingIds = any(), now = any()) }
+                }
+            }
+
+            `when`("a connecting user has no upcoming meetings") {
+                val storedToken = CapturingSlotHolder()
+                val h =
+                    harness().withConsumedState().savingConnection(storedToken = storedToken).apply {
+                        every { oauth.exchangeCode(code = "good") } returns grant()
+                    }
+                h.service.completeConnection(code = "good", state = "ok", error = null)
+
+                then("nothing is enqueued, and the revive is still called once, with an empty id list") {
+                    verify(exactly = 0) { h.queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) }
+                    verify(exactly = 1) {
+                        h.queue.touchForUser(userId = TEST_USER_ID, meetingIds = emptyList(), now = now)
+                    }
+                    verify(exactly = 1) { h.queue.touchForUser(userId = any(), meetingIds = any(), now = any()) }
+                }
+            }
+
+            `when`("a connection is stored under a real transaction manager") {
+                val storedToken = CapturingSlotHolder()
+                val dataSource = createH2DataSource()
+                val transactionsSeen = mutableListOf<Any?>()
+
+                fun recordTransaction() {
+                    transactionsSeen += TransactionSynchronizationManager.getResource(dataSource)
+                }
+                val h =
+                    harness(transactionManager = createH2TransactionManager(dataSource = dataSource))
+                        .withConsumedState()
+                        .savingConnection(storedToken = storedToken)
+                        .apply {
+                            every { oauth.exchangeCode(code = "good") } returns grant()
+                            every {
+                                meetings.getMeetingsByUserIdInRange(
+                                    userId = TEST_USER_ID,
+                                    startAt = any(),
+                                    endAt = any(),
+                                )
+                            } answers {
+                                recordTransaction()
+                                listOf(
+                                    createMeetingDto(
+                                        meetingId = 21L,
+                                        creator = TEST_USER_ID,
+                                        startAt = LocalDateTime.of(2026, 10, 8, 9, 0),
+                                    ),
+                                )
+                            }
+                            every { queue.enqueue(meetingId = 21L, slackUserId = TEST_USER_ID, now = now) } answers {
+                                recordTransaction()
+                            }
+                            every {
+                                queue.touchForUser(userId = TEST_USER_ID, meetingIds = any(), now = now)
+                            } answers {
+                                recordTransaction()
+                                2
+                            }
+                        }
+                every {
+                    h.connections.saveActive(
+                        userId = TEST_USER_ID,
+                        googleSubject = any(),
+                        googleEmail = any(),
+                        encryptedRefreshToken = capture(storedToken.slot),
+                        now = now,
+                    )
+                } answers {
+                    recordTransaction()
+                    ConnectionSaved(connection = activeConnection(), replaced = null)
+                }
+                h.service.completeConnection(code = "good", state = "ok", error = null)
+
+                then(
+                    "the save, the meeting read, the enqueue and the revive all ran on the connection of one transaction",
+                ) {
+                    transactionsSeen.size shouldBe 4
+                    transactionsSeen.forEach { transaction ->
+                        transaction.shouldNotBeNull()
+                        transaction shouldBeSameInstanceAs transactionsSeen.first()
+                    }
                 }
             }
 

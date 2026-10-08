@@ -68,6 +68,15 @@ class GoogleOAuthCallbackController(
                         title = "Google did not complete the connection",
                         detail = "Run /meetup calendar connect in Slack to try again.",
                     )
+
+                CalendarConnectionOutcome.STORE_FAILED ->
+                    CallbackPage(
+                        status = HttpStatus.SERVICE_UNAVAILABLE,
+                        title = "The connection could not be saved",
+                        detail =
+                            "Nothing was connected. This link cannot be used again; " +
+                                "run /meetup calendar connect in Slack for a new one.",
+                    )
             }
         return ResponseEntity
             .status(page.status)

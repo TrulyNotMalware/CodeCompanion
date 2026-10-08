@@ -1,6 +1,7 @@
 package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.IdempotencyCreator
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
@@ -44,6 +45,7 @@ class MeetingServiceImpl(
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
     transactionManager: PlatformTransactionManager,
+    private val calendarMirror: MeetingCalendarMirror,
 ) : MeetingService {
     private val log = KotlinLogging.logger {}
     private val writeTemplate = isolatedWriteTemplate(transactionManager = transactionManager)
@@ -71,6 +73,10 @@ class MeetingServiceImpl(
             idempotencyKey = event.idempotencyKey,
             channel = event.commandBasicInfo.channel,
         )
+        calendarMirror.onMeetingCreated(
+            meetingIdempotencyKey = event.idempotencyKey,
+            hostId = event.meeting.host.userId,
+        )
     }
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT, fallbackExecution = false)
@@ -95,6 +101,12 @@ class MeetingServiceImpl(
                     "userId=${payload.participantUserId}; refusing to acknowledge an unrecorded decision.",
             )
         }
+        if (rowsUpdated == 0) return
+        calendarMirror.onAttendanceChanged(
+            meetingIdempotencyKey = payload.meetingIdempotencyKey,
+            userId = payload.participantUserId,
+            attending = payload.isAttending,
+        )
     }
 
     @EventListener
@@ -142,6 +154,7 @@ class MeetingServiceImpl(
                         meetingUid = payload.meetingUid,
                         requesterId = payload.requesterId,
                     )
+                if (canceled) calendarMirror.onMeetingCanceled(meetingUid = payload.meetingUid)
                 publishCancelEphemeral(
                     message =
                         if (canceled) "Meeting canceled." else "Meeting was already canceled, or you are not the host.",

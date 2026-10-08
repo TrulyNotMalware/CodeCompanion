@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -23,7 +25,9 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createGetMeetingListEvent
+import dev.notypie.domain.meet.createMeeting
 import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackOutboundStager
@@ -42,6 +46,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.slf4j.LoggerFactory
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataAccessResourceFailureException
@@ -63,6 +68,7 @@ class MeetingServiceImplTest :
                 outboundStager = stager,
                 eventPublisher = eventPublisher,
                 transactionManager = createH2TransactionManager(),
+                calendarMirror = NoopMeetingCalendarMirror,
             )
 
         given("updateParticipantAttendance receives an UpdateMeetingAttendanceEvent") {
@@ -157,6 +163,172 @@ class MeetingServiceImplTest :
                             isAttending = false,
                             absentReason = RejectReason.OTHER,
                         )
+                    }
+                }
+            }
+        }
+
+        given("the calendar mirror hooks on the meeting listeners") {
+            fun hookedService(repository: MeetingRepository, mirror: MeetingCalendarMirror) =
+                MeetingServiceImpl(
+                    meetingRepository = repository,
+                    commandExecutor = commandExecutor,
+                    outboundStager = mockk(relaxed = true),
+                    eventPublisher = eventPublisher,
+                    transactionManager = createH2TransactionManager(),
+                    calendarMirror = mirror,
+                )
+            val meetingKey = UUID.randomUUID()
+
+            `when`("a new meeting is persisted") {
+                val repository = mockk<MeetingRepository>()
+                val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                val result = createRequestMeetingContextResult(meeting = createMeeting(publisher = "U_HOST_HOOK"))
+                every {
+                    repository.createNewMeeting(
+                        meeting = result.meeting,
+                        idempotencyKey = result.idempotencyKey,
+                        channel = result.commandBasicInfo.channel,
+                    )
+                } returns result.meeting
+
+                hookedService(repository = repository, mirror = mirror).createNewMeeting(event = result)
+
+                then("the mirror gets the meeting's idempotency key and its host, after the insert") {
+                    verifyOrder {
+                        repository.createNewMeeting(
+                            meeting = result.meeting,
+                            idempotencyKey = result.idempotencyKey,
+                            channel = result.commandBasicInfo.channel,
+                        )
+                        mirror.onMeetingCreated(meetingIdempotencyKey = result.idempotencyKey, hostId = "U_HOST_HOOK")
+                    }
+                    verify(exactly = 1) { mirror.onMeetingCreated(meetingIdempotencyKey = any(), hostId = any()) }
+                }
+            }
+
+            listOf(true to RejectReason.ATTENDING, false to RejectReason.OTHER).forEach { (attending, reason) ->
+                `when`("a participant records attending=$attending") {
+                    val repository = mockk<MeetingRepository>()
+                    val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                    every {
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = "U_DECIDER",
+                            isAttending = attending,
+                            absentReason = reason,
+                        )
+                    } returns 1
+
+                    hookedService(repository = repository, mirror = mirror).updateParticipantAttendance(
+                        event =
+                            createUpdateMeetingAttendanceEvent(
+                                meetingIdempotencyKey = meetingKey,
+                                participantUserId = "U_DECIDER",
+                                isAttending = attending,
+                                absentReason = reason,
+                            ),
+                    )
+
+                    then("the mirror gets the same decision for that user and meeting") {
+                        verify(exactly = 1) {
+                            mirror.onAttendanceChanged(
+                                meetingIdempotencyKey = meetingKey,
+                                userId = "U_DECIDER",
+                                attending = attending,
+                            )
+                        }
+                    }
+                }
+            }
+
+            `when`("the decision repeats the recorded one and the UPDATE reports zero rows") {
+                val repository = mockk<MeetingRepository>()
+                val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                every {
+                    repository.updateParticipantAttendance(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_REPEAT",
+                        isAttending = true,
+                        absentReason = RejectReason.ATTENDING,
+                    )
+                } returns 0
+                every {
+                    repository.participantExists(meetingIdempotencyKey = meetingKey, userId = "U_REPEAT")
+                } returns true
+
+                hookedService(repository = repository, mirror = mirror).updateParticipantAttendance(
+                    event =
+                        createUpdateMeetingAttendanceEvent(
+                            meetingIdempotencyKey = meetingKey,
+                            participantUserId = "U_REPEAT",
+                            isAttending = true,
+                            absentReason = RejectReason.ATTENDING,
+                        ),
+                )
+
+                then("the no-op is accepted and the mirror is not called") {
+                    verify(exactly = 0) {
+                        mirror.onAttendanceChanged(meetingIdempotencyKey = any(), userId = any(), attending = any())
+                    }
+                }
+            }
+
+            `when`("no participant row matches the decision") {
+                val repository = mockk<MeetingRepository>()
+                val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                every {
+                    repository.updateParticipantAttendance(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_STRANGER",
+                        isAttending = true,
+                        absentReason = RejectReason.ATTENDING,
+                    )
+                } returns 0
+                every {
+                    repository.participantExists(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_STRANGER",
+                    )
+                } returns
+                    false
+
+                then("the listener fails before the mirror hears anything") {
+                    shouldThrow<IllegalStateException> {
+                        hookedService(repository = repository, mirror = mirror).updateParticipantAttendance(
+                            event =
+                                createUpdateMeetingAttendanceEvent(
+                                    meetingIdempotencyKey = meetingKey,
+                                    participantUserId = "U_STRANGER",
+                                    isAttending = true,
+                                    absentReason = RejectReason.ATTENDING,
+                                ),
+                        )
+                    }
+                    verify(exactly = 0) {
+                        mirror.onAttendanceChanged(meetingIdempotencyKey = any(), userId = any(), attending = any())
+                    }
+                }
+            }
+
+            listOf(true, false).forEach { canceled ->
+                `when`("the cancel write returns $canceled") {
+                    val repository = mockk<MeetingRepository>()
+                    val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                    val event = createCancelMeetingEvent(requesterId = "U_HOST_HOOK")
+                    every {
+                        repository.markMeetingCanceled(
+                            meetingUid = event.payload.meetingUid,
+                            requesterId = "U_HOST_HOOK",
+                        )
+                    } returns canceled
+
+                    hookedService(repository = repository, mirror = mirror).cancelMeeting(event = event)
+
+                    then("the mirror hears about it only when the meeting was actually canceled") {
+                        verify(exactly = if (canceled) 1 else 0) {
+                            mirror.onMeetingCanceled(meetingUid = event.payload.meetingUid)
+                        }
                     }
                 }
             }
@@ -410,6 +582,7 @@ class MeetingServiceImplTest :
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
             val meetingUid = UUID.randomUUID()
             val requesterId = "U_HOST_RACE"
@@ -638,6 +811,7 @@ class MeetingServiceImplTest :
                     outboundStager = failingStager,
                     eventPublisher = eventPublisher,
                     transactionManager = createH2TransactionManager(),
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
 
             `when`("a cancel fails and so does its reply") {
@@ -699,6 +873,7 @@ class MeetingServiceImplTest :
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
             val event = createAddParticipantEvent(requesterId = "U_HOST_POOL", participantUserIds = listOf("U_A"))
             every {

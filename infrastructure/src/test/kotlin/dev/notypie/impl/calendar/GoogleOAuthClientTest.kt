@@ -1,5 +1,9 @@
 package dev.notypie.impl.calendar
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import io.kotest.assertions.throwables.shouldThrow
@@ -9,6 +13,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -59,6 +64,18 @@ class GoogleOAuthClientTest :
                 val (name, value) = pair.split("=", limit = 2)
                 URLDecoder.decode(name, StandardCharsets.UTF_8) to URLDecoder.decode(value, StandardCharsets.UTF_8)
             }
+
+        fun warningsDuring(block: () -> Unit): List<String> {
+            val logger = LoggerFactory.getLogger(GoogleOAuthClient::class.java) as Logger
+            val appender = ListAppender<ILoggingEvent>().apply { start() }
+            logger.addAppender(appender)
+            try {
+                block()
+            } finally {
+                logger.detachAppender(appender)
+            }
+            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+        }
 
         fun idToken(email: String): String {
             val encoder = Base64.getUrlEncoder().withoutPadding()
@@ -177,6 +194,88 @@ class GoogleOAuthClientTest :
 
             then("it fails without throwing a parser error") {
                 shouldThrow<GoogleOAuthException> { client.exchangeCode(code = "c") }.statusCode shouldBe 504
+            }
+        }
+
+        given("a refresh-token exchange") {
+            respond =
+                response(
+                    status = 200,
+                    body = """{"access_token":"ya29.fresh","expires_in":3599,"token_type":"Bearer"}""",
+                )
+            val token = client.refresh(refreshToken = "1//refresh")
+
+            then("it returns the new access token and its lifetime without printing the token") {
+                token.accessToken shouldBe "ya29.fresh"
+                token.expiresInSeconds shouldBe 3599L
+                token.toString() shouldNotContain "ya29.fresh"
+            }
+
+            then("the request is a form POST with the refresh_token grant and no redirect_uri") {
+                capturedPath shouldBe "/token"
+                capturedContentType shouldBe "application/x-www-form-urlencoded"
+                formFields(capturedBody) shouldBe
+                    mapOf(
+                        "client_id" to "client-id.apps.googleusercontent.com",
+                        "client_secret" to "client-secret",
+                        "refresh_token" to "1//refresh",
+                        "grant_type" to "refresh_token",
+                    )
+            }
+        }
+
+        given("a refresh answered with 2xx but without a positive expires_in") {
+            listOf(
+                "no expires_in" to """{"access_token":"ya29.fresh","token_type":"Bearer"}""",
+                "expires_in 0" to """{"access_token":"ya29.fresh","expires_in":0}""",
+            ).forEach { (label, body) ->
+                `when`("the response has $label") {
+                    respond = response(status = 200, body = body)
+                    lateinit var token: GoogleAccessToken
+                    val warnings = warningsDuring { token = client.refresh(refreshToken = "1//refresh") }
+
+                    then("the token is kept for Google's documented one hour and a WARN says so") {
+                        token.accessToken shouldBe "ya29.fresh"
+                        token.expiresInSeconds shouldBe 3600L
+                        warnings shouldBe
+                            listOf("Google refresh response has no positive expires_in; assuming 3600s")
+                    }
+                }
+            }
+        }
+
+        given("a refresh Google rejects because the grant was revoked") {
+            respond =
+                response(
+                    status = 400,
+                    body = """{"error":"invalid_grant","error_description":"Token has been expired or revoked."}""",
+                )
+
+            then("the failure carries the invalid_grant code and the HTTP status") {
+                val failure = shouldThrow<GoogleOAuthException> { client.refresh(refreshToken = "1//revoked") }
+                failure.error shouldBe "invalid_grant"
+                failure.statusCode shouldBe 400
+                failure.message shouldContain "invalid_grant"
+            }
+        }
+
+        given("a refresh rejected with a JSON body that names no error code") {
+            respond = response(status = 500, body = "{}")
+
+            then("the failure has no error code and says so in the message") {
+                val failure = shouldThrow<GoogleOAuthException> { client.refresh(refreshToken = "1//refresh") }
+                failure.error.shouldBeNull()
+                failure.statusCode shouldBe 500
+                failure.message shouldContain "unknown"
+            }
+        }
+
+        given("a refresh answered with 2xx but no access_token") {
+            respond = response(status = 200, body = """{"expires_in":3599}""")
+
+            then("it fails instead of returning an empty token") {
+                shouldThrow<GoogleOAuthException> { client.refresh(refreshToken = "1//refresh") }.message shouldContain
+                    "access_token"
             }
         }
 

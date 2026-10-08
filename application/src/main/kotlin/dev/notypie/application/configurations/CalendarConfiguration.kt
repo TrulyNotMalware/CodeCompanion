@@ -4,13 +4,21 @@ import dev.notypie.application.configurations.conditions.OnGoogleCalendarDisable
 import dev.notypie.application.configurations.conditions.OnGoogleCalendarEnabled
 import dev.notypie.application.service.calendar.CalendarConnectionDisabledResponder
 import dev.notypie.application.service.calendar.CalendarConnectionService
+import dev.notypie.application.service.calendar.CalendarSyncService
+import dev.notypie.application.service.calendar.GoogleAccessTokenProvider
 import dev.notypie.application.service.calendar.GoogleTokenRevocationWorker
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
+import dev.notypie.application.service.calendar.MeetingCalendarMirrorService
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
+import dev.notypie.repository.calendar.MeetingCalendarEventRepository
+import dev.notypie.repository.meeting.MeetingRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
@@ -100,9 +108,66 @@ class CalendarConfiguration(
         )
 
     @Bean
+    fun googleCalendarClient(): GoogleCalendarClient =
+        GoogleCalendarClient(requestTimeout = Duration.ofSeconds(appConfig.calendar.google.requestTimeoutSeconds))
+
+    @Bean
+    fun googleAccessTokenProvider(
+        googleOAuthClient: GoogleOAuthClient,
+        tokenCipher: TokenCipher,
+        connectionRepository: GoogleCalendarConnectionRepository,
+        clock: Clock,
+    ): GoogleAccessTokenProvider =
+        GoogleAccessTokenProvider(
+            oauthClient = googleOAuthClient,
+            tokenCipher = tokenCipher,
+            connections = connectionRepository,
+            clock = clock,
+        )
+
+    @Bean
+    fun calendarSyncService(
+        calendarEventRepository: MeetingCalendarEventRepository,
+        connectionRepository: GoogleCalendarConnectionRepository,
+        googleAccessTokenProvider: GoogleAccessTokenProvider,
+        googleCalendarClient: GoogleCalendarClient,
+        outboundStager: OutboundMessageStager,
+        eventPublisher: EventPublisher,
+        transactionManager: PlatformTransactionManager,
+        clock: Clock,
+    ): CalendarSyncService =
+        CalendarSyncService(
+            queue = calendarEventRepository,
+            connections = connectionRepository,
+            tokenProvider = googleAccessTokenProvider,
+            calendarClient = googleCalendarClient,
+            outboundStager = outboundStager,
+            eventPublisher = eventPublisher,
+            transactionManager = transactionManager,
+            clock = clock,
+            appConfig = appConfig,
+        )
+
+    @Bean
+    fun meetingCalendarMirror(
+        calendarEventRepository: MeetingCalendarEventRepository,
+        connectionRepository: GoogleCalendarConnectionRepository,
+        meetingRepository: MeetingRepository,
+        clock: Clock,
+    ): MeetingCalendarMirror =
+        MeetingCalendarMirrorService(
+            queue = calendarEventRepository,
+            connections = connectionRepository,
+            meetings = meetingRepository,
+            clock = clock,
+        )
+
+    @Bean
     fun calendarConnectionService(
         connectionRepository: GoogleCalendarConnectionRepository,
         stateRepository: GoogleOAuthStateRepository,
+        calendarEventRepository: MeetingCalendarEventRepository,
+        meetingRepository: MeetingRepository,
         googleOAuthClient: GoogleOAuthClient,
         tokenCipher: TokenCipher,
         outboundStager: OutboundMessageStager,
@@ -114,6 +179,8 @@ class CalendarConfiguration(
         CalendarConnectionService(
             connectionRepository = connectionRepository,
             stateRepository = stateRepository,
+            queue = calendarEventRepository,
+            meetingRepository = meetingRepository,
             oauthClient = googleOAuthClient,
             tokenCipher = tokenCipher,
             outboundStager = outboundStager,
@@ -141,6 +208,9 @@ class GoogleTokenRevocationExecutor : ThreadPoolTaskExecutor() {
 @Configuration
 @Conditional(OnGoogleCalendarDisabled::class)
 class CalendarDisabledConfiguration {
+    @Bean
+    fun meetingCalendarMirror(): MeetingCalendarMirror = NoopMeetingCalendarMirror
+
     @Bean
     fun calendarConnectionDisabledResponder(
         outboundStager: OutboundMessageStager,

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # infrastructure/impl
 
@@ -19,7 +19,7 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 | `agent/` | `AgentGateway` port + `SidecarAgentClient` (HTTP + SSE) (see `agent/AGENTS.md`) |
 | `cve/` | `SourceAdapter` port + `NvdCveSourceAdapter`, `GithubReleaseSourceAdapter` (see `cve/AGENTS.md`) |
 | `retry/` | `RetryService` (see `retry/AGENTS.md`) |
-| `calendar/` | `GoogleOAuthClient` (authorization URL, code exchange, revoke) + `TokenCipher` (AES-GCM for stored refresh tokens) (see `calendar/AGENTS.md`) |
+| `calendar/` | `GoogleOAuthClient` (authorization URL, code exchange, refresh, revoke), `GoogleCalendarClient` (primary-calendar event insert / patch / delete as a `CalendarApiResult`) + `TokenCipher` (AES-GCM for stored refresh tokens) (see `calendar/AGENTS.md`) |
 
 ## Key Files
 | File | Description |

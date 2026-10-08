@@ -1,5 +1,6 @@
 package dev.notypie.application.service.interaction
 
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.meeting.CommitRecordingEventPublisher
@@ -288,6 +289,7 @@ class SlackInteractionHandlerImplTest :
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = publisher,
                     transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
             val event = createAddParticipantEvent(participantUserIds = listOf("U_A"))
 
