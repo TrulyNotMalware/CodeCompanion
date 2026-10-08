@@ -8,6 +8,9 @@ import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.AgentUsageReportPayload
 import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
+import dev.notypie.domain.command.entity.event.CalendarConnectionAction
+import dev.notypie.domain.command.entity.event.CalendarConnectionPayload
+import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
@@ -120,6 +123,27 @@ class SlackIntentResolver {
                     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
             }
+
+            is CommandIntent.CalendarConnect ->
+                calendarConnectionEvent(
+                    action = CalendarConnectionAction.CONNECT,
+                    userId = intent.userId,
+                    basicInfo = basicInfo,
+                )
+
+            is CommandIntent.CalendarDisconnect ->
+                calendarConnectionEvent(
+                    action = CalendarConnectionAction.DISCONNECT,
+                    userId = intent.userId,
+                    basicInfo = basicInfo,
+                )
+
+            is CommandIntent.CalendarStatus ->
+                calendarConnectionEvent(
+                    action = CalendarConnectionAction.STATUS,
+                    userId = intent.userId,
+                    basicInfo = basicInfo,
+                )
 
             is CommandIntent.StatusReport -> {
                 StatusReportRequestEvent(
@@ -360,4 +384,19 @@ class SlackIntentResolver {
                 null
             }
         }
+
+    private fun calendarConnectionEvent(
+        action: CalendarConnectionAction,
+        userId: String,
+        basicInfo: CommandBasicInfo,
+    ): CalendarConnectionRequestEvent =
+        CalendarConnectionRequestEvent(
+            idempotencyKey = basicInfo.idempotencyKey,
+            payload =
+                CalendarConnectionPayload(
+                    action = action,
+                    userId = userId,
+                    responseBasicInfo = basicInfo,
+                ),
+        )
 }

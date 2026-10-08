@@ -67,6 +67,10 @@ enum class MeetingSubCommandDefinition(
         subCommandIdentifier = "list",
         usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | tomorrow | week | month]",
     ),
+    CALENDAR(
+        subCommandIdentifier = "calendar",
+        usage = "/${MEETING_COMMAND_IDENTIFIER} calendar connect | disconnect | status",
+    ),
 }
 
 data class RequestMeetingContextResult(

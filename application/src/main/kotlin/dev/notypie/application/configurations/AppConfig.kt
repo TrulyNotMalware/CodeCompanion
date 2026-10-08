@@ -30,6 +30,7 @@ data class AppConfig(
     val mcp: Mcp = Mcp(),
     val cve: Cve = Cve(),
     val ai: Ai = Ai(),
+    val calendar: Calendar = Calendar(),
 ) {
     data class Authorization(
         val bootstrapAdmins: List<String> = emptyList(),
@@ -55,6 +56,30 @@ data class AppConfig(
     data class Cdc(
         val topic: String = "",
     )
+
+    data class Calendar(
+        val google: Google = Google(),
+    ) {
+        data class Google(
+            val enabled: Boolean = false,
+            val clientId: String = "",
+            val clientSecret: String = "",
+            val redirectUri: String = "",
+            val tokenEncryptionKey: String = "",
+            val stateTtlMinutes: Long = 10L,
+            val requestTimeoutSeconds: Long = 10L,
+        ) {
+            init {
+                require(stateTtlMinutes > 0L) { "calendar.google.state-ttl-minutes must be positive" }
+                require(requestTimeoutSeconds > 0L) { "calendar.google.request-timeout-seconds must be positive" }
+            }
+
+            override fun toString(): String =
+                "Google(enabled=$enabled, clientId=$clientId, clientSecret=${clientSecret.masked()}, " +
+                    "redirectUri=$redirectUri, tokenEncryptionKey=${tokenEncryptionKey.masked()}, " +
+                    "stateTtlMinutes=$stateTtlMinutes, requestTimeoutSeconds=$requestTimeoutSeconds)"
+        }
+    }
 
     data class Meeting(
         val reminder: Reminder = Reminder(),
@@ -254,6 +279,8 @@ fun AppConfig.requireUsableSecrets() {
             "slack.app.mcp.signing-secret" to mcp.signingSecret,
             "slack.app.cve.github.token" to cve.github.token,
             "slack.app.cve.nvd.api-key" to cve.nvd.apiKey,
+            "slack.app.calendar.google.client-secret" to calendar.google.clientSecret,
+            "slack.app.calendar.google.token-encryption-key" to calendar.google.tokenEncryptionKey,
         ).filterValues { UNRESOLVED_PLACEHOLDER.containsMatchIn(it) }.keys
     check(unresolved.isEmpty()) { "Unresolved placeholders, set their environment variables: $unresolved" }
     check(api.token.isNotBlank()) { "slack.app.api.token is blank; set SLACK_API_TOKEN" }

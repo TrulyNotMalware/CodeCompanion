@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
 
 # infrastructure/repository
 
@@ -19,6 +19,7 @@ subpackage of `@Entity` classes.
 | `agent/` | `agent_session` and `agent_turn_history` (token usage, duration, outcome) (see `agent/AGENTS.md`) |
 | `authorization/` | `user_command_role` grants backing the role system (see `authorization/AGENTS.md`) |
 | `mcp/` | `mcp_tool_call_history` audit trail (see `mcp/AGENTS.md`) |
+| `calendar/` | `google_calendar_connection` (encrypted refresh token per Slack user) and the single-use `google_oauth_state` ledger (see `calendar/AGENTS.md`) |
 
 ## For AI Agents
 

@@ -2,10 +2,12 @@ package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createSlashInboundCommand
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingCommand
 import dev.notypie.domain.command.exceptions.SubCommandParseException
+import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -108,6 +110,80 @@ class RequestMeetingCommandTest :
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown
                         .contains("Unknown range 'bogus'") shouldBe true
+                }
+            }
+        }
+
+        given("RequestMeetingCommand handleEvent with CALENDAR sub command") {
+            fun run(vararg tokens: String): Pair<CommandOutput, List<CommandEffect>> {
+                val command =
+                    RequestMeetingCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = createSlashInboundCommand(subCommands = listOf("calendar") + tokens),
+                    )
+                return command.handleEvent() to command.drainIntents()
+            }
+
+            fun List<CommandEffect>.usageEphemeral(): String =
+                single()
+                    .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    .content
+                    .shouldBeInstanceOf<MessageContent.Text>()
+                    .markdown
+
+            `when`("subcommand text is 'calendar connect'") {
+                val (result, intents) = run("connect")
+
+                then("should succeed and emit CalendarConnect for the requester") {
+                    result.ok shouldBe true
+                    result.status shouldBe Status.SUCCESS
+                    intents.single().shouldBeInstanceOf<CommandIntent.CalendarConnect>().userId shouldBe TEST_USER_ID
+                }
+            }
+
+            `when`("subcommand text is 'calendar DISCONNECT' in upper case") {
+                val (result, intents) = run("DISCONNECT")
+
+                then("should match case-insensitively and emit CalendarDisconnect") {
+                    result.ok shouldBe true
+                    intents.single().shouldBeInstanceOf<CommandIntent.CalendarDisconnect>().userId shouldBe TEST_USER_ID
+                }
+            }
+
+            `when`("subcommand text is 'calendar status'") {
+                val (result, intents) = run("status")
+
+                then("should emit CalendarStatus") {
+                    result.ok shouldBe true
+                    intents.single().shouldBeInstanceOf<CommandIntent.CalendarStatus>().userId shouldBe TEST_USER_ID
+                }
+            }
+
+            `when`("subcommand text is 'calendar' without an action") {
+                val (result, intents) = run()
+
+                then("should fail with the usage line and emit no intent") {
+                    result.ok shouldBe false
+                    intents.usageEphemeral() shouldBe "Usage: ${MeetingSubCommandDefinition.CALENDAR.usage}"
+                }
+            }
+
+            `when`("subcommand text is 'calendar bogus'") {
+                val (result, intents) = run("bogus")
+
+                then("should fail and name the unknown action") {
+                    result.ok shouldBe false
+                    intents.usageEphemeral() shouldBe
+                        "Unknown action 'bogus'. Usage: ${MeetingSubCommandDefinition.CALENDAR.usage}"
+                }
+            }
+
+            `when`("subcommand text is 'calendar connect now'") {
+                val (result, intents) = run("connect", "now")
+
+                then("should reject the extra argument with the usage line") {
+                    result.ok shouldBe false
+                    intents.usageEphemeral() shouldBe "Usage: ${MeetingSubCommandDefinition.CALENDAR.usage}"
                 }
             }
         }

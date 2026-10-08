@@ -136,6 +136,15 @@ slack:
       retention:
         days: 14
         batch-size: 1000
+    # Google Calendar per-user OAuth (/meetup calendar connect). Off unless GOOGLE_CALENDAR_ENABLED=true;
+    # then the client id/secret, the public callback URL and a base64 32-byte token key are required.
+    calendar:
+      google:
+        enabled: ${GOOGLE_CALENDAR_ENABLED:false}
+        client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+        client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+        redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:}
+        token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
     # AI agent backend — the claude-sidecar runs in the same Pod (k8s native sidecar), so the
     # base URL stays Pod-loopback. The bearer secret is shared with the sidecar via one Secret.
     agent:

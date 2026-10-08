@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
 
 # application/service
 
@@ -21,6 +21,7 @@ that the relay lane dispatches.
 | `cve/` | CVE collection, AI summarization, subscription, query, notification (see `cve/AGENTS.md`) |
 | `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering (see `relay/AGENTS.md`) |
 | `ops/` | `OpsStatusService` — backs `@bot status` (see `ops/AGENTS.md`) |
+| `calendar/` | `/meetup calendar connect \| disconnect \| status` — per-user Google OAuth connection, callback completion, async token revoke, disabled responder (see `calendar/AGENTS.md`) |
 
 ## Key Files
 | File | Description |

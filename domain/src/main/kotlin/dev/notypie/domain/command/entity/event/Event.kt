@@ -335,6 +335,29 @@ data class StandupOpsRequestEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<StandupOpsPayload>
 
+enum class CalendarConnectionAction {
+    CONNECT,
+    DISCONNECT,
+    STATUS,
+}
+
+class CalendarConnectionPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: CalendarConnectionAction,
+    val userId: String,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CalendarConnectionRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CalendarConnectionRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CalendarConnectionPayload,
+    override val type: CommandDetailType = CommandDetailType.CALENDAR_CONNECTION,
+) : CommandEvent<CalendarConnectionPayload>
+
 data class DeclineModalOpenFailedEvent(
     val meetingIdempotencyKey: UUID,
     val participantUserId: String,

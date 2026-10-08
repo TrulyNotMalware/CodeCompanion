@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/impl
 
@@ -15,5 +15,6 @@ the `view_submission` routing regression guard.
 | `command/` | Slack parser / mapper / renderer / stager / intent resolver, Kafka publisher, REST requester; `slack/` sub-lane (see `command/AGENTS.md`) |
 | `cve/` | GitHub-release and NVD source adapters against a loopback `HttpServer`, shared JSON helpers (see `cve/AGENTS.md`) |
 | `retry/` | `RetryService` over Spring's core `RetryTemplate` (see `retry/AGENTS.md`) |
+| `calendar/` | `GoogleOAuthClient` against a loopback `HttpServer`, `TokenCipher` round trip and rejection cases (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

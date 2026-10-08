@@ -19,6 +19,7 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 | `agent/` | `AgentGateway` port + `SidecarAgentClient` (HTTP + SSE) (see `agent/AGENTS.md`) |
 | `cve/` | `SourceAdapter` port + `NvdCveSourceAdapter`, `GithubReleaseSourceAdapter` (see `cve/AGENTS.md`) |
 | `retry/` | `RetryService` (see `retry/AGENTS.md`) |
+| `calendar/` | `GoogleOAuthClient` (authorization URL, code exchange, revoke) + `TokenCipher` (AES-GCM for stored refresh tokens) (see `calendar/AGENTS.md`) |
 
 ## Key Files
 | File | Description |

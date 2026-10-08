@@ -15,6 +15,9 @@ import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.AgentUsageReportPayload
 import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
+import dev.notypie.domain.command.entity.event.CalendarConnectionAction
+import dev.notypie.domain.command.entity.event.CalendarConnectionPayload
+import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import dev.notypie.domain.command.entity.event.CveLatestPayload
@@ -223,6 +226,21 @@ fun createCveLatestRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.CVE_LATEST,
+)
+
+fun createCalendarConnectionRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: CalendarConnectionAction = CalendarConnectionAction.CONNECT,
+    userId: String = TEST_USER_ID,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = CalendarConnectionRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CalendarConnectionPayload(
+            action = action,
+            userId = userId,
+            responseBasicInfo = responseBasicInfo,
+        ),
 )
 
 fun createApprovalContents(

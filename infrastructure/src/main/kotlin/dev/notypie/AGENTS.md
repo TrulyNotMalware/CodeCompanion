@@ -14,7 +14,7 @@ sits directly in this package.
 | Directory | Purpose |
 |-----------|---------|
 | `common/` | Shared Jackson 3 `jsonMapper`, `JPAJsonConverter`, `PartitionKeyUtil` (see `common/AGENTS.md`) |
-| `configurations/` | HikariCP/JPA wiring and the thirteen repository-adapter beans; `RetryTemplate` + `RetryService` (see `configurations/AGENTS.md`) |
+| `configurations/` | HikariCP/JPA wiring and the fifteen repository-adapter beans; `RetryTemplate` + `RetryService` (see `configurations/AGENTS.md`) |
 | `exception/` | `ErrorBroadcaster` port and its only implementation `StdoutErrorBroadcaster`; `meeting/DatabaseException` family (see `exception/AGENTS.md`) |
 | `impl/` | Transport and external-service adapters: `command/` (Slack), `agent/`, `cve/`, `retry/` (see `impl/AGENTS.md`) |
 | `repository/` | Spring Data JPA repositories, `*RepositoryImpl` mappers, `schema/` entities, outbox (see `repository/AGENTS.md`) |

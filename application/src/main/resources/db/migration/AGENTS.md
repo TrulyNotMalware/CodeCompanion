@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # db/migration
 
@@ -38,11 +38,12 @@ the release checklist below decide the order.
 | `V21__fix_inverted_meeting_end_at.sql` | Data fix, no DDL: `end_at = NULL` (V3's "start + 1h" marker) where `end_at <= start_at`, rows left by reschedules that moved only `start_at`, with `version = version + 1` so a meeting write that read the row earlier fails its optimistic-lock check instead of restoring the inverted value. Idempotent; the header carries the inspection query and the rollout constraint (after V18, once every replica writes through the `@Version` entity) |
 | `V22__add_outbox_send_count.sql` | `outbox_message.send_count INT NOT NULL DEFAULT 0` — raised by `renewClaim` right before a send, taken back by the rate-limit deferral; the recovery sweep's abandon budget (`outbox.polling.max-sends`) and the health probe's retrying-row counter. Ships with V20 under the same rollout constraint and online-DDL procedure |
 | `V23__widen_outbox_payload_to_mediumtext.sql` | `outbox_message.payload` `TEXT` → `MEDIUMTEXT NOT NULL`: under strict `sql_mode` a payload over 65,535 bytes failed its write (a long AI answer or a full standup summary was never staged). Re-runnable. The header carries the first-run cost: the retention purge ships in the same release, so the first run meets the whole history — measure the table, try `ALGORITHM=INPLACE, LOCK=NONE` with a short `lock_wait_timeout` (rejected at once if impossible), and run the copying form only at a quiet moment or after the purge. Safe for old binaries and rollbacks |
+| `V24__add_google_calendar_tables.sql` | `google_calendar_connection` (one row per Slack user, `google_subject`/`google_email` from the id_token, `refresh_token_enc` = `TokenCipher` output, `status` ACTIVE/REVOKED, unique `slack_user_id`) and `google_oauth_state` (`state` PK, `slack_user_id`, `expires_at`, `consumed_at`; index on `expires_at`) for `/meetup calendar connect`. Independent of every existing table; `CREATE TABLE IF NOT EXISTS`, safe beside the previous release; rollback is `DROP TABLE` on both |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V24`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V25`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Number ≠ apply order: the V18–V23 release checklist.** `main` stopped at `V17`, and the next release ships
   `V18`–`V23` together. Apply them in this order, which `../k8s/README.md` ("One-time") and
   `docs/wiki/dev-environment.md` repeat:
@@ -83,7 +84,7 @@ the release checklist below decide the order.
   for a change is recorded, since prod applies these outside any migration tool.
 - The profile YAML carries no `spring.flyway.*` keys (the inert `enabled: false` leftovers were removed
   2026-09-21). Do not add Flyway config — adopting the tool would also require a baseline for every
-  environment that already applied `V1`–`V23` by hand.
+  environment that already applied `V1`–`V24` by hand.
 - Files here are packaged into the boot jar by `processResources` although the app never reads them.
 
 ### Testing Requirements

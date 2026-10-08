@@ -38,6 +38,18 @@ sealed class CommandIntent : CommandEffect {
         val participantUserIds: List<String>,
     ) : CommandIntent()
 
+    data class CalendarConnect(
+        val userId: String,
+    ) : CommandIntent()
+
+    data class CalendarDisconnect(
+        val userId: String,
+    ) : CommandIntent()
+
+    data class CalendarStatus(
+        val userId: String,
+    ) : CommandIntent()
+
     data object StatusReport : CommandIntent()
 
     data class AgentUsageReport(

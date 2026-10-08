@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # test/kotlin/dev/notypie/application/service
 
@@ -25,5 +25,6 @@ matters, and asserts on the captured `OutboundMessage` effects — never on Slac
 | `ops/` | `OpsStatusService` report rendering (see `ops/AGENTS.md`) |
 | `relay/` | Outbox renderer, polling processor, relay service (see `relay/AGENTS.md`) |
 | `standup/` | Routine setup, answers, scheduling, summary, message builders (see `standup/AGENTS.md`) |
+| `calendar/` | `CalendarConnectionService` actions and callback outcomes, the token revocation worker (unit and real-H2 after-commit specs), disabled responder (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

@@ -3,6 +3,8 @@ package dev.notypie.impl.command
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
+import dev.notypie.domain.command.entity.event.CalendarConnectionAction
+import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
@@ -357,6 +359,38 @@ class SlackIntentResolverTest :
                     events shouldHaveSize 2
                     events[0].type shouldBe CommandDetailType.CANCEL_MEETING
                     events[1].type shouldBe CommandDetailType.STATUS_REPORT
+                }
+            }
+        }
+
+        given("calendar connection intents") {
+            `when`("CalendarConnect, CalendarDisconnect and CalendarStatus are resolved") {
+                val events =
+                    resolver.resolveAll(
+                        intents =
+                            listOf(
+                                CommandIntent.CalendarConnect(userId = "U_CAL"),
+                                CommandIntent.CalendarDisconnect(userId = "U_CAL"),
+                                CommandIntent.CalendarStatus(userId = "U_CAL"),
+                            ),
+                        basicInfo = basicInfo,
+                    )
+
+                then("each becomes a CalendarConnectionRequestEvent carrying its action and the requester") {
+                    events shouldHaveSize 3
+                    events.map { it.shouldBeInstanceOf<CalendarConnectionRequestEvent>().payload.action } shouldBe
+                        listOf(
+                            CalendarConnectionAction.CONNECT,
+                            CalendarConnectionAction.DISCONNECT,
+                            CalendarConnectionAction.STATUS,
+                        )
+                    events.forEach { event ->
+                        event.shouldBeInstanceOf<CalendarConnectionRequestEvent>()
+                        event.payload.userId shouldBe "U_CAL"
+                        event.payload.responseBasicInfo shouldBe basicInfo
+                        event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                        event.type shouldBe CommandDetailType.CALENDAR_CONNECTION
+                    }
                 }
             }
         }
