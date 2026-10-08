@@ -1,13 +1,13 @@
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # CodeCompanion
 
 ## Purpose
 CodeCompanion is a Kotlin + Spring Boot Slack bot for side-project teams. It turns Slack slash
 commands, app mentions, and interactive components (buttons, dropdowns, modals) into event-driven
-workflows — meeting orchestration, standup automation, CVE watch/notification, and an AI assistant
-lane — backed by a transactional outbox, Debezium CDC, and Kafka so nothing is lost between Slack
-and the database.
+workflows — meeting orchestration (with an opt-in per-user Google Calendar mirror), standup automation,
+CVE watch/notification, and an AI assistant lane — backed by a transactional outbox, Debezium CDC, and
+Kafka so nothing is lost between Slack and the database.
 
 The repository is a Gradle multi-module build with a DDD-inspired three-layer structure. Dependencies
 flow **application → infrastructure → domain** (and **application → domain**) and never the other way.
@@ -33,7 +33,7 @@ flow **application → infrastructure → domain** (and **application → domain
 | `application/` | Spring Boot bootstrap, controllers, use-case services (see `application/AGENTS.md`) |
 | `infrastructure/` | Concrete adapters: Slack, JPA, Kafka, AI sidecar (see `infrastructure/AGENTS.md`) |
 | `gradle-config/` | OS-specific and CI (`apply.sh ci`) `gradle.properties` presets and `apply.sh` (see `gradle-config/AGENTS.md`) |
-| `scripts/` | Operational shell probes (see `scripts/AGENTS.md`) |
+| `scripts/` | Hand-run shell scripts: the MCP smoke probe and the local container launcher (see `scripts/AGENTS.md`) |
 | `.github/` | CI/CD and security workflows plus Dependabot config (see `.github/AGENTS.md`) |
 | `docs/wiki/` | Design philosophy and decision records for humans; complements, does not duplicate, the `AGENTS.md` tree |
 | `gradle/wrapper/` | Gradle wrapper jar and distribution descriptor — do not hand-edit |
@@ -43,7 +43,7 @@ flow **application → infrastructure → domain** (and **application → domain
 ## For AI Agents
 
 ### Working In This Directory
-- **Every directory carries an `AGENTS.md`** (235 files). Line 1 points at the nearest parent
+- **Every directory carries an `AGENTS.md`** (243 files). Line 1 points at the nearest parent
   (`<!-- Parent: ../AGENTS.md -->`), line 2 carries `Generated | Updated` dates, and text below the
   `<!-- MANUAL:` marker survives regeneration. When you add a directory, add its `AGENTS.md` and a row in the
   parent's `## Subdirectories` table; when you change a directory's contents, update its file and bump `Updated`.
@@ -112,5 +112,6 @@ Tests run on JUnit Platform with `-Xmx` from the `testMaxHeap` Gradle property (
 - Slack Events API / Socket Mode (`local` profile only) — inbound transport
 - [agent-sidecar](https://github.com/TrulyNotMalware/agent-sidecar) — claude/codex backend over HTTP+SSE
 - NVD and GitHub Releases — CVE collection sources
+- Google OAuth 2.0 and Calendar API v3 — per-user calendar mirror, off unless `slack.app.calendar.google.enabled=true`
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

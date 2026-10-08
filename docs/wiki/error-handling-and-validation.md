@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-07_
+_type: pattern · updated: 2026-10-08_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -61,11 +61,14 @@ _type: pattern · updated: 2026-10-07_
    그대로 반환하면서 ephemeral만 추가한다. `CommandExecutor.execute`가 **성공 여부와 무관하게** `drainIntents()`를
    발행하므로 에러 ephemeral은 항상 Slack에 도달한다. `RequestMeetingContext`는 `formInput.toMeeting()`을
    `catch (exception: CodeCompanionRuntimeException)`으로 감싸 `details`를 이 경로로 보낸다.
-2. **컨텍스트 안의 예외 → 조용한 `fail`.** `Command.handleEvent()`는 `runCatching { executeCommand() }`로 모든 예외를
-   `CommandOutput.fail(commandDetailType = ERROR_RESPONSE, reason = exception.toString())`로 바꾼다. 이 경로에는
-   ephemeral이 없고, `errorReason`을 읽는 프로덕션 코드도 없다. `SlackInteractionHandlerImpl`은
-   `result.takeIf { it.ok }`로 실패 출력을 버리고 `SlackEventController`는 200 본문으로 돌려줄 뿐이다 — 사용자도 로그도
-   보지 못한다. 사용자에게 알려야 할 실패는 예외를 던지지 말고 `createErrorResponse`로 만든다.
+2. **컨텍스트 안의 예외 → `ERROR_RESPONSE` + WARN (슬래시면 ephemeral도).** `Command.handleEvent()`는
+   `runCatching { executeCommand() }`로 모든 예외를 `CommandOutput.fail(commandDetailType = ERROR_RESPONSE, reason =
+   exception.toString())`로 바꾸고, `CommandExecutor`가 이 출력을 명령 클래스·`commandId`·`idempotencyKey`·`kind`·`actorId`·
+   사유와 함께 WARN으로 남긴다(토큰은 남기지 않음). 2026-10-08부터 슬래시 명령이면 `handleEvent()`가 요청자 ephemeral을
+   intent 큐에 넣는다: `SubCommandParseException`은 "Unknown subcommand `토큰`." + 명령의 usage 줄(또는 그 서브커맨드의
+   usage), 그 밖은 "Something went wrong handling `/명령`. Please try again.". 인터랙션(`SlackInteractionHandlerImpl`은
+   `result.takeIf { it.ok }`)과 멘션은 여전히 사용자에게 답이 없다(멘션은 HTTP 컨트롤러도 WARN을 남김). 무엇이 틀렸는지
+   알려야 할 실패는 예외를 던지지 말고 `createErrorResponse`로 만든다.
 3. **HTTP(`/api/slack/**`) → `ControllerAdvice`.** `UnsupportedSlackCommandTypeException`은 WARN 로그 + 400
    `{"error": "Unsupported Slack command type: <raw>"}`. `DatabaseException` 핸들러는 본문이 비어 있어 **빈 200**이 나간다.
    `AppIdNotFoundException`은 핸들러가 없어 Spring 기본 500이다. `app_mention`이 아닌 이벤트는 핸들러를 타지 않고 200으로

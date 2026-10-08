@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/command
 
@@ -18,7 +18,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
 | `InboundInteractionInputCreator.kt` | `createInboundInteraction(detailType = NOTHING, action = passiveAction(), form, actor, channelId, trigger, reply, message, idempotencyKey, routingExtras, submission)`; actions `approveAction`, `rejectAction`, `passiveAction`; fields `inboundField(kind, rawValue, isSelected, key)`, `applyButtonField()`, `rejectButtonField()`, `plainTextField(text)`, `datePickerField(date, format)`, `timePickerField(time, format)`, `multiUsersField(userName, maximumSequence)`; `SEPARATOR` |
 | `MockEventBuilderCreator.kt` | `createIntentQueue(): IntentQueue` — a fresh `DefaultIntentQueue` (file name is historical; nothing here is mocked) |
 | `TestCommandEventCreator.kt` | `TestPayload`, `TestCommandEvent(name, isInternal = true, ...)`, `INTERNAL_EVENT_NAME` / `EXTERNAL_EVENT_NAME`, `createInternalTestEvent()`, `createExternalTestEvent()`, `createDomainEventQueue()`, `EventQueue.flushQueue()` |
-| `TestCommandFactory.kt` | `TestCommand(idempotencyKey, commandData, intentToProduce = null)` — `Command<NoSubCommands>` whose `TestContext` emits the optional intent and returns `CommandOutput.success` |
+| `TestCommandFactory.kt` | `TestCommand(idempotencyKey, commandData, intentToProduce = null, rawEffectToProduce = null, failure = null)` — `Command<NoSubCommands>` whose `TestContext` throws `failure` when given (the `ERROR_RESPONSE` path), else emits the optional intent / raw effect and returns `CommandOutput.success` |
 | `UnknownSubCommandDefinition.kt` | Enum implementing `SubCommandDefinition`: `UNKNOWN`, `TOO_MANY_ARGUMENTS_SUB_COMMAND` (`minRequiredArgs = Int.MAX_VALUE`) |
 
 ## For AI Agents

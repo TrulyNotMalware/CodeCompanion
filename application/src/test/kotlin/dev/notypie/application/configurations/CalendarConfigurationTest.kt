@@ -140,6 +140,21 @@ class CalendarConfigurationTest :
                         }
                 }
             }
+
+            `when`("the profile's placeholder meets an empty GOOGLE_CALENDAR_ENABLED") {
+                then("the empty value wins over the placeholder default and startup fails on the binding") {
+                    contextRunner
+                        .withPropertyValues(
+                            "GOOGLE_CALENDAR_ENABLED=",
+                            "slack.app.calendar.google.enabled=\${GOOGLE_CALENDAR_ENABLED:false}",
+                        ).run { context ->
+                            val failure = checkNotNull(context.startupFailure)
+                            generateSequence<Throwable>(failure) { it.cause }
+                                .map { it.message.orEmpty() }
+                                .joinToString() shouldContain "slack.app.calendar.google.enabled"
+                        }
+                }
+            }
         }
 
         given("the integration enabled") {

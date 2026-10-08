@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox
 
@@ -11,7 +11,7 @@ Specs for main `repository/outbox/`: the codec (plain Kotest), the repository's 
 | File | Description |
 |------|-------------|
 | `MessageOutboxRepositoryHintsTest.kt` | Reflection on `MessageOutboxRepository`: the seven reads behind the health indicator and the Prometheus gauges each carry `@QueryHints` with `jakarta.persistence.query.timeout` = `HEALTH_QUERY_TIMEOUT_MILLIS` |
-| `OutboundMessageCodecTest.kt` | `OutboundMessageCodec.encode` / `decode` through an `OutboundEnvelope(message, createCommandBasicInfo())`. The only `StringSpec` in the module. An envelope with a mixed-subtype `continuation` round-trips; one without writes no `continuation` field; `next()` walks a three-part chain to `null`. Round-trips every registered subtype: `ChannelMessage` with `Text` (with / without `detailType`, with `threadId`), `ErrorNotice`, `Schedule` (compared field by field because `TimeScheduleInfo.timeFormatter` has no `equals`), `MeetingRequest` (approval and null), `StandupSummary` (`ZoneId` + `Instant` inside DTOs); `Ephemeral` with `Text` and `MeetingList`; `Approval` with `routingExtras`; `Notice`; `UpdateMessage`; `ReplaceMessage`. Fail-fast: an `OpenModal` round-trip, an unknown `@type`, and malformed JSON all throw `OutboundMessageCodecException` |
+| `OutboundMessageCodecTest.kt` | `OutboundMessageCodec.encode` / `decode` through an `OutboundEnvelope(message, createCommandBasicInfo())`. The only `StringSpec` in the module. An envelope with a mixed-subtype `continuation` round-trips; one without writes no `continuation` field; `next()` walks a three-part chain to `null`. Round-trips every registered subtype: `ChannelMessage` with `Text` (with / without `detailType`, with `threadId`), `ErrorNotice`, `Schedule` (compared field by field because `TimeScheduleInfo.timeFormatter` has no `equals`), `MeetingRequest` (approval and null), `StandupSummary` (`ZoneId` + `Instant` inside DTOs); `Ephemeral` with `Text` and `MeetingList`; `Approval` with `routingExtras`; `Notice`; `UpdateMessage`; `ReplaceMessage`, and a `ReplaceMessage` whose `fallback` `Ephemeral` round-trips with its subtype while one without a fallback encodes no `fallback` key (the frozen pre-narrowing wire shape still matches). Fail-fast: an `OpenModal` round-trip, an unknown `@type`, and malformed JSON all throw `OutboundMessageCodecException` |
 
 ## Subdirectories
 | Directory | Purpose |

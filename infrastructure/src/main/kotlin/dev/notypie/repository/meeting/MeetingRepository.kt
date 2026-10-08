@@ -29,7 +29,7 @@ interface MeetingRepository {
 
     fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean
 
-    fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean
+    fun markMeetingCanceled(meetingUid: UUID, requesterId: String): MeetingDto?
 
     fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): RescheduleResult
 

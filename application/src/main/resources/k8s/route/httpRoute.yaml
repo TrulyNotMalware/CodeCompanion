@@ -11,7 +11,8 @@ spec:
   hostnames:
     - your.uri
   rules:
-    # Slack endpoints only. Not /api: dev/local/slack-live serve the unauthenticated actuator at /api/actuator.
+    # Slack endpoints and the Google OAuth callback only. Not /api: dev/local/slack-live serve the unauthenticated
+    # actuator at /api/actuator.
     - matches:
         - path:
             type: PathPrefix
@@ -19,6 +20,9 @@ spec:
         - path:
             type: PathPrefix
             value: /api/slash
+        - path:
+            type: Exact
+            value: /oauth/google/callback
       backendRefs:
         - name: code-companion-svc
           port: 80

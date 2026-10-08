@@ -3,6 +3,7 @@ package dev.notypie.repository.meeting
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.exception.meeting.DatabaseException
 import dev.notypie.repository.meeting.schema.MeetingSchema
+import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
 import io.kotest.assertions.throwables.shouldThrow
@@ -293,8 +294,9 @@ class MeetingRepositoryImplTest :
 
                 val result = repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID)
 
-                then("the managed row is flagged and flushed") {
-                    result shouldBe true
+                then("the managed row is flagged and flushed, and returned as the canceled meeting") {
+                    result shouldBe schema.toMeetingDto()
+                    result?.isCanceled shouldBe true
                     schema.isCanceled shouldBe true
                     verify(exactly = 1) { jpaMeetingRepository.saveAndFlush(schema) }
                 }
@@ -304,8 +306,8 @@ class MeetingRepositoryImplTest :
                 every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns
                     createMeetingSchema(meetingUid = meetingUid, isCanceled = true)
 
-                then("the caller sees false") {
-                    repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID) shouldBe false
+                then("the caller gets no meeting") {
+                    repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID) shouldBe null
                 }
             }
         }

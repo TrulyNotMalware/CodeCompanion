@@ -220,12 +220,25 @@ class SlackMessageRelayServiceImpl(
             }
             result.isTransientExhausted() ->
                 logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
-            else ->
+            result.ok || result.isOutcomeUnknown() ->
                 complete(
                     claim = claim,
                     updateEvent = result.toOutboxUpdateEvent(eventId = eventId),
-                    next = rendered.next.takeIf { result.ok || result.isOutcomeUnknown() },
+                    next = rendered.next,
                 )
+            else -> {
+                if (rendered.fallback != null) {
+                    logger.warn {
+                        "Replacing the original message failed for eventId=$eventId " +
+                            "idempotencyKey=${row.idempotencyKey} (${result.errorReason}); staging its fallback"
+                    }
+                }
+                complete(
+                    claim = claim,
+                    updateEvent = result.toOutboxUpdateEvent(eventId = eventId),
+                    next = rendered.fallback,
+                )
+            }
         }
     }
 

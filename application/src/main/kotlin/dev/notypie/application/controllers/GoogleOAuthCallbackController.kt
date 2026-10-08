@@ -41,7 +41,7 @@ class GoogleOAuthCallbackController(
                     CallbackPage(
                         status = HttpStatus.OK,
                         title = "Connection cancelled",
-                        detail = "No access was granted. Run /meetup calendar connect in Slack to try again.",
+                        detail = "No access was granted. Run /calendar connect in Slack to try again.",
                     )
 
                 CalendarConnectionOutcome.SCOPE_DENIED ->
@@ -49,7 +49,7 @@ class GoogleOAuthCallbackController(
                         status = HttpStatus.OK,
                         title = "Calendar access was not allowed",
                         detail =
-                            "Nothing was connected. Run /meetup calendar connect in Slack again and " +
+                            "Nothing was connected. Run /calendar connect in Slack again and " +
                                 "allow access to your calendar events.",
                     )
 
@@ -59,14 +59,14 @@ class GoogleOAuthCallbackController(
                         title = "This link is no longer valid",
                         detail =
                             "It may have expired or already been used. " +
-                                "Run /meetup calendar connect in Slack for a new one.",
+                                "Run /calendar connect in Slack for a new one.",
                     )
 
                 CalendarConnectionOutcome.EXCHANGE_FAILED ->
                     CallbackPage(
                         status = HttpStatus.BAD_GATEWAY,
                         title = "Google did not complete the connection",
-                        detail = "Run /meetup calendar connect in Slack to try again.",
+                        detail = "Run /calendar connect in Slack to try again.",
                     )
 
                 CalendarConnectionOutcome.STORE_FAILED ->
@@ -75,7 +75,7 @@ class GoogleOAuthCallbackController(
                         title = "The connection could not be saved",
                         detail =
                             "Nothing was connected. This link cannot be used again; " +
-                                "run /meetup calendar connect in Slack for a new one.",
+                                "run /calendar connect in Slack for a new one.",
                     )
             }
         return ResponseEntity

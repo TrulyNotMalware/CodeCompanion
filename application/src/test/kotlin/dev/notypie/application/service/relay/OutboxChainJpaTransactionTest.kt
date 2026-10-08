@@ -13,9 +13,12 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.impl.command.OutboundRenderer
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.createPostEventPayloadContents
+import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -61,10 +64,11 @@ class OutboxChainJpaTransactionTest :
         class Lane(
             port: OutboundMessagePort = codecPort,
             transactionManager: PlatformTransactionManager = context.getBean(JpaTransactionManager::class.java),
+            outcomes: List<(SlackEventPayload) -> CommandOutput> = emptyList(),
         ) {
             val clock = MutableClock()
             val sent = CopyOnWriteArrayList<OutboundMessage>()
-            val dispatcher = ScriptedMessageDispatcher(outcomes = emptyList(), fallback = delivered)
+            val dispatcher = ScriptedMessageDispatcher(outcomes = outcomes, fallback = delivered)
             private val renderer =
                 mockk<OutboundRenderer> {
                     every { render(message = any(), basicInfo = any()) } answers {
@@ -144,6 +148,58 @@ class OutboxChainJpaTransactionTest :
                     lane.sent shouldBe parts
                     statuses() shouldBe List(size = 3) { MessageStatus.SUCCESS.name }
                     pendingIds() shouldBe emptyList()
+                }
+            }
+        }
+
+        given("a list replacement staged with a fallback ephemeral") {
+            val handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list")
+            val fallback =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = basicInfo.channel),
+                    recipient = UserRef(id = basicInfo.publisherId),
+                    content = MessageContent.Text(headline = null, markdown = "Meeting canceled."),
+                )
+            val replace =
+                OutboundMessage.ReplaceMessage(
+                    handle = handle,
+                    content = MessageContent.Text(headline = null, markdown = "*Sync* canceled."),
+                    fallback = fallback,
+                )
+
+            fun stageReplace(): String =
+                repository.save(codecPort.toRow(message = replace, basicInfo = basicInfo)).eventId
+
+            `when`("Slack refuses the expired response URL, then the poller runs again") {
+                jdbc.update("DELETE FROM outbox_message")
+                val expired: (SlackEventPayload) -> CommandOutput = { failOutput(event = it, reason = "expired_url") }
+                val lane = Lane(outcomes = listOf(expired))
+                val headId = stageReplace()
+                lane.poller.pollPending()
+                val fallbackRows = pendingIds()
+                lane.poller.pollPending()
+
+                then("the replacement ends FAILURE and its fallback is staged once and sent next") {
+                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V4
+                    jdbc.outboxColumn(eventId = headId, column = "status") shouldBe MessageStatus.FAILURE.name
+                    fallbackRows.size shouldBe 1
+                    OutboundMessageCodec.decode(json = payloadOf(eventId = fallbackRows.single())).message shouldBe
+                        fallback
+                    lane.sent shouldBe listOf(replace, fallback)
+                    statuses().sorted() shouldBe listOf(MessageStatus.FAILURE.name, MessageStatus.SUCCESS.name)
+                }
+            }
+
+            `when`("Slack accepts the replacement") {
+                jdbc.update("DELETE FROM outbox_message")
+                val lane = Lane()
+                stageReplace()
+                lane.poller.pollPending()
+                lane.poller.pollPending()
+
+                then("only the replacement is sent and no fallback row is written") {
+                    lane.sent shouldBe listOf(replace)
+                    statuses() shouldBe listOf(MessageStatus.SUCCESS.name)
                 }
             }
         }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # docs
 
@@ -10,7 +10,7 @@ manifest. Per-directory guidance stays in the `AGENTS.md` tree, and user-facing 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `slack-app-manifest.yaml` | Slack app manifest for "Create from manifest": the six slash commands mapped to `/api/slash/*`, bot scopes, `app_mention` event, interactivity URL, all under a `https://<your-host>` placeholder. Its header explains the `local` Socket Mode dev app. Keep it in step with `SlashCommandController`, `AppConfig.Socket` and the Slack Web API methods the dispatcher calls |
+| `slack-app-manifest.yaml` | Slack app manifest for "Create from manifest": the seven slash commands mapped to `/api/slash/*` (`/calendar connect\|disconnect\|status` has its own command and `/api/slash/calendar` since 2026-10-08), bot scopes, `app_mention` event, interactivity URL, all under a `https://<your-host>` placeholder. Its header explains the `local` Socket Mode dev app and that the Google OAuth redirect is registered in Google Cloud, not here. Keep it in step with `SlashCommandController`, `AppConfig.Socket` and the Slack Web API methods the dispatcher calls |
 
 ## Subdirectories
 | Directory | Purpose |

@@ -20,6 +20,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
@@ -27,6 +28,7 @@ import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.isMeetingWriteConflict
+import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -101,7 +103,6 @@ class MeetingServiceImpl(
                     "userId=${payload.participantUserId}; refusing to acknowledge an unrecorded decision.",
             )
         }
-        if (rowsUpdated == 0) return
         calendarMirror.onAttendanceChanged(
             meetingIdempotencyKey = payload.meetingIdempotencyKey,
             userId = payload.participantUserId,
@@ -154,13 +155,27 @@ class MeetingServiceImpl(
                         meetingUid = payload.meetingUid,
                         requesterId = payload.requesterId,
                     )
-                if (canceled) calendarMirror.onMeetingCanceled(meetingUid = payload.meetingUid)
-                publishCancelEphemeral(
-                    message =
-                        if (canceled) "Meeting canceled." else "Meeting was already canceled, or you are not the host.",
-                    basicInfo = basicInfo,
-                    targetUserId = payload.requesterId,
-                )
+                if (canceled == null) {
+                    publishCancelEphemeral(
+                        message = "Meeting was already canceled, or you are not the host.",
+                        basicInfo = basicInfo,
+                        targetUserId = payload.requesterId,
+                    )
+                } else {
+                    calendarMirror.onMeetingCanceled(meetingUid = payload.meetingUid)
+                    outboundStager.stageHostConfirmation(
+                        reply =
+                            cancelEphemeral(
+                                message = "Meeting canceled.",
+                                basicInfo = basicInfo,
+                                targetUserId = payload.requesterId,
+                            ),
+                        listHandle = payload.listHandle,
+                        listSummary = "*${canceled.title.escapeMrkdwn()}* canceled.",
+                        basicInfo = basicInfo,
+                        publisher = eventPublisher,
+                    )
+                }
             }.onFailure { exception ->
                 replyTemplate.stageFailureReply(failure = exception) {
                     publishCancelEphemeral(
@@ -179,16 +194,22 @@ class MeetingServiceImpl(
     private fun publishCancelEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
         outboundStager
             .stage(
-                message =
-                    OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = basicInfo.channel),
-                        recipient = UserRef(id = targetUserId),
-                        content = MessageContent.Text(headline = null, markdown = message),
-                        detailType = CommandDetailType.CANCEL_MEETING,
-                    ),
+                message = cancelEphemeral(message = message, basicInfo = basicInfo, targetUserId = targetUserId),
                 basicInfo = basicInfo,
             )?.let { eventPublisher.publishOne(event = it) }
     }
+
+    private fun cancelEphemeral(
+        message: String,
+        basicInfo: CommandBasicInfo,
+        targetUserId: String,
+    ): OutboundMessage.Ephemeral =
+        OutboundMessage.Ephemeral(
+            target = ConversationTarget(id = basicInfo.channel),
+            recipient = UserRef(id = targetUserId),
+            content = MessageContent.Text(headline = null, markdown = message),
+            detailType = CommandDetailType.CANCEL_MEETING,
+        )
 
     @EventListener
     fun addParticipants(event: AddParticipantEvent) =
@@ -206,18 +227,29 @@ class MeetingServiceImpl(
                         participantUserIds = payload.participantUserIds,
                     )
                 val meeting = result.meeting
+                val message = addParticipantMessage(result = result)
                 if (result.outcome == AddParticipantResult.Outcome.ADDED && meeting != null) {
                     notifyAddedParticipants(
                         meeting = meeting,
                         addedUserIds = result.addedUserIds,
                         basicInfo = basicInfo,
                     )
+                    outboundStager.stageHostConfirmation(
+                        reply =
+                            hostEphemeral(
+                                message = message,
+                                basicInfo = basicInfo,
+                                targetUserId = payload.requesterId,
+                            ),
+                        listHandle = payload.listHandle,
+                        listSummary =
+                            "Added ${mentionsOf(userIds = result.addedUserIds)} to *${meeting.title.escapeMrkdwn()}*.",
+                        basicInfo = basicInfo,
+                        publisher = eventPublisher,
+                    )
+                } else {
+                    publishHostEphemeral(message = message, basicInfo = basicInfo, targetUserId = payload.requesterId)
                 }
-                publishHostEphemeral(
-                    message = addParticipantMessage(result = result),
-                    basicInfo = basicInfo,
-                    targetUserId = payload.requesterId,
-                )
             }.onFailure { exception ->
                 replyTemplate.stageFailureReply(failure = exception) {
                     publishHostEphemeral(
@@ -235,10 +267,7 @@ class MeetingServiceImpl(
 
     private fun addParticipantMessage(result: AddParticipantResult): String =
         when (result.outcome) {
-            AddParticipantResult.Outcome.ADDED -> {
-                val mentions = result.addedUserIds.joinToString(" ") { "<@$it>" }
-                "Added $mentions to the meeting."
-            }
+            AddParticipantResult.Outcome.ADDED -> "Added ${mentionsOf(userIds = result.addedUserIds)} to the meeting."
 
             AddParticipantResult.Outcome.NO_NEW_PARTICIPANTS ->
                 "Those people are already on this meeting."
@@ -291,16 +320,22 @@ class MeetingServiceImpl(
     private fun publishHostEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
         outboundStager
             .stage(
-                message =
-                    OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = basicInfo.channel),
-                        recipient = UserRef(id = targetUserId),
-                        content = MessageContent.Text(headline = null, markdown = message),
-                        detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                    ),
+                message = hostEphemeral(message = message, basicInfo = basicInfo, targetUserId = targetUserId),
                 basicInfo = basicInfo,
             )?.let { eventPublisher.publishOne(event = it) }
     }
+
+    private fun hostEphemeral(
+        message: String,
+        basicInfo: CommandBasicInfo,
+        targetUserId: String,
+    ): OutboundMessage.Ephemeral =
+        OutboundMessage.Ephemeral(
+            target = ConversationTarget(id = basicInfo.channel),
+            recipient = UserRef(id = targetUserId),
+            content = MessageContent.Text(headline = null, markdown = message),
+            detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+        )
 
     @EventListener
     fun getMeetingListEvent(event: GetMeetingListEvent) {
@@ -319,6 +354,28 @@ class MeetingServiceImpl(
             )
         outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }
+}
+
+private fun mentionsOf(userIds: List<String>): String = userIds.joinToString(separator = " ") { "<@$it>" }
+
+internal fun OutboundMessageStager.stageHostConfirmation(
+    reply: OutboundMessage.Ephemeral,
+    listHandle: ResponseReplaceHandle?,
+    listSummary: String,
+    basicInfo: CommandBasicInfo,
+    publisher: EventPublisher,
+) {
+    val message =
+        if (listHandle == null) {
+            reply
+        } else {
+            OutboundMessage.ReplaceMessage(
+                handle = listHandle,
+                content = MessageContent.Text(headline = null, markdown = listSummary),
+                fallback = reply,
+            )
+        }
+    stage(message = message, basicInfo = basicInfo)?.let { publisher.publishOne(event = it) }
 }
 
 internal fun isolatedWriteTemplate(transactionManager: PlatformTransactionManager): TransactionTemplate =

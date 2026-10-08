@@ -32,6 +32,7 @@ private fun addParticipant(uidRaw: String = UUID.randomUUID().toString()) =
         meetingUidRaw = uidRaw,
         requesterId = "U_HOST",
         participantUserIdsRaw = "U_A",
+        listHandleRaw = "",
     )
 
 class SubmissionRouterTest :
@@ -65,6 +66,7 @@ class SubmissionRouterTest :
                             requesterId = "U",
                             date = "2099-10-01",
                             time = "10:00",
+                            listHandleRaw = "",
                         ),
                     ).shouldBeInstanceOf<RescheduleMeetingSubmissionContext>()
                     route(

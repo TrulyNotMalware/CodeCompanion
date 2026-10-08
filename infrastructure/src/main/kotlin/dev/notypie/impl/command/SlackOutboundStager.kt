@@ -66,6 +66,7 @@ class SlackOutboundStager(
                         requesterId = form.requesterId,
                         channel = form.channel.id,
                         currentStartAt = LocalDateTime.now(),
+                        listResponseUrl = form.listHandle?.raw.orEmpty(),
                     )
                 }
 
@@ -81,6 +82,7 @@ class SlackOutboundStager(
                         meetingUid = form.meetingUid,
                         requesterId = form.requesterId,
                         channel = form.channel.id,
+                        listResponseUrl = form.listHandle?.raw.orEmpty(),
                     )
                 }
 

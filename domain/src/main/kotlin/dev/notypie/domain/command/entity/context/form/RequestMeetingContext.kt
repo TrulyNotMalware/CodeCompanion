@@ -23,10 +23,6 @@ import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDateTime
 
-private const val CALENDAR_CONNECT = "connect"
-private const val CALENDAR_DISCONNECT = "disconnect"
-private const val CALENDAR_STATUS = "status"
-
 internal class RequestMeetingContext(
     commandBasicInfo: CommandBasicInfo,
     subCommand: SubCommand<MeetingSubCommandDefinition> =
@@ -45,9 +41,7 @@ internal class RequestMeetingContext(
         when (subCommand.subCommandDefinition) {
             MeetingSubCommandDefinition.LIST -> return runListSubCommand(commandDetailType = commandDetailType)
 
-            MeetingSubCommandDefinition.CALENDAR -> return runCalendarSubCommand(commandDetailType = commandDetailType)
-
-            else -> {
+            MeetingSubCommandDefinition.NONE -> {
                 addOutbound(
                     OutboundMessage.ChannelMessage(
                         target = ConversationTarget(id = commandBasicInfo.channel),
@@ -90,32 +84,6 @@ internal class RequestMeetingContext(
                 endDate = endAt,
             ),
         )
-        return CommandOutput.success(
-            basicInfo = commandBasicInfo,
-            commandType = commandType,
-            commandDetailType = commandDetailType,
-        )
-    }
-
-    private fun runCalendarSubCommand(commandDetailType: CommandDetailType): CommandOutput {
-        val tokens = subCommand.options.filter { option -> option.isNotBlank() }
-        val usage = "Usage: ${MeetingSubCommandDefinition.CALENDAR.usage}"
-        if (tokens.size != 1) {
-            return listArgumentError(commandDetailType = commandDetailType, message = usage)
-        }
-        val userId = commandBasicInfo.publisherId
-        val intent =
-            when (tokens.single().lowercase()) {
-                CALENDAR_CONNECT -> CommandIntent.CalendarConnect(userId = userId)
-                CALENDAR_DISCONNECT -> CommandIntent.CalendarDisconnect(userId = userId)
-                CALENDAR_STATUS -> CommandIntent.CalendarStatus(userId = userId)
-                else ->
-                    return listArgumentError(
-                        commandDetailType = commandDetailType,
-                        message = "Unknown action '${tokens.single()}'. $usage",
-                    )
-            }
-        addIntent(intent)
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

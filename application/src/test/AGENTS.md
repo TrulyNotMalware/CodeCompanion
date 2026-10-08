@@ -16,7 +16,8 @@ in-memory H2 with a real transaction manager built from testFixtures (`createH2D
 `OutboxChainJpaTransactionTest`, `StandupSummaryServiceTest`, `StandupSchedulingServiceTest`,
 `StandupRoutineOpsServiceTest`, `CveNotificationDispatcherTest`, `TransactionTemplateExtTest`,
 `AgentConverseServiceTest`, `AgentUsageReportServiceTest`, `OpsStatusServiceTest`,
-`GoogleTokenRevocationWorkerTransactionTest`, `CalendarSyncServiceTest` (three cases),
+`GoogleTokenRevocationWorkerTransactionTest`, `CalendarSyncServiceTest` (four cases on `createH2TransactionManager`, two
+on `createH2MeetingJpaStore`),
 `CalendarConnectionServiceTest` (one case) and `MeetingCalendarMirrorServiceTest`; any case that claims a commit
 or a rollback belongs in this group. Nothing here starts EmbeddedKafka.
 Shared builders live in the sibling `testFixtures/` source set (see `../testFixtures/AGENTS.md`).

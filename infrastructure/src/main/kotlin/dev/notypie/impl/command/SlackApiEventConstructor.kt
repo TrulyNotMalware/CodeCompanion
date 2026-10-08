@@ -239,6 +239,7 @@ class SlackApiEventConstructor(
         requesterId: String,
         channel: String,
         currentStartAt: LocalDateTime,
+        listResponseUrl: String,
     ): OpenViewEvent {
         val viewJson =
             templateBuilder.rescheduleMeetingModalViewJson(
@@ -246,6 +247,7 @@ class SlackApiEventConstructor(
                 currentStartAt = currentStartAt,
                 requesterId = requesterId,
                 channel = channel,
+                listResponseUrl = listResponseUrl,
             )
         val payload =
             OpenViewPayloadContents(
@@ -273,12 +275,14 @@ class SlackApiEventConstructor(
         meetingUid: UUID,
         requesterId: String,
         channel: String,
+        listResponseUrl: String,
     ): OpenViewEvent {
         val viewJson =
             templateBuilder.addParticipantModalViewJson(
                 meetingUid = meetingUid,
                 requesterId = requesterId,
                 channel = channel,
+                listResponseUrl = listResponseUrl,
             )
         val payload =
             OpenViewPayloadContents(

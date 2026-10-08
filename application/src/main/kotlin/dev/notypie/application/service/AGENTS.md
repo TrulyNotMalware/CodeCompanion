@@ -21,7 +21,7 @@ that the relay lane dispatches.
 | `cve/` | CVE collection, AI summarization, subscription, query, notification (see `cve/AGENTS.md`) |
 | `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering (see `relay/AGENTS.md`) |
 | `ops/` | `OpsStatusService` — backs `@bot status` (see `ops/AGENTS.md`) |
-| `calendar/` | `/meetup calendar connect \| disconnect \| status` — per-user Google OAuth connection, callback completion, async token revoke, disabled responder — and the Google Calendar mirror: the `MeetingCalendarMirror` hooks the meeting lane calls in its write transactions, the access-token cache and the 60 s `CalendarSyncScheduler` / `CalendarSyncService` that inserts, patches and deletes events (see `calendar/AGENTS.md`) |
+| `calendar/` | `/calendar connect \| disconnect \| status` — per-user Google OAuth connection, callback completion, async token revoke, disabled responder — and the Google Calendar mirror: the `MeetingCalendarMirror` hooks the meeting lane calls in its write transactions, the access-token cache and the 60 s `CalendarSyncScheduler` / `CalendarSyncService` that inserts, patches and deletes events (see `calendar/AGENTS.md`) |
 
 ## Key Files
 | File | Description |

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/command/intent
 
@@ -12,7 +12,7 @@ emission order until the application layer drains the command.
 | File | Description |
 |------|-------------|
 | `CommandEffect.kt` | Marker interface implemented by `CommandIntent` and `outbound/OutboundMessage`. Not `sealed` because the two implementors live in different packages |
-| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant`, `StatusReport`, `AgentUsageReport(days)` (companion `DEFAULT_DAYS = 7`, `MAX_DAYS = 90`, `DAYS_RANGE = 1..MAX_DAYS` — the one place the window bounds live, read by `AppMentionContextParser` and the MCP tool `get_ai_usage`), `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer` (with `notice: MessageRef?`, the DM prompt to collapse once the outcome is known), `CreateStandupRoutine`, `ListStandupRoutines`, `StopStandupRoutine(routineName)`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`; `CalendarConnect(userId)`, `CalendarDisconnect(userId)`, `CalendarStatus(userId)` (from `/meetup calendar …`, resolved to one `CalendarConnectionRequestEvent` each) |
+| `CommandIntent.kt` | `sealed class`: `MeetingListRequest`, `MeetingAttendanceUpdate`, `CancelMeeting`, `RescheduleMeeting`, `AddParticipant` (the last three carry `listHandle: ResponseReplaceHandle?`, the `/meetup list` message to close once the write succeeds; `null` when the action did not come from a list row or its modal predates the field), `StatusReport`, `AgentUsageReport(days)` (companion `DEFAULT_DAYS = 7`, `MAX_DAYS = 90`, `DAYS_RANGE = 1..MAX_DAYS` — the one place the window bounds live, read by `AppMentionContextParser` and the MCP tool `get_ai_usage`), `GrantRole`, `RevokeRole`, `ListRoles`, `AgentConverse`, `RecordStandupAnswer` (with `notice: MessageRef?`, the DM prompt to collapse once the outcome is known), `CreateStandupRoutine`, `ListStandupRoutines`, `StopStandupRoutine(routineName)`, `CveSubscribe`, `CveUnsubscribe`, `CveListSubscriptions`, `CveLatest`, `CveListTopics`, `CveSetTopicActive`, `CveRetryDeadLetters`, `CveRetryDeadLetter`, `Nothing`; `CalendarConnect(userId)`, `CalendarDisconnect(userId)`, `CalendarStatus(userId)` (from `/calendar …`, resolved to one `CalendarConnectionRequestEvent` each) |
 | `IntentQueue.kt` | `IntentQueue` (`offer`, `snapshot`, `drainSnapshot`, `isEmpty`, `size`) and `internal DefaultIntentQueue` over an `ArrayDeque`; thread-unsafe by design |
 
 ## For AI Agents

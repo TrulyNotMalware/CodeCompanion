@@ -82,11 +82,11 @@ open class MeetingRepositoryImpl(
         )
 
     @Transactional
-    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean {
-        val schema = findActiveMeetingOwnedBy(meetingUid = meetingUid, requesterId = requesterId) ?: return false
+    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): MeetingDto? {
+        val schema = findActiveMeetingOwnedBy(meetingUid = meetingUid, requesterId = requesterId) ?: return null
         schema.cancel()
         jpaMeetingRepository.saveAndFlush(schema)
-        return true
+        return schema.toMeetingDto()
     }
 
     @Transactional

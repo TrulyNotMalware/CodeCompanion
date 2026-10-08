@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-07_
+_type: architecture · updated: 2026-10-08_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -175,10 +175,13 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 
 ## 8. 함정
 
-- **조용한 실패**: 컨텍스트가 만들어지기 전의 예외(`SubCommandParseException` — `/meetup foo`,
-  `IllegalArgumentException("Command Queue is empty")` — 토큰 없는 멘션, `UnSupportedCommandException`)는
-  `CommandOutput.fail`로 흡수될 뿐 아웃바운드를 하나도 남기지 않고, 슬래시 서비스는 반환값을 버리므로 사용자는 아무
-  답도 받지 못한다. 사용자에게 보여야 할 오류는 컨텍스트 안에서 `createErrorResponse`로 내라.
+- **예외는 `CommandOutput.fail`로 흡수된다**: 컨텍스트가 만들어지기 전의 예외(`SubCommandParseException` — `/meetup foo`,
+  `IllegalArgumentException("Command Queue is empty")` — 토큰 없는 멘션, `UnSupportedCommandException`)와 컨텍스트 안의 예외는
+  `ERROR_RESPONSE` 출력이 되고, `CommandExecutor`가 그 출력을 WARN 한 줄로 남긴다(2026-10-08). 슬래시 명령이면
+  `handleEvent()`가 요청자 ephemeral도 남긴다 — 모르는 서브커맨드는 "Unknown subcommand" + 그 명령의 usage 줄(각
+  `SubCommandDefinition.usage`), 인자가 모자란 서브커맨드는 그 usage, 그 밖은 "Something went wrong handling `/명령`.
+  Please try again.". 멘션·인터랙션은 여전히 답이 없으므로(로그만), 사용자에게 무엇이 틀렸는지 말해야 하는 오류는
+  컨텍스트 안에서 `createErrorResponse`로 내라.
 - 파서의 `CommandDetailType.valueOf`는 알 수 없는 토큰에 예외 → enum 리네임 후 남은 옛 버튼은 500. 미매핑은 무동작.
 - `LEGACY_AUTO_REJECT_TYPES`(`APPROVAL_REQUEST`)의 거절 버튼은 핸들러 수준에서 "Canceled."로
   대체된다. 새 타입을 여기에 넣지 말고 각 `ReactionContext`가 자기 거절을 처리하게 한다.

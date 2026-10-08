@@ -19,6 +19,8 @@ class CveSubscribeSlashCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    override val slashCommandName: String = "/subscribe"
+
     override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<out NoSubCommands> {
         val slashPayload = commandData.slashInvocation(commandName = "CveSubscribeSlashCommand")
         return RequestCveSubscribeContext(
@@ -41,6 +43,8 @@ class CveUnsubscribeSlashCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    override val slashCommandName: String = "/unsubscribe"
+
     override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<out NoSubCommands> {
         val slashPayload = commandData.slashInvocation(commandName = "CveUnsubscribeSlashCommand")
         return RequestCveUnsubscribeContext(
@@ -62,6 +66,8 @@ class CveSubscriptionsSlashCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    override val slashCommandName: String = "/subscriptions"
+
     override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<out NoSubCommands> =
         RequestCveSubscriptionsContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),

@@ -103,7 +103,7 @@ slack:
       event-publisher: kafka
       cdc:
         topic: cdc.code_companion.outbox_message
-    # Google Calendar per-user OAuth (/meetup calendar connect). Off unless GOOGLE_CALENDAR_ENABLED=true;
+    # Google Calendar per-user OAuth (/calendar connect). Off unless GOOGLE_CALENDAR_ENABLED=true;
     # then the client id/secret, the public callback URL and a base64 32-byte token key are required.
     calendar:
       google:

@@ -5,6 +5,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.MutableClock
 import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.service.meeting.captureErrorLogs
+import dev.notypie.application.service.meeting.createH2MeetingJpaStore
 import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -12,6 +13,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.CalendarApiResult
+import dev.notypie.impl.calendar.CalendarEventBody
 import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.createCalendarEventBody
 import dev.notypie.repository.calendar.CalendarMeetingView
@@ -19,8 +21,10 @@ import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.calendar.schema.CalendarSyncStatus
 import dev.notypie.repository.calendar.schema.MeetingCalendarEvent
+import dev.notypie.repository.meeting.schema.MeetingSchema
 import dev.notypie.schema.createCalendarMeetingView
 import dev.notypie.schema.createMeetingCalendarEvent
+import dev.notypie.schema.createMeetingSchema
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -35,6 +39,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import io.mockk.verifyOrder
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionSynchronizationManager
@@ -128,6 +133,7 @@ class CalendarSyncServiceTest :
             val failedInsideTransaction = mutableListOf<Boolean>()
             val revokedInsideTransaction = mutableListOf<Boolean>()
             val failedPendingInsideTransaction = mutableListOf<Boolean>()
+            val enqueuedInsideTransaction = mutableListOf<Boolean>()
             val transactionsSeen = mutableListOf<Any?>()
             val stager =
                 mockk<OutboundMessageStager> {
@@ -201,6 +207,10 @@ class CalendarSyncServiceTest :
                 every { tokenProvider.accessToken(userId = any()) } returns
                     AccessTokenResult.Granted(accessToken = "ya29.token")
                 every { tokenProvider.evict(userId = any()) } just Runs
+                every { connections.hasActiveConnection(userId = any()) } returns true
+                every { queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) } answers {
+                    enqueuedInsideTransaction += TransactionSynchronizationManager.isActualTransactionActive()
+                }
             }
 
             fun due(vararg rows: Pair<MeetingCalendarEvent, CalendarMeetingView?>) {
@@ -261,11 +271,96 @@ class CalendarSyncServiceTest :
                 verifyNoFailure()
             }
 
+            fun verifyNoReconciliation() {
+                verify(exactly = 0) { queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) }
+            }
+
             fun verifyNoGoogleCall() {
                 verify(exactly = 0) { calendarClient.insert(accessToken = any(), eventId = any(), event = any()) }
                 verify(exactly = 0) { calendarClient.patch(accessToken = any(), eventId = any(), event = any()) }
                 verify(exactly = 0) { calendarClient.delete(accessToken = any(), eventId = any()) }
             }
+        }
+
+        val queueStore = createH2MeetingJpaStore(mariaDbMode = true)
+        afterSpec { queueStore.close() }
+
+        fun persistHostedMeeting(startAt: LocalDateTime): MeetingSchema =
+            queueStore.inNewTransaction {
+                queueStore.jpaMeetingRepository.save(
+                    createMeetingSchema(name = "Sprint review", startAt = startAt, publisherId = host),
+                )
+            }
+
+        fun queueRowsOf(meetingId: Long): List<Pair<String, CalendarSyncStatus>> =
+            queueStore.inNewTransaction {
+                queueStore.jpaMeetingCalendarEventRepository
+                    .findAll()
+                    .filter { it.meeting.id == meetingId }
+                    .map { it.slackUserId to it.status }
+            }
+
+        class TwoWorkers {
+            val clock = MutableClock(current = start, zoneId = zone)
+            val googleEvents = mutableMapOf<String, CalendarEventBody>()
+            var stallBeforeNextWrite: (() -> Unit)? = null
+            private val calendarClient =
+                mockk<GoogleCalendarClient> {
+                    every { insert(accessToken = any(), eventId = any(), event = any()) } answers {
+                        stall()
+                        val eventId = secondArg<String>()
+                        if (eventId in googleEvents) {
+                            CalendarApiResult.AlreadyExists
+                        } else {
+                            googleEvents[eventId] = thirdArg()
+                            CalendarApiResult.Ok(eventId = eventId)
+                        }
+                    }
+                    every { patch(accessToken = any(), eventId = any(), event = any()) } answers {
+                        stall()
+                        val eventId = secondArg<String>()
+                        if (eventId in googleEvents) {
+                            googleEvents[eventId] = thirdArg()
+                            CalendarApiResult.Ok(eventId = eventId)
+                        } else {
+                            CalendarApiResult.Gone
+                        }
+                    }
+                    every { delete(accessToken = any(), eventId = any()) } answers {
+                        stall()
+                        val eventId = secondArg<String>()
+                        if (googleEvents.remove(eventId) == null) {
+                            CalendarApiResult.Gone
+                        } else {
+                            CalendarApiResult.Ok(eventId = eventId)
+                        }
+                    }
+                }
+            val workerA = worker()
+            val workerB = worker()
+
+            private fun stall() {
+                val action = stallBeforeNextWrite ?: return
+                stallBeforeNextWrite = null
+                action()
+            }
+
+            private fun worker(): CalendarSyncService =
+                CalendarSyncService(
+                    queue = queueStore.calendarEventRepository,
+                    connections = mockk { every { hasActiveConnection(userId = any()) } returns true },
+                    tokenProvider =
+                        mockk {
+                            every { accessToken(userId = any()) } returns
+                                AccessTokenResult.Granted(accessToken = "ya29.token")
+                        },
+                    calendarClient = calendarClient,
+                    outboundStager = mockk(relaxed = true),
+                    eventPublisher = mockk(relaxed = true),
+                    transactionManager = queueStore.transactionManager,
+                    clock = clock,
+                    appConfig = googleConfig(),
+                )
         }
 
         given("the host's row of a live meeting with no event yet") {
@@ -473,7 +568,12 @@ class CalendarSyncServiceTest :
 
             val errors = h.sync()
 
-            then("nothing is orphaned, so no ERROR is logged: the row still names that event") {
+            then(
+                "the pair is re-queued once, so a newer state another worker wrote meanwhile is restored by the " +
+                    "next pass; no ERROR, no retry or failure",
+            ) {
+                verify(exactly = 1) { h.connections.hasActiveConnection(userId = guest) }
+                verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = guest, now = start) }
                 errors.shouldBeEmpty()
                 h.verifyNoRetryOrFailure()
             }
@@ -538,9 +638,13 @@ class CalendarSyncServiceTest :
 
                 val errors = h.sync()
 
-                then("both misses are only logged: nothing else is written and no ERROR is raised") {
+                then(
+                    "the pair is re-queued once, so an event another worker re-created meanwhile is restored by " +
+                        "the next pass; nothing else is written and no ERROR is raised",
+                ) {
                     verify(exactly = 1) { h.queue.deleteSynced(id = 1L, token = h.token(), observedSeq = 3L) }
                     verify(exactly = 1) { h.queue.releaseWithoutEvent(id = 1L, token = h.token(), now = start) }
+                    verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = guest, now = start) }
                     h.verifyNoRetryOrFailure()
                     errors.shouldBeEmpty()
                 }
@@ -631,23 +735,181 @@ class CalendarSyncServiceTest :
         }
 
         given("an inserted event whose row the stuck sweep reset meanwhile") {
-            val h = Harness()
-            h.due(row() to view())
-            every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
-                CalendarApiResult.Ok(eventId = mirroredId)
-            every {
-                h.queue.markSynced(id = 1L, token = any(), observedSeq = 3L, googleEventId = mirroredId, now = start)
-            } returns false
+            `when`("the user is still connected") {
+                val h = Harness(transactionManager = createH2TransactionManager())
+                h.due(row() to view())
+                every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
+                    CalendarApiResult.Ok(eventId = mirroredId)
+                every {
+                    h.queue.markSynced(
+                        id = 1L,
+                        token = any(),
+                        observedSeq = 3L,
+                        googleEventId = mirroredId,
+                        now = start,
+                    )
+                } returns false
 
-            val errors = h.sync()
+                val errors = h.sync()
 
-            then(
-                "no ERROR is logged, since the next pass re-inserts the same id and patches it, and nothing is written",
-            ) {
-                errors.shouldBeEmpty()
-                h.verifyNoRetryOrFailure()
-                verify(exactly = 0) { h.queue.deleteSynced(id = any(), token = any(), observedSeq = any()) }
-                verify(exactly = 0) { h.queue.releaseWithoutEvent(id = any(), token = any(), now = any()) }
+                then(
+                    "the claim's meeting and user are re-queued once, in a transaction of their own, so the next " +
+                        "pass deletes the event if another worker settled the pair as unwanted meanwhile",
+                ) {
+                    verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = host, now = start) }
+                    h.enqueuedInsideTransaction shouldBe listOf(true)
+                    errors.shouldBeEmpty()
+                    h.verifyNoRetryOrFailure()
+                    verify(exactly = 0) { h.queue.deleteSynced(id = any(), token = any(), observedSeq = any()) }
+                    verify(exactly = 0) { h.queue.releaseWithoutEvent(id = any(), token = any(), now = any()) }
+                }
+            }
+
+            `when`("the user is no longer connected") {
+                val h = Harness()
+                h.due(row() to view())
+                every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
+                    CalendarApiResult.Ok(eventId = mirroredId)
+                every {
+                    h.queue.markSynced(
+                        id = 1L,
+                        token = any(),
+                        observedSeq = 3L,
+                        googleEventId = mirroredId,
+                        now = start,
+                    )
+                } returns false
+                every { h.connections.hasActiveConnection(userId = host) } returns false
+
+                val errors = h.sync()
+
+                then("nothing is re-queued: there is no token to reconcile with") {
+                    verify(exactly = 1) { h.connections.hasActiveConnection(userId = host) }
+                    h.verifyNoReconciliation()
+                    errors.shouldBeEmpty()
+                }
+            }
+
+            `when`("the meeting row is gone by the time the pair is re-queued") {
+                val h = Harness()
+                h.due(row() to view())
+                every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
+                    CalendarApiResult.Ok(eventId = mirroredId)
+                every {
+                    h.queue.markSynced(
+                        id = 1L,
+                        token = any(),
+                        observedSeq = 3L,
+                        googleEventId = mirroredId,
+                        now = start,
+                    )
+                } returns false
+                every { h.queue.enqueue(meetingId = 7L, slackUserId = host, now = any()) } throws
+                    DataIntegrityViolationException("FOREIGN KEY constraint fails (fk_meeting_calendar_event_meeting)")
+
+                val errors = h.sync()
+
+                then("the foreign-key failure is tolerated: no ERROR, no retry or failure of the lost row") {
+                    verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = host, now = start) }
+                    errors.shouldBeEmpty()
+                    h.verifyNoRetryOrFailure()
+                }
+            }
+        }
+
+        given("a claim lost after a write Google may have applied") {
+            `when`("an insert answered Failed and the backoff's retryLater misses") {
+                val h = Harness()
+                h.due(row() to view())
+                every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
+                    CalendarApiResult.Failed(statusCode = null, message = "request failed: HttpTimeoutException")
+                every {
+                    h.queue.retryLater(
+                        id = 1L,
+                        token = any(),
+                        observedSeq = any(),
+                        attempts = any(),
+                        nextAttemptAt = any(),
+                        lastError = any(),
+                        now = any(),
+                    )
+                } returns false
+
+                val errors = h.sync()
+
+                then("the pair is re-queued once") {
+                    verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = host, now = start) }
+                    errors.shouldBeEmpty()
+                }
+            }
+
+            `when`("a rate-limited write's requeue misses") {
+                val h = Harness()
+                h.due(row() to view())
+                every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
+                    CalendarApiResult.RateLimited(retryAfter = null)
+                every {
+                    h.queue.retryLater(
+                        id = 1L,
+                        token = any(),
+                        observedSeq = any(),
+                        attempts = any(),
+                        nextAttemptAt = any(),
+                        lastError = any(),
+                        now = any(),
+                    )
+                } returns false
+
+                val errors = h.sync()
+
+                then("the pair is re-queued once") {
+                    verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = host, now = start) }
+                    errors.shouldBeEmpty()
+                }
+            }
+        }
+
+        given("a claim lost before any Google write") {
+            `when`("the meeting row is gone, so the row is settled without HTTP, and both settlements miss") {
+                val h = Harness()
+                h.due(row(user = guest) to null)
+                every { h.queue.deleteSynced(id = 1L, token = any(), observedSeq = 3L) } returns false
+                every { h.queue.releaseWithoutEvent(id = 1L, token = any(), now = start) } returns false
+
+                val errors = h.sync()
+
+                then("nothing is re-queued and the connection is not even looked up") {
+                    h.verifyNoGoogleCall()
+                    h.verifyNoReconciliation()
+                    verify(exactly = 0) { h.connections.hasActiveConnection(userId = any()) }
+                    errors.shouldBeEmpty()
+                }
+            }
+
+            `when`("the token refresh is unavailable and the backoff's retryLater misses") {
+                val h = Harness()
+                h.due(row() to view())
+                every { h.tokenProvider.accessToken(userId = host) } returns
+                    AccessTokenResult.Unavailable(message = "refresh failed: HTTP 503")
+                every {
+                    h.queue.retryLater(
+                        id = 1L,
+                        token = any(),
+                        observedSeq = any(),
+                        attempts = any(),
+                        nextAttemptAt = any(),
+                        lastError = any(),
+                        now = any(),
+                    )
+                } returns false
+
+                val errors = h.sync()
+
+                then("nothing is re-queued") {
+                    h.verifyNoGoogleCall()
+                    h.verifyNoReconciliation()
+                    errors.shouldBeEmpty()
+                }
             }
         }
 
@@ -777,7 +1039,7 @@ class CalendarSyncServiceTest :
                 h.directMessages() shouldBe listOf(host to CalendarSyncService.GRANT_REJECTED_MESSAGE)
                 CalendarSyncService.GRANT_REJECTED_MESSAGE shouldBe
                     "Google no longer accepts CodeCompanion's access to your calendar (it was revoked or expired), " +
-                    "so meetings are no longer mirrored. Run `/meetup calendar connect` to reconnect."
+                    "so meetings are no longer mirrored. Run `/calendar connect` to reconnect."
             }
 
             then(
@@ -874,7 +1136,7 @@ class CalendarSyncServiceTest :
                 h.directMessages() shouldBe listOf(host to CalendarSyncService.TOKEN_UNREADABLE_MESSAGE)
                 CalendarSyncService.TOKEN_UNREADABLE_MESSAGE shouldBe
                     "CodeCompanion can no longer use your saved Google Calendar connection, so meetings are no " +
-                    "longer mirrored. Run `/meetup calendar connect` to reconnect."
+                    "longer mirrored. Run `/calendar connect` to reconnect."
                 errors.shouldBeEmpty()
             }
         }
@@ -1313,7 +1575,7 @@ class CalendarSyncServiceTest :
                         listOf(
                             host to
                                 "CodeCompanion couldn't sync *R&amp;D &lt;!here&gt;* to your Google Calendar " +
-                                "(Backend Error). It will not retry; reconnect with `/meetup calendar connect` " +
+                                "(Backend Error). It will not retry; reconnect with `/calendar connect` " +
                                 "if this keeps happening.",
                         )
                 }
@@ -1364,10 +1626,12 @@ class CalendarSyncServiceTest :
                     )
                 } returns null
 
-                h.sync()
+                val errors = h.sync()
 
-                then("no DM is sent") {
+                then("no DM is sent, and the pair is re-queued because the failed insert may have landed") {
                     h.staged.shouldBeEmpty()
+                    verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = host, now = start) }
+                    errors.shouldBeEmpty()
                 }
             }
         }
@@ -1529,7 +1793,7 @@ class CalendarSyncServiceTest :
                         listOf(
                             host to
                                 "CodeCompanion couldn't sync a meeting to your Google Calendar (poisoned row). " +
-                                "It will not retry; reconnect with `/meetup calendar connect` if this keeps happening.",
+                                "It will not retry; reconnect with `/calendar connect` if this keeps happening.",
                         )
                     errors.size shouldBe 1
                 }
@@ -1559,6 +1823,92 @@ class CalendarSyncServiceTest :
                     errors[1].throwableProxy.message shouldBe "db still down"
                     h.verifyNoFailure()
                 }
+            }
+        }
+
+        given("two replicas on one row, where the first stalls past the stuck threshold before its insert lands") {
+            val world = TwoWorkers()
+            val meeting = persistHostedMeeting(startAt = meetingStart)
+            val eventId = mirroredEventIdOf(meetingUid = meeting.meetingUid, slackUserId = host)
+            queueStore.inNewTransaction {
+                queueStore.calendarEventRepository.enqueue(meetingId = meeting.id, slackUserId = host, now = start)
+            }
+            world.stallBeforeNextWrite = {
+                queueStore.inNewTransaction {
+                    queueStore.meetingRepository.markMeetingCanceled(
+                        meetingUid = meeting.meetingUid,
+                        requesterId = host,
+                    )
+                    queueStore.calendarEventRepository.touchMeetingByUid(
+                        meetingUid = meeting.meetingUid,
+                        now = world.clock.instant(),
+                    )
+                }
+                world.clock.advance(by = Duration.ofMinutes(11L))
+                world.workerB.syncDue()
+            }
+
+            world.workerA.syncDue()
+            val eventsAfterStalePass = world.googleEvents.keys.toSet()
+            val rowsAfterStalePass = queueRowsOf(meetingId = meeting.id)
+            world.workerB.syncDue()
+
+            then(
+                "the second replica found nothing to delete and dropped the row, the stalled insert then created " +
+                    "the event, and its missed markSynced re-queued the pair",
+            ) {
+                eventsAfterStalePass shouldBe setOf(eventId)
+                rowsAfterStalePass shouldBe listOf(host to CalendarSyncStatus.PENDING)
+            }
+
+            then("the follow-up pass deletes that orphan, so Google ends with no event for the canceled meeting") {
+                world.googleEvents shouldBe emptyMap()
+                queueRowsOf(meetingId = meeting.id).shouldBeEmpty()
+            }
+        }
+
+        given("two replicas on one row, where the first stalls past the stuck threshold before its patch lands") {
+            val world = TwoWorkers()
+            val meeting = persistHostedMeeting(startAt = meetingStart)
+            val eventId = mirroredEventIdOf(meetingUid = meeting.meetingUid, slackUserId = host)
+
+            fun rescheduleTo(newStartAt: LocalDateTime) =
+                queueStore.inNewTransaction {
+                    queueStore.meetingRepository.rescheduleMeeting(
+                        meetingUid = meeting.meetingUid,
+                        requesterId = host,
+                        newStartAt = newStartAt,
+                    )
+                    queueStore.calendarEventRepository.touchMeeting(meetingId = meeting.id, now = world.clock.instant())
+                }
+            queueStore.inNewTransaction {
+                queueStore.calendarEventRepository.enqueue(meetingId = meeting.id, slackUserId = host, now = start)
+            }
+            world.workerA.syncDue()
+            rescheduleTo(newStartAt = meetingStart.plusDays(1L))
+            world.stallBeforeNextWrite = {
+                rescheduleTo(newStartAt = meetingStart.plusDays(2L))
+                world.clock.advance(by = Duration.ofMinutes(11L))
+                world.workerB.syncDue()
+            }
+
+            world.workerA.syncDue()
+            val startAfterStalePass = world.googleEvents.getValue(eventId).start
+            val rowsAfterStalePass = queueRowsOf(meetingId = meeting.id)
+            world.workerB.syncDue()
+
+            then(
+                "the second replica patched the latest time, the stalled patch then wrote the older one back, and " +
+                    "its missed markSynced re-queued the pair",
+            ) {
+                startAfterStalePass shouldBe meetingStart.plusDays(1L)
+                rowsAfterStalePass shouldBe listOf(host to CalendarSyncStatus.PENDING)
+            }
+
+            then("the follow-up pass patches the latest time again and the row ends SYNCED") {
+                world.googleEvents.keys shouldBe setOf(eventId)
+                world.googleEvents.getValue(eventId).start shouldBe meetingStart.plusDays(2L)
+                queueRowsOf(meetingId = meeting.id) shouldBe listOf(host to CalendarSyncStatus.SYNCED)
             }
         }
 

@@ -71,6 +71,7 @@ class OutboundMessageTest :
                             meetingUid = meetingUid,
                             requesterId = "U1",
                             channel = rescheduleChannel,
+                            listHandle = null,
                         )
                     reschedule.meetingUid shouldBe meetingUid
                     reschedule.requesterId shouldBe "U1"
@@ -82,6 +83,7 @@ class OutboundMessageTest :
                             meetingUid = meetingUid,
                             requesterId = "U2",
                             channel = addChannel,
+                            listHandle = null,
                         )
                     addParticipant.meetingUid shouldBe meetingUid
                     addParticipant.requesterId shouldBe "U2"

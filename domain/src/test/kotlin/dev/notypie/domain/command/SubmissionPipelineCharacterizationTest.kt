@@ -9,6 +9,7 @@ import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -56,6 +57,7 @@ class SubmissionPipelineCharacterizationTest :
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
                                 participantUserIdsRaw = " U_A , U_B ,,",
+                                listHandleRaw = "https://hooks.slack.com/actions/T1/1/list",
                             ),
                     )
 
@@ -66,6 +68,7 @@ class SubmissionPipelineCharacterizationTest :
                     intent.meetingUid shouldBe meetingUid
                     intent.requesterId shouldBe "U_HOST"
                     intent.participantUserIds shouldContainExactly listOf("U_A", "U_B")
+                    intent.listHandle shouldBe ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list")
                 }
             }
 
@@ -78,6 +81,7 @@ class SubmissionPipelineCharacterizationTest :
                                 meetingUidRaw = UUID.randomUUID().toString(),
                                 requesterId = "",
                                 participantUserIdsRaw = "U_A",
+                                listHandleRaw = "",
                             ),
                     )
 
@@ -95,6 +99,7 @@ class SubmissionPipelineCharacterizationTest :
                                 meetingUidRaw = "not-a-uuid",
                                 requesterId = "U_HOST",
                                 participantUserIdsRaw = "U_A",
+                                listHandleRaw = "",
                             ),
                     )
                 val emptySelection =
@@ -105,6 +110,7 @@ class SubmissionPipelineCharacterizationTest :
                                 meetingUidRaw = UUID.randomUUID().toString(),
                                 requesterId = "U_HOST",
                                 participantUserIdsRaw = " , ",
+                                listHandleRaw = "",
                             ),
                     )
 
@@ -143,12 +149,14 @@ class SubmissionPipelineCharacterizationTest :
                                 requesterId = "U_HOST",
                                 date = "2099-10-01",
                                 time = "14:30",
+                                listHandleRaw = "https://hooks.slack.com/actions/T1/1/list",
                             ),
                     )
 
                 then("one RescheduleMeeting intent carries the combined start datetime") {
                     output.ok shouldBe true
                     val intent = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
+                    intent.listHandle shouldBe ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list")
                     intent.meetingUid shouldBe meetingUid
                     intent.requesterId shouldBe "U_HOST"
                     intent.newStartAt shouldBe LocalDateTime.of(2099, 10, 1, 14, 30)
@@ -166,6 +174,7 @@ class SubmissionPipelineCharacterizationTest :
                                 requesterId = "U_HOST",
                                 date = "2000-01-01",
                                 time = "09:00",
+                                listHandleRaw = "",
                             ),
                     )
 
@@ -185,18 +194,21 @@ class SubmissionPipelineCharacterizationTest :
                             requesterId = "U_HOST",
                             date = "2099-10-01",
                             time = "14:30",
+                            listHandleRaw = "",
                         ),
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = UUID.randomUUID().toString(),
                             requesterId = "U_HOST",
                             date = "",
                             time = "14:30",
+                            listHandleRaw = "",
                         ),
                         InboundSubmission.RescheduleMeeting(
                             meetingUidRaw = UUID.randomUUID().toString(),
                             requesterId = "U_HOST",
                             date = "2099-10-01",
                             time = "25:99",
+                            listHandleRaw = "",
                         ),
                     )
 
@@ -500,6 +512,7 @@ class SubmissionPipelineCharacterizationTest :
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
                                 participantUserIdsRaw = "U_A",
+                                listHandleRaw = "",
                             ),
                     )
 

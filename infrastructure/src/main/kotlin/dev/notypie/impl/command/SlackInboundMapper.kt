@@ -45,6 +45,7 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 requesterId = routingExtras.getOrNull(0).orEmpty(),
                 date = form.firstNonBlankValue(kind = InboundFieldKind.DATE),
                 time = form.firstNonBlankValue(kind = InboundFieldKind.TIME),
+                listHandleRaw = routingExtras.getOrNull(2).orEmpty(),
             )
 
         CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT ->
@@ -52,6 +53,7 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 meetingUidRaw = idempotencyKey,
                 requesterId = routingExtras.getOrNull(0).orEmpty(),
                 participantUserIdsRaw = form.value(key = InboundFieldKeys.ADD_PARTICIPANT_USERS),
+                listHandleRaw = routingExtras.getOrNull(2).orEmpty(),
             )
 
         CommandDetailType.MEETING_DECLINE_REASON ->

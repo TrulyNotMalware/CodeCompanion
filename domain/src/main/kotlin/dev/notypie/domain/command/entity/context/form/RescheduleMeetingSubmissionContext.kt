@@ -23,6 +23,7 @@ internal class RescheduleMeetingSubmissionContext(
                 meetingUid = model.meetingUid,
                 requesterId = model.requesterId,
                 newStartAt = model.newStartAt,
+                listHandle = model.listHandle,
             ),
         )
 }

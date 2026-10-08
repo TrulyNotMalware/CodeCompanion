@@ -2,6 +2,7 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
 import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
@@ -10,6 +11,7 @@ import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
+import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.StandupOpsAction
 import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
@@ -17,6 +19,7 @@ import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
@@ -172,6 +175,7 @@ class SlackIntentResolverTest :
                     CommandIntent.CancelMeeting(
                         meetingUid = meetingUid,
                         requesterId = requesterId,
+                        listHandle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list"),
                     )
 
                 val events =
@@ -188,7 +192,46 @@ class SlackIntentResolverTest :
                     event.type shouldBe CommandDetailType.CANCEL_MEETING
                     event.payload.meetingUid shouldBe meetingUid
                     event.payload.requesterId shouldBe requesterId
+                    event.payload.listHandle shouldBe intent.listHandle
                     event.payload.responseBasicInfo shouldBe basicInfo
+                }
+            }
+        }
+
+        given("RescheduleMeeting and AddParticipant intents submitted from a list row's modal") {
+            val listHandle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/2/list")
+            val meetingUid = UUID.randomUUID()
+
+            `when`("both are resolved") {
+                val events =
+                    resolver.resolveAll(
+                        intents =
+                            listOf(
+                                CommandIntent.RescheduleMeeting(
+                                    meetingUid = meetingUid,
+                                    requesterId = "U_HOST",
+                                    newStartAt = LocalDateTime.of(2099, 1, 1, 10, 0),
+                                    listHandle = listHandle,
+                                ),
+                                CommandIntent.AddParticipant(
+                                    meetingUid = meetingUid,
+                                    requesterId = "U_HOST",
+                                    participantUserIds = listOf("U_A"),
+                                    listHandle = listHandle,
+                                ),
+                            ),
+                        basicInfo = basicInfo,
+                    )
+
+                then("each event payload carries the list handle to the write service") {
+                    events
+                        .filterIsInstance<RescheduleMeetingEvent>()
+                        .single()
+                        .payload.listHandle shouldBe listHandle
+                    events
+                        .filterIsInstance<AddParticipantEvent>()
+                        .single()
+                        .payload.listHandle shouldBe listHandle
                 }
             }
         }
@@ -345,6 +388,7 @@ class SlackIntentResolverTest :
                         CommandIntent.CancelMeeting(
                             meetingUid = UUID.randomUUID(),
                             requesterId = "U_HOST",
+                            listHandle = null,
                         ),
                         CommandIntent.StatusReport,
                     )

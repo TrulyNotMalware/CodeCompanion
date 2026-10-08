@@ -10,6 +10,7 @@ import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.outbound.replaceHandleOrNull
 import java.util.UUID
 
 internal class CancelMeetingContext(
@@ -39,6 +40,7 @@ internal class CancelMeetingContext(
             CommandIntent.CancelMeeting(
                 meetingUid = meetingUid,
                 requesterId = interaction.actor.id,
+                listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
             ),
         )
         return CommandOutput.success(

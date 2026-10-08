@@ -1,5 +1,6 @@
 package dev.notypie.repository.meeting
 
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import dev.notypie.schema.createParticipants
@@ -11,6 +12,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.springframework.beans.factory.annotation.Autowired
@@ -60,8 +62,10 @@ class MeetingRepositoryWriteTest
                     )
                 }
 
-            fun cancel(meetingUid: UUID, requesterId: String) =
-                inTx { repositoryImpl.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId) }
+            fun cancel(meetingUid: UUID, requesterId: String): MeetingDto? =
+                transactionTemplate.execute {
+                    repositoryImpl.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId)
+                }
 
             fun reload(meetingUid: UUID) =
                 jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid)!!
@@ -531,15 +535,16 @@ class MeetingRepositoryWriteTest
 
                     val canceled = cancel(meetingUid = meetingUid, requesterId = "U_HOST")
 
-                    then("the flag is persisted and the version is bumped") {
-                        canceled shouldBe true
+                    then("the flag is persisted, the version is bumped and the canceled meeting is returned") {
+                        canceled.shouldNotBeNull().meetingUid shouldBe meetingUid
+                        canceled.isCanceled shouldBe true
                         val reloaded = reload(meetingUid = meetingUid)
                         reloaded.isCanceled shouldBe true
                         reloaded.version shouldBe 1L
                     }
 
                     then("a resubmitted cancellation is a no-op that leaves the version alone") {
-                        cancel(meetingUid = meetingUid, requesterId = "U_HOST") shouldBe false
+                        cancel(meetingUid = meetingUid, requesterId = "U_HOST").shouldBeNull()
                         reload(meetingUid = meetingUid).version shouldBe 1L
                     }
                 }
@@ -557,7 +562,7 @@ class MeetingRepositoryWriteTest
                     val canceled = cancel(meetingUid = meetingUid, requesterId = "U_PARTICIPANT")
 
                     then("the meeting stays active and its version is untouched") {
-                        canceled shouldBe false
+                        canceled.shouldBeNull()
                         val reloaded = reload(meetingUid = meetingUid)
                         reloaded.isCanceled shouldBe false
                         reloaded.version shouldBe 0L
@@ -565,8 +570,8 @@ class MeetingRepositoryWriteTest
                 }
 
                 `when`("no meeting matches the meetingUid") {
-                    then("the cancellation reports false") {
-                        cancel(meetingUid = UUID.randomUUID(), requesterId = "U_HOST") shouldBe false
+                    then("the cancellation returns no meeting") {
+                        cancel(meetingUid = UUID.randomUUID(), requesterId = "U_HOST").shouldBeNull()
                     }
                 }
             }
@@ -582,7 +587,7 @@ class MeetingRepositoryWriteTest
                                 repositoryImpl.markMeetingCanceled(
                                     meetingUid = meetingUid,
                                     requesterId = "U_HOST",
-                                )
+                                ) != null
                             },
                             second = {
                                 repositoryImpl.addParticipants(

@@ -2,6 +2,7 @@ package dev.notypie.domain.command.intent
 
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
@@ -24,18 +25,21 @@ sealed class CommandIntent : CommandEffect {
     data class CancelMeeting(
         val meetingUid: UUID,
         val requesterId: String,
+        val listHandle: ResponseReplaceHandle?,
     ) : CommandIntent()
 
     data class RescheduleMeeting(
         val meetingUid: UUID,
         val requesterId: String,
         val newStartAt: LocalDateTime,
+        val listHandle: ResponseReplaceHandle?,
     ) : CommandIntent()
 
     data class AddParticipant(
         val meetingUid: UUID,
         val requesterId: String,
         val participantUserIds: List<String>,
+        val listHandle: ResponseReplaceHandle?,
     ) : CommandIntent()
 
     data class CalendarConnect(

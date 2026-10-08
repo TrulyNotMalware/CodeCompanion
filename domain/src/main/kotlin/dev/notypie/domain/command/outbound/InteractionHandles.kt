@@ -9,3 +9,6 @@ value class ModalOpenHandle(
 value class ResponseReplaceHandle(
     val raw: String,
 )
+
+fun replaceHandleOrNull(raw: String): ResponseReplaceHandle? =
+    raw.takeIf { it.isNotBlank() }?.let { ResponseReplaceHandle(raw = it) }

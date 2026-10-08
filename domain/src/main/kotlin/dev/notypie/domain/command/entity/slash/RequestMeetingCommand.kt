@@ -25,6 +25,10 @@ class RequestMeetingCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    override val slashCommandName: String = "/$MEETING_COMMAND_IDENTIFIER"
+
+    override val subCommandDefinitions: List<MeetingSubCommandDefinition> = MeetingSubCommandDefinition.entries
+
     override fun parseContext(
         subCommand: SubCommand<MeetingSubCommandDefinition>,
     ): CommandContext<MeetingSubCommandDefinition> =
@@ -61,15 +65,11 @@ enum class MeetingSubCommandDefinition(
 ) : SubCommandDefinition {
     NONE(
         subCommandIdentifier = "",
-        usage = "",
+        usage = "/$MEETING_COMMAND_IDENTIFIER",
     ),
     LIST(
         subCommandIdentifier = "list",
         usage = "/${MEETING_COMMAND_IDENTIFIER} list [today | tomorrow | week | month]",
-    ),
-    CALENDAR(
-        subCommandIdentifier = "calendar",
-        usage = "/${MEETING_COMMAND_IDENTIFIER} calendar connect | disconnect | status",
     ),
 }
 

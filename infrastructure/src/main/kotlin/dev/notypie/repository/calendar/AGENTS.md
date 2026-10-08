@@ -85,9 +85,9 @@ registered in `configurations/JpaConfiguration`.
   its foreign-key check on `meetings` fails the Accept with 1020 when the host changed the meeting after the
   interaction transaction's snapshot, and the user clicks again. That millisecond window is accepted (the reminder
   lane documents the same mechanism), because moving the hook to `AFTER_COMMIT` would need a second connection.
-  Two Accepts of the same user are serialized by the `meeting_participants` row lock; the second hook is skipped only
-  when its `UPDATE` reports zero rows (`useAffectedRows=true`), and with the driver's default found-rows count it runs
-  again and merely bumps `change_seq` once more. The first Accepts of two different users no longer deadlock: the
+  Two Accepts of the same user are serialized by the `meeting_participants` row lock; the second hook runs again
+  whatever the driver reports for its `UPDATE` (a zero-row result with an existing participant still calls it) and
+  merely bumps `change_seq` once more. The first Accepts of two different users no longer deadlock: the
   upsert is one statement, with no pre-`UPDATE` whose gap lock the other insert waits on. A connected user's accept
   costs three statements (the connection exists-check, the meeting id lookup, the upsert). The accept / decline hook
   also fails with 1020 through its own row (the upsert, or `touchOne` on Decline) when the worker wrote that row
@@ -138,7 +138,8 @@ against a real database.
 - Consumers: `application/service/calendar/CalendarConnectionService` (also `MeetingCalendarEventRepository.failPendingForUser`
   on disconnect, and `enqueue` plus `touchForUser`, its only caller, for the connect back-fill), `GoogleAccessTokenProvider` (`find`),
   `MeetingCalendarMirrorService` (`hasActiveConnection`, the queue's `enqueue` / touches) and `CalendarSyncService`
-  (`markRevoked`, the queue's claim and transitions)
+  (`markRevoked`, the queue's claim and transitions, and `hasActiveConnection` plus `enqueue`, in a transaction of its
+  own, to re-queue a pair whose claim it lost after a Google write)
 
 ### External
 Spring Data JPA, Hibernate.

@@ -69,7 +69,7 @@ slack:
       # POLLING + APPLICATION_EVENT keeps the whole relay in-process — no Kafka, no Debezium.
       outbox-reading-strategy: polling
       event-publisher: application_event
-    # Google Calendar per-user OAuth (/meetup calendar connect). The tunnel URL + /oauth/google/callback is the
+    # Google Calendar per-user OAuth (/calendar connect). The tunnel URL + /oauth/google/callback is the
     # redirect URI to register in Google Cloud; off unless GOOGLE_CALENDAR_ENABLED=true.
     calendar:
       google:

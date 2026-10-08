@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-07_
+_type: decision · updated: 2026-10-08_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -71,6 +71,44 @@ _type: decision · updated: 2026-10-07_
 18. **CVE 봇은 새 저장소가 아니라 이 앱의 기능으로.** MariaDB·아웃박스·CAS·모달 파이프라인을 재사용. 이유:
     별도 앱은 DB·Slack 수신·DM 발송을 전부 중복 구현하게 된다. 상태: 유지(M1~M6 완료 2026-07-14).
     근거: `CveBotPlan.md` §0.
+
+## 외부 연동
+
+36. **Google Calendar 연동은 사용자별 OAuth 미러다 (2026-10-07~08).** 사용자가 `/calendar connect`로 자기 Google
+    계정을 연결하면 봇이 그 사용자의 `primary` 캘린더에 미팅 사본을 둔다. 호스트의 이벤트는 미팅 생성 시, 참석자의 이벤트는
+    슬랙에서 Approve를 누른 시점에 생기고, 거절·취소는 삭제, 일정 변경은 patch다. 출석의 원본은 슬랙 하나이고(캘린더에서 바꾼
+    응답은 슬랙으로 돌아오지 않는다) 이메일 매핑·추가 Slack scope가 없으며, 연결하지 않은 사용자는 아무것도 받지 않는다. 기각:
+    초대 메시지에 캘린더 추가 링크 삽입(요구는 "자동으로 연동되는 것"), 공용 팀 캘린더, Workspace 도메인 전체 위임. 뒤의 둘을
+    기각한 사유는 기록되지 않았다(미확인) — 차이만 적으면 공용 캘린더는 참석 여부와 무관하게 모두가 일정 하나를 공유하고, 위임은
+    Workspace 관리자 설정과 한 도메인의 계정을 전제한다. 상태: 유지(`feature/gap-closure` `3c0529bf`·`6ae0a047`, `main` 미머지).
+    근거: `service/calendar/AGENTS.md`, `V24__add_google_calendar_tables.sql` 헤더.
+    - **명령 표면 (2026-10-08 변경):** 자체 슬래시 명령 `/calendar connect | disconnect | status`(`POST /api/slash/calendar`,
+      Socket Mode는 `slack.app.socket.calendar-command`)이고 `/meetup calendar …`는 없앴다(이제 모르는 서브커맨드). 이유(사용자):
+      캘린더 연결은 미팅 전용이 아니며 나중에 스탠드업 등 다른 것도 캘린더에 둘 수 있다. 처음(10-07)의 "`/meetup` 서브커맨드라 새
+      슬래시 명령·manifest 항목이 없다"는 결정은 이것으로 대체됐다 — 운영·개발 Slack 앱에 `/calendar` 명령을 추가해야 한다.
+37. **미러는 아웃박스 `Transport`가 아니라 전용 더티 마커 테이블 + CAS 스케줄러로 at-least-once.** `meeting_calendar_event`(V25)는
+    (미팅, 사용자)당 한 행이고 "원하는 동작"이 아니라 "다시 보라"는 표시다. 훅이 미팅 쓰기 트랜잭션 안에서 행을 upsert/touch해
+    `change_seq`를 올리면, 60초 워커가 claim(CAS) 뒤 미팅을 다시 읽어 이벤트가 있어야 하는지 계산하고 Google을 호출한다. 완료
+    CAS는 `change_seq`가 claim 때와 같을 때만 `SYNCED`, 아니면 `PENDING`이라 호출 중 들어온 취소·일정 변경이 다시 동기화된다
+    (리마인더와 같은 결정 #10의 claim-token 패턴). 이유: Google 호출은 미팅 쓰기 트랜잭션 안에서 할 수 없고, 큐에 적힌 동작을
+    믿으면 취소와 수락이 엇갈려 커밋될 때 취소된 미팅의 이벤트가 남는다. 상태: 유지(2026-10-08). 근거:
+    `V25__add_meeting_calendar_event.sql` 헤더, `repository/calendar/AGENTS.md`, `service/calendar/AGENTS.md`
+    (`CalendarSyncService`, `CalendarConnectionService`).
+    - **이벤트 id는 클라이언트가 정한다:** SHA-256(`"$meetingUid:$slackUserId"`)의 소문자 hex 64자(Google의 base32hex id 알파벳
+      안). insert가 멱등이 되어(409 → patch) stuck 리셋·크래시·완료 기록 실패가 중복 이벤트를 만들지 않고, 응답을 잃은 insert의
+      이벤트도 같은 id로 지울 수 있다. 사용자까지 넣는 이유: 두 Slack 사용자가 같은 Google 계정을 연결하면 미팅 uid만으로는 한
+      사람의 거절이 다른 사람의 사본을 지운다.
+    - **연결 시 백필은 호스트 미팅만:** 진행 중이거나 다가오는 미취소 호스트 미팅은 `enqueue`하고, 참석 미팅은 이미 있는 큐 행만
+      되살린다(`touchForUser`, `FAILED` 포함). `meeting_participants.is_attending`이 초대 직후 기본 `true`라 "수락"과 "미응답"을
+      구분할 수 없어서, 참석 미팅까지 넣으면 Approve 전의 초대가 미러된다. 응답 시각 컬럼(`responded_at`, 새 마이그레이션)은 첫
+      연결의 백필까지 가능하게 하지만 보류한 후보다.
+    - **claim을 잃은 쓰기는 재큐잉한다 (2026-10-08):** 운영은 레플리카 2개라 한 워커가 미팅을 읽은 뒤 stuck 임계보다 오래 멈추면
+      다른 워커가 행을 가져가 더 새로운 상태로 정리하고, 늦게 도착한 쓰기가 그것을 뒤집을 수 있다(고아 이벤트, 낡은 시각, 방금
+      되살린 이벤트 삭제). 그래서 Google 쓰기를 보낸 뒤 자기 완료 CAS가 빗나가면, 사용자가 아직 연결돼 있을 때 그 (미팅, 사용자)를
+      `enqueue`로 다시 표시하고 다음 패스가 미팅에서 원하는 상태를 다시 계산해 수렴한다. 결정적 id는 중복을 막을 뿐 낡은 쓰기는 막지 못한다.
+    - **알려진 한계:** disconnect 뒤에도 이미 미러된 이벤트는 캘린더에 남는다(지울 토큰이 없다. disconnect는 `PENDING` 행만
+      `FAILED`로 두고 나머지 행은 재연결 때 되살리려고 보존한다). 다른 계정으로 재연결하면 옛 계정의 사본도 남는다. 연결되지 않은
+      동안(첫 연결 전, 또는 disconnect 뒤 재연결 전) 수락한 미팅은 큐 행이 없어 미러되지 않는다.
 
 ## 빌드·런타임
 
@@ -284,6 +322,9 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `application/src/main/kotlin/dev/notypie/application/health/OutboxMetrics.kt`,
   `configurations/{KafkaConsumerConfiguration,CveConfiguration,SlackRequestBuilderConfiguration}.kt`,
   `service/agent/AgentConverseService.kt`
+- Google Calendar(#36·#37): `git show --stat 3c0529bf 6ae0a047`, `application/src/main/kotlin/dev/notypie/application/service/calendar/AGENTS.md`,
+  `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/AGENTS.md`, `db/migration/V24__…`·`V25__…`, git-ignored
+  `.omc/plans/google-calendar-user-oauth.md`(설계와 리뷰 반영 결정 전부)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

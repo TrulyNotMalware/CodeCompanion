@@ -19,6 +19,10 @@ class StandupCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    override val slashCommandName: String = "/$STANDUP_COMMAND_IDENTIFIER"
+
+    override val subCommandDefinitions: List<StandupSubCommandDefinition> = StandupSubCommandDefinition.entries
+
     override fun parseContext(
         subCommand: SubCommand<StandupSubCommandDefinition>,
     ): CommandContext<StandupSubCommandDefinition> {

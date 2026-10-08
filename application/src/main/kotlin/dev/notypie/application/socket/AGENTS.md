@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # application/socket
 
@@ -12,7 +12,7 @@ is unchanged (Web API via the outbox relay). The bean exists only under the `loc
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SocketModeReceiver.kt` | `@Component @Profile("local") class SocketModeReceiver(appConfig, meetingService, standupSlashService, cveSubscriptionSlashService, cveQuerySlashService, interactionHandler, appMentionEventHandler) : SmartLifecycle`. `start()` skips with a warning when `slack.app.api.app-token` is blank, else builds `Slack.getInstance().socketMode(appToken)`, registers three envelope listeners and connects. `handleSlash` parses the envelope map through `parseRequestBodyData(headers = noHeaders, data)` and dispatches on `payload.command` against `AppConfig.Socket` (`meetingCommand` → `handleMeeting`, `standupCommand` → `handleStandup`, `subscribeCommand` / `unsubscribeCommand` / `subscriptionsCommand` → the CVE subscription service, `latestCommand` → `handleLatest`); `handleInteractive(payloadJson, acknowledge)` (internal, the test seam) passes the `InteractionHandler` ack body to `acknowledge`, and on a handler exception logs ERROR and sends **no** ack; `handleEvent` forwards only `event.type == "app_mention"`. `stop()` disconnects |
+| `SocketModeReceiver.kt` | `@Component @Profile("local") class SocketModeReceiver(appConfig, meetingService, standupSlashService, cveSubscriptionSlashService, cveQuerySlashService, calendarSlashService, interactionHandler, appMentionEventHandler) : SmartLifecycle`. `start()` skips with a warning when `slack.app.api.app-token` is blank, else builds `Slack.getInstance().socketMode(appToken)`, registers three envelope listeners and connects. `handleSlash` parses the envelope map through `parseRequestBodyData(headers = noHeaders, data)` and dispatches on `payload.command` against `AppConfig.Socket` (`meetingCommand` → `handleMeeting`, `standupCommand` → `handleStandup`, `calendarCommand` (`/calendar`; `application-local.yaml` reads `SLACK_CALENDAR_COMMAND`) → `handleCalendar`, `subscribeCommand` / `unsubscribeCommand` / `subscriptionsCommand` → the CVE subscription service, `latestCommand` → `handleLatest`); `dispatchSlash(payload, commandData)` (internal, the slash test seam); `handleInteractive(payloadJson, acknowledge)` (internal, the test seam) passes the `InteractionHandler` ack body to `acknowledge`, and on a handler exception logs ERROR and sends **no** ack; `handleEvent` forwards only `event.type == "app_mention"`. `stop()` disconnects |
 
 ## For AI Agents
 

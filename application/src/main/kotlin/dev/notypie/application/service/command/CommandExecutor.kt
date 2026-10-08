@@ -4,6 +4,7 @@ import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -23,6 +24,13 @@ class CommandExecutor(
 
     fun <T : SubCommandDefinition> execute(command: Command<T>): CommandOutput {
         val output = command.handleEvent()
+        if (!output.ok && output.commandDetailType == CommandDetailType.ERROR_RESPONSE) {
+            log.warn {
+                "Command ${command::class.simpleName} failed: commandId=${command.commandId} " +
+                    "idempotencyKey=${command.idempotencyKey} kind=${command.commandData.kind} " +
+                    "actorId=${command.commandData.actorId} reason=${output.errorReason}"
+            }
+        }
 
         val pendingEffects = command.drainIntents()
         if (pendingEffects.isNotEmpty()) {

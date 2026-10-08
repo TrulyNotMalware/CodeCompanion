@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # application
 
@@ -22,8 +22,8 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `src/main/kotlin/dev/notypie/application/controllers/` | `SlackEventController` (`/api/slack/events`, `/interaction`) and `SlashCommandController` (`/api/slash/*`) (see `src/main/kotlin/dev/notypie/application/controllers/AGENTS.md`) |
-| `src/main/kotlin/dev/notypie/application/service/` | Use-case services (see `src/main/kotlin/dev/notypie/application/service/AGENTS.md`) |
+| `src/main/kotlin/dev/notypie/application/controllers/` | `SlackEventController` (`/api/slack/events`, `/interaction`), `SlashCommandController` (`/api/slash/*`) and `GoogleOAuthCallbackController` (`GET /oauth/google/callback`, only while the calendar integration is enabled) (see `src/main/kotlin/dev/notypie/application/controllers/AGENTS.md`) |
+| `src/main/kotlin/dev/notypie/application/service/` | Use-case services, the Google Calendar connection and mirror lane (`calendar/`) included (see `src/main/kotlin/dev/notypie/application/service/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/security/` | Slack signature verification, retry dedup, MCP turn tokens (see `src/main/kotlin/dev/notypie/application/security/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/configurations/` | Bean wiring, conditions, Kafka/async/scheduling config (see `src/main/kotlin/dev/notypie/application/configurations/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/application/mcp/` | `McpToolGate` + `DomainReadTools` — role-gated MCP tools exposed to the AI agent |

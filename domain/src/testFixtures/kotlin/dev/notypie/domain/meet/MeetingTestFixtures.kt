@@ -16,6 +16,7 @@ import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendancePayload
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
@@ -74,12 +75,14 @@ fun createCancelMeetingEvent(
     requesterId: String = TEST_USER_ID,
     idempotencyKey: UUID = UUID.randomUUID(),
     responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+    listHandle: ResponseReplaceHandle? = null,
 ) = CancelMeetingEvent(
     idempotencyKey = idempotencyKey,
     payload =
         CancelMeetingPayload(
             meetingUid = meetingUid,
             requesterId = requesterId,
+            listHandle = listHandle,
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.CANCEL_MEETING,
@@ -91,6 +94,7 @@ fun createAddParticipantEvent(
     participantUserIds: List<String> = listOf("U_NEW_PARTICIPANT"),
     idempotencyKey: UUID = UUID.randomUUID(),
     responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+    listHandle: ResponseReplaceHandle? = null,
 ) = AddParticipantEvent(
     idempotencyKey = idempotencyKey,
     payload =
@@ -98,6 +102,7 @@ fun createAddParticipantEvent(
             meetingUid = meetingUid,
             requesterId = requesterId,
             participantUserIds = participantUserIds,
+            listHandle = listHandle,
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
@@ -128,6 +133,7 @@ fun createRescheduleMeetingEvent(
     newStartAt: LocalDateTime = LocalDateTime.now().plusDays(1L),
     idempotencyKey: UUID = UUID.randomUUID(),
     responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+    listHandle: ResponseReplaceHandle? = null,
 ) = RescheduleMeetingEvent(
     idempotencyKey = idempotencyKey,
     payload =
@@ -135,6 +141,7 @@ fun createRescheduleMeetingEvent(
             meetingUid = meetingUid,
             requesterId = requesterId,
             newStartAt = newStartAt,
+            listHandle = listHandle,
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,

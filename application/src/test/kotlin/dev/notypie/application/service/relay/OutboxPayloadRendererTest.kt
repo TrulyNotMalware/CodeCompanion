@@ -4,9 +4,11 @@ import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.impl.command.OutboundRenderer
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
+import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import io.kotest.assertions.throwables.shouldThrow
@@ -45,6 +47,39 @@ class OutboxPayloadRendererTest :
                             basicInfo = basicInfo,
                         )
                     }
+                }
+            }
+        }
+
+        given("a replace-original row that carries a fallback ephemeral") {
+            val rendered = mockk<SlackEventPayload>()
+            val slackRenderer = mockk<OutboundRenderer>()
+            every { slackRenderer.render(message = any(), basicInfo = any()) } returns rendered
+            val fallback =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = basicInfo.channel),
+                    content = MessageContent.Text(headline = null, markdown = "Meeting canceled."),
+                )
+            val replace =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list"),
+                    content = MessageContent.Text(headline = null, markdown = "*Sync* canceled."),
+                    fallback = fallback,
+                )
+
+            `when`("the row is rendered") {
+                val result =
+                    OutboxPayloadRenderer(renderers = mapOf(Transport.SLACK to slackRenderer))
+                        .render(row = port.toRow(message = replace, basicInfo = basicInfo))
+
+                then("the replacement is rendered, and the fallback is offered as its own envelope") {
+                    result shouldBe
+                        RenderedRow(
+                            payload = rendered,
+                            next = null,
+                            fallback = OutboundEnvelope(message = fallback, basicInfo = basicInfo),
+                        )
+                    verify(exactly = 1) { slackRenderer.render(message = replace, basicInfo = basicInfo) }
                 }
             }
         }

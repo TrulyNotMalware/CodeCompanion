@@ -4,24 +4,27 @@ import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.context.CommandContext
-import dev.notypie.domain.command.entity.context.form.RequestCveLatestContext
+import dev.notypie.domain.command.entity.context.form.CalendarSlashContext
 import dev.notypie.domain.command.inbound.InboundCommand
 import java.util.UUID
 
-class CveLatestSlashCommand(
+internal const val CALENDAR_COMMAND_IDENTIFIER: String = "calendar"
+
+internal const val CALENDAR_USAGE: String = "/$CALENDAR_COMMAND_IDENTIFIER connect | disconnect | status"
+
+class CalendarCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
-    private val topicKey: String?,
 ) : Command<NoSubCommands>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
-    override val slashCommandName: String = "/latest"
+    override val slashCommandName: String = "/$CALENDAR_COMMAND_IDENTIFIER"
 
     override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<out NoSubCommands> =
-        RequestCveLatestContext(
+        CalendarSlashContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
-            topicKey = topicKey,
+            arguments = commandData.subCommands,
             subCommand = subCommand,
             intents = intents,
         )

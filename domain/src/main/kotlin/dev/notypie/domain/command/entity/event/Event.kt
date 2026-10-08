@@ -4,6 +4,7 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -73,6 +74,7 @@ class CancelMeetingPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val meetingUid: UUID,
     val requesterId: String,
+    val listHandle: ResponseReplaceHandle?,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -91,6 +93,7 @@ class RescheduleMeetingPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val newStartAt: LocalDateTime,
+    val listHandle: ResponseReplaceHandle?,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -109,6 +112,7 @@ class AddParticipantPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val participantUserIds: List<String>,
+    val listHandle: ResponseReplaceHandle?,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 

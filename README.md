@@ -5,7 +5,8 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 ## Features
 - **Slack Event Handling** — Process mentions, messages, and interactive components (buttons, dropdowns, modals).
 - **Slash Commands** — Execute custom `/` commands such as `/meetup` directly from Slack.
-- **Meeting Orchestration** — Request, approve/decline, cancel, and list team meetings through interactive Slack modals, with host-only authorization enforced at the repository layer. Attendees get reminder DMs 15 and 5 minutes before a meeting (`slack.app.meeting.reminder.offsets-minutes`, default `15,5`) and a daily agenda DM of that day's meetings at 08:00 Asia/Seoul (`slack.app.meeting.agenda.*`). On `/meetup list`, the host's own rows carry **Reschedule**, **Add participant** and **Cancel** buttons.
+- **Meeting Orchestration** — Request, approve/decline, cancel, and list team meetings through interactive Slack modals, with host-only authorization enforced at the repository layer. Attendees get reminder DMs 15 and 5 minutes before a meeting (`slack.app.meeting.reminder.offsets-minutes`, default `15,5`) and a daily agenda DM of that day's meetings at 08:00 Asia/Seoul (`slack.app.meeting.agenda.*`); participants also get a DM when the host reschedules. On `/meetup list`, the host's own rows carry **Reschedule**, **Add participant** and **Cancel** buttons; once one of them succeeds, the list is replaced by a one-line result.
+- **Google Calendar Mirror** — `/calendar connect` links a user's own Google account (per-user OAuth; the consent link arrives by DM and the refresh token is stored encrypted). From then on the bot keeps a copy of that user's meetings in their `primary` calendar: the host's event is created when the meeting is created, an attendee's when they press **Approve** in Slack; declining or canceling deletes the event and rescheduling updates it. Connecting also copies the upcoming meetings the user hosts; meetings accepted while not connected (before the first connect, or between a disconnect and a reconnect) are not copied. Slack stays the source of truth, and users who never connect get nothing. `disconnect` revokes the access (events already copied stay in the calendar) and `status` shows the linked account. Off unless `slack.app.calendar.google.enabled=true`.
 - **Standup Automation** — `/standup setup|list|stop` creates, lists and stops a channel's recurring standup routines. Members answer a DM prompt, members who have not answered get a nudge DM 30 minutes before the cutoff (`slack.app.standup.nudge.offset-minutes`), and at the cutoff the summary is posted to the routine's summary channel.
 - **AI Assistant** — `@bot ask <question>` runs one agent turn against a claude/codex sidecar (HTTP+SSE) and replies in a thread; mentioning again in the thread continues the same session.
 - **CVE Watch** — Watched topics are polled from external sources (NVD, GitHub Releases) on a schedule, summarized once each by the AI lane, then delivered to subscribers as an immediate DM or a daily digest. Users follow topics with `/subscribe` and `/unsubscribe`, list them with `/subscriptions`, and read recent summaries with `/latest [topic-key]`; all four reply by DM. Admins manage topics in-chat with `@bot cve ...`. The feature is off unless `slack.app.cve.enabled=true`.
@@ -46,8 +47,8 @@ CodeCompanion/
 │   └── common/                  # Shared value objects & validation DSL
 │
 ├── application/                 # Spring Boot bootstrap + use-case orchestration
-│   ├── controllers/             # Slack event / slash / interaction endpoints
-│   ├── service/                 # Use cases: agent, command (roles), cve, interaction, meeting, mention, ops, relay, standup
+│   ├── controllers/             # Slack event / slash / interaction endpoints, Google OAuth callback
+│   ├── service/                 # Use cases: agent, calendar, command (roles), cve, interaction, meeting, mention, ops, relay, standup
 │   │   └── cve/                 #   Collector, AI summary worker, subscription, query, notification, ops
 │   ├── socket/                  # Slack Socket Mode connector
 │   ├── security/                # Slack signature verification & retry dedup filter
@@ -59,12 +60,13 @@ CodeCompanion/
 └── infrastructure/              # Concrete adapters — all Slack coupling lives here
     ├── impl/
     │   ├── agent/               # AI sidecar client (HTTP + SSE)
+    │   ├── calendar/            # Google OAuth and Calendar API clients, refresh-token cipher
     │   ├── command/             # Slack adapter: inbound mapping, intent resolving, outbound rendering & staging
     │   │   ├── slack/           #   Slack wire DTOs & inbound mappers (payload → InboundCommand)
     │   │   └── event/           #   Slack event payloads, dispatch events, message dispatcher
     │   ├── cve/                 # CVE feed adapters (NVD, GitHub Releases)
     │   └── retry/               # Retry support
-    ├── repository/              # JPA repositories: agent, authorization, cve, mcp, meeting, outbox, standup
+    ├── repository/              # JPA repositories: agent, authorization, calendar, cve, mcp, meeting, outbox, standup
     └── templates/               # Slack message & modal builders
 ```
 
@@ -80,6 +82,7 @@ Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_us
 | Command | Surface | Minimum role |
 |---------|---------|--------------|
 | `/meetup`, `/meetup list [today\|tomorrow\|week\|month]` | Slash command | `user` |
+| `/calendar connect\|disconnect\|status` — link your Google Calendar (consent link by DM), unlink it, or show the link | Slash command | `user` |
 | `/standup setup` — create a standup routine (modal) | Slash command | `user` |
 | `/standup list` — this channel's active standup routines | Slash command | `user` |
 | `/standup stop <routine-name>` — only the routine's creator or an admin may stop it | Slash command | `user` |
@@ -152,6 +155,11 @@ A user's role is resolved in order: `slack.app.authorization.bootstrap-admins` (
      ```
    - For the agent to call the MCP tools, start the app with `--slack.app.mcp.enabled=true --spring.ai.mcp.server.enabled=true --spring.ai.mcp.server.protocol=STREAMABLE` and set `slack.app.mcp.signing-secret`. The full recipe, including volume ownership, codex credentials and timeouts, is in [`docs/wiki/dev-environment.md`](docs/wiki/dev-environment.md)
 
+8. **(Optional) Enable the Google Calendar mirror**
+   - In a Google Cloud project, enable the Google Calendar API, configure the OAuth consent screen, and create an OAuth client of type *Web application* whose redirect URI is `<public base URL>/oauth/google/callback` (Google accepts plain `http` only for `localhost`)
+   - Set `GOOGLE_CALENDAR_ENABLED=true`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (exactly the registered URI) and `GOOGLE_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), and apply migrations `V24` and `V25` by hand where `ddl-auto` is `none`
+   - Local setup, including the consent screen's test users, is in [`docs/wiki/dev-environment.md`](docs/wiki/dev-environment.md); production keys and routing are in [`application/src/main/resources/k8s/README.md`](application/src/main/resources/k8s/README.md)
+
 ### Testing
 ```bash
 ./gradlew build                 # full pipeline: compile + ktlint + tests
@@ -170,7 +178,8 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 ## 기능
 - **슬랙 이벤트 처리** — 멘션, 메시지, 상호작용 컴포넌트(버튼·드롭다운·모달) 처리
 - **슬래시 명령어** — `/meetup` 등 사용자 정의 `/` 명령어를 슬랙에서 직접 실행
-- **미팅 오케스트레이션** — 상호작용 모달을 통한 미팅 요청·수락/거절·취소·조회. 리포지토리 계층에서 호스트 전용 권한을 원자적으로 강제. 참석자는 미팅 15분·5분 전에 리마인더 DM(`slack.app.meeting.reminder.offsets-minutes`, 기본값 `15,5`)을, 매일 08:00(Asia/Seoul)에 그날 미팅을 모은 일일 아젠다 DM(`slack.app.meeting.agenda.*`)을 받음. `/meetup list`에서 호스트 본인의 미팅 행에는 **Reschedule**·**Add participant**·**Cancel** 버튼이 붙음
+- **미팅 오케스트레이션** — 상호작용 모달을 통한 미팅 요청·수락/거절·취소·조회. 리포지토리 계층에서 호스트 전용 권한을 원자적으로 강제. 참석자는 미팅 15분·5분 전에 리마인더 DM(`slack.app.meeting.reminder.offsets-minutes`, 기본값 `15,5`)을, 매일 08:00(Asia/Seoul)에 그날 미팅을 모은 일일 아젠다 DM(`slack.app.meeting.agenda.*`)을 받으며, 호스트가 일정을 바꾸면 참석자에게 DM이 감. `/meetup list`에서 호스트 본인의 미팅 행에는 **Reschedule**·**Add participant**·**Cancel** 버튼이 붙고, 그중 하나가 성공하면 목록이 한 줄 결과로 바뀜
+- **Google Calendar 미러** — `/calendar connect`로 각 사용자가 자기 Google 계정을 연결(사용자별 OAuth, 동의 링크는 DM으로 오고 refresh token은 암호화해 저장). 이후 봇이 그 사용자의 미팅 사본을 본인 `primary` 캘린더에 유지: 호스트의 이벤트는 미팅 생성 시, 참석자의 이벤트는 슬랙에서 **Approve**를 누른 시점에 생성되고, 거절·취소하면 삭제, 일정 변경은 반영. 연결할 때 다가오는 호스트 미팅도 복사하며, 연결되지 않은 동안(첫 연결 전, 또는 disconnect 뒤 재연결 전) 수락한 미팅은 복사하지 않음. 출석의 원본은 슬랙이며 연결하지 않은 사용자는 아무것도 받지 않음. `disconnect`는 접근 권한을 철회하고(이미 복사된 이벤트는 캘린더에 남음) `status`는 연결된 계정을 표시. `slack.app.calendar.google.enabled=true`일 때만 동작
 - **스탠드업 자동화** — `/standup setup|list|stop`으로 채널의 반복 스탠드업 루틴을 생성·조회·중지. 멤버는 DM 프롬프트로 답하고, 아직 답하지 않은 멤버는 마감 30분 전에 재촉 DM(`slack.app.standup.nudge.offset-minutes`)을 받으며, 마감 시각에 요약이 루틴의 요약 채널에 게시됨
 - **AI 어시스턴트** — `@bot ask <질문>`이 claude/codex 사이드카(HTTP+SSE)로 에이전트 턴을 실행하고 스레드로 응답. 같은 스레드에서 재멘션하면 세션이 이어짐
 - **CVE 감시** — 등록된 토픽을 외부 소스(NVD, GitHub Releases)에서 주기적으로 수집하고, AI 레인이 이벤트당 정확히 한 번 요약한 뒤, 구독자에게 즉시 DM 또는 일일 다이제스트로 전달. 사용자는 `/subscribe`·`/unsubscribe`로 토픽을 구독·해지하고 `/subscriptions`로 목록을, `/latest [topic-key]`로 최근 요약을 조회하며 네 명령 모두 DM으로 답함. 관리자는 `@bot cve ...`로 채팅에서 토픽을 관리. `slack.app.cve.enabled=true`일 때만 동작
@@ -211,8 +220,8 @@ CodeCompanion/
 │   └── common/                  # 공용 값 객체 및 검증 DSL
 │
 ├── application/                 # Spring Boot 부트스트랩 + 유스케이스 오케스트레이션
-│   ├── controllers/             # 슬랙 이벤트 / 슬래시 / 상호작용 엔드포인트
-│   ├── service/                 # 유스케이스: agent, command(역할), cve, interaction, meeting, mention, ops, relay, standup
+│   ├── controllers/             # 슬랙 이벤트 / 슬래시 / 상호작용 엔드포인트, Google OAuth 콜백
+│   ├── service/                 # 유스케이스: agent, calendar, command(역할), cve, interaction, meeting, mention, ops, relay, standup
 │   │   └── cve/                 #   수집기, AI 요약 워커, 구독, 조회, 알림, 운영
 │   ├── socket/                  # 슬랙 Socket Mode 커넥터
 │   ├── security/                # 슬랙 서명 검증 및 재시도 중복 제거 필터
@@ -224,12 +233,13 @@ CodeCompanion/
 └── infrastructure/              # 구체 어댑터 — 모든 슬랙 결합은 여기에 격리
     ├── impl/
     │   ├── agent/               # AI 사이드카 클라이언트 (HTTP + SSE)
+    │   ├── calendar/            # Google OAuth·Calendar API 클라이언트, refresh token 암호화
     │   ├── command/             # 슬랙 어댑터: 인바운드 매핑, 인텐트 해석, 아웃바운드 렌더링·스테이징
     │   │   ├── slack/           #   슬랙 wire DTO 및 인바운드 매퍼 (payload → InboundCommand)
     │   │   └── event/           #   슬랙 이벤트 페이로드, 디스패치 이벤트, 메시지 디스패처
     │   ├── cve/                 # CVE 피드 어댑터 (NVD, GitHub Releases)
     │   └── retry/               # 재시도 지원
-    ├── repository/              # JPA 리포지토리: agent, authorization, cve, mcp, meeting, outbox, standup
+    ├── repository/              # JPA 리포지토리: agent, authorization, calendar, cve, mcp, meeting, outbox, standup
     └── templates/               # 슬랙 메시지 및 모달 빌더
 ```
 
@@ -244,6 +254,7 @@ CodeCompanion/
 | 명령 | 진입점 | 최소 역할 |
 |------|--------|-----------|
 | `/meetup`, `/meetup list [today\|tomorrow\|week\|month]` | 슬래시 명령 | `user` |
+| `/calendar connect\|disconnect\|status` — Google Calendar 연결(동의 링크는 DM), 연결 해제, 연결 상태 조회 | 슬래시 명령 | `user` |
 | `/standup setup` — 스탠드업 루틴 생성(모달) | 슬래시 명령 | `user` |
 | `/standup list` — 이 채널의 활성 스탠드업 루틴 목록 | 슬래시 명령 | `user` |
 | `/standup stop <routine-name>` — 루틴 생성자 또는 관리자만 중지 가능 | 슬래시 명령 | `user` |
@@ -315,6 +326,11 @@ CodeCompanion/
        -e MCP_SERVER_URL=http://host.docker.internal:9000/mcp -e MCP_SERVER_NAME=domain-tools agent-sidecar
      ```
    - 에이전트가 MCP 도구를 호출하게 하려면 앱을 `--slack.app.mcp.enabled=true --spring.ai.mcp.server.enabled=true --spring.ai.mcp.server.protocol=STREAMABLE`로 띄우고 `slack.app.mcp.signing-secret`을 설정. 볼륨 소유권, codex 자격 증명, 타임아웃을 포함한 전체 레시피는 [`docs/wiki/dev-environment.md`](docs/wiki/dev-environment.md) 참고
+
+8. **(선택) Google Calendar 미러 활성화**
+   - Google Cloud 프로젝트에서 Google Calendar API를 사용 설정하고 OAuth 동의 화면을 구성한 뒤, 리디렉션 URI가 `<공개 기본 URL>/oauth/google/callback`인 *웹 애플리케이션* 유형 OAuth 클라이언트 생성(Google은 `localhost`에만 평문 `http`를 허용)
+   - `GOOGLE_CALENDAR_ENABLED=true`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`(등록한 URI와 정확히 같은 값), `GOOGLE_TOKEN_ENCRYPTION_KEY`(`openssl rand -base64 32`)를 설정하고, `ddl-auto`가 `none`인 환경에는 마이그레이션 `V24`·`V25`를 직접 적용
+   - 동의 화면의 테스트 사용자를 포함한 로컬 준비는 [`docs/wiki/dev-environment.md`](docs/wiki/dev-environment.md), 운영 키와 라우팅은 [`application/src/main/resources/k8s/README.md`](application/src/main/resources/k8s/README.md) 참고
 
 ### 테스트
 ```bash

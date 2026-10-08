@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.exception.ControllerAdvice
+import dev.notypie.application.service.calendar.CalendarSlashService
 import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.interaction.InteractionHandler
@@ -32,6 +33,7 @@ class SlackControllersTest :
     BehaviorSpec({
         val eventHandler = mockk<AppMentionEventHandler>()
         val meetingService = mockk<MeetingService>(relaxed = true)
+        val calendarSlashService = mockk<CalendarSlashService>(relaxed = true)
         val mockMvc =
             MockMvcBuilders
                 .standaloneSetup(
@@ -41,6 +43,7 @@ class SlackControllersTest :
                         standupSlashService = mockk(relaxed = true),
                         cveSubscriptionSlashService = mockk(relaxed = true),
                         cveQuerySlashService = mockk(relaxed = true),
+                        calendarSlashService = calendarSlashService,
                     ),
                 ).setControllerAdvice(ControllerAdvice())
                 .build()
@@ -176,6 +179,44 @@ class SlackControllersTest :
             }
         }
 
+        given("a /calendar slash command") {
+            val form =
+                LinkedMultiValueMap<String, String>().apply {
+                    createSlashCommandForm(command = "/calendar", text = "connect").forEach { (k, v) ->
+                        add(k, v)
+                    }
+                }
+
+            `when`("Slack posts it as a form to /api/slash/calendar") {
+                val response =
+                    mockMvc
+                        .perform(
+                            post("/api/slash/calendar")
+                                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                                .params(form),
+                        ).andReturn()
+                        .response
+
+                then("the calendar slash service handles it with the command's text, and nothing else does") {
+                    response.status shouldBe 200
+                    verify(exactly = 1) {
+                        calendarSlashService.handleCalendar(
+                            headers = any(),
+                            payload = match { it.command == "/calendar" && it.subCommands == "connect" },
+                            commandData = match { it.subCommands == listOf("connect") },
+                        )
+                    }
+                    verify(exactly = 0) {
+                        meetingService.handleMeeting(
+                            headers = any(),
+                            payload = match { it.command == "/calendar" },
+                            commandData = any(),
+                        )
+                    }
+                }
+            }
+        }
+
         given("slash commands whose service opens a modal") {
             val messageDispatcher = mockk<MessageDispatcher>()
             var opens = 0
@@ -207,6 +248,10 @@ class SlackControllersTest :
             }
             val query = mockk<CveQuerySlashService>()
             every { query.handleLatest(headers = any(), payload = any(), commandData = any()) } answers { openModal() }
+            val calendar = mockk<CalendarSlashService>()
+            every { calendar.handleCalendar(headers = any(), payload = any(), commandData = any()) } answers {
+                openModal()
+            }
             val slashMvc =
                 MockMvcBuilders
                     .standaloneSetup(
@@ -215,6 +260,7 @@ class SlackControllersTest :
                             standupSlashService = standup,
                             cveSubscriptionSlashService = subscription,
                             cveQuerySlashService = query,
+                            calendarSlashService = calendar,
                         ),
                     ).build()
             val form =
@@ -224,7 +270,15 @@ class SlackControllersTest :
                     }
                 }
 
-            listOf("/meet", "/standup", "/subscribe", "/unsubscribe", "/subscriptions", "/latest").forEach { path ->
+            listOf(
+                "/meet",
+                "/standup",
+                "/calendar",
+                "/subscribe",
+                "/unsubscribe",
+                "/subscriptions",
+                "/latest",
+            ).forEach { path ->
                 `when`("$path runs its service, which publishes a views.open") {
                     opens = 0
                     opensInsideService = -1

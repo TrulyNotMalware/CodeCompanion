@@ -15,6 +15,7 @@ import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.calendar.schema.CalendarSyncStatus
 import dev.notypie.repository.calendar.schema.MeetingCalendarEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.security.MessageDigest
@@ -48,10 +49,10 @@ class CalendarSyncService(
         const val RATE_LIMITED_ERROR: String = "rate limited by Google"
         const val GRANT_REJECTED_MESSAGE: String =
             "Google no longer accepts CodeCompanion's access to your calendar (it was revoked or expired), so " +
-                "meetings are no longer mirrored. Run `/meetup calendar connect` to reconnect."
+                "meetings are no longer mirrored. Run `/calendar connect` to reconnect."
         const val TOKEN_UNREADABLE_MESSAGE: String =
             "CodeCompanion can no longer use your saved Google Calendar connection, so meetings are no longer " +
-                "mirrored. Run `/meetup calendar connect` to reconnect."
+                "mirrored. Run `/calendar connect` to reconnect."
         private const val CLIENT_REJECTED_HINT =
             "check $CALENDAR_GOOGLE_PROPERTIES_PREFIX.client-id and client-secret"
         private const val API_DISABLED_HINT =
@@ -67,7 +68,7 @@ class CalendarSyncService(
     private val maxAttempts: Int = appConfig.calendar.google.syncMaxAttempts
     private val stuckAfter: Duration = Duration.ofMinutes(appConfig.calendar.google.syncStuckMinutes)
     private val tickBudget: Duration = Duration.ofSeconds(appConfig.calendar.google.syncTickBudgetSeconds)
-    private val noticeTemplate = TransactionTemplate(transactionManager)
+    private val transactionTemplate = TransactionTemplate(transactionManager)
 
     fun syncDue() {
         val tickStart = clock.instant()
@@ -159,14 +160,14 @@ class CalendarSyncService(
         val title = view?.title
         var result =
             when (val access = accessTokenFor(claim = claim, title = title, revokedUsers = revokedUsers)) {
-                is Access.Token -> mirror(accessToken = access.accessToken, plan = plan)
+                is Access.Token -> mirror(claim = claim, accessToken = access.accessToken, plan = plan)
                 is Access.Denied -> return access.control
             }
         if (result == CalendarApiResult.Unauthorized) {
             tokenProvider.evict(userId = row.slackUserId)
             result =
                 when (val access = accessTokenFor(claim = claim, title = title, revokedUsers = revokedUsers)) {
-                    is Access.Token -> mirror(accessToken = access.accessToken, plan = plan)
+                    is Access.Token -> mirror(claim = claim, accessToken = access.accessToken, plan = plan)
                     is Access.Denied -> return access.control
                 }
         }
@@ -221,8 +222,9 @@ class CalendarSyncService(
             }
         }
 
-    private fun mirror(accessToken: String, plan: Plan): CalendarApiResult =
-        when (plan) {
+    private fun mirror(claim: Claim, accessToken: String, plan: Plan): CalendarApiResult {
+        claim.googleWriteIssued = true
+        return when (plan) {
             is Plan.Remove -> calendarClient.delete(accessToken = accessToken, eventId = plan.eventId)
 
             is Plan.Write -> {
@@ -240,6 +242,7 @@ class CalendarSyncService(
                 }
             }
         }
+    }
 
     private fun insertOrPatch(accessToken: String, eventId: String, body: CalendarEventBody): CalendarApiResult {
         val inserted = calendarClient.insert(accessToken = accessToken, eventId = eventId, event = body)
@@ -320,18 +323,13 @@ class CalendarSyncService(
                 googleEventId = eventId,
                 now = clock.instant(),
             )
-        if (recorded) return
-        log.warn {
-            "Calendar sync lost its claim after writing event $eventId: rowId=${claim.row.id} " +
-                "meetingId=${claim.row.meetingId} userId=${claim.row.slackUserId}; the event id is derived from the " +
-                "meeting, so the next pass of a live row re-inserts the same id, gets 409 and patches it"
-        }
+        if (!recorded) onClaimLost(claim = claim, step = "recording event $eventId")
     }
 
     private fun settleWithoutEvent(claim: Claim) {
         if (queue.deleteSynced(id = claim.row.id, token = claim.token, observedSeq = claim.row.changeSeq)) return
         if (!queue.releaseWithoutEvent(id = claim.row.id, token = claim.token, now = clock.instant())) {
-            log.warn { "Calendar sync lost its claim before settling: rowId=${claim.row.id}" }
+            onClaimLost(claim = claim, step = "settling")
         }
     }
 
@@ -359,7 +357,7 @@ class CalendarSyncService(
                     "userId=${claim.row.slackUserId} attempts=$attempts reason=$reason"
             }
         } else {
-            log.warn { "Calendar sync lost its claim before scheduling a retry: rowId=${claim.row.id}" }
+            onClaimLost(claim = claim, step = "scheduling a retry")
         }
     }
 
@@ -375,7 +373,7 @@ class CalendarSyncService(
     ) {
         when (val settled = failClaim(claim = claim, attempts = attempts, lastError = reason, now = now)) {
             CalendarSyncStatus.FAILED -> {
-                noticeTemplate.executeWithoutResult {
+                transactionTemplate.executeWithoutResult {
                     outboundStager.stageCalendarDirectMessage(
                         userId = claim.row.slackUserId,
                         text = syncFailureMessage(title = title, reason = reason),
@@ -395,7 +393,7 @@ class CalendarSyncService(
                         "rowId=${claim.row.id} status=$settled"
                 }
 
-            null -> log.warn { "Calendar sync lost its claim before giving up: rowId=${claim.row.id}" }
+            null -> onClaimLost(claim = claim, step = "giving up")
         }
     }
 
@@ -416,7 +414,7 @@ class CalendarSyncService(
 
     private fun revokeUser(userId: String, revoked: AccessTokenResult.Revoked) {
         val cause = revoked.cause
-        noticeTemplate.executeWithoutResult {
+        transactionTemplate.executeWithoutResult {
             val now = clock.instant()
             val matched =
                 connections.markRevoked(
@@ -463,22 +461,57 @@ class CalendarSyncService(
 
     private fun requeueWithoutAttempt(claim: Claim, delay: Duration, lastError: String): Boolean {
         val now = clock.instant()
-        return queue.retryLater(
-            id = claim.row.id,
-            token = claim.token,
-            observedSeq = claim.row.changeSeq,
-            attempts = claim.row.attempts,
-            nextAttemptAt = now.plus(delay),
-            lastError = lastError,
-            now = now,
-        )
+        val requeued =
+            queue.retryLater(
+                id = claim.row.id,
+                token = claim.token,
+                observedSeq = claim.row.changeSeq,
+                attempts = claim.row.attempts,
+                nextAttemptAt = now.plus(delay),
+                lastError = lastError,
+                now = now,
+            )
+        if (!requeued) onClaimLost(claim = claim, step = "requeueing")
+        return requeued
+    }
+
+    private fun onClaimLost(claim: Claim, step: String) {
+        val row = claim.row
+        if (!claim.googleWriteIssued) {
+            log.warn { "Calendar sync lost its claim before $step: rowId=${row.id}" }
+            return
+        }
+        if (!connections.hasActiveConnection(userId = row.slackUserId)) {
+            log.warn {
+                "Calendar sync lost its claim before $step, after a Google write, and the user is no longer " +
+                    "connected, so nothing is re-queued: rowId=${row.id} meetingId=${row.meetingId} " +
+                    "userId=${row.slackUserId}"
+            }
+            return
+        }
+        try {
+            transactionTemplate.executeWithoutResult {
+                queue.enqueue(meetingId = row.meetingId, slackUserId = row.slackUserId, now = clock.instant())
+            }
+        } catch (exception: DataIntegrityViolationException) {
+            log.warn(exception) {
+                "Calendar sync lost its claim before $step, after a Google write, and the meeting row is gone, so " +
+                    "nothing is re-queued: rowId=${row.id} meetingId=${row.meetingId} userId=${row.slackUserId}"
+            }
+            return
+        }
+        log.warn {
+            "Calendar sync lost its claim before $step, after a Google write that another worker's pass may " +
+                "contradict; re-queued the pair so the next pass reconciles Google with the meeting: " +
+                "rowId=${row.id} meetingId=${row.meetingId} userId=${row.slackUserId}"
+        }
     }
 
     private fun syncFailureMessage(title: String?, reason: String): String {
         val meeting = title?.let { "*${it.escapeMarkup()}*" } ?: "a meeting"
         return "CodeCompanion couldn't sync $meeting to your Google Calendar " +
             "(${reason.take(MAX_REASON_LENGTH).escapeMarkup()}). It will not retry; reconnect with " +
-            "`/meetup calendar connect` if this keeps happening."
+            "`/calendar connect` if this keeps happening."
     }
 
     private fun eventBody(view: CalendarMeetingView): CalendarEventBody {
@@ -493,10 +526,12 @@ class CalendarSyncService(
         )
     }
 
-    private data class Claim(
+    private class Claim(
         val row: MeetingCalendarEvent,
         val token: String,
-    )
+    ) {
+        var googleWriteIssued: Boolean = false
+    }
 
     private sealed interface Plan {
         data class Write(

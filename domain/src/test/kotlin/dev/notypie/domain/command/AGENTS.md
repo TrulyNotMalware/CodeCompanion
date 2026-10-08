@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # domain/command (test)
 
@@ -13,7 +13,7 @@ largest part of the domain test set (36 of 42 spec files).
 |------|-------------|
 | `CommandSetTest.kt` | `CommandSet.parseCommand`: unknown string → `UNKNOWN`, case-insensitive match (`NOtiCE` → `NOTICE`), `ask` → `ASK`. `BehaviorSpec`, no fixtures |
 | `EventQueueTest.kt` | `DefaultEventQueue` via `createDomainEventQueue()`: empty state, `offer` of internal/external events, `containsExternalEvent` flips back when the external event is polled, FIFO `poll`, ordered `snapshot`. `BehaviorSpec`; uses `createInternalTestEvent`, `createExternalTestEvent`, `INTERNAL_EVENT_NAME`, `EXTERNAL_EVENT_NAME`, `TestCommandEvent` |
-| `SubmissionPipelineCharacterizationTest.kt` | Full `InteractionCommand` path for every modal submission: which intents/outbounds each variant yields and which inputs fall open (success, no effects). A past reschedule start is not dropped: it yields a `RescheduleMeeting` intent so the application can answer the host. An unparsable standup cutoff is carried as `null` on `CreateStandupRoutine`; a standup answer with responses carries the notice on `RecordStandupAnswer` and emits no `UpdateMessage` |
+| `SubmissionPipelineCharacterizationTest.kt` | Full `InteractionCommand` path for every modal submission: which intents/outbounds each variant yields and which inputs fall open (success, no effects). A past reschedule start is not dropped: it yields a `RescheduleMeeting` intent so the application can answer the host. The add-participant and reschedule submissions carry a list handle through to `intent.listHandle`. An unparsable standup cutoff is carried as `null` on `CreateStandupRoutine`; a standup answer with responses carries the notice on `RecordStandupAnswer` and emits no `UpdateMessage` |
 | `SubCommandDefinitionTest.kt` | `SubCommandDefinition.validateArguments` (`requiresArguments` / `minRequiredArgs`), `SubCommand.empty()` / `SubCommand.of(definition, options)` / `isValid()`, and `findSubCommandByIdentifier<MeetingSubCommandDefinition>` (match → `LIST`, `""` → `NONE`, unknown → `null`). `BehaviorSpec`; uses `NoSubCommands` from main, no fixtures |
 
 ## Subdirectories

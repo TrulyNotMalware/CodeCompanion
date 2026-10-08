@@ -4,6 +4,8 @@ import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.OutboundMessageCodec
 import dev.notypie.repository.outbox.Transport
@@ -110,6 +112,46 @@ class OutboxMessageTest :
                     head.schemaVersion shouldBe OutboxSchemaVersion.V3
                     single.schemaVersion shouldBe OutboxSchemaVersion.V2
                     single.chainedParts() shouldBe 0
+                }
+            }
+        }
+
+        given("CodecOutboundMessagePort.toRow for a replace-original message") {
+            val basicInfo = createCommandBasicInfo()
+            val fallback =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = basicInfo.channel),
+                    recipient = UserRef(id = basicInfo.publisherId),
+                    content = MessageContent.Text(headline = null, markdown = "Meeting canceled."),
+                )
+
+            fun replace(withFallback: OutboundMessage.Ephemeral?) =
+                port.toRow(
+                    message =
+                        OutboundMessage.ReplaceMessage(
+                            handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list"),
+                            content = MessageContent.Text(headline = null, markdown = "*Sync* canceled."),
+                            fallback = withFallback,
+                        ),
+                    basicInfo = basicInfo,
+                )
+
+            `when`("the rows are built with and without a fallback") {
+                val withFallback = replace(withFallback = fallback)
+                val withoutFallback = replace(withFallback = null)
+
+                then("only the row with a fallback is stamped V4, so an older binary holds it instead of dropping it") {
+                    withFallback.schemaVersion shouldBe OutboxSchemaVersion.V4
+                    withoutFallback.schemaVersion shouldBe OutboxSchemaVersion.V2
+                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4)
+                }
+
+                then("the fallback survives the codec") {
+                    OutboundMessageCodec
+                        .decode(json = withFallback.payload)
+                        .message
+                        .shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                        .fallback shouldBe fallback
                 }
             }
         }

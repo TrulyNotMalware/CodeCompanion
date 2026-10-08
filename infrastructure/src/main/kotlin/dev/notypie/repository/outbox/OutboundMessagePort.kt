@@ -34,7 +34,12 @@ class CodecOutboundMessagePort : OutboundMessagePort {
             transport = transport.name,
             payload = OutboundMessageCodec.encode(envelope = envelope),
             createdAt = LocalDateTime.now(),
-            schemaVersion = if (continuation.isEmpty()) OutboxSchemaVersion.V2 else OutboxSchemaVersion.V3,
+            schemaVersion =
+                when {
+                    message is OutboundMessage.ReplaceMessage && message.fallback != null -> OutboxSchemaVersion.V4
+                    continuation.isNotEmpty() -> OutboxSchemaVersion.V3
+                    else -> OutboxSchemaVersion.V2
+                },
         )
     }
 }

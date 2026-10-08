@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/command/exceptions
 
@@ -21,10 +21,13 @@ sealed exception hierarchy thrown while parsing sub-commands or routing an unsup
   (`SUBCOMMAND_NOT_FOUND`), `entity/Command.executeInteraction` and
   `entity/InteractionCommand.buildParser` (`UNSUPPORTED_COMMAND_TYPE`). The never-thrown
   `COMMAND_NOT_FOUND` / `UNKNOWN_SUBCOMMAND_TYPE` / `VALIDATION_FAILED` were removed on 2026-09-22.
-- Nothing here escapes the domain. `Command.handleEvent()` wraps execution in `runCatching` and turns
-  any throwable into `CommandOutput.fail(..., ERROR_RESPONSE, reason = exception.toString())`. The user
-  therefore sees the class name plus `errorCode.message`; `details` built with `exceptionDetails {}` are
-  dropped at that boundary unless a context renders them first.
+- Nothing here escapes the domain. `Command.handleEvent()` catches it and returns
+  `CommandOutput.fail(..., ERROR_RESPONSE, reason = exception.toString())` (class name plus `errorCode.message`;
+  `details` built with `exceptionDetails {}` are dropped at that boundary). For a slash command it also stages a
+  requester ephemeral: `SubCommandParseException` is rendered from its `errorCode`, `subCommandName` and the
+  command's `subCommandDefinitions` (unknown subcommand plus usage lines, or the invalid subcommand's usage); any
+  other exception gets a generic "Something went wrong" line (`entity/AGENTS.md`). `CommandExecutor` logs the
+  output at WARN.
 - Everything is `internal`, so `:application` cannot catch these types — it only observes
   `CommandOutput.ok == false`. Do not widen visibility to special-case them upstream; add a
   `CommandDetailType` or an outbound message instead.

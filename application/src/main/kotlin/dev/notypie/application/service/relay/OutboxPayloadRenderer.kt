@@ -1,5 +1,6 @@
 package dev.notypie.application.service.relay
 
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.OutboundRenderer
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.repository.outbox.OutboundEnvelope
@@ -11,6 +12,7 @@ import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 data class RenderedRow(
     val payload: SlackEventPayload,
     val next: OutboundEnvelope?,
+    val fallback: OutboundEnvelope? = null,
 )
 
 class OutboxPayloadRenderer(
@@ -30,6 +32,10 @@ class OutboxPayloadRenderer(
         return RenderedRow(
             payload = renderer.render(message = envelope.message, basicInfo = envelope.basicInfo),
             next = envelope.next(),
+            fallback =
+                (envelope.message as? OutboundMessage.ReplaceMessage)?.fallback?.let { fallback ->
+                    OutboundEnvelope(message = fallback, basicInfo = envelope.basicInfo)
+                },
         )
     }
 }

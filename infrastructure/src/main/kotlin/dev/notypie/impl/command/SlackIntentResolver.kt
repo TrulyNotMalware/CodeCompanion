@@ -90,6 +90,7 @@ class SlackIntentResolver {
                         CancelMeetingPayload(
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
+                            listHandle = intent.listHandle,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.CANCEL_MEETING,
@@ -104,6 +105,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             newStartAt = intent.newStartAt,
+                            listHandle = intent.listHandle,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
@@ -118,6 +120,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             participantUserIds = intent.participantUserIds,
+                            listHandle = intent.listHandle,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,

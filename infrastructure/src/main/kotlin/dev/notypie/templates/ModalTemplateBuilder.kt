@@ -16,6 +16,8 @@ import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -23,6 +25,9 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 private val log = KotlinLogging.logger {}
+
+private fun String.encodedRoutingTokenOrNull(): String? =
+    takeIf { it.isNotBlank() }?.let { URLEncoder.encode(it, StandardCharsets.UTF_8) }
 
 class ModalTemplateBuilder(
     private val modalBlockBuilder: ModalBlockBuilder =
@@ -417,17 +422,19 @@ class ModalTemplateBuilder(
         currentStartAt: LocalDateTime,
         requesterId: String,
         channel: String,
+        listResponseUrl: String,
     ): String {
         val view =
             modal {
                 callbackId(id = RescheduleMeetingModalIds.CALLBACK_ID)
                 privateMetadata(
                     metadata =
-                        listOf(
+                        listOfNotNull(
                             meetingUid.toString(),
                             CommandDetailType.MEETING_RESCHEDULE_SUBMIT.name,
                             requesterId,
                             channel,
+                            listResponseUrl.encodedRoutingTokenOrNull(),
                         ).joinToString(","),
                 )
                 title(text = "Reschedule meeting")
@@ -453,17 +460,23 @@ class ModalTemplateBuilder(
         return jsonMapper.writeValueAsString(view)
     }
 
-    override fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String {
+    override fun addParticipantModalViewJson(
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+        listResponseUrl: String,
+    ): String {
         val view =
             modal {
                 callbackId(id = AddParticipantModalIds.CALLBACK_ID)
                 privateMetadata(
                     metadata =
-                        listOf(
+                        listOfNotNull(
                             meetingUid.toString(),
                             CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT.name,
                             requesterId,
                             channel,
+                            listResponseUrl.encodedRoutingTokenOrNull(),
                         ).joinToString(","),
                 )
                 title(text = "Add participants")

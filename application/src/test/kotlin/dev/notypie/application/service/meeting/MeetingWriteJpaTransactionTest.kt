@@ -4,13 +4,13 @@ import dev.notypie.application.service.calendar.MeetingCalendarMirror
 import dev.notypie.application.service.calendar.MeetingCalendarMirrorService
 import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createMeeting
 import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.createRescheduleMeetingEvent
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.schema.CalendarSyncStatus
@@ -25,7 +25,6 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.transaction.TransactionDefinition
@@ -123,9 +122,11 @@ class MeetingWriteJpaTransactionTest :
             `when`("the first submission commits") {
                 interaction { rescheduleService().rescheduleMeeting(event = event) }
 
-                then("the meeting moves, its reminders are dropped and participants are told once") {
+                then("the meeting moves, its reminders are dropped and the guest gets one DM") {
                     publisher.committedEphemeralMarkdowns shouldBe listOf("Meeting rescheduled to 2026-07-02 10:00.")
-                    publisher.committedMessages.filterIsInstance<OutboundMessage.ChannelMessage>().size shouldBe 1
+                    publisher.committedMessages.filterIsInstance<OutboundMessage.ChannelMessage>().map {
+                        it.target.id
+                    } shouldBe listOf("U_GUEST")
                     reminderArmed(meetingId = meeting.id) shouldBe false
                     reload(meetingUid = meeting.meetingUid).version shouldBe 1L
                 }
@@ -135,7 +136,7 @@ class MeetingWriteJpaTransactionTest :
                 armReminder(meetingId = meeting.id)
                 interaction { rescheduleService().rescheduleMeeting(event = event) }
 
-                then("only a neutral reply is sent: no notice, no reminder change, no version bump") {
+                then("only a neutral reply is sent: no DM, no reminder change, no version bump") {
                     publisher.committedEphemeralMarkdowns shouldBe
                         listOf("The meeting is already scheduled for 2026-07-02 10:00. Nothing was changed.")
                     publisher.committedMessages.filterIsInstance<OutboundMessage.ChannelMessage>().size shouldBe 0
@@ -415,9 +416,10 @@ class MeetingWriteJpaTransactionTest :
                     reloaded.version shouldBe 2L
                 }
 
-                then("participants are notified from the fresh state and the host gets one confirmation") {
-                    val notice = publisher.committedMessages.filterIsInstance<OutboundMessage.ChannelMessage>().single()
-                    (notice.content as MessageContent.Text).markdown shouldContain "<@U_COMPETITOR>"
+                then("participants are DMed from the fresh state and the host gets one confirmation") {
+                    publisher.committedMessages.filterIsInstance<OutboundMessage.ChannelMessage>().map {
+                        it.target.id
+                    } shouldContainExactlyInAnyOrder listOf("U_GUEST", "U_COMPETITOR")
                     publisher.committedEphemeralMarkdowns.size shouldBe 1
                 }
             }
@@ -442,7 +444,7 @@ class MeetingWriteJpaTransactionTest :
             var repaired = 0
             val racingRepository =
                 object : MeetingRepository by store.meetingRepository {
-                    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean {
+                    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): MeetingDto? {
                         if (repaired == 0) {
                             store.jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid)
                             repaired =

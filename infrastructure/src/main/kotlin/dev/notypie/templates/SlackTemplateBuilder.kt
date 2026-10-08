@@ -54,9 +54,15 @@ interface SlackTemplateBuilder {
         currentStartAt: LocalDateTime,
         requesterId: String,
         channel: String,
+        listResponseUrl: String,
     ): String
 
-    fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String
+    fun addParticipantModalViewJson(
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+        listResponseUrl: String,
+    ): String
 
     fun standupModalViewJson(
         routineName: String,

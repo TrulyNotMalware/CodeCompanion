@@ -9,6 +9,7 @@ import dev.notypie.domain.command.entity.context.form.AddParticipantContext
 import dev.notypie.domain.command.inbound.TriggerHandle
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -45,13 +46,14 @@ class AddParticipantContextTest :
                     result.commandDetailType shouldBe CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST
                 }
 
-                then("OpenModal carries the trigger id, meeting uid, requester, and channel") {
+                then("OpenModal carries the trigger id, meeting uid, requester, channel and the list's reply handle") {
                     val open = intents.filterIsInstance<OutboundMessage.OpenModal>().single()
                     open.handle.raw shouldBe triggerId
                     val form = open.form.shouldBeInstanceOf<ModalForm.AddParticipant>()
                     form.meetingUid shouldBe meetingUid
                     form.requesterId shouldBe payload.actor.id
                     form.channel.id shouldBe payload.channelId
+                    form.listHandle shouldBe ResponseReplaceHandle(raw = payload.reply.raw)
                 }
             }
         }

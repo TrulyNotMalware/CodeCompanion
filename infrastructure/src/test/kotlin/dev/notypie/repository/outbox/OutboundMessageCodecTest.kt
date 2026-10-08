@@ -220,6 +220,26 @@ class OutboundMessageCodecTest :
             )
         }
 
+        "a ReplaceMessage's fallback ephemeral round-trips with its subtype, and an absent one adds no key" {
+            val fallback =
+                OutboundMessage.Ephemeral(
+                    target = target,
+                    recipient = UserRef(id = "U_HOST"),
+                    content = MessageContent.Text(headline = null, markdown = "Meeting canceled."),
+                    detailType = CommandDetailType.CANCEL_MEETING,
+                )
+            val withFallback =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = "https://hooks.example.com/actions/123"),
+                    content = MessageContent.Text(headline = null, markdown = "*Sync* canceled."),
+                    fallback = fallback,
+                )
+            assertRoundTrips(message = withFallback)
+            OutboundMessageCodec.encode(
+                envelope = OutboundEnvelope(message = withFallback.copy(fallback = null), basicInfo = basicInfo),
+            ) shouldNotContain "fallback"
+        }
+
         "pre-narrowing update/replace rows decode, and the encoded wire shape is frozen" {
             val fixtureBasicInfo =
                 createCommandBasicInfo(idempotencyKey = UUID.fromString("00000000-0000-0000-0000-000000000001"))

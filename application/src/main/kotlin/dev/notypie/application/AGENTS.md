@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # application/src/main/kotlin/dev/notypie/application
 
@@ -14,12 +14,12 @@ use case (`service/`). No sources sit at this level.
 |-----------|---------|
 | `common/` | `IdempotencyCreator`, `parseRequestBodyData`, `TransactionTemplate.runInTx` (see `common/AGENTS.md`) |
 | `configurations/` | `AppConfig` tree, `Condition`s, and every `@Configuration` that declares beans (see `configurations/AGENTS.md`) |
-| `controllers/` | `SlackEventController`, `SlashCommandController` HTTP entry points (see `controllers/AGENTS.md`) |
+| `controllers/` | `SlackEventController`, `SlashCommandController` and `GoogleOAuthCallbackController` HTTP entry points (see `controllers/AGENTS.md`) |
 | `exception/` | `PayloadParseException` types and `ControllerAdvice` (see `exception/AGENTS.md`) |
 | `health/` | `OutboxHealthIndicator` Actuator contribution (see `health/AGENTS.md`) |
 | `mcp/` | `McpToolGate` and `DomainReadTools` — role-gated MCP tools (see `mcp/AGENTS.md`) |
 | `security/` | Slack signature/retry gate and the MCP turn-token gate (see `security/AGENTS.md`) |
-| `service/` | Use-case lanes: command, mention, interaction, meeting, standup, agent, cve, relay, ops (see `service/AGENTS.md`) |
+| `service/` | Use-case lanes: command, mention, interaction, meeting, calendar, standup, agent, cve, relay, ops (see `service/AGENTS.md`) |
 | `socket/` | `SocketModeReceiver` — `local`-profile WebSocket inbound transport (see `socket/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

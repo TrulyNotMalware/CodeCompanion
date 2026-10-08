@@ -17,6 +17,7 @@ class TestCommand(
     commandData: InboundCommand,
     private val intentToProduce: CommandIntent? = null,
     private val rawEffectToProduce: CommandEffect? = null,
+    private val failure: RuntimeException? = null,
 ) : Command<NoSubCommands>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
@@ -27,6 +28,7 @@ class TestCommand(
             intents = intents,
             intentToProduce = intentToProduce,
             rawEffectToProduce = rawEffectToProduce,
+            failure = failure,
         )
 
     override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
@@ -37,6 +39,7 @@ internal class TestContext(
     intents: IntentQueue,
     private val intentToProduce: CommandIntent?,
     private val rawEffectToProduce: CommandEffect? = null,
+    private val failure: RuntimeException? = null,
 ) : CommandContext<NoSubCommands>(
         commandBasicInfo = commandBasicInfo,
         intents = intents,
@@ -47,6 +50,7 @@ internal class TestContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
+        if (failure != null) throw failure
         if (intentToProduce != null) {
             addIntent(intent = intentToProduce)
         }

@@ -170,7 +170,7 @@ class CalendarConnectionServiceTest :
         fun harness(transactionManager: PlatformTransactionManager = createStubTransactionManager()): Harness =
             Harness(cipher = cipher, clock = clock, appConfig = appConfig, transactionManager = transactionManager)
 
-        given("`/meetup calendar connect`") {
+        given("`/calendar connect`") {
             fun connectHarness(existing: CalendarConnection?): Harness =
                 harness().apply {
                     every { states.issue(state = any(), userId = TEST_USER_ID, expiresAt = any()) } just Runs
@@ -240,7 +240,7 @@ class CalendarConnectionServiceTest :
             }
         }
 
-        given("`/meetup calendar disconnect`") {
+        given("`/calendar disconnect`") {
             `when`("the requester has no connection") {
                 val h = harness().apply { every { connections.find(userId = TEST_USER_ID) } returns null }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.DISCONNECT))
@@ -306,7 +306,7 @@ class CalendarConnectionServiceTest :
             }
         }
 
-        given("`/meetup calendar status`") {
+        given("`/calendar status`") {
             `when`("there is no connection") {
                 val h = harness().apply { every { connections.find(userId = TEST_USER_ID) } returns null }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.STATUS))

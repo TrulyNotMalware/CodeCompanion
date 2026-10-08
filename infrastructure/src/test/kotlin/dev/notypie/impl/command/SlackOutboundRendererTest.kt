@@ -733,6 +733,7 @@ class SlackOutboundRendererTest :
                             meetingUid = UUID.randomUUID(),
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = null,
                         ),
                 )
 

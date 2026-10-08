@@ -12,6 +12,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.RescheduleResult
@@ -84,65 +85,94 @@ class MeetingRescheduleService(
                 requesterId = payload.requesterId,
                 newStartAt = payload.newStartAt,
             )
-        val hostMessage =
-            when (result) {
-                RescheduleResult.NotAuthorized ->
-                    "Meeting was canceled, or you are not the host."
+        when (result) {
+            RescheduleResult.NotAuthorized ->
+                publishEphemeral(
+                    message = "Meeting was canceled, or you are not the host.",
+                    basicInfo = basicInfo,
+                    targetUserId = payload.requesterId,
+                )
 
-                RescheduleResult.AlreadyAtRequestedTime ->
-                    "The meeting is already scheduled for $formattedStart. Nothing was changed."
+            RescheduleResult.AlreadyAtRequestedTime ->
+                publishEphemeral(
+                    message = "The meeting is already scheduled for $formattedStart. Nothing was changed.",
+                    basicInfo = basicInfo,
+                    targetUserId = payload.requesterId,
+                )
 
-                is RescheduleResult.Rescheduled -> {
-                    reminderRepository.deleteByMeetingId(meetingId = result.meeting.meetingId)
-                    calendarMirror.onMeetingRescheduled(meetingId = result.meeting.meetingId)
-                    publishParticipantReNotification(
-                        meetingTitle = result.meeting.title,
-                        participantUserIds = result.meeting.participants.map { it.userId },
-                        newStartAt = payload.newStartAt,
-                        basicInfo = basicInfo,
-                    )
-                    "Meeting rescheduled to $formattedStart."
-                }
+            is RescheduleResult.Rescheduled -> {
+                reminderRepository.deleteByMeetingId(meetingId = result.meeting.meetingId)
+                calendarMirror.onMeetingRescheduled(meetingId = result.meeting.meetingId)
+                notifyParticipantsByDm(
+                    meeting = result.meeting,
+                    hostId = payload.requesterId,
+                    formattedStart = formattedStart,
+                    appId = basicInfo.appId,
+                )
+                outboundStager.stageHostConfirmation(
+                    reply =
+                        hostEphemeral(
+                            message = "Meeting rescheduled to $formattedStart.",
+                            basicInfo = basicInfo,
+                            targetUserId = payload.requesterId,
+                        ),
+                    listHandle = payload.listHandle,
+                    listSummary = "*${result.meeting.title.escapeMrkdwn()}* rescheduled to $formattedStart.",
+                    basicInfo = basicInfo,
+                    publisher = eventPublisher,
+                )
             }
-        publishEphemeral(message = hostMessage, basicInfo = basicInfo, targetUserId = payload.requesterId)
+        }
     }
 
-    private fun publishParticipantReNotification(
-        meetingTitle: String,
-        participantUserIds: List<String>,
-        newStartAt: LocalDateTime,
-        basicInfo: CommandBasicInfo,
+    private fun notifyParticipantsByDm(
+        meeting: MeetingDto,
+        hostId: String,
+        formattedStart: String,
+        appId: String,
     ) {
-        if (participantUserIds.isEmpty()) return
-        val mentions = participantUserIds.joinToString(" ") { "<@$it>" }
-        val notice =
-            "[Notice] $mentions *${meetingTitle.escapeMrkdwn()}* has been rescheduled to " +
-                newStartAt.format(RESCHEDULE_TIMESTAMP_FORMAT) + "."
-        outboundStager
-            .stage(
-                message =
-                    OutboundMessage.ChannelMessage(
-                        target = ConversationTarget(id = basicInfo.channel),
-                        content = MessageContent.Text(headline = "Meeting rescheduled", markdown = notice),
-                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                    ),
-                basicInfo = basicInfo,
-            )?.let { eventPublisher.publishOne(event = it) }
+        val content =
+            MessageContent.Text(
+                headline = "Meeting rescheduled",
+                markdown = "*${meeting.title.escapeMrkdwn()}* has been rescheduled to $formattedStart.",
+            )
+        meeting.participants
+            .map { it.userId }
+            .distinct()
+            .filter { it != hostId }
+            .forEach { userId ->
+                outboundStager
+                    .stage(
+                        message =
+                            OutboundMessage.ChannelMessage(
+                                target = ConversationTarget(id = userId),
+                                content = content,
+                                detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                            ),
+                        basicInfo = CommandBasicInfo.forOutbound(publisherId = userId, channel = userId, appId = appId),
+                    )?.let { eventPublisher.publishOne(event = it) }
+            }
     }
 
     private fun publishEphemeral(message: String, basicInfo: CommandBasicInfo, targetUserId: String) {
         outboundStager
             .stage(
-                message =
-                    OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = basicInfo.channel),
-                        recipient = UserRef(id = targetUserId),
-                        content = MessageContent.Text(headline = null, markdown = message),
-                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                    ),
+                message = hostEphemeral(message = message, basicInfo = basicInfo, targetUserId = targetUserId),
                 basicInfo = basicInfo,
             )?.let { eventPublisher.publishOne(event = it) }
     }
+
+    private fun hostEphemeral(
+        message: String,
+        basicInfo: CommandBasicInfo,
+        targetUserId: String,
+    ): OutboundMessage.Ephemeral =
+        OutboundMessage.Ephemeral(
+            target = ConversationTarget(id = basicInfo.channel),
+            recipient = UserRef(id = targetUserId),
+            content = MessageContent.Text(headline = null, markdown = message),
+            detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+        )
 
     companion object {
         private val RESCHEDULE_TIMESTAMP_FORMAT: DateTimeFormatter =

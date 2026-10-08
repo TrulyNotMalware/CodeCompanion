@@ -2,7 +2,7 @@
 -- Google Calendar (per-user OAuth): connection store + one-time OAuth state
 -- -----------------------------------------------------------------------------
 -- Rationale:
---   `/meetup calendar connect` links a Slack user to their own Google Calendar.
+--   `/calendar connect` links a Slack user to their own Google Calendar.
 --   The bot keeps one refresh token per Slack user so the mirror worker can write
 --   meetings into that user's primary calendar without asking again. The token is
 --   stored encrypted (AES-256-GCM, key = slack.app.calendar.google.token-encryption-key);
@@ -22,7 +22,7 @@
 --     revoke endpoint revokes the whole grant for that account and client, which
 --     would also kill the token just stored.
 --   - status REVOKED is written by the mirror worker when Google rejects the
---     refresh token (invalid_grant); `/meetup calendar status` then asks the user
+--     refresh token (invalid_grant); `/calendar status` then asks the user
 --     to reconnect.
 --   - Expired state rows are purged opportunistically on the next connect.
 --

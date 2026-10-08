@@ -51,7 +51,7 @@ class GoogleOAuthCallbackControllerTest :
                 then("a 200 page explains how to retry") {
                     response.status shouldBe 200
                     response.contentAsString shouldContain "Connection cancelled"
-                    response.contentAsString shouldContain "/meetup calendar connect"
+                    response.contentAsString shouldContain "/calendar connect"
                 }
             }
 
@@ -101,7 +101,7 @@ class GoogleOAuthCallbackControllerTest :
                     response.getHeader("Cache-Control") shouldBe "no-store"
                     response.contentAsString shouldContain "The connection could not be saved"
                     response.contentAsString shouldContain "This link cannot be used again"
-                    response.contentAsString shouldContain "/meetup calendar connect"
+                    response.contentAsString shouldContain "/calendar connect"
                 }
 
                 then("no request parameter is echoed") {

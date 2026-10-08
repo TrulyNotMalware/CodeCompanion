@@ -64,6 +64,21 @@ class StandupCommandTest :
                         command.findSubCommandDefinition()
                     }
                 }
+
+                then("handleEvent answers the requester with the unknown name and /standup's escaped usage lines") {
+                    val output = command.handleEvent()
+                    output.ok shouldBe false
+                    output.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
+                    command
+                        .drainIntents()
+                        .single()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe
+                        "Unknown subcommand `unknown_sub`.\nUsage:\n• `/standup setup`\n• `/standup list`\n" +
+                        "• `/standup stop &lt;routine-name&gt;`"
+                }
             }
         }
 

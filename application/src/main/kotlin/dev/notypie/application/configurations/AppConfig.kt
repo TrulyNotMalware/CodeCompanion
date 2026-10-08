@@ -175,6 +175,7 @@ data class AppConfig(
     data class Socket(
         val meetingCommand: String = "/meetup",
         val standupCommand: String = "/standup",
+        val calendarCommand: String = "/calendar",
         val subscribeCommand: String = "/subscribe",
         val unsubscribeCommand: String = "/unsubscribe",
         val subscriptionsCommand: String = "/subscriptions",

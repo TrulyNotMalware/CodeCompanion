@@ -50,7 +50,7 @@ class CalendarConnectionService(
 ) : CalendarConnectionCallback {
     companion object {
         private const val STATE_BYTES = 32
-        const val CONNECT_USAGE: String = "Run `/meetup calendar connect` to link your Google Calendar."
+        const val CONNECT_USAGE: String = "Run `/calendar connect` to link your Google Calendar."
         const val DISCONNECT_REASON: String = "disconnect"
         const val RECONNECT_REASON: String = "replaced by a new connection"
         const val DISCONNECTED_ERROR: String = "disconnected"
