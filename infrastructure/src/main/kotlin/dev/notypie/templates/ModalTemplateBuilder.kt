@@ -16,6 +16,8 @@ import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.LayoutBlocks
 import dev.notypie.templates.dto.TimeScheduleAlertContents
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -23,6 +25,9 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 private val log = KotlinLogging.logger {}
+
+private fun String.encodedRoutingTokenOrNull(): String? =
+    takeIf { it.isNotBlank() }?.let { URLEncoder.encode(it, StandardCharsets.UTF_8) }
 
 class ModalTemplateBuilder(
     private val modalBlockBuilder: ModalBlockBuilder =
@@ -217,32 +222,6 @@ class ModalTemplateBuilder(
             )
             details?.let { modalBlockBuilder.textSections(text = it, isMarkDown = false).forEach { add(block = it) } }
         }
-
-    override fun requestApprovalFormTemplate(
-        headLineText: String,
-        selectionFields: List<SelectionContents>,
-        approvalContents: ApprovalContents,
-        approvalTargetUser: MultiUserSelectContents?,
-        reasonInput: TextInputContents?,
-    ): LayoutBlocks {
-        val targetUser =
-            approvalTargetUser
-                ?: MultiUserSelectContents(
-                    title = "Select target user",
-                    placeholderText = DEFAULT_PLACEHOLDER_TEXT,
-                )
-        val selectionLayouts =
-            selectionFields.map { modalBlockBuilder.selectionBlock(selectionContents = it) }
-
-        return layoutBlocks {
-            add(block = modalBlockBuilder.headerBlock(text = headLineText))
-            add(block = modalBlockBuilder.dividerBlock())
-            addAll(layouts = selectionLayouts)
-            add(layout = modalBlockBuilder.multiUserSelectBlock(contents = targetUser))
-            reasonInput?.let { add(block = modalBlockBuilder.plainTextInputBlock(contents = it)) }
-            add(layout = modalBlockBuilder.approvalBlock(approvalContents = approvalContents))
-        }
-    }
 
     override fun meetingListFormTemplate(
         meetings: List<MeetingDto>,
@@ -443,17 +422,19 @@ class ModalTemplateBuilder(
         currentStartAt: LocalDateTime,
         requesterId: String,
         channel: String,
+        listResponseUrl: String,
     ): String {
         val view =
             modal {
                 callbackId(id = RescheduleMeetingModalIds.CALLBACK_ID)
                 privateMetadata(
                     metadata =
-                        listOf(
+                        listOfNotNull(
                             meetingUid.toString(),
                             CommandDetailType.MEETING_RESCHEDULE_SUBMIT.name,
                             requesterId,
                             channel,
+                            listResponseUrl.encodedRoutingTokenOrNull(),
                         ).joinToString(","),
                 )
                 title(text = "Reschedule meeting")
@@ -479,17 +460,23 @@ class ModalTemplateBuilder(
         return jsonMapper.writeValueAsString(view)
     }
 
-    override fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String {
+    override fun addParticipantModalViewJson(
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+        listResponseUrl: String,
+    ): String {
         val view =
             modal {
                 callbackId(id = AddParticipantModalIds.CALLBACK_ID)
                 privateMetadata(
                     metadata =
-                        listOf(
+                        listOfNotNull(
                             meetingUid.toString(),
                             CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT.name,
                             requesterId,
                             channel,
+                            listResponseUrl.encodedRoutingTokenOrNull(),
                         ).joinToString(","),
                 )
                 title(text = "Add participants")

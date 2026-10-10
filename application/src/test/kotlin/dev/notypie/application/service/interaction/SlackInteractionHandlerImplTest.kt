@@ -1,5 +1,6 @@
 package dev.notypie.application.service.interaction
 
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.meeting.CommitRecordingEventPublisher
@@ -288,6 +289,7 @@ class SlackInteractionHandlerImplTest :
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = publisher,
                     transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
             val event = createAddParticipantEvent(participantUserIds = listOf("U_A"))
 
@@ -348,12 +350,9 @@ class SlackInteractionHandlerImplTest :
 
         given("legacy whitelist constant") {
             `when`("LEGACY_AUTO_REJECT_TYPES is inspected") {
-                then("contains exactly APPLY_REQUEST and APPROVAL_REQUEST") {
+                then("contains exactly APPROVAL_REQUEST") {
                     SlackInteractionHandlerImpl.LEGACY_AUTO_REJECT_TYPES shouldBe
-                        setOf(
-                            CommandDetailType.APPLY_REQUEST,
-                            CommandDetailType.APPROVAL_REQUEST,
-                        )
+                        setOf(CommandDetailType.APPROVAL_REQUEST)
                 }
 
                 then("does NOT contain new CommandDetailType values that need context routing") {

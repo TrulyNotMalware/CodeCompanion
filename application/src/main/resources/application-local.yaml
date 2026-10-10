@@ -98,12 +98,22 @@ slack:
     socket:
       meeting-command: ${SLACK_MEETING_COMMAND:/meetup}
       standup-command: ${SLACK_STANDUP_COMMAND:/standup}
+      calendar-command: ${SLACK_CALENDAR_COMMAND:/calendar}
     mode:
       # Full local pipeline against orbstack: outbox -> Debezium CDC -> Kafka -> consumer -> Slack.
       outbox-reading-strategy: cdc
       event-publisher: kafka
       cdc:
         topic: cdc.code_companion.outbox_message
+    # Google Calendar per-user OAuth (/calendar connect). Off unless GOOGLE_CALENDAR_ENABLED=true;
+    # then the client id/secret, the public callback URL and a base64 32-byte token key are required.
+    calendar:
+      google:
+        enabled: ${GOOGLE_CALENDAR_ENABLED:false}
+        client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+        client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+        redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:}
+        token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
     # AI agent backend — run the claude-sidecar locally: `BEARER_SECRET=... python -m sidecar`
     # (binds 127.0.0.1:7300 by default). Local runs may authenticate the sidecar with a
     # subscription OAuth token; clusters must use ANTHROPIC_API_KEY (sidecar-side setting).

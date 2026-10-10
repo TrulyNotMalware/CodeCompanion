@@ -5,6 +5,7 @@ import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.OutboxStatusRow
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRepositoryOver
+import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.outbox.stubOutboxStatus
 import dev.notypie.application.service.ops.OpsStatusService
 import dev.notypie.application.service.relay.AccessBlockedTracker
@@ -273,6 +274,7 @@ class OutboxHealthIndicatorTest :
                             accessBlockedTracker = tracker,
                             clock = clock,
                             appConfig = appConfig,
+                            transactionManager = createStubTransactionManager(),
                         ).renderReport()
                     val registry = SimpleMeterRegistry()
                     OutboxMetrics(

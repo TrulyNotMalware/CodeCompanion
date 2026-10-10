@@ -22,11 +22,15 @@ Contains application configuration including:
 - Database connection settings (isolation level, timeouts)
 - Hibernate batch size settings
 - Kafka bootstrap servers (placeholder) and the CDC topic (`SLACK_CDC_TOPIC`, `cdc.code_companion.outbox_message`)
+- Google Calendar mirror switch and client settings: `GOOGLE_CALENDAR_ENABLED` (`'false'`), `GOOGLE_OAUTH_CLIENT_ID`,
+  `GOOGLE_OAUTH_REDIRECT_URI` (see Google Calendar Mirror below)
 
 ### Secret (secret.yaml)
 Stores sensitive information that needs to be configured:
 - Database connection URL, username, and password
 - Slack API token and Slack signing secret (`SLACK_SIGNING_SECRET`; the app refuses to start without it)
+- Google OAuth client secret and the refresh-token encryption key (`GOOGLE_OAUTH_CLIENT_SECRET`,
+  `GOOGLE_TOKEN_ENCRYPTION_KEY`), read only while the Google Calendar mirror is enabled
 
 Values sit under `stringData:`, so write them as plain text — the API server base64-encodes them.
 
@@ -83,7 +87,8 @@ Configure:
 - `cert-manager.io/cluster-issuer`: Your cluster issuer name
 - `secretName`: TLS secret name
 
-Both samples forward only the `/api/slack` and `/api/slash` prefixes (the Slack endpoints). Never route
+Both samples forward only the `/api/slack` and `/api/slash` prefixes (the Slack endpoints) and the exact path
+`/oauth/google/callback` (Google's OAuth redirect, see Google Calendar Mirror below). Never route
 `/actuator`, `/api/actuator` (the base path of the dev, local and slack-live profiles) or `/mcp` publicly: they
 are served on the application port without authentication.
 
@@ -174,6 +179,9 @@ the `strategy` block from `deployment.yaml` in a follow-up PR. `kubectl apply` r
 the last-applied configuration, and the API server defaults it back to `RollingUpdate` (25% / 25%). Do not restore
 the rolling update while a pre-V20 revision is still serving (for example after the workflow rolled back).
 
+The Google Calendar release adds V24 and V25. They only create tables and are independent of this procedure; see
+Google Calendar Mirror below.
+
 If a migration must run while no Pod is up, use `kubectl scale deployment code-companion-deploy -n api-service
 --replicas=0` before merging, wait for the Pods to disappear (`kubectl get pods -n api-service -l
 app=code-companion-deploy`), run the script, then merge; V21 still waits for step 5. The workflow's apply sets `replicas: 2` again. The
@@ -237,6 +245,57 @@ The AI assistant lane (`@bot ask`) requires [agent-sidecar](https://github.com/T
 
 Because both containers share the Pod network namespace, no Service or NetworkPolicy changes are needed — the sidecar should bind to `127.0.0.1` only.
 
+## Google Calendar Mirror (Optional)
+
+`/calendar connect` lets each Slack user link their own Google Calendar; the bot then mirrors the meetings they
+host or approve into it (see the root `README.md`). The feature is off unless `GOOGLE_CALENDAR_ENABLED` is `true`:
+until then `/calendar` only answers that it is not enabled and `/oauth/google/callback` returns `404`.
+
+1. **Migrations: V24, then V25, by hand.** Production runs `ddl-auto: none`. Both scripts only create new tables
+   (`CREATE TABLE IF NOT EXISTS`; V25's foreign key references `meetings`), so apply them while the previous release
+   still serves, before the deploy that ships them. Then confirm:
+   ```sql
+   SHOW TABLES LIKE 'google_%';
+   SHOW TABLES LIKE 'meeting_calendar_event';
+   SHOW INDEX FROM meetings WHERE Column_name = 'idempotency_key';
+   ```
+   The first query lists `google_calendar_connection` and `google_oauth_state`. The last should show a unique index:
+   the entity declares one, but `meetings` predates V1 (Hibernate created it), and the mirror hooks look a meeting up
+   by that key. If it is missing, look for duplicates first
+   (`SELECT idempotency_key, COUNT(*) FROM meetings GROUP BY idempotency_key HAVING COUNT(*) > 1;`), resolve any, then
+   add it with the online form the migration headers use (`SET SESSION lock_wait_timeout = 5;` then `ALTER TABLE
+   meetings ADD UNIQUE INDEX uk_meetings_idempotency_key (idempotency_key), ALGORITHM=INPLACE, LOCK=NONE;`).
+   Never enable the feature before both tables exist: the hooks read and write them inside every
+   meeting write transaction, so creating, approving, canceling and rescheduling meetings would all roll back on the
+   missing table while readiness stays green.
+2. **Google Cloud OAuth client.** In the Google Cloud project: enable the Google Calendar API; configure the OAuth
+   consent screen (user type External, publishing status *In production*: under *Testing* only the listed test users
+   can consent and their refresh tokens expire after 7 days; `calendar.events` is a sensitive scope, so Google shows
+   an unverified-app warning until the app is verified); create an OAuth client of type *Web application* with the
+   authorized redirect URI `https://<bot-domain>/oauth/google/callback`. Google accepts plain `http` only for
+   `localhost`, so production needs the public HTTPS host.
+3. **Keys.** ConfigMap: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI` (exactly the registered URI, or Google
+   rejects the consent with `redirect_uri_mismatch`) and `GOOGLE_CALENDAR_ENABLED`, which must be `'true'` or
+   `'false'`: an empty value fails startup. Secret: `GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_TOKEN_ENCRYPTION_KEY`
+   (`openssl rand -base64 32`, a base64 32-byte AES key). Changing the key later makes every stored token
+   unreadable; each user then gets one reconnect DM at their next sync. With the feature enabled, a blank client id, client secret or key,
+   or a redirect URI that is not an absolute `http(s)://` URL, fails startup.
+4. **Routing.** Both samples in `route/` forward the exact path `/oauth/google/callback` (a browser `GET` with no
+   Slack signature). The production host is fronted by a bearer-authenticating layer outside this repository (see
+   `AGENTS.md`); confirm with its operator that this path reaches the app without a bearer token, or Google's
+   redirect ends at a `401`.
+5. **Slack command.** On the production (HTTP) Slack app, add the slash command `/calendar` with the Request URL
+   `https://<bot-domain>/api/slash/calendar`, a short description such as "Link your Google Calendar" and the usage
+   hint `connect | disconnect | status` (`docs/slack-app-manifest.yaml` has the full entry). The existing
+   `/api/slash` route and the Slack signature check already cover the path. Until step 6 the command only answers
+   that the integration is not enabled.
+6. **Enable.** Apply the ConfigMap and Secret with `GOOGLE_CALENDAR_ENABLED: 'true'` and restart the Pods
+   (`kubectl rollout restart deployment code-companion-deploy -n api-service`; `envFrom` is read only at container
+   start). With `strategy: Recreate` in `deployment.yaml` that restart is a full outage (the old Pods stop before
+   the new ones start), so do it in a quiet window or let the next deploy pick the change up; the same holds for
+   turning the feature off. Then run `/calendar connect` in Slack and check `google_calendar_connection` and
+   `meeting_calendar_event` rows and the calendar itself.
+
 ## Notes
 
 - The deployment uses `$IMAGE_NAME` variable which should be replaced during CI/CD (`envsubst '${IMAGE_NAME}'`)
@@ -273,11 +332,15 @@ k8s/
 - 데이터베이스 연결 설정 (격리 수준, 타임아웃)
 - Hibernate 배치 크기 설정
 - Kafka 부트스트랩 서버(플레이스홀더)와 CDC 토픽(`SLACK_CDC_TOPIC`, `cdc.code_companion.outbox_message`)
+- Google Calendar 미러 스위치와 클라이언트 설정: `GOOGLE_CALENDAR_ENABLED`(`'false'`), `GOOGLE_OAUTH_CLIENT_ID`,
+  `GOOGLE_OAUTH_REDIRECT_URI`(아래 Google Calendar 미러 참고)
 
 ### Secret (secret.yaml)
 설정이 필요한 민감한 정보를 저장합니다:
 - 데이터베이스 연결 URL, 사용자명, 비밀번호
 - Slack API 토큰과 Slack 서명 시크릿(`SLACK_SIGNING_SECRET`, 없으면 앱이 기동을 거부)
+- Google OAuth 클라이언트 시크릿과 refresh token 암호화 키(`GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`),
+  Google Calendar 미러를 켰을 때만 읽힘
 
 값은 `stringData:` 아래에 평문으로 적습니다 — base64 인코딩은 API 서버가 합니다.
 
@@ -326,7 +389,8 @@ k8s/
 - `cert-manager.io/cluster-issuer`: 클러스터 issuer 이름
 - `secretName`: TLS secret 이름
 
-두 샘플 모두 `/api/slack`과 `/api/slash` 접두(Slack 엔드포인트)만 전달합니다. `/actuator`, `/api/actuator`(dev·local·
+두 샘플 모두 `/api/slack`과 `/api/slash` 접두(Slack 엔드포인트)와 정확한 경로 `/oauth/google/callback`(Google OAuth 리디렉션,
+아래 Google Calendar 미러 참고)만 전달합니다. `/actuator`, `/api/actuator`(dev·local·
 slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서 인증 없이 제공되므로 절대 외부로 라우팅하지 마세요.
 
 ## 배포 단계
@@ -407,6 +471,8 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
 `strategy` 블록을 지웁니다. 필드가 last-applied 설정에 있으므로 `kubectl apply`가 지우고, API 서버가 `RollingUpdate`(25% / 25%)로
 되돌립니다. pre-V20 리비전이 아직 서비스 중이면(예: 워크플로가 롤백한 뒤) 롤링 업데이트로 되돌리지 마세요.
 
+Google Calendar 릴리스는 V24와 V25를 추가합니다. 테이블만 만들며 이 절차와 무관합니다. 아래 Google Calendar 미러를 참고하세요.
+
 파드가 하나도 없을 때 실행해야 하는 마이그레이션이 있으면 머지 전에 `kubectl scale deployment code-companion-deploy -n
 api-service --replicas=0`으로 내리고 파드가 사라진 것을 확인한 뒤(`kubectl get pods -n api-service -l app=code-companion-deploy`)
 스크립트를 실행하고 머지합니다. V21은 여전히 5단계를 기다립니다. 워크플로의 apply가 `replicas: 2`로 되돌립니다. 이 경우 중단은 빌드가 끝나고 새 파드가
@@ -467,6 +533,49 @@ AI 어시스턴트 기능(`@bot ask`)을 사용하려면 [agent-sidecar](https:/
 4. **앱 설정**: `slack.app.agent.sidecar.base-url`은 Pod 루프백 기본값 `http://127.0.0.1:7300`을 그대로 사용하고, bearer 시크릿만 주입하면 됩니다 (예: 같은 Secret의 환경 변수로).
 
 두 컨테이너가 Pod 네트워크 네임스페이스를 공유하므로 Service나 NetworkPolicy 변경은 필요 없습니다 — 사이드카는 `127.0.0.1`에만 바인드하는 것이 안전합니다.
+
+## Google Calendar 미러 (선택)
+
+`/calendar connect`로 각 슬랙 사용자가 자기 Google Calendar를 연결하면, 봇이 그 사용자가 호스트이거나 승인한 미팅을 그
+캘린더에 미러합니다(루트 `README.md` 참고). `GOOGLE_CALENDAR_ENABLED`가 `true`가 아니면 꺼져 있고, 그동안 `/calendar`는
+꺼져 있다는 안내만 하며 `/oauth/google/callback`은 `404`를 돌려줍니다.
+
+1. **마이그레이션: V24, 이어서 V25를 직접 적용.** 운영은 `ddl-auto: none`입니다. 두 스크립트는 새 테이블만 만들므로
+   (`CREATE TABLE IF NOT EXISTS`, V25의 외래 키가 `meetings`를 참조) 이전 릴리스가 서비스하는 동안, 이 스크립트를 싣는 배포 전에
+   적용합니다. 그다음 확인합니다:
+   ```sql
+   SHOW TABLES LIKE 'google_%';
+   SHOW TABLES LIKE 'meeting_calendar_event';
+   SHOW INDEX FROM meetings WHERE Column_name = 'idempotency_key';
+   ```
+   첫 쿼리는 `google_calendar_connection`과 `google_oauth_state`를 보여야 합니다. 마지막 쿼리는 유니크 인덱스를 보여야 합니다:
+   엔티티는 유니크로 선언하지만 `meetings`는 V1 이전에 Hibernate가 만든 테이블이고, 미러 훅이 이 키로 미팅을 찾습니다. 인덱스가
+   없으면 먼저 중복을 찾아(`SELECT idempotency_key, COUNT(*) FROM meetings GROUP BY idempotency_key HAVING COUNT(*) > 1;`)
+   정리한 뒤, 마이그레이션 헤더와 같은 온라인 형식으로 추가합니다(`SET SESSION lock_wait_timeout = 5;` 후 `ALTER TABLE meetings
+   ADD UNIQUE INDEX uk_meetings_idempotency_key (idempotency_key), ALGORITHM=INPLACE, LOCK=NONE;`). 두 테이블이
+   생기기 전에는 절대 켜지 마세요. 훅이 모든 미팅 쓰기 트랜잭션 안에서 이 테이블을 읽고 쓰므로, 테이블이 없으면 미팅 생성·승인·
+   취소·일정 변경이 전부 롤백되는데 readiness는 그대로 통과합니다.
+2. **Google Cloud OAuth 클라이언트.** Google Cloud 프로젝트에서 Google Calendar API를 사용 설정하고, OAuth 동의 화면을 구성하고
+   (사용자 유형 External, 게시 상태 *프로덕션*: *테스트* 상태에서는 등록한 테스트 사용자만 동의할 수 있고 refresh token이 7일 뒤
+   만료됩니다. `calendar.events`는 민감한 범위라 앱 확인을 받기 전까지 Google이 확인되지 않은 앱 경고를 보여 줍니다), 승인된
+   리디렉션 URI가 `https://<봇 도메인>/oauth/google/callback`인 *웹 애플리케이션* 유형 OAuth 클라이언트를 만듭니다. Google은
+   `localhost`에만 평문 `http`를 허용하므로 운영에는 공개 HTTPS 호스트가 필요합니다.
+3. **키.** ConfigMap: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI`(등록한 URI와 정확히 같아야 하며, 다르면 Google이
+   `redirect_uri_mismatch`로 동의를 거부), `GOOGLE_CALENDAR_ENABLED`(`'true'` 또는 `'false'`만 — 빈 값이면 기동이 실패). Secret:
+   `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`(`openssl rand -base64 32`, base64 32바이트 AES 키). 나중에 키를
+   바꾸면 저장된 토큰을 모두 읽을 수 없게 되어 사용자마다 다음 동기화 때 재연결 DM이 한 번 갑니다. 기능을 켠 상태에서 client id·client secret·키가
+   비었거나 리디렉션 URI가 `http(s)://`로 시작하는 절대 URL이 아니면 기동이 실패합니다.
+4. **라우팅.** `route/`의 두 샘플은 정확한 경로 `/oauth/google/callback`(슬랙 서명이 없는 브라우저 `GET`)을 전달합니다. 운영 호스트
+   앞에는 이 저장소 밖의 bearer 인증 계층이 있으므로(`AGENTS.md` 참고), 이 경로가 bearer 토큰 없이 앱에 도달하는지 그 운영자에게
+   확인하세요. 그러지 않으면 Google의 리디렉션이 `401`로 끝납니다.
+5. **슬랙 명령.** 운영(HTTP) 슬랙 앱에 슬래시 명령 `/calendar`를 추가합니다. Request URL은 `https://<봇 도메인>/api/slash/calendar`,
+   짧은 설명은 예컨대 "Link your Google Calendar", usage hint는 `connect | disconnect | status`입니다(전체 항목은
+   `docs/slack-app-manifest.yaml`). 기존 `/api/slash` 라우트와 슬랙 서명 검사가 이 경로를 이미 덮습니다. 6단계 전까지 이 명령은
+   연동이 꺼져 있다는 안내만 합니다.
+6. **활성화.** `GOOGLE_CALENDAR_ENABLED: 'true'`로 ConfigMap과 Secret을 적용하고 파드를 재시작합니다(`kubectl rollout restart
+   deployment code-companion-deploy -n api-service`. `envFrom`은 컨테이너 시작 때만 읽힘). `deployment.yaml`이 `strategy: Recreate`인 동안 이 재시작은 이전
+   파드가 멈춘 뒤 새 파드가 뜨는 전체 중단이므로 한가한 시간에 하거나 다음 배포에 맡깁니다. 기능을 끌 때도 같습니다. 그다음
+   슬랙에서 `/calendar connect`를 실행하고 `google_calendar_connection`·`meeting_calendar_event` 행과 실제 캘린더를 확인합니다.
 
 ## 참고 사항
 

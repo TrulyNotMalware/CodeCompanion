@@ -3,6 +3,8 @@ package dev.notypie.repository
 import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.domain.standup.entity.enums.SessionStatus
+import dev.notypie.repository.calendar.JpaMeetingCalendarEventRepository
+import dev.notypie.repository.calendar.schema.CalendarSyncStatus
 import dev.notypie.repository.cve.JpaCveDeliveryRepository
 import dev.notypie.repository.cve.JpaCveEventRepository
 import dev.notypie.repository.cve.schema.CveDeliveryStatus
@@ -31,6 +33,7 @@ private val STATUS_ENUM_BY_REPOSITORY: Map<Class<*>, Class<out Enum<*>>> =
         JpaMeetingReminderRepository::class.java to MeetingReminderStatus::class.java,
         JpaSessionDispatchRepository::class.java to DispatchStatus::class.java,
         JpaStandupSessionRepository::class.java to SessionStatus::class.java,
+        JpaMeetingCalendarEventRepository::class.java to CalendarSyncStatus::class.java,
     )
 
 private fun Class<*>.nativeQueryConstants(): Map<String, Set<String>> =

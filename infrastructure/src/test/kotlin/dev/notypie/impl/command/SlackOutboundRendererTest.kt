@@ -2,9 +2,6 @@ package dev.notypie.impl.command
 
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -254,59 +251,6 @@ class SlackOutboundRendererTest :
             }
         }
 
-        given("a ChannelMessage with Form content") {
-            val fields =
-                listOf(
-                    SelectionContents(
-                        title = "Purpose",
-                        explanation = "Select",
-                        placeholderText = "pick one",
-                        contents = listOf(SelectBoxDetails(name = "A", value = "a")),
-                    ),
-                )
-            val reason = TextInputContents(title = "Reason", placeholderText = "why")
-            val message =
-                OutboundMessage.ChannelMessage(
-                    target = target,
-                    content =
-                        MessageContent.Form(
-                            headline = "Approve",
-                            fields = fields,
-                            reason = reason,
-                            approval = null,
-                        ),
-                )
-
-            `when`("render is called") {
-                every {
-                    slackEventBuilder.simpleApprovalFormRequest(
-                        commandDetailType = any(),
-                        headLineText = any(),
-                        commandBasicInfo = any(),
-                        selectionFields = any(),
-                        reasonInput = any(),
-                        approvalContents = any(),
-                    )
-                } returns stubEvent
-
-                val payload = renderer.render(message = message, basicInfo = basicInfo)
-
-                then("delegates to simpleApprovalFormRequest with APPROVAL_REQUEST and the same fields") {
-                    payload shouldBe stubEvent.payload
-                    verify(exactly = 1) {
-                        slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
-                            headLineText = "Approve",
-                            commandBasicInfo = basicInfo,
-                            selectionFields = fields,
-                            reasonInput = reason,
-                            approvalContents = null,
-                        )
-                    }
-                }
-            }
-        }
-
         given("a ChannelMessage with MeetingRequest content") {
             val message =
                 OutboundMessage.ChannelMessage(
@@ -394,6 +338,7 @@ class SlackOutboundRendererTest :
             `when`("render is called") {
                 every {
                     slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
                         textMessage = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
@@ -403,10 +348,11 @@ class SlackOutboundRendererTest :
 
                 val payload = renderer.render(message = message, basicInfo = basicInfo)
 
-                then("delegates to simpleEphemeralTextRequest with the recipient id") {
+                then("delegates to simpleEphemeralTextRequest with the recipient id and no headline") {
                     payload shouldBe stubEvent.payload
                     verify(exactly = 1) {
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
                             textMessage = "secret",
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.SIMPLE_TEXT,
@@ -428,6 +374,7 @@ class SlackOutboundRendererTest :
             `when`("render is called") {
                 every {
                     slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
                         textMessage = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
@@ -440,6 +387,7 @@ class SlackOutboundRendererTest :
                 then("a null recipient maps to a null targetUserId (posts to the publisher)") {
                     verify(exactly = 1) {
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
                             textMessage = "to publisher",
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.SIMPLE_TEXT,
@@ -462,6 +410,7 @@ class SlackOutboundRendererTest :
             `when`("render is called") {
                 every {
                     slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
                         textMessage = any(),
                         commandBasicInfo = any(),
                         commandDetailType = any(),
@@ -475,9 +424,47 @@ class SlackOutboundRendererTest :
                     payload shouldBe stubEvent.payload
                     verify(exactly = 1) {
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
                             textMessage = "canceled",
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.CANCEL_MEETING,
+                            targetUserId = "U_REQUESTER",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an Ephemeral with Text content and a headline") {
+            val message =
+                OutboundMessage.Ephemeral(
+                    target = target,
+                    recipient = UserRef(id = "U_REQUESTER"),
+                    content = MessageContent.Text(headline = "CodeCompanion — outbox status", markdown = "report"),
+                    detailType = CommandDetailType.STATUS_REPORT,
+                )
+
+            `when`("render is called") {
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
+                        textMessage = any(),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns stubEvent
+
+                val payload = renderer.render(message = message, basicInfo = basicInfo)
+
+                then("the headline is handed to simpleEphemeralTextRequest, as a channel Text hands it over") {
+                    payload shouldBe stubEvent.payload
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = "CodeCompanion — outbox status",
+                            textMessage = "report",
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.STATUS_REPORT,
                             targetUserId = "U_REQUESTER",
                         )
                     }
@@ -569,7 +556,7 @@ class SlackOutboundRendererTest :
                     reason = "approve this",
                     publisherId = basicInfo.publisherId,
                     idempotencyKey = basicInfo.idempotencyKey,
-                    commandDetailType = CommandDetailType.APPLY_REQUEST,
+                    commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                 )
             val message =
                 OutboundMessage.Approval(
@@ -596,7 +583,7 @@ class SlackOutboundRendererTest :
                     routingSlot.captured shouldBe emptyList()
                     verify(exactly = 1) {
                         slackEventBuilder.simpleApplyRejectRequest(
-                            commandDetailType = CommandDetailType.APPLY_REQUEST,
+                            commandDetailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
                             commandBasicInfo = basicInfo,
                             approvalContents = approval,
                             targetUserId = null,
@@ -746,6 +733,7 @@ class SlackOutboundRendererTest :
                             meetingUid = UUID.randomUUID(),
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = null,
                         ),
                 )
 

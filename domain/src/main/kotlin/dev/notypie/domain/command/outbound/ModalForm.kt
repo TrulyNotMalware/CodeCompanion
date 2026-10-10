@@ -7,12 +7,14 @@ sealed interface ModalForm {
         val meetingUid: UUID,
         val requesterId: String,
         val channel: ConversationTarget,
+        val listHandle: ResponseReplaceHandle?,
     ) : ModalForm
 
     data class AddParticipant(
         val meetingUid: UUID,
         val requesterId: String,
         val channel: ConversationTarget,
+        val listHandle: ResponseReplaceHandle?,
     ) : ModalForm
 
     data class StandupFill(

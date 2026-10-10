@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # k8s/route
 
@@ -11,8 +11,8 @@ applied by CI.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `httpRoute.yaml` | `gateway.networking.k8s.io/v1` HTTPRoute `code-companion-http-route`; one rule matching `PathPrefix /api/slack` or `PathPrefix /api/slash` → `code-companion-svc:80`. Placeholders: `metadata.namespace` (`your-namespace`), `parentRefs[0].name` (`api-gateway-name`), `.namespace` (`gateway-vendor-namespace`), `.sectionName` (`gateway-section-name`), `hostnames[0]` (`your.uri`) |
-| `ingress.yaml` | `networking.k8s.io/v1` Ingress `code-companion-ingress` with `kubernetes.io/ingress.class: nginx`, TLS via `cert-manager.io/cluster-issuer`; two `Prefix` paths, `/api/slack` and `/api/slash` → `code-companion-svc:80`. Placeholders: `cert-manager.io/cluster-issuer` (`your-cluster-issuer`), `tls[0].hosts[0]` and `rules[0].host` (`your.uri`), `tls[0].secretName` (`your-secret-tls`) |
+| `httpRoute.yaml` | `gateway.networking.k8s.io/v1` HTTPRoute `code-companion-http-route`; one rule matching `PathPrefix /api/slack`, `PathPrefix /api/slash` or `Exact /oauth/google/callback` → `code-companion-svc:80`. Placeholders: `metadata.namespace` (`your-namespace`), `parentRefs[0].name` (`api-gateway-name`), `.namespace` (`gateway-vendor-namespace`), `.sectionName` (`gateway-section-name`), `hostnames[0]` (`your.uri`) |
+| `ingress.yaml` | `networking.k8s.io/v1` Ingress `code-companion-ingress` with `kubernetes.io/ingress.class: nginx`, TLS via `cert-manager.io/cluster-issuer`; two `Prefix` paths, `/api/slack` and `/api/slash`, and the `Exact` path `/oauth/google/callback` → `code-companion-svc:80`. Placeholders: `cert-manager.io/cluster-issuer` (`your-cluster-issuer`), `tls[0].hosts[0]` and `rules[0].host` (`your.uri`), `tls[0].secretName` (`your-secret-tls`) |
 
 ## For AI Agents
 
@@ -28,7 +28,9 @@ applied by CI.
 - The TLS host and the rule host are the same placeholder value and have to be replaced together; cert-manager
   writes the certificate into `secretName`, so that Secret must not pre-exist with other content.
 - Both routes forward only `/api/slack` and `/api/slash` (the paths `SlackEventController` and
-  `SlashCommandController` serve), without any rewrite. Both match types are element-wise, so `/api/slackx` does
+  `SlashCommandController` serve) and the exact path `/oauth/google/callback` (`GoogleOAuthCallbackController`, the
+  browser redirect from Google's consent screen; it is registered only while the calendar integration is enabled,
+  so it answers `404` otherwise), without any rewrite. Both prefix match types are element-wise, so `/api/slackx` does
   not match. **Do not widen them to `/api` or `/`:** the app serves the unauthenticated actuator at `/actuator`
   (prod) or `/api/actuator` (dev, local and slack-live, where local also exposes `loggers` and `threaddump`), and
   `/mcp`, on the same port, and none of them may be reachable from outside. A new public controller path needs a

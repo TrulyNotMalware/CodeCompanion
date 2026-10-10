@@ -10,8 +10,6 @@ import com.slack.api.model.block.LayoutBlock
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.TopicOption
@@ -62,12 +60,22 @@ class SlackApiEventConstructor(
     }
 
     fun simpleEphemeralTextRequest(
+        headLineText: String?,
         textMessage: String,
         commandBasicInfo: CommandBasicInfo,
         commandDetailType: CommandDetailType,
         targetUserId: String? = null,
     ): SendSlackMessageEvent {
-        val layout = templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
+        val layout =
+            if (headLineText == null) {
+                templateBuilder.onlyTextTemplate(message = textMessage, isMarkDown = true)
+            } else {
+                templateBuilder.simpleTextResponseTemplate(
+                    headLineText = headLineText,
+                    body = textMessage,
+                    isMarkDown = true,
+                )
+            }
         return buildEphemeralMessage(
             commandDetailType = commandDetailType,
             commandBasicInfo = commandBasicInfo,
@@ -139,39 +147,6 @@ class SlackApiEventConstructor(
             replaceOriginal = false,
             targetUserId = targetUserId,
             routingExtras = routingExtras,
-        )
-    }
-
-    fun simpleApprovalFormRequest(
-        commandDetailType: CommandDetailType,
-        headLineText: String,
-        commandBasicInfo: CommandBasicInfo,
-        selectionFields: List<SelectionContents>,
-        reasonInput: TextInputContents? = null,
-        approvalContents: ApprovalContents? = null,
-    ): SendSlackMessageEvent {
-        val layout =
-            templateBuilder.requestApprovalFormTemplate(
-                headLineText = headLineText,
-                selectionFields = selectionFields,
-                reasonInput = reasonInput,
-                approvalContents =
-                    approvalContents
-                        ?: ApprovalContents(
-                            reason = "Request Approval",
-                            approvalButtonName = "Send",
-                            rejectButtonName = "Cancel",
-                            idempotencyKey = commandBasicInfo.idempotencyKey,
-                            commandDetailType = commandDetailType,
-                            publisherId = commandBasicInfo.publisherId,
-                        ),
-            )
-
-        return buildMessage(
-            commandBasicInfo = commandBasicInfo,
-            commandDetailType = commandDetailType,
-            layout = layout,
-            replaceOriginal = false,
         )
     }
 
@@ -264,6 +239,7 @@ class SlackApiEventConstructor(
         requesterId: String,
         channel: String,
         currentStartAt: LocalDateTime,
+        listResponseUrl: String,
     ): OpenViewEvent {
         val viewJson =
             templateBuilder.rescheduleMeetingModalViewJson(
@@ -271,6 +247,7 @@ class SlackApiEventConstructor(
                 currentStartAt = currentStartAt,
                 requesterId = requesterId,
                 channel = channel,
+                listResponseUrl = listResponseUrl,
             )
         val payload =
             OpenViewPayloadContents(
@@ -298,12 +275,14 @@ class SlackApiEventConstructor(
         meetingUid: UUID,
         requesterId: String,
         channel: String,
+        listResponseUrl: String,
     ): OpenViewEvent {
         val viewJson =
             templateBuilder.addParticipantModalViewJson(
                 meetingUid = meetingUid,
                 requesterId = requesterId,
                 channel = channel,
+                listResponseUrl = listResponseUrl,
             )
         val payload =
             OpenViewPayloadContents(

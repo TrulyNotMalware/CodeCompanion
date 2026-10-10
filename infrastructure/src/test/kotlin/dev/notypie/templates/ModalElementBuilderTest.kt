@@ -5,13 +5,11 @@ import com.slack.api.model.block.composition.PlainTextObject
 import com.slack.api.model.block.element.ButtonElement
 import com.slack.api.model.block.element.CheckboxesElement
 import com.slack.api.model.block.element.DatePickerElement
-import com.slack.api.model.block.element.MultiStaticSelectElement
 import com.slack.api.model.block.element.MultiUsersSelectElement
 import com.slack.api.model.block.element.PlainTextInputElement
 import com.slack.api.model.block.element.RadioButtonsElement
 import com.slack.api.model.block.element.TimePickerElement
 import dev.notypie.domain.command.dto.modals.MultiUserSelectContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
 import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.templates.dto.CheckBoxOptions
@@ -130,30 +128,6 @@ class ModalElementBuilderTest :
                     result.text.text shouldBe "Are you sure?"
                     result.confirm.text shouldBe "Yes"
                     result.deny.text shouldBe "No"
-                }
-            }
-        }
-
-        given("selectionElement") {
-            `when`("called with options") {
-                val contents =
-                    listOf(
-                        SelectBoxDetails(name = "Option A", value = "a"),
-                        SelectBoxDetails(name = "Option B", value = "b"),
-                    )
-                val result = builder.selectionElement(placeholderText = "Select", contents = contents)
-
-                then("state type is MULTI_STATIC_SELECT") {
-                    result.state.type shouldBe ActionElementTypes.MULTI_STATIC_SELECT
-                }
-
-                then("element is MultiStaticSelectElement with correct options") {
-                    val select = result.element.shouldBeInstanceOf<MultiStaticSelectElement>()
-                    select.options.size shouldBe 2
-                    select.options[0].text.text shouldBe "Option A"
-                    select.options[0].value shouldBe "a"
-                    select.options[1].text.text shouldBe "Option B"
-                    select.options[1].value shouldBe "b"
                 }
             }
         }

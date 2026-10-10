@@ -10,6 +10,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.CveTopicRepository
@@ -17,6 +18,8 @@ import dev.notypie.templates.escapeMrkdwn
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+
+internal const val CVE_FEATURE_DISABLED_MESSAGE = "The CVE feature is currently disabled."
 
 @Service
 class CveOpsService(
@@ -28,7 +31,6 @@ class CveOpsService(
 ) {
     companion object {
         private const val RESPONSE_HEADLINE = "CodeCompanion — CVE operations"
-        private const val FEATURE_DISABLED_MESSAGE = "The CVE feature is currently disabled."
     }
 
     private val maxRetries: Int = appConfig.ai.maxRetries
@@ -39,7 +41,7 @@ class CveOpsService(
         val payload = event.payload
         val text =
             if (!appConfig.cve.enabled) {
-                FEATURE_DISABLED_MESSAGE
+                CVE_FEATURE_DISABLED_MESSAGE
             } else {
                 when (payload.action) {
                     CveOpsAction.LIST_TOPICS -> renderTopics()
@@ -54,8 +56,9 @@ class CveOpsService(
             checkNotNull(
                 outboundStager.stage(
                     message =
-                        OutboundMessage.ChannelMessage(
+                        OutboundMessage.Ephemeral(
                             target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                            recipient = UserRef(id = payload.responseBasicInfo.publisherId),
                             content = MessageContent.Text(headline = RESPONSE_HEADLINE, markdown = text),
                         ),
                     basicInfo = payload.responseBasicInfo,

@@ -14,6 +14,8 @@ private val log = KotlinLogging.logger {}
 
 private val CONTROL_CHARACTERS = Regex("\\p{Cntrl}")
 
+internal fun String.stripControlCharacters(): String = replace(regex = CONTROL_CHARACTERS, replacement = "?")
+
 @RestControllerAdvice
 class ControllerAdvice : ResponseEntityExceptionHandler() {
     @ExceptionHandler(value = [DatabaseException::class])
@@ -28,7 +30,7 @@ class ControllerAdvice : ResponseEntityExceptionHandler() {
     fun handleUnsupportedSlackCommandType(
         e: UnsupportedSlackCommandTypeException,
     ): ResponseEntity<Map<String, String>> {
-        val commandType = e.rawCommandType.replace(regex = CONTROL_CHARACTERS, replacement = "?")
+        val commandType = e.rawCommandType.stripControlCharacters()
         log.warn { "Received unsupported Slack command type '$commandType'" }
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)

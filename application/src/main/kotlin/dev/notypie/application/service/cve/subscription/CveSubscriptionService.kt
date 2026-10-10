@@ -101,7 +101,7 @@ class CveSubscriptionService(
         return base + skippedSuffix(unknownKeys = unknown, reason = "not subscribed")
     }
 
-    private fun renderSubscriptions(userId: String): String {
+    internal fun renderSubscriptions(userId: String): String {
         val topics = cveSubscriptionRepository.findSubscribedTopics(userId = userId)
         if (topics.isEmpty()) return "You have no CVE topic subscriptions."
         val lines =

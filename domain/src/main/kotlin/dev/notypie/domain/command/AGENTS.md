@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-11 -->
 
 # domain/command
 
@@ -29,11 +29,11 @@ queue and hands the effects to the infrastructure resolver/stager.
 | `entity/context/` | One `CommandContext` per user-visible behaviour (notice, status, approval, agent chat, CVE ops, reaction, ...) (see `entity/context/AGENTS.md`) |
 | `entity/context/form/` | Modal-backed contexts: request/reschedule/cancel meeting, add participant, standup setup & fill, CVE subscription, decline reason (see `entity/context/form/AGENTS.md`) |
 | `entity/parsers/` | `ContextParser` and its `AppMentionContextParser` / `InteractionContextParser` implementations (see `entity/parsers/AGENTS.md`) |
-| `entity/slash/` | Slash-command definitions: `RequestMeetingCommand`, `SetupStandupCommand`, `CveLatestSlashCommand`, `CveSubscriptionCommands`, `MeetingListRange` (see `entity/slash/AGENTS.md`) |
+| `entity/slash/` | Slash-command definitions: `RequestMeetingCommand`, `StandupCommand`, `CalendarCommand`, `CveLatestSlashCommand`, `CveSubscriptionCommands`, `MeetingListRange` (see `entity/slash/AGENTS.md`) |
 | `entity/event/` | `Event`, `EventPublisher` contracts implemented by infrastructure (see `entity/event/AGENTS.md`) |
 | `exceptions/` | `CommandException` hierarchy and `CommandErrorCode` (see `exceptions/AGENTS.md`) |
 | `dto/` | `CommandBasicInfo`, `UrlVerificationRequest` (see `dto/AGENTS.md`) |
-| `dto/modals/` | Modal payload DTOs: `ApprovalContents`, `SelectionContents`, `TextInputContents`, `TimeScheduleInfo` (see `dto/modals/AGENTS.md`) |
+| `dto/modals/` | Modal payload DTOs: `ApprovalContents`, `MultiUserSelectContents`, `TextInputContents`, `TimeScheduleInfo` (see `dto/modals/AGENTS.md`) |
 | `dto/response/` | `CommandOutput` (`empty` / `fail`) and `Status` (see `dto/response/AGENTS.md`) |
 
 ## For AI Agents
@@ -47,9 +47,11 @@ queue and hands the effects to the infrastructure resolver/stager.
   `addIntent(CommandIntent...)`; the queue is drained once by `CommandExecutor` in the application layer.
 - `CommandContext` and `Command.parseContext` / `findSubCommandDefinition` are `internal` on purpose.
   Keep new context plumbing `internal` unless the application layer genuinely needs it.
-- `Command.handleEvent()` wraps execution in `runCatching` and converts any throw into
-  `CommandOutput.fail(..., ERROR_RESPONSE, ...)`. Error effects are still drained and delivered — do not
-  early-return on failure paths in a way that skips `addOutbound`.
+- `Command.handleEvent()` catches `Exception` (a `try`, not `runCatching`) and converts it into
+  `CommandOutput.fail(..., ERROR_RESPONSE, ...)`, and for a slash payload adds a requester ephemeral (usage for a
+  bad subcommand, a generic line otherwise; `entity/AGENTS.md`). An `InterruptedException` is rethrown after the
+  interrupt flag is restored, and an `Error` propagates. Error effects are still drained and delivered — do
+  not early-return on failure paths in a way that skips `addOutbound`.
 - `drainIntents()` returns a defensive copy and clears the queue, so it is safe under retry. Intents are
   deliberately **not** re-queued after a publish failure — retries belong upstream (outbox relay, Kafka,
   Slack replay) under the shared `idempotencyKey`.

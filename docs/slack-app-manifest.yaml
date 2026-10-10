@@ -1,0 +1,94 @@
+# Slack app manifest for CodeCompanion (api.slack.com/apps -> Create New App -> From an app manifest).
+#
+# - Replace every `https://<your-host>` with the public base URL that reaches the app's HTTP port (directly,
+#   or through a tunnel / ingress).
+# - All three kinds of Request URL (slash commands, interactivity, events) must be reachable before Slack
+#   calls them. Slack verifies the Events URL with a `url_verification` challenge that the app answers, so
+#   the app must already be running when that URL is saved.
+# - After installing, copy the Bot User OAuth Token to `slack.app.api.token` and the Signing Secret to
+#   `slack.app.api.signing-secret`.
+# - The four CVE commands do nothing (a warning is logged) unless `slack.app.cve.enabled=true`.
+# - `/calendar` answers "not enabled" unless `slack.app.calendar.google.enabled=true`. Its OAuth redirect,
+#   `https://<your-host>/oauth/google/callback`, is registered on the Google Cloud OAuth client, not in this manifest.
+# - Command names are free to change here: the HTTP endpoints are keyed by URL path, not by name.
+#
+# Local development (`local` profile, Socket Mode): create a separate dev app from this same manifest with
+# `socket_mode_enabled: true` and the Request URLs removed, then generate an app-level token with the
+# `connections:write` scope (`slack.app.api.app-token`). Socket Mode delivers every slash command to one
+# listener that matches on the command name, so if the dev app uses other names, map them with
+# `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` / `SLACK_CALENDAR_COMMAND` or `slack.app.socket.<name>-command`
+# for the CVE commands.
+# Turning Socket Mode on disables the Request URLs, so never enable it on the production app.
+
+display_information:
+  name: CodeCompanion
+  description: Meetings, standups, CVE watch and an AI assistant for side-project teams.
+
+features:
+  app_home:
+    home_tab_enabled: false
+    # Reminders, the daily agenda, standup prompts and CVE replies arrive as DMs in this tab.
+    # Read-only because the app does not handle direct messages sent to it.
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: true
+  bot_user:
+    display_name: CodeCompanion
+    always_online: false
+  slash_commands:
+    - command: /meetup
+      url: https://<your-host>/api/slash/meet
+      description: Open the new-meeting form or list your upcoming meetings
+      usage_hint: list [today|tomorrow|week|month]
+      should_escape: false
+    - command: /standup
+      url: https://<your-host>/api/slash/standup
+      description: Create, list or stop this channel's standup routines
+      usage_hint: setup | list | stop <routine-name>
+      should_escape: false
+    - command: /calendar
+      url: https://<your-host>/api/slash/calendar
+      description: Link your Google Calendar so your meetings are mirrored into it, unlink it, or show the link
+      usage_hint: connect | disconnect | status
+      should_escape: false
+    - command: /subscribe
+      url: https://<your-host>/api/slash/subscribe
+      description: Pick CVE topics to follow (replies by DM)
+      should_escape: false
+    - command: /unsubscribe
+      url: https://<your-host>/api/slash/unsubscribe
+      description: Stop following CVE topics (replies by DM)
+      should_escape: false
+    - command: /subscriptions
+      url: https://<your-host>/api/slash/subscriptions
+      description: List your CVE topic subscriptions (replies by DM)
+      should_escape: false
+    - command: /latest
+      url: https://<your-host>/api/slash/latest
+      description: Show the latest summarized CVE updates (replies by DM)
+      usage_hint: "[topic-key]"
+      should_escape: false
+
+oauth_config:
+  scopes:
+    # The app calls chat.postMessage, chat.postEphemeral, chat.update, views.open and users.profile.get,
+    # and receives app_mention. DMs are posted with `channel = <user id>`.
+    # users:read becomes necessary only if per-member timezone lookup is added.
+    bot:
+      - app_mentions:read
+      - chat:write
+      - commands
+      - im:write
+      # users.profile.get: publisher name and avatar on meeting invitations; without it the bare mention is shown.
+      - users.profile:read
+
+settings:
+  event_subscriptions:
+    request_url: https://<your-host>/api/slack/events
+    bot_events:
+      - app_mention
+  interactivity:
+    is_enabled: true
+    request_url: https://<your-host>/api/slack/interaction
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

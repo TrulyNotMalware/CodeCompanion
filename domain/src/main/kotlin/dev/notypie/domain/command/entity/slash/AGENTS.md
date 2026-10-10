@@ -1,18 +1,19 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/command/entity/slash
 
 ## Purpose
-The `Command` subclasses behind slash commands (`/meetup`, `/standup setup`, `/latest`, `/subscribe`,
-`/unsubscribe`, `/subscriptions`), their `SubCommandDefinition` enums, the `/meetup list` date-range
+The `Command` subclasses behind slash commands (`/meetup`, `/standup setup|list|stop`, `/calendar
+connect|disconnect|status`, `/latest`, `/subscribe`, `/unsubscribe`, `/subscriptions`), their `SubCommandDefinition` enums, the `/meetup list` date-range
 grammar, and the one `CommandOutput` subclass that carries a built `Meeting` back to the application.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `RequestMeetingCommand.kt` | `RequestMeetingCommand` (`/meetup`): resolves `MeetingSubCommandDefinition` from `subCommands[0]` (unknown → `SUBCOMMAND_NOT_FOUND`), context `RequestMeetingContext`. `MEETING_COMMAND_IDENTIFIER = "meetup"`; `enum MeetingSubCommandDefinition` `NONE` / `LIST("list")`; `RequestMeetingContextResult(ok, status, meeting, commandBasicInfo) : CommandOutput` fixed to `PIPELINE` / `MEETING_CREATE_REQUEST` |
-| `SetupStandupCommand.kt` | `SetupStandupCommand` (`/standup setup`): reads `SlashInvocation.trigger` and builds `RequestStandupSetupContext` (modal open). `STANDUP_COMMAND_IDENTIFIER = "standup"`; `enum StandupSubCommandDefinition` `NONE` / `SETUP("setup")` |
+| `RequestMeetingCommand.kt` | `RequestMeetingCommand` (`/meetup`): resolves `MeetingSubCommandDefinition` from `subCommands[0]` (unknown → `SUBCOMMAND_NOT_FOUND`), context `RequestMeetingContext`. `MEETING_COMMAND_IDENTIFIER = "meetup"`; `enum MeetingSubCommandDefinition` `NONE` (usage `/meetup`) / `LIST("list")`; `RequestMeetingContextResult(ok, status, meeting, commandBasicInfo) : CommandOutput` fixed to `PIPELINE` / `MEETING_CREATE_REQUEST`. The `calendar` subcommand of 2026-10-07 was removed on 2026-10-08 (calendar linking is not meeting-specific); `/meetup calendar …` is now an unknown subcommand like any other |
+| `CalendarCommand.kt` | `CalendarCommand` (`/calendar`): a `Command<NoSubCommands>` whose `CalendarSlashContext` (`context/form/`) reads the raw `subCommands` itself, so a typo or a missing action gets the usage ephemeral instead of the silent `SUBCOMMAND_NOT_FOUND` an enum lookup would give. `CALENDAR_COMMAND_IDENTIFIER = "calendar"`; `CALENDAR_USAGE = "/calendar connect | disconnect | status"` (no angle brackets: Slack would render `<a \| b>` as a link) |
+| `StandupCommand.kt` | `StandupCommand` (`/standup`): resolves `StandupSubCommandDefinition` from `subCommands[0]` (unknown → `SUBCOMMAND_NOT_FOUND`), reads `SlashInvocation.trigger` and builds `StandupSlashContext` (modal open for `NONE`/`SETUP`, list/stop intents otherwise). `STANDUP_COMMAND_IDENTIFIER = "standup"`; `enum StandupSubCommandDefinition` `NONE` / `SETUP("setup")` / `LIST("list")` / `STOP("stop")` |
 | `CveLatestSlashCommand.kt` | `/latest [topic-key]` — no modal; `topicKey` pre-resolved by the application service → `RequestCveLatestContext` |
 | `CveSubscriptionCommands.kt` | `CveSubscribeSlashCommand(topics)` and `CveUnsubscribeSlashCommand(topics)` open modals from `SlashInvocation.trigger`; `CveSubscriptionsSlashCommand` emits the list intent directly |
 | `MeetingListRange.kt` | `internal enum` `TODAY` / `TOMORROW` (day-aligned) / `WEEK` (`now + 7d`) / `MONTH` (`now + 30d`), half-open `[start, end)`; `DEFAULT = WEEK`; `parseOrNull(token)`; `usageTokens()` |
@@ -31,23 +32,35 @@ grammar, and the one `CommandOutput` subclass that carries a built `Meeting` bac
 - `subCommands` is `[identifier, options...]`. `LIST` has `requiresArguments = false`, so `/meetup
   list` alone is valid and the optional range token is validated in
   `RequestMeetingContext.runListSubCommand` ("Too many arguments" / "Unknown range").
+- **Prefer validating a user-typed argument in the context over `requiresArguments`.** A failed
+  `SubCommand.isValid()` throws `SubCommandParseException` in `Command.createSubCommand`; since 2026-10-08
+  `handleEvent()` answers it with only that subcommand's `usage` (and an unknown identifier with "Unknown
+  subcommand" plus every usage line, built from `subCommandDefinitions`), while a context can say what is wrong.
+  `StandupSubCommandDefinition.STOP` therefore keeps `requiresArguments = false` and `StandupSlashContext` answers
+  a blank routine name with the usage ephemeral (pinned by `entity/StandupCommandTest`).
+- **Every slash command overrides `slashCommandName`** (`/meetup`, `/standup`, `/calendar`, `/latest`,
+  `/subscribe`, `/unsubscribe`, `/subscriptions`) for the generic failure reply, and the two with a
+  `SubCommandDefinition` enum also override `subCommandDefinitions` with its `entries`, so the usage reply lists
+  them. `MeetingSubCommandDefinition.NONE.usage` is `/meetup` (opens the form) so the list starts with it;
+  `StandupSubCommandDefinition.NONE.usage` stays blank because bare `/standup` is `setup`.
 - `MeetingListRange.WEEK` / `MONTH` are rolling windows from `now`, not calendar weeks/months; `TODAY` /
   `TOMORROW` snap to midnight. Specs pass `now` explicitly to `dateRange(now)`.
 - `RequestMeetingContextResult.ok` is always `true` (`RequestMeetingContext.interactionResults`
   hard-codes it) even when `status == FAILED`; `MeetingServiceImpl.createNewMeeting` must branch on
   `status`.
-- `createContext(STANDUP_SETUP_REQUEST)` in `entity/CommandType.kt` rebuilds `RequestStandupSetupContext`
-  with a blank trigger for completeness; the real entry point is `SetupStandupCommand`.
+- `createContext(STANDUP_SETUP_REQUEST)` in `entity/CommandType.kt` rebuilds `StandupSlashContext`
+  with a blank trigger for completeness; the real entry point is `StandupCommand`.
 - Slash-command *identifiers* (`meetup`, `standup`) are matched by the application layer; the constants
   here are `internal` and used only for usage strings.
 
 ### Testing Requirements
 ```bash
 ./gradlew :domain:test --tests 'dev.notypie.domain.command.entity.RequestMeetingCommandTest' \
+  --tests 'dev.notypie.domain.command.entity.StandupCommandTest' \
   --tests 'dev.notypie.domain.command.entity.slash.MeetingListRangeTest'
 ```
 `SubCommandDefinitionTest` (`domain/src/test/kotlin/dev/notypie/domain/command/`) covers
-`validateArguments` and `findSubCommandByIdentifier`. `SetupStandupCommand` and the CVE slash commands
+`validateArguments` and `findSubCommandByIdentifier`. `StandupCommand` and the CVE slash commands
 are pinned by `command/SlashPayloadResolutionTest` (slash payload → modal-open intent; non-slash
 payload → ERROR_RESPONSE inside the command boundary) and by the application service specs.
 

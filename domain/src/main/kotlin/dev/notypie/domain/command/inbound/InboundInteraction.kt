@@ -96,12 +96,14 @@ sealed interface InboundSubmission {
         val requesterId: String,
         val date: String,
         val time: String,
+        val listHandleRaw: String,
     ) : InboundSubmission
 
     data class AddParticipant(
         val meetingUidRaw: String,
         val requesterId: String,
         val participantUserIdsRaw: String,
+        val listHandleRaw: String,
     ) : InboundSubmission
 
     data class DeclineReason(

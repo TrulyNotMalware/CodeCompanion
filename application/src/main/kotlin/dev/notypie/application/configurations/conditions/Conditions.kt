@@ -36,6 +36,20 @@ class OnKafkaEventPublisher : Condition {
             .mode.eventPublisher == EventPublisherType.KAFKA
 }
 
+class OnGoogleCalendarEnabled : Condition {
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        context.environment
+            .extractAppConfig()
+            .calendar.google.enabled
+}
+
+class OnGoogleCalendarDisabled : Condition {
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        !context.environment
+            .extractAppConfig()
+            .calendar.google.enabled
+}
+
 class OnApplicationEventPublisher : Condition {
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
         context.environment

@@ -21,6 +21,7 @@ fun createMeetingSchema(
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     participants: MutableList<ParticipantsSchema> = mutableListOf(),
+    reason: String? = null,
 ) = MeetingSchema(
     id = id,
     meetingUid = meetingUid,
@@ -32,6 +33,7 @@ fun createMeetingSchema(
     publisherId = publisherId,
     channel = channel,
     participants = participants,
+    reason = reason,
 )
 
 fun createParticipants(

@@ -1,9 +1,11 @@
 package dev.notypie.repository.standup
 
+import dev.notypie.domain.standup.createRoutine
 import dev.notypie.domain.standup.createSessionDispatch
 import dev.notypie.domain.standup.createStandupSession
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.domain.standup.entity.enums.SessionStatus
+import dev.notypie.schema.createRoutineStopCandidate
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
@@ -75,6 +77,72 @@ class StandupRepositoryImplTest
                         submittedAt = submittedAt,
                     )
                 }
+
+            fun createActiveRoutine(name: String, creatorId: String, commandChannel: String) =
+                inTx {
+                    repository.createRoutine(
+                        routine = createRoutine(name = name, creatorId = creatorId, commandChannel = commandChannel),
+                    )
+                }
+
+            given("lockActiveRoutinesByChannel") {
+                `when`("a channel holds two active routines and a stopped one, and another channel holds one more") {
+                    val channel = "C_LOCK_${UUID.randomUUID()}"
+                    val first =
+                        createActiveRoutine(name = "Daily Sync", creatorId = "U_FIRST", commandChannel = channel)
+                    val stopped = createActiveRoutine(name = "Old Sync", creatorId = "U_OLD", commandChannel = channel)
+                    val second = createActiveRoutine(name = "Retro", creatorId = "U_SECOND", commandChannel = channel)
+                    createActiveRoutine(name = "Elsewhere", creatorId = "U_FIRST", commandChannel = "${channel}_OTHER")
+                    inTx { repository.deactivateRoutine(routineUid = stopped.routineUid) }
+
+                    val candidates = inTx { repository.lockActiveRoutinesByChannel(commandChannel = channel) }
+
+                    then("only that channel's active routines come back in id order with uid, name and creator") {
+                        candidates shouldContainExactly
+                            listOf(
+                                createRoutineStopCandidate(
+                                    routineUid = first.routineUid,
+                                    name = "Daily Sync",
+                                    creatorId = "U_FIRST",
+                                ),
+                                createRoutineStopCandidate(
+                                    routineUid = second.routineUid,
+                                    name = "Retro",
+                                    creatorId = "U_SECOND",
+                                ),
+                            )
+                    }
+                }
+
+                `when`("one stop holds the lock while a second transaction deactivates the same routine") {
+                    val channel = "C_LOCK_${UUID.randomUUID()}"
+                    val routine =
+                        createActiveRoutine(name = "Daily Sync", creatorId = "U_FIRST", commandChannel = channel)
+                    val lockHeld = CountDownLatch(1)
+                    val holderStopped = AtomicReference<Boolean?>()
+                    val holder =
+                        thread {
+                            runCatching {
+                                inTx {
+                                    val candidate =
+                                        repository.lockActiveRoutinesByChannel(commandChannel = channel).single()
+                                    lockHeld.countDown()
+                                    Thread.sleep(LOCK_HOLD_MILLIS)
+                                    repository.deactivateRoutine(routineUid = candidate.routineUid)
+                                }
+                            }.onSuccess { holderStopped.set(it) }
+                            lockHeld.countDown()
+                        }
+                    lockHeld.await(5L, TimeUnit.SECONDS)
+                    val secondStopped = inTx { repository.deactivateRoutine(routineUid = routine.routineUid) }
+                    holder.join()
+
+                    then("the second waits for the holder's commit and finds the routine already stopped") {
+                        holderStopped.get() shouldBe true
+                        secondStopped shouldBe false
+                    }
+                }
+            }
 
             given("a member who answers a collecting session twice") {
                 `when`("the same member resubmits in a later transaction") {

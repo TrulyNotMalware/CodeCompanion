@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-09-21_
+_type: architecture · updated: 2026-10-11_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -43,18 +43,20 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 
 `Command<T : SubCommandDefinition>`(`entity/Command.kt`)은 `idempotencyKey`와 `InboundCommand`를 쥐고
 `handleEvent()` 한 번으로 끝난다: `createSubCommand()` → `parseContext()` → `InboundInteraction`이면
-`ReactionContext.handleInteraction()`, 아니면 `runCommand()`. 전체가 `runCatching`이라 예외는 `CommandOutput.fail`이 된다.
+`ReactionContext.handleInteraction()`, 아니면 `runCommand()`. `Exception`은 `catch`로 `CommandOutput.fail`이 되고,
+`InterruptedException`은 인터럽트 플래그를 복원해 다시 던지며, `Error`는 잡지 않고 전파한다.
 
 - **`SubCommandDefinition`**: `subCommandIdentifier`/`requiresArguments`/`minRequiredArgs`/`usage`. 슬래시 명령은
-  enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP}`).
+  enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP, LIST, STOP}`).
   `NONE`의 식별자가 `""`인 이유는 `SlashCommandRequestBody.subCommandList()`가 빈 텍스트를 `[""]`로 만들기 때문이다.
-- **구현체**: 슬래시는 명령당 하나(`RequestMeetingCommand`, `SetupStandupCommand`, `CveLatestSlashCommand`,
+- **구현체**: 슬래시는 명령당 하나(`RequestMeetingCommand`, `StandupCommand`, `CveLatestSlashCommand`,
   `CveSubscribe/Unsubscribe/SubscriptionsSlashCommand`). 멘션과 인터랙션은 `InteractionCommand` 하나가 받아 페이로드
   타입으로 `AppMentionContextParser` / `InteractionContextParser`를 고른다. `ReplaceTextResponseCommand`는 레거시용.
 - **`CommandContext<T>`**(`entity/context/`, internal)는 `commandBasicInfo`·`subCommand`·`intents`를 받고 효과를
   `addIntent()`/`addOutbound()`로 큐에 넣기만 한다. `createErrorResponse`는 에러 `Ephemeral`을 큐에 넣고 `fail`
   출력을 돌려준다. 인터랙션을 받는 컨텍스트는 `ReactionContext` 하위뿐이며, 아니면 `UnSupportedCommandException`이다.
-- **기능별 컨텍스트**: 멘션 → `Notice/ApprovalForm/TextResponse/Status/AgentChat/RoleManagement/CveOpsContext`;
+- **기능별 컨텍스트**: 멘션 → `Notice/TextResponse/Status/AgentChat/RoleManagement/IntentContext`
+  (`IntentContext`는 인텐트 하나만 큐에 넣는 범용 컨텍스트로 `cve …`와 `usage [days]`가 함께 쓴다);
   슬래시 → `RequestMeeting/RequestStandupSetup/RequestCve*Context`; 모달 제출 → `context/form/*SubmissionContext`.
   비제출 인터랙션 → 컨텍스트 매핑은 `CommandDetailType.createContext()`(`entity/CommandType.kt`), 미매핑은 `EmptyContext`.
 - **제출 라우팅(2026-09-21, Phase 11)**: `view_submission`은 `SubmissionRouter`(`entity/SubmissionRouting.kt`)가
@@ -78,12 +80,18 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `RecordStandupAnswer`, `GrantRole`, `AgentConverse` 등).
 - **`OutboundMessage`**(`outbound/OutboundMessage.kt`, sealed): 사용자에게 보이는 결과. `ChannelMessage`, `Ephemeral`,
   `UpdateMessage`, `ReplaceMessage`, `OpenModal`, `Approval`, `Notice`(그리고 `DirectMessage`, §8 참고). 내용은
-  `MessageContent`(Text/ErrorNotice/Schedule/Form/MeetingRequest/MeetingList/StandupSummary), 모달은 `ModalForm`.
+  `MessageContent`(Text/ErrorNotice/Schedule/MeetingRequest/MeetingList/StandupSummary), 모달은 `ModalForm`.
 - **의도 → 이벤트**: `SlackIntentResolver.resolveAll`이 변종별로 `CommandEvent`와 라우팅용 `CommandDetailType`을
   붙인다(`MeetingListRequest` → `GetMeetingListEvent`). 이벤트는 `isInternal = true`라 Spring 버스로 가고, 리스너
   (`MeetingServiceImpl`, `RoleManagementService`, `OpsStatusService`, `AgentConverseService`, `CveOpsService`)
   가 DB 작업 후 답장을 `OutboundMessageStager.stage` + `EventPublisher.publishOne`으로 스테이징한다. 도메인은
   "무엇을 원하는지"만 말하고 답장 문구는 리스너가 만든다. `CommandIntent.Nothing`은 `null`로 사라진다.
+- **멘션 답장은 요청자 전용 ephemeral(2026-10-07)**: `TextResponseContext`(`help`, usage 안내, 권한 거부,
+  "Command Not supported.")와 `OpsStatusService`·`AgentUsageReportService`·`RoleManagementService`·`CveOpsService`의
+  답장은 `Ephemeral(target = 명령 채널, recipient = UserRef(publisherId))`이다. 헤드라인은
+  `simpleEphemeralTextRequest(headLineText)`가 채널 `Text`와 같은 `simpleTextResponseTemplate`으로 렌더한다(null이면
+  본문만). `chat.postEphemeral`은 봇이 채널 멤버여야 하는데, Slack은 앱이 들어 있지 않은 대화의 `app_mention`을 보내지
+  않으므로 멘션 답장에서는 항상 성립한다. `notice`, `ask` 스레드 답장, CVE 구독·조회 DM은 그대로다.
 - **잔존 누수**: `ApprovalContents.commandDetailType`은 표현 모델에 남은 라우팅 enum이다(Refactor.md §4.4가
   `interactionValue` 문자열은 걷어냈지만 필드는 남김). `Approval` 렌더 시 버튼 값의 라우팅 타입이 여기서 나온다.
 
@@ -117,7 +125,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `ADMIN`은 `CommandPermission.entries.toSet()`이라 앞으로 추가되는 권한도 자동 포함한다.
 - 멘션 명령 → 권한 매핑은 `CommandSet`(internal)이 갖고, `UNKNOWN`(자유 텍스트 → `ask` 폴백)은 `AI`다. 게이트는
   `AppMentionContextParser.parseContext`가 라우팅 직전에 `actorRole.grants(...)`로 검사하고, 거부 시
-  `TextResponseContext`로 "You don't have permission..."을 답한다.
+  `TextResponseContext`가 요청자에게만 보이는 ephemeral로 "You don't have permission..."을 답한다.
 - **해석 순서**는 `CommandRoleResolver.resolve`: `slack.app.authorization.bootstrap-admins`(설정, 채팅에서 불변) →
   `user_command_role` 행(`UserCommandRoleRepository.findRole`) → `USER`. `SlackMentionEventHandlerImpl`이 매 턴
   새로 해석하므로 revoke가 즉시 반영된다. 부트스트랩 admin은 DB 행 없이 첫 admin을 만들기 위한 닭-달걀 해소다.
@@ -168,19 +176,24 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 
 ## 8. 함정
 
-- **조용한 실패**: 컨텍스트가 만들어지기 전의 예외(`SubCommandParseException` — `/meetup foo`,
-  `IllegalArgumentException("Command Queue is empty")` — 토큰 없는 멘션, `UnSupportedCommandException`)는
-  `CommandOutput.fail`로 흡수될 뿐 아웃바운드를 하나도 남기지 않고, 슬래시 서비스는 반환값을 버리므로 사용자는 아무
-  답도 받지 못한다. 사용자에게 보여야 할 오류는 컨텍스트 안에서 `createErrorResponse`로 내라.
+- **예외는 `CommandOutput.fail`로 흡수된다**: 컨텍스트가 만들어지기 전의 예외(`SubCommandParseException` — `/meetup foo`,
+  `IllegalArgumentException("Command Queue is empty")` — 토큰 없는 멘션, `UnSupportedCommandException`)와 컨텍스트 안의 예외는
+  `ERROR_RESPONSE` 출력이 되고, `CommandExecutor`가 그 출력을 WARN 한 줄로 남긴다(2026-10-08). 슬래시 명령이면
+  `handleEvent()`가 요청자 ephemeral도 남긴다 — 모르는 서브커맨드는 "Unknown subcommand" + 그 명령의 usage 줄(각
+  `SubCommandDefinition.usage`), 인자가 모자란 서브커맨드는 그 usage, 그 밖은 "Something went wrong handling `/명령`.
+  Please try again.". 멘션·인터랙션은 여전히 답이 없으므로(로그만), 사용자에게 무엇이 틀렸는지 말해야 하는 오류는
+  컨텍스트 안에서 `createErrorResponse`로 내라.
 - 파서의 `CommandDetailType.valueOf`는 알 수 없는 토큰에 예외 → enum 리네임 후 남은 옛 버튼은 500. 미매핑은 무동작.
-- `LEGACY_AUTO_REJECT_TYPES`(`APPLY_REQUEST`, `APPROVAL_REQUEST`)의 거절 버튼은 핸들러 수준에서 "Canceled."로
+- `LEGACY_AUTO_REJECT_TYPES`(`APPROVAL_REQUEST`)의 거절 버튼은 핸들러 수준에서 "Canceled."로
   대체된다. 새 타입을 여기에 넣지 말고 각 `ReactionContext`가 자기 거절을 처리하게 한다.
 - `SlackMentionEventHandlerImpl.parseAppMentionEvent`는 `payload["channel_name"]`/`payload["user_name"]`을 읽지만
-  Events API `app_mention` 페이로드에는 그 키가 없다(`SlackEventCallBackRequest`에도 필드 없음). 결과 `actorName`/
-  `channelName`은 문자열 `"null"`이 되어 `AgentConversePayload`를 통해 에이전트 프롬프트에 들어간다(코드에 `FIXME`).
+  Events API `app_mention` 페이로드에는 그 키가 없다(`SlackEventCallBackRequest`에도 필드 없음). 키가 없으면 `""`로
+  떨어지므로 멘션 경로의 `actorName`/`channelName`은 늘 빈 문자열이다. `AgentConverseService`의 `requesterLine`/
+  `channelLine`은 이름이 비면 `<@id>`/`<#id>`만 쓰고 이름 괄호를 생략하므로 에이전트 프롬프트에 가짜 이름이 들어가지
+  않는다.
 - `IdempotencyCreator.create(InboundCommand)` = 페이로드 JSON SHA-256 + **1초 창** 시드. 같은 초의 재전송만 같은 키다.
 - 죽었거나 반쯤 죽은 조각(본보기로 삼지 말 것): `OutboundMessage.DirectMessage`(생산자 없음, 렌더러는 `error()`),
-  `EphemeralTextResponseContext`/`DetailErrorAlertContext`(테스트에서만 생성), `/api/slash/task`(파싱 후 폐기),
+  `EphemeralTextResponseContext`/`DetailErrorAlertContext`(테스트에서만 생성),
   `controllers/dto/*`, `InteractionCommand.appName`, `InboundCommand.teamId`, `containsExternalEvent`(호출처 없음).
 
 ## 근거
@@ -204,7 +217,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - [events-and-outbox.md](events-and-outbox.md) — 아웃박스 행 이후의 relay·멱등성·CAS
 - [error-handling-and-validation.md](error-handling-and-validation.md) — `CommandException`·`exceptionDetails`
 - [testing-guide.md](testing-guide.md) — `AbstractCommandContextTest`, testFixtures 입력 빌더
-- [decisions.md](decisions.md) · [history.md](history.md)
+- [decisions.md](decisions.md)
 - [`domain/command/AGENTS.md`](../../domain/src/main/kotlin/dev/notypie/domain/command/AGENTS.md) ·
   [`impl/AGENTS.md`](../../infrastructure/src/main/kotlin/dev/notypie/impl/AGENTS.md) ·
   [`controllers/AGENTS.md`](../../application/src/main/kotlin/dev/notypie/application/controllers/AGENTS.md) ·

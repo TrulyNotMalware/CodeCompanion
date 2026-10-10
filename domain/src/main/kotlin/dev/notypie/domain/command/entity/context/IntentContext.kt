@@ -9,7 +9,7 @@ import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 
-internal class CveOpsContext(
+internal class IntentContext(
     private val intent: CommandIntent,
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

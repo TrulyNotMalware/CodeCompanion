@@ -1,10 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # application/service/standup
 
 ## Purpose
-The daily-standup lane. `/standup setup` opens a modal whose submission creates a `Routine`; a one-minute
+The daily-standup lane. `/standup setup` opens a modal whose submission creates a `Routine`, and
+`/standup list` / `/standup stop <routine-name>` list or deactivate the channel's active routines; a one-minute
 scheduler then opens today's session per routine, DMs each member a "Fill in standup" prompt in their own
 timezone, nudges non-responders once before cutoff, and detects cutoff. Answers submitted from the modal
 are recorded per session, and after cutoff a channel summary is written to the outbox and its Slack `ts`
@@ -14,8 +15,9 @@ is written back onto the session row once the relay has posted it.
 | File | Description |
 |------|-------------|
 | `StandupSlashService.kt` | Interface `handleStandup(headers, payload: SlashCommandRequestBody, commandData)` — the dependency `SlashCommandController` and `SocketModeReceiver` take |
-| `StandupSlashServiceImpl.kt` | `@Service`, `@Transactional handleStandup`: `IdempotencyCreator.create(data = commandData)` → `SetupStandupCommand` → `CommandExecutor.execute` (the resolved intent is the synchronous `views.open` of the setup modal) |
-| `StandupRoutineSetupService.kt` | `@EventListener createRoutine(CreateStandupRoutineEvent)`: builds `Routine` + one `RoutineMember` per id (each member adopts the routine timezone), `StandupRepository.createRoutine`, then stages an `OutboundMessage.ChannelMessage` confirmation, or a rejection when building the `Routine` (input validation) throws; a failed `createRoutine` write propagates, since it left the caller's transaction rollback-only (`STANDUP_SETUP_SUBMIT`) and `eventPublisher.publishOne`. `Routine.init` (plus the `requireNotNull` on an unusable cutoff) is the only validator; its throw becomes the rejection text, escaped with `escapeMrkdwn`, and the confirmation escapes the routine name (the `<@id>` member mentions stay markup). Both replies go to the creator's DM (`chat.postMessage` with `channel = payload.creatorId`, `basicInfo` copied to that channel, publisher and idempotency key kept): a view_submission's `responseBasicInfo.channel` is `""` (`channel_not_found`), and an ephemeral in `payload.commandChannel` fails with `no_permission` when the bot is not a member there (`/standup setup` runs in any channel) — Slack treats that as a permanent per-channel failure, so the reply was lost. The DM path is the one meeting reminders and standup prompts already use |
+| `StandupSlashServiceImpl.kt` | `@Service`, `@Transactional handleStandup`: `IdempotencyCreator.create(data = commandData)` → `StandupCommand` → `CommandExecutor.execute` (for `setup` the resolved effect is the synchronous `views.open` of the setup modal; `list` / `stop` resolve to a `StandupOpsRequestEvent`; the `CommandOutput` is discarded, so a reply the user must see has to be an outbound effect) |
+| `StandupRoutineOpsService.kt` | `@Service`, `@Transactional @EventListener handleStandupOps(StandupOpsRequestEvent)`. `LIST` → `findActiveRoutinesByChannel(basicInfo.channel)` rendered as one bullet per routine (name escaped with `escapeMrkdwn`, `HH:mm` + zone id, weekdays `Mon/Tue/…` in week order, `cutoff +<minutes>m`, member count, summary channel, creator), or a pointer to `/standup setup` when empty. `STOP` → `lockActiveRoutinesByChannel(basicInfo.channel)` first (a `SELECT … FOR UPDATE`, the STOP path's first database statement), then the candidates whose `Routine.normalizeName` matches the requested name case-insensitively: none → "No active standup routine named …"; one → that routine; several → the one whose `creatorId` is the requester, or, when none is, "Several active routines are named `X` in this channel; ask their creators to stop theirs." with nothing stopped (admins included — no arbitrary pick). Only the routine's `creatorId` or a user whose `CommandRoleResolver.resolve` role grants `CommandPermission.ADMINISTRATION` may stop it (the creator skips the role lookup); the lookup runs through `detachedTemplate` (`PROPAGATION_NOT_SUPPORTED`), so a failing `@Transactional` role read cannot mark the slash transaction rollback-only; `deactivateRoutine` returning `false` → "already stopped". Every reply is an `OutboundMessage.Ephemeral` to the requester in the command channel (`recipient = UserRef(publisherId)`, headline "CodeCompanion — standup", `STANDUP_ROUTINE_LIST` / `STANDUP_ROUTINE_STOP`), staged through `OutboundMessageStager` (`checkNotNull`) and `eventPublisher.publishOne`. A stopped routine opens no new session, and later `sendPendingDispatches` / `nudgeNonResponders` ticks skip it (each tick snapshots `listActiveRoutines()`); outbox rows a tick already enqueued are still delivered, and a session already `COLLECTING` is still summarized at cutoff, because `findCollectingSessionsPastCutoff` and `StandupSummaryService` (`getRoutine`) ignore `isActive`. The success reply says exactly that ("…later prompt and nudge ticks skip it; messages already queued may still be delivered…") |
+| `StandupRoutineSetupService.kt` | `@EventListener createRoutine(CreateStandupRoutineEvent)`: reads `findActiveRoutinesByChannel(payload.commandChannel)` first, outside the rejection path (a failing read propagates like a failing write), then builds `Routine` under `Routine.normalizeName(payload.name)` — a name equal, ignoring case, to an active routine's normalized name in that channel is rejected with `require` ("a standup routine named '…' already exists in this channel"), which the DM rejection path reports; the check is not a constraint, so two concurrent setups can still both pass, which is why `STOP` handles several matches — + one `RoutineMember` per id (each member adopts the routine timezone), `StandupRepository.createRoutine`, then stages an `OutboundMessage.ChannelMessage` confirmation, or a rejection when building the `Routine` (input validation) throws; a failed `createRoutine` write propagates, since it left the caller's transaction rollback-only (`STANDUP_SETUP_SUBMIT`) and `eventPublisher.publishOne`. `Routine.init` (plus the `requireNotNull` on an unusable cutoff) is the only validator; its throw becomes the rejection text, escaped with `escapeMrkdwn`, and the confirmation escapes the routine name (the `<@id>` member mentions stay markup). Both replies go to the creator's DM (`chat.postMessage` with `channel = payload.creatorId`, `basicInfo` copied to that channel, publisher and idempotency key kept): a view_submission's `responseBasicInfo.channel` is `""` (`channel_not_found`), and an ephemeral in `payload.commandChannel` fails with `no_permission` when the bot is not a member there (`/standup setup` runs in any channel) — Slack treats that as a permanent per-channel failure, so the reply was lost. The DM path is the one meeting reminders and standup prompts already use |
 | `StandupAnswerService.kt` | `@EventListener recordAnswer(RecordStandupAnswerEvent)` → `StandupRepository.recordAnswer` (joins the interaction transaction, so the session row lock is held until it commits), then collapses the DM prompt (`payload.notice`, when ferried) with the outcome: `RECORDED` → `SUBMITTED_NOTICE` ("Standup submitted."), `SESSION_CLOSED` → `CLOSED_NOTICE`, `SESSION_NOT_FOUND` → `SESSION_NOT_FOUND_NOTICE` — a late answer is never told "submitted"; `@EventListener @Transactional onStandupModalOpenFailed(StandupModalOpenFailedEvent)` (its own transaction, because modals now open after the caller's transaction ended and the outbox write is BEFORE_COMMIT) stages an `Ephemeral` with `recipient = null` into the originating DM channel |
 | `StandupScheduler.kt` | `@Component`, `@Scheduled(fixedDelay = 60_000) tick()`: `openSessionsForToday` → `sendPendingDispatches` → `nudgeNonResponders` → `detectCutoffs`, each phase in its own `containFailure` so one failing phase no longer skips the later ones |
 | `StandupSchedulingService.kt` | `@Service` owning the four phases, a `TransactionTemplate` built from the injected `PlatformTransactionManager`, and the `internal` builders `buildDmNotice` (`OutboundMessage.Approval`, buttons "Fill in standup" / "Skip", `STANDUP_PROMPT`, `routingExtras = [sessionUid, routineUid]`) and `buildNudgeNotice` (`ChannelMessage`; the creator-chosen routine name is passed through `escapeMrkdwn`, the template's own `*bold*` is not). Publishes `StandupCutoffEvent` through a plain `ApplicationEventPublisher` |
@@ -67,7 +69,20 @@ is written back onto the session row once the relay has posted it.
   `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)` (a tick has no request context or
   `trigger_id`). Event-driven services go through `OutboundMessageStager.stage(...)?.let {
   eventPublisher.publishOne(it) }`. Keep each path where it is.
-- Events consumed: `CreateStandupRoutineEvent`, `RecordStandupAnswerEvent`, `StandupModalOpenFailedEvent`
+- **`/standup list|stop` replies are channel ephemerals, unlike the setup reply.** `chat.postEphemeral` in a
+  channel the bot has not joined can fail with `no_permission`, the failure that moved the setup reply to the
+  creator's DM. The list and stop replies use the `/meetup list` shape instead; if they go missing in such a
+  channel, apply the same DM fallback.
+- **`/standup stop` takes the row lock before anything else.** `handleStandupOps` runs inside
+  `StandupSlashServiceImpl.handleStandup`'s transaction (a synchronous `@EventListener`, and nothing before it
+  in that transaction touches the database). MariaDB ≥ 11.6.2 fails a locking read or `UPDATE` of a row that
+  another transaction committed after this transaction's first plain read with ER_CHECKREAD 1020
+  (`docs/wiki/error-handling-and-validation.md`), so `STOP` reads with `lockActiveRoutinesByChannel` and then
+  `deactivateRoutine`s; it must not go back to `findActiveRoutinesByChannel` (a plain read) before that `UPDATE`.
+  `LIST` only reads and keeps the plain query. The role lookup is detached from this transaction for the same
+  reason the reply must commit: a participating `@Transactional(readOnly = true)` failure would leave it
+  rollback-only.
+- Events consumed: `CreateStandupRoutineEvent`, `StandupOpsRequestEvent`, `RecordStandupAnswerEvent`, `StandupModalOpenFailedEvent`
   (lifted from domain contexts by `SlackIntentResolver` / `ApplicationMessageDispatcher`),
   `StandupCutoffEvent` (produced here), `MessagePublishSuccessEvent` (produced by `service/relay/`).
   The answer modal itself is opened by `domain/.../context/form/StandupFillContext` from the DM button.
@@ -78,14 +93,18 @@ is written back onto the session row once the relay has posted it.
 ```
 Specs under `application/src/test/kotlin/dev/notypie/application/service/standup/`:
 `StandupSchedulingServiceTest`, `StandupSummaryServiceTest`, `StandupAnswerServiceTest`,
-`StandupRoutineSetupServiceTest`, `StandupSchedulerTest`, `StandupDispatchMessageBuilderTest` (`buildDmNotice` /
+`StandupRoutineSetupServiceTest`, `StandupRoutineOpsServiceTest`, `StandupSchedulerTest`, `StandupDispatchMessageBuilderTest` (`buildDmNotice` /
 `buildNudgeNotice`). MockK the `StandupRepository`, `MessageOutboxRepository`, `OutboundMessagePort` and
 `OutboundMessageStager`; pass a MockK `PlatformTransactionManager` and a fixed `Clock`; assert on the
 CAS calls and captured outbox rows / staged messages. Fixtures: `createNudgeCandidateSession`
 (application testFixtures, same package), `createRoutineDto` / `createRoutineMemberDto` /
-`createSessionDispatchDto` / `createStandupSessionDto` and `createCreateStandupRoutineEvent`,
-`createCommandBasicInfo` (domain testFixtures), `createOutboxRow` (`dev.notypie.application.outbox`).
-There is no H2 spec for the standup repository CAS methods — assert orchestration here.
+`createSessionDispatchDto` / `createStandupSessionDto`, `createCreateStandupRoutineEvent` and `createStandupOpsRequestEvent`,
+`createCommandBasicInfo` (domain testFixtures), `createOutboxRow` / `createStubTransactionManager`
+(`dev.notypie.application.outbox`), `createRoutineStopCandidate` (infrastructure testFixtures, `dev.notypie.schema`).
+`StandupRoutineOpsServiceTest` drives one STOP through an outer H2 `DataSourceTransactionManager` transaction whose
+role lookup fails inside a participating template (`createH2TransactionManager` / `failInsideParticipatingTx`,
+`dev.notypie.application.service.meeting`), and asserts the outer commit still succeeds. The locking read itself is
+pinned on H2 by infrastructure's `StandupRepositoryImplTest`; assert orchestration here.
 
 ### Common Patterns
 - Thin `@Scheduled` `*Scheduler` → logic in `*SchedulingService`; specs target the service only.
@@ -99,16 +118,18 @@ There is no H2 spec for the standup repository CAS methods — assert orchestrat
 ## Dependencies
 
 ### Internal
-- `infrastructure/repository/standup/` — `StandupRepository`, `ReadyDispatch`, `NudgeCandidateSession`
+- `infrastructure/repository/standup/` — `StandupRepository`, `ReadyDispatch`, `NudgeCandidateSession`,
+  `RoutineStopCandidate`
 - `infrastructure/repository/outbox/` — `MessageOutboxRepository`, `OutboundMessagePort`,
   `dto/MessagePublishSuccessEvent`
 - `infrastructure/impl/command/slack/SlashCommandRequestBody`
 - `domain/standup/` — `Routine`, `RoutineMember`, `StandupSession`, `SessionDispatch`, `RoutineDto`
 - `domain/command/entity/event/` — `CreateStandupRoutineEvent`, `RecordStandupAnswerEvent`,
   `StandupModalOpenFailedEvent`, `StandupCutoffEvent`, `EventPublisher.publishOne`
-- `domain/command/entity/slash/SetupStandupCommand`, `domain/command/outbound/` (`OutboundMessage`,
+- `domain/command/entity/slash/StandupCommand`, `domain/command/outbound/` (`OutboundMessage`,
   `MessageContent.StandupSummary`, `OutboundMessageStager`), `domain/command/dto/modals/ApprovalContents`
-- `application/service/command/CommandExecutor`, `application/common/` (`IdempotencyCreator`, `runInTx`),
+- `application/service/command/CommandExecutor`, `application/service/command/CommandRoleResolver`
+  (stop authorization), `domain/command/authorization/CommandPermission`, `application/common/` (`IdempotencyCreator`, `runInTx`, `detachedTemplate`),
   `application/configurations/AppConfig`
 
 ### External

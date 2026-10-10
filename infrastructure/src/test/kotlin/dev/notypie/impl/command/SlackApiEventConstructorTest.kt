@@ -121,6 +121,7 @@ class SlackApiEventConstructorTest :
 
                 val result =
                     constructor.simpleEphemeralTextRequest(
+                        headLineText = null,
                         textMessage = "Ephemeral Message",
                         commandBasicInfo = commandBasicInfo,
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
@@ -130,10 +131,24 @@ class SlackApiEventConstructorTest :
                     result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
                     val payload = result.payload
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
+                    payload.body["user"] shouldBe commandBasicInfo.publisherId
                 }
 
                 then("idempotencyKey matches commandBasicInfo") {
                     result.idempotencyKey shouldBe idempotencyKey
+                }
+
+                then("a null headline renders the body alone through onlyTextTemplate") {
+                    verify(exactly = 1) {
+                        templateBuilder.onlyTextTemplate(message = "Ephemeral Message", isMarkDown = true)
+                    }
+                    verify(exactly = 0) {
+                        templateBuilder.simpleTextResponseTemplate(
+                            headLineText = any(),
+                            body = "Ephemeral Message",
+                            isMarkDown = any(),
+                        )
+                    }
                 }
             }
 
@@ -148,6 +163,7 @@ class SlackApiEventConstructorTest :
                 val targetUserId = "U999999"
                 val result =
                     constructor.simpleEphemeralTextRequest(
+                        headLineText = null,
                         textMessage = "DM Message",
                         commandBasicInfo = commandBasicInfo,
                         commandDetailType = CommandDetailType.SIMPLE_TEXT,
@@ -160,6 +176,46 @@ class SlackApiEventConstructorTest :
                     payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
                     payload.body["channel"] shouldBe commandBasicInfo.channel
                     payload.body["user"] shouldBe targetUserId
+                }
+            }
+
+            `when`("called with a headline") {
+                every {
+                    templateBuilder.simpleTextResponseTemplate(
+                        headLineText = any(),
+                        body = any(),
+                        isMarkDown = any(),
+                    )
+                } returns emptyLayout
+
+                val result =
+                    constructor.simpleEphemeralTextRequest(
+                        headLineText = "Report Title",
+                        textMessage = "Report Body",
+                        commandBasicInfo = commandBasicInfo,
+                        commandDetailType = CommandDetailType.STATUS_REPORT,
+                    )
+
+                then("the headline renders through simpleTextResponseTemplate, as simpleTextRequest does") {
+                    verify(exactly = 1) {
+                        templateBuilder.simpleTextResponseTemplate(
+                            headLineText = "Report Title",
+                            body = "Report Body",
+                            isMarkDown = true,
+                        )
+                    }
+                    verify(exactly = 0) {
+                        templateBuilder.onlyTextTemplate(message = "Report Body", isMarkDown = any())
+                    }
+                }
+
+                then("it is still an ephemeral in the command channel for the publisher") {
+                    result.type shouldBe CommandDetailType.STATUS_REPORT
+                    result.payload.shouldBeInstanceOf<PostEventPayloadContents>()
+                    val payload = result.payload
+                    payload.messageType shouldBe MessageType.EPHEMERAL_MESSAGE
+                    payload.body["channel"] shouldBe commandBasicInfo.channel
+                    payload.body["user"] shouldBe commandBasicInfo.publisherId
                 }
             }
         }

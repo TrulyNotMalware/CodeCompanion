@@ -54,6 +54,7 @@ class SubmissionContextsTest :
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
                             participantUserIds = listOf("U_A", "U_B"),
+                            listHandle = null,
                         ),
                 )
 
@@ -83,6 +84,7 @@ class SubmissionContextsTest :
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
                             newStartAt = LocalDateTime.of(2026, 10, 1, 14, 30),
+                            listHandle = null,
                         ),
                 )
 

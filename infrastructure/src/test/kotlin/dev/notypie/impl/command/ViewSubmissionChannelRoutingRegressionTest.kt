@@ -7,9 +7,11 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
+import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.templates.AddParticipantModalIds
 import dev.notypie.templates.DeclineReasonModalIds
 import dev.notypie.templates.ModalBlockBuilder
@@ -20,6 +22,7 @@ import dev.notypie.templates.StandupSetupModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.mockk
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -61,6 +64,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30),
                     requesterId = requesterId,
                     channel = originChannel,
+                    listResponseUrl = "",
                 )
             val submissionPayload =
                 createRoutingOnlyViewSubmissionJson(
@@ -97,6 +101,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     meetingUid = meetingUid,
                     requesterId = requesterId,
                     channel = originChannel,
+                    listResponseUrl = "",
                 )
             val submissionPayload =
                 createRoutingOnlyViewSubmissionJson(
@@ -250,6 +255,92 @@ class ViewSubmissionChannelRoutingRegressionTest :
             }
         }
 
+        given("a reschedule or add-participant modal opened from a /meetup list row") {
+            val meetingUid = UUID.randomUUID()
+            val originChannel = "C_ORIGIN_LIST"
+            val listResponseUrl = "https://hooks.slack.com/actions/T0001/123/a,b%2Fc"
+
+            `when`("the reschedule modal carries the list's response URL and is submitted with a new time") {
+                val modalJson =
+                    templateBuilder.rescheduleMeetingModalViewJson(
+                        meetingUid = meetingUid,
+                        currentStartAt = LocalDateTime.of(2099, 7, 1, 14, 30),
+                        requesterId = "U_HOST",
+                        channel = originChannel,
+                        listResponseUrl = listResponseUrl,
+                    )
+                val privateMetadata = extractPrivateMetadata(modalViewJson = modalJson)
+                val submissionPayload =
+                    createRoutingOnlyViewSubmissionJson(
+                        callbackId = RescheduleMeetingModalIds.CALLBACK_ID,
+                        privateMetadata = privateMetadata,
+                        stateValues =
+                            stateValuesJson(
+                                "reschedule_date_block" to datepickerStateJson(selectedDate = "2099-07-10"),
+                                "reschedule_time_block" to timepickerStateJson(selectedTime = "15:45"),
+                            ),
+                    )
+                val interactionPayload = parser.parseStringPayload(payload = submissionPayload)
+                val (output, effects) = runThroughDomain(viewSubmissionPayload = submissionPayload)
+
+                then("the URL is one encoded fifth token, and the origin channel still comes from the second extra") {
+                    privateMetadata.split(",").size shouldBe 5
+                    interactionPayload.routingExtras shouldBe listOf("U_HOST", originChannel, listResponseUrl)
+                    interactionPayload.channel.id shouldBe originChannel
+                }
+
+                then("the reschedule intent carries the URL back as the handle that closes the list") {
+                    output.ok shouldBe true
+                    effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single().listHandle shouldBe
+                        ResponseReplaceHandle(raw = listResponseUrl)
+                }
+            }
+
+            `when`("the add-participant modal carries the list's response URL") {
+                val modalJson =
+                    templateBuilder.addParticipantModalViewJson(
+                        meetingUid = meetingUid,
+                        requesterId = "U_HOST",
+                        channel = originChannel,
+                        listResponseUrl = listResponseUrl,
+                    )
+                val submission =
+                    parser
+                        .parseStringPayload(
+                            payload =
+                                createRoutingOnlyViewSubmissionJson(
+                                    callbackId = AddParticipantModalIds.CALLBACK_ID,
+                                    privateMetadata = extractPrivateMetadata(modalViewJson = modalJson),
+                                ),
+                        ).toInbound()
+                        .submission
+
+                then("the submission hands the decoded URL to the domain") {
+                    submission.shouldBeInstanceOf<InboundSubmission.AddParticipant>().listHandleRaw shouldBe
+                        listResponseUrl
+                }
+            }
+
+            `when`("a modal opened before this change submits its four-token private_metadata") {
+                val submission =
+                    parser
+                        .parseStringPayload(
+                            payload =
+                                createRoutingOnlyViewSubmissionJson(
+                                    callbackId = RescheduleMeetingModalIds.CALLBACK_ID,
+                                    privateMetadata =
+                                        "$meetingUid,${CommandDetailType.MEETING_RESCHEDULE_SUBMIT.name}," +
+                                            "U_HOST,$originChannel",
+                                ),
+                        ).toInbound()
+                        .submission
+
+                then("there is no list to close, so the host gets the ephemeral reply as before") {
+                    submission.shouldBeInstanceOf<InboundSubmission.RescheduleMeeting>().listHandleRaw shouldBe ""
+                }
+            }
+        }
+
         given("a reschedule private_metadata whose routing tokens were reordered") {
             val meetingUid = UUID.randomUUID()
             val requesterId = "U_HOST_SWAPPED"
@@ -260,6 +351,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30),
                     requesterId = requesterId,
                     channel = originChannel,
+                    listResponseUrl = "",
                 )
             val swappedMetadata =
                 extractPrivateMetadata(modalViewJson = modalJson)

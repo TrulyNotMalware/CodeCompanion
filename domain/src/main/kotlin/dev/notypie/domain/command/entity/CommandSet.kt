@@ -7,9 +7,9 @@ internal enum class CommandSet(
 ) {
     UNKNOWN(CommandPermission.AI),
     NOTICE(CommandPermission.OPERATIONS),
-    APPROVAL(CommandPermission.BASIC),
     HELP(CommandPermission.BASIC),
     STATUS(CommandPermission.OPERATIONS),
+    USAGE(CommandPermission.OPERATIONS),
     ASK(CommandPermission.AI),
     GRANT(CommandPermission.ADMINISTRATION),
     REVOKE(CommandPermission.ADMINISTRATION),

@@ -50,6 +50,34 @@ fun createInboundInteraction(
         submission = submission,
     )
 
+fun createAddParticipantSubmission(
+    meetingUidRaw: String = UUID.randomUUID().toString(),
+    requesterId: String = "U_HOST",
+    participantUserIdsRaw: String = "U_A",
+    listHandleRaw: String = "",
+): InboundSubmission.AddParticipant =
+    InboundSubmission.AddParticipant(
+        meetingUidRaw = meetingUidRaw,
+        requesterId = requesterId,
+        participantUserIdsRaw = participantUserIdsRaw,
+        listHandleRaw = listHandleRaw,
+    )
+
+fun createRescheduleMeetingSubmission(
+    meetingUidRaw: String = UUID.randomUUID().toString(),
+    requesterId: String = "U_HOST",
+    date: String = "2099-10-01",
+    time: String = "14:30",
+    listHandleRaw: String = "",
+): InboundSubmission.RescheduleMeeting =
+    InboundSubmission.RescheduleMeeting(
+        meetingUidRaw = meetingUidRaw,
+        requesterId = requesterId,
+        date = date,
+        time = time,
+        listHandleRaw = listHandleRaw,
+    )
+
 fun approveAction(isSelected: Boolean = true) = InboundAction(role = InboundActionRole.APPROVE, isSelected = isSelected)
 
 fun rejectAction(isSelected: Boolean = true) = InboundAction(role = InboundActionRole.REJECT, isSelected = isSelected)

@@ -1,24 +1,26 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/meet
 
 ## Purpose
 Builders for the meeting lane: the `Meeting` aggregate, its read-side DTOs (`MeetingDto`,
-`MeetingParticipantDto`, `MeetingReminderDto`) and the five meeting request events
-(`UpdateMeetingAttendance`, `CancelMeeting`, `AddParticipant`, `GetMeetingList`, `RescheduleMeeting`).
+`MeetingParticipantDto`, `MeetingReminderDto`), the five meeting request events
+(`UpdateMeetingAttendance`, `CancelMeeting`, `AddParticipant`, `GetMeetingList`, `RescheduleMeeting`) and the
+`RequestMeetingContextResult` that drives the new-meeting listener.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MeetingTestFixtures.kt` | `createMeeting(title = "Standup", publisher = "U001", members = {U002, U003}, reason, startAt = now+1d, endAt = startAt+1h, isCanceled, meetingUid)`; `createUpdateMeetingAttendanceEvent(meetingIdempotencyKey, participantUserId, isAttending = false, absentReason = OTHER, idempotencyKey)`; `createCancelMeetingEvent(meetingUid, requesterId, idempotencyKey, responseBasicInfo)`; `createAddParticipantEvent(meetingUid, requesterId, participantUserIds = ["U_NEW_PARTICIPANT"], idempotencyKey, responseBasicInfo)`; `createGetMeetingListEvent(publisherId, startDate = now, endDate = now+1w, ...)`; `createRescheduleMeetingEvent(meetingUid, requesterId, newStartAt = now+1d, ...)` |
+| `MeetingTestFixtures.kt` | `createMeeting(title = "Standup", publisher = "U001", members = {U002, U003}, reason, startAt = now+1d, endAt = startAt+1h, isCanceled, meetingUid)`; `createRequestMeetingContextResult(meeting = createMeeting(), commandBasicInfo = createCommandBasicInfo())` (`ok = true`, `Status.SUCCESS`; its `idempotencyKey` is the basic info's); `createUpdateMeetingAttendanceEvent(meetingIdempotencyKey, participantUserId, isAttending = false, absentReason = OTHER, idempotencyKey)`; `createCancelMeetingEvent(meetingUid, requesterId, idempotencyKey, responseBasicInfo, listHandle = null)`; `createAddParticipantEvent(meetingUid, requesterId, participantUserIds = ["U_NEW_PARTICIPANT"], idempotencyKey, responseBasicInfo, listHandle = null)`; `createGetMeetingListEvent(publisherId, startDate = now, endDate = now+1w, ...)`; `createRescheduleMeetingEvent(meetingUid, requesterId, newStartAt = now+1d, ..., listHandle = null)` (a non-null `listHandle` makes the write close the `/meetup list` message instead of answering with an ephemeral) |
 | `MeetingDtoCreator.kt` | `createMeetingDto(meetingId = 0L, meetingUid, idempotencyKey, creator = TEST_USER_ID, title = "Test Meeting", reason, startAt = now+1d, endAt = startAt+1h, participants = [], isCanceled)`; `createMeetingParticipantDto(userId (required), isAttending = true, absentReason = ATTENDING, absentReasonDetail)` |
 | `MeetingReminderDtoCreator.kt` | `createMeetingReminderDto(id = 1L, meetingId = 1L, offsetMinutes = 15, scheduledAt = 2026-05-01T01:00Z, sentAt, status = PENDING, failureReason)` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- Consumers by builder: `createMeeting` → domain `meet/entity/MeetingTest`; `createMeetingDto` →
+- Consumers by builder: `createMeeting` → domain `meet/entity/MeetingTest` and application `MeetingServiceImplTest`
+  (through `createRequestMeetingContextResult`, the calendar-hook case); `createMeetingDto` →
   application `MeetingServiceImplTest`, `MeetingRescheduleServiceTest`, `mcp/DomainReadToolsTest`,
   infrastructure `SlackOutboundRendererTest`, `OutboundMessageCodecTest`, `ModalTemplateBuilderTest`;
   `createMeetingParticipantDto` → `MeetingRescheduleServiceTest`, `ModalTemplateBuilderTest`;

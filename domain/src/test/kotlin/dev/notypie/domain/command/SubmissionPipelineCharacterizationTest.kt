@@ -1,5 +1,6 @@
 package dev.notypie.domain.command
 
+import dev.notypie.domain.TEST_LIST_HANDLE
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -9,6 +10,7 @@ import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -52,10 +54,11 @@ class SubmissionPipelineCharacterizationTest :
                     execute(
                         detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                         submission =
-                            InboundSubmission.AddParticipant(
+                            createAddParticipantSubmission(
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
                                 participantUserIdsRaw = " U_A , U_B ,,",
+                                listHandleRaw = TEST_LIST_HANDLE,
                             ),
                     )
 
@@ -66,6 +69,7 @@ class SubmissionPipelineCharacterizationTest :
                     intent.meetingUid shouldBe meetingUid
                     intent.requesterId shouldBe "U_HOST"
                     intent.participantUserIds shouldContainExactly listOf("U_A", "U_B")
+                    intent.listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
                 }
             }
 
@@ -73,12 +77,7 @@ class SubmissionPipelineCharacterizationTest :
                 val (_, effects) =
                     execute(
                         detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                        submission =
-                            InboundSubmission.AddParticipant(
-                                meetingUidRaw = UUID.randomUUID().toString(),
-                                requesterId = "",
-                                participantUserIdsRaw = "U_A",
-                            ),
+                        submission = createAddParticipantSubmission(requesterId = ""),
                     )
 
                 then("the submitting actor becomes the requester") {
@@ -90,22 +89,12 @@ class SubmissionPipelineCharacterizationTest :
                 val badUid =
                     execute(
                         detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                        submission =
-                            InboundSubmission.AddParticipant(
-                                meetingUidRaw = "not-a-uuid",
-                                requesterId = "U_HOST",
-                                participantUserIdsRaw = "U_A",
-                            ),
+                        submission = createAddParticipantSubmission(meetingUidRaw = "not-a-uuid"),
                     )
                 val emptySelection =
                     execute(
                         detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                        submission =
-                            InboundSubmission.AddParticipant(
-                                meetingUidRaw = UUID.randomUUID().toString(),
-                                requesterId = "U_HOST",
-                                participantUserIdsRaw = " , ",
-                            ),
+                        submission = createAddParticipantSubmission(participantUserIdsRaw = " , "),
                     )
 
                 then("both fall open: success with no effects") {
@@ -138,17 +127,19 @@ class SubmissionPipelineCharacterizationTest :
                     execute(
                         detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                         submission =
-                            InboundSubmission.RescheduleMeeting(
+                            createRescheduleMeetingSubmission(
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
                                 date = "2099-10-01",
                                 time = "14:30",
+                                listHandleRaw = TEST_LIST_HANDLE,
                             ),
                     )
 
                 then("one RescheduleMeeting intent carries the combined start datetime") {
                     output.ok shouldBe true
                     val intent = effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single()
+                    intent.listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
                     intent.meetingUid shouldBe meetingUid
                     intent.requesterId shouldBe "U_HOST"
                     intent.newStartAt shouldBe LocalDateTime.of(2099, 10, 1, 14, 30)
@@ -161,9 +152,8 @@ class SubmissionPipelineCharacterizationTest :
                     execute(
                         detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
                         submission =
-                            InboundSubmission.RescheduleMeeting(
+                            createRescheduleMeetingSubmission(
                                 meetingUidRaw = meetingUid.toString(),
-                                requesterId = "U_HOST",
                                 date = "2000-01-01",
                                 time = "09:00",
                             ),
@@ -180,24 +170,9 @@ class SubmissionPipelineCharacterizationTest :
             `when`("the uid, date, or time is unusable") {
                 val cases =
                     listOf(
-                        InboundSubmission.RescheduleMeeting(
-                            meetingUidRaw = "broken",
-                            requesterId = "U_HOST",
-                            date = "2099-10-01",
-                            time = "14:30",
-                        ),
-                        InboundSubmission.RescheduleMeeting(
-                            meetingUidRaw = UUID.randomUUID().toString(),
-                            requesterId = "U_HOST",
-                            date = "",
-                            time = "14:30",
-                        ),
-                        InboundSubmission.RescheduleMeeting(
-                            meetingUidRaw = UUID.randomUUID().toString(),
-                            requesterId = "U_HOST",
-                            date = "2099-10-01",
-                            time = "25:99",
-                        ),
+                        createRescheduleMeetingSubmission(meetingUidRaw = "broken"),
+                        createRescheduleMeetingSubmission(date = ""),
+                        createRescheduleMeetingSubmission(time = "25:99"),
                     )
 
                 then("each falls open: success with no effects") {
@@ -495,12 +470,7 @@ class SubmissionPipelineCharacterizationTest :
                 val (output, effects) =
                     execute(
                         detailType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
-                        submission =
-                            InboundSubmission.AddParticipant(
-                                meetingUidRaw = meetingUid.toString(),
-                                requesterId = "U_HOST",
-                                participantUserIdsRaw = "U_A",
-                            ),
+                        submission = createAddParticipantSubmission(meetingUidRaw = meetingUid.toString()),
                     )
 
                 then("the variant wins: the submission executes as its own flow") {

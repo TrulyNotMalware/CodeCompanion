@@ -26,6 +26,7 @@ import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.Lifecycle
 import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
+import org.springframework.core.env.MapPropertySource
 import org.springframework.core.io.ClassPathResource
 import org.springframework.kafka.config.KafkaListenerConfigUtils
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry
@@ -141,6 +142,9 @@ class ShutdownBudgetTest :
                         "discardBudget",
                     ) as Duration
                 val discardBudgetSeconds = Math.ceilDiv(discardBudget.toMillis(), 1_000L).toInt()
+                val revokeExecutor = CalendarConfiguration(appConfig = AppConfig()).googleTokenRevocationExecutor()
+                val revokeAwaitSeconds =
+                    (ReflectionTestUtils.getField(revokeExecutor, "awaitTerminationMillis") as Long) / 1_000L
                 val connectionTimeoutKey =
                     Regex("""\$\{(\w+)}""")
                         .matchEntire(prod.getProperty("spring.datasource.hikari.connection-timeout").toString())!!
@@ -154,7 +158,7 @@ class ShutdownBudgetTest :
                 val discardPhase = discardBudgetSeconds + connectionTimeoutSeconds
                 val executorWaits =
                     relayAwaitSeconds.toInt() + agentTurnSeconds + discardPhase +
-                        DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS
+                        DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS + revokeAwaitSeconds.toInt()
                 val required =
                     preStopSeconds + lifecyclePhases + producerCloses * PRODUCER_CLOSE_TIMEOUT_SECONDS + executorWaits +
                         margin
@@ -166,6 +170,11 @@ class ShutdownBudgetTest :
 
                 then("the grace period covers every wait in the serial shutdown plus a margin") {
                     graceSeconds shouldBeGreaterThanOrEqual required
+                }
+
+                then("the Google token revoke executor adds nothing: it drops queued revokes instead of waiting") {
+                    revokeAwaitSeconds shouldBe 0L
+                    ReflectionTestUtils.getField(revokeExecutor, "waitForTasksToCompleteOnShutdown") shouldBe false
                 }
             }
         }
@@ -207,11 +216,14 @@ class ShutdownBudgetTest :
             }
         }
 
-        given("the relay and agent-turn executors and the EntityManagerFactory in one context") {
+        given("the relay, agent-turn and token-revoke executors and the EntityManagerFactory in one context") {
             val executorsShutDownWhenEmfCloses = AtomicReference<List<Boolean>>()
             val executors = AtomicReference<List<ThreadPoolTaskExecutor>>()
             val context =
                 AnnotationConfigApplicationContext().apply {
+                    environment.propertySources.addFirst(
+                        MapPropertySource("calendar", mapOf("slack.app.calendar.google.enabled" to "true")),
+                    )
                     addBeanFactoryPostProcessor(LazyInitializationBeanFactoryPostProcessor())
                     registerBean(AppConfig::class.java, Supplier { AppConfig() })
                     registerBean(MeterRegistry::class.java, Supplier { SimpleMeterRegistry() })
@@ -225,11 +237,11 @@ class ShutdownBudgetTest :
                             }
                         },
                     )
-                    register(AsyncConfig::class.java, AgentConfiguration::class.java)
+                    register(AsyncConfig::class.java, AgentConfiguration::class.java, CalendarConfiguration::class.java)
                     refresh()
                 }
             executors.set(
-                listOf("relayTaskExecutor", "agentTurnExecutor").map {
+                listOf("relayTaskExecutor", "agentTurnExecutor", GOOGLE_TOKEN_REVOCATION_EXECUTOR).map {
                     context.getBean(it, ThreadPoolTaskExecutor::class.java)
                 },
             )
@@ -238,8 +250,8 @@ class ShutdownBudgetTest :
             `when`("the context closes") {
                 context.close()
 
-                then("both executors are shut down before the EntityManagerFactory closes") {
-                    executorsShutDownWhenEmfCloses.get() shouldBe listOf(true, true)
+                then("all three executors are shut down before the EntityManagerFactory closes") {
+                    executorsShutDownWhenEmfCloses.get() shouldBe listOf(true, true, true)
                 }
             }
         }

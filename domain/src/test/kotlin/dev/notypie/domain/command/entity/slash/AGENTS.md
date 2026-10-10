@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # domain/command/entity/slash (test)
 
 ## Purpose
 Spec for `MeetingListRange`, the enum that turns the `list <range>` option of the meeting slash
-command into a `[start, end)` window. `RequestMeetingCommand` and `RequestMeetingContext` are covered
-one level up and in `../../context/`.
+command into a `[start, end)` window. `RequestMeetingCommand` / `StandupCommand` and their contexts are
+covered one level up and in `../../context/`.
 
 ## Key Files
 | File | Description |

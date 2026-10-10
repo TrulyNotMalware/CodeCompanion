@@ -1,8 +1,6 @@
 package dev.notypie.domain.command.outbound
 
 import dev.notypie.domain.command.dto.modals.ApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.standup.dto.RoutineMemberDto
@@ -24,13 +22,6 @@ sealed interface MessageContent {
     data class Schedule(
         val headline: String,
         val info: TimeScheduleInfo,
-    ) : MessageContent
-
-    data class Form(
-        val headline: String,
-        val fields: List<SelectionContents>,
-        val reason: TextInputContents?,
-        val approval: ApprovalContents?,
     ) : MessageContent
 
     data class MeetingRequest(

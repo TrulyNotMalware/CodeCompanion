@@ -2,6 +2,7 @@ package dev.notypie.domain.command.intent
 
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDateTime
 import java.util.UUID
@@ -24,21 +25,46 @@ sealed class CommandIntent : CommandEffect {
     data class CancelMeeting(
         val meetingUid: UUID,
         val requesterId: String,
+        val listHandle: ResponseReplaceHandle?,
     ) : CommandIntent()
 
     data class RescheduleMeeting(
         val meetingUid: UUID,
         val requesterId: String,
         val newStartAt: LocalDateTime,
+        val listHandle: ResponseReplaceHandle?,
     ) : CommandIntent()
 
     data class AddParticipant(
         val meetingUid: UUID,
         val requesterId: String,
         val participantUserIds: List<String>,
+        val listHandle: ResponseReplaceHandle?,
+    ) : CommandIntent()
+
+    data class CalendarConnect(
+        val userId: String,
+    ) : CommandIntent()
+
+    data class CalendarDisconnect(
+        val userId: String,
+    ) : CommandIntent()
+
+    data class CalendarStatus(
+        val userId: String,
     ) : CommandIntent()
 
     data object StatusReport : CommandIntent()
+
+    data class AgentUsageReport(
+        val days: Int,
+    ) : CommandIntent() {
+        companion object {
+            const val DEFAULT_DAYS: Int = 7
+            const val MAX_DAYS: Int = 90
+            val DAYS_RANGE: IntRange = 1..MAX_DAYS
+        }
+    }
 
     data class GrantRole(
         val targetUserId: String,
@@ -76,6 +102,12 @@ sealed class CommandIntent : CommandEffect {
         val triggerLocalTime: java.time.LocalTime,
         val cutoffMinutes: Long?,
         val timezone: java.time.ZoneId,
+    ) : CommandIntent()
+
+    data object ListStandupRoutines : CommandIntent()
+
+    data class StopStandupRoutine(
+        val routineName: String,
     ) : CommandIntent()
 
     data class CveSubscribe(

@@ -40,10 +40,7 @@ class SlackInteractionHandlerImpl(
 ) : InteractionHandler {
     companion object {
         internal val LEGACY_AUTO_REJECT_TYPES: Set<CommandDetailType> =
-            setOf(
-                CommandDetailType.APPLY_REQUEST,
-                CommandDetailType.APPROVAL_REQUEST,
-            )
+            setOf(CommandDetailType.APPROVAL_REQUEST)
 
         private val INTERACTION_TRANSACTION =
             DefaultTransactionDefinition().apply { setName("SlackInteractionHandlerImpl.handleInteraction") }

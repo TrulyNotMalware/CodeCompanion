@@ -1,12 +1,13 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-07 -->
 
 # application/common
 
 ## Purpose
 Framework-light helpers shared across the `application` module: deterministic idempotency-key
 derivation, Slack slash-command form parsing into the transport-neutral `InboundCommand`, and a
-`TransactionTemplate` wrapper that gives scheduler/async code a `Result`-typed transaction boundary.
+`TransactionTemplate` wrapper that gives scheduler/async code a `Result`-typed transaction boundary, and a
+factory for a template that runs work outside the caller's transaction.
 Nothing here is a Spring bean; every helper is a top-level function or `object` usable without an
 application context.
 
@@ -15,7 +16,7 @@ application context.
 |------|-------------|
 | `IdempotencyCreator.kt` | `object IdempotencyCreator` with two `create(data, currentTimeMillis = System.currentTimeMillis()): UUID` overloads (`String` / `IdempotencyData`). Seed is `currentTimeMillis / 1000`; the key is `UUID.nameUUIDFromBytes("$data|$seed")`. `IdempotencyDataSerializer` + `DefaultIdempotencyDataSerializer` (`jsonMapper` bytes → SHA-256 hex) turn an `IdempotencyData` into the `String` input |
 | `SlackRequestParser.kt` | `parseRequestBodyData(data: Map<String, String>): SlashCommandRequestBody` (Jackson `convertValue`); `parseRequestBodyData(headers, data): Pair<SlashCommandRequestBody, InboundCommand>` adds `toInboundCommand()` — `headers` is accepted but unused; `Map<String, Any>.convert<T>()` is a reified `convertValue` helper with no current call sites |
-| `TransactionTemplateExt.kt` | `inline fun <T> TransactionTemplate.runInTx(crossinline action: () -> T): Result<T>` — `runCatching` inside `execute` with `setRollbackOnly()` on failure, and an outer `runCatching` around `execute` so a commit-time failure (flush, a `BEFORE_COMMIT` listener such as the outbox write) is also returned as `Result.failure` instead of escaping past the caller's `.onFailure` (2026-10-01) |
+| `TransactionTemplateExt.kt` | `inline fun <T> TransactionTemplate.runInTx(crossinline action: () -> T): Result<T>` — `runCatching` inside `execute` with `setRollbackOnly()` on failure, and an outer `runCatching` around `execute` so a commit-time failure (flush, a `BEFORE_COMMIT` listener such as the outbox write) is also returned as `Result.failure` instead of escaping past the caller's `.onFailure` (2026-10-01). `internal fun detachedTemplate(transactionManager): TransactionTemplate` — `PROPAGATION_NOT_SUPPORTED`, the counterpart of `service/meeting`'s `isolatedWriteTemplate` (`REQUIRES_NEW`): the caller's transaction is suspended for the block, so a `@Transactional` repository call inside it runs in its own transaction and its failure cannot mark the caller's rollback-only. Used by `StandupRoutineOpsService` (stop's admin lookup), `AgentUsageReportService` and `OpsStatusService` (report rendering). The block takes a second pooled connection while the caller still holds one |
 
 ## For AI Agents
 

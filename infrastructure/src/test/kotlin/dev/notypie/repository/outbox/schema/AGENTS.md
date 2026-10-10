@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox/schema
 
@@ -10,7 +10,7 @@ no Spring, no database — it checks the in-memory `OutboxMessage` the port prod
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxMessageTest.kt` | `toChainHead` of three parts → payload with part 1 and parts 2–3 as continuation, `chainedParts() == 2`, schema V3; of one part → V2, `chainedParts() == 0`. `CodecOutboundMessagePort().toRow(message, basicInfo)`: `eventId` non-blank and unique per call, `idempotencyKey` / `publisherId` copied from `createCommandBasicInfo()`, `transport == Transport.SLACK.name`, `schemaVersion == OutboxSchemaVersion.V2`, `status == MessageStatus.PENDING.name`, and `payload` decodes back through `OutboundMessageCodec` to the original `basicInfo` and a `ChannelMessage` / `Text`. `OutboxMessage.updateMessageStatus` to `SUCCESS` and `FAILURE` |
+| `OutboxMessageTest.kt` | `toChainHead` of three parts → payload with part 1 and parts 2–3 as continuation, `chainedParts() == 2`, schema V3; of one part → V2, `chainedParts() == 0`. A `ReplaceMessage` with a `fallback` → V4 and the fallback decodes back; without one → V2; `SUPPORTED == {2, 3, 4}`. `CodecOutboundMessagePort().toRow(message, basicInfo)`: `eventId` non-blank and unique per call, `idempotencyKey` / `publisherId` copied from `createCommandBasicInfo()`, `transport == Transport.SLACK.name`, `schemaVersion == OutboxSchemaVersion.V2`, `status == MessageStatus.PENDING.name`, and `payload` decodes back through `OutboundMessageCodec` to the original `basicInfo` and a `ChannelMessage` / `Text`. `OutboxMessage.updateMessageStatus` to `SUCCESS` and `FAILURE` |
 
 ## For AI Agents
 

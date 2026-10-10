@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # application/resources
 
@@ -12,16 +12,16 @@ stand up change-data-capture locally and in-cluster.
 | File | Description |
 |------|-------------|
 | `application.yaml` | Base defaults only — kept deliberately minimal. MCP server off by default; `spring.jpa.open-in-view: false`; scheduler pool sized to 4 (effective through `SchedulingConfig`'s `ThreadPoolTaskScheduler`) |
-| `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true`; HTTP bound to `server.address: 127.0.0.1` (the only profile allowed a blank signing secret, with unauthenticated actuator endpoints) |
-| `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics,prometheus` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required |
-| `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), actuator `health,info,metrics,prometheus` (scrape `/actuator/prometheus` in-cluster; never routed publicly), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off |
-| `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB URL/user defaults but `DATABASE_USER_PWD` required (no committed default), port 9000, `SLACK_SIGNING_SECRET` required (no default); the port is tunnelled to the internet, so the actuator exposes `health` only, with `show-details: when_authorized`. `configurations/ProfileYamlTest` pins both |
+| `application-local.yaml` | Local orbstack infra: MariaDB on 3306, 3-broker Kafka on 19092/29092/39092, virtual threads on, `ddl-auto: update`, `show-sql: true`; HTTP bound to `server.address: 127.0.0.1` (the only profile allowed a blank signing secret, with unauthenticated actuator endpoints); `slack.app.calendar.google.*` from `GOOGLE_CALENDAR_ENABLED` (false), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY` |
+| `application-dev.yaml` | Development environment: MariaDB/Kafka from env vars, CDC + Kafka, port 9000, actuator `health,info,metrics,prometheus` with `show-details: when_authorized`, `SLACK_SIGNING_SECRET` required; the same `slack.app.calendar.google.*` `GOOGLE_*` placeholders as local (off by default) |
+| `application-prod.yaml` | Production: env-var driven except the actuator base path (fixed `/actuator`, which the k8s probes and the deploy health check hard-code), actuator `health,info,metrics,prometheus` (scrape `/actuator/prometheus` in-cluster; never routed publicly), `ddl-auto: none`, `show-sql: false`, 10s graceful shutdown, H2 console off; the same `slack.app.calendar.google.*` `GOOGLE_*` placeholders as local (off by default) |
+| `application-slack-live.yaml` | Live Slack workspace test: POLLING outbox relay + APPLICATION_EVENT publisher (no Kafka/Debezium), MariaDB URL/user defaults but `DATABASE_USER_PWD` required (no committed default), port 9000, `SLACK_SIGNING_SECRET` required (no default); the port is tunnelled to the internet, so the actuator exposes `health` only, with `show-details: when_authorized`. `configurations/ProfileYamlTest` pins both; `slack.app.calendar.google.*` `GOOGLE_*` placeholders (off by default) — the tunnel URL + `/oauth/google/callback` is the redirect URI to register in Google Cloud |
 | `banner.txt` | Spring Boot startup banner |
 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `db/migration/` | `V1__` … `V22__` SQL migrations (outbox and its indexes/attempt and send counts, meeting, standup, agenda dispatch, agent session/turn history, user command roles, MCP tool call history, CVE tables and indexes, data fixes) — see `db/migration/AGENTS.md` |
+| `db/migration/` | `V1__` … `V25__` SQL migrations (outbox and its indexes/attempt and send counts, meeting, standup, agenda dispatch, agent session/turn history, user command roles, MCP tool call history, CVE tables and indexes, data fixes, Google Calendar connection/OAuth state and mirror queue) — see `db/migration/AGENTS.md` |
 | `k8s/` | `deployment.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml` + `route/` (`ingress.yaml`, `httpRoute.yaml`) — see `k8s/README.md` (see `k8s/AGENTS.md`) |
 | `cdc/docker-compose/` | Local Debezium + MariaDB stack (`docker-compose.yml`, `debezium/connect_mariadb.sh`, `mariadb/my.cnf`) — see its `README.md` |
 | `cdc/k8s/yamls/mariadb/` | In-cluster MariaDB StatefulSet, service, config, and init job |
@@ -38,8 +38,8 @@ stand up change-data-capture locally and in-cluster.
   `ddl-auto: update` to create base tables, then the `V*` scripts patch them. Prod runs `ddl-auto: none`.
   So: a new migration must be additive and safe against a Hibernate-created base table, and any new
   entity needs *both* a JPA schema class and a migration.
-- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-02 is
-  `V23__`, so the next free one is `V24__`. Check the highest existing `V*` here and on `origin/main` before
+- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-08 is
+  `V25__`, so the next free one is `V26__`. Check the highest existing `V*` here and on `origin/main` before
   naming a new one.
 - **Prod config is env-var only** (`${SQL_DATABASE_URL}`, `${MCP_ENABLED}`, ...). Do not commit a literal
   secret or host here; add the variable to `k8s/configmap.yaml` / `k8s/secret.yaml` instead.

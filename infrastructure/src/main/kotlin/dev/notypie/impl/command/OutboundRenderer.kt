@@ -44,16 +44,6 @@ class SlackOutboundRenderer(
                             timeScheduleInfo = content.info,
                         )
 
-                    is MessageContent.Form ->
-                        slackEventBuilder.simpleApprovalFormRequest(
-                            commandDetailType = message.detailType ?: CommandDetailType.APPROVAL_REQUEST,
-                            headLineText = content.headline,
-                            commandBasicInfo = basicInfo,
-                            selectionFields = content.fields,
-                            reasonInput = content.reason,
-                            approvalContents = content.approval,
-                        )
-
                     is MessageContent.MeetingRequest ->
                         slackEventBuilder.requestMeetingFormRequest(
                             commandBasicInfo = basicInfo,
@@ -78,6 +68,7 @@ class SlackOutboundRenderer(
                 when (val content = message.content) {
                     is MessageContent.Text ->
                         slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = content.headline,
                             textMessage = content.markdown,
                             commandBasicInfo = basicInfo,
                             commandDetailType = message.detailType ?: CommandDetailType.SIMPLE_TEXT,

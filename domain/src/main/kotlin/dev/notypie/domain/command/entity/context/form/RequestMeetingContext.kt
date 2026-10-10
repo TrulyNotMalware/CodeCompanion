@@ -41,7 +41,7 @@ internal class RequestMeetingContext(
         when (subCommand.subCommandDefinition) {
             MeetingSubCommandDefinition.LIST -> return runListSubCommand(commandDetailType = commandDetailType)
 
-            else -> {
+            MeetingSubCommandDefinition.NONE -> {
                 addOutbound(
                     OutboundMessage.ChannelMessage(
                         target = ConversationTarget(id = commandBasicInfo.channel),

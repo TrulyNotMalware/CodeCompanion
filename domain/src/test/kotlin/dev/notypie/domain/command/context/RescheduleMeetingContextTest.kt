@@ -6,9 +6,11 @@ import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
+import dev.notypie.domain.command.inbound.ReplyHandle
 import dev.notypie.domain.command.inbound.TriggerHandle
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -45,13 +47,25 @@ class RescheduleMeetingContextTest :
                     result.commandDetailType shouldBe CommandDetailType.MEETING_RESCHEDULE_REQUEST
                 }
 
-                then("OpenModal carries the trigger id, meeting uid, requester, and channel") {
+                then("OpenModal carries the trigger id, meeting uid, requester, channel and the list's reply handle") {
                     val open = intents.filterIsInstance<OutboundMessage.OpenModal>().single()
                     open.handle.raw shouldBe triggerId
                     val form = open.form.shouldBeInstanceOf<ModalForm.Reschedule>()
                     form.meetingUid shouldBe meetingUid
                     form.requesterId shouldBe payload.actor.id
                     form.channel.id shouldBe payload.channelId
+                    form.listHandle shouldBe ResponseReplaceHandle(raw = payload.reply.raw)
+                }
+            }
+
+            `when`("the click carries no reply handle") {
+                val noReplyIntents = createIntentQueue()
+                RescheduleMeetingContext(commandBasicInfo = createCommandBasicInfo(), intents = noReplyIntents)
+                    .handleInteraction(interaction = payload.copy(reply = ReplyHandle(raw = "")))
+
+                then("the modal is still opened, with no list to close") {
+                    val open = noReplyIntents.drainSnapshot().filterIsInstance<OutboundMessage.OpenModal>().single()
+                    open.form.shouldBeInstanceOf<ModalForm.Reschedule>().listHandle shouldBe null
                 }
             }
         }

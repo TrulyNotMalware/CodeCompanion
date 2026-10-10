@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -19,11 +21,14 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createGetMeetingListEvent
+import dev.notypie.domain.meet.createMeeting
 import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackOutboundStager
@@ -34,6 +39,7 @@ import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
@@ -42,6 +48,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.slf4j.LoggerFactory
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataAccessResourceFailureException
@@ -63,6 +70,7 @@ class MeetingServiceImplTest :
                 outboundStager = stager,
                 eventPublisher = eventPublisher,
                 transactionManager = createH2TransactionManager(),
+                calendarMirror = NoopMeetingCalendarMirror,
             )
 
         given("updateParticipantAttendance receives an UpdateMeetingAttendanceEvent") {
@@ -162,6 +170,183 @@ class MeetingServiceImplTest :
             }
         }
 
+        given("the calendar mirror hooks on the meeting listeners") {
+            fun hookedService(repository: MeetingRepository, mirror: MeetingCalendarMirror) =
+                MeetingServiceImpl(
+                    meetingRepository = repository,
+                    commandExecutor = commandExecutor,
+                    outboundStager = mockk(relaxed = true),
+                    eventPublisher = eventPublisher,
+                    transactionManager = createH2TransactionManager(),
+                    calendarMirror = mirror,
+                )
+            val meetingKey = UUID.randomUUID()
+
+            `when`("a new meeting is persisted") {
+                val repository = mockk<MeetingRepository>()
+                val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                val result = createRequestMeetingContextResult(meeting = createMeeting(publisher = "U_HOST_HOOK"))
+                every {
+                    repository.createNewMeeting(
+                        meeting = result.meeting,
+                        idempotencyKey = result.idempotencyKey,
+                        channel = result.commandBasicInfo.channel,
+                    )
+                } returns result.meeting
+
+                hookedService(repository = repository, mirror = mirror).createNewMeeting(event = result)
+
+                then("the mirror gets the meeting's idempotency key and its host, after the insert") {
+                    verifyOrder {
+                        repository.createNewMeeting(
+                            meeting = result.meeting,
+                            idempotencyKey = result.idempotencyKey,
+                            channel = result.commandBasicInfo.channel,
+                        )
+                        mirror.onMeetingCreated(meetingIdempotencyKey = result.idempotencyKey, hostId = "U_HOST_HOOK")
+                    }
+                    verify(exactly = 1) { mirror.onMeetingCreated(meetingIdempotencyKey = any(), hostId = any()) }
+                }
+            }
+
+            listOf(true to RejectReason.ATTENDING, false to RejectReason.OTHER).forEach { (attending, reason) ->
+                `when`("a participant records attending=$attending") {
+                    val repository = mockk<MeetingRepository>()
+                    val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                    every {
+                        repository.updateParticipantAttendance(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = "U_DECIDER",
+                            isAttending = attending,
+                            absentReason = reason,
+                        )
+                    } returns 1
+
+                    hookedService(repository = repository, mirror = mirror).updateParticipantAttendance(
+                        event =
+                            createUpdateMeetingAttendanceEvent(
+                                meetingIdempotencyKey = meetingKey,
+                                participantUserId = "U_DECIDER",
+                                isAttending = attending,
+                                absentReason = reason,
+                            ),
+                    )
+
+                    then("the mirror gets the same decision for that user and meeting") {
+                        verify(exactly = 1) {
+                            mirror.onAttendanceChanged(
+                                meetingIdempotencyKey = meetingKey,
+                                userId = "U_DECIDER",
+                                attending = attending,
+                            )
+                        }
+                    }
+                }
+            }
+
+            `when`(
+                "the first Approve writes the row's initial values and a useAffectedRows=true driver reports zero rows",
+            ) {
+                val repository = mockk<MeetingRepository>()
+                val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                every {
+                    repository.updateParticipantAttendance(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_FIRST_ACCEPT",
+                        isAttending = true,
+                        absentReason = RejectReason.ATTENDING,
+                    )
+                } returns 0
+                every {
+                    repository.participantExists(meetingIdempotencyKey = meetingKey, userId = "U_FIRST_ACCEPT")
+                } returns true
+
+                hookedService(repository = repository, mirror = mirror).updateParticipantAttendance(
+                    event =
+                        createUpdateMeetingAttendanceEvent(
+                            meetingIdempotencyKey = meetingKey,
+                            participantUserId = "U_FIRST_ACCEPT",
+                            isAttending = true,
+                            absentReason = RejectReason.ATTENDING,
+                        ),
+                )
+
+                then("the participant exists, so the mirror still hears the acceptance, after one existence check") {
+                    verify(exactly = 1) {
+                        mirror.onAttendanceChanged(
+                            meetingIdempotencyKey = meetingKey,
+                            userId = "U_FIRST_ACCEPT",
+                            attending = true,
+                        )
+                    }
+                    verify(exactly = 1) {
+                        repository.participantExists(meetingIdempotencyKey = meetingKey, userId = "U_FIRST_ACCEPT")
+                    }
+                }
+            }
+
+            `when`("no participant row matches the decision") {
+                val repository = mockk<MeetingRepository>()
+                val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                every {
+                    repository.updateParticipantAttendance(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_STRANGER",
+                        isAttending = true,
+                        absentReason = RejectReason.ATTENDING,
+                    )
+                } returns 0
+                every {
+                    repository.participantExists(
+                        meetingIdempotencyKey = meetingKey,
+                        userId = "U_STRANGER",
+                    )
+                } returns
+                    false
+
+                then("the listener fails before the mirror hears anything") {
+                    shouldThrow<IllegalStateException> {
+                        hookedService(repository = repository, mirror = mirror).updateParticipantAttendance(
+                            event =
+                                createUpdateMeetingAttendanceEvent(
+                                    meetingIdempotencyKey = meetingKey,
+                                    participantUserId = "U_STRANGER",
+                                    isAttending = true,
+                                    absentReason = RejectReason.ATTENDING,
+                                ),
+                        )
+                    }
+                    verify(exactly = 0) {
+                        mirror.onAttendanceChanged(meetingIdempotencyKey = any(), userId = any(), attending = any())
+                    }
+                }
+            }
+
+            listOf(true, false).forEach { canceled ->
+                `when`("the cancel write returns $canceled") {
+                    val repository = mockk<MeetingRepository>()
+                    val mirror = mockk<MeetingCalendarMirror>(relaxed = true)
+                    val event = createCancelMeetingEvent(requesterId = "U_HOST_HOOK")
+                    every {
+                        repository.markMeetingCanceled(
+                            meetingUid = event.payload.meetingUid,
+                            requesterId = "U_HOST_HOOK",
+                        )
+                    } returns
+                        createMeetingDto(meetingUid = event.payload.meetingUid, creator = "U_HOST_HOOK")
+                            .takeIf { canceled }
+
+                    hookedService(repository = repository, mirror = mirror).cancelMeeting(event = event)
+
+                    then("the mirror hears about it only when the meeting was actually canceled") {
+                        verify(exactly = if (canceled) 1 else 0) {
+                            mirror.onMeetingCanceled(meetingUid = event.payload.meetingUid)
+                        }
+                    }
+                }
+            }
+        }
+
         given("cancelMeeting receives a CancelMeetingEvent") {
             val meetingUid = UUID.randomUUID()
             val requesterId = "U_HOST_LISTENER"
@@ -187,7 +372,7 @@ class MeetingServiceImplTest :
                         meetingUid = meetingUid,
                         requesterId = requesterId,
                     )
-                } returns true
+                } returns createMeetingDto(meetingUid = meetingUid, creator = requesterId, isCanceled = true)
                 every { stager.stage(message = capture(capturedMessage), basicInfo = any()) } returns ephemeralEvent
 
                 val captured = slot<EventQueue<CommandEvent<EventPayload>>>()
@@ -220,7 +405,7 @@ class MeetingServiceImplTest :
                         meetingUid = meetingUid,
                         requesterId = requesterId,
                     )
-                } returns false
+                } returns null
                 every { stager.stage(message = capture(capturedMessage), basicInfo = any()) } returns ephemeralEvent
                 every { eventPublisher.publishEvent(events = any()) } returns Unit
 
@@ -302,6 +487,7 @@ class MeetingServiceImplTest :
                             requesterId = requesterId,
                             participantUserIds = listOf("U_A", "U_B"),
                             responseBasicInfo = basic,
+                            listHandle = null,
                         ),
                     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
@@ -410,6 +596,7 @@ class MeetingServiceImplTest :
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
             val meetingUid = UUID.randomUUID()
             val requesterId = "U_HOST_RACE"
@@ -423,6 +610,7 @@ class MeetingServiceImplTest :
                             requesterId = requesterId,
                             participantUserIds = listOf("U_A"),
                             responseBasicInfo = basic,
+                            listHandle = null,
                         ),
                     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
@@ -626,6 +814,181 @@ class MeetingServiceImplTest :
             }
         }
 
+        given("a /meetup list row action whose event carries the list message's reply handle") {
+            val transactionManager = createH2TransactionManager()
+            val outerTransaction = TransactionTemplate(transactionManager)
+            val recordingPublisher = CommitRecordingEventPublisher()
+            val listRepository = mockk<MeetingRepository>()
+            val listService =
+                MeetingServiceImpl(
+                    meetingRepository = listRepository,
+                    commandExecutor = commandExecutor,
+                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    eventPublisher = recordingPublisher,
+                    transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
+                )
+            val meetingUid = UUID.randomUUID()
+            val requesterId = "U_HOST_LIST"
+            val basic = createCommandBasicInfo()
+            val listHandle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list")
+            val canceledMeeting =
+                createMeetingDto(
+                    meetingUid = meetingUid,
+                    creator = requesterId,
+                    title = "R&D <Sync>",
+                    isCanceled = true,
+                )
+            val cancelEvent =
+                createCancelMeetingEvent(
+                    meetingUid = meetingUid,
+                    requesterId = requesterId,
+                    responseBasicInfo = basic,
+                    listHandle = listHandle,
+                )
+            val addEvent =
+                createAddParticipantEvent(
+                    meetingUid = meetingUid,
+                    requesterId = requesterId,
+                    participantUserIds = listOf("U_A", "U_B"),
+                    responseBasicInfo = basic,
+                    listHandle = listHandle,
+                )
+
+            fun hostEphemeral(markdown: String, detailType: CommandDetailType) =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = basic.channel),
+                    recipient = UserRef(id = requesterId),
+                    content = MessageContent.Text(headline = null, markdown = markdown),
+                    detailType = detailType,
+                )
+
+            fun committedReplies(): List<OutboundMessage> =
+                recordingPublisher.committedMessages.filterNot { it is OutboundMessage.Approval }
+
+            fun stubAddOnce(result: AddParticipantResult) {
+                clearMocks(listRepository)
+                every {
+                    listRepository.addParticipants(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        participantUserIds = listOf("U_A", "U_B"),
+                    )
+                } answers {
+                    transactionManager.failInsideParticipatingTx(exception = createMeetingVersionConflict())
+                } andThenAnswer { result }
+            }
+
+            `when`("the cancel succeeds") {
+                recordingPublisher.committedMessages.clear()
+                every {
+                    listRepository.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId)
+                } returns canceledMeeting
+
+                outerTransaction.executeWithoutResult { listService.cancelMeeting(event = cancelEvent) }
+
+                then("the list is replaced by the escaped one-line result, and no separate ephemeral is sent") {
+                    committedReplies() shouldBe
+                        listOf(
+                            OutboundMessage.ReplaceMessage(
+                                handle = listHandle,
+                                content =
+                                    MessageContent.Text(headline = null, markdown = "*R&amp;D &lt;Sync&gt;* canceled."),
+                                fallback =
+                                    hostEphemeral(
+                                        markdown = "Meeting canceled.",
+                                        detailType = CommandDetailType.CANCEL_MEETING,
+                                    ),
+                            ),
+                        )
+                }
+            }
+
+            `when`("the cancel is a no-op (not the host, or already canceled)") {
+                recordingPublisher.committedMessages.clear()
+                every {
+                    listRepository.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId)
+                } returns null
+
+                outerTransaction.executeWithoutResult { listService.cancelMeeting(event = cancelEvent) }
+
+                then("the list stays and the host gets the ephemeral, so they can retry from it") {
+                    committedReplies() shouldBe
+                        listOf(
+                            hostEphemeral(
+                                markdown = "Meeting was already canceled, or you are not the host.",
+                                detailType = CommandDetailType.CANCEL_MEETING,
+                            ),
+                        )
+                }
+            }
+
+            `when`("the cancel conflicts on both attempts") {
+                recordingPublisher.committedMessages.clear()
+                every {
+                    listRepository.markMeetingCanceled(meetingUid = meetingUid, requesterId = requesterId)
+                } answers { transactionManager.failInsideParticipatingTx(exception = createMeetingVersionConflict()) }
+
+                outerTransaction.executeWithoutResult { listService.cancelMeeting(event = cancelEvent) }
+
+                then("the list stays and only the try-again ephemeral is committed") {
+                    committedReplies().filterIsInstance<OutboundMessage.ReplaceMessage>().shouldBeEmpty()
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe
+                        listOf("Failed to cancel the meeting. Please try again later.")
+                }
+            }
+
+            `when`("the add conflicts once after staging its replies, and the retry wins") {
+                recordingPublisher.committedMessages.clear()
+                stubAddOnce(
+                    result =
+                        AddParticipantResult(
+                            outcome = AddParticipantResult.Outcome.ADDED,
+                            addedUserIds = listOf("U_A", "U_B"),
+                            meeting = createMeetingDto(meetingUid = meetingUid, creator = requesterId, title = "Sync"),
+                        ),
+                )
+
+                outerTransaction.executeWithoutResult { listService.addParticipants(event = addEvent) }
+
+                then("only the retry's list replacement commits, once, naming the added users and the meeting") {
+                    committedReplies() shouldBe
+                        listOf(
+                            OutboundMessage.ReplaceMessage(
+                                handle = listHandle,
+                                content =
+                                    MessageContent.Text(headline = null, markdown = "Added <@U_A> <@U_B> to *Sync*."),
+                                fallback =
+                                    hostEphemeral(
+                                        markdown = "Added <@U_A> <@U_B> to the meeting.",
+                                        detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+                                    ),
+                            ),
+                        )
+                    recordingPublisher.committedMessages.filterIsInstance<OutboundMessage.Approval>().size shouldBe 2
+                }
+            }
+
+            `when`("the add adds nobody new") {
+                recordingPublisher.committedMessages.clear()
+                stubAddOnce(
+                    result = AddParticipantResult(outcome = AddParticipantResult.Outcome.NO_NEW_PARTICIPANTS),
+                )
+
+                outerTransaction.executeWithoutResult { listService.addParticipants(event = addEvent) }
+
+                then("the list stays and the host gets the ephemeral") {
+                    committedReplies() shouldBe
+                        listOf(
+                            hostEphemeral(
+                                markdown = "Those people are already on this meeting.",
+                                detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+                            ),
+                        )
+                }
+            }
+        }
+
         given("a deferred write whose failure reply fails as well") {
             val failingStager = mockk<OutboundMessageStager>()
             every { failingStager.stage(message = any(), basicInfo = any()) } throws
@@ -638,6 +1001,7 @@ class MeetingServiceImplTest :
                     outboundStager = failingStager,
                     eventPublisher = eventPublisher,
                     transactionManager = createH2TransactionManager(),
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
 
             `when`("a cancel fails and so does its reply") {
@@ -699,6 +1063,7 @@ class MeetingServiceImplTest :
                     outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
+                    calendarMirror = NoopMeetingCalendarMirror,
                 )
             val event = createAddParticipantEvent(requesterId = "U_HOST_POOL", participantUserIds = listOf("U_A"))
             every {

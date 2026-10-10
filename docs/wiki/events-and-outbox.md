@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-03_
+_type: architecture · updated: 2026-10-07_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -170,7 +170,7 @@ _type: architecture · updated: 2026-10-03_
   `StandupScheduler` 등 모든 `@Scheduled`가 조용히 no-op이었다.
 - `KafkaEventPublisher`는 `isInternal == false`인 이벤트만 Kafka(`event.destination` 토픽, key = `idempotencyKey`,
   5초 동기 대기)로 보내는데, 현재 모든 `CommandEvent`가 `isInternal = true`라 이 경로는 휴면이다. `ErrorBroadcaster`는
-  모드와 무관하게 `StdoutErrorBroadcaster` 하나뿐이다(구 `KafkaErrorBroadcaster`는 삭제됨).
+  모드와 무관하게 `StdoutErrorBroadcaster` 하나뿐이다(`TODO()` 스텁이던 Kafka 구현은 삭제됨).
 
 ## 멱등성
 
@@ -350,5 +350,5 @@ _type: architecture · updated: 2026-10-03_
 - [ddd-layering.md](ddd-layering.md) — 도메인이 Jackson·Slack 타입을 모르는 채로 아웃박스에 실리는 이유
 - [dev-environment.md](dev-environment.md) — 프로파일별 릴레이 모드, CDC 스택, `V*` 마이그레이션 관례
 - [testing-guide.md](testing-guide.md) — `OutboxTestFixtures`, `EmbeddedKafka` 슬라이스
-- [decisions.md](decisions.md) · [history.md](history.md)
+- [decisions.md](decisions.md)
 - [`../../infrastructure/AGENTS.md`](../../infrastructure/AGENTS.md) · [`../../application/AGENTS.md`](../../application/AGENTS.md)

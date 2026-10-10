@@ -9,6 +9,7 @@ import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.createRoutineDto
@@ -26,6 +27,8 @@ import io.mockk.mockk
 import io.mockk.verify
 import java.time.LocalDate
 import java.util.UUID
+
+private const val LIST_RESPONSE_URL = "https://hooks.slack.com/actions/T1/1/list"
 
 class SlackOutboundStagerTest :
     BehaviorSpec({
@@ -156,6 +159,7 @@ class SlackOutboundStagerTest :
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = ResponseReplaceHandle(raw = LIST_RESPONSE_URL),
                         ),
                 )
 
@@ -169,12 +173,13 @@ class SlackOutboundStagerTest :
                         requesterId = any(),
                         channel = any(),
                         currentStartAt = any(),
+                        listResponseUrl = any(),
                     )
                 } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to openRescheduleMeetingModalRequest with the ferried channel") {
+                then("delegates to openRescheduleMeetingModalRequest with the ferried channel and list response URL") {
                     verify(exactly = 1) {
                         slackEventBuilder.openRescheduleMeetingModalRequest(
                             commandBasicInfo = basicInfo,
@@ -184,6 +189,7 @@ class SlackOutboundStagerTest :
                             requesterId = "U_HOST",
                             channel = "C_LIST",
                             currentStartAt = any(),
+                            listResponseUrl = LIST_RESPONSE_URL,
                         )
                     }
                 }
@@ -199,6 +205,7 @@ class SlackOutboundStagerTest :
                             meetingUid = UUID.randomUUID(),
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = null,
                         ),
                 )
 
@@ -221,6 +228,7 @@ class SlackOutboundStagerTest :
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = ResponseReplaceHandle(raw = LIST_RESPONSE_URL),
                         ),
                 )
 
@@ -233,12 +241,13 @@ class SlackOutboundStagerTest :
                         meetingUid = any(),
                         requesterId = any(),
                         channel = any(),
+                        listResponseUrl = any(),
                     )
                 } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
 
                 stager.stage(message = message, basicInfo = basicInfo)
 
-                then("delegates to openAddParticipantModalRequest with the ferried channel") {
+                then("delegates to openAddParticipantModalRequest with the ferried channel and list response URL") {
                     verify(exactly = 1) {
                         slackEventBuilder.openAddParticipantModalRequest(
                             commandBasicInfo = basicInfo,
@@ -247,6 +256,7 @@ class SlackOutboundStagerTest :
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
                             channel = "C_LIST",
+                            listResponseUrl = LIST_RESPONSE_URL,
                         )
                     }
                 }
@@ -262,6 +272,7 @@ class SlackOutboundStagerTest :
                             meetingUid = UUID.randomUUID(),
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = null,
                         ),
                 )
 

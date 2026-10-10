@@ -1,6 +1,8 @@
 package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
+import dev.notypie.domain.command.outbound.replaceHandleOrNull
 import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.entity.Routine
@@ -35,6 +37,7 @@ internal data class AddParticipantParsed(
     val meetingUid: UUID,
     val requesterId: String,
     val participantUserIds: List<String>,
+    val listHandle: ResponseReplaceHandle?,
 ) {
     companion object {
         fun from(raw: InboundSubmission.AddParticipant, actorId: String): AddParticipantParsed? {
@@ -49,6 +52,7 @@ internal data class AddParticipantParsed(
                     meetingUid = meetingUid,
                     requesterId = raw.requesterId.ifBlank { actorId },
                     participantUserIds = it,
+                    listHandle = replaceHandleOrNull(raw = raw.listHandleRaw),
                 )
             }
         }
@@ -59,6 +63,7 @@ internal data class RescheduleMeetingParsed(
     val meetingUid: UUID,
     val requesterId: String,
     val newStartAt: LocalDateTime,
+    val listHandle: ResponseReplaceHandle?,
 ) {
     companion object {
         internal const val DATE_PATTERN = "yyyy-MM-dd"
@@ -71,6 +76,7 @@ internal data class RescheduleMeetingParsed(
                 meetingUid = meetingUid,
                 requesterId = raw.requesterId.ifBlank { actorId },
                 newStartAt = newStartAt,
+                listHandle = replaceHandleOrNull(raw = raw.listHandleRaw),
             )
         }
 

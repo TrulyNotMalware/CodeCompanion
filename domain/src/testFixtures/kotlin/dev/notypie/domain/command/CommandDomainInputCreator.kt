@@ -13,6 +13,11 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
+import dev.notypie.domain.command.entity.event.AgentUsageReportPayload
+import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
+import dev.notypie.domain.command.entity.event.CalendarConnectionAction
+import dev.notypie.domain.command.entity.event.CalendarConnectionPayload
+import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
 import dev.notypie.domain.command.entity.event.CveLatestPayload
@@ -28,6 +33,9 @@ import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
+import dev.notypie.domain.command.entity.event.StandupOpsAction
+import dev.notypie.domain.command.entity.event.StandupOpsPayload
+import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.outbound.MessageRef
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -119,6 +127,16 @@ fun createAgentConverseRequestEvent(
     type = CommandDetailType.AGENT_CONVERSE,
 )
 
+fun createAgentUsageReportRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    days: Int = 7,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = AgentUsageReportRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload = AgentUsageReportPayload(days = days, responseBasicInfo = responseBasicInfo),
+    type = CommandDetailType.AGENT_USAGE_REPORT,
+)
+
 fun createRoleManageRequestEvent(
     idempotencyKey: UUID = UUID.randomUUID(),
     action: RoleManageAction = RoleManageAction.GRANT,
@@ -174,6 +192,26 @@ fun createCveOpsRequestEvent(
     type = CommandDetailType.SIMPLE_TEXT,
 )
 
+fun createStandupOpsRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: StandupOpsAction = StandupOpsAction.LIST,
+    routineName: String? = null,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = StandupOpsRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        StandupOpsPayload(
+            action = action,
+            routineName = routineName,
+            responseBasicInfo = responseBasicInfo,
+        ),
+    type =
+        when (action) {
+            StandupOpsAction.LIST -> CommandDetailType.STANDUP_ROUTINE_LIST
+            StandupOpsAction.STOP -> CommandDetailType.STANDUP_ROUTINE_STOP
+        },
+)
+
 fun createCveLatestRequestEvent(
     idempotencyKey: UUID = UUID.randomUUID(),
     userId: String = TEST_USER_ID,
@@ -188,6 +226,21 @@ fun createCveLatestRequestEvent(
             responseBasicInfo = responseBasicInfo,
         ),
     type = CommandDetailType.CVE_LATEST,
+)
+
+fun createCalendarConnectionRequestEvent(
+    idempotencyKey: UUID = UUID.randomUUID(),
+    action: CalendarConnectionAction = CalendarConnectionAction.CONNECT,
+    userId: String = TEST_USER_ID,
+    responseBasicInfo: CommandBasicInfo = createCommandBasicInfo(idempotencyKey = idempotencyKey),
+) = CalendarConnectionRequestEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        CalendarConnectionPayload(
+            action = action,
+            userId = userId,
+            responseBasicInfo = responseBasicInfo,
+        ),
 )
 
 fun createApprovalContents(

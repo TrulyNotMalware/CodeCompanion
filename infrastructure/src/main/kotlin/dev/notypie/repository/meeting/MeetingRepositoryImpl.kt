@@ -32,6 +32,10 @@ open class MeetingRepositoryImpl(
             .throwIfSchemaNotFound(fieldName = "id", fieldValue = meetingId)
 
     @Transactional(readOnly = true)
+    override fun findMeetingId(idempotencyKey: UUID): Long? =
+        jpaMeetingRepository.findIdByIdempotencyKey(idempotencyKey = idempotencyKey)
+
+    @Transactional(readOnly = true)
     override fun getAllMeetingByUserId(userId: String): List<MeetingDto> =
         jpaMeetingRepository
             .findAllMeetingByUserId(userId = userId)
@@ -78,11 +82,11 @@ open class MeetingRepositoryImpl(
         )
 
     @Transactional
-    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean {
-        val schema = findActiveMeetingOwnedBy(meetingUid = meetingUid, requesterId = requesterId) ?: return false
+    override fun markMeetingCanceled(meetingUid: UUID, requesterId: String): MeetingDto? {
+        val schema = findActiveMeetingOwnedBy(meetingUid = meetingUid, requesterId = requesterId) ?: return null
         schema.cancel()
         jpaMeetingRepository.saveAndFlush(schema)
-        return true
+        return schema.toMeetingDto()
     }
 
     @Transactional

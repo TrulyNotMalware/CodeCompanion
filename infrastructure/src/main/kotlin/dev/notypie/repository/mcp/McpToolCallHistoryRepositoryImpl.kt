@@ -1,6 +1,7 @@
 package dev.notypie.repository.mcp
 
 import dev.notypie.repository.mcp.schema.McpToolCallHistorySchema
+import java.time.LocalDateTime
 
 class McpToolCallHistoryRepositoryImpl(
     private val jpaMcpToolCallHistoryRepository: JpaMcpToolCallHistoryRepository,
@@ -20,4 +21,7 @@ class McpToolCallHistoryRepositoryImpl(
             ),
         )
     }
+
+    override fun countByToolSince(since: LocalDateTime): List<ToolCallUsage> =
+        jpaMcpToolCallHistoryRepository.countByToolSince(since = since)
 }

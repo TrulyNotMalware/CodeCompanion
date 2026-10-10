@@ -2,9 +2,6 @@ package dev.notypie.repository.outbox
 
 import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
-import dev.notypie.domain.command.dto.modals.TextInputContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -106,41 +103,6 @@ class OutboundMessageCodecTest :
             info.endTime shouldBe original.endTime
             info.timeZone shouldBe original.timeZone
             info.toString() shouldBe original.toString()
-        }
-
-        "ChannelMessage with Form round-trips including String select values" {
-            assertRoundTrips(
-                message =
-                    OutboundMessage.ChannelMessage(
-                        target = target,
-                        content =
-                            MessageContent.Form(
-                                headline = "Approval Requests",
-                                fields =
-                                    listOf(
-                                        SelectionContents(
-                                            title = "Request type",
-                                            explanation = "Pick one",
-                                            placeholderText = "Select...",
-                                            contents =
-                                                listOf(
-                                                    SelectBoxDetails(
-                                                        name = "Pull Requests",
-                                                        value = "GIT_PULL_REQUEST",
-                                                    ),
-                                                    SelectBoxDetails(
-                                                        name = "Logs",
-                                                        isMarkDown = true,
-                                                        value = "GET_LOGS",
-                                                    ),
-                                                ),
-                                        ),
-                                    ),
-                                reason = TextInputContents(title = "Reason", placeholderText = "Why?"),
-                                approval = createApprovalContents(),
-                            ),
-                    ),
-            )
         }
 
         "ChannelMessage with MeetingRequest round-trips" {
@@ -256,6 +218,26 @@ class OutboundMessageCodecTest :
                         content = MessageContent.Text(headline = null, markdown = "replaced"),
                     ),
             )
+        }
+
+        "a ReplaceMessage's fallback ephemeral round-trips with its subtype, and an absent one adds no key" {
+            val fallback =
+                OutboundMessage.Ephemeral(
+                    target = target,
+                    recipient = UserRef(id = "U_HOST"),
+                    content = MessageContent.Text(headline = null, markdown = "Meeting canceled."),
+                    detailType = CommandDetailType.CANCEL_MEETING,
+                )
+            val withFallback =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = "https://hooks.example.com/actions/123"),
+                    content = MessageContent.Text(headline = null, markdown = "*Sync* canceled."),
+                    fallback = fallback,
+                )
+            assertRoundTrips(message = withFallback)
+            OutboundMessageCodec.encode(
+                envelope = OutboundEnvelope(message = withFallback.copy(fallback = null), basicInfo = basicInfo),
+            ) shouldNotContain "fallback"
         }
 
         "pre-narrowing update/replace rows decode, and the encoded wire shape is frozen" {

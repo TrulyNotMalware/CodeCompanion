@@ -13,6 +13,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.replaceHandleOrNull
 import java.util.UUID
 
 internal class AddParticipantContext(
@@ -42,6 +43,7 @@ internal class AddParticipantContext(
                         meetingUid = meetingUid,
                         requesterId = interaction.actor.id,
                         channel = ConversationTarget(id = interaction.channelId),
+                        listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
                     ),
             ),
         )

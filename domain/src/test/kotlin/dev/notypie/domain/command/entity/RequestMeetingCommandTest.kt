@@ -51,17 +51,33 @@ class RequestMeetingCommandTest :
                 }
             }
 
-            `when`("subcommand is unknown") {
-                val commandData = createSlashInboundCommand(subCommands = listOf("unknown_sub"))
-                val command =
-                    RequestMeetingCommand(
-                        idempotencyKey = UUID.randomUUID(),
-                        commandData = commandData,
-                    )
+            listOf("unknown_sub", "calendar").forEach { identifier ->
+                `when`("subcommand is '$identifier', which /meetup does not define") {
+                    val command =
+                        RequestMeetingCommand(
+                            idempotencyKey = UUID.randomUUID(),
+                            commandData = createSlashInboundCommand(subCommands = listOf(identifier, "status")),
+                        )
 
-                then("should throw SubCommandParseException") {
-                    shouldThrow<SubCommandParseException> {
-                        command.findSubCommandDefinition()
+                    then("the lookup still rejects it") {
+                        shouldThrow<SubCommandParseException> {
+                            command.findSubCommandDefinition()
+                        }
+                    }
+
+                    then("handleEvent fails and answers the requester with the unknown name and /meetup's usage") {
+                        val output = command.handleEvent()
+                        output.ok shouldBe false
+                        output.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
+                        command
+                            .drainIntents()
+                            .single()
+                            .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                            .markdown shouldBe
+                            "Unknown subcommand `$identifier`.\nUsage:\n• `/meetup`\n" +
+                            "• `/meetup list [today | tomorrow | week | month]`"
                     }
                 }
             }

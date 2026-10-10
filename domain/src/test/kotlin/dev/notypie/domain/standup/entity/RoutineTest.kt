@@ -178,4 +178,20 @@ class RoutineTest :
                 }
             }
         }
+
+        given("normalizeName") {
+            `when`("a name has surrounding whitespace and repeated inner whitespace") {
+                val normalized = Routine.normalizeName(raw = "  Daily \t  Sync ")
+
+                then("it is trimmed and every inner run collapses to one space") {
+                    normalized shouldBe "Daily Sync"
+                }
+            }
+
+            `when`("a name is blank") {
+                then("it normalizes to an empty string") {
+                    Routine.normalizeName(raw = " \t ") shouldBe ""
+                }
+            }
+        }
     })

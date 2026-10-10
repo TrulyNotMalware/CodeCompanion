@@ -6,6 +6,11 @@ import dev.notypie.domain.command.entity.event.AddParticipantEvent
 import dev.notypie.domain.command.entity.event.AddParticipantPayload
 import dev.notypie.domain.command.entity.event.AgentConversePayload
 import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
+import dev.notypie.domain.command.entity.event.AgentUsageReportPayload
+import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
+import dev.notypie.domain.command.entity.event.CalendarConnectionAction
+import dev.notypie.domain.command.entity.event.CalendarConnectionPayload
+import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingPayload
 import dev.notypie.domain.command.entity.event.CommandEvent
@@ -29,6 +34,9 @@ import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
+import dev.notypie.domain.command.entity.event.StandupOpsAction
+import dev.notypie.domain.command.entity.event.StandupOpsPayload
+import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportPayload
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
@@ -82,6 +90,7 @@ class SlackIntentResolver {
                         CancelMeetingPayload(
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
+                            listHandle = intent.listHandle,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.CANCEL_MEETING,
@@ -96,6 +105,7 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             newStartAt = intent.newStartAt,
+                            listHandle = intent.listHandle,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
@@ -110,17 +120,47 @@ class SlackIntentResolver {
                             meetingUid = intent.meetingUid,
                             requesterId = intent.requesterId,
                             participantUserIds = intent.participantUserIds,
+                            listHandle = intent.listHandle,
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
                 )
             }
 
+            is CommandIntent.CalendarConnect ->
+                calendarConnectionEvent(
+                    action = CalendarConnectionAction.CONNECT,
+                    userId = intent.userId,
+                    basicInfo = basicInfo,
+                )
+
+            is CommandIntent.CalendarDisconnect ->
+                calendarConnectionEvent(
+                    action = CalendarConnectionAction.DISCONNECT,
+                    userId = intent.userId,
+                    basicInfo = basicInfo,
+                )
+
+            is CommandIntent.CalendarStatus ->
+                calendarConnectionEvent(
+                    action = CalendarConnectionAction.STATUS,
+                    userId = intent.userId,
+                    basicInfo = basicInfo,
+                )
+
             is CommandIntent.StatusReport -> {
                 StatusReportRequestEvent(
                     idempotencyKey = basicInfo.idempotencyKey,
                     payload = StatusReportPayload(responseBasicInfo = basicInfo),
                     type = CommandDetailType.STATUS_REPORT,
+                )
+            }
+
+            is CommandIntent.AgentUsageReport -> {
+                AgentUsageReportRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload = AgentUsageReportPayload(days = intent.days, responseBasicInfo = basicInfo),
+                    type = CommandDetailType.AGENT_USAGE_REPORT,
                 )
             }
 
@@ -210,6 +250,31 @@ class SlackIntentResolver {
                             responseBasicInfo = basicInfo,
                         ),
                     type = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                )
+            }
+
+            is CommandIntent.ListStandupRoutines -> {
+                StandupOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        StandupOpsPayload(
+                            action = StandupOpsAction.LIST,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.STANDUP_ROUTINE_LIST,
+                )
+            }
+
+            is CommandIntent.StopStandupRoutine -> {
+                StandupOpsRequestEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        StandupOpsPayload(
+                            action = StandupOpsAction.STOP,
+                            routineName = intent.routineName,
+                            responseBasicInfo = basicInfo,
+                        ),
+                    type = CommandDetailType.STANDUP_ROUTINE_STOP,
                 )
             }
 
@@ -322,4 +387,19 @@ class SlackIntentResolver {
                 null
             }
         }
+
+    private fun calendarConnectionEvent(
+        action: CalendarConnectionAction,
+        userId: String,
+        basicInfo: CommandBasicInfo,
+    ): CalendarConnectionRequestEvent =
+        CalendarConnectionRequestEvent(
+            idempotencyKey = basicInfo.idempotencyKey,
+            payload =
+                CalendarConnectionPayload(
+                    action = action,
+                    userId = userId,
+                    responseBasicInfo = basicInfo,
+                ),
+        )
 }

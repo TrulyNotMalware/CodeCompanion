@@ -105,6 +105,27 @@ class SlackRequestVerificationFilterTest :
                 }
             }
 
+            `when`("a /calendar slash command arrives with an invalid signature") {
+                val response = MockHttpServletResponse()
+                val chain = CountingFilterChain()
+
+                filter().doFilter(
+                    slackRequest(
+                        rawBody = "team_id=T123&command=%2Fcalendar&text=connect",
+                        path = "/api/slash/calendar",
+                        timestamp = TIMESTAMP,
+                        signature = "v0=x",
+                    ),
+                    response,
+                    chain,
+                )
+
+                then("the slash prefix covers it, so it is rejected before the controller") {
+                    response.status shouldBe 401
+                    chain.invocationCount shouldBe 0
+                }
+            }
+
             `when`("the declared Content-Length exceeds the limit") {
                 val request =
                     object : MockHttpServletRequest() {

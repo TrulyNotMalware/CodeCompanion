@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-11 -->
 
 # .github
 
@@ -19,6 +19,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 | `workflows/deploy_action.yaml` | On merged PR to `main`: build jar → multi-arch Docker image → push to Harbor → apply `deployment.yaml` to Oracle OKE → rollout + in-cluster health check → `rollout undo` on failure |
 | `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage`; the `docker` entry ignores `eclipse-temurin` major updates so the runtime stays on the Java 25 toolchain line |
 | `../.gitleaks.toml` | Repo-root gitleaks config (auto-loaded by the CLI): extends the default rules and allowlists the placeholder-valued sample Secret in `cdc/k8s/yamls/mariadb/mariadb-config.yaml`; its `[[allowlists]]` table needs gitleaks 8.25.0+, which is why the workflow pins `GITLEAKS_VERSION` |
+| `../.gitleaksignore` | Repo-root fingerprint list (auto-loaded): `commit:path:rule:line` entries for confirmed false positives that stay in history, so far one fake Google access token in a test fixture (6ae0a047, `generic-api-key`) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -91,7 +92,10 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   reads only from 8.25.0; the action defaulted to 8.24.3 and ignored it (weekly failures 2026-09-28 and
   2026-10-05), so the step pins `GITLEAKS_VERSION` — keep it at or above 8.25.0 when bumping. Allowlist by path only for template files, never for a
   real leak — rotate and rewrite instead. Test fixtures use `xoxb-test…`-style placeholders that the
-  Slack token rules do not match; keep any new fixture tokens equally obviously fake.
+  Slack token rules do not match; keep any new fixture tokens equally obviously fake: `generic-api-key` fires on any
+  `token`-adjacent literal of entropy ≥ 3.5, and a 16-character fake `ya29.…` access token in
+  `GoogleAccessTokenProviderTest` failed PR #29's scan (2026-10-11). The tree now uses `ya29.stale`; the historical
+  commit's fingerprint is listed in `.gitleaksignore`, which suppresses it in every scan mode without rewriting history.
 - **Dependabot resolves the shared versions only through `$name` templates.** Its Gradle parser
   understands `extra["name"] = "…"` / `extra.set("name", "…")` declarations and `$name` / `${name}`
   references, but not an `ext { set(…) }` block, `by extra("…")` or `${rootProject.extra.get("…")}`
@@ -194,7 +198,7 @@ Workflows are only exercised by pushing. Before changing one:
 - reproduce the command locally (`./gradlew ktlintCheck`, `./gradlew build -PjarName=...`,
   `./gradlew classes --no-daemon --no-build-cache` for the CodeQL compile step);
 - lint the YAML with `actionlint` (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color`);
-- after touching `.gitleaks.toml`, replay the weekly scan locally:
+- after touching `.gitleaks.toml` or `.gitleaksignore`, replay the weekly scan locally (for a PR range use `--log-opts="main..HEAD"`):
   `docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --log-opts="--branches --remotes" --redact` (same version as `GITLEAKS_VERSION` in the workflow; `latest` may read the config differently)
   (`--branches --remotes` rather than `--all` so local stashes are not scanned);
 - for deploy edits, confirm the k8s manifest still renders: `IMAGE_NAME=x envsubst '${IMAGE_NAME}' < application/src/main/resources/k8s/deployment.yaml`;

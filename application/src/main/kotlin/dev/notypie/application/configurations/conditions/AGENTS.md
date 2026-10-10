@@ -13,7 +13,7 @@ classes in `../ConsumerConfig.kt`.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Conditions.kt` | `Environment.extractAppConfig(): AppConfig` — `Binder.get(this).bind(APP_CONFIG_PROPERTIES_PREFIX, AppConfig::class.java).orElseGet { AppConfig() }`. Four `Condition`s whose `matches(context, metadata)` read `context.environment.extractAppConfig().mode`: `OnPollingConsumer` (`outboxReadingStrategy == OutboxReaderStrategy.POLLING`), `OnCdcConsumer` (`== CDC`), `OnKafkaEventPublisher` (`eventPublisher == EventPublisherType.KAFKA`), `OnApplicationEventPublisher` (`== APPLICATION_EVENT`) |
+| `Conditions.kt` | `OnGoogleCalendarEnabled` / `OnGoogleCalendarDisabled` (2026-10-07): the bound `calendar.google.enabled` Boolean and its negation, so `yes`/`on`/`1` and `true` agree with `AppConfig` and exactly one of `CalendarConfiguration` / `CalendarDisabledConfiguration` loads (a `@ConditionalOnProperty` string compare would have matched neither for `yes`); `Environment.extractAppConfig(): AppConfig` — `Binder.get(this).bind(APP_CONFIG_PROPERTIES_PREFIX, AppConfig::class.java).orElseGet { AppConfig() }`. Four `Condition`s whose `matches(context, metadata)` read `context.environment.extractAppConfig().mode`: `OnPollingConsumer` (`outboxReadingStrategy == OutboxReaderStrategy.POLLING`), `OnCdcConsumer` (`== CDC`), `OnKafkaEventPublisher` (`eventPublisher == EventPublisherType.KAFKA`), `OnApplicationEventPublisher` (`== APPLICATION_EVENT`) |
 
 ## For AI Agents
 

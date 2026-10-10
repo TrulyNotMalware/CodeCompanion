@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # k8s
 
@@ -12,11 +12,11 @@ adds what an agent editing the manifests needs to know.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
-| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 180`, `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
+| `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), the optional Google Calendar mirror (V24 then V25 by hand before the deploy plus the `meetings.idempotency_key` unique-index check, the Google Cloud OAuth client with the public HTTPS redirect URI, its keys, the callback route and the edge check, the `/calendar` slash command on the production Slack app (`/api/slash/calendar`), enabling through a restart that `Recreate` turns into an outage), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
+| `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 180` (its comment also lists the 0 s Google token revoke executor), `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
-| `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name) |
-| `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET` |
+| `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name), `GOOGLE_CALENDAR_ENABLED` (`'false'`), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI` (placeholders) |
+| `secret.yaml` | Opaque Secret `code-companion-secret` under `stringData:` (plain values, the API server encodes them) with placeholders for `SQL_DATABASE_URL`, `SQL_DATABASE_USERNAME`, `SQL_DATABASE_PASSWORD`, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY` |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -44,9 +44,12 @@ adds what an agent editing the manifests needs to know.
   `secret.yaml`), `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS`,
   `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. All of them are present in the samples
   (credentials in `secret.yaml`, the rest in `configmap.yaml`). Everything else the profile reads (`MCP_ENABLED`, `MCP_SIGNING_SECRET`, `SIDECAR_*`,
-  `AI_PROVIDER`, `GITHUB_TOKEN`, `GITHUB_RELEASES_PER_PAGE`, `NVD_*`, `CVE_COLLECTOR_*`) has a default and is
-  opt-in. `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are not manifest keys: the deploy workflow passes
-  them as Docker build args and `application/Dockerfile` bakes them into the image env (`BUILD_DATE` is the
+  `AI_PROVIDER`, `GITHUB_TOKEN`, `GITHUB_RELEASES_PER_PAGE`, `NVD_*`, `CVE_COLLECTOR_*`, `GOOGLE_*`) has a default
+  and is opt-in. The five `GOOGLE_*` keys are in the samples anyway (client secret and token key in `secret.yaml`,
+  the rest in `configmap.yaml`) with `GOOGLE_CALENDAR_ENABLED: 'false'`: that key must be `'true'`, `'false'` or
+  absent, because an empty string fails the Boolean binding at startup. Enabling the calendar needs V24 and V25
+  applied first (`README.md`, "Google Calendar Mirror"). `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are not
+  manifest keys: the deploy workflow passes them as Docker build args and `application/Dockerfile` bakes them into the image env (`BUILD_DATE` is the
   merged PR's `merged_at`; the workflow runs on `pull_request`, whose payload has no `head_commit`).
   The management base path is no longer an env var: it is fixed at `/actuator` in `application-prod.yaml`. A
   cluster ConfigMap that still carries `ACTUATOR_BASE_PATH` is harmless; nothing reads it.
@@ -147,8 +150,10 @@ adds what an agent editing the manifests needs to know.
   to be confirmed by whoever operates it.
 - **`/actuator` must never be routed publicly** (unauthenticated `metrics`/`prometheus`/`info`, and `health`
   reports outbox state). Prometheus scrapes `/actuator/prometheus` on the Pod port 80 from inside the cluster;
-  the Deployment carries no scrape annotations, so add whatever discovery the cluster's Prometheus uses. The samples in `route/` therefore forward only `/api/slack` and `/api/slash`; `/api` as a whole would
-  expose `/api/actuator` if a sample were reused with the dev, local or slack-live profile.
+  the Deployment carries no scrape annotations, so add whatever discovery the cluster's Prometheus uses. The samples
+  in `route/` therefore forward only `/api/slack`, `/api/slash` and the exact path `/oauth/google/callback` (Google's
+  OAuth redirect, `404` while the calendar is disabled); `/api` as a whole would expose `/api/actuator` if a sample
+  were reused with the dev, local or slack-live profile.
 - **CI path filters treat these YAML files as source.** Only `**/*.md` is excluded, so a manifest-only push
   runs lint + `:application:test`, and a manifest-only PR merged to `main` builds and deploys a new image.
 - Everything here is packaged into the boot jar by `processResources` even though the app never reads it.

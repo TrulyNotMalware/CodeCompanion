@@ -33,6 +33,7 @@ sealed interface OutboundMessage : CommandEffect {
     data class ReplaceMessage(
         val handle: ResponseReplaceHandle,
         val content: MessageContent.Text,
+        val fallback: Ephemeral? = null,
     ) : OutboundMessage
 
     data class OpenModal(

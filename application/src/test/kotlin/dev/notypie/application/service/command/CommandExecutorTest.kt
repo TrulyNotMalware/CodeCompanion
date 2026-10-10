@@ -1,11 +1,18 @@
 package dev.notypie.application.service.command
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.domain.command.TestCommand
 import dev.notypie.domain.command.createMentionInboundCommand
+import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.entity.slash.CalendarCommand
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
@@ -13,13 +20,16 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 class CommandExecutorTest :
@@ -174,6 +184,95 @@ class CommandExecutorTest :
                 then("the unknown effect fails loudly instead of being dropped") {
                     shouldThrow<IllegalStateException> { executor.execute(command = command) }
                         .message shouldContain "Unclassified CommandEffect"
+                }
+            }
+        }
+
+        given("commands whose outputs differ in how they failed") {
+            fun warningsWhile(block: () -> Unit): List<ILoggingEvent> {
+                val appender = ListAppender<ILoggingEvent>().apply { start() }
+                val logger = LoggerFactory.getLogger(CommandExecutor::class.java) as Logger
+                logger.addAppender(appender)
+                try {
+                    block()
+                } finally {
+                    logger.detachAppender(appender)
+                }
+                return appender.list.filter { it.level == Level.WARN }
+            }
+            val staged = mutableListOf<OutboundMessage>()
+            every { intentResolver.resolveAll(intents = any(), basicInfo = any()) } returns emptyList()
+            every { outboundStager.stage(message = capture(staged), basicInfo = any()) } returns
+                createSendSlackMessageEvent(
+                    commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    idempotencyKey = UUID.randomUUID(),
+                )
+            every { eventPublisher.publishEvent(events = any()) } just Runs
+
+            `when`("a slash command's context throws") {
+                val command =
+                    TestCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = createSlashInboundCommand(appToken = "xoxb-secret-token"),
+                        failure = IllegalStateException("database down"),
+                    )
+                val warnings = warningsWhile { executor.execute(command = command) }
+
+                then("one WARN names the command, its ids and the reason, never the app token") {
+                    warnings.size shouldBe 1
+                    val line = warnings.single().formattedMessage
+                    line shouldContain "Command TestCommand failed"
+                    line shouldContain "commandId=${command.commandId}"
+                    line shouldContain "idempotencyKey=${command.idempotencyKey}"
+                    line shouldContain "kind=SLASH"
+                    line shouldContain "reason=java.lang.IllegalStateException: database down"
+                    line shouldNotContain "xoxb-secret-token"
+                }
+
+                then("the generic error reply goes out through the stager like any other outbound") {
+                    staged.filterIsInstance<OutboundMessage.Ephemeral>().size shouldBe 1
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            `when`("a failure's reason carries a line break and a terminal escape") {
+                val command =
+                    TestCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = createMentionInboundCommand(),
+                        failure = IllegalStateException("bad <@U1>\nWARN forged line\u001b[31m"),
+                    )
+                val warnings = warningsWhile { executor.execute(command = command) }
+
+                then("the one WARN replaces each control character with ? so the reason cannot forge a log line") {
+                    val line = warnings.single().formattedMessage
+                    line shouldContain "reason=java.lang.IllegalStateException: bad <@U1>?WARN forged line?[31m"
+                    line shouldNotContain "\n"
+                    line shouldNotContain "\u001b"
+                }
+            }
+
+            `when`("a command succeeds, or its context fails on purpose with its own reply") {
+                val warnings =
+                    warningsWhile {
+                        executor.execute(
+                            command =
+                                TestCommand(
+                                    idempotencyKey = UUID.randomUUID(),
+                                    commandData = createMentionInboundCommand(),
+                                ),
+                        )
+                        executor.execute(
+                            command =
+                                CalendarCommand(
+                                    idempotencyKey = UUID.randomUUID(),
+                                    commandData = createSlashInboundCommand(subCommands = listOf("bogus")),
+                                ),
+                        )
+                    }
+
+                then("nothing is logged at WARN") {
+                    warnings.shouldBeEmpty()
                 }
             }
         }

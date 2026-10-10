@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
 
 # infrastructure/repository/mcp
 
@@ -10,9 +10,9 @@ endpoint: who called which tool in which turn, with what resolved role, and how 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `McpToolCallHistoryRepository.kt` | `data class McpToolCallRecord(toolName, requesterId, sessionKey, turnId, resolvedRole: UserRole, outcome: McpToolCallOutcome, errorCode?, argumentsJson?, durationMs)`; port `record(call)` |
-| `McpToolCallHistoryRepositoryImpl.kt` | Maps the record to `McpToolCallHistorySchema` and saves. Final class, no `@Transactional` |
-| `JpaMcpToolCallHistoryRepository.kt` | Bare `JpaRepository<McpToolCallHistorySchema, Long>` |
+| `McpToolCallHistoryRepository.kt` | `data class McpToolCallRecord(toolName, requesterId, sessionKey, turnId, resolvedRole: UserRole, outcome: McpToolCallOutcome, errorCode?, argumentsJson?, durationMs)`; aggregate row `ToolCallUsage(toolName, outcome, calls: Long)`; port `record(call)`, `countByToolSince(since)` |
+| `McpToolCallHistoryRepositoryImpl.kt` | Maps the record to `McpToolCallHistorySchema` and saves; `countByToolSince` delegates. Final class, no `@Transactional` |
+| `JpaMcpToolCallHistoryRepository.kt` | `JpaRepository<McpToolCallHistorySchema, Long>` + JPQL `countByToolSince(since)`: constructor expression over `created_at >= :since`, `GROUP BY toolName, outcome ORDER BY toolName, outcome` |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -30,17 +30,17 @@ endpoint: who called which tool in which turn, with what resolved role, and how 
 - **`record` must not fail the tool call.** The gate treats this as best-effort audit; do not add
   validation that throws.
 - Migration: `V13__add_mcp_tool_call_history_table.sql`. Bean: `JpaConfiguration.mcpToolCallHistoryRepository`;
-  consumer: `application/mcp/McpToolGate`.
+  consumers: `application/mcp/McpToolGate` (writes) and `application/service/agent/AgentUsageReportService` (aggregate).
 
 ### Testing Requirements
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.*'
 ```
-No spec targets this lane in `:infrastructure`; `McpToolGateTest` in `:application` verifies the record
-contents through a mocked port.
+`McpToolCallHistoryRepositoryImplTest` (`@DataJpaTest`, H2 `MODE=MariaDB`) pins `countByToolSince`; `McpToolGateTest`
+in `:application` verifies the record contents through a mocked port.
 
 ### Common Patterns
-- Record data class in the port file; `*Impl` is a pure mapper over `save`.
+- Record and aggregate data classes in the port file; `*Impl` is a pure mapper over `save` and the query.
 
 ## Dependencies
 

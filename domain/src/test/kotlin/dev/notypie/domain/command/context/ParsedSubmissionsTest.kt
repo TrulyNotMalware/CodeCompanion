@@ -1,5 +1,8 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.TEST_LIST_HANDLE
+import dev.notypie.domain.command.createAddParticipantSubmission
+import dev.notypie.domain.command.createRescheduleMeetingSubmission
 import dev.notypie.domain.command.entity.context.form.AddParticipantParsed
 import dev.notypie.domain.command.entity.context.form.CveSubscribeParsed
 import dev.notypie.domain.command.entity.context.form.CveUnsubscribeParsed
@@ -9,6 +12,7 @@ import dev.notypie.domain.command.entity.context.form.RescheduleMeetingParsed
 import dev.notypie.domain.command.entity.context.form.StandupAnswerParsed
 import dev.notypie.domain.command.entity.context.form.StandupSetupParsed
 import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -33,20 +37,31 @@ class ParsedSubmissionsTest :
                 uidRaw: String = meetingUid.toString(),
                 requesterId: String = "U_HOST",
                 idsRaw: String = "U_A,U_B",
-            ) = InboundSubmission.AddParticipant(
+                listHandleRaw: String = "",
+            ) = createAddParticipantSubmission(
                 meetingUidRaw = uidRaw,
                 requesterId = requesterId,
                 participantUserIdsRaw = idsRaw,
+                listHandleRaw = listHandleRaw,
             )
 
             `when`("the raw variant is well-formed") {
                 val parsed = AddParticipantParsed.from(raw = raw(idsRaw = " U_A , U_B ,,"), actorId = ACTOR)
 
-                then("ids are trimmed, blanks dropped, requester kept") {
+                then("ids are trimmed, blanks dropped, requester kept, and no list handle") {
                     parsed.shouldNotBeNull()
                     parsed.meetingUid shouldBe meetingUid
                     parsed.requesterId shouldBe "U_HOST"
                     parsed.participantUserIds shouldContainExactly listOf("U_A", "U_B")
+                    parsed.listHandle shouldBe null
+                }
+            }
+
+            `when`("the modal carried the list message's reply handle") {
+                val parsed = AddParticipantParsed.from(raw = raw(listHandleRaw = TEST_LIST_HANDLE), actorId = ACTOR)
+
+                then("it becomes the handle that closes the list") {
+                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
                 }
             }
 
@@ -69,13 +84,18 @@ class ParsedSubmissionsTest :
         given("RescheduleMeetingParsed.from") {
             val meetingUid = UUID.randomUUID()
 
-            fun raw(uidRaw: String = meetingUid.toString(), date: String = "2026-10-01", time: String = "14:30") =
-                InboundSubmission.RescheduleMeeting(
-                    meetingUidRaw = uidRaw,
-                    requesterId = "",
-                    date = date,
-                    time = time,
-                )
+            fun raw(
+                uidRaw: String = meetingUid.toString(),
+                date: String = "2026-10-01",
+                time: String = "14:30",
+                listHandleRaw: String = "",
+            ) = createRescheduleMeetingSubmission(
+                meetingUidRaw = uidRaw,
+                requesterId = "",
+                date = date,
+                time = time,
+                listHandleRaw = listHandleRaw,
+            )
 
             `when`("date and time parse to a start") {
                 val parsed = RescheduleMeetingParsed.from(raw = raw(), actorId = ACTOR)
@@ -84,6 +104,15 @@ class ParsedSubmissionsTest :
                     parsed.shouldNotBeNull()
                     parsed.newStartAt shouldBe LocalDateTime.of(2026, 10, 1, 14, 30)
                     parsed.requesterId shouldBe ACTOR
+                    parsed.listHandle shouldBe null
+                }
+            }
+
+            `when`("the modal carried the list message's reply handle") {
+                val parsed = RescheduleMeetingParsed.from(raw = raw(listHandleRaw = TEST_LIST_HANDLE), actorId = ACTOR)
+
+                then("it becomes the handle that closes the list") {
+                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
                 }
             }
 

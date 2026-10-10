@@ -1,12 +1,16 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.application.service.calendar.MeetingCalendarMirror
+import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
@@ -34,6 +38,7 @@ class MeetingRescheduleServiceTest :
         val reminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
         val stager = mockk<OutboundMessageStager>()
         val eventPublisher = mockk<EventPublisher>(relaxed = true)
+        val calendarMirror = mockk<MeetingCalendarMirror>(relaxed = true)
         val service =
             MeetingRescheduleService(
                 meetingRepository = meetingRepository,
@@ -42,6 +47,7 @@ class MeetingRescheduleServiceTest :
                 eventPublisher = eventPublisher,
                 transactionManager = createH2TransactionManager(),
                 clock = clock,
+                calendarMirror = calendarMirror,
             )
 
         given("rescheduleMeeting receives a RescheduleMeetingEvent") {
@@ -95,22 +101,39 @@ class MeetingRescheduleServiceTest :
                     verify(exactly = 1) { reminderRepository.deleteByMeetingId(meetingId = meetingId) }
                 }
 
-                then("a participant re-notification is published") {
-                    verify(exactly = 1) {
+                then("the calendar mirror is told the meeting moved, inside the write") {
+                    verify(exactly = 1) { calendarMirror.onMeetingRescheduled(meetingId = meetingId) }
+                }
+
+                then("each participant gets their own DM, keyed to them under the event's app") {
+                    listOf("U_P1", "U_P2").forEach { participant ->
+                        verify(exactly = 1) {
+                            stager.stage(
+                                message =
+                                    OutboundMessage.ChannelMessage(
+                                        target = ConversationTarget(id = participant),
+                                        content =
+                                            MessageContent.Text(
+                                                headline = "Meeting rescheduled",
+                                                markdown = "*Test Meeting* has been rescheduled to 2026-07-01 14:30.",
+                                            ),
+                                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                                    ),
+                                basicInfo =
+                                    match {
+                                        it.publisherId == participant && it.channel == participant &&
+                                            it.appId == basic.appId && it.idempotencyKey != basic.idempotencyKey
+                                    },
+                            )
+                        }
+                    }
+                }
+
+                then("nothing is posted to the meeting's channel") {
+                    verify(exactly = 0) {
                         stager.stage(
-                            message =
-                                OutboundMessage.ChannelMessage(
-                                    target = ConversationTarget(id = basic.channel),
-                                    content =
-                                        MessageContent.Text(
-                                            headline = "Meeting rescheduled",
-                                            markdown =
-                                                "[Notice] <@U_P1> <@U_P2> *Test Meeting* has been rescheduled to " +
-                                                    "2026-07-01 14:30.",
-                                        ),
-                                    detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                                ),
-                            basicInfo = basic,
+                            message = match { it is OutboundMessage.ChannelMessage && it.target.id == basic.channel },
+                            basicInfo = any(),
                         )
                     }
                 }
@@ -148,6 +171,7 @@ class MeetingRescheduleServiceTest :
                         eventPublisher = recordingPublisher,
                         transactionManager = transactionManager,
                         clock = clock,
+                        calendarMirror = NoopMeetingCalendarMirror,
                     )
                 every {
                     localMeetingRepository.rescheduleMeeting(
@@ -178,10 +202,161 @@ class MeetingRescheduleServiceTest :
                 }
             }
 
+            `when`("the write conflicts after the participant DMs were staged and the retry wins") {
+                val transactionManager = createH2TransactionManager()
+                val recordingPublisher = CommitRecordingEventPublisher()
+                val slackStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk())
+                var hostReplies = 0
+                val conflictingOnFirstReply =
+                    object : OutboundMessageStager by slackStager {
+                        override fun stage(message: OutboundMessage, basicInfo: CommandBasicInfo) =
+                            if (message is OutboundMessage.Ephemeral && ++hostReplies == 1) {
+                                throw createMeetingVersionConflict()
+                            } else {
+                                slackStager.stage(message = message, basicInfo = basicInfo)
+                            }
+                    }
+                val localMeetingRepository = mockk<MeetingRepository>()
+                every {
+                    localMeetingRepository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        newStartAt = newStartAt,
+                    )
+                } returns
+                    RescheduleResult.Rescheduled(
+                        meeting =
+                            createMeetingDto(
+                                meetingId = meetingId,
+                                meetingUid = meetingUid,
+                                creator = requesterId,
+                                participants =
+                                    listOf(
+                                        createMeetingParticipantDto(userId = "U_P1"),
+                                        createMeetingParticipantDto(userId = "U_P2"),
+                                    ),
+                            ),
+                    )
+
+                val escaped =
+                    runCatching {
+                        TransactionTemplate(transactionManager).executeWithoutResult {
+                            MeetingRescheduleService(
+                                meetingRepository = localMeetingRepository,
+                                reminderRepository = mockk(relaxed = true),
+                                outboundStager = conflictingOnFirstReply,
+                                eventPublisher = recordingPublisher,
+                                transactionManager = transactionManager,
+                                clock = clock,
+                                calendarMirror = NoopMeetingCalendarMirror,
+                            ).rescheduleMeeting(event = event)
+                        }
+                    }.exceptionOrNull()
+
+                then("the first attempt's DMs roll back with it, so each participant is sent exactly one") {
+                    escaped shouldBe null
+                    hostReplies shouldBe 2
+                    recordingPublisher.committedMessages
+                        .filterIsInstance<OutboundMessage.ChannelMessage>()
+                        .map { it.target.id } shouldBe listOf("U_P1", "U_P2")
+                    recordingPublisher.committedEphemeralMarkdowns shouldBe
+                        listOf("Meeting rescheduled to 2026-07-01 14:30.")
+                }
+            }
+
+            `when`("the reschedule came from a /meetup list row's modal, so the event carries the list's handle") {
+                val listHandle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list")
+                val listEvent =
+                    createRescheduleMeetingEvent(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        newStartAt = newStartAt,
+                        responseBasicInfo = basic,
+                        listHandle = listHandle,
+                    )
+                val transactionManager = createH2TransactionManager()
+                val localMeetingRepository = mockk<MeetingRepository>()
+
+                fun runWith(result: RescheduleResult): CommitRecordingEventPublisher {
+                    every {
+                        localMeetingRepository.rescheduleMeeting(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            newStartAt = newStartAt,
+                        )
+                    } returns result
+                    val recordingPublisher = CommitRecordingEventPublisher()
+                    TransactionTemplate(transactionManager).executeWithoutResult {
+                        MeetingRescheduleService(
+                            meetingRepository = localMeetingRepository,
+                            reminderRepository = mockk(relaxed = true),
+                            outboundStager =
+                                SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                            eventPublisher = recordingPublisher,
+                            transactionManager = transactionManager,
+                            clock = clock,
+                            calendarMirror = NoopMeetingCalendarMirror,
+                        ).rescheduleMeeting(event = listEvent)
+                    }
+                    return recordingPublisher
+                }
+
+                val rescheduled =
+                    runWith(
+                        result =
+                            RescheduleResult.Rescheduled(
+                                meeting =
+                                    createMeetingDto(
+                                        meetingId = meetingId,
+                                        meetingUid = meetingUid,
+                                        creator = requesterId,
+                                        title = "R&D <Sync>",
+                                        participants = listOf(createMeetingParticipantDto(userId = "U_P1")),
+                                    ),
+                            ),
+                    )
+                val unchanged = runWith(result = RescheduleResult.AlreadyAtRequestedTime)
+
+                then("a success replaces the list with the escaped one-line result instead of the host ephemeral") {
+                    rescheduled.committedMessages.filterNot { it is OutboundMessage.ChannelMessage } shouldBe
+                        listOf(
+                            OutboundMessage.ReplaceMessage(
+                                handle = listHandle,
+                                content =
+                                    MessageContent.Text(
+                                        headline = null,
+                                        markdown = "*R&amp;D &lt;Sync&gt;* rescheduled to 2026-07-01 14:30.",
+                                    ),
+                                fallback =
+                                    OutboundMessage.Ephemeral(
+                                        target = ConversationTarget(id = basic.channel),
+                                        recipient = UserRef(id = requesterId),
+                                        content =
+                                            MessageContent.Text(
+                                                headline = null,
+                                                markdown = "Meeting rescheduled to 2026-07-01 14:30.",
+                                            ),
+                                        detailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
+                                    ),
+                            ),
+                        )
+                    rescheduled.committedMessages.filterIsInstance<OutboundMessage.ChannelMessage>().map {
+                        it.target.id
+                    } shouldBe listOf("U_P1")
+                }
+
+                then("a time the meeting already has leaves the list and answers with the ephemeral") {
+                    unchanged.committedMessages.filterIsInstance<OutboundMessage.ReplaceMessage>() shouldBe emptyList()
+                    unchanged.committedEphemeralMarkdowns shouldBe
+                        listOf("The meeting is already scheduled for 2026-07-01 14:30. Nothing was changed.")
+                }
+            }
+
             fun serviceCapturing(
                 localMeetingRepository: MeetingRepository,
                 localReminderRepository: MeetingReminderRepository,
                 localStager: OutboundMessageStager,
+                localMirror: MeetingCalendarMirror = NoopMeetingCalendarMirror,
             ) = MeetingRescheduleService(
                 meetingRepository = localMeetingRepository,
                 reminderRepository = localReminderRepository,
@@ -189,12 +364,14 @@ class MeetingRescheduleServiceTest :
                 eventPublisher = mockk(relaxed = true),
                 transactionManager = createH2TransactionManager(),
                 clock = clock,
+                calendarMirror = localMirror,
             )
 
             `when`("the repository reports a no-op (non-host or canceled)") {
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
                 val localStager = mockk<OutboundMessageStager>()
+                val localMirror = mockk<MeetingCalendarMirror>(relaxed = true)
                 val capturedMessage = slot<OutboundMessage>()
                 every {
                     localMeetingRepository.rescheduleMeeting(
@@ -211,6 +388,7 @@ class MeetingRescheduleServiceTest :
                     localMeetingRepository = localMeetingRepository,
                     localReminderRepository = localReminderRepository,
                     localStager = localStager,
+                    localMirror = localMirror,
                 ).rescheduleMeeting(event = event)
 
                 then("a friendly non-host-or-canceled ephemeral is published instead of throwing") {
@@ -219,8 +397,11 @@ class MeetingRescheduleServiceTest :
                     body shouldBe "Meeting was canceled, or you are not the host."
                 }
 
-                then("reminders are NOT cleared and no re-notification is published") {
+                then(
+                    "reminders are NOT cleared, the calendar mirror is not touched and no participant DM is sent",
+                ) {
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
+                    verify(exactly = 0) { localMirror.onMeetingRescheduled(meetingId = any()) }
                     verify(exactly = 0) {
                         localStager.stage(
                             message = match { it is OutboundMessage.ChannelMessage },
@@ -234,6 +415,7 @@ class MeetingRescheduleServiceTest :
                 val localMeetingRepository = mockk<MeetingRepository>()
                 val localReminderRepository = mockk<MeetingReminderRepository>(relaxed = true)
                 val localStager = mockk<OutboundMessageStager>()
+                val localMirror = mockk<MeetingCalendarMirror>(relaxed = true)
                 val capturedMessage = slot<OutboundMessage>()
                 every {
                     localMeetingRepository.rescheduleMeeting(
@@ -250,6 +432,7 @@ class MeetingRescheduleServiceTest :
                     localMeetingRepository = localMeetingRepository,
                     localReminderRepository = localReminderRepository,
                     localStager = localStager,
+                    localMirror = localMirror,
                 ).rescheduleMeeting(event = event)
 
                 then("only a neutral ephemeral goes to the host: no notice and no reminder change") {
@@ -259,6 +442,7 @@ class MeetingRescheduleServiceTest :
                         "The meeting is already scheduled for 2026-07-01 14:30. Nothing was changed."
                     verify(exactly = 1) { localStager.stage(message = any(), basicInfo = any()) }
                     verify(exactly = 0) { localReminderRepository.deleteByMeetingId(any()) }
+                    verify(exactly = 0) { localMirror.onMeetingRescheduled(meetingId = any()) }
                 }
             }
 
@@ -303,6 +487,47 @@ class MeetingRescheduleServiceTest :
                 }
             }
 
+            `when`("the participant list repeats a user and names the host") {
+                val localStager = mockk<OutboundMessageStager>()
+                val staged = mutableListOf<OutboundMessage>()
+                val localMeetingRepository = mockk<MeetingRepository>()
+                every {
+                    localMeetingRepository.rescheduleMeeting(
+                        meetingUid = meetingUid,
+                        requesterId = requesterId,
+                        newStartAt = newStartAt,
+                    )
+                } returns
+                    RescheduleResult.Rescheduled(
+                        meeting =
+                            createMeetingDto(
+                                meetingId = meetingId,
+                                meetingUid = meetingUid,
+                                creator = requesterId,
+                                participants =
+                                    listOf(
+                                        createMeetingParticipantDto(userId = "U_P1"),
+                                        createMeetingParticipantDto(userId = requesterId),
+                                        createMeetingParticipantDto(userId = "U_P1"),
+                                    ),
+                            ),
+                    )
+                every { localStager.stage(message = capture(staged), basicInfo = any()) } returns ephemeralEvent
+
+                serviceCapturing(
+                    localMeetingRepository = localMeetingRepository,
+                    localReminderRepository = mockk(relaxed = true),
+                    localStager = localStager,
+                ).rescheduleMeeting(event = event)
+
+                then("one DM goes to each other participant, and the host only gets the confirmation") {
+                    staged.filterIsInstance<OutboundMessage.ChannelMessage>().map { it.target.id } shouldBe
+                        listOf("U_P1")
+                    staged.filterIsInstance<OutboundMessage.Ephemeral>().map { it.recipient } shouldBe
+                        listOf(UserRef(id = requesterId))
+                }
+            }
+
             `when`("the rescheduled meeting's title carries mrkdwn control sequences") {
                 val localStager = mockk<OutboundMessageStager>()
                 val staged = mutableListOf<OutboundMessage>()
@@ -333,10 +558,10 @@ class MeetingRescheduleServiceTest :
                     localStager = localStager,
                 ).rescheduleMeeting(event = event)
 
-                then("the channel notice escapes the title and keeps its own participant mentions") {
-                    val notice = staged.filterIsInstance<OutboundMessage.ChannelMessage>().single()
-                    (notice.content as MessageContent.Text).markdown shouldBe
-                        "[Notice] <@U_P1> *&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;* " +
+                then("the DM escapes the title") {
+                    val dm = staged.filterIsInstance<OutboundMessage.ChannelMessage>().single()
+                    (dm.content as MessageContent.Text).markdown shouldBe
+                        "*&lt;!channel&gt; R&amp;D &lt;https://evil.example|docs&gt;* " +
                         "has been rescheduled to 2026-07-01 14:30."
                 }
             }

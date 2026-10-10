@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
 
 # docs/wiki
 
@@ -12,7 +12,6 @@ agents. The two link to each other and must not duplicate each other — the wik
 | File | Description |
 |------|-------------|
 | `index.md` | Operating rules of the wiki plus the page catalog (one line per page). Update it whenever a page is added, renamed, or removed |
-| `log.md` | Append-only chronicle (`## [YYYY-MM-DD] create|update|lint | …`). Never edit past entries |
 | `architecture-overview.md` | Module responsibilities, dependency direction, the path a request takes |
 | `ddd-layering.md` | Domain purity and transport neutrality: what is forbidden, how the guard test enforces it, deliberate leaks |
 | `command-pipeline.md` | Slack payload → `InboundCommand` → `Command`/`CommandIntent` → `OutboundMessage`; how to add a command |
@@ -21,8 +20,7 @@ agents. The two link to each other and must not duplicate each other — the wik
 | `coding-style.md` | Kotlin conventions, commit message format, comment/null/file rules (promoted from the git-ignored local style guide) |
 | `testing-guide.md` | Kotest/MockK style, testFixtures factories, guard and regression specs, module commands |
 | `dev-environment.md` | Toolchain, profile matrix, local run recipes, migration and secret conventions, CI/CD summary |
-| `decisions.md` | Numbered decision records with status (`유지` / `열림` / `폐기`) and evidence |
-| `history.md` | Milestones from 2024-06 and the design turning points, with verified commit hashes |
+| `decisions.md` | Numbered decision records with status (`유지` / `열림` / `폐기`) and evidence, then the timeline from 2024-06 (milestones and design turning points with verified commit hashes) and the retired/replaced list |
 
 ## For AI Agents
 
@@ -35,7 +33,7 @@ agents. The two link to each other and must not duplicate each other — the wik
 - Record deltas only (project-specific decisions, constraints, traps, reasons). Framework tutorials, restated
   official docs, and narration of what code does line by line do not belong here.
 - When a decision changes, edit its entry in `decisions.md` in place (status + a dated note) rather than deleting it,
-  bump the page's `updated` date, and append a line to `log.md`.
+  and bump the page's `updated` date. Git history is the change log; there is no separate log page.
 - No secrets, tokens, or hostnames beyond what `README.md` already shows. `dev-environment.md` names config keys,
   never values.
 - Changes here are documentation: lint, test and deploy exclude `**/*.md`, so nothing under `docs/` builds or
@@ -44,7 +42,7 @@ agents. The two link to each other and must not duplicate each other — the wik
 
 ### Testing Requirements
 - Walk `docs/wiki/*.md`, resolve every relative link target against the wiki directory, and confirm each page
-  except `index.md` / `log.md` keeps the header shape (`# title`, `_type … · updated …_`, `> summary`) and the
+  except `index.md` keeps the header shape (`# title`, `_type … · updated …_`, `> summary`) and the
   `## 근거` / `## 관련 페이지` sections. A short Python loop is enough; there is no committed script.
 - Before publishing, scan the directory for leaked secrets:
   `docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:latest dir /repo/docs/wiki --redact`.
@@ -60,9 +58,10 @@ agents. The two link to each other and must not duplicate each other — the wik
 ### Internal
 - `README.md` and the root `AGENTS.md` link to `index.md`; the module and package `AGENTS.md` files are the primary
   evidence sources.
-- The git-ignored planning documents (`Refactor.md`, `Handoff.md`, `CveBotPlan.md`, `RealTestSetup.md`,
-  `STYLE_GUIDE.local.md`) exist only in the maintainer's working tree; `history.md` and `decisions.md` carry their
-  substance into the repository.
+- The git-ignored planning documents `Handoff.md`, `Refactor.md`, `CveBotPlan.md`, `review.md` and `review_skill.md`
+  were deleted from the maintainer's working tree on 2026-10-07; `decisions.md` (decisions plus the timeline) and the
+  `AGENTS.md` tree are the only record of their substance. `RealTestSetup.md` and `STYLE_GUIDE.local.md` remain
+  git-ignored local files.
 
 ### External
 None — plain Markdown rendered by GitHub.

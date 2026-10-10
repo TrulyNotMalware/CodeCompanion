@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/command/inbound
 
@@ -13,7 +13,7 @@ a Slack payload.
 | File | Description |
 |------|-------------|
 | `InboundCommand.kt` | `InboundKind` (`SLASH`, `MENTION`, `INTERACTION`); `sealed InboundPayload` with `SlashInvocation(trigger)` and `MentionInvocation(mentionedUserIds, commandTokens, hasCommandStructure, message?, thread?, text = "")` — `commandTokens` are the words of the first text section (what command parsing needs); `text` is the whole message restored as plain text in reading order for free-text consumers such as the agent prompt, blank when the transport supplied none; `InboundCommand(appId, appToken, actorId, actorName, channel, channelName, teamId?, kind, subCommands, payload) : IdempotencyData` with `extractBasicInfo(idempotencyKey)` |
-| `InboundInteraction.kt` | Value classes `TriggerHandle`, `ReplyHandle`, `MessageHandle`; `InboundActor(id)`; `InboundActionRole(triggersEvent)` = `APPROVE` / `REJECT` / `ACTIVATE` / `PASSIVE`; `InboundAction(role, isSelected)`; `InboundFieldKind(alwaysComplete)` = `TEXT` / `DATE` / `TIME` / `CHOICE` / `MULTI_CHOICE` / `USERS` / `CONVERSATION` / `TOGGLE` / `UNKNOWN`; `InboundField(key?, kind, isSelected, rawValue)`; `InboundForm(fields)` with `field` / `value` / `isSelected` / `first` / `all` / `firstValue`; `object InboundFieldKeys` (modal block-id constants); `sealed InboundSubmission` (`RescheduleMeeting`, `AddParticipant`, `DeclineReason`, `StandupAnswer`, `StandupSetup`, `CveSubscribe`, `CveUnsubscribe`); `InboundInteraction(detailType, actor, channelId, trigger, reply, message?, idempotencyKey: String, routingExtras, form, action, submission?) : InboundPayload`; extensions `isPrimary()`, `isCanceled()`, `isComplete()` |
+| `InboundInteraction.kt` | Value classes `TriggerHandle`, `ReplyHandle`, `MessageHandle`; `InboundActor(id)`; `InboundActionRole(triggersEvent)` = `APPROVE` / `REJECT` / `ACTIVATE` / `PASSIVE`; `InboundAction(role, isSelected)`; `InboundFieldKind(alwaysComplete)` = `TEXT` / `DATE` / `TIME` / `CHOICE` / `MULTI_CHOICE` / `USERS` / `CONVERSATION` / `TOGGLE` / `UNKNOWN`; `InboundField(key?, kind, isSelected, rawValue)`; `InboundForm(fields)` with `field` / `value` / `isSelected` / `first` / `all` / `firstValue`; `object InboundFieldKeys` (modal block-id constants); `sealed InboundSubmission` (`RescheduleMeeting`, `AddParticipant` — both with `listHandleRaw`, the `/meetup list` reply handle the modal ferried, `""` when none —, `DeclineReason`, `StandupAnswer`, `StandupSetup`, `CveSubscribe`, `CveUnsubscribe`); `InboundInteraction(detailType, actor, channelId, trigger, reply, message?, idempotencyKey: String, routingExtras, form, action, submission?) : InboundPayload`; extensions `isPrimary()`, `isCanceled()`, `isComplete()` |
 | `SubmissionParseObserver.kt` | `fun interface SubmissionParseObserver` + `SubmissionIgnoreReason` (`MISSING_SUBMISSION` / `PARSE_REJECTED`): the observation port for submissions that fall open. Domain stays dependency-free (`NONE` default); the application binds it to Micrometer (`MeteredSubmissionParseObserver`). Expected per-flow defaults are not ignores |
 
 ## For AI Agents
@@ -31,7 +31,9 @@ a Slack payload.
   exposes the tail as `routingExtras`: `[meetingUid]` for `CANCEL_MEETING`, `MEETING_RESCHEDULE_REQUEST`,
   `MEETING_ADD_PARTICIPANT_REQUEST`; `[sessionUid, routineUid]` for `STANDUP_PROMPT`; `[meetingTitle]`
   for `MEETING_APPROVAL_REQUEST`. Modal submissions reuse `idempotencyKey` for the meeting uid from
-  `private_metadata`, which is why it is a `String`, not a `UUID`.
+  `private_metadata`, which is why it is a `String`, not a `UUID`. The reschedule and add-participant modals'
+  extras are `[requesterId, deliveryChannel]` plus, when opened from a `/meetup list` row, `[2]` = the list
+  message's reply handle (`listHandleRaw`).
 - `submission` is non-null exactly when the detail type is a submission route: the mapper keys
   `buildSubmission` on the detail type, which also makes a detail-type/variant mismatch
   unrepresentable on the real path; block-action detail types carry `null`. Since Phase 11 the leaf

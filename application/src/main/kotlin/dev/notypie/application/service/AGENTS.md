@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
 
 # application/service
 
@@ -21,6 +21,7 @@ that the relay lane dispatches.
 | `cve/` | CVE collection, AI summarization, subscription, query, notification (see `cve/AGENTS.md`) |
 | `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering (see `relay/AGENTS.md`) |
 | `ops/` | `OpsStatusService` — backs `@bot status` (see `ops/AGENTS.md`) |
+| `calendar/` | `/calendar connect \| disconnect \| status` — per-user Google OAuth connection, callback completion, async token revoke, disabled responder — and the Google Calendar mirror: the `MeetingCalendarMirror` hooks the meeting lane calls in its write transactions, the access-token cache and the 60 s `CalendarSyncScheduler` / `CalendarSyncService` that inserts, patches and deletes events (see `calendar/AGENTS.md`) |
 
 ## Key Files
 | File | Description |
@@ -30,6 +31,7 @@ that the relay lane dispatches.
 | `relay/DebeziumLogTailingProcessor.kt` | `@KafkaListener` on the CDC topic; consumes Debezium envelopes off the outbox table |
 | `relay/OutboxPayloadRenderer.kt` | Renders a stored outbox envelope into the concrete transport call |
 | `meeting/MeetingReminderScheduler.kt` / `MeetingReminderSchedulingService.kt` | Trigger vs. logic split for pre-meeting reminder batches |
+| `calendar/CalendarSyncScheduler.kt` / `CalendarSyncService.kt` | Trigger vs. logic split for the Google Calendar mirror: claim-token CAS over `meeting_calendar_event`, HTTP outside any transaction, a per-tick time budget |
 | `meeting/DailyAgendaScheduler.kt` / `DailyAgendaSchedulingService.kt` | Daily agenda digest |
 | `standup/StandupScheduler.kt` / `StandupSchedulingService.kt` | Session open, per-member DM dispatch, nudge, cutoff |
 | `standup/StandupSummaryService.kt` | Posts the channel summary and writes back `summaryMessageTs` |

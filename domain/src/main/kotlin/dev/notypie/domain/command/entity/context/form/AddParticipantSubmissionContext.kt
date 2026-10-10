@@ -23,6 +23,7 @@ internal class AddParticipantSubmissionContext(
                 meetingUid = model.meetingUid,
                 requesterId = model.requesterId,
                 participantUserIds = model.participantUserIds,
+                listHandle = model.listHandle,
             ),
         )
 }

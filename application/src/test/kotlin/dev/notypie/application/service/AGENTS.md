@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
 
 # test/kotlin/dev/notypie/application/service
 
@@ -20,10 +20,11 @@ matters, and asserts on the captured `OutboundMessage` effects — never on Slac
 | `command/` | `CommandExecutor`, `CommandRoleResolver`, `RoleManagementService` (see `command/AGENTS.md`) |
 | `cve/` | CVE bootstrap plus `ai/`, `collector/`, `notification/`, `ops/`, `query/`, `subscription/` (see `cve/AGENTS.md`) |
 | `interaction/` | `SlackInteractionHandlerImpl` routing (see `interaction/AGENTS.md`) |
-| `meeting/` | Agenda/reminder schedulers, reschedule, `MeetingServiceImpl` listeners (see `meeting/AGENTS.md`) |
+| `meeting/` | Agenda/reminder schedulers, reschedule, `MeetingServiceImpl` listeners and their Google Calendar mirror hooks (see `meeting/AGENTS.md`) |
 | `mention/` | `SlackMentionEventHandlerImpl` payload parsing (see `mention/AGENTS.md`) |
 | `ops/` | `OpsStatusService` report rendering (see `ops/AGENTS.md`) |
 | `relay/` | Outbox renderer, polling processor, relay service (see `relay/AGENTS.md`) |
 | `standup/` | Routine setup, answers, scheduling, summary, message builders (see `standup/AGENTS.md`) |
+| `calendar/` | `CalendarConnectionService` actions and callback outcomes, the token revocation worker (unit and real-H2 after-commit specs), disabled responder, and the Google Calendar mirror: hook queueing (`MeetingCalendarMirrorServiceTest`), the access-token cache (`GoogleAccessTokenProviderTest`), the sync worker and its scheduler (`CalendarSyncServiceTest`) (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

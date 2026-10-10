@@ -28,14 +28,6 @@ interface SlackTemplateBuilder {
 
     fun errorNoticeTemplate(headLineText: String, errorMessage: String, details: String?): LayoutBlocks
 
-    fun requestApprovalFormTemplate(
-        headLineText: String,
-        selectionFields: List<SelectionContents>,
-        approvalContents: ApprovalContents,
-        approvalTargetUser: MultiUserSelectContents? = null,
-        reasonInput: TextInputContents? = null,
-    ): LayoutBlocks
-
     fun meetingListFormTemplate(
         meetings: List<MeetingDto>,
         currentUserId: String,
@@ -62,9 +54,15 @@ interface SlackTemplateBuilder {
         currentStartAt: LocalDateTime,
         requesterId: String,
         channel: String,
+        listResponseUrl: String,
     ): String
 
-    fun addParticipantModalViewJson(meetingUid: UUID, requesterId: String, channel: String): String
+    fun addParticipantModalViewJson(
+        meetingUid: UUID,
+        requesterId: String,
+        channel: String,
+        listResponseUrl: String,
+    ): String
 
     fun standupModalViewJson(
         routineName: String,

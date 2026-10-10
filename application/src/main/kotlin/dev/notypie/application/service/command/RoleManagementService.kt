@@ -10,6 +10,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.authorization.UserCommandRoleRepository
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -43,8 +44,9 @@ class RoleManagementService(
             checkNotNull(
                 outboundStager.stage(
                     message =
-                        OutboundMessage.ChannelMessage(
+                        OutboundMessage.Ephemeral(
                             target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                            recipient = UserRef(id = payload.responseBasicInfo.publisherId),
                             content = MessageContent.Text(headline = RESPONSE_HEADLINE, markdown = text),
                         ),
                     basicInfo = payload.responseBasicInfo,

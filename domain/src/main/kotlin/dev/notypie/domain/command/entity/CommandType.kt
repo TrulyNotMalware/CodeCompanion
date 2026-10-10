@@ -4,7 +4,6 @@ import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.entity.context.ApprovalFormContext
 import dev.notypie.domain.command.entity.context.CommandContext
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.form.AddParticipantContext
@@ -12,9 +11,9 @@ import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
 import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
-import dev.notypie.domain.command.entity.context.form.RequestStandupSetupContext
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
 import dev.notypie.domain.command.entity.context.form.StandupFillContext
+import dev.notypie.domain.command.entity.context.form.StandupSlashContext
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.IntentQueue
 
@@ -32,7 +31,6 @@ enum class CommandDetailType {
     REPLACE_TEXT,
     ERROR_RESPONSE,
     APPROVAL_REQUEST,
-    APPLY_REQUEST,
 
     MEETING_CREATE_REQUEST,
     GET_MEETING_LIST,
@@ -45,13 +43,17 @@ enum class CommandDetailType {
     MEETING_ADD_PARTICIPANT_SUBMIT,
     MEETING_REMINDER,
     DAILY_AGENDA,
+    CALENDAR_CONNECTION,
     STATUS_REPORT,
+    AGENT_USAGE_REPORT,
     AGENT_CONVERSE,
     STANDUP_PROMPT,
     STANDUP_ANSWER_SUBMIT,
     STANDUP_SETUP_REQUEST,
     STANDUP_SETUP_SUBMIT,
     STANDUP_SUMMARY,
+    STANDUP_ROUTINE_LIST,
+    STANDUP_ROUTINE_STOP,
     APPROVAL_CALLBACK,
 
     CVE_SUBSCRIBE_REQUEST,
@@ -68,13 +70,6 @@ internal fun CommandDetailType.createContext(
     intents: IntentQueue,
 ): CommandContext<out SubCommandDefinition> =
     when (this) {
-        CommandDetailType.APPROVAL_REQUEST -> {
-            ApprovalFormContext(
-                commandBasicInfo = commandBasicInfo,
-                intents = intents,
-            )
-        }
-
         CommandDetailType.MEETING_CREATE_REQUEST -> {
             RequestMeetingContext(
                 commandBasicInfo = commandBasicInfo,
@@ -127,7 +122,7 @@ internal fun CommandDetailType.createContext(
         }
 
         CommandDetailType.STANDUP_SETUP_REQUEST -> {
-            RequestStandupSetupContext(
+            StandupSlashContext(
                 commandBasicInfo = commandBasicInfo,
                 triggerHandle = "",
                 intents = intents,
@@ -146,18 +141,22 @@ internal fun CommandDetailType.createContext(
         CommandDetailType.SIMPLE_TEXT,
         CommandDetailType.REPLACE_TEXT,
         CommandDetailType.ERROR_RESPONSE,
-        CommandDetailType.APPLY_REQUEST,
+        CommandDetailType.APPROVAL_REQUEST,
         CommandDetailType.GET_MEETING_LIST,
         CommandDetailType.MEETING_DECLINE_REASON,
         CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
         CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
         CommandDetailType.MEETING_REMINDER,
         CommandDetailType.DAILY_AGENDA,
+        CommandDetailType.CALENDAR_CONNECTION,
         CommandDetailType.STATUS_REPORT,
+        CommandDetailType.AGENT_USAGE_REPORT,
         CommandDetailType.AGENT_CONVERSE,
         CommandDetailType.STANDUP_ANSWER_SUBMIT,
         CommandDetailType.STANDUP_SETUP_SUBMIT,
         CommandDetailType.STANDUP_SUMMARY,
+        CommandDetailType.STANDUP_ROUTINE_LIST,
+        CommandDetailType.STANDUP_ROUTINE_STOP,
         CommandDetailType.CVE_SUBSCRIBE_REQUEST,
         CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
         CommandDetailType.CVE_UNSUBSCRIBE_REQUEST,

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-09-21 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
 
 # domain/command/entity/context
 
@@ -17,11 +17,9 @@ live in `form/`.
 | `AgentChatContext.kt` | `@bot ask` / free text → `CommandIntent.AgentConverse` (`AGENT_CONVERSE`); blank prompt → error ephemeral `EMPTY_PROMPT_MESSAGE` |
 | `StatusContext.kt` | `@bot status` → `CommandIntent.StatusReport` (`STATUS_REPORT`) |
 | `RoleManagementContext.kt` | `grant` / `revoke` / `roles` — forwards the intent the parser built (`SIMPLE_TEXT`) |
-| `CveOpsContext.kt` | `cve ...` admin mentions — forwards the intent the parser built (`SIMPLE_TEXT`) |
+| `IntentContext.kt` | Queues the one intent the parser built (`SIMPLE_TEXT`): `cve ...` admin mentions and `usage [days]` (`AgentUsageReport`) |
 | `NoticeContext.kt` | `notice @u1 @u2 text` → `OutboundMessage.Notice(mentions, message)` (`SIMPLE_TEXT`) |
-| `ApprovalFormContext.kt` | `approval` → `MessageContent.Form` with a hard-coded purpose select ("Pull Requests" / "Logs") (`APPROVAL_REQUEST`) |
-| `RequestApprovalContext.kt` | `OutboundMessage.Approval` built from `commands.poll()` as the reason (`APPLY_REQUEST`); carries a `FIXME` about moving to a modal |
-| `TextResponseContext.kt` | Channel message with headline "Simple Text Response" (`SIMPLE_TEXT`) — help, usage, permission-denied, "Command Not supported." |
+| `TextResponseContext.kt` | `Ephemeral` in the command channel to `recipient = UserRef(publisherId)`, no headline (`SIMPLE_TEXT`) — help, usage, permission-denied, "Command Not supported." |
 | `EphemeralTextResponseContext.kt` | `ResponseContext`; ephemeral text, `isOk` selects `success` / `fail` |
 | `ReplaceMessageContext.kt` | `ReplaceMessage` through a reply handle (`REPLACE_TEXT`); same behaviour from `runCommand` and `handleInteraction` |
 | `DetailErrorAlertContext.kt` | Channel `MessageContent.ErrorNotice(className, message, details)` (`SIMPLE_TEXT`) |
@@ -40,29 +38,34 @@ live in `form/`.
   `Command.executeCommand` throws `UNSUPPORTED_COMMAND_TYPE` if an interaction reaches a context that
   is not a `ReactionContext`.
 - Contexts never call a repository, an HTTP client, or the agent backend. `StatusContext`,
-  `RoleManagementContext`, `CveOpsContext` and `AgentChatContext` exist only to queue an intent; the
+  `RoleManagementContext`, `IntentContext` and `AgentChatContext` exist only to queue an intent; the
   listener that owns the resource does the work and replies. Keep new behaviour on that side of the line.
 - `createErrorResponse` both queues an ephemeral and returns `fail` — the ephemeral is delivered even
   though `ok == false`. `recipient = null` on those ephemerals is deliberate (the addressee is resolved
   from `basicInfo` downstream; `chat.postEphemeral` needs a channel id, not a user id).
-- `commandType` / `commandDetailType` are `by lazy`, which is what lets `RequestApprovalContext` and
+- `commandType` / `commandDetailType` are `by lazy`, which is what lets
   `ApprovalCallbackContext` read `commandDetailType` inside a property initializer.
 - `tracking` on `CommandContext` is never read anywhere; do not build on it.
 - All contexts are `internal`. They are reached through `parsers/`, `CommandDetailType.createContext`,
   or a slash `Command`; specs can see them because the test source set shares the module.
-- `TextResponseContext` posts to the **channel**; use `EphemeralTextResponseContext` when only the
-  actor should see the text.
+- `TextResponseContext` replies only to the actor: an `Ephemeral` in the command channel with an explicit
+  `recipient = UserRef(publisherId)`, the same `user` the constructor falls back to for `recipient = null`.
+  That is safe for every mention reply: `chat.postEphemeral` needs the bot in the channel, Slack sends
+  `app_mention` only from conversations the app is in (DMs never arrive as `app_mention`), and
+  `AppMentionContextParser` is reached only through `InteractionCommand` with a `MentionInvocation`, which only
+  `SlackMentionMapper.toMentionInboundCommand` builds for an `app_mention`. Use `NoticeContext` when everyone
+  should see the text.
 
 ### Testing Requirements
 ```bash
 ./gradlew :domain:test --tests 'dev.notypie.domain.command.context.*'
 ```
 Specs mirror file names under `domain/src/test/kotlin/dev/notypie/domain/command/context/`:
-`AgentChatContextTest`, `ApprovalFormContextTest`, `DetailErrorAlertContextTest`, `EmptyContextTest`,
+`AgentChatContextTest`, `DetailErrorAlertContextTest`, `EmptyContextTest`,
 `EphemeralTextContextTest`, `NoticeContextTest`, `ReplaceMessageContextTest`,
-`RequestApprovalContextTest`, `TextResponseContextTest`. Extend `AbstractCommandContextTest` (or
+`TextResponseContextTest`. Extend `AbstractCommandContextTest` (or
 `AbstractReactionCommandContextTest`) and assert on the drained queue. `StatusContext`,
-`RoleManagementContext` and `CveOpsContext` have no dedicated spec; they are covered through
+`RoleManagementContext` and `IntentContext` have no dedicated spec; they are covered through
 `AppMentionContextParserTest`.
 
 ### Common Patterns

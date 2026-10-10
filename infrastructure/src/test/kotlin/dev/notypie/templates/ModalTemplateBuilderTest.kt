@@ -8,8 +8,6 @@ import com.slack.api.model.block.composition.MarkdownTextObject
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createApprovalContents
-import dev.notypie.domain.command.dto.modals.SelectBoxDetails
-import dev.notypie.domain.command.dto.modals.SelectionContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.TopicOption
@@ -286,48 +284,6 @@ class ModalTemplateBuilderTest :
                     small.single().members.map { it.userId } shouldBe listOf("U1", "U2")
                     empty.map { it.routineName } shouldBe listOf("Daily")
                     empty.single().members shouldBe emptyList()
-                }
-            }
-        }
-
-        given("requestApprovalFormTemplate") {
-            `when`("called with selection fields") {
-                val selectionFields =
-                    listOf(
-                        SelectionContents(
-                            title = "Category",
-                            explanation = "Select a category",
-                            placeholderText = "SELECT",
-                            contents =
-                                listOf(
-                                    SelectBoxDetails(name = "Option A", value = "a"),
-                                ),
-                        ),
-                    )
-
-                val result =
-                    templateBuilder.requestApprovalFormTemplate(
-                        headLineText = "Test Approval",
-                        selectionFields = selectionFields,
-                        approvalContents = testApprovalContents,
-                    )
-
-                then("interactionStates should contain approval, reject, userSelect, and selection states") {
-                    val stateTypes = result.interactionStates.map { it.type }
-                    stateTypes.shouldContainAll(
-                        ActionElementTypes.APPLY_BUTTON,
-                        ActionElementTypes.REJECT_BUTTON,
-                        ActionElementTypes.MULTI_USERS_SELECT,
-                        ActionElementTypes.MULTI_STATIC_SELECT,
-                    )
-                }
-
-                then("interactionStates size should be 4") {
-                    result.interactionStates.size shouldBe 4
-                }
-
-                then("template should not be empty") {
-                    result.template.size shouldBe 5
                 }
             }
         }
@@ -1386,6 +1342,28 @@ class ModalTemplateBuilderTest :
             val channel = "C_LIST"
             val currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30)
 
+            fun view(json: String): com.slack.api.model.view.View =
+                com.slack.api.util.json.GsonFactory
+                    .createSnakeCase()
+                    .fromJson(json, com.slack.api.model.view.View::class.java)
+
+            `when`("opened from a /meetup list row whose response URL holds reserved characters") {
+                val json =
+                    templateBuilder.rescheduleMeetingModalViewJson(
+                        meetingUid = meetingUid,
+                        currentStartAt = currentStartAt,
+                        requesterId = requesterId,
+                        channel = channel,
+                        listResponseUrl = "https://hooks.slack.com/actions/T1/2/a,b",
+                    )
+
+                then("the URL is appended as one URL-encoded token after the channel") {
+                    view(json = json).privateMetadata shouldBe
+                        "$meetingUid,MEETING_RESCHEDULE_SUBMIT,$requesterId,$channel," +
+                        "https%3A%2F%2Fhooks.slack.com%2Factions%2FT1%2F2%2Fa%2Cb"
+                }
+            }
+
             `when`("called with the meeting uid, current start, requester, and channel") {
                 val json =
                     templateBuilder.rescheduleMeetingModalViewJson(
@@ -1393,12 +1371,17 @@ class ModalTemplateBuilderTest :
                         currentStartAt = currentStartAt,
                         requesterId = requesterId,
                         channel = channel,
+                        listResponseUrl = "",
                     )
 
                 then("private_metadata routes the submission to MEETING_RESCHEDULE_SUBMIT with the channel") {
                     json shouldContain "\"callback_id\":\"${RescheduleMeetingModalIds.CALLBACK_ID}\""
                     json shouldContain
                         "\"private_metadata\":\"$meetingUid,MEETING_RESCHEDULE_SUBMIT,$requesterId,$channel\""
+                }
+
+                then("no fifth token is written when there is no list to close, so the wire shape is unchanged") {
+                    view(json = json).privateMetadata.split(",").size shouldBe 4
                 }
 
                 then("the date and time pickers are pre-filled from the current start") {

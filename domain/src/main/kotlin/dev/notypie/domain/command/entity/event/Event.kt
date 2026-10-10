@@ -4,6 +4,7 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -73,6 +74,7 @@ class CancelMeetingPayload(
     override val eventId: UUID = UUID.randomUUID(),
     val meetingUid: UUID,
     val requesterId: String,
+    val listHandle: ResponseReplaceHandle?,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -91,6 +93,7 @@ class RescheduleMeetingPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val newStartAt: LocalDateTime,
+    val listHandle: ResponseReplaceHandle?,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -109,6 +112,7 @@ class AddParticipantPayload(
     val meetingUid: UUID,
     val requesterId: String,
     val participantUserIds: List<String>,
+    val listHandle: ResponseReplaceHandle?,
     val responseBasicInfo: CommandBasicInfo,
 ) : EventPayload
 
@@ -136,6 +140,22 @@ data class StatusReportRequestEvent(
     override val payload: StatusReportPayload,
     override val type: CommandDetailType,
 ) : CommandEvent<StatusReportPayload>
+
+class AgentUsageReportPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val days: Int,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class AgentUsageReportRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = AgentUsageReportRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: AgentUsageReportPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<AgentUsageReportPayload>
 
 enum class RoleManageAction {
     GRANT,
@@ -296,6 +316,51 @@ data class CreateStandupRoutineEvent(
     override val payload: CreateStandupRoutinePayload,
     override val type: CommandDetailType,
 ) : CommandEvent<CreateStandupRoutinePayload>
+
+enum class StandupOpsAction {
+    LIST,
+    STOP,
+}
+
+class StandupOpsPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: StandupOpsAction,
+    val routineName: String? = null,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class StandupOpsRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = StandupOpsRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: StandupOpsPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<StandupOpsPayload>
+
+enum class CalendarConnectionAction {
+    CONNECT,
+    DISCONNECT,
+    STATUS,
+}
+
+class CalendarConnectionPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val action: CalendarConnectionAction,
+    val userId: String,
+    val responseBasicInfo: CommandBasicInfo,
+) : EventPayload
+
+data class CalendarConnectionRequestEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = CalendarConnectionRequestEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: CalendarConnectionPayload,
+    override val type: CommandDetailType = CommandDetailType.CALENDAR_CONNECTION,
+) : CommandEvent<CalendarConnectionPayload>
 
 data class DeclineModalOpenFailedEvent(
     val meetingIdempotencyKey: UUID,

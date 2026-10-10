@@ -5,6 +5,7 @@ import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.socket_mode.response.AckResponse
 import dev.notypie.application.common.parseRequestBodyData
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.calendar.CalendarSlashService
 import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
 import dev.notypie.application.service.interaction.InteractionHandler
@@ -34,6 +35,7 @@ class SocketModeReceiver(
     private val standupSlashService: StandupSlashService,
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
     private val cveQuerySlashService: CveQuerySlashService,
+    private val calendarSlashService: CalendarSlashService,
     private val interactionHandler: InteractionHandler,
     private val appMentionEventHandler: AppMentionEventHandler,
 ) : SmartLifecycle {
@@ -102,7 +104,7 @@ class SocketModeReceiver(
         }.onFailure { log.error(it) { "Socket Mode slash-command handling failed." } }
     }
 
-    private fun dispatchSlash(payload: SlashCommandRequestBody, commandData: InboundCommand) {
+    internal fun dispatchSlash(payload: SlashCommandRequestBody, commandData: InboundCommand) {
         when (payload.command) {
             appConfig.socket.meetingCommand ->
                 meetingService.handleMeeting(
@@ -113,6 +115,13 @@ class SocketModeReceiver(
 
             appConfig.socket.standupCommand ->
                 standupSlashService.handleStandup(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.calendarCommand ->
+                calendarSlashService.handleCalendar(
                     headers = noHeaders,
                     payload = payload,
                     commandData = commandData,

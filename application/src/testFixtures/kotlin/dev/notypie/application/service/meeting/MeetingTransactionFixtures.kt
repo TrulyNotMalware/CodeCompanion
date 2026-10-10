@@ -2,6 +2,8 @@ package dev.notypie.application.service.meeting
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.configurations.SnapshotIsolationConflictException
+import dev.notypie.configurations.SnapshotIsolationExceptionTranslator
 import dev.notypie.domain.command.EventQueue
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -9,6 +11,8 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
+import dev.notypie.repository.calendar.JpaMeetingCalendarEventRepository
+import dev.notypie.repository.calendar.MeetingCalendarEventRepositoryImpl
 import dev.notypie.repository.meeting.JpaMeetingReminderRepository
 import dev.notypie.repository.meeting.JpaMeetingRepository
 import dev.notypie.repository.meeting.MeetingReminderRepositoryImpl
@@ -31,6 +35,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.sql.SQLException
 import java.sql.SQLIntegrityConstraintViolationException
 import java.time.Clock
 import java.time.LocalDateTime
@@ -60,6 +65,17 @@ fun createFixedClock(now: LocalDateTime): Clock =
 
 fun createMeetingVersionConflict(): ObjectOptimisticLockingFailureException =
     ObjectOptimisticLockingFailureException("meetings", 1L)
+
+fun createSnapshotIsolationConflict(): SnapshotIsolationConflictException =
+    SnapshotIsolationConflictException(
+        message = "Record has changed since last read in table 'google_calendar_connection'",
+        cause =
+            SQLException(
+                "Record has changed since last read",
+                "HY000",
+                SnapshotIsolationExceptionTranslator.ER_CHECKREAD,
+            ),
+    )
 
 fun createParticipantDuplicateKeyViolation(): DataIntegrityViolationException =
     DataIntegrityViolationException(
@@ -107,6 +123,7 @@ class MeetingJpaStore(
     val transactionManager: JpaTransactionManager,
     val jpaMeetingRepository: JpaMeetingRepository,
     val jpaMeetingReminderRepository: JpaMeetingReminderRepository,
+    val jpaMeetingCalendarEventRepository: JpaMeetingCalendarEventRepository,
 ) : AutoCloseable {
     val meetingRepository =
         MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
@@ -114,6 +131,12 @@ class MeetingJpaStore(
         MeetingReminderRepositoryImpl(
             jpaMeetingRepository = jpaMeetingRepository,
             jpaMeetingReminderRepository = jpaMeetingReminderRepository,
+            transactionManager = transactionManager,
+        )
+    val calendarEventRepository =
+        MeetingCalendarEventRepositoryImpl(
+            jpaMeetingRepository = jpaMeetingRepository,
+            jpaMeetingCalendarEventRepository = jpaMeetingCalendarEventRepository,
             transactionManager = transactionManager,
         )
 
@@ -127,11 +150,13 @@ class MeetingJpaStore(
     override fun close() = entityManagerFactory.close()
 }
 
-fun createH2MeetingJpaStore(): MeetingJpaStore {
+// The calendar queue's enqueue is an INSERT ... ON DUPLICATE KEY UPDATE, which H2 accepts only in MariaDB mode.
+fun createH2MeetingJpaStore(mariaDbMode: Boolean = false): MeetingJpaStore {
     val factoryBean =
         LocalContainerEntityManagerFactoryBean().apply {
-            dataSource = createH2DataSource()
-            setPackagesToScan("dev.notypie.repository.meeting.schema")
+            dataSource =
+                if (mariaDbMode) DriverManagerDataSource("${newH2Url()};MODE=MariaDB") else createH2DataSource()
+            setPackagesToScan("dev.notypie.repository.meeting.schema", "dev.notypie.repository.calendar.schema")
             jpaVendorAdapter = HibernateJpaVendorAdapter()
             setJpaPropertyMap(mapOf("hibernate.hbm2ddl.auto" to "create-drop"))
             afterPropertiesSet()
@@ -148,5 +173,7 @@ fun createH2MeetingJpaStore(): MeetingJpaStore {
         transactionManager = JpaTransactionManager(entityManagerFactory),
         jpaMeetingRepository = repositoryFactory.getRepository(JpaMeetingRepository::class.java),
         jpaMeetingReminderRepository = repositoryFactory.getRepository(JpaMeetingReminderRepository::class.java),
+        jpaMeetingCalendarEventRepository =
+            repositoryFactory.getRepository(JpaMeetingCalendarEventRepository::class.java),
     )
 }

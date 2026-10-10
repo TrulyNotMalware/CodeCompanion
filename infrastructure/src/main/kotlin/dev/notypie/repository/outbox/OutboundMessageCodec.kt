@@ -1,6 +1,7 @@
 package dev.notypie.repository.outbox
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
@@ -30,7 +31,6 @@ private interface OutboundMessageMixin
     JsonSubTypes.Type(value = MessageContent.Text::class, name = "Text"),
     JsonSubTypes.Type(value = MessageContent.ErrorNotice::class, name = "ErrorNotice"),
     JsonSubTypes.Type(value = MessageContent.Schedule::class, name = "Schedule"),
-    JsonSubTypes.Type(value = MessageContent.Form::class, name = "Form"),
     JsonSubTypes.Type(value = MessageContent.MeetingRequest::class, name = "MeetingRequest"),
     JsonSubTypes.Type(value = MessageContent.MeetingList::class, name = "MeetingList"),
     JsonSubTypes.Type(value = MessageContent.StandupSummary::class, name = "StandupSummary"),
@@ -39,6 +39,9 @@ private interface MessageContentMixin
 
 @JsonIgnoreProperties("timeFormatter")
 private interface TimeScheduleInfoMixin
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+private interface ReplaceMessageMixin
 
 class OutboundMessageCodecException(
     message: String,
@@ -61,6 +64,7 @@ object OutboundMessageCodec {
             .addMixIn(OutboundMessage::class.java, OutboundMessageMixin::class.java)
             .addMixIn(MessageContent::class.java, MessageContentMixin::class.java)
             .addMixIn(TimeScheduleInfo::class.java, TimeScheduleInfoMixin::class.java)
+            .addMixIn(OutboundMessage.ReplaceMessage::class.java, ReplaceMessageMixin::class.java)
             .build()
 
     fun encode(envelope: OutboundEnvelope): String =

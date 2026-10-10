@@ -1,5 +1,6 @@
 package dev.notypie.application.service.ops
 
+import dev.notypie.application.common.detachedTemplate
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.health.readOutboxHealth
 import dev.notypie.application.service.relay.AccessBlockedTracker
@@ -11,6 +12,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.cve.CveCollectLedgerRepository
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
@@ -19,6 +21,8 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.format.DateTimeFormatter
 
@@ -37,7 +41,9 @@ class OpsStatusService(
     private val accessBlockedTracker: AccessBlockedTracker,
     private val clock: Clock,
     appConfig: AppConfig,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val reportTemplate: TransactionTemplate = detachedTemplate(transactionManager = transactionManager)
     private val healthConfig: AppConfig.Outbox.Health = appConfig.outbox.health
     private val cveEnabled: Boolean = appConfig.cve.enabled
     private val cveMaxRetries: Int = appConfig.ai.maxRetries
@@ -46,19 +52,21 @@ class OpsStatusService(
     fun handleStatusReport(event: StatusReportRequestEvent) {
         val payload = event.payload
         val text =
-            runCatching { renderReport() }
-                .getOrElse { exception ->
-                    log.error(exception) {
-                        "Failed to render outbox status report idempotencyKey=${event.idempotencyKey}"
-                    }
-                    "Failed to read outbox status. Check application logs."
+            try {
+                checkNotNull(reportTemplate.execute { renderReport() })
+            } catch (exception: Exception) {
+                log.error(exception) {
+                    "Failed to render outbox status report idempotencyKey=${event.idempotencyKey}"
                 }
+                "Failed to read outbox status. Check application logs."
+            }
 
         outboundStager
             .stage(
                 message =
-                    OutboundMessage.ChannelMessage(
+                    OutboundMessage.Ephemeral(
                         target = ConversationTarget(id = payload.responseBasicInfo.channel),
+                        recipient = UserRef(id = payload.responseBasicInfo.publisherId),
                         content =
                             MessageContent.Text(
                                 headline = "CodeCompanion — outbox status",

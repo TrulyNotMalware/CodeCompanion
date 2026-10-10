@@ -30,8 +30,12 @@ class StandupRoutineSetupService(
     @EventListener
     fun createRoutine(event: CreateStandupRoutineEvent) {
         val payload = event.payload
+        val activeNames =
+            standupRepository
+                .findActiveRoutinesByChannel(commandChannel = payload.commandChannel)
+                .map { routine -> Routine.normalizeName(raw = routine.name) }
         val message =
-            runCatching { buildRoutine(payload = payload) }
+            runCatching { buildRoutine(payload = payload, activeNames = activeNames) }
                 .fold(
                     onSuccess = { routine ->
                         confirmationMessage(routine = standupRepository.createRoutine(routine = routine))
@@ -59,7 +63,7 @@ class StandupRoutineSetupService(
             )?.let { eventPublisher.publishOne(event = it) }
     }
 
-    private fun buildRoutine(payload: CreateStandupRoutinePayload): Routine {
+    private fun buildRoutine(payload: CreateStandupRoutinePayload, activeNames: List<String>): Routine {
         val cutoffMinutes =
             requireNotNull(payload.cutoffMinutes) {
                 "cutoff must be a whole number of minutes between ${Routine.MIN_CUTOFF_MINUTES} and " +
@@ -67,7 +71,7 @@ class StandupRoutineSetupService(
             }
         val routine =
             Routine(
-                name = payload.name,
+                name = Routine.normalizeName(raw = payload.name),
                 creatorId = payload.creatorId,
                 commandChannel = payload.commandChannel,
                 summaryChannel = payload.summaryChannel,
@@ -77,6 +81,9 @@ class StandupRoutineSetupService(
                 weekdays = payload.weekdays,
                 routineTimezone = payload.timezone,
             )
+        require(activeNames.none { activeName -> activeName.equals(routine.name, ignoreCase = true) }) {
+            "a standup routine named '${routine.name}' already exists in this channel"
+        }
         payload.memberIds.forEach { memberId ->
             routine.addMember(
                 member = RoutineMember(userId = memberId, userTimezone = payload.timezone),

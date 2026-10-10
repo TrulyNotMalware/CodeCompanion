@@ -14,9 +14,9 @@
 - **델타만 기록**: 공식 문서나 일반 지식으로 대체되는 내용은 쓰지 않는다. 이 프로젝트의 결정·제약·함정·
   이유만 남긴다.
 - **페이지 머리**: 제목 아래 `_type: … · updated: YYYY-MM-DD_` 한 줄과 한 문장 요약(인용 블록).
-  `type`은 `architecture` / `pattern` / `guide` / `decision` / `history` 중 하나.
-- **갱신**: 내용을 바꾸면 `updated`를 고치고 [`log.md`](log.md)에 한 줄을 **추가**한다(append-only,
-  과거 항목 수정 금지). 결정이 뒤집히면 지우지 말고 이력을 남긴다.
+  `type`은 `architecture` / `pattern` / `guide` / `decision` 중 하나.
+- **갱신**: 내용을 바꾸면 `updated`를 고친다. 변경 기록은 git 이력이 맡으므로 별도 로그 페이지를 두지 않는다.
+  결정이 뒤집히면 지우지 말고 이력을 남긴다.
 - **민감 정보 금지**: 토큰·시크릿·내부 주소는 README에 이미 있는 수준을 넘지 않는다.
 
 ## 페이지
@@ -31,8 +31,7 @@
 | [coding-style.md](coding-style.md) | guide | Kotlin 작성 규칙, 커밋 메시지, 주석·널·파일 구성 원칙 |
 | [testing-guide.md](testing-guide.md) | guide | Kotest/MockK 스타일, testFixtures, 가드 테스트, 모듈별 실행 |
 | [dev-environment.md](dev-environment.md) | guide | 프로파일, Gradle 프리셋, 로컬 실행, 마이그레이션·시크릿 관례, CI/CD |
-| [decisions.md](decisions.md) | decision | 근거가 있는 기술 결정 목록(ADR 요약) |
-| [history.md](history.md) | history | 2024-06부터의 마일스톤과 설계가 바뀐 지점 |
+| [decisions.md](decisions.md) | decision | 근거가 있는 기술 결정 목록(ADR 요약)과 2024-06부터의 연혁·폐기 목록 |
 
 ## 관련
 

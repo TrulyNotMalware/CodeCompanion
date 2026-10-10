@@ -3,6 +3,7 @@ package dev.notypie.repository.meeting
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.exception.meeting.DatabaseException
 import dev.notypie.repository.meeting.schema.MeetingSchema
+import dev.notypie.repository.meeting.schema.toMeetingDto
 import dev.notypie.schema.createMeetingSchema
 import dev.notypie.schema.createParticipants
 import io.kotest.assertions.throwables.shouldThrow
@@ -56,6 +57,25 @@ class MeetingRepositoryImplTest :
                     shouldThrow<DatabaseException> {
                         repository.getMeeting(meetingId = 999L)
                     }
+                }
+            }
+        }
+
+        given("findMeetingId") {
+            val knownKey = UUID.fromString("0b6f1c2a-5d3e-4f7a-9b8c-1d2e3f4a5b6c")
+            val unknownKey = UUID.fromString("9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b")
+            every { jpaMeetingRepository.findIdByIdempotencyKey(idempotencyKey = knownKey) } returns 7L
+            every { jpaMeetingRepository.findIdByIdempotencyKey(idempotencyKey = unknownKey) } returns null
+
+            `when`("a meeting carries the key") {
+                then("its id is returned") {
+                    repository.findMeetingId(idempotencyKey = knownKey) shouldBe 7L
+                }
+            }
+
+            `when`("no meeting carries the key") {
+                then("null is returned") {
+                    repository.findMeetingId(idempotencyKey = unknownKey) shouldBe null
                 }
             }
         }
@@ -274,8 +294,9 @@ class MeetingRepositoryImplTest :
 
                 val result = repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID)
 
-                then("the managed row is flagged and flushed") {
-                    result shouldBe true
+                then("the managed row is flagged and flushed, and returned as the canceled meeting") {
+                    result shouldBe schema.toMeetingDto()
+                    result?.isCanceled shouldBe true
                     schema.isCanceled shouldBe true
                     verify(exactly = 1) { jpaMeetingRepository.saveAndFlush(schema) }
                 }
@@ -285,8 +306,8 @@ class MeetingRepositoryImplTest :
                 every { jpaMeetingRepository.findMeetingByUidWithParticipants(meetingUid = meetingUid) } returns
                     createMeetingSchema(meetingUid = meetingUid, isCanceled = true)
 
-                then("the caller sees false") {
-                    repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID) shouldBe false
+                then("the caller gets no meeting") {
+                    repository.markMeetingCanceled(meetingUid = meetingUid, requesterId = TEST_USER_ID) shouldBe null
                 }
             }
         }

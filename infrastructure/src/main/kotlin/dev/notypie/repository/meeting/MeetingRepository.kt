@@ -11,6 +11,8 @@ interface MeetingRepository {
 
     fun getMeeting(meetingId: Long): MeetingDto
 
+    fun findMeetingId(idempotencyKey: UUID): Long?
+
     fun getAllMeetingByUserId(userId: String): List<MeetingDto>
 
     fun getMeetingsByUserIdInRange(userId: String, startAt: LocalDateTime, endAt: LocalDateTime): List<MeetingDto>
@@ -27,7 +29,7 @@ interface MeetingRepository {
 
     fun participantExists(meetingIdempotencyKey: UUID, userId: String): Boolean
 
-    fun markMeetingCanceled(meetingUid: UUID, requesterId: String): Boolean
+    fun markMeetingCanceled(meetingUid: UUID, requesterId: String): MeetingDto?
 
     fun rescheduleMeeting(meetingUid: UUID, requesterId: String, newStartAt: LocalDateTime): RescheduleResult
 

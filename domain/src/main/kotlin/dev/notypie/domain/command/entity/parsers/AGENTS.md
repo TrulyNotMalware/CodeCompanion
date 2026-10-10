@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
 
 # domain/command/entity/parsers
 
@@ -12,7 +12,7 @@ is a thin lookup from `CommandDetailType` to context.
 | File | Description |
 |------|-------------|
 | `ContextParser.kt` | `internal interface ContextParser { parseContext(idempotencyKey): CommandContext<out SubCommandDefinition> }` |
-| `AppMentionContextParser.kt` | `internal class (commandData, mention, idempotencyKey, intents, actorRole)`. Constants `HELP_MESSAGE`, `GRANT_USAGE`, `REVOKE_USAGE`, `ROLES_USAGE`, `CVE_USAGE`. Flow: no command structure → "Command Not supported."; first token → `CommandSet`; permission gate → denial text; then per-keyword dispatch: `notice`, `approval`, `help`, `status`, `ask`, `grant @user <role>`, `revoke @user`, `roles`, `cve topics` / `cve topic activate|deactivate <key>` / `cve retry all|<event-id>`, and the free-text fallback to `AgentChatContext` |
+| `AppMentionContextParser.kt` | `internal class (commandData, mention, idempotencyKey, intents, actorRole)`. Constants `HELP_MESSAGE`, `GRANT_USAGE`, `REVOKE_USAGE`, `ROLES_USAGE`, `CVE_USAGE`, `USAGE_USAGE`. Flow: no command structure → "Command Not supported."; first token → `CommandSet`; permission gate → denial text; then per-keyword dispatch: `notice`, `help`, `status`, `usage [days]` (`IntentContext` with `AgentUsageReport`, default `AgentUsageReport.DEFAULT_DAYS` (7); a window outside `AgentUsageReport.DAYS_RANGE` (`1..90`), a non-number or extra tokens → `USAGE_USAGE`, whose text and the `HELP_MESSAGE` usage line are built from the same constants), `ask`, `grant @user <role>`, `revoke @user`, `roles`, `cve topics` / `cve topic activate|deactivate <key>` / `cve retry all|<event-id>` (each an `IntentContext`), and the free-text fallback to `AgentChatContext` |
 | `InteractionContextParser.kt` | `internal class (commandData, interaction, idempotencyKey, intents[, observer])`; tries `SubmissionRouter.route(interaction)` first (submission variants win, SUBMIT-without-submission → `IgnoredSubmissionContext`), then falls back to `interaction.detailType.createContext(...)` with `SubCommand.empty()` |
 
 ## For AI Agents
@@ -20,11 +20,13 @@ is a thin lookup from `CommandDetailType` to context.
 ### Working In This Directory
 - Parsers return a context and never run it; `entity/InteractionCommand` builds them lazily so a
   parse failure surfaces as an `ERROR_RESPONSE` output instead of a construction exception.
-- `HELP_MESSAGE` is asserted verbatim by `AppMentionContextParserTest`; it is also the only user-facing
-  documentation of the mention grammar. Change the text and the spec together, and add a line whenever
-  you add a keyword.
+- `HELP_MESSAGE` is the only in-chat documentation of the mention and slash grammar; add a line whenever
+  you add a keyword or slash command. No spec pins its wording: `AppMentionContextParserTest` checks that
+  `help` yields a `TextResponseContext` whose reply is an `Ephemeral` to the requester carrying the
+  constant itself (compared by reference), so editing the text needs no spec change.
 - The permission check runs before the `when`, so a denied `grant` never reaches the argument checks.
-  Usage errors after the gate are `TextResponseContext` **channel** messages, not ephemerals.
+  Usage errors after the gate, the denial itself, `help` and "Command Not supported." are `TextResponseContext`
+  ephemerals to the actor (`recipient = publisherId`).
 - The agent prompt is `mention.text` (the restored message: links, code blocks and other people's mentions
   included) when the transport supplied it, the joined `commandTokens` otherwise. `ask` drops the first
   whole-word occurrence of the keyword (the text may lead with `<@alice> ask …`, so a prefix check is not
@@ -38,10 +40,11 @@ is a thin lookup from `CommandDetailType` to context.
   no `rich_text_section`, and an empty token list with structure throws `IllegalArgumentException`
   (caught upstream).
 - `InteractionContextParser` passes an empty `SubCommand`; `createContext` substitutes
-  `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST` itself. The `else -> EmptyContext`
-  arm there resolves an unrouted non-submission interaction to `EmptyContext`, which
+  `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST` itself. `createContext` names every
+  `CommandDetailType` explicitly (no `else`), so a new value does not compile until it is placed. The
+  values placed in the `EmptyContext` group resolve an interaction of that type to `EmptyContext`, which
   `Command.executeInteraction()` turns into an `ERROR_RESPONSE` (it is not a `ReactionContext`);
-  submission routes can no longer fall through to it — `SubmissionRouter` intercepts them first.
+  submission routes never reach it — `SubmissionRouter` intercepts them first.
 
 ### Testing Requirements
 ```bash

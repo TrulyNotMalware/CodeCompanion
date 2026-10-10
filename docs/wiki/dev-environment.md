@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-10-03_
+_type: guide · updated: 2026-10-08_
 
 > JDK 25 · Gradle 9.8.0 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -40,7 +40,7 @@ _type: guide · updated: 2026-10-03_
   CDC 토픽을 읽지 않고 아웃박스를 폴링한다. 모드별 빈 선택은 `configurations/conditions/Conditions.kt`의 Condition 네 개가
   맡는다 — 상세는 [events-and-outbox.md](events-and-outbox.md).
 - `local`만 `slack.app.api.app-token`(Socket Mode app-level token)과 `slack.app.socket.meeting-command` /
-  `standup-command`를 가진다. 수신기 `SocketModeReceiver`는 `@Profile("local")`이라 다른 프로파일에서는 빈 자체가 없다.
+  `standup-command` / `calendar-command`를 가진다. 수신기 `SocketModeReceiver`는 `@Profile("local")`이라 다른 프로파일에서는 빈 자체가 없다.
 - AI 사이드카 설정 키(`slack.app.agent.sidecar.base-url` / `bearer-secret` / `request-timeout-seconds`)는 `local`과
   `prod` YAML에만 있다. 빈 자체(`AgentGateway`, `AgentConverseService`)는 `AgentConfiguration`이 프로파일과 무관하게
   만들고 `AppConfig`의 루프백 기본 URL을 쓰므로, 키가 없는 프로파일은 "미연결"이 아니라 "기본값으로 연결 시도"다.
@@ -82,20 +82,26 @@ _type: guide · updated: 2026-10-03_
 
 ## 로컬 실행 레시피
 
+`~/infra` 공용 스택으로 실제 워크스페이스를 확인하는 라이브 실행은 **E(`scripts/local-container.sh`)를 권장한다** — A의 `local`
+프로파일과 D의 사이드카·MCP 배선을 컨테이너 둘로 한 번에 띄운다. A·B·D의 `bootRun` 레시피는 IDE 디버깅, `~/infra`가 아닌 인프라,
+스크립트가 덮지 않는 조합에 쓴다.
+
 ### A. Socket Mode (`local`) — 터널 없음
 
 1. orbstack MariaDB(`code_companion`)와 3-broker Kafka + Debezium이 떠 있어야 한다. `local`은 CDC 모드라 Kafka 없이는 뜨지 않는다.
 2. **별도의 개발용 Slack 앱**에서 Socket Mode를 켜고 `connections:write` 스코프의 app-level token을 발급한다. Socket Mode는
    앱 전체 설정이라 운영 앱에 켜면 Request URL이 비활성화된다.
 3. `SLACK_API_TOKEN`, `SLACK_APP_TOKEN`을 env로 주고 `./gradlew :application:bootRun --args='--spring.profiles.active=local'`
-   을 실행한다. 명령 이름이 `/meetup`·`/standup`이 아니면 `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND`로 매핑한다.
+   을 실행한다. 명령 이름이 `/meetup`·`/standup`·`/calendar`가 아니면 `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` /
+   `SLACK_CALENDAR_COMMAND`로 매핑한다.
 4. 로그의 `Slack Socket Mode receiver connected`가 성공 신호다.
 
 ### B. HTTP + 터널 (`slack-live`) — 실제 워크스페이스 e2e (구 `real`, 2026-09-21 개명)
 
 - Kafka·Debezium 없이 orbstack MariaDB만 있으면 된다. `ngrok`/`cloudflared`로 9000 포트를 노출하고 Slack 앱의 Request URL
-  세 개 — slash(`/api/slash/meet`, `/api/slash/standup`), Interactivity(`/api/slack/interaction`), Events(`/api/slack/events`)
-  — 를 터널 주소로 잡는다. Events URL 검증(`url_verification`)은 앱이 먼저 떠 있어야 통과한다.
+  세 종류 — slash(`/api/slash/{meet,standup,subscribe,unsubscribe,subscriptions,latest}`), Interactivity(`/api/slack/interaction`),
+  Events(`/api/slack/events`) — 를 터널 주소로 잡는다. [`docs/slack-app-manifest.yaml`](../slack-app-manifest.yaml)의
+  `<your-host>`를 터널 주소로 바꿔 앱을 만들면 한 번에 잡힌다. Events URL 검증(`url_verification`)은 앱이 먼저 떠 있어야 통과한다.
 - `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `DATABASE_USER_PWD`(모두 필수, 기본값 없음)로
   `bootRun --args='--spring.profiles.active=slack-live'`. 터널로 공개되는 포트라 actuator는 `/api/actuator/health`만 연다
   (2026-10-01: DB 비밀번호 기본값 제거, `metrics`·`info` 노출 제거). devtools의 restart classloader가 기동을 깨면 `--spring.devtools.restart.enabled=false`를 붙인다.
@@ -120,6 +126,113 @@ _type: guide · updated: 2026-10-03_
   시계(`Clock`)로 기록되므로 DB 세션 시간대(`NOW()`, `CURRENT_TIMESTAMP`)에 기대는 쿼리·운영 비교를 하지 않는다. 운영 DB의
   실제 값은 `SELECT @@session.time_zone, NOW()`로 확인한다(미확인).
 
+### D. AI 사이드카 컨테이너 (2026-10-07 확인)
+
+`local` 프로파일 앱(A)에 [agent-sidecar](https://github.com/TrulyNotMalware/agent-sidecar)를 컨테이너로 붙여 `@bot ask`와
+MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 돌려 봤고, claude 공급자는 같은 방식에
+`CLAUDE_CODE_OAUTH_TOKEN` 또는 `ANTHROPIC_API_KEY`가 더 필요하다.
+
+1. 이미지는 agent-sidecar `main` 체크아웃에서 빌드한다. 이미지는 uid 10001로 돌고 상태를 전부 `/var/lib/claude-sidecar`
+   아래에 둔다(`CODEX_HOME=/var/lib/claude-sidecar/codex`).
+2. 그 경로에 붙일 named volume을 uid 10001 소유로 만들고, codex 공급자면 호스트의 `~/.codex/auth.json`을 볼륨의
+   `codex/auth.json`으로 복사해 둔다.
+3. 이미지의 `CLAUDE_MD_PATH` 기본값은 `/workspace/CLAUDE.md`다. 사이드카는 그 파일이 있을 때만 읽어 시스템 프롬프트에 합치므로
+   (`_merge_system_prompt`의 `base_path.exists()` 검사) 마운트는 선택이다 — 에이전트에 기본 프롬프트를 줄 때만 붙인다.
+   2026-10-08 사이드카 이미지 `claude-sidecar:main-dca99f3`에서 파일 없이 `@bot ask` 턴이 끝까지 완료됐다(이전 기록의
+   "파일이 없으면 모든 턴이 실패"는 이 이미지에 맞지 않는다).
+4. 실행:
+
+   ```bash
+   docker run -d --name agent-sidecar \
+     -e PROVIDER=codex \
+     -e BEARER_SECRET="$SIDECAR_BEARER_SECRET" \
+     -e MCP_SERVER_URL=http://host.docker.internal:9000/mcp \
+     -e MCP_SERVER_NAME=domain-tools \
+     -e TURN_TIMEOUT_SEC=90 \
+     -v <volume>:/var/lib/claude-sidecar \
+     -v <path>/CLAUDE.md:/workspace/CLAUDE.md:ro \
+     -p 127.0.0.1:7300:7300 \
+     <image>
+   ```
+
+   - `BEARER_SECRET`은 앱의 `slack.app.agent.sidecar.bearer-secret`과 같은 값이다. `local` yaml은 그 키를
+     `${SIDECAR_BEARER_SECRET:}`(기본값 빈 문자열)로 읽으므로 앱과 컨테이너에 같은 env를 준다.
+   - `TURN_TIMEOUT_SEC`(사이드카 기본 90)는 앱의 `slack.app.agent.sidecar.request-timeout-seconds`(`local` yaml 120) 이하로
+     둔다. 사이드카 쪽 타임아웃이 먼저 터져야 앱이 끊긴 스트림 대신 타임아웃 응답을 받는다.
+5. 앱은 A의 env에 더해 MCP 서명 시크릿을 env `SLACK_APP_MCP_SIGNINGSECRET`(`slack.app.mcp.signing-secret`의 relaxed binding)로
+   주고, 다음 플래그로 띄운다. `local` yaml은 MCP를 켜지 않으므로 플래그가 필요하다.
+
+   ```bash
+   --slack.app.mcp.enabled=true --spring.ai.mcp.server.enabled=true --spring.ai.mcp.server.protocol=STREAMABLE
+   --spring.kafka.bootstrap-servers=<tailscale-ip>:19092,<tailscale-ip>:29092,<tailscale-ip>:39092
+   ```
+
+라이브로 확인한 사실(2026-10-07):
+
+- OrbStack의 `host.docker.internal`은 앱이 `127.0.0.1`에만 바인딩해도 닿는다. `/mcp`는 `slack.app.mcp.allow-remote=false`(기본)일
+  때 loopback이 아닌 주소나 forwarding 헤더가 있는 요청을 401로 거부하므로(`McpTurnTokenFilter`), 다른 컨테이너 런타임에서
+  MCP 호출이 401이면 이 검사를 먼저 의심한다(OrbStack 외 런타임은 미확인).
+- `local` yaml의 Kafka bootstrap(`localhost:19092`·`29092`·`39092`)은 그대로 쓸 수 없다. `~/infra` Kafka가 그 포트를
+  Tailscale IP에만 바인딩하므로 `--spring.kafka.bootstrap-servers`로 덮어쓴다.
+- 성공 판정은 `agent_turn_history`·`mcp_tool_call_history` 행과 Slack 스레드로 한다. 사이드카 로그의 `force_cancelled`는
+  앱이 `done` 프레임을 받고 연결을 닫을 때도 찍히므로 실패 신호가 아니다.
+- `scripts/mcp-smoke.sh`로 `/mcp`만 따로 찔러 볼 때는 `MCP_SIGNING_SECRET`(앱의 `slack.app.mcp.signing-secret`과 같은 값)이
+  필요하다.
+
+### E. 컨테이너로 `local` 실행 — `scripts/local-container.sh` (2026-10-08)
+
+`~/infra` 공용 스택을 쓸 때의 권장 라이브 실행 경로다. A의 `local` 프로파일과 D의 사이드카·MCP 배선을 한 Docker 네트워크의
+컨테이너 둘(`codecompanion-app`, `codecompanion-sidecar`)로 띄우므로, D의 수동 `docker run`·MCP 플래그·Kafka 주소 덮어쓰기를
+손으로 맞출 필요가 없다.
+
+```bash
+./scripts/local-container.sh up [--no-build] [--no-sidecar]
+./scripts/local-container.sh status | logs [app|sidecar] | down
+```
+
+- 전제: `~/infra`의 MariaDB(3306)·Kafka(19092·29092·39092)가 Tailscale IP에 떠 있고, Debezium Connect에 outbox 커넥터가 등록돼
+  있어야 한다 — `local`은 CDC 릴레이라 커넥터가 없으면 앱은 떠도 슬랙 메시지가 하나도 나가지 않는다. 스크립트는 셋을 확인만 하고
+  `~/infra` 서비스를 띄우거나 내리지 않는다. Socket Mode라 슬랙 쪽 터널은 필요 없다.
+- `up`은 jar·이미지 빌드 → 사이드카 → 앱 → 헬스 대기 순서다. `--no-build`는 이미 있는 이미지를 쓰고, `--no-sidecar`는 기존 사이드카
+  컨테이너까지 지우고 앱만 띄운다(`@bot ask`는 실패). `down`은 두 컨테이너를 지우고 사이드카 상태 볼륨은 남긴다.
+- 사이드카 공급자는 `SIDECAR_PROVIDER`(기본 `codex`)로 고른다. codex는 D의 1~2단계처럼 상태 볼륨에 `auth.json`을 두고, claude일
+  때만 `local.env`의 `CLAUDE_CODE_OAUTH_TOKEN`·`ANTHROPIC_API_KEY`가 사이드카로 넘어간다(codex면 `local.env`에 있어도 넘기지 않는다).
+  사이드카 이미지는 `SIDECAR_IMAGE`로 바꾼다.
+- 입력 파일, 덮어쓸 수 있는 env, 앱 컨테이너에 주는 값과 그 이유(`SERVER_ADDRESS`, `SLACK_APP_MCP_ALLOWREMOTE`, 비밀값 전달 방식)는
+  [`scripts/AGENTS.md`](../../scripts/AGENTS.md)가 원본이다.
+- 2026-10-08 확인(사이드카 이미지 `claude-sidecar:main-dca99f3`, `PROVIDER=codex`): `CLAUDE.md` 마운트 없이 `@bot ask` 턴이
+  끝까지 돌았고, 사이드카가 다른 컨테이너에서 MCP 도구 `get_ai_usage`·`list_meetings`를 호출했다.
+
+### F. Google Calendar 연동 — 로컬 OAuth 클라이언트 준비
+
+`/calendar connect`를 로컬에서 끝까지 돌리려면 Google Cloud OAuth 클라이언트가 필요하다. 리디렉션 URI가 `localhost`라
+터널은 필요 없다 — 동의 링크를 앱이 도는 머신의 브라우저에서 열면 된다. 명령은 2026-10-08부터 `/meetup`의 서브커맨드가 아니라
+자체 슬래시 명령이다: Socket Mode 개발 앱(A)의 *Slash Commands*에 `/calendar`(설명 예: "Link your Google Calendar", usage hint
+`connect | disconnect | status`)를 추가한다. Socket Mode라 Request URL은 필요 없다. 다른 이름을 쓰면 `SLACK_CALENDAR_COMMAND`로 맞춘다.
+
+1. Google Cloud 프로젝트에서 **Google Calendar API**를 사용 설정한다. 꺼져 있으면 Calendar 호출이 403
+   `accessNotConfigured`/`SERVICE_DISABLED`로 끝나고, 워커는 행을 실패시키지 않은 채 틱마다 ERROR 한 줄을 남기고 멈춘다(DM 없음).
+   2026-10-08 라이브 관찰: 콘솔에서 API를 끄자 ERROR `Calendar sync tick stopped … (accessNotConfigured)`, 행은 `PENDING`으로
+   돌아가고 `attempts`는 그대로, `last_error`에 사유가 남았으며 DM은 없었다. 다시 켜자 다음 틱에 `SYNCED`가 되고 `last_error`가 지워졌다.
+2. **OAuth 동의 화면**: 사용자 유형 External, 게시 상태 Testing, 연결할 Google 계정을 **테스트 사용자**에 추가한다(Testing에서는
+   테스트 사용자만 동의할 수 있다). 앱이 요청하는 범위는 `https://www.googleapis.com/auth/calendar.events`, `openid`, `email`이다.
+   동의 화면에서 캘린더 권한을 빼면 아무것도 저장하지 않고 "Calendar access was not allowed" 페이지를 보여 준다(`SCOPE_DENIED`).
+3. **OAuth 클라이언트 ID**: 애플리케이션 유형 *웹 애플리케이션*, 승인된 리디렉션 URI `http://localhost:9000/oauth/google/callback`.
+   Google은 평문 `http`를 `localhost`에만 허용한다. `slack-live`(B)처럼 터널 주소로 받거나 운영에서는
+   `https://<공개 호스트>/oauth/google/callback`을 등록한다(운영 절차는 `k8s/README.md`).
+4. env: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`(등록한 URI와 글자 그대로 같아야 한다 —
+   다르면 Google이 `redirect_uri_mismatch`로 거부), `GOOGLE_TOKEN_ENCRYPTION_KEY`(base64 32바이트, `openssl rand -base64 32`),
+   `GOOGLE_CALENDAR_ENABLED`. 네 프로파일 모두 `slack.app.calendar.google.*`를 이 이름으로 읽고 기본은 꺼짐이다. E의 스크립트는
+   `local.env`에 클라이언트 id·secret만 넣으면 나머지 셋을 채운다.
+   - `GOOGLE_CALENDAR_ENABLED`는 `true`/`false`만 쓴다. 빈 문자열은 Boolean 바인딩에 실패해 기동이 멈춘다.
+   - 켜면 client id·secret·암호화 키가 비었거나 리디렉션 URI가 `http(s)://`로 시작하지 않을 때 기동을 거부한다(`CalendarConfiguration`).
+   - 암호화 키를 바꾸면 저장된 refresh token을 읽지 못한다. 그 사용자의 다음 동기화 때 연결이 `REVOKED`가 되고 재연결 DM이 한 번
+     간다 — 키 회전 뒤의 유일한 복구 경로가 재연결이다.
+5. 스키마: `local`은 `ddl-auto: update`라 새 테이블이 자동으로 생긴다. `V24`·`V25`를 손으로 적용하는 것은 `ddl-auto: none`(prod)뿐이다.
+6. **Testing 상태의 refresh token은 7일 뒤 만료된다**(Google 문서 기준, 이 저장소에서는 아직 관찰하지 않음). 그 뒤 첫 동기화의
+   refresh가 `invalid_grant`로 거부되면 연결이 `REVOKED`가 되고 "…(it was revoked or expired)… Run `/calendar connect` to
+   reconnect." DM이 간다. 정상 동작이며 다시 연결하면 된다.
+
 ## 데이터베이스와 마이그레이션
 
 - 런타임 DB는 MariaDB(`org.mariadb.jdbc.Driver`, 네 프로파일 모두). H2는 `infrastructure`에 `runtimeOnly`로만 있고 실제로는
@@ -129,10 +242,10 @@ _type: guide · updated: 2026-10-03_
   (무효 키였던 `enabled: false`는 2026-09-21에 제거). `db/migration/V*.sql`은 **사람이 수동으로 적용**한다.
 - 스키마 기동 방식: `local`/`slack-live`/`dev`는 `ddl-auto: update`로 Hibernate가 베이스 테이블을 만들고 `V*` 스크립트는 그 위에 얹는
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
-- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V23**(2026-10-02 작업 트리; 마지막으로 fetch한 `origin/main`은 V17), 다음은 **V24**. 번호를 정하기
+- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V25**(2026-10-08 `feature/gap-closure`; 마지막으로 fetch한 `origin/main`은 V23), 다음은 **V26**. 번호를 정하기
   전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
-- **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈췄고 다음 릴리스가 V18~V23을 한꺼번에 싣는다.
-  운영 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
+- **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈춰 있었고 #26(`f9971700`, 2026-10-06)이
+  V18~V23을 한꺼번에 실었다. 아직 V17인 환경의 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
   구 파드 종료 → 배포 → V21**이다. V21을 뺀 나머지는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 구 바이너리는 그것에 의존하지
   않으므로 이전 릴리스가 떠 있는 동안 적용한다. V23은 헤더대로 크기를 재고 온라인 형식을 먼저 시도하며, 거부되고 테이블이 크면
   배포와 보존 정리 뒤로 미룬다. "구 파드 종료 → 배포"는 `deployment.yaml`의 `Recreate` 롤아웃 한 번이 순서대로 수행한다. V21(뒤집힌
@@ -140,6 +253,10 @@ _type: guide · updated: 2026-10-03_
   뒤집힌 행을 다시 만든다. readiness는 스키마를 검사하지 않으므로 V18이 빠지면 모든 `meetings` 조회가, V20·V22가 빠지면 모든
   아웃박스 claim이 실패하는데도 배포 게이트는 통과한다. 머지 전에 `SHOW COLUMNS`로 `meetings.version`,
   `outbox_message.attempt_count`·`send_count`를 확인한다. 절차 원본은 `k8s/README.md`와 `db/migration/AGENTS.md`다.
+- **Google Calendar 릴리스 — V24 → V25.** 둘 다 새 테이블만 만들고(`CREATE TABLE IF NOT EXISTS`) 기존 테이블을 건드리지 않으므로
+  이전 릴리스가 서비스하는 동안, 배포 전에 이 순서로 적용한다. `GOOGLE_CALENDAR_ENABLED=true`는 두 테이블이 생긴 뒤에만 켠다 — 미러
+  훅이 미팅 쓰기 트랜잭션 안에서 이 테이블을 읽고 쓰므로, 테이블 없이 켜면 미팅 생성·수락·취소·일정 변경이 SQL 오류로 롤백된다
+  (훅 구조에서 추론, 미측정). 꺼져 있으면 훅은 no-op이다.
 - 새 엔티티는 JPA 스키마 클래스(`infrastructure/repository/*/schema/`)와 마이그레이션을 **둘 다** 추가한다. H2/`ddl-auto` 테스트는
   MariaDB 전용 문법 오류를 잡지 못하므로 `slack-live` DB에 한 번 적용해 본다.
 
@@ -149,12 +266,15 @@ _type: guide · updated: 2026-10-03_
   토큰을 채워 두었다면 그 hunk를 절대 스테이징하지 않는다(`git add -p`). 명시적 요청이 없으면 작업 트리 값을 되돌리지도 않는다.
 - git-ignored 로컬 파일: `gradle.properties`(+`.backup.*`), `logs/`, `*.hprof`, `.omc/`, `.claude/`, 그리고 로컬 작업 문서
   `RealTestSetup.md` · `Handoff.md` · `Refactor.md` · `STYLE_GUIDE.local.md` · `CveBotPlan.md`.
-- k8s: `k8s/secret.yaml`(`stringData:` — DB URL/계정, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`)과 `k8s/configmap.yaml`(격리 수준,
-  타임아웃, 배치 크기, `KAFKA_BOOTSTRAP_SERVERS`, `SLACK_CDC_TOPIC`)은 플레이스홀더 템플릿이다. 실제 값은 클러스터에만 있고, 새 env는 `application-prod.yaml`의 `${VAR}`와 매니페스트
+- k8s: `k8s/secret.yaml`(`stringData:` — DB URL/계정, `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `GOOGLE_TOKEN_ENCRYPTION_KEY`)과 `k8s/configmap.yaml`(격리 수준, 타임아웃, 배치 크기, `KAFKA_BOOTSTRAP_SERVERS`, `SLACK_CDC_TOPIC`,
+  `GOOGLE_CALENDAR_ENABLED`(`'false'`), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI`)은 플레이스홀더 템플릿이다. 실제 값은 클러스터에만 있고, 새 env는 `application-prod.yaml`의 `${VAR}`와 매니페스트
   키 등록이 한 쌍이다.
 - gitleaks: `.gitleaks.toml`은 기본 룰을 확장하고 `cdc/k8s/yamls/mariadb/mariadb-config.yaml`만 경로 allowlist한다(샘플 Secret의
   플레이스홀더가 kubernetes-secret 룰에 걸리기 때문). 실제 유출은 allowlist가 아니라 회전 + 히스토리 재작성으로 처리한다. 테스트
   픽스처 토큰은 `xoxb-test…`처럼 룰에 안 걸리는 가짜를 유지한다.
+- `scripts/local-container.sh`의 입력 파일은 모두 저장소 밖에 있고 저장소에는 키 이름만 남긴다(목록은
+  [`scripts/AGENTS.md`](../../scripts/AGENTS.md)).
 - `scripts/mcp-smoke.sh`는 `MCP_SIGNING_SECRET` env를 요구하며 `slack.app.mcp.signing-secret`과 같아야 한다. 토큰 포맷
   (`ScopedTurnTokenCodec`)이 바뀌면 스크립트도 같은 커밋에서 바꾼다.
 
@@ -255,14 +375,22 @@ _type: guide · updated: 2026-10-03_
 - `application/src/main/kotlin/dev/notypie/application/configurations/AppConfig.kt`, `CveConfiguration.kt`,
   `conditions/Conditions.kt`, `socket/SocketModeReceiver.kt`, `security/SlackRequestVerificationFilter.kt`
 - `.github/workflows/{lint,simple_test_action,security_check,deploy_action}.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`
-- `scripts/mcp-smoke.sh`, `README.md`, git-ignored `RealTestSetup.md`
+- `scripts/mcp-smoke.sh`, `scripts/local-container.sh`, `README.md`, git-ignored `RealTestSetup.md`, `docs/slack-app-manifest.yaml`
+- Google Calendar: `application/src/main/kotlin/dev/notypie/application/configurations/{AppConfig,CalendarConfiguration}.kt`,
+  `controllers/GoogleOAuthCallbackController.kt`, `service/calendar/AGENTS.md`(`GoogleAccessTokenProvider`·`CalendarSyncService`),
+  `db/migration/V24__…`·`V25__…`, `application-*.yaml`의 `slack.app.calendar.google.*`, git-ignored `.omc/plans/google-calendar-user-oauth.md`
+- `application/src/main/kotlin/dev/notypie/application/security/mcp/McpTurnTokenFilter.kt`, `application-local.yaml`
+  (`slack.app.agent.sidecar.*`, `spring.kafka.bootstrap-servers`)
+- agent-sidecar `main`(외부 저장소): `Dockerfile`(uid 10001, `/var/lib/claude-sidecar`, `CLAUDE_MD_PATH`), `sidecar/config.py`
+  (`turn_timeout_sec` 90, `mcp_server_name` 기본 `domain-tools`), `_merge_system_prompt`(`dca99f3` 기준 `CLAUDE_MD_PATH`는 파일이
+  있을 때만 읽는다 — 2026-10-07 기록의 "못 읽으면 턴 거부"를 대체). 2026-10-07·10-08 로컬 라이브 실행
 
 ## 관련 페이지
 
 - [architecture-overview.md](architecture-overview.md) — 모듈 책임과 요청 흐름
 - [events-and-outbox.md](events-and-outbox.md) — POLLING/CDC 릴레이와 퍼블리셔 모드의 동작
 - [testing-guide.md](testing-guide.md) — EmbeddedKafka + H2 통합 테스트 실행
-- [decisions.md](decisions.md), [history.md](history.md)
+- [decisions.md](decisions.md)
 - [`.github/AGENTS.md`](../../.github/AGENTS.md), [`gradle-config/AGENTS.md`](../../gradle-config/AGENTS.md),
   [`scripts/AGENTS.md`](../../scripts/AGENTS.md),
   [`application/src/main/resources/AGENTS.md`](../../application/src/main/resources/AGENTS.md)

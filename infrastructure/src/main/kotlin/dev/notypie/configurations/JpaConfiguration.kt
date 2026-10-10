@@ -7,6 +7,12 @@ import dev.notypie.repository.agent.JpaAgentSessionRepository
 import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
 import dev.notypie.repository.authorization.JpaUserCommandRoleRepository
 import dev.notypie.repository.authorization.UserCommandRoleRepositoryImpl
+import dev.notypie.repository.calendar.GoogleCalendarConnectionRepositoryImpl
+import dev.notypie.repository.calendar.GoogleOAuthStateRepositoryImpl
+import dev.notypie.repository.calendar.JpaGoogleCalendarConnectionRepository
+import dev.notypie.repository.calendar.JpaGoogleOAuthStateRepository
+import dev.notypie.repository.calendar.JpaMeetingCalendarEventRepository
+import dev.notypie.repository.calendar.MeetingCalendarEventRepositoryImpl
 import dev.notypie.repository.cve.CveCollectLedgerRepositoryImpl
 import dev.notypie.repository.cve.CveDeliveryRepositoryImpl
 import dev.notypie.repository.cve.CveEventRepositoryImpl
@@ -107,6 +113,31 @@ class JpaConfiguration {
     @Primary
     fun userCommandRoleRepository(jpaUserCommandRoleRepository: JpaUserCommandRoleRepository) =
         UserCommandRoleRepositoryImpl(jpaUserCommandRoleRepository = jpaUserCommandRoleRepository)
+
+    @Bean
+    @Primary
+    fun googleCalendarConnectionRepository(
+        jpaGoogleCalendarConnectionRepository: JpaGoogleCalendarConnectionRepository,
+    ) = GoogleCalendarConnectionRepositoryImpl(
+        jpaGoogleCalendarConnectionRepository = jpaGoogleCalendarConnectionRepository,
+    )
+
+    @Bean
+    @Primary
+    fun googleOAuthStateRepository(jpaGoogleOAuthStateRepository: JpaGoogleOAuthStateRepository) =
+        GoogleOAuthStateRepositoryImpl(jpaGoogleOAuthStateRepository = jpaGoogleOAuthStateRepository)
+
+    @Bean
+    @Primary
+    fun meetingCalendarEventRepository(
+        jpaMeetingRepository: JpaMeetingRepository,
+        jpaMeetingCalendarEventRepository: JpaMeetingCalendarEventRepository,
+        transactionManager: PlatformTransactionManager,
+    ) = MeetingCalendarEventRepositoryImpl(
+        jpaMeetingRepository = jpaMeetingRepository,
+        jpaMeetingCalendarEventRepository = jpaMeetingCalendarEventRepository,
+        transactionManager = transactionManager,
+    )
 
     @Bean
     @Primary

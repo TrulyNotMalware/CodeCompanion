@@ -16,6 +16,8 @@ class CveLatestSlashCommand(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
     ) {
+    override val slashCommandName: String = "/latest"
+
     override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<out NoSubCommands> =
         RequestCveLatestContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
