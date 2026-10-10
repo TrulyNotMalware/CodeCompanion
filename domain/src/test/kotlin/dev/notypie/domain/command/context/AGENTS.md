@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
 
 # domain/command/context (test)
 
@@ -60,14 +60,17 @@ All specs are Kotest `BehaviorSpec`s.
 ### Common Patterns
 - Setup: `createIntentQueue()` per `given`, `createCommandBasicInfo()`, then either `runCommand()` or
   `handleInteraction(interaction = createInboundInteraction(detailType = ..., action = approveAction(),
-  submission = InboundSubmission.X(...)))`.
+  submission = InboundSubmission.X(...)))`. Build `AddParticipant` / `RescheduleMeeting` submissions with
+  `createAddParticipantSubmission(...)` / `createRescheduleMeetingSubmission(...)`, overriding only the fields the
+  case exercises.
 - Assertion: `intentQueue.snapshot()` (non-destructive) or `drainSnapshot()` (clears), then
   `filterIsInstance<CommandIntent.X>().single()` or `shouldBeInstanceOf<OutboundMessage.X>()`.
 - Metadata checks (`context.commandType`, `context.commandDetailType`) sit in their own `when`.
 - Fixtures used: `createCommandBasicInfo`, `createIntentQueue`, `createInboundInteraction`,
   `approveAction`, `rejectAction`, `applyButtonField`, `rejectButtonField`, `plainTextField`,
   `datePickerField`, `timePickerField`, `multiUsersField`, `createApprovalContents`,
-  `createMentionInboundCommand`, `dto.isEmpty`, and the `TEST_*` constants.
+  `createMentionInboundCommand`, `createAddParticipantSubmission`, `createRescheduleMeetingSubmission`,
+  `dto.isEmpty`, and the `TEST_*` constants (`TEST_LIST_HANDLE` for a list message's reply handle).
 
 ## Dependencies
 

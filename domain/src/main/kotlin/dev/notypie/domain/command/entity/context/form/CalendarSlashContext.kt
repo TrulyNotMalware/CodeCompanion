@@ -6,6 +6,7 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.command.entity.asEchoedToken
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.entity.slash.CALENDAR_USAGE
 import dev.notypie.domain.command.intent.CommandIntent
@@ -42,7 +43,7 @@ internal class CalendarSlashContext(
                 CONNECT_ACTION -> CommandIntent.CalendarConnect(userId = userId)
                 DISCONNECT_ACTION -> CommandIntent.CalendarDisconnect(userId = userId)
                 STATUS_ACTION -> CommandIntent.CalendarStatus(userId = userId)
-                else -> return usageError(message = "Unknown action '${tokens.single()}'. $usage")
+                else -> return usageError(message = "Unknown action '${tokens.single().asEchoedToken()}'. $usage")
             }
         addIntent(intent = intent)
         return CommandOutput.success(

@@ -1,5 +1,8 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.TEST_LIST_HANDLE
+import dev.notypie.domain.command.createAddParticipantSubmission
+import dev.notypie.domain.command.createRescheduleMeetingSubmission
 import dev.notypie.domain.command.entity.context.form.AddParticipantParsed
 import dev.notypie.domain.command.entity.context.form.CveSubscribeParsed
 import dev.notypie.domain.command.entity.context.form.CveUnsubscribeParsed
@@ -24,7 +27,6 @@ import java.time.ZoneId
 import java.util.UUID
 
 private const val ACTOR = "U_ACTOR"
-private const val LIST_HANDLE = "https://hooks.slack.com/actions/T1/1/list"
 
 class ParsedSubmissionsTest :
     BehaviorSpec({
@@ -36,7 +38,7 @@ class ParsedSubmissionsTest :
                 requesterId: String = "U_HOST",
                 idsRaw: String = "U_A,U_B",
                 listHandleRaw: String = "",
-            ) = InboundSubmission.AddParticipant(
+            ) = createAddParticipantSubmission(
                 meetingUidRaw = uidRaw,
                 requesterId = requesterId,
                 participantUserIdsRaw = idsRaw,
@@ -56,10 +58,10 @@ class ParsedSubmissionsTest :
             }
 
             `when`("the modal carried the list message's reply handle") {
-                val parsed = AddParticipantParsed.from(raw = raw(listHandleRaw = LIST_HANDLE), actorId = ACTOR)
+                val parsed = AddParticipantParsed.from(raw = raw(listHandleRaw = TEST_LIST_HANDLE), actorId = ACTOR)
 
                 then("it becomes the handle that closes the list") {
-                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = LIST_HANDLE)
+                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
                 }
             }
 
@@ -87,7 +89,7 @@ class ParsedSubmissionsTest :
                 date: String = "2026-10-01",
                 time: String = "14:30",
                 listHandleRaw: String = "",
-            ) = InboundSubmission.RescheduleMeeting(
+            ) = createRescheduleMeetingSubmission(
                 meetingUidRaw = uidRaw,
                 requesterId = "",
                 date = date,
@@ -107,10 +109,10 @@ class ParsedSubmissionsTest :
             }
 
             `when`("the modal carried the list message's reply handle") {
-                val parsed = RescheduleMeetingParsed.from(raw = raw(listHandleRaw = LIST_HANDLE), actorId = ACTOR)
+                val parsed = RescheduleMeetingParsed.from(raw = raw(listHandleRaw = TEST_LIST_HANDLE), actorId = ACTOR)
 
                 then("it becomes the handle that closes the list") {
-                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = LIST_HANDLE)
+                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
                 }
             }
 

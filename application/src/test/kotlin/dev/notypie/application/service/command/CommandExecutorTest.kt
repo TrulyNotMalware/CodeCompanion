@@ -235,6 +235,23 @@ class CommandExecutorTest :
                 }
             }
 
+            `when`("a failure's reason carries a line break and a terminal escape") {
+                val command =
+                    TestCommand(
+                        idempotencyKey = UUID.randomUUID(),
+                        commandData = createMentionInboundCommand(),
+                        failure = IllegalStateException("bad <@U1>\nWARN forged line\u001b[31m"),
+                    )
+                val warnings = warningsWhile { executor.execute(command = command) }
+
+                then("the one WARN replaces each control character with ? so the reason cannot forge a log line") {
+                    val line = warnings.single().formattedMessage
+                    line shouldContain "reason=java.lang.IllegalStateException: bad <@U1>?WARN forged line?[31m"
+                    line shouldNotContain "\n"
+                    line shouldNotContain "\u001b"
+                }
+            }
+
             `when`("a command succeeds, or its context fails on purpose with its own reply") {
                 val warnings =
                     warningsWhile {

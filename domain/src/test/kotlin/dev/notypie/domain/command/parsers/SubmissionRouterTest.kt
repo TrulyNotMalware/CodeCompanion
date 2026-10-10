@@ -1,8 +1,10 @@
 package dev.notypie.domain.command.parsers
 
+import dev.notypie.domain.command.createAddParticipantSubmission
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createIntentQueue
+import dev.notypie.domain.command.createRescheduleMeetingSubmission
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.SubmissionRouter
 import dev.notypie.domain.command.entity.context.IgnoredSubmissionContext
@@ -26,14 +28,6 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
-
-private fun addParticipant(uidRaw: String = UUID.randomUUID().toString()) =
-    InboundSubmission.AddParticipant(
-        meetingUidRaw = uidRaw,
-        requesterId = "U_HOST",
-        participantUserIdsRaw = "U_A",
-        listHandleRaw = "",
-    )
 
 class SubmissionRouterTest :
     BehaviorSpec({
@@ -59,16 +53,8 @@ class SubmissionRouterTest :
                     )
 
                 then("each parseable variant reaches its own leaf, regardless of the envelope detail type") {
-                    route(addParticipant()).shouldBeInstanceOf<AddParticipantSubmissionContext>()
-                    route(
-                        InboundSubmission.RescheduleMeeting(
-                            meetingUidRaw = UUID.randomUUID().toString(),
-                            requesterId = "U",
-                            date = "2099-10-01",
-                            time = "10:00",
-                            listHandleRaw = "",
-                        ),
-                    ).shouldBeInstanceOf<RescheduleMeetingSubmissionContext>()
+                    route(createAddParticipantSubmission()).shouldBeInstanceOf<AddParticipantSubmissionContext>()
+                    route(createRescheduleMeetingSubmission()).shouldBeInstanceOf<RescheduleMeetingSubmissionContext>()
                     route(
                         InboundSubmission.DeclineReason(
                             meetingIdempotencyKeyRaw = UUID.randomUUID().toString(),
@@ -131,7 +117,7 @@ class SubmissionRouterTest :
                         interaction =
                             createInboundInteraction(
                                 detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                                submission = addParticipant(uidRaw = "not-a-uuid"),
+                                submission = createAddParticipantSubmission(meetingUidRaw = "not-a-uuid"),
                             ),
                     )
 
@@ -215,7 +201,7 @@ class SubmissionRouterTest :
                         interaction =
                             createInboundInteraction(
                                 detailType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
-                                submission = addParticipant(),
+                                submission = createAddParticipantSubmission(),
                             ),
                     )
 

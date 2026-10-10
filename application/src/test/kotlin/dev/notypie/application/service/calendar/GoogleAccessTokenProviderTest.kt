@@ -5,10 +5,11 @@ import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.impl.calendar.GoogleAccessToken
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.GoogleOAuthException
-import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
+import dev.notypie.schema.createCalendarConnection
+import dev.notypie.schema.createTestTokenCipher
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
@@ -18,27 +19,17 @@ import io.mockk.verify
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
-import java.util.Base64
 
 class GoogleAccessTokenProviderTest :
     BehaviorSpec({
         val start = Instant.parse("2026-10-08T01:00:00Z")
-        val cipher = TokenCipher(keyBase64 = Base64.getEncoder().encodeToString(ByteArray(32) { 3 }))
+        val cipher = createTestTokenCipher()
         val storedToken = cipher.encrypt(plaintext = "1//refresh")
 
         fun connection(
             status: CalendarConnectionStatus = CalendarConnectionStatus.ACTIVE,
             encryptedRefreshToken: String = storedToken,
-        ) = CalendarConnection(
-            slackUserId = TEST_USER_ID,
-            googleSubject = "sub-1",
-            googleEmail = "dev@example.com",
-            encryptedRefreshToken = encryptedRefreshToken,
-            status = status,
-            connectedAt = start.minus(Duration.ofDays(1L)),
-            revokedAt = null,
-            lastError = null,
-        )
+        ) = createCalendarConnection(encryptedRefreshToken = encryptedRefreshToken, status = status)
 
         class Harness(
             stored: CalendarConnection?,

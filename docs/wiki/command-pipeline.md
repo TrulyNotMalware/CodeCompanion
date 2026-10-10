@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-08_
+_type: architecture · updated: 2026-10-11_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -43,7 +43,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 
 `Command<T : SubCommandDefinition>`(`entity/Command.kt`)은 `idempotencyKey`와 `InboundCommand`를 쥐고
 `handleEvent()` 한 번으로 끝난다: `createSubCommand()` → `parseContext()` → `InboundInteraction`이면
-`ReactionContext.handleInteraction()`, 아니면 `runCommand()`. 전체가 `runCatching`이라 예외는 `CommandOutput.fail`이 된다.
+`ReactionContext.handleInteraction()`, 아니면 `runCommand()`. `Exception`은 `catch`로 `CommandOutput.fail`이 되고,
+`InterruptedException`은 인터럽트 플래그를 복원해 다시 던지며, `Error`는 잡지 않고 전파한다.
 
 - **`SubCommandDefinition`**: `subCommandIdentifier`/`requiresArguments`/`minRequiredArgs`/`usage`. 슬래시 명령은
   enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP, LIST, STOP}`).

@@ -5,8 +5,8 @@ import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.GoogleOAuthClient
-import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
+import dev.notypie.schema.createTestTokenCipher
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -21,7 +21,6 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.event.TransactionalEventListenerFactory
 import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Connection
-import java.util.Base64
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
@@ -32,7 +31,7 @@ class GoogleTokenRevocationWorkerTransactionTest :
     BehaviorSpec({
         val dataSource = createH2DataSource()
         val transactionManager = createH2TransactionManager(dataSource = dataSource)
-        val cipher = TokenCipher(keyBase64 = Base64.getEncoder().encodeToString(ByteArray(32) { 5 }))
+        val cipher = createTestTokenCipher()
         val event =
             GoogleTokenRevocationRequested(
                 userId = "U_TX",

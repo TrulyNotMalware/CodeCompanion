@@ -114,6 +114,22 @@ class SlackControllersTest :
                     warnings shouldBe listOf("app_mention command failed: boom")
                 }
             }
+
+            `when`("the mention's command failed with control characters in the reason") {
+                val warnings =
+                    deliverAndCaptureWarnings(
+                        output =
+                            CommandOutput.fail(
+                                basicInfo = createCommandBasicInfo(),
+                                commandDetailType = CommandDetailType.ERROR_RESPONSE,
+                                reason = "boom\nforged line\u001b[0m",
+                            ),
+                    )
+
+                then("the control characters are masked before logging") {
+                    warnings shouldBe listOf("app_mention command failed: boom?forged line?[0m")
+                }
+            }
         }
 
         given("Slack's URL verification request") {

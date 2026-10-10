@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-11 -->
 
 # application/exception
 
@@ -14,7 +14,7 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
 | File | Description |
 |------|-------------|
 | `PayloadParseException.kt` | `enum class PayloadParseErrorCode : ErrorCode` — `APP_ID_NOT_FOUND` ("Application ID not found in payload.") and `UNSUPPORTED_SLACK_COMMAND_TYPE` ("Unsupported Slack command type in payload."). `AppIdNotFoundException(errorCode, details)` and `UnsupportedSlackCommandTypeException(rawCommandType: String, errorCode, details)`, both `: CodeCompanionRuntimeException` |
-| `ControllerAdvice.kt` | `@RestControllerAdvice class ControllerAdvice`. `handleDatabaseException` logs `ERROR` (with the table name) and returns `500` `{"error": "internal_error"}`; `handleUnsupportedSlackCommandType` logs `WARN` (raw type with control characters replaced by `?`) and returns `400` `{"error": "unsupported_command_type"}` with `X-Slack-No-Retry: 1` — the user-controlled type is never echoed in the body; `handleUnexpected(e: Exception)` logs `ERROR` and returns the same `500` body; `handleUnreadablePayload` answers `400` `{"error": "invalid_payload"}` with `X-Slack-No-Retry: 1` for `AppIdNotFoundException` and `InvalidEventPayloadException` |
+| `ControllerAdvice.kt` | `@RestControllerAdvice class ControllerAdvice`. `handleDatabaseException` logs `ERROR` (with the table name) and returns `500` `{"error": "internal_error"}`; `handleUnsupportedSlackCommandType` logs `WARN` (raw type through the file's `internal fun String.stripControlCharacters()`, which replaces every `\p{Cntrl}` character with `?`; `service/command/CommandExecutor` reuses it for its failure `WARN`) and returns `400` `{"error": "unsupported_command_type"}` with `X-Slack-No-Retry: 1` — the user-controlled type is never echoed in the body; `handleUnexpected(e: Exception)` logs `ERROR` and returns the same `500` body; `handleUnreadablePayload` answers `400` `{"error": "invalid_payload"}` with `X-Slack-No-Retry: 1` for `AppIdNotFoundException` and `InvalidEventPayloadException` |
 
 ## For AI Agents
 
@@ -45,6 +45,12 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
 - The advice extends `ResponseEntityExceptionHandler`, so Spring MVC's own exceptions (`NoResourceFoundException`
   → 404, `HttpMessageNotReadableException` → 400, `HttpRequestMethodNotSupportedException` → 405, ...) keep
   their status via the inherited `handleException`; only exceptions outside that list reach `handleUnexpected`.
+- `controllers/GoogleOAuthCallbackController` serves a browser, not Slack, and declares its own
+  `@ExceptionHandler(Exception)`. Spring prefers it over this advice for that controller only, so its unexpected
+  failures render a 500 HTML page and never reach `handleUnexpected` (its JSON body and its "while handling a Slack
+  request" log line).
+- `stripControlCharacters()` is shared across the module: change its replacement only together with the
+  `CommandExecutor` spec that pins it.
 - Over Socket Mode (`socket/SocketModeReceiver`) there is no MVC dispatch, so nothing here applies —
   failures are caught with `runCatching` and logged in the receiver.
 - Keep infrastructure exceptions (JPA, Kafka, Slack SDK) in `infrastructure`; only failures of

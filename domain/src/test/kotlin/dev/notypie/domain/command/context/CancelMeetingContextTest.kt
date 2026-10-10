@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.context
 
+import dev.notypie.domain.TEST_LIST_HANDLE
 import dev.notypie.domain.command.approveAction
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.createInboundInteraction
@@ -37,7 +38,7 @@ class CancelMeetingContextTest :
 
         given("a Cancel click on a /meetup list row") {
             `when`("the click carries the list message's reply handle") {
-                val reply = ReplyHandle(raw = "https://hooks.slack.com/actions/T1/1/list")
+                val reply = ReplyHandle(raw = TEST_LIST_HANDLE)
                 val intents = cancelIntents(routingExtras = listOf(meetingUid.toString()), reply = reply)
 
                 then("the cancel intent names the meeting, the actor and that handle, so the list can be closed") {

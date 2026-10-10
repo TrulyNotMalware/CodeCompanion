@@ -50,3 +50,19 @@ fun createGoogleServiceDisabledErrorJson(
     return """{"error": {"code": 403, "message": "$message", "errors": $errors, "status": "$status", """ +
         """"details": $details}}"""
 }
+
+fun createGoogleTokenResponseJson(
+    accessToken: String? = "ya29.access",
+    refreshToken: String? = "1//refresh",
+    expiresIn: Int? = 3599,
+    idToken: String? = null,
+    scope: String? = "openid https://www.googleapis.com/auth/calendar.events email",
+): String =
+    listOfNotNull(
+        accessToken?.let { """"access_token": "$it"""" },
+        refreshToken?.let { """"refresh_token": "$it"""" },
+        expiresIn?.let { """"expires_in": $it""" },
+        idToken?.let { """"id_token": "$it"""" },
+        scope?.let { """"scope": "$it"""" },
+        """"token_type": "Bearer"""",
+    ).joinToString(separator = ", ", prefix = "{", postfix = "}")

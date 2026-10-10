@@ -90,11 +90,6 @@ abstract class Command<T : SubCommandDefinition>(
         return subCommandUsage?.let { "Usage: `${it.escapeMarkup()}`" } ?: "Invalid arguments.$usageBlock"
     }
 
-    private fun String.asEchoedToken(): String {
-        val clipped = if (length > MAX_ECHOED_TOKEN_LENGTH) take(n = MAX_ECHOED_TOKEN_LENGTH) + "…" else this
-        return clipped.replace(oldValue = "`", newValue = "'").escapeMarkup()
-    }
-
     private fun executeCommand(): CommandOutput {
         val subCommand = createSubCommand()
         val context = parseContext(subCommand = subCommand)
@@ -140,6 +135,11 @@ abstract class Command<T : SubCommandDefinition>(
             )
         }
     }
+}
+
+internal fun String.asEchoedToken(): String {
+    val clipped = if (length > MAX_ECHOED_TOKEN_LENGTH) take(n = MAX_ECHOED_TOKEN_LENGTH) + "…" else this
+    return clipped.replace(oldValue = "`", newValue = "'").escapeMarkup()
 }
 
 private const val MAX_ECHOED_TOKEN_LENGTH = 40

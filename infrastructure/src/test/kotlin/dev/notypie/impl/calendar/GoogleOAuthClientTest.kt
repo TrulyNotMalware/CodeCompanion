@@ -38,6 +38,13 @@ class GoogleOAuthClientTest :
                 start()
             }
         afterSpec { server.stop(0) }
+        beforeContainer { testCase ->
+            if (testCase.parent == null) {
+                capturedPath = ""
+                capturedBody = ""
+                capturedContentType = null
+            }
+        }
 
         val baseUrl = "http://127.0.0.1:${server.address.port}"
         val client =
@@ -108,9 +115,13 @@ class GoogleOAuthClientTest :
                 response(
                     status = 200,
                     body =
-                        """{"access_token":"ya29.access","refresh_token":"1//refresh","expires_in":3599,""" +
-                            """"id_token":"${idToken(email = "dev@example.com")}",""" +
-                            """"scope":"openid https://www.googleapis.com/auth/calendar.events email","token_type":"Bearer"}""",
+                        createGoogleTokenResponseJson(
+                            accessToken = "ya29.access",
+                            refreshToken = "1//refresh",
+                            expiresIn = 3599,
+                            idToken = idToken(email = "dev@example.com"),
+                            scope = "openid https://www.googleapis.com/auth/calendar.events email",
+                        ),
                 )
             val grant = client.exchangeCode(code = "4/0Acode")
 
@@ -144,7 +155,7 @@ class GoogleOAuthClientTest :
             respond =
                 response(
                     status = 200,
-                    body = """{"access_token":"a","refresh_token":"r","expires_in":10,"scope":"openid"}""",
+                    body = createGoogleTokenResponseJson(idToken = null, scope = "openid"),
                 )
 
             then("subject and email are absent and the calendar scope is not granted") {
@@ -157,7 +168,7 @@ class GoogleOAuthClientTest :
         }
 
         given("a code exchange whose response has no scope field at all") {
-            respond = response(status = 200, body = """{"access_token":"a","refresh_token":"r","expires_in":10}""")
+            respond = response(status = 200, body = createGoogleTokenResponseJson(scope = null))
 
             then("the requested scopes are assumed granted, as RFC 6749 §5.1 defines an omitted scope") {
                 val grant = client.exchangeCode(code = "c")
@@ -167,7 +178,7 @@ class GoogleOAuthClientTest :
         }
 
         given("a code exchange that returns no refresh_token") {
-            respond = response(status = 200, body = """{"access_token":"a","expires_in":10}""")
+            respond = response(status = 200, body = createGoogleTokenResponseJson(refreshToken = null))
 
             then("it fails so the connection is never stored without a long-lived credential") {
                 shouldThrow<GoogleOAuthException> { client.exchangeCode(code = "c") }.message shouldContain
@@ -201,7 +212,13 @@ class GoogleOAuthClientTest :
             respond =
                 response(
                     status = 200,
-                    body = """{"access_token":"ya29.fresh","expires_in":3599,"token_type":"Bearer"}""",
+                    body =
+                        createGoogleTokenResponseJson(
+                            accessToken = "ya29.fresh",
+                            refreshToken = null,
+                            expiresIn = 3599,
+                            scope = null,
+                        ),
                 )
             val token = client.refresh(refreshToken = "1//refresh")
 
@@ -225,12 +242,19 @@ class GoogleOAuthClientTest :
         }
 
         given("a refresh answered with 2xx but without a positive expires_in") {
-            listOf(
-                "no expires_in" to """{"access_token":"ya29.fresh","token_type":"Bearer"}""",
-                "expires_in 0" to """{"access_token":"ya29.fresh","expires_in":0}""",
-            ).forEach { (label, body) ->
+            listOf("no expires_in" to null, "expires_in 0" to 0).forEach { (label, expiresIn) ->
                 `when`("the response has $label") {
-                    respond = response(status = 200, body = body)
+                    respond =
+                        response(
+                            status = 200,
+                            body =
+                                createGoogleTokenResponseJson(
+                                    accessToken = "ya29.fresh",
+                                    refreshToken = null,
+                                    expiresIn = expiresIn,
+                                    scope = null,
+                                ),
+                        )
                     lateinit var token: GoogleAccessToken
                     val warnings = warningsDuring { token = client.refresh(refreshToken = "1//refresh") }
 
@@ -271,7 +295,7 @@ class GoogleOAuthClientTest :
         }
 
         given("a refresh answered with 2xx but no access_token") {
-            respond = response(status = 200, body = """{"expires_in":3599}""")
+            respond = response(status = 200, body = createGoogleTokenResponseJson(accessToken = null))
 
             then("it fails instead of returning an empty token") {
                 shouldThrow<GoogleOAuthException> { client.refresh(refreshToken = "1//refresh") }.message shouldContain

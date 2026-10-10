@@ -210,6 +210,7 @@ class CalendarConnectionService(
     private fun disconnect(payload: CalendarConnectionPayload) {
         val basicInfo = payload.responseBasicInfo
         val connection = connectionRepository.find(userId = payload.userId)
+        stateRepository.deleteForUser(userId = payload.userId)
         if (connection == null) {
             outboundStager.stageCalendarEphemeral(
                 text = "Google Calendar is not connected. $CONNECT_USAGE",
@@ -219,7 +220,6 @@ class CalendarConnectionService(
             return
         }
         connectionRepository.delete(userId = payload.userId)
-        stateRepository.deleteForUser(userId = payload.userId)
         queue.failPendingForUser(userId = payload.userId, lastError = DISCONNECTED_ERROR, now = clock.instant())
         requestRevocation(
             userId = payload.userId,

@@ -34,6 +34,15 @@ class GoogleCalendarClientTest :
                 start()
             }
         afterSpec { server.stop(0) }
+        beforeContainer { testCase ->
+            if (testCase.parent == null) {
+                capturedMethod = ""
+                capturedPath = ""
+                capturedAuthorization = null
+                capturedContentType = null
+                capturedBody = ""
+            }
+        }
 
         val baseUrl = "http://127.0.0.1:${server.address.port}/calendar/v3"
         val client = GoogleCalendarClient(requestTimeout = Duration.ofSeconds(5L), baseUrl = baseUrl)

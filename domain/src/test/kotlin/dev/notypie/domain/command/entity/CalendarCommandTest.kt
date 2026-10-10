@@ -88,6 +88,25 @@ class CalendarCommandTest :
                 }
             }
 
+            `when`("the unknown action is Slack markup") {
+                val (result, intents) = run("<!channel>")
+
+                then("the echoed action is escaped") {
+                    result.ok shouldBe false
+                    intents.usageEphemeral() shouldBe "Unknown action '&lt;!channel&gt;'. Usage: $CALENDAR_USAGE"
+                }
+            }
+
+            `when`("the unknown action carries markup and a backtick and runs long") {
+                val (result, intents) = run("<!channel>&`" + "x".repeat(n = 60))
+
+                then("the echoed action is clipped to 40 characters, its backtick turned into a quote, then escaped") {
+                    result.ok shouldBe false
+                    intents.usageEphemeral() shouldBe
+                        "Unknown action '&lt;!channel&gt;&amp;'${"x".repeat(n = 28)}…'. Usage: $CALENDAR_USAGE"
+                }
+            }
+
             `when`("an extra argument follows the action") {
                 val (result, intents) = run("connect", "now")
 

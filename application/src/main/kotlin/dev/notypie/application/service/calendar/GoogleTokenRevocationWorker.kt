@@ -1,5 +1,6 @@
 package dev.notypie.application.service.calendar
 
+import dev.notypie.application.service.standup.containFailure
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.GoogleOAuthClient
@@ -50,7 +51,18 @@ class GoogleTokenRevocationWorker(
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     fun onRevocationRequested(event: GoogleTokenRevocationRequested) {
         try {
-            executor.execute { revoke(event = event) }
+            executor.execute {
+                containFailure(
+                    onFailure = { exception ->
+                        log.error(exception) {
+                            "Google token revoke failed: userId=${event.userId} reason=${event.reason}"
+                        }
+                        notifyManualRemoval(userId = event.userId)
+                    },
+                ) {
+                    revoke(event = event)
+                }
+            }
         } catch (rejected: RejectedExecutionException) {
             log.warn(rejected) { "Google token revoke queue is full: userId=${event.userId} reason=${event.reason}" }
             notifyManualRemoval(userId = event.userId)

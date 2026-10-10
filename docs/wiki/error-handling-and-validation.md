@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-08_
+_type: pattern · updated: 2026-10-11_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -62,8 +62,8 @@ _type: pattern · updated: 2026-10-08_
    발행하므로 에러 ephemeral은 항상 Slack에 도달한다. `RequestMeetingContext`는 `formInput.toMeeting()`을
    `catch (exception: CodeCompanionRuntimeException)`으로 감싸 `details`를 이 경로로 보낸다.
 2. **컨텍스트 안의 예외 → `ERROR_RESPONSE` + WARN (슬래시면 ephemeral도).** `Command.handleEvent()`는
-   `runCatching { executeCommand() }`로 모든 예외를 `CommandOutput.fail(commandDetailType = ERROR_RESPONSE, reason =
-   exception.toString())`로 바꾸고, `CommandExecutor`가 이 출력을 명령 클래스·`commandId`·`idempotencyKey`·`kind`·`actorId`·
+   `catch (exception: Exception)`으로 예외를 `CommandOutput.fail(commandDetailType = ERROR_RESPONSE, reason =
+   exception.toString())`로 바꾸고(`InterruptedException`은 플래그 복원 후 재throw, `Error`는 전파), `CommandExecutor`가 이 출력을 명령 클래스·`commandId`·`idempotencyKey`·`kind`·`actorId`·
    사유와 함께 WARN으로 남긴다(토큰은 남기지 않음). 2026-10-08부터 슬래시 명령이면 `handleEvent()`가 요청자 ephemeral을
    intent 큐에 넣는다: `SubCommandParseException`은 "Unknown subcommand `토큰`." + 명령의 usage 줄(또는 그 서브커맨드의
    usage), 그 밖은 "Something went wrong handling `/명령`. Please try again.". 인터랙션(`SlackInteractionHandlerImpl`은
@@ -123,7 +123,9 @@ _type: pattern · updated: 2026-10-08_
 - `DatabaseException` → `ControllerAdvice.handleDatabaseException` 본문이 비어 **빈 200**. `JpaErrorCode`의 404는 도달하지 않는다.
 - `CodeCompanionRuntimeException`이 `errorCode`를 보존하지 않아 상태 코드를 일반 매핑하는 핸들러를 만들 수 없다. 네 enum의
   `statusCode`는 어떤 응답 경로도 읽지 않는다. 고치려면 domain에 프로퍼티를 추가하는 변경이 먼저다.
-- `Command.handleEvent`의 `runCatching` 경로는 `errorReason`에만 남고 로그·ephemeral 어디에도 나타나지 않는다.
+- `Command.handleEvent`가 잡은 예외의 `errorReason`은 `CommandExecutor` WARN과, HTTP 멘션이면 `SlackEventController`의 WARN에만
+  남는다(2026-10-11부터 둘 다 제어문자를 `?`로 치환). 슬래시 요청자 ephemeral은 고정 문구(또는 escape된 토큰 + usage)이지
+  예외 문구가 아니다. `Error`는 잡지 않는다.
 - `DetailErrorAlertContext`(`MessageContent.ErrorNotice`를 채널에 게시)는 스펙은 있지만 **생성하는 프로덕션 코드가 없다.**
 - Socket Mode 실패는 로그로만 남는다. 로컬 프로파일 전용이라 감수하고 있는 상태다.
 - `ErrorBroadcaster`는 주입처가 없다(구현은 `StdoutErrorBroadcaster`뿐). `ErrorResponse`는 참조가 없다.

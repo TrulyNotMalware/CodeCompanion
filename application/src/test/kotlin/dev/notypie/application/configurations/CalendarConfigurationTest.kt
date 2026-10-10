@@ -13,6 +13,7 @@ import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.createCalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.GoogleOAuthClient
@@ -29,7 +30,6 @@ import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.context.ApplicationContext
 import org.springframework.transaction.PlatformTransactionManager
@@ -77,16 +77,11 @@ class CalendarConfigurationTest :
 
         fun statusRequestReplies(context: ApplicationContext): Int {
             clearMocks(stager, connections)
-            every { stager.stage(message = any(), basicInfo = any()) } returns mockk(relaxed = true)
+            val staged = mutableListOf<OutboundMessage>()
+            every { stager.stage(message = capture(staged), basicInfo = any()) } returns mockk(relaxed = true)
             every { connections.find(userId = any()) } returns null
             context.publishEvent(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.STATUS))
-            var replies = 0
-            verify { stager.stage(message = any(), basicInfo = any()) }
-            listOf(1, 2, 3).forEach { n ->
-                runCatching { verify(exactly = n) { stager.stage(message = any(), basicInfo = any()) } }
-                    .onSuccess { replies = n }
-            }
-            return replies
+            return staged.size
         }
 
         given("every spelling of the enabled flag") {

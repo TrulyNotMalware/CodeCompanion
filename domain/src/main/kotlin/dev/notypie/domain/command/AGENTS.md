@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-11 -->
 
 # domain/command
 
@@ -47,9 +47,10 @@ queue and hands the effects to the infrastructure resolver/stager.
   `addIntent(CommandIntent...)`; the queue is drained once by `CommandExecutor` in the application layer.
 - `CommandContext` and `Command.parseContext` / `findSubCommandDefinition` are `internal` on purpose.
   Keep new context plumbing `internal` unless the application layer genuinely needs it.
-- `Command.handleEvent()` wraps execution in `runCatching` and converts any throw into
+- `Command.handleEvent()` catches `Exception` (a `try`, not `runCatching`) and converts it into
   `CommandOutput.fail(..., ERROR_RESPONSE, ...)`, and for a slash payload adds a requester ephemeral (usage for a
-  bad subcommand, a generic line otherwise; `entity/AGENTS.md`). Error effects are still drained and delivered — do
+  bad subcommand, a generic line otherwise; `entity/AGENTS.md`). An `InterruptedException` is rethrown after the
+  interrupt flag is restored, and an `Error` propagates. Error effects are still drained and delivered — do
   not early-return on failure paths in a way that skips `addOutbound`.
 - `drainIntents()` returns a defensive copy and clears the queue, so it is safe under retry. Intents are
   deliberately **not** re-queued after a publish failure — retries belong upstream (outbox relay, Kafka,

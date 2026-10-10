@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-08_
+_type: decision · updated: 2026-10-11_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -80,12 +80,17 @@ _type: decision · updated: 2026-10-08_
     응답은 슬랙으로 돌아오지 않는다) 이메일 매핑·추가 Slack scope가 없으며, 연결하지 않은 사용자는 아무것도 받지 않는다. 기각:
     초대 메시지에 캘린더 추가 링크 삽입(요구는 "자동으로 연동되는 것"), 공용 팀 캘린더, Workspace 도메인 전체 위임. 뒤의 둘을
     기각한 사유는 기록되지 않았다(미확인) — 차이만 적으면 공용 캘린더는 참석 여부와 무관하게 모두가 일정 하나를 공유하고, 위임은
-    Workspace 관리자 설정과 한 도메인의 계정을 전제한다. 상태: 유지(`feature/gap-closure` `3c0529bf`·`6ae0a047`, `main` 미머지).
+    Workspace 관리자 설정과 한 도메인의 계정을 전제한다. 상태: 유지(`3c0529bf`·`6ae0a047`; `main`은 squash 머지라 원본 커밋은 `archive/gap-closure` 태그에서 도달).
     근거: `service/calendar/AGENTS.md`, `V24__add_google_calendar_tables.sql` 헤더.
     - **명령 표면 (2026-10-08 변경):** 자체 슬래시 명령 `/calendar connect | disconnect | status`(`POST /api/slash/calendar`,
       Socket Mode는 `slack.app.socket.calendar-command`)이고 `/meetup calendar …`는 없앴다(이제 모르는 서브커맨드). 이유(사용자):
       캘린더 연결은 미팅 전용이 아니며 나중에 스탠드업 등 다른 것도 캘린더에 둘 수 있다. 처음(10-07)의 "`/meetup` 서브커맨드라 새
       슬래시 명령·manifest 항목이 없다"는 결정은 이것으로 대체됐다 — 운영·개발 Slack 앱에 `/calendar` 명령을 추가해야 한다.
+    - **같은 Google 계정을 연결한 두 Slack 사용자 (2026-10-11 수용):** 봇의 revoke 판단(워커의 재조회, `SCOPE_DENIED` 검사)은
+      요청한 Slack 사용자의 연결만 본다. Google의 revoke는 그 계정·클라이언트의 grant 전체를 취소하므로, 한 사람의 disconnect·
+      다른 계정으로의 교체·`SCOPE_DENIED` revoke가 상대의 grant도 취소하고, 상대는 다음 동기화의 토큰 갱신에서 `invalid_grant` →
+      `REVOKED` DM을 받아 재연결한다(Google 쪽 동작은 문서 기준이고 실측은 (미확인)). 이유(사용자 판단): 한 도메인 계정 전제라
+      수용. 지적: Codex 교차 리뷰(2026-10-10). 근거: `service/calendar/AGENTS.md`.
 37. **미러는 아웃박스 `Transport`가 아니라 전용 더티 마커 테이블 + CAS 스케줄러로 at-least-once.** `meeting_calendar_event`(V25)는
     (미팅, 사용자)당 한 행이고 "원하는 동작"이 아니라 "다시 보라"는 표시다. 훅이 미팅 쓰기 트랜잭션 안에서 행을 upsert/touch해
     `change_seq`를 올리면, 60초 워커가 claim(CAS) 뒤 미팅을 다시 읽어 이벤트가 있어야 하는지 계산하고 Google을 호출한다. 완료
@@ -322,7 +327,7 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `application/src/main/kotlin/dev/notypie/application/health/OutboxMetrics.kt`,
   `configurations/{KafkaConsumerConfiguration,CveConfiguration,SlackRequestBuilderConfiguration}.kt`,
   `service/agent/AgentConverseService.kt`
-- Google Calendar(#36·#37): `git show --stat 3c0529bf 6ae0a047`, `application/src/main/kotlin/dev/notypie/application/service/calendar/AGENTS.md`,
+- Google Calendar(#36·#37): `git show --stat 3c0529bf 6ae0a047`(`archive/gap-closure` 태그 기준), `application/src/main/kotlin/dev/notypie/application/service/calendar/AGENTS.md`,
   `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/AGENTS.md`, `db/migration/V24__…`·`V25__…`, git-ignored
   `.omc/plans/google-calendar-user-oauth.md`(설계와 리뷰 반영 결정 전부)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,

@@ -29,9 +29,9 @@ class TokenCipherTest :
             }
 
             `when`("the ciphertext is tampered with") {
-                val encrypted = cipher.encrypt(plaintext = plaintext)
-                val segments = encrypted.split(".")
-                val tampered = segments[0] + "." + segments[1] + "." + segments[2].dropLast(2) + "AA"
+                val (version, iv, ciphertext) = cipher.encrypt(plaintext = plaintext).split(".")
+                val flipped = Base64.getUrlDecoder().decode(ciphertext).also { it[0] = (it[0].toInt() xor 1).toByte() }
+                val tampered = "$version.$iv.${Base64.getUrlEncoder().withoutPadding().encodeToString(flipped)}"
 
                 then("decrypt rejects it instead of returning garbage") {
                     shouldThrow<IllegalArgumentException> { cipher.decrypt(token = tampered) }

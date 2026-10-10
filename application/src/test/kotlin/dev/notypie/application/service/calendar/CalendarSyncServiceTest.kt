@@ -32,6 +32,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldMatch
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.Runs
 import io.mockk.every
@@ -1770,32 +1771,40 @@ class CalendarSyncServiceTest :
         }
 
         given("a row whose meeting view throws on every pass") {
-            `when`("it reaches the attempt limit") {
+            `when`("it reaches the attempt limit with a database error that names SQL and a table") {
                 val h = Harness(transactionManager = createH2TransactionManager())
                 h.due(row(attempts = 7) to view())
-                every { h.queue.loadSyncView(meetingId = 7L) } throws IllegalStateException("poisoned row")
+                val sqlError = "could not execute statement [update meeting_calendar_event set status=? where id=?]"
+                every { h.queue.loadSyncView(meetingId = 7L) } throws RuntimeException(sqlError)
 
                 val errors = h.sync()
 
-                then("it is failed for good instead of looping, and the user is told about a meeting") {
+                then("it is failed for good instead of looping, with the raw error kept as last_error and in the log") {
                     verify(exactly = 1) {
                         h.queue.markFailed(
                             id = 1L,
                             token = h.token(),
                             observedSeq = 3L,
                             attempts = 8,
-                            lastError = "poisoned row",
+                            lastError = sqlError,
                             now = start,
                         )
                     }
                     h.verifyNoRetry()
+                    errors.size shouldBe 1
+                    errors.single().throwableProxy.message shouldBe sqlError
+                }
+
+                then("the user is told about a meeting with a generic reason, never the SQL or the table") {
                     h.directMessages() shouldBe
                         listOf(
                             host to
-                                "CodeCompanion couldn't sync a meeting to your Google Calendar (poisoned row). " +
+                                "CodeCompanion couldn't sync a meeting to your Google Calendar (an internal error). " +
                                 "It will not retry; reconnect with `/calendar connect` if this keeps happening.",
                         )
-                    errors.size shouldBe 1
+                    val text = h.directMessages().single().second
+                    text shouldNotContain "meeting_calendar_event"
+                    text shouldNotContain "could not execute statement"
                 }
             }
 

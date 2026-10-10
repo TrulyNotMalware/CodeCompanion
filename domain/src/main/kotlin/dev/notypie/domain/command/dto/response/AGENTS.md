@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-11 -->
 
 # domain/command/dto/response
 
@@ -28,7 +28,7 @@ type, error reason). It is deliberately not the list of effects — those come f
 - `token` and `messageTs` are placeholders (the source carries a `FIXME`); `token` is only populated by
   `RequestMeetingContextResult` and `ApprovalCallbackContext`. Do not add logic that depends on them.
 - `IN_PROGRESSED` is produced by no context; it only participates in `ApprovalCallbackContext`'s
-  status aggregation. `Command.handleEvent()`'s catch-all uses `fail(..., ERROR_RESPONSE, ...)`.
+  status aggregation. `Command.handleEvent()`'s `Exception` catch uses `fail(..., ERROR_RESPONSE, ...)`.
 
 ### Testing Requirements
 ```bash

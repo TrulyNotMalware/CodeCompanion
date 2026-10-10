@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-11 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/command
 
@@ -15,7 +15,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
 |------|-------------|
 | `CommandDomainInputCreator.kt` | `createCommandBasicInfo(appId, appToken, publisherId, channel, idempotencyKey)`; events `createCreateStandupRoutineEvent(name, creatorId, commandChannel, summaryChannel, questions, memberIds, weekdays, triggerLocalTime, cutoffMinutes: Long? = 120, timezone, responseBasicInfo)` (`responseBasicInfo.channel` is `""`, as a view_submission's is), `createRecordStandupAnswerEvent(sessionUid, userId, responses, notice = null, idempotencyKey)`, `createAgentConverseRequestEvent(prompt, threadId, requesterName, channelName)`, `createAgentUsageReportRequestEvent(days = 7)` (typed `AGENT_USAGE_REPORT`), `createRoleManageRequestEvent(action = GRANT, targetUserId, role = DEVELOPER)`, `createCveSubscriptionRequestEvent(action = SUBSCRIBE, userId, topicKeys = ["cve-java"], type)`, `createCveOpsRequestEvent(action = LIST_TOPICS, topicKey, targetEventId)`, `createStandupOpsRequestEvent(action = LIST, routineName = null, responseBasicInfo)` (`type` follows the action: `STANDUP_ROUTINE_LIST` / `STANDUP_ROUTINE_STOP`), `createCveLatestRequestEvent(userId, topicKey)`; `createApprovalContents(idempotencyKey, commandDetailType, reason, publisherId, headLineText)`; `createCalendarConnectionRequestEvent(idempotencyKey, action = CONNECT, userId = TEST_USER_ID, responseBasicInfo)` |
 | `InboundCommandCreator.kt` | `createMentionInboundCommand(mentionedUserIds, commandTokens = ["help"], hasCommandStructure, appId, appToken, actorId, actorName, channel, channelName, teamId, message, thread)`, `createSlashInboundCommand(subCommands, triggerId, ...)`, `createInteractionInboundCommand(commandDetailType = APPROVAL_REQUEST, action = approveAction(), form, idempotencyKey, ...)`, `createInteractionResponseInboundCommand(interaction, ...)` |
-| `InboundInteractionInputCreator.kt` | `createInboundInteraction(detailType = NOTHING, action = passiveAction(), form, actor, channelId, trigger, reply, message, idempotencyKey, routingExtras, submission)`; actions `approveAction`, `rejectAction`, `passiveAction`; fields `inboundField(kind, rawValue, isSelected, key)`, `applyButtonField()`, `rejectButtonField()`, `plainTextField(text)`, `datePickerField(date, format)`, `timePickerField(time, format)`, `multiUsersField(userName, maximumSequence)`; `SEPARATOR` |
+| `InboundInteractionInputCreator.kt` | `createInboundInteraction(detailType = NOTHING, action = passiveAction(), form, actor, channelId, trigger, reply, message, idempotencyKey, routingExtras, submission)`; submissions `createAddParticipantSubmission(meetingUidRaw = random, requesterId = "U_HOST", participantUserIdsRaw = "U_A", listHandleRaw = "")` and `createRescheduleMeetingSubmission(meetingUidRaw = random, requesterId = "U_HOST", date = "2099-10-01", time = "14:30", listHandleRaw = "")` (both parse; the requester differs from the `TEST_USER_ID` actor so the blank-requester fallback stays visible); actions `approveAction`, `rejectAction`, `passiveAction`; fields `inboundField(kind, rawValue, isSelected, key)`, `applyButtonField()`, `rejectButtonField()`, `plainTextField(text)`, `datePickerField(date, format)`, `timePickerField(time, format)`, `multiUsersField(userName, maximumSequence)`; `SEPARATOR` |
 | `MockEventBuilderCreator.kt` | `createIntentQueue(): IntentQueue` — a fresh `DefaultIntentQueue` (file name is historical; nothing here is mocked) |
 | `TestCommandEventCreator.kt` | `TestPayload`, `TestCommandEvent(name, isInternal = true, ...)`, `INTERNAL_EVENT_NAME` / `EXTERNAL_EVENT_NAME`, `createInternalTestEvent()`, `createExternalTestEvent()`, `createDomainEventQueue()`, `EventQueue.flushQueue()` |
 | `TestCommandFactory.kt` | `TestCommand(idempotencyKey, commandData, intentToProduce = null, rawEffectToProduce = null, failure = null)` — `Command<NoSubCommands>` whose `TestContext` throws `failure` when given (the `ERROR_RESPONSE` path), else emits the optional intent / raw effect and returns `CommandOutput.success` |
@@ -39,6 +39,9 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
   (`RequestMeetingCommandTest`, `IdempotencyCreatorTest`), `createInteractionResponseInboundCommand`
   (`CommandTest`, `InteractionCommandTest`, `InteractionContextParserTest`), and the convenience
   `createInteractionInboundCommand` that composes the previous two (`IdempotencyCreatorTest`).
+- **Submissions**: `createAddParticipantSubmission` / `createRescheduleMeetingSubmission` back
+  `SubmissionPipelineCharacterizationTest`, `ParsedSubmissionsTest` and `SubmissionRouterTest`, so a new field on
+  either variant touches one constructor call.
 - **Events** feed application service specs one-to-one: `createAgentConverseRequestEvent` →
   `AgentConverseServiceTest`, `createAgentUsageReportRequestEvent` → `AgentUsageReportServiceTest`, `createCreateStandupRoutineEvent` → `StandupRoutineSetupServiceTest`,
   `createRoleManageRequestEvent` → `RoleManagementServiceTest`, `createCveSubscriptionRequestEvent` →
@@ -65,7 +68,7 @@ added to `domain/src/main`, add the matching `create*` / `*Field` helper here in
 
 ### Common Patterns
 - Expression-bodied `create*` with every parameter defaulted to a `TEST_*` constant or a fixed literal;
-  `UUID.randomUUID()` only for idempotency keys.
+  `UUID.randomUUID()` only for idempotency keys and the submission factories' `meetingUidRaw`.
 - Builder composition: `createInteractionInboundCommand` =
   `createInteractionResponseInboundCommand(createInboundInteraction(...))`; every `create*Event` embeds
   `createCommandBasicInfo(idempotencyKey = key)` in its payload.

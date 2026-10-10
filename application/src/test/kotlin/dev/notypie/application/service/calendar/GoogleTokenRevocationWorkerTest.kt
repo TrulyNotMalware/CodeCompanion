@@ -6,10 +6,11 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.GoogleOAuthClient
-import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
-import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
+import dev.notypie.schema.createCalendarConnection
+import dev.notypie.schema.createTestTokenCipher
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -17,14 +18,13 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import java.time.Instant
-import java.util.Base64
+import org.springframework.dao.DataAccessResourceFailureException
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
 
 class GoogleTokenRevocationWorkerTest :
     BehaviorSpec({
-        val cipher = TokenCipher(keyBase64 = Base64.getEncoder().encodeToString(ByteArray(32) { 3 }))
+        val cipher = createTestTokenCipher()
         val encrypted = cipher.encrypt(plaintext = "1//refresh")
 
         class Harness(
@@ -62,18 +62,6 @@ class GoogleTokenRevocationWorkerTest :
                 googleSubject = "sub-1",
                 encryptedRefreshToken = encrypted,
                 reason = "disconnect",
-            )
-
-        fun activeConnection(subject: String?) =
-            CalendarConnection(
-                slackUserId = "U_CAL",
-                googleSubject = subject,
-                googleEmail = "dev@example.com",
-                encryptedRefreshToken = cipher.encrypt(plaintext = "1//newer"),
-                status = CalendarConnectionStatus.ACTIVE,
-                connectedAt = Instant.parse("2026-10-07T01:00:00Z"),
-                revokedAt = null,
-                lastError = null,
             )
 
         given("a revocation request after the slash transaction committed") {
@@ -118,11 +106,25 @@ class GoogleTokenRevocationWorkerTest :
                     h.hintDm().target.id shouldBe "U_CAL"
                 }
             }
+
+            `when`("the task fails before the revoke because the connection cannot be read (database outage)") {
+                val h =
+                    Harness().apply {
+                        every { connections.find(userId = "U_CAL") } throws
+                            DataAccessResourceFailureException("database down")
+                    }
+
+                then("nothing escapes the executor task, no revoke is attempted and the manual-removal hint is sent") {
+                    shouldNotThrowAny { h.worker.onRevocationRequested(event) }
+                    verify(exactly = 0) { h.oauth.revoke(token = any()) }
+                    h.hintDm().target.id shouldBe "U_CAL"
+                }
+            }
         }
 
         given("a revocation that was queued behind a reconnect") {
             `when`("the user is connected again with the same Google account") {
-                val h = Harness(current = activeConnection(subject = "sub-1"))
+                val h = Harness(current = createCalendarConnection(slackUserId = "U_CAL", googleSubject = "sub-1"))
                 h.worker.onRevocationRequested(event)
 
                 then("the revoke is skipped, because it would revoke the grant now in use") {
@@ -132,7 +134,7 @@ class GoogleTokenRevocationWorkerTest :
             }
 
             `when`("the user is connected again but the account is unknown on either side") {
-                val h = Harness(current = activeConnection(subject = null))
+                val h = Harness(current = createCalendarConnection(slackUserId = "U_CAL", googleSubject = null))
                 h.worker.onRevocationRequested(event)
 
                 then("the revoke is skipped as well") {
@@ -142,7 +144,9 @@ class GoogleTokenRevocationWorkerTest :
 
             `when`("the user is connected again with another Google account") {
                 val h =
-                    Harness(current = activeConnection(subject = "sub-other")).apply {
+                    Harness(
+                        current = createCalendarConnection(slackUserId = "U_CAL", googleSubject = "sub-other"),
+                    ).apply {
                         every {
                             oauth.revoke(token = "1//refresh")
                         } returns true

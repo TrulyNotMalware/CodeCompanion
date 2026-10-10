@@ -30,6 +30,8 @@ import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.schema.createCalendarConnection
+import dev.notypie.schema.createTestTokenCipher
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -59,13 +61,12 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.util.Base64
 
 class CalendarConnectionServiceTest :
     BehaviorSpec({
         val now = Instant.parse("2026-10-07T01:00:00Z")
         val clock = Clock.fixed(now, ZoneOffset.UTC)
-        val cipher = TokenCipher(keyBase64 = Base64.getEncoder().encodeToString(ByteArray(32) { 7 }))
+        val cipher = createTestTokenCipher()
         val appConfig =
             AppConfig(
                 calendar =
@@ -82,21 +83,6 @@ class CalendarConnectionServiceTest :
                     ),
             )
         val calendarScopes = setOf(GoogleOAuthClient.CALENDAR_EVENTS_SCOPE, "openid", "email")
-
-        fun activeConnection(
-            subject: String? = "sub-1",
-            email: String? = "dev@example.com",
-            status: CalendarConnectionStatus = CalendarConnectionStatus.ACTIVE,
-        ) = CalendarConnection(
-            slackUserId = TEST_USER_ID,
-            googleSubject = subject,
-            googleEmail = email,
-            encryptedRefreshToken = cipher.encrypt(plaintext = "1//refresh"),
-            status = status,
-            connectedAt = now.minus(Duration.ofDays(1)),
-            revokedAt = if (status == CalendarConnectionStatus.REVOKED) now.minus(Duration.ofHours(1)) else null,
-            lastError = null,
-        )
 
         fun grant(
             refreshToken: String = "1//fresh",
@@ -228,7 +214,7 @@ class CalendarConnectionServiceTest :
             }
 
             `when`("the requester is already connected") {
-                val h = connectHarness(existing = activeConnection())
+                val h = connectHarness(existing = createCalendarConnection(googleEmail = "dev@example.com"))
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.CONNECT))
 
                 then("the reply warns that reconnecting replaces the existing account") {
@@ -241,11 +227,22 @@ class CalendarConnectionServiceTest :
         }
 
         given("`/calendar disconnect`") {
-            `when`("the requester has no connection") {
-                val h = harness().apply { every { connections.find(userId = TEST_USER_ID) } returns null }
+            `when`("the requester has no connection but holds a consent link from an earlier connect") {
+                val h =
+                    harness().apply {
+                        every { connections.find(userId = TEST_USER_ID) } returns null
+                        every { states.deleteForUser(userId = TEST_USER_ID) } returns 1
+                    }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.DISCONNECT))
 
-                then("nothing is deleted or revoked and the reply points at connect") {
+                then(
+                    "the user's consent links are deleted anyway, so a link issued before the disconnect cannot " +
+                        "connect afterwards",
+                ) {
+                    verify(exactly = 1) { h.states.deleteForUser(userId = TEST_USER_ID) }
+                }
+
+                then("no connection is deleted, nothing is revoked and the reply points at connect") {
                     with(h) {
                         ephemeral().markdown() shouldBe
                             "Google Calendar is not connected. ${CalendarConnectionService.CONNECT_USAGE}"
@@ -257,7 +254,7 @@ class CalendarConnectionServiceTest :
             }
 
             `when`("the requester is connected") {
-                val connection = activeConnection()
+                val connection = createCalendarConnection(googleSubject = "sub-1")
                 val h =
                     harness().apply {
                         every { connections.find(userId = TEST_USER_ID) } returns connection
@@ -320,7 +317,11 @@ class CalendarConnectionServiceTest :
             }
 
             `when`("the connection is active") {
-                val h = harness().apply { every { connections.find(userId = TEST_USER_ID) } returns activeConnection() }
+                val h =
+                    harness().apply {
+                        every { connections.find(userId = TEST_USER_ID) } returns
+                            createCalendarConnection(googleEmail = "dev@example.com")
+                    }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.STATUS))
 
                 then("the reply names the account and renders the time with Slack's viewer-local date token") {
@@ -336,7 +337,10 @@ class CalendarConnectionServiceTest :
                 val h =
                     harness().apply {
                         every { connections.find(userId = TEST_USER_ID) } returns
-                            activeConnection(status = CalendarConnectionStatus.REVOKED)
+                            createCalendarConnection(
+                                status = CalendarConnectionStatus.REVOKED,
+                                revokedAt = now.minus(Duration.ofHours(1)),
+                            )
                     }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.STATUS))
 
@@ -380,17 +384,7 @@ class CalendarConnectionServiceTest :
                         )
                     } answers {
                         ConnectionSaved(
-                            connection =
-                                CalendarConnection(
-                                    slackUserId = TEST_USER_ID,
-                                    googleSubject = "sub-1",
-                                    googleEmail = "dev@example.com",
-                                    encryptedRefreshToken = storedToken.slot.captured,
-                                    status = CalendarConnectionStatus.ACTIVE,
-                                    connectedAt = now,
-                                    revokedAt = null,
-                                    lastError = null,
-                                ),
+                            connection = createCalendarConnection(googleEmail = "dev@example.com"),
                             replaced = replaced,
                         )
                     }
@@ -490,7 +484,7 @@ class CalendarConnectionServiceTest :
                 val h =
                     harness().withConsumedState().apply {
                         every { oauth.exchangeCode(code = "partial") } returns grant(scopes = setOf("openid", "email"))
-                        every { connections.find(userId = TEST_USER_ID) } returns activeConnection()
+                        every { connections.find(userId = TEST_USER_ID) } returns createCalendarConnection()
                     }
                 val outcome = h.service.completeConnection(code = "partial", state = "ok", error = null)
 
@@ -529,8 +523,10 @@ class CalendarConnectionServiceTest :
                 val h =
                     harness()
                         .withConsumedState()
-                        .savingConnection(storedToken = storedToken, replaced = activeConnection(subject = "sub-1"))
-                        .apply { every { oauth.exchangeCode(code = "good") } returns grant(subject = "sub-1") }
+                        .savingConnection(
+                            storedToken = storedToken,
+                            replaced = createCalendarConnection(googleSubject = "sub-1"),
+                        ).apply { every { oauth.exchangeCode(code = "good") } returns grant(subject = "sub-1") }
                 h.service.completeConnection(code = "good", state = "ok", error = null)
 
                 then("the replaced token is left alone: revoking it would revoke the whole grant, new token included") {
@@ -540,7 +536,7 @@ class CalendarConnectionServiceTest :
 
             `when`("the exchange succeeds for a user switching to another Google account") {
                 val storedToken = CapturingSlotHolder()
-                val replaced = activeConnection(subject = "sub-old", email = "old@example.com")
+                val replaced = createCalendarConnection(googleSubject = "sub-old", googleEmail = "old@example.com")
                 val h =
                     harness()
                         .withConsumedState()
@@ -571,20 +567,7 @@ class CalendarConnectionServiceTest :
                                 now = now,
                             )
                         } throws DataIntegrityViolationException("uk_google_calendar_connection_user") andThenAnswer {
-                            ConnectionSaved(
-                                connection =
-                                    CalendarConnection(
-                                        slackUserId = TEST_USER_ID,
-                                        googleSubject = "sub-1",
-                                        googleEmail = "dev@example.com",
-                                        encryptedRefreshToken = storedToken.slot.captured,
-                                        status = CalendarConnectionStatus.ACTIVE,
-                                        connectedAt = now,
-                                        revokedAt = null,
-                                        lastError = null,
-                                    ),
-                                replaced = null,
-                            )
+                            ConnectionSaved(connection = createCalendarConnection(), replaced = null)
                         }
                     }
                 val outcome = h.service.completeConnection(code = "good", state = "ok", error = null)
@@ -656,7 +639,7 @@ class CalendarConnectionServiceTest :
                         now = now,
                     )
                 } throws createSnapshotIsolationConflict() andThenAnswer {
-                    ConnectionSaved(connection = activeConnection(), replaced = null)
+                    ConnectionSaved(connection = createCalendarConnection(), replaced = null)
                 }
                 val outcome = h.service.completeConnection(code = "good", state = "ok", error = null)
 
@@ -906,7 +889,7 @@ class CalendarConnectionServiceTest :
                     )
                 } answers {
                     recordTransaction()
-                    ConnectionSaved(connection = activeConnection(), replaced = null)
+                    ConnectionSaved(connection = createCalendarConnection(), replaced = null)
                 }
                 h.service.completeConnection(code = "good", state = "ok", error = null)
 
@@ -923,7 +906,7 @@ class CalendarConnectionServiceTest :
 
             `when`("the accounts are only known by e-mail and they differ") {
                 val storedToken = CapturingSlotHolder()
-                val replaced = activeConnection(subject = null, email = "Old@example.com")
+                val replaced = createCalendarConnection(googleSubject = null, googleEmail = "Old@example.com")
                 val h =
                     harness()
                         .withConsumedState()
@@ -946,7 +929,7 @@ class CalendarConnectionServiceTest :
                         .withConsumedState()
                         .savingConnection(
                             storedToken = storedToken,
-                            replaced = activeConnection(subject = null, email = null),
+                            replaced = createCalendarConnection(googleSubject = null, googleEmail = null),
                         ).apply { every { oauth.exchangeCode(code = "good") } returns grant() }
                 h.service.completeConnection(code = "good", state = "ok", error = null)
 

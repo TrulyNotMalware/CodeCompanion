@@ -1,5 +1,6 @@
 package dev.notypie.application.controllers
 
+import dev.notypie.application.exception.stripControlCharacters
 import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.mention.AppMentionEventHandler
 import dev.notypie.domain.command.dto.response.Status
@@ -47,7 +48,7 @@ class SlackEventController(
         when {
             output.ok -> Unit
             output.status == Status.DO_NOTHING -> logger.debug { "app_mention ignored: nothing to do" }
-            else -> logger.warn { "app_mention command failed: ${output.errorReason}" }
+            else -> logger.warn { "app_mention command failed: ${output.errorReason.stripControlCharacters()}" }
         }
         return ResponseEntity.ok().build()
     }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
 
 # domain/command/parsers (test)
 
@@ -49,7 +49,8 @@ Both specs are Kotest `BehaviorSpec`s.
   their `*_USAGE` constants; `entity.context.*` / `entity.context.form.*` (routing targets);
   `command.authorization.UserRole`; `command.intent.{CommandIntent, IntentQueue}`;
   `command.inbound.{MentionInvocation, MessageHandle}`; `command.outbound.{OutboundMessage, MessageContent}`.
-- `testFixtures` — `command/InboundCommandCreator.kt`, `command/InboundInteractionInputCreator.kt`,
+- `testFixtures` — `command/InboundCommandCreator.kt`, `command/InboundInteractionInputCreator.kt` (including
+  `createAddParticipantSubmission` / `createRescheduleMeetingSubmission` in `SubmissionRouterTest`),
   `command/MockEventBuilderCreator.kt`, `Constants.kt`.
 
 ### External

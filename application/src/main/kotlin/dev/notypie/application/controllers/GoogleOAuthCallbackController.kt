@@ -3,14 +3,18 @@ package dev.notypie.application.controllers
 import dev.notypie.application.configurations.conditions.OnGoogleCalendarEnabled
 import dev.notypie.application.service.calendar.CalendarConnectionCallback
 import dev.notypie.application.service.calendar.CalendarConnectionOutcome
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.annotation.Conditional
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+
+private val logger = KotlinLogging.logger {}
 
 @RestController
 @Conditional(OnGoogleCalendarEnabled::class)
@@ -78,11 +82,22 @@ class GoogleOAuthCallbackController(
                                 "run /calendar connect in Slack for a new one.",
                     )
             }
-        return ResponseEntity
-            .status(page.status)
-            .header(HttpHeaders.CACHE_CONTROL, "no-store")
-            .contentType(MediaType.TEXT_HTML)
-            .body(page.render())
+        return page.toResponse()
+    }
+
+    @ExceptionHandler(value = [Exception::class])
+    fun handleUnexpected(exception: Exception): ResponseEntity<String> {
+        logger.error(exception) { "Google Calendar OAuth callback failed unexpectedly" }
+        if (exception is InterruptedException) Thread.currentThread().interrupt()
+        val page =
+            CallbackPage(
+                status = HttpStatus.INTERNAL_SERVER_ERROR,
+                title = "The connection could not be completed",
+                detail =
+                    "Something went wrong on our side, and this link may no longer work. " +
+                        "Run /calendar connect in Slack for a new one.",
+            )
+        return page.toResponse()
     }
 
     private data class CallbackPage(
@@ -90,6 +105,13 @@ class GoogleOAuthCallbackController(
         val title: String,
         val detail: String,
     )
+
+    private fun CallbackPage.toResponse(): ResponseEntity<String> =
+        ResponseEntity
+            .status(status)
+            .header(HttpHeaders.CACHE_CONTROL, "no-store")
+            .contentType(MediaType.TEXT_HTML)
+            .body(render())
 
     private fun CallbackPage.render(): String =
         """

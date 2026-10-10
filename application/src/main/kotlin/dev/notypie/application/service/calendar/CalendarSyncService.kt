@@ -59,6 +59,7 @@ class CalendarSyncService(
             "enable the Google Calendar API in the OAuth client's Google Cloud project"
         private const val MAX_BACKOFF_EXPONENT = 6
         private const val MAX_REASON_LENGTH = 200
+        private const val INTERNAL_ERROR_REASON = "an internal error"
         private val MAX_BACKOFF: Duration = Duration.ofMinutes(60L)
         private val MISCONFIGURED_RETRY_DELAY: Duration = Duration.ofMinutes(1L)
         private val RATE_LIMIT_MIN_DELAY: Duration = Duration.ofMinutes(2L)
@@ -120,6 +121,7 @@ class CalendarSyncService(
                 claim = claim,
                 reason = exception.message ?: exception.javaClass.simpleName,
                 title = null,
+                userReason = INTERNAL_ERROR_REASON,
             )
         }
     }
@@ -333,11 +335,23 @@ class CalendarSyncService(
         }
     }
 
-    private fun backoff(claim: Claim, reason: String, title: String?) {
+    private fun backoff(
+        claim: Claim,
+        reason: String,
+        title: String?,
+        userReason: String = reason,
+    ) {
         val attempts = claim.row.attempts + 1
         val now = clock.instant()
         if (attempts >= maxAttempts) {
-            giveUp(claim = claim, attempts = attempts, reason = reason, title = title, now = now)
+            giveUp(
+                claim = claim,
+                attempts = attempts,
+                reason = reason,
+                userReason = userReason,
+                title = title,
+                now = now,
+            )
             return
         }
         val delay = backoffDelay(attempts = attempts)
@@ -368,6 +382,7 @@ class CalendarSyncService(
         claim: Claim,
         attempts: Int,
         reason: String,
+        userReason: String,
         title: String?,
         now: Instant,
     ) {
@@ -376,7 +391,7 @@ class CalendarSyncService(
                 transactionTemplate.executeWithoutResult {
                     outboundStager.stageCalendarDirectMessage(
                         userId = claim.row.slackUserId,
-                        text = syncFailureMessage(title = title, reason = reason),
+                        text = syncFailureMessage(title = title, reason = userReason),
                         appId = "",
                         publisher = eventPublisher,
                     )

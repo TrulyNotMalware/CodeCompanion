@@ -24,7 +24,10 @@
 --   - status REVOKED is written by the mirror worker when Google rejects the
 --     refresh token (invalid_grant); `/calendar status` then asks the user
 --     to reconnect.
---   - Expired state rows are purged opportunistically on the next connect.
+--   - Expired state rows are purged by the OAuth callback, in the transaction
+--     that consumes a state and only after a successful consume. Not on connect:
+--     a range DELETE next to the new state's INSERT in one transaction gap-locks
+--     the expires_at index and two concurrent connects could deadlock.
 --
 -- Apply BEFORE rolling out the calendar application code in any environment with
 -- `ddl-auto: none` (prod). dev/local with auto-ddl pick this up automatically.

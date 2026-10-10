@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
 
 # domain/command (test)
 
@@ -56,7 +56,10 @@ indirectly by every context spec; the DTOs are exercised by `outbound/OutboundMe
 ### Internal
 - `dev.notypie.domain.command` (main) — `CommandSet`, `SubCommand`, `SubCommandDefinition`,
   `NoSubCommands`, `DefaultEventQueue`; `command.entity.slash.MeetingSubCommandDefinition`.
-- `testFixtures` — `TestCommandEventCreator.kt`.
+- `testFixtures` — `TestCommandEventCreator.kt`; `SubmissionPipelineCharacterizationTest` also uses
+  `command/InboundInteractionInputCreator.kt` (`createInboundInteraction`, `approveAction`,
+  `createAddParticipantSubmission`, `createRescheduleMeetingSubmission`), `command/InboundCommandCreator.kt` and
+  `Constants.kt` (`TEST_USER_ID`, `TEST_LIST_HANDLE`).
 
 ### External
 - Kotest (`BehaviorSpec`, `shouldBe`, `shouldNotBe`, `shouldBeInstanceOf`).

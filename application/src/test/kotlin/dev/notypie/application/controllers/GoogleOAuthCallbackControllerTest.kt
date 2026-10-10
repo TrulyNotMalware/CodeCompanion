@@ -1,5 +1,6 @@
 package dev.notypie.application.controllers
 
+import dev.notypie.application.exception.ControllerAdvice
 import dev.notypie.application.service.calendar.CalendarConnectionCallback
 import dev.notypie.application.service.calendar.CalendarConnectionOutcome
 import io.kotest.core.spec.style.BehaviorSpec
@@ -18,6 +19,7 @@ class GoogleOAuthCallbackControllerTest :
         val mockMvc =
             MockMvcBuilders
                 .standaloneSetup(GoogleOAuthCallbackController(calendarConnectionCallback = callback))
+                .setControllerAdvice(ControllerAdvice())
                 .build()
 
         fun callback(vararg params: Pair<String, String>) =
@@ -107,6 +109,42 @@ class GoogleOAuthCallbackControllerTest :
                 then("no request parameter is echoed") {
                     response.contentAsString shouldNotContain "c<b>"
                     response.contentAsString shouldNotContain "s<i>"
+                }
+            }
+        }
+
+        given("a callback that fails outside the classified outcomes") {
+            `when`("the connection service throws an unexpected exception") {
+                every { callback.completeConnection(code = "c<b>", state = "s<i>", error = null) } throws
+                    RuntimeException("could not execute statement [update google_oauth_state set consumed_at=?]")
+                val response = callback("code" to "c<b>", "state" to "s<i>")
+
+                then("a 500 HTML page points at /calendar connect and is never cached, instead of the JSON error") {
+                    response.status shouldBe 500
+                    response.contentType shouldStartWith "text/html"
+                    response.getHeader("Cache-Control") shouldBe "no-store"
+                    response.contentAsString shouldContain "The connection could not be completed"
+                    response.contentAsString shouldContain "Run /calendar connect in Slack for a new one."
+                    response.contentAsString shouldNotContain "internal_error"
+                }
+
+                then("neither the exception text nor a request parameter is echoed") {
+                    response.contentAsString shouldNotContain "google_oauth_state"
+                    response.contentAsString shouldNotContain "c<b>"
+                    response.contentAsString shouldNotContain "s<i>"
+                }
+            }
+
+            `when`("the connection service is interrupted") {
+                every { callback.completeConnection(code = "c", state = "s", error = null) } throws
+                    InterruptedException()
+                val response = callback("code" to "c", "state" to "s")
+                val interrupted = Thread.interrupted()
+
+                then("the same 500 page is served and the request thread's interrupt flag is restored") {
+                    response.status shouldBe 500
+                    response.contentAsString shouldContain "/calendar connect"
+                    interrupted shouldBe true
                 }
             }
         }

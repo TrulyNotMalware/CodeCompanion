@@ -1,11 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
 
 # domain/command/entity (test)
 
 ## Purpose
 Specs for the `Command` aggregate and its concrete subclasses — the layer above contexts that owns the
-`IntentQueue`, dispatches to `parseContext`, and wraps execution in `runCatching`.
+`IntentQueue`, dispatches to `parseContext`, and catches `Exception` around execution (an `InterruptedException` is
+rethrown after the interrupt flag is restored; an `Error` propagates).
 
 ## Key Files
 All specs are Kotest `BehaviorSpec`s.
@@ -16,7 +17,7 @@ All specs are Kotest `BehaviorSpec`s.
 | `InteractionCommandTest.kt` | `InteractionCommand(appName, idempotencyKey, commandData, actorRole)`. Mention `notice hello` as `ADMIN` succeeds; `APPROVAL_CALLBACK` interaction succeeds (reactive context); `APPROVAL_REQUEST` interaction fails because its `EmptyContext` is not a `ReactionContext`; `findSubCommandDefinition` → `MeetingSubCommandDefinition.NONE` for `MEETING_CREATE_REQUEST`, `NoSubCommands` for a mention |
 | `ReplaceTextResponseCommandTest.kt` | `ReplaceTextResponseCommand(markdownMessage, replyHandle)`: `handleEvent` succeeds, definition is `NoSubCommands` |
 | `RequestMeetingCommandTest.kt` | `slash.RequestMeetingCommand`. `findSubCommandDefinition`: none → `NONE`, `list` → `LIST`, unknown or `calendar` (removed 2026-10-08) → `SubCommandParseException`, and through `handleEvent` → `ERROR_RESPONSE` plus one ephemeral ``Unknown subcommand `<token>`.`` with `Usage:` and the `/meetup` and `/meetup list [...]` lines; `list today` → `MeetingListRequest` spanning exactly one day from start-of-day for `TEST_USER_ID`; `list bogus` → `ok = false` plus an `Ephemeral` containing "Unknown range 'bogus'"; no sub-commands → success. Uses `createSlashInboundCommand(subCommands = ...)` and `drainIntents()` |
-| `CalendarCommandTest.kt` | `slash.CalendarCommand` (`/calendar`): `CALENDAR_USAGE` is `/calendar connect \| disconnect \| status`; `connect` → success typed `CALENDAR_CONNECTION` with `CalendarConnect(TEST_USER_ID)`; `DISCONNECT` → `CalendarDisconnect`; `"", "status", " "` → blanks ignored, `CalendarStatus`; no action, `conect` (typo) and `connect now` → `ok = false` and one requester-only (`recipient = null`) ephemeral: `Usage: …`, `Unknown action 'conect'. Usage: …`, `Usage: …` |
+| `CalendarCommandTest.kt` | `slash.CalendarCommand` (`/calendar`): `CALENDAR_USAGE` is `/calendar connect \| disconnect \| status`; `connect` → success typed `CALENDAR_CONNECTION` with `CalendarConnect(TEST_USER_ID)`; `DISCONNECT` → `CalendarDisconnect`; `"", "status", " "` → blanks ignored, `CalendarStatus`; no action, `conect` (typo) and `connect now` → `ok = false` and one requester-only (`recipient = null`) ephemeral: `Usage: …`, `Unknown action 'conect'. Usage: …`, `Usage: …`; an unknown action is echoed escaped and clipped: `<!channel>` → `Unknown action '&lt;!channel&gt;'. Usage: …`, and a 72-character token with `<!channel>&` and a backtick → `'&lt;!channel&gt;&amp;'xxx…'` (40 characters plus `…`) |
 | `StandupCommandTest.kt` | `slash.StandupCommand`. `findSubCommandDefinition`: none → `NONE`, `setup` / `list` / `stop` → their entries, unknown → `SubCommandParseException` (through `handleEvent`: `ERROR_RESPONSE` plus ``Unknown subcommand `unknown_sub`.`` and the three usage lines, `&lt;routine-name&gt;` escaped); through `handleEvent`: a bare `stop` passes sub-command validation and yields `ok = false` plus the `STOP_USAGE_MESSAGE` `Ephemeral` (the guard against gating the name with `requiresArguments`, which would drop the reply), `stop daily sync` → `StopStandupRoutine("daily sync")`, `list` → `ListStandupRoutines` only |
 
 ## Subdirectories
