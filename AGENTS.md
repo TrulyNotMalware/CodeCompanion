@@ -24,6 +24,7 @@ flow **application → infrastructure → domain** (and **application → domain
 | `README.md` | Human-facing docs (English + Korean): features, tech stack, architecture, command/role table |
 | `docs/wiki/` | Project wiki (Korean): design philosophy, layering rules, outbox/event model, coding style, decision log and history — read `docs/wiki/index.md` before making an architectural change |
 | `.gitleaks.toml` | gitleaks config for the CI secret scan: default rules plus a path allowlist for the placeholder-valued sample Secret manifest (see `.github/AGENTS.md`) |
+| `.gitleaksignore` | gitleaks fingerprints of confirmed false positives in history (one per line, `commit:path:rule:line`); only fixture values, never a real leak (see `.github/AGENTS.md`) |
 | `LICENSE` | MIT license |
 
 ## Subdirectories

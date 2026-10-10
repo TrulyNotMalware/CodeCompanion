@@ -235,7 +235,7 @@ class GoogleAccessTokenProviderTest :
                     val h = Harness(stored = connection())
                     every { h.connections.find(userId = TEST_USER_ID) } returnsMany listOf(connection(), afterRefresh)
                     every { h.oauth.refresh(refreshToken = "1//refresh") } returns
-                        GoogleAccessToken(accessToken = "ya29.stale-grant", expiresInSeconds = 3600L) andThen
+                        GoogleAccessToken(accessToken = "ya29.stale", expiresInSeconds = 3600L) andThen
                         GoogleAccessToken(accessToken = "ya29.second", expiresInSeconds = 3600L)
 
                     val result = h.provider.accessToken(userId = TEST_USER_ID)

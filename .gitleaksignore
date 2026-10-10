@@ -1,0 +1,4 @@
+# Fingerprints of confirmed false positives (commit:path:rule:line). Never list a real leak here: rotate and rewrite instead.
+# 2026-10-11 generic-api-key on a fake Google access token in a test fixture (replaced by "ya29.stale" in the tree; the
+# historical commit stays in the PR range and in the archive/gap-closure tag).
+6ae0a047c356b1f9766af62f6a46c10ef9b380f0:application/src/test/kotlin/dev/notypie/application/service/calendar/GoogleAccessTokenProviderTest.kt:generic-api-key:247
