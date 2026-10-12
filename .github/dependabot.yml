@@ -13,9 +13,16 @@ updates:
       # the colon stops Dependabot from appending its own.
       prefix: "chore :"
     groups:
-      # The Kotlin compiler and its spring/jpa plugins must move in lockstep.
+      # The Kotlin compiler and its spring/jpa plugins must move in lockstep. Group patterns match the
+      # dependency name Dependabot parses, and for the `kotlin("jvm")` plugin shorthand that name is the
+      # bare argument (`jvm`, `plugin.spring`, `plugin.jpa`), not `org.jetbrains.kotlin.jvm`: with only the
+      # `org.jetbrains.kotlin*` pattern the job logged "Skipping update group for 'kotlin'" and opened three
+      # separate PRs for one Kotlin release (#30, #31, #33, 2026-10-12).
       kotlin:
         patterns:
+          - "jvm"
+          - "plugin.spring"
+          - "plugin.jpa"
           - "org.jetbrains.kotlin*"
       spring:
         patterns:

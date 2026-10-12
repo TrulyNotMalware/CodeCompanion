@@ -18,9 +18,9 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **Security** — Slack request signature verification and retry de-duplication via a servlet filter.
 
 ## Tech Stack
-- **Language / Runtime**: Kotlin `2.4.10`, Java `25` (Adoptium toolchain)
+- **Language / Runtime**: Kotlin `2.4.21`, Java `25` (Adoptium toolchain)
 - **Framework**: Spring Boot `4.1.1` (Web on Jetty, Actuator, AOP/AspectJ, Data JPA)
-- **Build**: Gradle `9.8.0` (multi-module), ktlint `14.2.0`
+- **Build**: Gradle `9.8.1` (multi-module), ktlint `14.2.0`
 - **Messaging**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC outbox relay
 - **Persistence**: JPA / Hibernate — MariaDB (runtime, every profile), H2 (tests only)
 - **Slack**: Slack Java SDK `1.52.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)
@@ -191,9 +191,9 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **보안** — 서블릿 필터를 통한 슬랙 요청 서명 검증 및 재시도 중복 제거
 
 ## 기술 스택
-- **언어 / 런타임**: Kotlin `2.4.10`, Java `25` (Adoptium 툴체인)
+- **언어 / 런타임**: Kotlin `2.4.21`, Java `25` (Adoptium 툴체인)
 - **프레임워크**: Spring Boot `4.1.1` (Jetty 기반 Web, Actuator, AOP/AspectJ, Data JPA)
-- **빌드**: Gradle `9.8.0` (멀티 모듈), ktlint `14.2.0`
+- **빌드**: Gradle `9.8.1` (멀티 모듈), ktlint `14.2.0`
 - **메시징**: Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC 아웃박스 릴레이
 - **영속성**: JPA / Hibernate — MariaDB(런타임, 모든 프로파일), H2(테스트 전용)
 - **슬랙**: Slack Java SDK `1.52.0` (`slack-api-client`, `slack-api-model`, `slack-app-backend`)

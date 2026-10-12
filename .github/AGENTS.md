@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-12 -->
 
 # .github
 
@@ -17,7 +17,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 | `workflows/claude-code-review.yml` | Claude Code review on every non-Dependabot PR (`anthropics/claude-code-action@v1`, `code-review` plugin, inline comments); skipped for Dependabot because those runs only receive Dependabot secrets |
 | `workflows/claude.yml` | `@claude` mentions in issues, PR comments and reviews start an interactive Claude Code run |
 | `workflows/deploy_action.yaml` | On merged PR to `main`: build jar → multi-arch Docker image → push to Harbor → apply `deployment.yaml` to Oracle OKE → rollout + in-cluster health check → `rollout undo` on failure |
-| `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage`; the `docker` entry ignores `eclipse-temurin` major updates so the runtime stays on the Java 25 toolchain line |
+| `dependabot.yml` | Weekly (Monday 09:00 KST) version updates for `gradle` (`/`), `github-actions` (`/`), `docker` (`/application`) and `docker-compose` (the CDC compose directory); commit prefix `chore :` to match `.gitmessage`; the `docker` entry ignores `eclipse-temurin` major updates so the runtime stays on the Java 25 toolchain line; the `kotlin` group names the plugins by their `kotlin("…")` shorthand (`jvm`, `plugin.spring`, `plugin.jpa`) so one Kotlin release arrives as one PR |
 | `../.gitleaks.toml` | Repo-root gitleaks config (auto-loaded by the CLI): extends the default rules and allowlists the placeholder-valued sample Secret in `cdc/k8s/yamls/mariadb/mariadb-config.yaml`; its `[[allowlists]]` table needs gitleaks 8.25.0+, which is why the workflow pins `GITLEAKS_VERSION` |
 | `../.gitleaksignore` | Repo-root fingerprint list (auto-loaded): `commit:path:rule:line` entries for confirmed false positives that stay in history, so far one fake Google access token in a test fixture (6ae0a047, `generic-api-key`) |
 
@@ -69,10 +69,13 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   limit exceeded` (seen on `:infrastructure:compileKotlin`). If Kotlin extraction still fails with the daemon, the next knob is
   `-Pkotlin.compiler.execution.strategy=in-process`. Supported Kotlin range is published at
   https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/ — check it before
-  bumping the Kotlin plugin past what CodeQL lists. An unsupported version fails `compileKotlin` under
-  the tracer with `Kotlin version X is too recent. CodeQL currently supports versions below X`
-  (seen with 2.4.20, so the plugin is pinned to 2.4.10); a Dependabot `kotlin` group PR that goes red
-  here for that reason waits for a CodeQL release rather than getting merged.
+  bumping the Kotlin plugin past what CodeQL lists. That page lags the CLI; the authoritative bound is the
+  `lower than X` text in `java/ql/integration-tests/kotlin/all-platforms/diagnostics/kotlin-version-too-new/diagnostics.expected`
+  at the `codeql-cli/vX.Y.Z` tag of github/codeql, for the CLI the `init` step logs as `Using CodeQL CLI version`.
+  An unsupported version fails `compileKotlin` under the tracer with `Kotlin version X is too recent. CodeQL
+  currently supports versions below X` (2.4.20 under CodeQL 2.26.4, 2026-09-21; CLI 2.27.1+ accepts versions
+  below 2.4.30, which is what let 2.4.21 in on 2026-10-12 while the docs page still said 2.4.20); a Dependabot
+  `kotlin` group PR that goes red here for that reason waits for a CodeQL release rather than getting merged.
 - **The dependency graph is populated only by `gradle/actions/dependency-submission`.** GitHub cannot
   parse Gradle build scripts by itself, so without that step Dependabot alerts and
   `dependency-review-action` see nothing. It needs `contents: write`, granted at job level: Dependabot
@@ -106,7 +109,13 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
   removal scheduled for Gradle 10) and interpolate `$name`; keep new dependencies in that form or they
   silently drop out of version updates. Version-less
   coordinates managed by the Spring Boot / Jackson / Spring AI / kotest BOMs move with the BOM
-  version; the Boot BOM and Boot plugin share the `spring` group so they bump in one PR.
+  version; the Boot BOM and Boot plugin share the `spring` group so they bump in one PR. Group `patterns`
+  match the dependency *name* the parser produces, and for the `kotlin("jvm")` plugin shorthand that name is
+  the bare argument (`jvm`, `plugin.spring`, `plugin.jpa`, see `extra_groups` in `file_parser.rb`), so the
+  `kotlin` group lists those names next to `org.jetbrains.kotlin*`; with the wildcard alone the job logged
+  `Skipping update group for 'kotlin' as it does not match any allowed dependencies` and opened three PRs for
+  one Kotlin release (#30, #31, #33, 2026-10-12). After editing a group, check that warning is gone in the
+  next `Dependabot Updates` job log.
 - Dependabot pushes to `dependabot/**`, which is why that pattern is in the lint and test branch
   lists — remove it and Dependabot PRs arrive unverified. Actions-only bumps touch nothing under the
   path filters and therefore trigger only `security_check.yaml`, which is the intended behaviour.

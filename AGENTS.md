@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-12 -->
 
 # CodeCompanion
 
@@ -16,8 +16,8 @@ flow **application → infrastructure → domain** (and **application → domain
 | File | Description |
 |------|-------------|
 | `settings.gradle.kts` | Declares root project `CodeCompanion` and the three modules |
-| `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.10, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
-| `gradlew` / `gradlew.bat` | Gradle 9.8.0 wrapper entry points |
+| `build.gradle.kts` | Root build: Java 25 toolchain, Kotlin 2.4.21, shared dependency versions as `extra["…"]` declarations, ktlint, shared test JVM args |
+| `gradlew` / `gradlew.bat` | Gradle 9.8.1 wrapper entry points |
 | `run` | Bash launcher for the built Spring Boot jar (`./run -e prod build/libs/app.jar`); handles profile, heap, GC, JDWP (local/dev) and JMX (prod, RMI on the same port), both bound to 127.0.0.1, heap dump, GC log; leaves actuator exposure to the profile YAML. Defaults to `-e local` (only warns: that profile binds HTTP to 127.0.0.1 and may run without signature verification) |
 | `.editorconfig` | Formatting contract enforced by ktlint (120 cols, LF, 4-space indent, wildcard imports allowed) |
 | `.gitmessage` | Korean commit-message template — `<타입> : <제목>`, types: `feat`, `fix`, `docs`, `test`, `refact`, `style`, `chore` |
@@ -98,7 +98,7 @@ Tests run on JUnit Platform with `-Xmx` from the `testMaxHeap` Gradle property (
 ## Dependencies
 
 ### External
-- Kotlin 2.4.10 / Java 25 (Adoptium toolchain) — language and runtime
+- Kotlin 2.4.21 / Java 25 (Adoptium toolchain) — language and runtime
 - Spring Boot 4.1.1 — Web on **Jetty** (Tomcat excluded; Undertow unsupported on Boot 4), Actuator,
   AOP/AspectJ, Data JPA
 - Apache Kafka (`spring-boot-starter-kafka`) + Debezium CDC — outbox relay
