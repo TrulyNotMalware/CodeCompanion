@@ -12,6 +12,9 @@ import dev.notypie.domain.command.entity.context.form.RescheduleMeetingParsed
 import dev.notypie.domain.command.entity.context.form.StandupAnswerParsed
 import dev.notypie.domain.command.entity.context.form.StandupSetupParsed
 import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
 import io.kotest.core.spec.style.BehaviorSpec
@@ -323,7 +326,34 @@ class ParsedSubmissionsTest :
                     parsed.shouldNotBeNull()
                     parsed.responses.shouldBeEmpty()
                     parsed.userId shouldBe ACTOR
-                    parsed.notice shouldBe NoticeTarget.Update(channel = "C_S", messageTs = "9.9")
+                    parsed.confirmation shouldBe
+                        StandupAnswerConfirmation.UpdateNotice(
+                            ref = MessageRef(conversation = ConversationTarget(id = "C_S"), messageId = "9.9"),
+                        )
+                }
+            }
+
+            `when`("the modal came from /standup answer, so it carries a channel but no message ts") {
+                fun confirmationFor(channel: String, ts: String) =
+                    StandupAnswerParsed
+                        .from(
+                            raw =
+                                InboundSubmission.StandupAnswer(
+                                    sessionUidRaw = sessionUid.toString(),
+                                    userId = "U",
+                                    noticeChannel = channel,
+                                    noticeMessageTs = ts,
+                                    answers = listOf("a"),
+                                ),
+                            actorId = ACTOR,
+                        ).shouldNotBeNull()
+                        .confirmation
+
+                then("the confirmation becomes an ephemeral in that channel; without a channel it stays None") {
+                    confirmationFor(channel = "C_CMD", ts = "") shouldBe
+                        StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = "C_CMD"))
+                    confirmationFor(channel = "", ts = "") shouldBe StandupAnswerConfirmation.None
+                    confirmationFor(channel = "", ts = "9.9") shouldBe StandupAnswerConfirmation.None
                 }
             }
 

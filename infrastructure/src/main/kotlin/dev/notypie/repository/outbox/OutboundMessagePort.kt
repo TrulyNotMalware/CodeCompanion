@@ -1,6 +1,7 @@
 package dev.notypie.repository.outbox
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
@@ -36,8 +37,13 @@ class CodecOutboundMessagePort : OutboundMessagePort {
             createdAt = LocalDateTime.now(),
             schemaVersion =
                 when {
+                    message is OutboundMessage.ChannelMessage && message.content is MessageContent.AgentQuestion ->
+                        OutboxSchemaVersion.V5
+
                     message is OutboundMessage.ReplaceMessage && message.fallback != null -> OutboxSchemaVersion.V4
+
                     continuation.isNotEmpty() -> OutboxSchemaVersion.V3
+
                     else -> OutboxSchemaVersion.V2
                 },
         )

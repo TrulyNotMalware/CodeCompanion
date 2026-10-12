@@ -8,11 +8,13 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.AnswerRecordResult
 import dev.notypie.repository.standup.StandupRepository
@@ -33,6 +35,8 @@ class StandupAnswerServiceTest :
         given("recordAnswer") {
             val now = Instant.parse("2026-05-01T02:00:00Z")
             val notice = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1700000000.000500")
+            val updateNotice = StandupAnswerConfirmation.UpdateNotice(ref = notice)
+            val slashConfirmation = StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = "C_CMD"))
 
             fun serviceOf(repo: StandupRepository, stager: OutboundMessageStager, eventPublisher: EventPublisher) =
                 StandupAnswerService(
@@ -45,6 +49,14 @@ class StandupAnswerServiceTest :
             fun updateTo(text: String): OutboundMessage.UpdateMessage =
                 OutboundMessage.UpdateMessage(
                     ref = notice,
+                    content = MessageContent.Text(headline = null, markdown = text),
+                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                )
+
+            fun ephemeralTo(text: String): OutboundMessage.Ephemeral =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = "C_CMD"),
+                    recipient = UserRef(id = "U_STANDUP"),
                     content = MessageContent.Text(headline = null, markdown = text),
                     detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
                 )
@@ -68,7 +80,7 @@ class StandupAnswerServiceTest :
                 val repo = repoAnswering(result = AnswerRecordResult.RECORDED)
                 val stager = stubbedStager()
                 val eventPublisher = mockk<EventPublisher>(relaxed = true)
-                val event = createRecordStandupAnswerEvent(userId = "U_STANDUP", notice = notice)
+                val event = createRecordStandupAnswerEvent(userId = "U_STANDUP", confirmation = updateNotice)
 
                 serviceOf(repo = repo, stager = stager, eventPublisher = eventPublisher).recordAnswer(event = event)
 
@@ -106,7 +118,7 @@ class StandupAnswerServiceTest :
                     repo = repoAnswering(result = AnswerRecordResult.SESSION_CLOSED),
                     stager = stager,
                     eventPublisher = mockk(relaxed = true),
-                ).recordAnswer(event = createRecordStandupAnswerEvent(notice = notice))
+                ).recordAnswer(event = createRecordStandupAnswerEvent(confirmation = updateNotice))
 
                 then("the notice says the standup closed and never claims the answer was submitted") {
                     verify(exactly = 1) { stager.stage(message = updateTo(text = CLOSED_NOTICE), basicInfo = any()) }
@@ -121,7 +133,7 @@ class StandupAnswerServiceTest :
                     repo = repoAnswering(result = AnswerRecordResult.SESSION_NOT_FOUND),
                     stager = stager,
                     eventPublisher = mockk(relaxed = true),
-                ).recordAnswer(event = createRecordStandupAnswerEvent(notice = notice))
+                ).recordAnswer(event = createRecordStandupAnswerEvent(confirmation = updateNotice))
 
                 then("the prompt is still collapsed, saying the answer was not recorded") {
                     verify(exactly = 1) {
@@ -131,16 +143,82 @@ class StandupAnswerServiceTest :
                 }
             }
 
-            `when`("no notice was ferried with the submission") {
+            `when`("a /standup answer submission with no message to update is recorded") {
+                val stager = stubbedStager()
+                val eventPublisher = mockk<EventPublisher>(relaxed = true)
+                val event = createRecordStandupAnswerEvent(userId = "U_STANDUP", confirmation = slashConfirmation)
+
+                serviceOf(
+                    repo = repoAnswering(result = AnswerRecordResult.RECORDED),
+                    stager = stager,
+                    eventPublisher = eventPublisher,
+                ).recordAnswer(event = event)
+
+                then("the requester gets an ephemeral confirmation in the command channel and no update is staged") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message = ephemeralTo(text = SUBMITTED_NOTICE),
+                            basicInfo =
+                                CommandBasicInfo.forOutbound(
+                                    publisherId = "U_STANDUP",
+                                    channel = "C_CMD",
+                                    idempotencyKey = event.idempotencyKey,
+                                ),
+                        )
+                    }
+                    verify(exactly = 0) {
+                        stager.stage(message = ofType<OutboundMessage.UpdateMessage>(), basicInfo = any())
+                    }
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            `when`("a /standup answer submission arrives after the session closed") {
+                val stager = stubbedStager()
+
+                serviceOf(
+                    repo = repoAnswering(result = AnswerRecordResult.SESSION_CLOSED),
+                    stager = stager,
+                    eventPublisher = mockk(relaxed = true),
+                ).recordAnswer(
+                    event = createRecordStandupAnswerEvent(userId = "U_STANDUP", confirmation = slashConfirmation),
+                )
+
+                then("the ephemeral says the standup closed and never claims the answer was submitted") {
+                    verify(exactly = 1) { stager.stage(message = ephemeralTo(text = CLOSED_NOTICE), basicInfo = any()) }
+                    verify(exactly = 1) { stager.stage(message = any(), basicInfo = any()) }
+                }
+            }
+
+            `when`("a /standup answer submission names a session that no longer exists") {
+                val stager = stubbedStager()
+
+                serviceOf(
+                    repo = repoAnswering(result = AnswerRecordResult.SESSION_NOT_FOUND),
+                    stager = stager,
+                    eventPublisher = mockk(relaxed = true),
+                ).recordAnswer(
+                    event = createRecordStandupAnswerEvent(userId = "U_STANDUP", confirmation = slashConfirmation),
+                )
+
+                then("the ephemeral says the answer was not recorded and is the only message staged") {
+                    verify(exactly = 1) {
+                        stager.stage(message = ephemeralTo(text = SESSION_NOT_FOUND_NOTICE), basicInfo = any())
+                    }
+                    verify(exactly = 1) { stager.stage(message = any(), basicInfo = any()) }
+                }
+            }
+
+            `when`("the submission asks for no confirmation") {
                 val stager = mockk<OutboundMessageStager>()
 
                 serviceOf(
                     repo = repoAnswering(result = AnswerRecordResult.RECORDED),
                     stager = stager,
                     eventPublisher = mockk(relaxed = true),
-                ).recordAnswer(event = createRecordStandupAnswerEvent(notice = null))
+                ).recordAnswer(event = createRecordStandupAnswerEvent(confirmation = StandupAnswerConfirmation.None))
 
-                then("the answer is stored and there is no message to update") {
+                then("the answer is stored and there is no message to send") {
                     verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
                 }
             }
@@ -185,7 +263,8 @@ class StandupAnswerServiceTest :
                                             headline = null,
                                             markdown =
                                                 "Couldn't open the standup form. _Tip: re-click the " +
-                                                    "*Fill in standup* button from the original DM to try again._",
+                                                    "*Fill in standup* button in the original DM, or run " +
+                                                    "`/standup answer` in the routine's channel, to try again._",
                                         ),
                                 ),
                             basicInfo =

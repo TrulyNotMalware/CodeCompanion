@@ -34,6 +34,7 @@ private interface OutboundMessageMixin
     JsonSubTypes.Type(value = MessageContent.MeetingRequest::class, name = "MeetingRequest"),
     JsonSubTypes.Type(value = MessageContent.MeetingList::class, name = "MeetingList"),
     JsonSubTypes.Type(value = MessageContent.StandupSummary::class, name = "StandupSummary"),
+    JsonSubTypes.Type(value = MessageContent.AgentQuestion::class, name = "AgentQuestion"),
 )
 private interface MessageContentMixin
 

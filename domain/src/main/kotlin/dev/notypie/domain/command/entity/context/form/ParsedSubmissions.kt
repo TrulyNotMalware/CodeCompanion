@@ -1,6 +1,9 @@
 package dev.notypie.domain.command.entity.context.form
 
 import dev.notypie.domain.command.inbound.InboundSubmission
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.replaceHandleOrNull
 import dev.notypie.domain.common.escapeMarkup
@@ -137,7 +140,7 @@ internal data class StandupAnswerParsed(
     val sessionUid: UUID,
     val userId: String,
     val responses: List<String>,
-    val notice: NoticeTarget,
+    val confirmation: StandupAnswerConfirmation,
 ) {
     companion object {
         fun from(raw: InboundSubmission.StandupAnswer, actorId: String): StandupAnswerParsed? {
@@ -146,9 +149,19 @@ internal data class StandupAnswerParsed(
                 sessionUid = sessionUid,
                 userId = raw.userId.ifBlank { actorId },
                 responses = raw.answers,
-                notice = NoticeTarget.of(channel = raw.noticeChannel, messageTs = raw.noticeMessageTs),
+                confirmation = confirmationOf(channel = raw.noticeChannel, messageTs = raw.noticeMessageTs),
             )
         }
+
+        private fun confirmationOf(channel: String, messageTs: String): StandupAnswerConfirmation =
+            when {
+                channel.isBlank() -> StandupAnswerConfirmation.None
+                messageTs.isBlank() -> StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = channel))
+                else ->
+                    StandupAnswerConfirmation.UpdateNotice(
+                        ref = MessageRef(conversation = ConversationTarget(id = channel), messageId = messageTs),
+                    )
+            }
     }
 }
 

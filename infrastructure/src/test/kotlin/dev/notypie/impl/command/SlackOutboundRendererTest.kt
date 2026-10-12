@@ -1,5 +1,6 @@
 package dev.notypie.impl.command
 
+import dev.notypie.domain.command.createAgentQuestionMessage
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
@@ -15,9 +16,14 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
+import dev.notypie.templates.ModalBlockBuilder
+import dev.notypie.templates.SlackBlockLimits
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldStartWith
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -323,6 +329,94 @@ class SlackOutboundRendererTest :
                             questions = listOf("What did you do yesterday?"),
                         )
                     }
+                }
+            }
+        }
+
+        given("a ChannelMessage with an AgentQuestion") {
+            `when`("render is called on a two-line question that carries Slack markup") {
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = any(),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+
+                val payload =
+                    renderer.render(
+                        message = createAgentQuestionMessage(prompt = "Is *this* <!channel> safe?\nsecond & line"),
+                        basicInfo = basicInfo,
+                    )
+
+                then("it posts an unthreaded root that mentions the asker and quotes each escaped line") {
+                    val expectedBody =
+                        "<@${basicInfo.publisherId}> asked:\n" +
+                            "> Is *this* &lt;!channel&gt; safe?\n" +
+                            "> second &amp; line"
+                    payload shouldBe stubEvent.payload
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleTextRequest(
+                            commandDetailType = CommandDetailType.AGENT_ASK_QUESTION,
+                            headLineText = "",
+                            commandBasicInfo = basicInfo,
+                            simpleString = expectedBody,
+                            threadTs = null,
+                        )
+                    }
+                }
+            }
+
+            `when`("render is called on a question longer than one message body") {
+                val body = slot<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(body),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+
+                renderer.render(
+                    message = createAgentQuestionMessage(prompt = "x".repeat(n = SlackBlockLimits.MESSAGE_BODY_BUDGET)),
+                    basicInfo = basicInfo,
+                )
+
+                then("the quoted body is cut to the message budget and ends with the truncation marker") {
+                    body.captured.length shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_BODY_BUDGET
+                    body.captured shouldEndWith SlackBlockLimits.TRUNCATION_MARKER
+                }
+            }
+
+            `when`("render is called on a question whose single line is longer than one section") {
+                val body = slot<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(body),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+
+                renderer.render(
+                    message = createAgentQuestionMessage(prompt = "x".repeat(n = 4_000)),
+                    basicInfo = basicInfo,
+                )
+
+                then("every line the message template lays out stays quoted and no character is lost") {
+                    val lines =
+                        ModalBlockBuilder()
+                            .textSections(text = body.captured, isMarkDown = true)
+                            .flatMap { section -> section.text.text.lines() }
+                    lines.first() shouldBe "<@${basicInfo.publisherId}> asked:"
+                    lines.drop(n = 1).forEach { line -> line shouldStartWith "> " }
+                    lines.sumOf { line -> line.count { character -> character == 'x' } } shouldBe 4_000
                 }
             }
         }

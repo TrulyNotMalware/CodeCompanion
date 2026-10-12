@@ -106,10 +106,14 @@ interactive path: it turns `OutboundMessageEnqueued` into an outbox row at `BEFO
   (5 s) is unaffected. Restore the connector first.
 - **An outcome event is published only by the owner that recorded it.** `completeClaim` returning 0 means
   another owner has the row and will publish its own outcome.
-- **`MessagePublishSuccessEvent` has a downstream consumer:** `service/standup/StandupSummaryService`
-  swaps its `outbox:<eventId>` marker for `messageTs`. Keep `messageTs` and `commandDetailType` (from the
-  dispatch output, i.e. the rendered payload) populated on success: the listener skips every type but
-  `STANDUP_SUMMARY`. It is the only listener of `OutboxUpdateEvent`s.
+- **`MessagePublishSuccessEvent` has two downstream consumers:** `service/standup/StandupSummaryService`
+  swaps its `outbox:<eventId>` marker for `messageTs` (type `STANDUP_SUMMARY`), and
+  `service/agent/AgentAskThreadStarter` turns a delivered `/ask` question (type `AGENT_ASK_QUESTION`) into an
+  `AgentConverseRequestEvent` with `threadId = messageTs`, re-reading the row with `findById` and decoding it. Keep
+  `messageTs` and `commandDetailType` (from the dispatch output, i.e. the rendered payload) populated on success: both
+  listeners skip every other type. Nothing else listens to `OutboxUpdateEvent`s. The ask consumer runs on the relay's
+  publishing thread (CDC listener or polling executor): one extra `findById` + decode per `AGENT_ASK_QUESTION` row, and
+  a `REQUIRES_NEW` outbox write (`AgentConverseService.publishOverloaded`) when the turn executor rejects the turn.
 - The `Envelope` FQN is hardcoded in the `@KafkaListener` properties; moving or renaming the class
   breaks CDC deserialization at runtime with no compile error. `relayTaskExecutor` is the dedicated bounded
   `@Qualifier("relayTaskExecutor")` bean in `configurations/AsyncConfig.kt`; `Error`s deliberately propagate to
@@ -153,7 +157,7 @@ H2 scenario `createOutboxJpaContext`, `MutableClock`, `ScriptedMessageDispatcher
 - `application/configurations/` — `ConsumerConfig.kt`, `SlackRequestBuilderConfiguration.kt`,
   `AsyncConfig.kt`, `AppConfig.outbox.polling.{batchSize, stuckInProgressSeconds, giveUpAfterHours, maxSends}`,
   the `Clock` bean from `security/SlackRequestVerificationConfiguration`
-- `application/service/standup/StandupSummaryService` — consumer of `MessagePublishSuccessEvent`
+- `application/service/standup/StandupSummaryService`, `application/service/agent/AgentAskThreadStarter` — consumers of `MessagePublishSuccessEvent`
 
 ### External
 Spring scheduling, Spring Kafka (`@KafkaListener`), Spring transaction events, Jackson, kotlin-logging.

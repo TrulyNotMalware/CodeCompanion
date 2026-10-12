@@ -99,6 +99,7 @@ slack:
       meeting-command: ${SLACK_MEETING_COMMAND:/meetup}
       standup-command: ${SLACK_STANDUP_COMMAND:/standup}
       calendar-command: ${SLACK_CALENDAR_COMMAND:/calendar}
+      ask-command: ${SLACK_ASK_COMMAND:/ask}
     mode:
       # Full local pipeline against orbstack: outbox -> Debezium CDC -> Kafka -> consumer -> Slack.
       outbox-reading-strategy: cdc

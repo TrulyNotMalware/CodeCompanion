@@ -22,7 +22,8 @@ row from `IN_PROGRESS` to its terminal state. One file, one sealed hierarchy.
 - `messageTs` on the success event is the Slack `chat.postMessage` ts and defaults to `""` when the call
   returns none; treat blank as "unknown", not as a ts.
 - Raised by `SlackMessageRelayServiceImpl` and `DebeziumLogTailingProcessor` in `:application` and consumed
-  by the outbox status listener there.
+  by the outbox status listener there; `MessagePublishSuccessEvent` is also consumed by `StandupSummaryService`
+  (`STANDUP_SUMMARY` marker swap) and `AgentAskThreadStarter` (`AGENT_ASK_QUESTION` → agent turn in the thread).
 
 ### Testing Requirements
 ```bash

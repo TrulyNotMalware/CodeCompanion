@@ -1,6 +1,7 @@
 package dev.notypie.application.controllers
 
 import dev.notypie.application.common.parseRequestBodyData
+import dev.notypie.application.service.agent.AskSlashService
 import dev.notypie.application.service.calendar.CalendarSlashService
 import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
@@ -19,6 +20,7 @@ class SlashCommandController(
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
     private val cveQuerySlashService: CveQuerySlashService,
     private val calendarSlashService: CalendarSlashService,
+    private val askSlashService: AskSlashService,
 ) {
     @PostMapping(value = ["/meet"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
     fun requestMeeting(
@@ -58,6 +60,21 @@ class SlashCommandController(
         val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
         ViewOpenDeferral.afterBoundary {
             calendarSlashService.handleCalendar(
+                headers = headers,
+                payload = payload,
+                commandData = commandData,
+            )
+        }
+    }
+
+    @PostMapping(value = ["/ask"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun ask(
+        @RequestHeader headers: MultiValueMap<String, String>,
+        @RequestParam data: Map<String, String>,
+    ) {
+        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        ViewOpenDeferral.afterBoundary {
+            askSlashService.handleAsk(
                 headers = headers,
                 payload = payload,
                 commandData = commandData,

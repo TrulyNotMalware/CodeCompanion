@@ -36,7 +36,7 @@ import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
 import dev.notypie.domain.command.entity.event.StandupOpsAction
 import dev.notypie.domain.command.entity.event.StandupOpsPayload
 import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
-import dev.notypie.domain.command.outbound.MessageRef
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZoneId
@@ -93,7 +93,7 @@ fun createRecordStandupAnswerEvent(
     sessionUid: UUID = UUID.randomUUID(),
     userId: String = TEST_USER_ID,
     responses: List<String> = listOf("Done", "Next"),
-    notice: MessageRef? = null,
+    confirmation: StandupAnswerConfirmation = StandupAnswerConfirmation.None,
     idempotencyKey: UUID = UUID.randomUUID(),
 ) = RecordStandupAnswerEvent(
     idempotencyKey = idempotencyKey,
@@ -102,7 +102,7 @@ fun createRecordStandupAnswerEvent(
             sessionUid = sessionUid,
             userId = userId,
             responses = responses,
-            notice = notice,
+            confirmation = confirmation,
         ),
     type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
 )

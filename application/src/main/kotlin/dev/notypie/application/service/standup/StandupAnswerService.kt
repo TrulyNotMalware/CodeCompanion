@@ -6,10 +6,12 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.publishOne
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.repository.standup.AnswerRecordResult
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -60,23 +62,35 @@ class StandupAnswerService(
                     SESSION_NOT_FOUND_NOTICE
                 }
             }
-        val notice = payload.notice ?: return
-        val basicInfo =
-            CommandBasicInfo.forOutbound(
-                publisherId = payload.userId,
-                channel = notice.conversation.id,
-                idempotencyKey = event.idempotencyKey,
-            )
-        outboundStager
-            .stage(
-                message =
-                    OutboundMessage.UpdateMessage(
-                        ref = notice,
-                        content = MessageContent.Text(headline = null, markdown = noticeText),
-                        detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                    ),
-                basicInfo = basicInfo,
-            )?.let { eventPublisher.publishOne(event = it) }
+        val content = MessageContent.Text(headline = null, markdown = noticeText)
+        when (val confirmation = payload.confirmation) {
+            is StandupAnswerConfirmation.UpdateNotice ->
+                stageConfirmation(
+                    event = event,
+                    channel = confirmation.ref.conversation,
+                    message =
+                        OutboundMessage.UpdateMessage(
+                            ref = confirmation.ref,
+                            content = content,
+                            detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                        ),
+                )
+
+            is StandupAnswerConfirmation.Ephemeral ->
+                stageConfirmation(
+                    event = event,
+                    channel = confirmation.channel,
+                    message =
+                        OutboundMessage.Ephemeral(
+                            target = confirmation.channel,
+                            recipient = UserRef(id = payload.userId),
+                            content = content,
+                            detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                        ),
+                )
+
+            StandupAnswerConfirmation.None -> Unit
+        }
     }
 
     @EventListener
@@ -104,10 +118,25 @@ class StandupAnswerService(
                                 headline = null,
                                 markdown =
                                     "Couldn't open the standup form. _Tip: re-click the *Fill in standup* button " +
-                                        "from the original DM to try again._",
+                                        "in the original DM, or run `/standup answer` in the routine's channel, " +
+                                        "to try again._",
                             ),
                     ),
                 basicInfo = basicInfo,
             )?.let { eventPublisher.publishOne(event = it) }
+    }
+
+    private fun stageConfirmation(
+        event: RecordStandupAnswerEvent,
+        channel: ConversationTarget,
+        message: OutboundMessage,
+    ) {
+        val basicInfo =
+            CommandBasicInfo.forOutbound(
+                publisherId = event.payload.userId,
+                channel = channel.id,
+                idempotencyKey = event.idempotencyKey,
+            )
+        outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }
 }

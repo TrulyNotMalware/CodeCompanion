@@ -16,7 +16,9 @@ import dev.notypie.application.service.standup.StandupAnswerService
 import dev.notypie.application.service.standup.StandupSchedulingService
 import dev.notypie.configurations.SnapshotIsolationConflictException
 import dev.notypie.domain.command.createAgentConverseRequestEvent
+import dev.notypie.domain.command.createAgentQuestionMessage
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -38,7 +40,10 @@ import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.repository.meeting.JpaMeetingRepository
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
+import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
+import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.extensions.ApplyExtension
@@ -67,6 +72,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.util.ReflectionTestUtils
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.net.InetSocketAddress
 import java.time.Clock
@@ -290,6 +296,42 @@ class ApplicationContextSmokeTest
                         eventually(5.seconds) { prompts.toList() shouldContain "committed" }
                         prompts.toList() shouldBe listOf("committed")
                         threadNames.toList().single() shouldStartWith "agent-turn-"
+                    }
+                }
+            }
+
+            given("an /ask question whose root message Slack has delivered") {
+                `when`("the relay publishes the delivery event outside any transaction") {
+                    then("the answer turn starts on the agent-turn executor, keyed to the question's thread") {
+                        val basicInfo = createCommandBasicInfo()
+                        val sessionKeys = ConcurrentLinkedQueue<String>()
+                        val threadNames = ConcurrentLinkedQueue<String>()
+                        every { agentGateway.converse(request = any()) } answers {
+                            threadNames += Thread.currentThread().name
+                            sessionKeys += firstArg<AgentTurnRequest>().sessionKey
+                            AgentTurnResult.Failed(code = "smoke", message = "smoke")
+                        }
+                        val question = createAgentQuestionMessage(channel = basicInfo.channel)
+                        val row =
+                            CodecOutboundMessagePort()
+                                .toRow(message = question, basicInfo = basicInfo)
+                                .apply { updateMessageStatus(status = MessageStatus.SUCCESS) }
+                        outboxRepository.save(row)
+
+                        TransactionSynchronizationManager.isActualTransactionActive() shouldBe false
+                        eventPublisher.publishEvent(
+                            MessagePublishSuccessEvent(
+                                eventId = UUID.fromString(row.eventId),
+                                commandDetailType = CommandDetailType.AGENT_ASK_QUESTION,
+                                messageTs = "1.2",
+                            ),
+                        )
+
+                        val expectedKey = "${basicInfo.channel}:1.2:${basicInfo.publisherId}"
+                        eventually(5.seconds) { sessionKeys.toList() shouldContain expectedKey }
+                        sessionKeys.toList() shouldBe listOf(expectedKey)
+                        threadNames.toList().single() shouldStartWith "agent-turn-"
+                        outboxRepository.deleteById(row.eventId)
                     }
                 }
             }

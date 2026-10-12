@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.intent
 
 import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
@@ -88,7 +89,7 @@ sealed class CommandIntent : CommandEffect {
         val sessionUid: UUID,
         val userId: String,
         val responses: List<String>,
-        val notice: MessageRef?,
+        val confirmation: StandupAnswerConfirmation,
     ) : CommandIntent()
 
     data class CreateStandupRoutine(
@@ -143,4 +144,16 @@ sealed class CommandIntent : CommandEffect {
     ) : CommandIntent()
 
     data object Nothing : CommandIntent()
+}
+
+sealed interface StandupAnswerConfirmation {
+    data class UpdateNotice(
+        val ref: MessageRef,
+    ) : StandupAnswerConfirmation
+
+    data class Ephemeral(
+        val channel: ConversationTarget,
+    ) : StandupAnswerConfirmation
+
+    data object None : StandupAnswerConfirmation
 }

@@ -1,5 +1,6 @@
 package dev.notypie.repository.outbox.schema
 
+import dev.notypie.domain.command.createAgentQuestionMessage
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -13,6 +14,7 @@ import dev.notypie.repository.outbox.chainedParts
 import dev.notypie.repository.outbox.toChainHead
 import dev.notypie.schema.createOutboxColumnMap
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -143,7 +145,7 @@ class OutboxMessageTest :
                 then("only the row with a fallback is stamped V4, so an older binary holds it instead of dropping it") {
                     withFallback.schemaVersion shouldBe OutboxSchemaVersion.V4
                     withoutFallback.schemaVersion shouldBe OutboxSchemaVersion.V2
-                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4)
+                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4, 5)
                 }
 
                 then("the fallback survives the codec") {
@@ -152,6 +154,29 @@ class OutboxMessageTest :
                         .message
                         .shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
                         .fallback shouldBe fallback
+                }
+            }
+        }
+
+        given("CodecOutboundMessagePort.toRow for an /ask question and for a plain channel message") {
+            val basicInfo = createCommandBasicInfo()
+
+            `when`("the rows are built") {
+                val question = port.toRow(message = createAgentQuestionMessage(), basicInfo = basicInfo)
+                val plain =
+                    port.toRow(
+                        message =
+                            OutboundMessage.ChannelMessage(
+                                target = ConversationTarget(id = basicInfo.channel),
+                                content = MessageContent.Text(headline = null, markdown = "plain"),
+                            ),
+                        basicInfo = basicInfo,
+                    )
+
+                then("only the question row is stamped V5, a version this binary reads, so an older one holds it") {
+                    question.schemaVersion shouldBe OutboxSchemaVersion.V5
+                    plain.schemaVersion shouldBe OutboxSchemaVersion.V2
+                    OutboxSchemaVersion.SUPPORTED shouldContain OutboxSchemaVersion.V5
                 }
             }
         }

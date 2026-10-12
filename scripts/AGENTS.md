@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-12 -->
 
 # scripts
 
@@ -49,7 +49,7 @@ the launcher that runs the `local` profile in containers for live testing.
 
   | Input | Holds |
   |-------|-------|
-  | `~/.config/codecompanion/local.env` | `SLACK_API_TOKEN`, `SLACK_APP_TOKEN` (required); optional `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`, `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` / `SLACK_CALENDAR_COMMAND`, and `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` for `SIDECAR_PROVIDER=claude` |
+  | `~/.config/codecompanion/local.env` | `SLACK_API_TOKEN`, `SLACK_APP_TOKEN` (required); optional `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`, `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` / `SLACK_CALENDAR_COMMAND` / `SLACK_ASK_COMMAND`, and `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` for `SIDECAR_PROVIDER=claude` |
   | `~/.config/codecompanion/local-secrets.env` | `SIDECAR_BEARER_SECRET`, `MCP_SIGNING_SECRET` (hex, 32 bytes), `GOOGLE_TOKEN_ENCRYPTION_KEY` (base64, 32 bytes); created 0600 inside a `umask 077` subshell, and a key missing from an existing file is appended alone |
   | `INFRA_MARIADB_ENV` (default `~/infra/mariadb/.env`) | `BIND_IP`, `MARIADB_ROOT_PASSWORD` (the app connects as `root` to `code_companion`) |
 

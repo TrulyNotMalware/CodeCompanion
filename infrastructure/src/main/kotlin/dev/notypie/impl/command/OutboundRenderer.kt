@@ -5,7 +5,12 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.SlackEventPayload
+import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.escapeMrkdwn
+import dev.notypie.templates.splitSectionText
+import dev.notypie.templates.truncateSectionText
+
+private const val MAX_QUOTED_LINE_LENGTH: Int = SlackBlockLimits.SECTION_TEXT_BUDGET / 2
 
 interface OutboundRenderer {
     fun render(message: OutboundMessage, basicInfo: CommandBasicInfo): SlackEventPayload
@@ -61,7 +66,16 @@ class SlackOutboundRenderer(
                             questions = content.questions,
                         )
 
-                    else -> error("not yet migrated: $content")
+                    is MessageContent.AgentQuestion ->
+                        slackEventBuilder.simpleTextRequest(
+                            commandDetailType = message.detailType ?: CommandDetailType.AGENT_ASK_QUESTION,
+                            headLineText = "",
+                            commandBasicInfo = basicInfo,
+                            simpleString = content.askedBy(publisherId = basicInfo.publisherId),
+                            threadTs = message.threadId,
+                        )
+
+                    is MessageContent.MeetingList -> error("not yet migrated: $content")
                 }.payload
 
             is OutboundMessage.Ephemeral ->
@@ -83,7 +97,12 @@ class SlackOutboundRenderer(
                             currentUserId = content.currentUserId,
                         )
 
-                    else -> error("Ephemeral content not yet migrated: $content")
+                    is MessageContent.ErrorNotice,
+                    is MessageContent.Schedule,
+                    is MessageContent.MeetingRequest,
+                    is MessageContent.StandupSummary,
+                    is MessageContent.AgentQuestion,
+                    -> error("Ephemeral content not yet migrated: $content")
                 }.payload
 
             is OutboundMessage.Approval ->
@@ -133,4 +152,20 @@ class SlackOutboundRenderer(
             is OutboundMessage.DirectMessage ->
                 error("DirectMessage is not a renderer concern: $message")
         }
+
+    private fun MessageContent.AgentQuestion.askedBy(publisherId: String): String =
+        prompt
+            .escapeMrkdwn()
+            .lines()
+            .flatMap { line -> line.wrappedForQuote() }
+            .joinToString(separator = "\n", prefix = "<@$publisherId> asked:\n") { line -> "> $line" }
+            .truncateSectionText(limit = SlackBlockLimits.MESSAGE_BODY_BUDGET)
+
+    private fun String.wrappedForQuote(): List<String> =
+        splitSectionText(
+            text = this,
+            maxSections = Int.MAX_VALUE,
+            balanceCodeFences = false,
+            budget = MAX_QUOTED_LINE_LENGTH,
+        ).flatMap { chunk -> chunk.lines() }
 }

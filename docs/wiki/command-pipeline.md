@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-11_
+_type: architecture · updated: 2026-10-12_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -47,7 +47,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 `InterruptedException`은 인터럽트 플래그를 복원해 다시 던지며, `Error`는 잡지 않고 전파한다.
 
 - **`SubCommandDefinition`**: `subCommandIdentifier`/`requiresArguments`/`minRequiredArgs`/`usage`. 슬래시 명령은
-  enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP, LIST, STOP}`).
+  enum으로 구현한다(`MeetingSubCommandDefinition {NONE, LIST}`, `StandupSubCommandDefinition {NONE, SETUP, LIST, STOP, ANSWER}`).
   `NONE`의 식별자가 `""`인 이유는 `SlashCommandRequestBody.subCommandList()`가 빈 텍스트를 `[""]`로 만들기 때문이다.
 - **구현체**: 슬래시는 명령당 하나(`RequestMeetingCommand`, `StandupCommand`, `CveLatestSlashCommand`,
   `CveSubscribe/Unsubscribe/SubscriptionsSlashCommand`). 멘션과 인터랙션은 `InteractionCommand` 하나가 받아 페이로드
@@ -58,7 +58,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - **기능별 컨텍스트**: 멘션 → `Notice/TextResponse/Status/AgentChat/RoleManagement/IntentContext`
   (`IntentContext`는 인텐트 하나만 큐에 넣는 범용 컨텍스트로 `cve …`와 `usage [days]`가 함께 쓴다);
   슬래시 → `RequestMeeting/RequestStandupSetup/RequestCve*Context`; 모달 제출 → `context/form/*SubmissionContext`.
-  비제출 인터랙션 → 컨텍스트 매핑은 `CommandDetailType.createContext()`(`entity/CommandType.kt`), 미매핑은 `EmptyContext`.
+  비제출 인터랙션 → 컨텍스트 매핑은 `CommandDetailType.createContext()`(`entity/CommandType.kt`)인데, 그 `when`은 exhaustive라
+  컨텍스트가 없는 타입은 `EmptyContext` 분기에 **열거**되어 있다 — `CommandDetailType`에 값을 추가하면 거기에도 넣어야 컴파일된다.
 - **제출 라우팅(2026-09-21, Phase 11)**: `view_submission`은 `SubmissionRouter`(`entity/SubmissionRouting.kt`)가
   가로챈다. sealed `InboundSubmission` 변종에 대한 exhaustive `when`이 변종별 `*Parsed.from`(`form/ParsedSubmissions.kt`)
   으로 **먼저 파싱**하고, leaf 컨텍스트는 non-null 파스 모델을 생성자로 받는다 — leaf에는 캐스트도 null도 없다.
@@ -109,6 +110,13 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - **렌더는 배달 시점에 한 번**: relay(폴링 또는 CDC)가 행을 집으면 `OutboxPayloadRenderer.render`가 schema 버전을
   검사하고 `OutboundMessageCodec.decode` 후 `Transport`별 `OutboundRenderer`(`SlackOutboundRenderer`)에 넘긴다.
   스테이저와 렌더러는 같은 `SlackApiEventConstructor`를 쓰므로 wire 출력이 동일하다. 세 번째 렌더 경로는 금지다.
+- **배달 결과를 되받는 길은 `MessagePublishSuccessEvent` 하나다**: relay가 터미널 상태를 기록한 뒤 `eventId`·
+  `commandDetailType`·`messageTs`(`chat.postMessage`의 `ts`)를 담아 동기 발행하고, 리스너 예외는 로그로 삼킨다. 소비자는 둘 —
+  `StandupSummaryService`(요약 메시지의 `outbox:<eventId>` 마커를 실제 ts로 치환)와 `AgentAskThreadStarter`(`AGENT_ASK_QUESTION`
+  행을 디코딩해 `threadId = ts`로 에이전트 턴을 시작, 결정 #38). 발행은 `writeTerminal`의 CAS가 성공한 소유자만 하므로 같은
+  eventId가 두 번 오지는 않는다 — 상태 쓰기를 잃은 행은 `OutboxRecoveryScheduler`가 **같은 행(같은 eventId)** 을 reclaim해 다시
+  보내므로 메시지가 두 번 게시되고, 두 번째 전달의 성공 이벤트가 그 eventId로 리스너를 깨운다(`/ask`는 두 번째 게시물에만 스레드).
+  성공 이벤트 뒤의 처리는 메모리 안이라 리스너 실패·재시작이면 그 턴은 사라진다(결정 #38 한계).
 - **모달 예외의 이유**: `views.open`은 요청 스레드의 `trigger_id`가 필요하고 발급 후 약 3초에 만료된다. 그래서
   `OpenViewEvent`는 아웃박스를 거치지 않고 `SlackViewOpenDispatcher`(`@EventListener`, 의도적으로 `@Async` 없음)가
   `MessageDispatcher.dispatchImmediate`로 호출한다 — 트랜잭션 경계를 가진 호출자 안에서는 `ViewOpenDeferral`이 경계가
@@ -131,7 +139,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   새로 해석하므로 revoke가 즉시 반영된다. 부트스트랩 admin은 DB 행 없이 첫 admin을 만들기 위한 닭-달걀 해소다.
 - **게이트되지 않는 표면**: 인터랙션(`SlackInteractionHandlerImpl.buildCommand`가 `UserRole.USER` 고정)과 슬래시
   서비스(해석기를 호출하지 않음). 둘 다 `BASIC` 표면이라 모달이 모두에게 계속 동작해야 한다는 결정이다. 슬래시에
-  권한을 붙이려면 서비스가 직접 `CommandRoleResolver`를 불러야 한다.
+  권한을 붙이려면 서비스가 직접 `CommandRoleResolver`를 불러야 한다 — 2026-10-12부터 `/ask`가 그 예외다:
+  `AskSlashService`가 역할을 해석해 `AskCommand(actorRole)`에 넘기고 `AskSlashContext`가 `AI`를 검사한다(결정 #13 보완).
 - `grant`/`revoke`/`roles`는 `RoleManagementService`(`@Transactional @EventListener`)가 처리한다. `@Transactional`을
   명시한 이유는 역할 쓰기와 확인 답장의 아웃박스 행이 한 트랜잭션에 묶여야 하기 때문이다(Codex 교차검증 반영).
 
@@ -140,7 +149,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 1. `SlashCommandController`에 `@PostMapping` 추가. HTTP 경로(`/api/slash/meet`)와 Slack 명령 이름(`/meetup`)은
    독립이다. `/api/slash/` 밖의 경로는 `SlackRequestVerificationFilter`가 서명 검증을 하지 않는다.
 2. `SocketModeReceiver.handleSlash`의 `when`에 분기 추가, `AppConfig.Socket`에 명령 이름 프로퍼티 추가
-   (`slack.app.socket.*`). 빠뜨리면 로컬에서만 "Unmapped slash command" 경고로 사라진다.
+   (`slack.app.socket.*`). 빠뜨리면 로컬에서만 "Unmapped slash command" 경고로 사라진다. 명령 이름을 env로 바꿀 수 있게
+   했으면 `scripts/local-container.sh`의 `-e` 허용 목록에도 그 변수를 넣는다(없으면 컨테이너에는 기본 이름만 전달된다).
 3. `domain/command/entity/slash/`에 `Command` 서브클래스 + `SubCommandDefinition` enum(하위 명령이 있으면) 또는
    `NoSubCommands`. `findSubCommandDefinition()`은 `findSubCommandByIdentifier<T>()`를 쓰고, 첫 토큰이 없으면 `NONE`.
 4. `CommandContext`(인터랙션을 받으면 `ReactionContext`) 추가. 모달을 열면 `SlashInvocation.trigger.raw`를 넘겨
@@ -148,7 +158,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
    `SlackApiEventConstructor.open*ModalRequest`를 짝으로 추가한다.
 5. 서비스(`@Transactional`)에서 `IdempotencyCreator.create(data = commandData)` → `Command` 생성 →
    `commandExecutor.execute`. 도메인은 저장소를 못 보므로 선행 데이터는 서비스가 조회해 생성자로 넘긴다
-   (`CveSubscriptionSlashServiceImpl`의 `topics`).
+   (`CveSubscriptionSlashServiceImpl`의 `topics`, `StandupSlashServiceImpl`의 `answerCandidates`). 역할이 필요한 명령이면 같은
+   자리에서 `CommandRoleResolver.resolve`로 해석해 생성자로 넘긴다(`AskSlashService`).
 6. 상태를 바꾸면 `CommandIntent` 변종 + `SlackIntentResolver` 분기 + `CommandEvent`/`EventPayload` + 리스너. 새
    `OutboundMessage`/`MessageContent`를 만들면 `SlackOutboundRenderer` 분기. 빠지면 효과가 **조용히 버려진다**.
 7. 모달 제출이 돌아와야 하면 `CommandDetailType` 항목 + `SlackInboundMapper.buildSubmission`의 `InboundSubmission`

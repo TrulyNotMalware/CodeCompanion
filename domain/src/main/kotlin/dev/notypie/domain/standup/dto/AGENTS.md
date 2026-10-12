@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
 
 # domain/standup/dto
 
@@ -13,6 +13,7 @@ single repository round-trip.
 |------|-------------|
 | `RoutineDto.kt` | `RoutineDto(routineId, routineUid, name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime, cutoffOffset, weekdays, routineTimezone, isActive, members)`; `RoutineMemberDto(userId, userTimezone: ZoneId)` |
 | `StandupSessionDto.kt` | `StandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs?, dispatches, answers)`; `SessionDispatchDto(id, userId, dmTriggerAt, dmSentAt?, dmStatus, failureReason?)`; `StandupAnswerDto(userId, responses, submittedAt)` |
+| `StandupAnswerCandidate.kt` | `StandupAnswerCandidate(sessionUid, routineUid, routineName)` — a routine whose session is `COLLECTING` for the actor, preloaded by `StandupSlashServiceImpl` and consumed by `StandupSlashContext` for `/standup answer` |
 
 ## For AI Agents
 

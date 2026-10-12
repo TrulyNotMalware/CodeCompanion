@@ -42,8 +42,13 @@ features:
       should_escape: false
     - command: /standup
       url: https://<your-host>/api/slash/standup
-      description: Create, list or stop this channel's standup routines
-      usage_hint: setup | list | stop <routine-name>
+      description: Create, list or stop this channel's standup routines, or answer today's standup
+      usage_hint: setup | list | stop <routine-name> | answer [routine-name]
+      should_escape: false
+    - command: /ask
+      url: https://<your-host>/api/slash/ask
+      description: Ask the AI assistant; the question is posted to the channel and answered in its thread
+      usage_hint: <question>
       should_escape: false
     - command: /calendar
       url: https://<your-host>/api/slash/calendar

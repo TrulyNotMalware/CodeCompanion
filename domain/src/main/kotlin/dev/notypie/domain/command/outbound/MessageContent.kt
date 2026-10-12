@@ -40,4 +40,10 @@ sealed interface MessageContent {
         val answers: List<StandupAnswerDto>,
         val questions: List<String>,
     ) : MessageContent
+
+    data class AgentQuestion(
+        val prompt: String,
+        val requesterName: String,
+        val channelName: String,
+    ) : MessageContent
 }

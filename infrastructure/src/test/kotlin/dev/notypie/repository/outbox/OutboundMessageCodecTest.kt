@@ -1,5 +1,6 @@
 package dev.notypie.repository.outbox
 
+import dev.notypie.domain.command.createAgentQuestionMessage
 import dev.notypie.domain.command.createApprovalContents
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
@@ -137,6 +138,10 @@ class OutboundMessageCodecTest :
                             ),
                     ),
             )
+        }
+
+        "ChannelMessage with AgentQuestion round-trips with its detailType" {
+            assertRoundTrips(message = createAgentQuestionMessage(prompt = "Why is the build slow?\nsecond line"))
         }
 
         "Ephemeral with Text round-trips with recipient and detailType" {
