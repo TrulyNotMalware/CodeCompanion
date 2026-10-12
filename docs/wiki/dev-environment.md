@@ -40,7 +40,7 @@ _type: guide · updated: 2026-10-12_
   CDC 토픽을 읽지 않고 아웃박스를 폴링한다. 모드별 빈 선택은 `configurations/conditions/Conditions.kt`의 Condition 네 개가
   맡는다 — 상세는 [events-and-outbox.md](events-and-outbox.md).
 - `local`만 `slack.app.api.app-token`(Socket Mode app-level token)과 `slack.app.socket.meeting-command` /
-  `standup-command` / `calendar-command`를 가진다. 수신기 `SocketModeReceiver`는 `@Profile("local")`이라 다른 프로파일에서는 빈 자체가 없다.
+  `standup-command` / `calendar-command` / `ask-command`를 가진다. 수신기 `SocketModeReceiver`는 `@Profile("local")`이라 다른 프로파일에서는 빈 자체가 없다.
 - AI 사이드카 설정 키(`slack.app.agent.sidecar.base-url` / `bearer-secret` / `request-timeout-seconds`)는 `local`과
   `prod` YAML에만 있다. 빈 자체(`AgentGateway`, `AgentConverseService`)는 `AgentConfiguration`이 프로파일과 무관하게
   만들고 `AppConfig`의 루프백 기본 URL을 쓰므로, 키가 없는 프로파일은 "미연결"이 아니라 "기본값으로 연결 시도"다.
@@ -92,8 +92,8 @@ _type: guide · updated: 2026-10-12_
 2. **별도의 개발용 Slack 앱**에서 Socket Mode를 켜고 `connections:write` 스코프의 app-level token을 발급한다. Socket Mode는
    앱 전체 설정이라 운영 앱에 켜면 Request URL이 비활성화된다.
 3. `SLACK_API_TOKEN`, `SLACK_APP_TOKEN`을 env로 주고 `./gradlew :application:bootRun --args='--spring.profiles.active=local'`
-   을 실행한다. 명령 이름이 `/meetup`·`/standup`·`/calendar`가 아니면 `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` /
-   `SLACK_CALENDAR_COMMAND`로 매핑한다.
+   을 실행한다. 명령 이름이 `/meetup`·`/standup`·`/calendar`·`/ask`가 아니면 `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` /
+   `SLACK_CALENDAR_COMMAND` / `SLACK_ASK_COMMAND`로 매핑한다.
 4. 로그의 `Slack Socket Mode receiver connected`가 성공 신호다.
 
 ### B. HTTP + 터널 (`slack-live`) — 실제 워크스페이스 e2e (구 `real`, 2026-09-21 개명)

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
 
 # infrastructure/repository/outbox/schema
 
@@ -13,7 +13,7 @@ decoding.
 |------|-------------|
 | `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`MEDIUMTEXT` since V23, codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.V2`), `attempt_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised only by the native claim statements, V20), `send_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised by `renewClaim`, lowered by `deferClaim`, V22). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue`. Implements `Persistable<String>`: a `@Transient` flag is true for a freshly built row and cleared by `@PostPersist`/`@PostLoad`, so `save()` of a new row is a plain `persist` (an application-assigned id with a primitive `@Version` would otherwise make Spring Data `merge`, issuing a SELECT before every INSERT on the busiest write path). Only new rows are ever saved; status changes go through the native CAS statements |
 | `MessageStatus.kt` | `enum MessageStatus { INIT, FAILURE, SUCCESS, PENDING, IN_PROGRESS }` |
-| `OutboxSchemaVersion.kt` | `object OutboxSchemaVersion { const V2 = 2; const V3 = 3; const V4 = 4; val SUPPORTED: Set<Int> = setOf(V2, V3, V4) }`. V3 = an envelope with a non-empty `continuation` (2026-10-02); V4 = a `ReplaceMessage` carrying a `fallback` (2026-10-08) |
+| `OutboxSchemaVersion.kt` | `object OutboxSchemaVersion { const V2 = 2; const V3 = 3; const V4 = 4; const V5 = 5; val SUPPORTED: Set<Int> = setOf(V2, V3, V4, V5) }`. V3 = an envelope with a non-empty `continuation` (2026-10-02); V4 = a `ReplaceMessage` carrying a `fallback` (2026-10-08); V5 (2026-10-12) marks rows whose `ChannelMessage` content is `MessageContent.AgentQuestion` (`/ask` root message) |
 
 ## For AI Agents
 

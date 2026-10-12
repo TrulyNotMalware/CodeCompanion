@@ -7,7 +7,10 @@ import dev.notypie.domain.command.entity.slash.StandupSubCommandDefinition
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.standup.createStandupAnswerCandidate
+import dev.notypie.domain.standup.dto.StandupAnswerCandidate
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -17,10 +20,11 @@ import java.util.UUID
 class StandupCommandTest :
     BehaviorSpec({
 
-        fun standupCommand(subCommands: List<String>) =
+        fun standupCommand(subCommands: List<String>, answerCandidates: List<StandupAnswerCandidate> = emptyList()) =
             StandupCommand(
                 idempotencyKey = UUID.randomUUID(),
                 commandData = createSlashInboundCommand(subCommands = subCommands, triggerId = "trigger-standup"),
+                answerCandidates = answerCandidates,
             )
 
         given("StandupCommand findSubCommandDefinition") {
@@ -56,6 +60,14 @@ class StandupCommandTest :
                 }
             }
 
+            `when`("subcommand is 'answer'") {
+                val definition = standupCommand(subCommands = listOf("answer")).findSubCommandDefinition()
+
+                then("should return StandupSubCommandDefinition.ANSWER") {
+                    definition shouldBe StandupSubCommandDefinition.ANSWER
+                }
+            }
+
             `when`("subcommand is unknown") {
                 val command = standupCommand(subCommands = listOf("unknown_sub"))
 
@@ -77,7 +89,7 @@ class StandupCommandTest :
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe
                         "Unknown subcommand `unknown_sub`.\nUsage:\n• `/standup setup`\n• `/standup list`\n" +
-                        "• `/standup stop &lt;routine-name&gt;`"
+                        "• `/standup stop &lt;routine-name&gt;`\n• `/standup answer [routine-name]`"
                 }
             }
         }
@@ -109,6 +121,41 @@ class StandupCommandTest :
                 then("a StopStandupRoutine intent carries the space-joined routine name") {
                     result.ok shouldBe true
                     effects.single() shouldBe CommandIntent.StopStandupRoutine(routineName = "daily sync")
+                }
+            }
+        }
+
+        given("StandupCommand handleEvent with 'answer' and one preloaded candidate") {
+            val candidate = createStandupAnswerCandidate()
+            val command = standupCommand(subCommands = listOf("answer"), answerCandidates = listOf(candidate))
+
+            `when`("handleEvent") {
+                val result = command.handleEvent()
+                val effects = command.drainIntents()
+
+                then("the candidate reaches the context and its answer modal opens on the slash trigger") {
+                    result.ok shouldBe true
+                    val open = effects.single().shouldBeInstanceOf<OutboundMessage.OpenModal>()
+                    open.handle.raw shouldBe "trigger-standup"
+                    val form = open.form.shouldBeInstanceOf<ModalForm.StandupFill>()
+                    form.sessionUid shouldBe candidate.sessionUid
+                    form.routineUid shouldBe candidate.routineUid
+                }
+            }
+        }
+
+        given("StandupCommand handleEvent with 'answer' built without candidates") {
+            val command = standupCommand(subCommands = listOf("answer"))
+
+            `when`("handleEvent") {
+                val result = command.handleEvent()
+                val effects = command.drainIntents()
+
+                then("the requester hears that nothing is collecting and no modal opens") {
+                    result.ok shouldBe true
+                    val ephemeral = effects.single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        StandupSlashContext.NO_COLLECTING_STANDUP_MESSAGE
                 }
             }
         }

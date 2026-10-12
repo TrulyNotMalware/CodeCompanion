@@ -5,6 +5,7 @@ import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.socket_mode.response.AckResponse
 import dev.notypie.application.common.parseRequestBodyData
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.agent.AskSlashService
 import dev.notypie.application.service.calendar.CalendarSlashService
 import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
@@ -36,6 +37,7 @@ class SocketModeReceiver(
     private val cveSubscriptionSlashService: CveSubscriptionSlashService,
     private val cveQuerySlashService: CveQuerySlashService,
     private val calendarSlashService: CalendarSlashService,
+    private val askSlashService: AskSlashService,
     private val interactionHandler: InteractionHandler,
     private val appMentionEventHandler: AppMentionEventHandler,
 ) : SmartLifecycle {
@@ -122,6 +124,13 @@ class SocketModeReceiver(
 
             appConfig.socket.calendarCommand ->
                 calendarSlashService.handleCalendar(
+                    headers = noHeaders,
+                    payload = payload,
+                    commandData = commandData,
+                )
+
+            appConfig.socket.askCommand ->
+                askSlashService.handleAsk(
                     headers = noHeaders,
                     payload = payload,
                     commandData = commandData,

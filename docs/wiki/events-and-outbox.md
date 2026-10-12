@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-07_
+_type: architecture · updated: 2026-10-12_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -87,13 +87,14 @@ _type: architecture · updated: 2026-10-07_
   미등록이라 인코딩/디코딩 시 fail-fast 한다.
 - `transport`는 문자열 컬럼(Debezium CDC가 enum을 null로 전달). 오늘은 `SLACK`뿐; 추가 = enum 상수 + 렌더러 등록.
 - `schema_version`: 행은 그것을 읽을 수 있는 가장 오래된 버전으로 찍는다. 일반 행은 V2, `continuation`이 있는
-  연쇄의 머리 행은 V3(2026-10-02)이고 읽기는 `SUPPORTED`(= {V2, V3})만 허용(`OutboxPayloadRenderer.render`의
+  연쇄의 머리 행은 V3(2026-10-02)이고 읽기는 `SUPPORTED`(= {V2, V3, V4, V5})만 허용(`OutboxPayloadRenderer.render`의
   `require`). Jackson 3은 모르는 필드를 무시하므로 V3을 모르는 바이너리가 머리 행을 V2로 읽으면 첫 조각만 보내고
   나머지를 조용히 버린다. V3이면 미지원 스키마 보류 가드(`544ae409`)는 있지만 V3을 읽지 못하는 바이너리는 머리 행을
   `IN_PROGRESS`로 두고(행마다 24시간 포기 기한 안에 V3을 읽는 바이너리가 돌아오면 스윕이 이어 보냄), 가드 이전 바이너리(main)는
   렌더 실패(`FAILURE`)로 남긴다. 이미 별도 행으로 들어간 V2 조각(연쇄의 마지막 조각)은 어느 바이너리에서나 보낸다. V1(렌더된 Slack 페이로드 + `metadata`/`type` 컬럼)은 big-bang drain으로 폐기했다(V11 마이그레이션, 데이터
   이전 없음). 새 shape는 그 shape를 쓰는 행에만 새 버전을 찍고 같은 변경에서 `SUPPORTED`에 넣으며, drain 창이
-  보장된 뒤에만 옛 버전을 뺀다.
+  보장된 뒤에만 옛 버전을 뺀다. 적용 예: `ReplaceMessage` + fallback 행은 V4(2026-10), `MessageContent.AgentQuestion`(`/ask` 질문 루트
+  메시지)을 담은 행은 V5(2026-10-12) — 새 콘텐츠 subtype도 "새 shape"라, 그것을 모르는 바이너리가 디코딩 실패(`FAILURE`) 대신 보류하게 한다.
 - 상태(`MessageStatus`): 새 행은 `PENDING`. 폴링·CDC·복구 스윕 모두 `claimPending`/`reclaimStuck`으로
   `IN_PROGRESS`를 잡고, dispatch 결과를 `completeClaim`으로 `SUCCESS`/`FAILURE`에 기록한다. `INIT`은 어디서도
   쓰이지 않는다. `FAILURE` 행을 다시 읽는 코드는 없다(재구동은 수동).

@@ -141,6 +141,17 @@ fun createRoutineDto(
         members = members,
     )
 
+fun createStandupAnswerCandidate(
+    sessionUid: UUID = UUID.randomUUID(),
+    routineUid: UUID = UUID.randomUUID(),
+    routineName: String = "Daily Standup",
+): dev.notypie.domain.standup.dto.StandupAnswerCandidate =
+    dev.notypie.domain.standup.dto.StandupAnswerCandidate(
+        sessionUid = sessionUid,
+        routineUid = routineUid,
+        routineName = routineName,
+    )
+
 fun createStandupAnswerDto(
     userId: String = TEST_USER_ID,
     responses: List<String> = listOf("Did the thing", "Will do the next thing"),

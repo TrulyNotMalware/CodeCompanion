@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.exception.ControllerAdvice
+import dev.notypie.application.service.agent.AskSlashService
 import dev.notypie.application.service.calendar.CalendarSlashService
 import dev.notypie.application.service.cve.query.CveQuerySlashService
 import dev.notypie.application.service.cve.subscription.CveSubscriptionSlashService
@@ -34,6 +35,7 @@ class SlackControllersTest :
         val eventHandler = mockk<AppMentionEventHandler>()
         val meetingService = mockk<MeetingService>(relaxed = true)
         val calendarSlashService = mockk<CalendarSlashService>(relaxed = true)
+        val askSlashService = mockk<AskSlashService>(relaxed = true)
         val mockMvc =
             MockMvcBuilders
                 .standaloneSetup(
@@ -44,6 +46,7 @@ class SlackControllersTest :
                         cveSubscriptionSlashService = mockk(relaxed = true),
                         cveQuerySlashService = mockk(relaxed = true),
                         calendarSlashService = calendarSlashService,
+                        askSlashService = askSlashService,
                     ),
                 ).setControllerAdvice(ControllerAdvice())
                 .build()
@@ -233,6 +236,44 @@ class SlackControllersTest :
             }
         }
 
+        given("an /ask slash command") {
+            val form =
+                LinkedMultiValueMap<String, String>().apply {
+                    createSlashCommandForm(command = "/ask", text = "why is CI red?").forEach { (k, v) ->
+                        add(k, v)
+                    }
+                }
+
+            `when`("Slack posts it as a form to /api/slash/ask") {
+                val response =
+                    mockMvc
+                        .perform(
+                            post("/api/slash/ask")
+                                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                                .params(form),
+                        ).andReturn()
+                        .response
+
+                then("the ask slash service handles it with the question as its tokens, and nothing else does") {
+                    response.status shouldBe 200
+                    verify(exactly = 1) {
+                        askSlashService.handleAsk(
+                            headers = any(),
+                            payload = match { it.command == "/ask" && it.subCommands == "why is CI red?" },
+                            commandData = match { it.subCommands == listOf("why", "is", "CI", "red?") },
+                        )
+                    }
+                    verify(exactly = 0) {
+                        meetingService.handleMeeting(
+                            headers = any(),
+                            payload = match { it.command == "/ask" },
+                            commandData = any(),
+                        )
+                    }
+                }
+            }
+        }
+
         given("slash commands whose service opens a modal") {
             val messageDispatcher = mockk<MessageDispatcher>()
             var opens = 0
@@ -268,6 +309,8 @@ class SlackControllersTest :
             every { calendar.handleCalendar(headers = any(), payload = any(), commandData = any()) } answers {
                 openModal()
             }
+            val ask = mockk<AskSlashService>()
+            every { ask.handleAsk(headers = any(), payload = any(), commandData = any()) } answers { openModal() }
             val slashMvc =
                 MockMvcBuilders
                     .standaloneSetup(
@@ -277,6 +320,7 @@ class SlackControllersTest :
                             cveSubscriptionSlashService = subscription,
                             cveQuerySlashService = query,
                             calendarSlashService = calendar,
+                            askSlashService = ask,
                         ),
                     ).build()
             val form =
@@ -290,6 +334,7 @@ class SlackControllersTest :
                 "/meet",
                 "/standup",
                 "/calendar",
+                "/ask",
                 "/subscribe",
                 "/unsubscribe",
                 "/subscriptions",

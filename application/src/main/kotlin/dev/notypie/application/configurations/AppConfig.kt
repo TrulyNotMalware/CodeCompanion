@@ -176,6 +176,7 @@ data class AppConfig(
         val meetingCommand: String = "/meetup",
         val standupCommand: String = "/standup",
         val calendarCommand: String = "/calendar",
+        val askCommand: String = "/ask",
         val subscribeCommand: String = "/subscribe",
         val unsubscribeCommand: String = "/unsubscribe",
         val subscriptionsCommand: String = "/subscriptions",

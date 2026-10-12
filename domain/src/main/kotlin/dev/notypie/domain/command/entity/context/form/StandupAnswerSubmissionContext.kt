@@ -5,9 +5,8 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.SubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
-import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.MessageContent
-import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 
 internal class StandupAnswerSubmissionContext(
@@ -22,32 +21,30 @@ internal class StandupAnswerSubmissionContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_ANSWER_SUBMIT
 
     override fun accept(model: StandupAnswerParsed) {
-        val noticeRef =
-            when (val notice = model.notice) {
-                is NoticeTarget.Update ->
-                    MessageRef(conversation = ConversationTarget(id = notice.channel), messageId = notice.messageTs)
-
-                NoticeTarget.None -> null
-            }
         if (model.responses.isNotEmpty()) {
             addIntent(
-                CommandIntent.RecordStandupAnswer(
-                    sessionUid = model.sessionUid,
-                    userId = model.userId,
-                    responses = model.responses,
-                    notice = noticeRef,
-                ),
+                intent =
+                    CommandIntent.RecordStandupAnswer(
+                        sessionUid = model.sessionUid,
+                        userId = model.userId,
+                        responses = model.responses,
+                        confirmation = model.confirmation,
+                    ),
             )
             return
         }
-        noticeRef?.let { ref ->
-            addOutbound(
-                OutboundMessage.UpdateMessage(
-                    ref = ref,
-                    content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
-                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                ),
-            )
+        when (val confirmation = model.confirmation) {
+            is StandupAnswerConfirmation.UpdateNotice ->
+                addOutbound(
+                    message =
+                        OutboundMessage.UpdateMessage(
+                            ref = confirmation.ref,
+                            content = MessageContent.Text(headline = null, markdown = "Standup submitted."),
+                            detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                        ),
+                )
+
+            is StandupAnswerConfirmation.Ephemeral, StandupAnswerConfirmation.None -> Unit
         }
     }
 }

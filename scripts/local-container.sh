@@ -16,7 +16,7 @@
 #                                              GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
 #                                              (both set → calendar integration enabled),
 #                                              SLACK_MEETING_COMMAND / SLACK_STANDUP_COMMAND /
-#                                              SLACK_CALENDAR_COMMAND,
+#                                              SLACK_CALENDAR_COMMAND / SLACK_ASK_COMMAND,
 #                                              CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY
 #                                              (SIDECAR_PROVIDER=claude)
 #   ~/.config/codecompanion/local-secrets.env  generated (0600), missing keys appended: sidecar
@@ -161,6 +161,7 @@ start_app() {
     -e SLACK_MEETING_COMMAND \
     -e SLACK_STANDUP_COMMAND \
     -e SLACK_CALENDAR_COMMAND \
+    -e SLACK_ASK_COMMAND \
     -e SIDECAR_URL="http://$SIDECAR_CONTAINER:7300" \
     -e SIDECAR_BEARER_SECRET \
     -e SLACK_APP_MCP_ENABLED=true \

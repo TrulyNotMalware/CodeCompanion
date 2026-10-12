@@ -37,6 +37,8 @@ internal class AppMentionContextParser(
             • `/standup setup` — create a standup routine (modal)
             • `/standup list` — show this channel's active standup routines
             • `/standup stop <routine-name>` — stop a routine (creator or admin)
+            • `/standup answer [routine-name]` — open today's standup form for a routine you belong to in this channel
+            • `/ask <question>` — ask the AI assistant from a slash command (the question is posted to the channel, the answer arrives in its thread; needs `ai_user`)
             • `/subscribe` / `/unsubscribe` — pick CVE topics to follow (modal; replies by DM)
             • `/subscriptions` — list your CVE subscriptions (DM)
             • `/latest [topic-key]` — latest summarized CVE updates (DM)

@@ -10,6 +10,8 @@ import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.templates.AddParticipantModalIds
@@ -20,6 +22,7 @@ import dev.notypie.templates.RescheduleMeetingModalIds
 import dev.notypie.templates.StandupModalIds
 import dev.notypie.templates.StandupSetupModalIds
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -208,6 +211,53 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     update.ref.conversation.id shouldBe noticeChannel
                     update.ref.messageId shouldBe noticeMessageTs
                     update.detailType shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                }
+            }
+        }
+
+        given("the standup-answer modal opened by /standup answer has a command channel but no message ts") {
+            val sessionUid = UUID.randomUUID()
+            val userId = "U_STANDUP_SLASH"
+            val commandChannel = "C_CMD_ANSWER"
+            val modalJson =
+                templateBuilder.standupModalViewJson(
+                    routineName = "Daily Standup",
+                    sessionDate = LocalDate.of(2026, 5, 4),
+                    sessionUid = sessionUid,
+                    userId = userId,
+                    noticeChannel = commandChannel,
+                    noticeMessageTs = "",
+                    questions = listOf("What did you do yesterday?"),
+                )
+            val submissionPayload =
+                createRoutingOnlyViewSubmissionJson(
+                    callbackId = StandupModalIds.CALLBACK_ID,
+                    privateMetadata = extractPrivateMetadata(modalViewJson = modalJson),
+                    stateValues =
+                        stateValuesJson(
+                            "${StandupModalIds.BLOCK_ID_PREFIX}0" to plainTextInputStateJson(value = "Shipped it"),
+                        ),
+                )
+
+            `when`("the parser reads the writer's actual private_metadata") {
+                val interactionPayload = parser.parseStringPayload(payload = submissionPayload)
+
+                then("the trailing empty ts survives as a third routing extra") {
+                    interactionPayload.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                    interactionPayload.routingExtras shouldBe listOf(userId, commandChannel, "")
+                }
+            }
+
+            `when`("the interaction is routed through the real domain command pipeline") {
+                val (output, effects) = runThroughDomain(viewSubmissionPayload = submissionPayload)
+
+                then("the record intent asks for an ephemeral confirmation in the command channel") {
+                    output.ok shouldBe true
+                    val record = effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single()
+                    record.responses shouldBe listOf("Shipped it")
+                    record.confirmation shouldBe
+                        StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = commandChannel))
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
         }

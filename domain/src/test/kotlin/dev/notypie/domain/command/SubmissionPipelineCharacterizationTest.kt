@@ -9,6 +9,9 @@ import dev.notypie.domain.command.entity.InteractionCommand
 import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
+import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.meet.entity.RejectReason
@@ -315,8 +318,11 @@ class SubmissionPipelineCharacterizationTest :
                     intent.sessionUid shouldBe sessionUid
                     intent.userId shouldBe "U_MEMBER"
                     intent.responses shouldContainExactly listOf("did X", "will do Y")
-                    intent.notice?.conversation?.id shouldBe "C_STANDUP"
-                    intent.notice?.messageId shouldBe "777.888"
+                    intent.confirmation shouldBe
+                        StandupAnswerConfirmation.UpdateNotice(
+                            ref =
+                                MessageRef(conversation = ConversationTarget(id = "C_STANDUP"), messageId = "777.888"),
+                        )
                     effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }

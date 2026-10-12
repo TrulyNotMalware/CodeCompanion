@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/standup
 
@@ -12,7 +12,7 @@ application services and infrastructure renderers.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `StandupTestFixtures.kt` | Entities: `createRoutine(name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime = 10:00, cutoffOffset = Routine.DEFAULT_CUTOFF_OFFSET, weekdays = Routine.DEFAULT_WEEKDAYS, routineTimezone = Asia/Seoul, isActive, routineUid, members)`, `createRoutineMember(userId, userTimezone)`, `createStandupSession(routineUid, sessionDate = 2026-05-01, cutoffAt = 02:00Z, status = COLLECTING, summaryMessageTs, sessionUid, dispatches, answers)`, `createSessionDispatch(userId, dmTriggerAt = 01:00Z, dmSentAt, dmStatus = PENDING, failureReason)`, `createStandupAnswer(userId, responses, submittedAt = 01:30Z)`. DTOs: `createRoutineDto(..., cutoffOffset = 1h, weekdays = Mon–Fri, members)`, `createRoutineMemberDto(userId, userTimezone)`, `createStandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs, dispatches, answers)`, `createSessionDispatchDto(id, userId, dmTriggerAt, dmSentAt, dmStatus, failureReason)`, `createStandupAnswerDto(userId, responses, submittedAt)` |
+| `StandupTestFixtures.kt` | Entities: `createRoutine(name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime = 10:00, cutoffOffset = Routine.DEFAULT_CUTOFF_OFFSET, weekdays = Routine.DEFAULT_WEEKDAYS, routineTimezone = Asia/Seoul, isActive, routineUid, members)`, `createRoutineMember(userId, userTimezone)`, `createStandupSession(routineUid, sessionDate = 2026-05-01, cutoffAt = 02:00Z, status = COLLECTING, summaryMessageTs, sessionUid, dispatches, answers)`, `createSessionDispatch(userId, dmTriggerAt = 01:00Z, dmSentAt, dmStatus = PENDING, failureReason)`, `createStandupAnswer(userId, responses, submittedAt = 01:30Z)`. DTOs: `createRoutineDto(..., cutoffOffset = 1h, weekdays = Mon–Fri, members)`, `createRoutineMemberDto(userId, userTimezone)`, `createStandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs, dispatches, answers)`, `createSessionDispatchDto(id, userId, dmTriggerAt, dmSentAt, dmStatus, failureReason)`, `createStandupAnswerDto(userId, responses, submittedAt)`; `createStandupAnswerCandidate(sessionUid, routineUid, routineName = "Daily Standup")` |
 
 ## For AI Agents
 

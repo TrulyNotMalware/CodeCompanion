@@ -53,7 +53,9 @@ _type: decision · updated: 2026-10-12_
 13. **역할 계층 `user ⊂ ai_user ⊂ developer ⊂ admin`, 멘션 경로만 게이트.** 슬래시·인터랙션은 BASIC 전용이라
     게이트하지 않는다. 설정의 `bootstrap-admins`는 불변(채팅으로 grant/revoke 불가)이며 DB row보다 우선.
     이유: 부트스트랩 순환 문제 해소. 상태: 유지(2026-07-07, Phase 10). 근거: `Refactor.md` Phase 10,
-    `README.md` Bot Commands & Roles.
+    `README.md` Bot Commands & Roles. **보완(2026-10-12):** 슬래시도 명령별로 게이트할 수 있다 — `/ask`는
+    `AskSlashService`가 `CommandRoleResolver`로 역할을 해석해 도메인 `AskCommand`에 넘기고, `AskSlashContext`가 `AI` 권한을
+    검사한다(거부 문구는 멘션 경로와 동일). 그 밖의 슬래시·인터랙션은 그대로 BASIC이다. 근거: `command-pipeline.md` §5, 결정 #38.
 14. **MCP 서버는 사이드카가 아니라 앱 안에.** 이유: `CommandRoleResolver`·스테이저·기존 서비스를 재사용하고
     사이드카는 도메인 무지로 유지. 바인드는 루프백 전용 — 판정은 소켓의 `remoteAddr`로 하므로 `server.forward-headers-strategy: none`을 고정하고, 루프백 전용 모드에서는 forwarding 헤더가 붙은 요청을 거부한다(2026-10-01, Kubernetes에서 Boot가 `X-Forwarded-For`를 신뢰해 위조한 `127.0.0.1`이 통과할 수 있었음). 상태: 유지(1차 2026-07-13). 근거: `Refactor.md`
     "후속 플랜 — Agent lane MCP".
@@ -114,6 +116,31 @@ _type: decision · updated: 2026-10-12_
     - **알려진 한계:** disconnect 뒤에도 이미 미러된 이벤트는 캘린더에 남는다(지울 토큰이 없다. disconnect는 `PENDING` 행만
       `FAILED`로 두고 나머지 행은 재연결 때 되살리려고 보존한다). 다른 계정으로 재연결하면 옛 계정의 사본도 남는다. 연결되지 않은
       동안(첫 연결 전, 또는 disconnect 뒤 재연결 전) 수락한 미팅은 큐 행이 없어 미러되지 않는다.
+38. **`/ask`는 질문을 채널 메시지로 올리고 답은 그 스레드에 달며, 스레드 id는 아웃박스 전달 이벤트에서 얻는다 (2026-10-12).**
+    슬래시 호출은 채널에 보이지 않고 `response_url`은 도메인에 들어오지 않으므로, `AskSlashContext`는
+    `MessageContent.AgentQuestion`을 담은 `ChannelMessage`(detailType `AGENT_ASK_QUESTION`) 하나만 아웃박스에 넣는다. 전달 뒤
+    relay가 발행하는 `MessagePublishSuccessEvent`의 `messageTs`를 `AgentAskThreadStarter`가 받아 아웃박스 행을 디코딩하고
+    `AgentConverseRequestEvent(threadId = ts)`를 발행하면, 그 뒤는 멘션 `ask`와 같은 경로다(세션 키 `channel:ts:user`라 그 스레드에서
+    멘션하면 이어진다). 기각: ① 동기 `chat.postMessage`로 ts를 먼저 얻기 — 모달 외 유일한 아웃박스 우회가 되고 at-least-once를
+    잃는다; ② `response_url`을 도메인까지 전달 — 5회·30분 제한이고 스레드가 없다; ③ 사용자별 세션 키(`channel:user`) — 톱레벨
+    멘션은 호출마다 새 스레드라 의미가 어긋난다. 알려진 한계: 봇이 없는 채널에서는 루트 메시지가 `not_in_channel`로 실패해 아무
+    응답이 없다(슬래시 공통, 후속 3-1); relay는 자기 CAS가 터미널 상태를 기록했을 때만 성공 이벤트를 내므로 같은 eventId가 두 번 오지는
+    않지만, 상태 쓰기를 잃으면 recovery가 같은 행을 reclaim해 루트 메시지를 **다시 게시**하고 두 번째 게시물에만 스레드가 달린다(수용);
+    성공 이벤트 이후는 메모리 안(리스너 → 턴 executor)이라 리스너의 DB 읽기 실패나 턴 전 재시작이면 질문만 남고 답이 오지 않는다 —
+    `@bot ask`도 턴 중 재시작이면 같지만 `/ask`는 전달 뒤 창이 하나 더 있다. 영속 레저(outbox eventId + ts, V26) + 재개 스윕은 후속
+    (Codex 2026-10-12 HIGH). 상태: 유지. 근거:
+    `service/agent/AGENTS.md`, `StandupSummaryService`의 `outbox:<eventId>` 치환 패턴, `.omc/plans/slash-slice1-ask-standup-answer.md`.
+39. **`/standup answer`는 서비스가 후보를 미리 조회해 도메인에 넘기고, 슬래시 기원 제출은 DM 갱신 대신 ephemeral로 확인한다
+    (2026-10-12).** 도메인은 저장소를 못 보므로 `StandupSlashServiceImpl`이 루틴마다 후보 세션 하나를 골라 `StandupAnswerCandidate`로
+    넘기고, 컨텍스트는 0개면 안내, 1개면 기존 `StandupFill` 모달, 여럿이면 이름을 요구한다(같은 이름이 여럿이면 DM 버튼으로 안내).
+    선택 규칙: 요청자가 멤버인 활성 루틴에서, **멤버 로컬 날짜 d**(`member.userTimezone`)의 전날과 당일 세션 중 `COLLECTING`이고 컷오프
+    전인 것을 모아, 둘이면 ① 그 멤버의 프롬프트가 이미 나갔고(`dispatch.dmTriggerAt <= now`) 미답변인 세션 → ② 미답변 세션 → ③ 더
+    이른 날짜 순으로 하나를 고른다. 날짜를 루틴 타임존으로 잡지 않는 이유: 스케줄러가 멤버 DM을
+    `LocalDateTime.of(sessionDate, trigger).atZone(member.userTimezone)`에 보내므로 멤버의 날짜가 곧 세션 날짜다(서쪽 멤버가 다음 날
+    세션에 답하는 사고, 코드 리뷰 HIGH-1). 전날까지 보는 이유: `cutoffOffset`이 최대 1,440분이라 전날 세션이 자정을 넘겨 열려 있을 수
+    있다(Codex HIGH). 프롬프트 전 조기 답변은 그 세션이 유일할 때만 허용된다. DM 알림이 없는 제출(`noticeMessageTs` 공백)은 `UpdateMessage` 대신 요청자에게 ephemeral로
+    결과를 알린다. 이유: 기존 모달·제출 파이프라인(`STANDUP_PROMPT`/`STANDUP_ANSWER_SUBMIT`)을 그대로 쓰기 위해. 상태: 유지.
+    근거: `service/standup/AGENTS.md`, `.omc/plans/slash-slice1-ask-standup-answer.md`.
 
 ## 빌드·런타임
 

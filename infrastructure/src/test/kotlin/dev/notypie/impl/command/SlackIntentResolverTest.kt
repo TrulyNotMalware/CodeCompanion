@@ -17,6 +17,7 @@ import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
 import dev.notypie.domain.command.entity.event.UpdateMeetingAttendanceEvent
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
@@ -238,12 +239,16 @@ class SlackIntentResolverTest :
 
         given("RecordStandupAnswer intent") {
             val sessionUid = UUID.randomUUID()
+            val updateNotice =
+                StandupAnswerConfirmation.UpdateNotice(
+                    ref = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1.2"),
+                )
             val intent =
                 CommandIntent.RecordStandupAnswer(
                     sessionUid = sessionUid,
                     userId = "U_STANDUP",
                     responses = listOf("Finished #12", "Working on #13"),
-                    notice = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1.2"),
+                    confirmation = updateNotice,
                 )
 
             `when`("resolveAll is called") {
@@ -257,9 +262,31 @@ class SlackIntentResolverTest :
                     record.payload.sessionUid shouldBe sessionUid
                     record.payload.userId shouldBe "U_STANDUP"
                     record.payload.responses shouldBe listOf("Finished #12", "Working on #13")
-                    record.payload.notice shouldBe
-                        MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1.2")
+                    record.payload.confirmation shouldBe updateNotice
                     record.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
+                }
+            }
+        }
+
+        given("RecordStandupAnswer intent from a /standup answer modal") {
+            val intent =
+                CommandIntent.RecordStandupAnswer(
+                    sessionUid = UUID.randomUUID(),
+                    userId = "U_STANDUP",
+                    responses = listOf("Finished #12"),
+                    confirmation = StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = "C_CMD")),
+                )
+
+            `when`("resolveAll is called") {
+                val record =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+                        .shouldBeInstanceOf<RecordStandupAnswerEvent>()
+
+                then("the ephemeral confirmation reaches the payload so the service can answer in the channel") {
+                    record.payload.confirmation shouldBe
+                        StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = "C_CMD"))
                 }
             }
         }

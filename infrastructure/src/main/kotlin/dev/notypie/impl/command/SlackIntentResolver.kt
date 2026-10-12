@@ -226,7 +226,7 @@ class SlackIntentResolver {
                             sessionUid = intent.sessionUid,
                             userId = intent.userId,
                             responses = intent.responses,
-                            notice = intent.notice,
+                            confirmation = intent.confirmation,
                         ),
                     type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
                 )

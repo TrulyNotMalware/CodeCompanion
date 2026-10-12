@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
 
 # domain/command/entity/event
 
@@ -25,8 +25,9 @@ implements to deliver them.
   (or `XxxEvent` for state changes).
 - Every payload that expects an asynchronous reply carries `responseBasicInfo: CommandBasicInfo` — the
   channel/app the listener answers on. `UpdateMeetingAttendancePayload` omits it because its listener does not
-  post; `RecordStandupAnswerPayload` carries `notice: MessageRef?` instead — the DM prompt the listener
-  collapses with the outcome.
+  post; `RecordStandupAnswerPayload` carries `confirmation: StandupAnswerConfirmation` instead — `UpdateNotice(ref)` is the
+  DM prompt the listener collapses with the outcome, `Ephemeral(channel)` asks for an ephemeral confirmation when the modal
+  came from `/standup answer` and there is no message to collapse, `None` asks for nothing.
 - `type: CommandDetailType` on the event is the routing token that later interactions use to find
   their context again; it must match what the emitting context declared.
 - `name` defaults to the event's simple class name and `timestamp` to `System.currentTimeMillis()` at

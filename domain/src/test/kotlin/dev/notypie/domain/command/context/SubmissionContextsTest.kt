@@ -21,6 +21,7 @@ import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionCon
 import dev.notypie.domain.command.entity.context.form.StandupSetupParsed
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -178,51 +179,77 @@ class SubmissionContextsTest :
 
         given("StandupAnswerSubmissionContext") {
             val sessionUid = UUID.randomUUID()
+            val updateNotice =
+                StandupAnswerConfirmation.UpdateNotice(
+                    ref = MessageRef(conversation = ConversationTarget(id = "C"), messageId = "1"),
+                )
+            val ephemeral = StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = "C_CMD"))
 
-            fun model(responses: List<String>, notice: NoticeTarget) =
+            fun model(responses: List<String>, confirmation: StandupAnswerConfirmation) =
                 StandupAnswerParsed(
                     sessionUid = sessionUid,
                     userId = "U_M",
                     responses = responses,
-                    notice = notice,
+                    confirmation = confirmation,
                 )
 
-            `when`("responses are present with an Update notice") {
+            `when`("responses are present with an UpdateNotice confirmation") {
                 val intents = createIntentQueue()
                 StandupAnswerSubmissionContext(
                     commandBasicInfo = createCommandBasicInfo(),
                     intents = intents,
-                    model =
-                        model(
-                            responses = listOf("a"),
-                            notice = NoticeTarget.Update(channel = "C", messageTs = "1"),
-                        ),
+                    model = model(responses = listOf("a"), confirmation = updateNotice),
                 ).handleInteraction(interaction = interaction)
 
                 then("the record intent carries the notice and no update goes out before the outcome is known") {
                     val effects = intents.drainSnapshot()
-                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single().notice shouldBe
-                        MessageRef(conversation = ConversationTarget(id = "C"), messageId = "1")
+                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single().confirmation shouldBe
+                        updateNotice
                     effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldBeEmpty()
                 }
             }
 
-            `when`("responses are empty but the notice is an Update") {
+            `when`("responses are present with an Ephemeral confirmation from /standup answer") {
                 val intents = createIntentQueue()
                 StandupAnswerSubmissionContext(
                     commandBasicInfo = createCommandBasicInfo(),
                     intents = intents,
-                    model =
-                        model(
-                            responses = emptyList(),
-                            notice = NoticeTarget.Update(channel = "C", messageTs = "1"),
-                        ),
+                    model = model(responses = listOf("a"), confirmation = ephemeral),
+                ).handleInteraction(interaction = interaction)
+
+                then("the record intent carries the ephemeral confirmation and nothing goes out yet") {
+                    val effects = intents.drainSnapshot()
+                    effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().single().confirmation shouldBe
+                        ephemeral
+                    effects.filterIsInstance<OutboundMessage>().shouldBeEmpty()
+                }
+            }
+
+            `when`("responses are empty and the confirmation is an Ephemeral") {
+                val intents = createIntentQueue()
+                StandupAnswerSubmissionContext(
+                    commandBasicInfo = createCommandBasicInfo(),
+                    intents = intents,
+                    model = model(responses = emptyList(), confirmation = ephemeral),
+                ).handleInteraction(interaction = interaction)
+
+                then("nothing is recorded and there is no message to collapse") {
+                    intents.drainSnapshot().shouldBeEmpty()
+                }
+            }
+
+            `when`("responses are empty but the confirmation is an UpdateNotice") {
+                val intents = createIntentQueue()
+                StandupAnswerSubmissionContext(
+                    commandBasicInfo = createCommandBasicInfo(),
+                    intents = intents,
+                    model = model(responses = emptyList(), confirmation = updateNotice),
                 ).handleInteraction(interaction = interaction)
 
                 then("persistence is suppressed but the update still goes out") {
                     val effects = intents.drainSnapshot()
                     effects.filterIsInstance<CommandIntent.RecordStandupAnswer>().shouldBeEmpty()
-                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().shouldHaveSize(1)
+                    effects.filterIsInstance<OutboundMessage.UpdateMessage>().single().ref shouldBe updateNotice.ref
                 }
             }
         }

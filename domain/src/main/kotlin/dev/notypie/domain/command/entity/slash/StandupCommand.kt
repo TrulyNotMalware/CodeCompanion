@@ -10,11 +10,13 @@ import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.common.error.exceptionDetails
+import dev.notypie.domain.standup.dto.StandupAnswerCandidate
 import java.util.UUID
 
 class StandupCommand(
     idempotencyKey: UUID,
     commandData: InboundCommand,
+    private val answerCandidates: List<StandupAnswerCandidate> = emptyList(),
 ) : Command<StandupSubCommandDefinition>(
         idempotencyKey = idempotencyKey,
         commandData = commandData,
@@ -30,6 +32,7 @@ class StandupCommand(
         return StandupSlashContext(
             commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
             triggerHandle = slashPayload.trigger.raw,
+            answerCandidates = answerCandidates,
             subCommand = subCommand,
             intents = intents,
         )
@@ -75,5 +78,9 @@ enum class StandupSubCommandDefinition(
     STOP(
         subCommandIdentifier = "stop",
         usage = "/$STANDUP_COMMAND_IDENTIFIER stop <routine-name>",
+    ),
+    ANSWER(
+        subCommandIdentifier = "answer",
+        usage = "/$STANDUP_COMMAND_IDENTIFIER answer [routine-name]",
     ),
 }
