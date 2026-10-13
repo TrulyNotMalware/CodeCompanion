@@ -1,29 +1,34 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # application/service/agent
 
 ## Purpose
-One AI-agent conversation turn. `AgentConverseService` listens for the `AgentConverseRequestEvent`
-that `SlackIntentResolver` lifts from a free-text `@bot ...` mention (or `AgentAskThreadStarter` lifts from a delivered `/ask` question), calls the sidecar through
+One AI-agent conversation turn, and the durable start of an `/ask` turn. `AgentConverseService` runs the turn for
+the `AgentConverseRequestEvent` that `SlackIntentResolver` lifts from a free-text `@bot ...` mention, and for the
+`/ask` turns that `AgentAskThreadStarter` hands it once the question is delivered: it calls the sidecar through
 `AgentGateway`, then commits the resumable session id, an `agent_turn_history` audit row, and the
 staged Slack reply in one transaction. Turns run on `agentTurnExecutor` (declared in
 `configurations/AgentConfiguration`, sized by `slack.app.agent.turns.*`: 4 concurrent turns, a queue of 20, 20 s
-shutdown wait), which the AFTER_COMMIT listener submits to directly rather than through `@Async`, so a full
+shutdown wait), which is submitted to directly rather than through `@Async`, so a full
 executor is seen: the requester gets `OVERLOADED_MESSAGE` (written in its own transaction) and
 `agent.turns{outcome=rejected}` counts it. Each submission is an `AgentTurn(start, onDiscard)`: a turn still
 queued when the executor's shutdown wait ends is discarded by `AgentTurnExecutor`, and its requester gets the same
 notice (`agent.turns{outcome=discarded}`, WARN log). The notices stop at `AGENT_TURN_DISCARD_BUDGET` (3 s from the
 end of the wait); the turns left then are dropped without a notice (one ERROR log, `agent.turns{outcome=dropped}`
-by their count). `AgentUsageReportService` reads that audit back: `@bot usage [days]` and the MCP tool `get_ai_usage`
+by their count). A mention turn exists in memory only. An `/ask` turn is recorded in the `agent_ask_turn` ledger
+before its question row is marked `SUCCESS` and runs under an `AgentTurnLease` on that row, so a crash, a restart,
+a busy sidecar or a failed outcome transaction leaves a row that the starter's 60 s sweep runs again until the turn
+has an outcome: an answer, the failure notice, the overload notice or the give-up notice (2026-10-13).
+`AgentUsageReportService` reads the audit back: `@bot usage [days]` and the MCP tool `get_ai_usage`
 summarise the turns and MCP tool calls of the last N days.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `AgentConverseService.kt` | `class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, turnExecutor, clock, scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn; the listener hands `converse` to the bounded `turnExecutor`, so the turn leaves the committing thread) builds `sessionKey = "$channel:$threadId:$publisherId"` (`"$channel:$publisherId"` without a thread or with a blank one), sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts; the answer is cut by `capAnswer` at `MAX_ANSWER_LENGTH` (`CHAIN_TEXT_BUDGET`, 40,000: every part rides in one chain head whose CDC update record must stay within 1 MiB, ending in `TRUNCATION_MARKER`, never splitting a surrogate pair), blank text → `EMPTY_RESPONSE_MESSAGE`, then `splitMessageText` cuts it into at most `MAX_ANSWER_MESSAGES` (8) bodies of `SlackBlockLimits.MESSAGE_BODY_BUDGET` with code fences closed and re-opened across the cut; each body is a thread reply headlined `RESPONSE_HEADLINE`, or `RESPONSE_HEADLINE (i/n)` when there are several, and all of them go out as one `outboundStager.stageInOrder` event (one outbox row; the relay stages each next part after the previous one is recorded)); `Busy` → ephemeral `BUSY_MESSAGE` + `BUSY` row; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` The capped answer goes through `templates/neutralizeBroadcastMentions()` before the split: `<!channel>` / `<!here>` / `<!everyone>` (also echoed from user text or a tool result) stay literal while links, emphasis and `<@user>` mentions keep working. |
+| `AgentConverseService.kt` | `class AgentConverseService(agentGateway, agentSessionRepository, agentTurnHistoryRepository, outboundStager, eventPublisher, meterRegistry, transactionManager, turnExecutor, clock, scopedTurnTokenCodec: ScopedTurnTokenCodec? = null)`. The file also declares `enum class BusyNotice { CONVERSATION_BUSY, ANSWER_LATER, NONE }` (the notice a busy run owes) and `interface AgentTurnLease { begin(): Boolean; settle(); giveBack(): BusyNotice; abandon(); discarded(): Boolean }` with `AgentTurnLease.Unleased` (`begin` true, `giveBack` `CONVERSATION_BUSY`, `discarded` false, the rest no-ops). `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true) handleAgentConverse(event)` (so a mention whose transaction rolls back, and is then retried by Slack, never starts a turn, while an event published with no transaction active still runs) is `submit(event, AgentTurnLease.Unleased)` with the result dropped: a listener's return value would be published as an event. `submit(event, lease): Boolean` hands `converse` to the bounded `turnExecutor`, so the turn leaves the calling thread, and returns whether the executor took it; a refusal gets the reject handling of the lease table below. `offer(event, lease): Boolean` is the same hand-off with no effect at all on a refusal (the entry of the sweep and of a delivery that found its ledger row). `abandon(event, lease): Boolean` stages `FAILURE_MESSAGE` as a thread reply and calls `lease.abandon()` in one transaction, with no history row, and returns false when that transaction failed. A turn first calls `lease.begin()` (false → INFO log, nothing else), then builds `sessionKey = "$channel:$threadId:$publisherId"` (`"$channel:$publisherId"` without a thread or with a blank one), sends `AgentTurnRequest(sessionKey, prompt, sessionId = findProviderSessionId, userId, appendSystemPrompt = contextPrompt, scopedToken = codec?.mint(...))`, then branches on `AgentTurnResult`: `Completed` → `publishAnswer` (save provider session id, record `COMPLETED` with token counts; the answer is cut by `capAnswer` at `MAX_ANSWER_LENGTH` (`CHAIN_TEXT_BUDGET`, 40,000: every part rides in one chain head whose CDC update record must stay within 1 MiB, ending in `TRUNCATION_MARKER`, never splitting a surrogate pair), blank text → `EMPTY_RESPONSE_MESSAGE`, then `splitMessageText` cuts it into at most `MAX_ANSWER_MESSAGES` (8) bodies of `SlackBlockLimits.MESSAGE_BODY_BUDGET` with code fences closed and re-opened across the cut; each body is a thread reply headlined `RESPONSE_HEADLINE`, or `RESPONSE_HEADLINE (i/n)` when there are several, and all of them go out as one `outboundStager.stageInOrder` event (one outbox row; the relay stages each next part after the previous one is recorded)); `Busy` → `lease.giveBack()` first, then an exhaustive `when` over the `BusyNotice` it returns, in that transaction: `CONVERSATION_BUSY` (no lease) → ephemeral `BUSY_MESSAGE` + `BUSY` row, `ANSWER_LATER` (a leased turn's first run) → ephemeral `ANSWER_LATER_MESSAGE` + `BUSY` row, `NONE` (a later leased run) → nothing else is written and an INFO line follows the commit; `Failed` → `FAILURE_MESSAGE` + `FAILED` row with `errorCode`. `Completed` and `Failed` end with `lease.settle()` in the same transaction. Records `agent.turns`, `agent.turn.duration`, `agent.tokens` The capped answer goes through `templates/neutralizeBroadcastMentions()` before the split: `<!channel>` / `<!here>` / `<!everyone>` (also echoed from user text or a tool result) stay literal while links, emphasis and `<@user>` mentions keep working. |
 | `AskSlashService.kt` | Interface `handleAsk(headers, payload: SlashCommandRequestBody, commandData)` plus `AskSlashServiceImpl` (`@Service`, `@Transactional`): resolves the actor role with `CommandRoleResolver.resolve`, builds `AskCommand(idempotencyKey, commandData, actorRole)` and runs it through `CommandExecutor`; the dependency `SlashCommandController` and `SocketModeReceiver` take for `/ask` |
-| `AgentAskThreadStarter.kt` | `@Service`, `@EventListener onDelivered(MessagePublishSuccessEvent)`: for `CommandDetailType.AGENT_ASK_QUESTION` with a non-blank `messageTs` it loads the outbox row, decodes it with `OutboundMessageCodec`, and publishes an `AgentConverseRequestEvent` whose `AgentConversePayload.threadId` is the posted message ts, so the answer arrives as thread replies; a missing row or non-`AgentQuestion` content only logs a WARN |
+| `AgentAskThreadStarter.kt` | `@Service class AgentAskThreadStarter(outboxRepository, askTurnRepository, agentConverseService, retryService, meterRegistry, clock, appConfig)`; `internal` constants `ASK_RESUME_PERIOD_MILLIS` (60 000), `ASK_RESUME_BATCH_SIZE` (20), `ASK_MAX_RUNS` (5), `ASK_PENDING_GRACE` (60 s), `ASK_ORPHAN_MARGIN` (60 s), `ASK_GIVE_UP_AFTER` (1 h), no YAML key. `@EventListener onDelivered(MessageDeliveredEvent)`, on the relay's dispatch thread before the outbox status write: another detail type than `AGENT_ASK_QUESTION` → return; blank `messageTs` → WARN, return; the outbox row is read and decoded (`OutboundMessageCodec`) inside `retryService.execute(maxAttempts = STATUS_WRITE_ATTEMPTS)` — row gone, undecodable or not a `ChannelMessage` with `MessageContent.AgentQuestion` → WARN, return, no ledger row and no retry, a read that throws on every attempt propagates to the relay; then `askTurnRepository.recordDelivered(eventId, messageTs, now)` in a second retry of the same size; if that still fails → ERROR (eventId, idempotencyKey, cause) and `agentConverseService.submit(event, AgentTurnLease.Unleased)`; otherwise, when the row is `PENDING`, the hand-off follows `RecordedAskTurn.storedNow`: a row this call stored → `submit(event, lease)`, a row that already existed → `offer(event, lease)` (a refusal then writes nothing), both with `AgentConversePayload.threadId` = the row's `message_ts`, so the answer arrives as thread replies (a row in any other status starts nothing). `@Scheduled(fixedDelay = ASK_RESUME_PERIOD_MILLIS, initialDelay = ASK_RESUME_PERIOD_MILLIS) resume()` → `containFailure { resumeOnce() }` (an `Exception` is logged, an `Error` propagates). `resumeOnce(): Int` reads `findResumable(pendingBefore = now − ASK_PENDING_GRACE, orphanedBefore = now − (agent.sidecar.requestTimeoutSeconds + ASK_ORPHAN_MARGIN), limit = ASK_RESUME_BATCH_SIZE)` and handles each row inside its own `containFailure` (ERROR naming the eventId, then the next row): an `IN_PROGRESS` row is `releaseOrphan`ed first (lost CAS → skipped); a row with `runCount >= ASK_MAX_RUNS` or `createdAt` older than `ASK_GIVE_UP_AFTER` goes to `agentConverseService.abandon` (committed → ERROR log, `agent.turns{outcome=abandoned}`); any other row is rebuilt from its outbox row and handed over with `agentConverseService.offer` (accepted → counted in the return value and in `agent.turns{outcome=resumed}`). A ledger row whose outbox row is gone or unreadable at sweep time is `finish(ABANDONED)`ed with no notice; the WARN and `outcome=abandoned` follow only when that CAS won. `private inner class AskTurnLease(eventId, attempt)` is the lease over the row: `begin` = the `begin` CAS with the observed `attempt_count` (then `attempt + 1`), `settle` / `abandon` = `finish(COMPLETED)` / `finish(ABANDONED)`, `giveBack` = `release`, returning `BusyNotice.ANSWER_LATER` on the lease's first run and `NONE` on a later one (`attempt > 1`), `discarded` = true; `settle`, `giveBack` and `abandon` `check` that their CAS updated one row |
 | `AgentUsageReportService.kt` | `class AgentUsageReportService(agentTurnHistoryRepository, mcpToolCallHistoryRepository, outboundStager, eventPublisher, clock, transactionManager)`. `@EventListener handleUsageReport(AgentUsageReportRequestEvent)` stages one `Ephemeral` to the requester (`recipient = UserRef(responseBasicInfo.publisherId)`) headlined `CodeCompanion — AI usage`, typed `AGENT_USAGE_REPORT`, and publishes it, as `OpsStatusService.handleStatusReport` does. The listener renders inside `detachedTemplate` (`application/common`, `PROPAGATION_NOT_SUPPORTED`), so a failing `@Transactional` repository read rolls back only its own transaction instead of marking the mention's transaction rollback-only and losing the reply; an `Exception` is logged and answered "Failed to read AI usage. Check application logs.", an `Error` propagates. `internal renderReport(days)` (shared with `mcp/DomainReadTools.get_ai_usage`): `since = LocalDateTime.now(clock).minusDays(days)`, then `countByOutcomeSince`, `topRequestersSince(limit = 5)` and `countByToolSince`. No turns and no tool calls → "No AI turns or tool calls in the last N day(s)."; otherwise mrkdwn lines: header with `since` as `yyyy-MM-dd HH:mm`, `• Turns: T (completed X, busy Y, failed Z)` (outcomes present, in enum order; `• Turns: 0` when none), `• Tokens: A in / B out`, `• Avg duration: S.s s` (only with turns), `• Top requesters: <@U> N turn(s), A in / B out; …` and `• MCP tools: tool N outcome, …; …` (each only when non-empty). Counts use `%,d` with `Locale.ENGLISH` |
 
 ## For AI Agents
@@ -39,6 +44,85 @@ summarise the turns and MCP tool calls of the last N days.
   boundary is what lets `SlackMessageRelayServiceImpl.saveOutboxMessage` (`BEFORE_COMMIT`) persist the
   staged reply; publishing outside it silently loses the message. `runInTx` swallows into a
   `Result` — failures are logged with `sessionKey` and `idempotencyKey`, never rethrown.
+- **An `/ask` turn starts from the ledger; the order of the two writes is the point.** `onDelivered` runs
+  synchronously inside `SlackMessageRelayServiceImpl.dispatchClaimed`, after Slack accepted the question and before
+  the outbox row is recorded `SUCCESS` (`service/relay/AGENTS.md`). A crash before the ledger insert leaves the
+  outbox row `IN_PROGRESS`, so the outbox sweep posts the question again and that delivery records the turn; a crash
+  after it leaves a ledger row the ask sweep resumes on the first post's thread. The ledger write is not inside the
+  status transaction on purpose: a ledger failure there would roll `SUCCESS` back and re-post the question, while
+  here it costs only that turn's durability (the turn still runs, unleased). This holds only while the listener
+  runs on the publishing thread — `ApplicationContextSmokeTest` asserts the row exists when `publishEvent` returns;
+  an `@Async` listener, an async multicaster or a move back behind `MessagePublishSuccessEvent` breaks it silently.
+  `recordDelivered` refuses to run inside a transaction (`infrastructure/repository/agent/AGENTS.md`); the relay
+  dispatch thread has none.
+- **Lease table** (what each moment writes; `AgentConverseServiceTest` has a case per cell that is not "—"):
+
+  | moment | no lease (mention; `/ask` whose ledger write failed) | leased (`/ask`) |
+  |---|---|---|
+  | executor full: a mention, or the delivery that stored the row (`submit`) | `OVERLOADED_MESSAGE`, `outcome=rejected` | the same notice and `lease.settle()` in one `REQUIRES_NEW` transaction: the row is `COMPLETED` without a run |
+  | executor full: the sweep, or a delivery that found its row (`offer`) | — | nothing is written: the row stays `PENDING` with its counters and `updated_at`, and the next sweep offers it again |
+  | executor already shut down (`submit`) | the discard path: WARN, `outcome=discarded`, `OVERLOADED_MESSAGE` | `lease.discarded()` → no notice, the row stays `PENDING` |
+  | discarded unstarted when the shutdown wait ends | the same discard path | the same: no notice, the row stays `PENDING` for the next start |
+  | turn starts | — | `lease.begin()`; false → no sidecar call, no metrics |
+  | `Completed` | answer transaction | the same transaction with `lease.settle()` as its last statement |
+  | `Busy`, the turn's first run | `BUSY` row + ephemeral `BUSY_MESSAGE` | `lease.giveBack()`, then the `BUSY` row + ephemeral `ANSWER_LATER_MESSAGE`, one transaction |
+  | `Busy`, a later run | — (a mention has no later run) | `lease.giveBack()` only |
+  | `Failed` | `FAILED` row + failure notice | the same transaction + `lease.settle()` |
+  | give-up (`abandon`) | — | `FAILURE_MESSAGE` thread reply + `lease.abandon()`, one transaction, no history row |
+
+  A lease write that loses its CAS throws, so its transaction rolls back and a run that lost the turn stages
+  nothing. The executor counts as shut down only when it is a `ThreadPoolTaskExecutor` whose pool `isShutdown`
+  (`AgentTurnIntake.stop()` does that at the start of the close); any other `Executor` is never "shut down".
+- **Only the delivery that stored the row ends a turn because an executor was full.** That rejection is the
+  lane's admission control: a full executor sheds a new question at once, with the overload notice, instead of
+  queueing it durably for up to an hour. It is safe there because a row this call just stored cannot be in another
+  replica's queue through a sweep: a sweep reads only `PENDING` rows older than `ASK_PENDING_GRACE` (replica clocks
+  are assumed to agree to well within that). Every other hand-off uses `offer` and writes nothing when refused: the
+  sweep, and a delivery that found its row — the outbox posted the question again after a lost status write, or
+  the insert of this very listener call committed and only its acknowledgement was lost. Prod runs two replicas,
+  and such a rejection must not close a turn another replica has queued or one that was given back as busy
+  (2026-10-13; before that a re-delivery on a full replica settled the turn another replica's sweep had queued).
+  Only `run_count >= ASK_MAX_RUNS` or the `ASK_GIVE_UP_AFTER` window ends a turn from the sweep, through `abandon`.
+- **Two counters.** `attempt_count` is the lease's ownership token and nothing else. The give-up budget is
+  `run_count`: `begin` raises both, the busy give-back takes the run back, an orphan release and `finish` touch
+  neither (`infrastructure/repository/agent/AGENTS.md`). So a sidecar that keeps answering busy or 429 never
+  spends the budget; that turn retries every sweep after `ASK_PENDING_GRACE` until the window ends it. Only its
+  first run tells the requester; later give-backs are silent, and `agent.turns{outcome=busy}` still counts each.
+  That one notice is `ANSWER_LATER_MESSAGE`, not `BUSY_MESSAGE`: a fresh `/ask` thread has no "previous request in
+  this conversation", and the ephemeral is its own outbox row, so Slack may deliver it after the resumed run's
+  answer; the sentence no longer claims that work is in progress, so it does not contradict an answer that is
+  already there. It is not a guarantee either: the turn can still end with `FAILURE_MESSAGE` instead of an answer.
+- **The orphan cutoff must exceed the longest turn.** It is `agent.sidecar.requestTimeoutSeconds` +
+  `ASK_ORPHAN_MARGIN`, never a literal: `SidecarAgentClient` bounds a whole turn by that timeout
+  (`infrastructure/impl/agent/AGENTS.md`), and the margin is for the outcome transaction. A released run that
+  finishes before anyone began the turn again still settles (`finish` accepts `PENDING`); once another run
+  began, its settle is refused and its answer rolls back.
+- **`queued` is this JVM's view only.** The set of event ids keeps the sweep from offering a turn that already
+  waits in this instance's executor queue: an id is added before the hand-off and removed when the hand-off was
+  refused, when the turn begins (after its CAS) and when it is discarded. Another replica cannot see it, so two
+  replicas may both queue one turn; the `begin` CAS decides and the loser does nothing.
+- **Known limits of the `/ask` lane (2026-10-13).** An outbox read that fails on all three attempts, followed by
+  a status write that succeeds, still loses the turn (question posted, no ledger row). The unleased fallback can
+  answer twice in one thread when a ledger insert committed but its acknowledgement was lost and no later
+  attempt of that listener call succeeded: the unleased turn answers, and the sweep runs the stored row after the
+  grace period. A lost lease is logged at ERROR like a failed outcome transaction, and `recordMetrics` still
+  counts that run as `completed` with its tokens. The sweep decodes without the `OutboxSchemaVersion.SUPPORTED`
+  gate the relay has, so a row this binary cannot decode is abandoned without a notice. Rows that cannot progress
+  (queued here, rejected offers, a give-up whose notice fails) keep the oldest `updated_at` and so the head of
+  the 20-row batch. The first-busy notice is skipped when the first run was cut off and a later run is busy; that
+  includes a first run whose notice transaction rolled back, because after the orphan release the next run is the
+  lease's second (never doubled: the notice commits only together with the first give-back). A first-busy notice
+  that Slack delivers late can arrive after the answer; its wording no longer claims work is in progress. When
+  two deliveries of one question race (two outbox owners both sent it), the instance that stored the row can shed
+  it with the overload notice while the other has just queued it, and that queued turn then does nothing (by
+  reading; no spec). A question whose dispatch outcome is unknown has no ts and gets no turn. Ledger rows are never purged. The
+  `V26` script and the five native statements were run once on MariaDB 12.3.3 through the `mariadb` client
+  (2026-10-13, see `infrastructure/repository/agent/AGENTS.md`); the application itself — the JPA mapping against
+  the `V26` table and `recordDelivered`'s duplicate-key path — has only run on H2 (the specs use tables Hibernate
+  generates).
+- **Where `V26` is missing**, every `recordDelivered` fails: `/ask` still answers through the unleased fallback,
+  without durability and with one ERROR per question (inferred from the code and the always-failing-insert case
+  of `AgentAskThreadStarterTest`; not run against a schema without the table).
 - `stageReply` is `checkNotNull` on `outboundStager.stage(...)`: a null stage means the reply would
   vanish, so the turn's transaction must fail instead. Keep that check when adding reply kinds.
 - Session continuity is two keys: `sessionKey` (sidecar workspace, derived from channel, thread and requester)
@@ -62,27 +146,40 @@ summarise the turns and MCP tool calls of the last N days.
   (app_mention events carry no names) degrades to the bare `<@id>` / `<#id>` mention. Route any new
   user-supplied prompt field through the same function and quoting.
 - `scopedTurnTokenCodec` is null when MCP is off (`AgentConfiguration` uses `ObjectProvider`); the
-  turn then carries no token and the model has no tools. `turnId` is the mention's `idempotencyKey`
-  so tool audit rows join back to `agent_turn_history`.
+  turn then carries no token and the model has no tools. `turnId` is the request's `idempotencyKey` (the
+  mention's, or the `/ask` question's) so tool audit rows join back to `agent_turn_history`.
 - A turn can last up to `slack.app.agent.sidecar.request-timeout-seconds` (120 s), longer than the 20 s shutdown
-  wait: a rolling deploy cuts turns still running after that wait. Keep `turns.queue-capacity` small; a deep queue
-  only converts an immediate "busy" reply into minutes of silence.
+  wait: a rolling deploy cuts turns still running after that wait. A cut mention turn is lost; a cut `/ask` turn
+  stays `IN_PROGRESS` and the sweep reruns it once the orphan cutoff has passed. Keep `turns.queue-capacity` small;
+  a deep queue only converts an immediate "busy" reply into minutes of silence.
 - A multi-part answer is one outbox row carrying every part (`stageInOrder`); the relay posts the parts in order,
   so the `(i/n)` headline only shows how many there are. Staging the parts as separate rows lets the parallel
   relay post them out of order.
-- Metric names are `internal const` and dashboards depend on the `outcome` / `direction` tags.
+- Metric names are `internal const` and dashboards depend on the `outcome` / `direction` tags. `agent.turns`
+  outcomes: `completed`, `busy`, `failed`, `rejected`, `discarded`, `dropped`, and for the `/ask` lane `resumed`
+  (a sweep offer the executor accepted) and `abandoned` (a committed give-up, with or without a notice). A turn
+  refused because the executor is shut down counts as `discarded`, not `rejected`; a leased turn left `PENDING`
+  at shutdown counts as neither.
 - The usage window is computed from the injected `Clock` (`Clock.systemDefaultZone()`), and `created_at` on both
   history tables is `@CreationTimestamp` on the JVM clock in the same zone. Changing either zone shifts the window.
 
 ### Testing Requirements
 ```bash
-./gradlew :application:test --tests '*AgentConverseServiceTest*' --tests '*AgentUsageReportServiceTest*'
+./gradlew :application:test --tests 'dev.notypie.application.service.agent.*' \
+  --tests '*ApplicationContextSmokeTest*' --tests '*AgentTurnShutdownContextTest*'
 ```
 `AgentConverseServiceTest` (Kotest `BehaviorSpec`, MockK) stubs `AgentGateway.converse` per outcome, a
 MockK `PlatformTransactionManager` (relaxed `TransactionStatus`, `commit` / `rollback` `just Runs`), a
 `SimpleMeterRegistry`, and a fixed `Clock`; it asserts the `AgentTurnRecord` fields, the staged
 `OutboundMessage` shape (thread id, headline, ephemeral recipient for `Busy`), the saved provider
-session id, and the counters. `AgentUsageReportServiceTest` passes `createStubTransactionManager()` by default and
+session id, and the counters, and it has one given per lease-table row with a MockK lease plus a real
+`JpaTransactionManager` given for "a refused lease write rolls the outcome back". `AgentAskThreadStarterTest` runs
+the starter over the real outbox and ledger repositories on H2 (`createOutboxJpaContext`) with a `MutableClock`,
+against a recording MockK `AgentConverseService` and, for the rejected-offer, busy and two-instance re-delivery
+cases, the real service and transaction manager. The two context specs pin what unit specs cannot see: the listener is synchronous, `resume`
+is scheduled, `fallbackExecution` still works, and a turn refused or queued at shutdown stays `PENDING`. Any case
+that claims the order of the two writes, a rollback or a CAS belongs in one of the H2 or context specs, not behind
+a mock. `AgentUsageReportServiceTest` passes `createStubTransactionManager()` by default and
 runs one `handleUsageReport` inside an outer H2 `DataSourceTransactionManager` transaction whose usage read fails
 inside a participating template (`createH2TransactionManager` / `failInsideParticipatingTx`); the outer commit must
 still succeed with the fallback text staged. Cover the null-codec and non-null-codec paths when touching token
@@ -100,17 +197,24 @@ minting; build the request event with the domain testFixtures rather than inline
 ### Internal
 - `application/common/TransactionTemplateExt` — `runInTx`, `detachedTemplate`
 - `application/security/mcp/ScopedTurnTokenCodec` — per-turn token
-- `application/configurations/AgentConfiguration` — bean declaration, sidecar client
+- `application/configurations/AgentConfiguration` — bean declaration, sidecar client, the turn executor;
+  `AppConfig.agent.sidecar.requestTimeoutSeconds` (the orphan cutoff)
+- `application/service/relay/` — publishes `MessageDeliveredEvent`; `STATUS_WRITE_ATTEMPTS` (shared on purpose:
+  the ledger write gets as many attempts as the status write that follows it)
+- `application/service/standup/StandupSchedulingService.kt` — `containFailure`
 - `infrastructure/impl/agent/` — `AgentGateway`, `AgentTurnRequest`, `AgentTurnResult`, `SidecarAgentClient`
 - `infrastructure/repository/agent/` — `AgentSessionRepository`, `AgentTurnHistoryRepository`,
-  `AgentTurnRecord`, `AgentTurnOutcome`, `AgentTurnOutcomeUsage`, `RequesterTurnUsage`
+  `AgentTurnRecord`, `AgentTurnOutcome`, `AgentTurnOutcomeUsage`, `RequesterTurnUsage`; the ledger
+  `AgentAskTurnRepository` (+ `recordDelivered`), `schema/AgentAskTurnSchema`, `AgentAskTurnStatus`
+- `infrastructure/repository/outbox/` — `MessageOutboxRepository.findById`, `OutboundMessageCodec`,
+  `dto/MessageDeliveredEvent`; `infrastructure/impl/retry/RetryService`
 - `infrastructure/repository/mcp/` — `McpToolCallHistoryRepository`, `ToolCallUsage`
 - `infrastructure/impl/command/SlackIntentResolver` — publishes `AgentConverseRequestEvent` and `AgentUsageReportRequestEvent`
 - `domain/command/entity/event/` — `AgentConverseRequestEvent`, `AgentConversePayload`, `EventPublisher.publishOne`
 - `domain/command/outbound/` — `OutboundMessage`, `MessageContent`, `ConversationTarget`, `UserRef`, `OutboundMessageStager`
 
 ### External
-Spring `@TransactionalEventListener`, `ThreadPoolTaskExecutor`, Spring TX `TransactionTemplate`, Micrometer `MeterRegistry`,
-kotlin-logging.
+Spring `@TransactionalEventListener`, `@EventListener`, `@Scheduled`, `ThreadPoolTaskExecutor`, Spring TX
+`TransactionTemplate`, Micrometer `MeterRegistry`, kotlin-logging.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

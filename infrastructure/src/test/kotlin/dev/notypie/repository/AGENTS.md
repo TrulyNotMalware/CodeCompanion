@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository
 
@@ -15,13 +15,13 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `NativeQueryStatusLiteralTest.kt` | Plain `StringSpec` guard: every `'QUOTED_CONSTANT'` in a native `@Query` of the seven status-CAS repositories must be a constant of that table's status enum (`MessageStatus`, `CveSummaryStatus`, `CveDeliveryStatus`, `MeetingReminderStatus`, `DispatchStatus`, `SessionStatus`, `CalendarSyncStatus`), and a classpath scan of `dev.notypie.repository` fails if another repository starts quoting constants without a mapping. Renaming a constant still needs a data migration; this only stops the SQL from silently matching nothing |
+| `NativeQueryStatusLiteralTest.kt` | Plain `StringSpec` guard: every `'QUOTED_CONSTANT'` in a native `@Query` of the eight status-CAS repositories must be a constant of that table's status enum (`MessageStatus`, `CveSummaryStatus`, `CveDeliveryStatus`, `MeetingReminderStatus`, `DispatchStatus`, `SessionStatus`, `CalendarSyncStatus`, `AgentAskTurnStatus`), and a classpath scan of `dev.notypie.repository` fails if another repository starts quoting constants without a mapping. Renaming a constant still needs a data migration; this only stops the SQL from silently matching nothing |
 | `SchemaNullabilityTest.kt` | `@DataJpaTest` `StringSpec` reading H2's `INFORMATION_SCHEMA.COLUMNS`: `outbox_message.status` and `meeting_participants.absent_reason`, both non-null Kotlin properties, are `NOT NULL` in the schema Hibernate generates. It sees only the generated schema; an existing MariaDB column keeps whatever nullability it was created with |
 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `agent/` | `AgentSessionRepositoryImplTest` — the provider-session upsert on H2 MariaDB mode and its no-read-before-write shape; `AgentTurnHistoryRepositoryImplTest` — the windowed usage aggregates (see `agent/AGENTS.md`) |
+| `agent/` | `AgentSessionRepositoryImplTest` — the provider-session upsert on H2 MariaDB mode and its no-read-before-write shape; `AgentTurnHistoryRepositoryImplTest` — the windowed usage aggregates; `AgentAskTurnRepositoryTest` — the `/ask` turn ledger's CAS statements, counters, `recordDelivered` and `findResumable` (see `agent/AGENTS.md`) |
 | `authorization/` | `UserCommandRoleRepositoryImplTest` — changing a user's grant in place (see `authorization/AGENTS.md`) |
 | `cve/` | Four `Jpa*` H2 specs + five `*Impl` delegation specs for topics, events, subscriptions, deliveries, collect ledger (see `cve/AGENTS.md`) |
 | `mcp/` | `McpToolCallHistoryRepositoryImplTest` — tool-call counts per tool and outcome since a window start (see `mcp/AGENTS.md`) |

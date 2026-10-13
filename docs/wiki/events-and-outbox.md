@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-12_
+_type: architecture · updated: 2026-10-13_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -211,6 +211,9 @@ _type: architecture · updated: 2026-10-12_
   기록"하는 일을 막는다.
 - 아웃박스 자체의 다중 인스턴스 안전은 같은 claim-token 패턴이다. 토큰이 별도 컬럼 대신 `attempt_count`이고,
   claim·reclaim·renew·defer·complete·abandon이 모두 그 값을 검사한다(위 "아웃박스 행" 절).
+- `/ask` 턴 레저 `agent_ask_turn`(V26, 2026-10-13)도 같은 패턴이고 토큰은 `attempt_count`다: `AgentAskTurnRepository`의
+  `begin`·`release`·`releaseOrphan`·`finish`가 모두 그 값을 검사하는 네이티브 UPDATE 하나씩이다. 포기 예산은 토큰과 따로
+  `run_count`가 센다(아웃박스의 `send_count`와 같은 분리). 아래 "전달 훅" 절과 결정 #40.
 - **배포 제약: V20/V22를 쓰는 릴리스는 그 이전 릴리스와 나란히 돌리면 안 된다.** 구 파드는 `updated_at`을
   `CURRENT_TIMESTAMP`(UTC)로 쓰고, CDC로 `IN_PROGRESS` 행을 재발송하며, JPA로 attempt 조건 없이 상태를 덮는다.
   섞이면 새 파드의 스윕이 구 파드가 발송 중인 행을 9시간 묵은 행으로 보고 다시 보내고, `SUCCESS`가 `FAILURE`로
@@ -248,6 +251,36 @@ _type: architecture · updated: 2026-10-12_
   `max-poll-records`·`max.poll.interval.ms`는 프로파일 YAML이 정한다.
 - 정직한 보장: README의 "exactly-once-style"은 지향 표현이다. 실제는 **at-least-once**(폴링 stuck 재전송, Kafka
   재전달) + **멱등 소비자**(상태 필터, `event_id` 기준 상태 갱신)이며, Slack 채널에는 중복 게시가 가능하다.
+
+## 전달 훅 `MessageDeliveredEvent`와 `/ask` 턴 레저 (2026-10-13)
+
+- relay(`SlackMessageRelayServiceImpl.dispatchClaimed`)는 디스패치 결과가 `ok`이면 **상태를 쓰기 전에**
+  `MessageDeliveredEvent(eventId, commandDetailType, messageTs)`를 디스패치 스레드(CDC 리스너 스레드 또는 relay executor)에서
+  동기 발행한다. 메시지 종류와 무관하게 모든 `ok` 디스패치에 나가고, 영구 거절·outcome unknown·rate limit·일시 오류에는 나가지
+  않는다. 뜻은 "전송 수단이 메시지를 받았고 행은 아직 기록되지 않았다"다. 결과 이벤트(`OutboxUpdateEvent`)가 아니므로 뒤에
+  `completeClaim`이 0을 돌려주는 소유자도 이미 발행했고, 상태 쓰기를 잃어 재게시되면 같은 `eventId`로 다시 온다. 리스너가 던진
+  예외는 ERROR 로그로 남고 상태 쓰기는 그대로 진행된다.
+- 유일한 리스너는 `AgentAskThreadStarter`이고 `AGENT_ASK_QUESTION` + ts가 있는 전달에만 반응한다: 아웃박스 행을 다시 읽고,
+  `agent_ask_turn`에 행(PK = 그 `event_id`)을 넣고, 턴을 턴 executor에 넘긴다. 이 셋이 `SUCCESS` 기록보다 먼저 끝난다. 같은
+  `eventId`의 전달이 다시 와서 이미 있는 `PENDING` 행을 찾으면 거절돼도 아무것도 쓰지 않는 `offer`로 넘긴다 — executor가 가득 찼을 때
+  과부하 안내로 턴을 끝내는 것은 그 호출이 행을 넣은 첫 전달뿐이다(다른 레플리카가 큐에 넣은 턴을 끝내지 않기 위해). 크래시가 레저
+  insert 앞이면 아웃박스 행이 `IN_PROGRESS`로 남아 `OutboxRecoveryScheduler`가 질문을 다시 게시하고 그 전달이 레저를 쓰며, 뒤면
+  레저 행이 남아 ask 스윕(60초)이 턴을 이어 간다. 레저 쓰기를 상태 기록 트랜잭션에 넣지 않은 이유, lease, 스윕, 남은 한계는
+  [결정 #40](decisions.md)에 있다. 순서가 요점이므로 발행을 `writeTerminal` 뒤로 옮기거나, 성공 이벤트에 합치거나, 비동기로
+  돌리지 않는다.
+- 성공 이벤트 `MessagePublishSuccessEvent`의 소비자는 이제 `StandupSummaryService` 하나다(`main` `8446f9d8`에서는 `/ask`도 들었다).
+- **relay의 시간 예산에 얹히는 것:** 리스너는 `renewClaim` → `completeClaim` 창 안에서 돌므로 ask 질문 행은 그 창이 길어진다.
+  정상 경로는 커넥션 획득 2회(재조회, 레저 insert), 행을 넣은 첫 전달을 턴 executor가 거절하면 `REQUIRES_NEW` 안내로 1회 더, 최악은
+  10회(재조회 3 + insert 3 + 중복 뒤 저장 행 조회 3 + 안내 1)에 재시도 백오프 0.66초다. 산식과 결과(ask 행에서 약 81초·66초,
+  여전히 stuck 임계 300초 아래)는 `service/relay/AGENTS.md`에 있고 실측은 아니다. 종료 예산(`RELAY_RECORD_TIME_BOUND` 45.99초,
+  `RECORD_SHUTDOWN_WAIT` 46초)은 바꾸지 않았다 — 리스너의 DB 시간과 백오프는 커밋처럼 그 상한 밖이고, 넘기면 상태가 기록되지
+  않아 스윕이 질문을 다시 게시하지만 레저 키 덕에 턴은 하나다. 재시도 횟수는 `STATUS_WRITE_ATTEMPTS`(3)를 일부러 공유한다.
+- 레저 스윕은 아웃박스 스윕과 별개의 잡이다(`AgentAskThreadStarter.resume`, 60초 fixedDelay, 틱당 20건). 레저에는 헬스
+  인디케이터도 게이지도 없다 — 포기된 턴은 `agent.turns{outcome="abandoned"}`와 ERROR 로그로만 보이고, `OutboxRetentionScheduler`는
+  레저 행을 지우지 않는다(보존 정리 없음).
+- 검증 범위: 스펙은 레저의 네이티브 문장을 H2에서 실행한다. MariaDB 12.3.3에서는 V26 적용과 다섯 문장을 `mariadb` 클라이언트로 한 번
+  확인했고(2026-10-13, 결정 #40), 애플리케이션(JPA·Connector/J)이 그 테이블 위에서 돈 적은 없다(미확인). CDC 모드에서
+  이 훅이 리스너 스레드에서 도는 경로는 스펙이 real relay + mock 저장소로만 확인했다(Kafka·Debezium을 거친 종단 실행은 미확인).
 
 ## 헬스와 `@bot status`
 
@@ -317,7 +350,8 @@ _type: architecture · updated: 2026-10-12_
   `send_count`를 세므로 남겨 둔다).
 - 결과 이벤트(`OutboxUpdateEvent`)는 `completeClaim`이 1을 돌려준 소유자만 발행한다. 0이면 다른 소유자가 행을
   가져간 것이고 그쪽이 자기 결과를 발행한다. 유일한 리스너는 `StandupSummaryService`(성공 시 `messageTs` 기록)다.
-  리스너 예외는 상태 기록 실패와 별도로 로그한다 — 행은 이미 종결 상태다.
+  리스너 예외는 상태 기록 실패와 별도로 로그한다 — 행은 이미 종결 상태다. `MessageDeliveredEvent`는 결과 이벤트가 아니라서
+  이 보장이 없다(위 "전달 훅" 절): 리스너는 같은 `eventId`가 두 번 오는 것을 스스로 접어야 한다.
 - 잘못된 `eventId`는 결정적 오류라 폴링·스윕 경로에서 곧바로 `completeClaim(FAILURE)`한다(CDC는 DLT).
 - 구 shape 로컬 행은 디코드에 실패하고 `ddl-auto: update`는 옛 컬럼을 안 지운다 → `outbox_message` DROP 후 재생성.
 
@@ -335,7 +369,11 @@ _type: architecture · updated: 2026-10-12_
   `configurations/conditions/Conditions.kt`, `health/{OutboxHealthIndicator,OutboxMetrics}.kt`, `service/ops/OpsStatusService.kt`,
   `common/{IdempotencyCreator,TransactionTemplateExt}.kt`, `security/{SlackRetryDeduplicator,
   SlackRequestVerificationFilter}.kt`, `service/command/{CommandExecutor,RoleManagementService}.kt`,
-  `service/{standup/StandupSchedulingService,cve/notification/CveNotificationDispatcher,agent/AgentConverseService}.kt`
+  `service/{standup/StandupSchedulingService,cve/notification/CveNotificationDispatcher,agent/AgentConverseService,
+  agent/AgentAskThreadStarter}.kt`; `infrastructure/.../repository/agent/AgentAskTurnRepository.kt`,
+  `repository/outbox/dto/OutboxMessageEvents.kt`, `db/migration/V26__add_agent_ask_turn.sql`; 스펙
+  `SlackMessageRelayServiceImplTest`·`DebeziumLogTailingProcessorTest`(전달 이벤트의 순서와 발행 조건),
+  `ApplicationContextSmokeTest`(리스너가 동기라는 것), `service/{relay,agent}/AGENTS.md`(시간 예산, lease 표)
 - `application/src/main/resources/application*.yaml`, `resources/cdc/docker-compose/` (README, `connect_mariadb.sh`),
   `resources/db/migration/V1__outbox_pk_event_id.sql`, `V11__outbox_transport_neutral_envelope.sql`,
   `V20__add_outbox_attempt_count.sql`, `V22__add_outbox_send_count.sql`; `review.md` 13장(S2·S3·S4·S9·S17, Codex #3);

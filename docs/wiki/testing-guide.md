@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-10-02_
+_type: guide · updated: 2026-10-13_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -79,11 +79,13 @@ _type: guide · updated: 2026-10-02_
   패키지의 `@Bean`이 잘못 엮이면 깨지는 유일한 스펙이 이것이다.
 - `:application`의 `@SpringBootTest`는 `ApplicationContextSmokeTest` 하나다(2026-10-01). H2 위에 애플리케이션 전체를 띄워 단위 스펙이
   볼 수 없는 배선 — Hikari 풀 크기, `ThreadPoolTaskScheduler`, `relayTaskExecutor` 주입, 단일 `Clock`, AI 턴이
-  커밋 뒤 `agent-turn-` 스레드에서만 도는지, 클럭 빈 공유, outbox 게이지의 Prometheus 노출, BEFORE_COMMIT outbox 쓰기 — 를 고정한다. 이 테스트가 처음 생기면서 testFixtures의 `@Configuration`이 컴포넌트
+  커밋 뒤 `agent-turn-` 스레드에서만 도는지, 클럭 빈 공유, outbox 게이지의 Prometheus 노출, BEFORE_COMMIT outbox 쓰기, `/ask` 레저 행이
+  전달 이벤트의 `publishEvent`가 돌아오기 전에 써지는지와 ask 스윕의 fixedDelay 등록(2026-10-13) — 를 고정한다. 이 테스트가 처음 생기면서 testFixtures의 `@Configuration`이 컴포넌트
   스캔에 잡혀 저장소가 이중 등록되던 문제가 드러났으므로 testFixtures에는 스테레오타입을 붙이지 않는다. `src/test/resources`는 없고,
   그 밖에 testFixtures가 인메모리 H2와 실제 트랜잭션 매니저를
   만든다: `outbox/OutboxJpaTestContext.kt`의 `createOutboxJpaContext()`(작은 `AnnotationConfigApplicationContext` +
-  `JpaTransactionManager`, 아웃박스 복구 시나리오 스펙이 사용)와 `service/meeting/MeetingTransactionFixtures.kt`의
+  `JpaTransactionManager`; 아웃박스 복구·연쇄 시나리오 스펙과 에이전트 스펙 `AgentConverseServiceTest`·`AgentAskThreadStarterTest`가
+  사용하고, 2026-10-13부터 `repository/agent`의 저장소와 스키마도 스캔한다)와 `service/meeting/MeetingTransactionFixtures.kt`의
   `createH2DataSource`·`createH2TransactionManager`·`createBoundedH2DataSource`(회의 스펙이 `REQUIRES_NEW` 경계와 커넥션
   한도를 실제로 확인할 때 사용). 나머지 `:application` 스펙은 MockK 단위 스펙이다.
 

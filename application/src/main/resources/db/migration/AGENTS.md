@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # db/migration
 
@@ -40,11 +40,12 @@ the release checklist below decide the order.
 | `V23__widen_outbox_payload_to_mediumtext.sql` | `outbox_message.payload` `TEXT` → `MEDIUMTEXT NOT NULL`: under strict `sql_mode` a payload over 65,535 bytes failed its write (a long AI answer or a full standup summary was never staged). Re-runnable. The header carries the first-run cost: the retention purge ships in the same release, so the first run meets the whole history — measure the table, try `ALGORITHM=INPLACE, LOCK=NONE` with a short `lock_wait_timeout` (rejected at once if impossible), and run the copying form only at a quiet moment or after the purge. Safe for old binaries and rollbacks |
 | `V24__add_google_calendar_tables.sql` | `google_calendar_connection` (one row per Slack user, `google_subject`/`google_email` from the id_token, `refresh_token_enc` = `TokenCipher` output, `status` ACTIVE/REVOKED, unique `slack_user_id`) and `google_oauth_state` (`state` PK, `slack_user_id`, `expires_at`, `consumed_at`; index on `expires_at`) for `/calendar connect`. Independent of every existing table; `CREATE TABLE IF NOT EXISTS`, safe beside the previous release; rollback is `DROP TABLE` on both |
 | `V25__add_meeting_calendar_event.sql` | `meeting_calendar_event`, the Google Calendar mirror queue: one row per `(meeting_id, slack_user_id)` (unique `uk_meeting_calendar_event_meeting_user`, FK cascade to `meetings`), `google_event_id VARCHAR(1024)`, `status` PENDING/SYNCING/SYNCED/FAILED, `change_seq BIGINT DEFAULT 1`, `attempts`, `next_attempt_at DATETIME(6)`, `claim_token`, `last_error`, `created_at DATETIME(6) NOT NULL` and `updated_at DATETIME(6) NULL` without a database default or `ON UPDATE` (as in `V24`; every insert and transition binds them); indexes `(status, next_attempt_at)` and `(slack_user_id)`. The row is a dirty marker (the worker recomputes the desired event from the meeting) and `change_seq` is the generation the completion CAS compares, so a change during the Google call is synced again without losing the event id. Apply after `V24`; new table only, safe beside the previous release; rollback is `DROP TABLE` |
+| `V26__add_agent_ask_turn.sql` | `agent_ask_turn`, the `/ask` turn ledger: one row per delivered question, `event_id VARCHAR(36)` PK = the `outbox_message.event_id` of the question row (not its `idempotency_key`, which answer rows share and which is not unique per ask), `message_ts VARCHAR(32)` (the Slack ts, i.e. the answer thread), `status VARCHAR(16)` PENDING/IN_PROGRESS/COMPLETED/ABANDONED, `attempt_count INT DEFAULT 0` (the ownership token: only the PENDING → IN_PROGRESS transition raises it, it never goes down) and `run_count INT DEFAULT 0` (the give-up budget: the same transition raises it, the give-back of a turn the sidecar reported busy takes it back), `created_at` / `updated_at DATETIME(6) NOT NULL` without a database default or `ON UPDATE` (every insert and transition binds them from the application clock); index `(status, updated_at)` for the resume sweep. No foreign key to `outbox_message` (the retention purge deletes the question row long after the turn ended). New table only, `CREATE TABLE IF NOT EXISTS`, safe beside the previous release; rollback is `DROP TABLE`. Apply before the release that writes it |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V26`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V27`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Number ≠ apply order: the V18–V23 release checklist.** `main` had stopped at `V17`, and #26 (`f9971700`,
   2026-10-06) shipped `V18`–`V23` together. An environment still at `V17` applies them in this order, which
   `../../k8s/README.md` ("One-time") and `docs/wiki/dev-environment.md` repeat:
@@ -90,6 +91,18 @@ the release checklist below decide the order.
   `V24`, then `V25`, before the deploy that ships them and before `GOOGLE_CALENDAR_ENABLED` turns `true`: the mirror
   hooks use both tables inside every meeting write (`application/src/main/resources/k8s/README.md`, "Google
   Calendar Mirror").
+- **`V26` ships with the `/ask` turn ledger and is new on 2026-10-13, so assume no hand-applied environment has
+  it yet.** Apply it before the deploy that ships the ledger code. Where it is missing the application still starts
+  (`ddl-auto: none` does not check the schema) and `/ask` still answers, because the delivery listener falls back
+  to a turn without a ledger row; but every question then logs an ERROR, no turn survives a restart, and the 60 s
+  resume sweep logs its own ERROR each tick (`application/service/agent/AGENTS.md`; inferred from the code and
+  from the spec case whose ledger insert always fails, not run against a schema without the table). The script
+  was applied twice to an empty database on MariaDB 12.3.3 (2026-10-13, local instance; the second run changed
+  nothing) and the ledger's native statements were run on that table through the `mariadb` client
+  (`infrastructure/repository/agent/AGENTS.md`). The specs still run on tables Hibernate generates on H2, and the
+  application has not run against the script's table. Compare `SHOW CREATE TABLE` with the mapping when applying it (`status` is
+  `@Enumerated(STRING)` with length 16, which Hibernate generated as an `enum` column on H2, while the script
+  creates `VARCHAR(16)` — the same mapping style as `V25`'s `status`).
 - Files here are packaged into the boot jar by `processResources` although the app never reads them.
 
 ### Testing Requirements
@@ -105,8 +118,9 @@ the release checklist below decide the order.
 - Claim/idempotency ledgers follow one shape: a `UNIQUE` key on the natural pair and a nullable `claim_token`
   or timestamp column for the CAS. Their `created_at` comes in two forms: `DATETIME NOT NULL DEFAULT
   CURRENT_TIMESTAMP` (`V4`, `V5`, `V7`; `V4` and `V5` add `updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP`)
-  and `DATETIME(6) NOT NULL` with no default, bound by the application (`V14`, `V15`, `V24`, `V25`). New tables
-  use the second form.
+  and `DATETIME(6) NOT NULL` with no default, bound by the application (`V14`, `V15`, `V24`, `V25`, `V26`). New
+  tables use the second form. `V26` is the exception to the first sentence: its key is the outbox `event_id`
+  itself and its CAS token is `attempt_count`, like the outbox row's.
 - Index changes use `DROP INDEX IF EXISTS … ON <table>; CREATE INDEX …` so re-application is safe (`V16`,
   `V17`).
 - Append-only audit tables (`V10`, `V13`) index `created_at` plus one lookup key and never get `updated_at`.
@@ -117,7 +131,7 @@ the release checklist below decide the order.
 - `infrastructure/repository/outbox/schema/` — `V1`, `V11`, `V19`, `V20`, `V22`
 - `infrastructure/repository/meeting/schema/` — `V2`, `V3`, `V5`, `V7`, `V8`
 - `infrastructure/repository/standup/schema/` — `V4`, `V6`
-- `infrastructure/repository/agent/schema/` — `V9`, `V10`
+- `infrastructure/repository/agent/schema/` — `V9`, `V10`, `V26`
 - `infrastructure/repository/authorization/schema/` — `V12`
 - `infrastructure/repository/mcp/schema/` — `V13`
 - `infrastructure/repository/cve/schema/` — `V14`–`V17`

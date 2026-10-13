@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-13 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/outbox
 
@@ -7,14 +7,15 @@
 Fixtures for the outbox relay and its health/ops read-outs: a fixed UTC clock, relaxed `OutboxMessage`
 rows, a fully wired `PollingMessageProcessor`, a real `SlackMessageRelayServiceImpl` builder, MockK
 extensions that stub the claim lifecycle and the seven status queries on `MessageOutboxRepository`, and an
-H2-backed Spring Data context for scenario specs that drive the real repository. The package has no `src/main` counterpart — the production code sits in
+H2-backed Spring Data context for scenario specs that drive the real outbox repository and, since the `/ask` turn
+ledger, the `repository/agent` Spring Data repositories. The package has no `src/main` counterpart — the production code sits in
 `service/relay/` and `health/` — it groups fixtures by the outbox concern instead.
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `OutboxTestFixtures.kt` | `DEFAULT_TEST_NOW` (2026-04-28T12:00), `createFixedUtcClock(now)`, `createStubTransactionManager()` (MockK `PlatformTransactionManager`: relaxed status, `commit` / `rollback` `just Runs`; the relay's default), `OutboundMessagePort.captureChains(chains, build = { createOutboxRow(random id) })` (stubs `toRow` for any arguments, appends `[message] + continuation` to `chains` and returns `build(message, basicInfo, continuation)`), `createOutboxRow(eventId, status = PENDING, createdAt = DEFAULT_TEST_NOW, attemptCount = 0, sendCount = 0, schemaVersion = OutboxSchemaVersion.V2)`, `transport` = `SLACK` (the relay checks `schemaVersion` before sending, and a relaxed `Int` of 0 is unsupported), `PollingProcessorFixture` + `createPollingProcessorFixture(batchSize = 100, outboxRepository, relayService, clock = createFixedUtcClock())` (the default `relayService` is a relaxed mock whose `reserveDispatchSlots(wanted)` grants all `wanted`; a relaxed `Int` of 0 would make every tick skip), `createRelayService(outboxRepository, outboundMessagePort, payloadRenderer, messageDispatcher, applicationEventPublisher, clock, relayTaskExecutor = inline, appConfig = AppConfig(), accessBlockedTracker = AccessBlockedTracker(), transactionManager = createStubTransactionManager())` (real service, real `RetryService`; the default `payloadRenderer` renders any row to a relaxed payload with no next part; its dispatch slots are `appConfig`'s `outbox.polling.batch-size`, so a test over a real pool passes a batch size that matches the pool's queue), `MessageOutboxRepository.stubClaimLifecycle(renewed = 1, completed = 1, deferred = 1)` (`renewClaim` / `completeClaim` / `deferClaim` for any arguments), `OutboxStatusRow(status, createdAt, updatedAt, sendCount)` + `createOutboxRepositoryOver(rows)` (a mock that answers all seven health queries from one row list, so readers with different cutoffs reach different verdicts), `MessageOutboxRepository.stubOutboxStatus(pendingCount, stuckPendingCount, oldestPendingCreatedAt, inProgressCount, stuckInProgressCount, oldestInProgressUpdatedAt, retryingCount)` |
-| `OutboxJpaTestContext.kt` | `OutboxJpaTestConfiguration` (deliberately not `@Configuration`: it lives under `dev.notypie`, so a `@SpringBootTest` component scan would register its repositories a second time; `AnnotationConfigApplicationContext` processes it without the stereotype; `@EnableJpaRepositories(basePackageClasses = [MessageOutboxRepository::class])`, uniquely named embedded H2, Hibernate `generateDdl` over the `outbox/schema` package only, `JpaTransactionManager`, `JdbcTemplate`) and `createOutboxJpaContext()`; `MutableClock(current = Instant.now(), zoneId = systemDefault)` with `now` and `advance(by)`; `ScriptedMessageDispatcher(outcomes, fallback)` answering the n-th `dispatch` with `outcomes[n]` or `fallback` and counting `calls`; `QueuedExecutor` (`execute` queues, `runAll()` drains in order, `size`); `JdbcTemplate.outboxColumn(eventId, column)` |
+| `OutboxJpaTestContext.kt` | `OutboxJpaTestConfiguration` (deliberately not `@Configuration`: it lives under `dev.notypie`, so a `@SpringBootTest` component scan would register its repositories a second time; `AnnotationConfigApplicationContext` processes it without the stereotype; `@EnableJpaRepositories(basePackageClasses = [MessageOutboxRepository::class, AgentAskTurnRepository::class])` — the second one brings in the whole `repository/agent` package: `AgentAskTurnRepository`, `JpaAgentSessionRepository`, `JpaAgentTurnHistoryRepository` (the `*RepositoryImpl` classes are not Spring Data interfaces and are built by the spec that needs them); uniquely named embedded H2 in its default mode (not `MODE=MariaDB`), Hibernate `generateDdl` over the `outbox/schema` and `agent/schema` packages (`outbox_message`, `agent_ask_turn`, `agent_session`, `agent_turn_history`), `JpaTransactionManager`, `JdbcTemplate`) and `createOutboxJpaContext()`; `MutableClock(current = Instant.now(), zoneId = systemDefault)` with `now` and `advance(by)`; `ScriptedMessageDispatcher(outcomes, fallback)` answering the n-th `dispatch` with `outcomes[n]` or `fallback` and counting `calls`; `QueuedExecutor` (`execute` queues, `runAll()` drains in order, `size`); `JdbcTemplate.outboxColumn(eventId, column)` |
 
 ## For AI Agents
 
@@ -40,7 +41,10 @@ H2-backed Spring Data context for scenario specs that drive the real repository.
   `application.yaml` or auto-configuration is involved and the application module needs no JPA test starter.
   `@CreationTimestamp` still stamps `created_at` with JVM time, which is why `MutableClock` starts at
   `Instant.now()` in the JVM zone. Close the context in `afterSpec`, and delete the rows between scenarios,
-  since the sweep reads every row in the table. Used by `OutboxRelayRecoveryScenarioTest`.
+  since the sweep reads every row in the table. Used by `OutboxRelayRecoveryScenarioTest`,
+  `OutboxChainJpaTransactionTest`, `AgentConverseServiceTest` (the committed-notice and leased-turn cases) and
+  `AgentAskThreadStarterTest` (which pins `MutableClock` to a fixed instant: `agent_ask_turn` takes both timestamps
+  from the caller, so nothing there is stamped with JVM time).
 - `stubOutboxStatus` stubs `countPending`, `countPendingOlderThan(any())`, `findOldestPendingCreatedAt`,
   `countInProgress`, `countInProgressOlderThan(any())`, `findOldestInProgressUpdatedAt`,
   `countInProgressWithSendsAtLeast(any())` in one call — used
@@ -63,7 +67,8 @@ No specs for the fixtures themselves; the relay, health and ops specs above exer
   `OutboxPayloadRenderer`; `dev.notypie.impl.command.event.MessageDispatcher`, `dev.notypie.impl.retry.RetryService`
 
 ### External
-- `dev.notypie.repository.outbox.MessageOutboxRepository`, `schema.OutboxMessage` from `:infrastructure`
+- `dev.notypie.repository.outbox.MessageOutboxRepository`, `schema.OutboxMessage`,
+  `dev.notypie.repository.agent.AgentAskTurnRepository`, `schema.AgentAskTurnSchema` from `:infrastructure`
 - `io.mockk` (`mockk`, `every`)
 - `java.time.Clock` / `ZoneOffset.UTC`
 - Spring Data JPA, Spring ORM (`LocalContainerEntityManagerFactoryBean`, `HibernateJpaVendorAdapter`,

@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-12_
+_type: architecture · updated: 2026-10-13_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -110,13 +110,18 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - **렌더는 배달 시점에 한 번**: relay(폴링 또는 CDC)가 행을 집으면 `OutboxPayloadRenderer.render`가 schema 버전을
   검사하고 `OutboundMessageCodec.decode` 후 `Transport`별 `OutboundRenderer`(`SlackOutboundRenderer`)에 넘긴다.
   스테이저와 렌더러는 같은 `SlackApiEventConstructor`를 쓰므로 wire 출력이 동일하다. 세 번째 렌더 경로는 금지다.
-- **배달 결과를 되받는 길은 `MessagePublishSuccessEvent` 하나다**: relay가 터미널 상태를 기록한 뒤 `eventId`·
-  `commandDetailType`·`messageTs`(`chat.postMessage`의 `ts`)를 담아 동기 발행하고, 리스너 예외는 로그로 삼킨다. 소비자는 둘 —
-  `StandupSummaryService`(요약 메시지의 `outbox:<eventId>` 마커를 실제 ts로 치환)와 `AgentAskThreadStarter`(`AGENT_ASK_QUESTION`
-  행을 디코딩해 `threadId = ts`로 에이전트 턴을 시작, 결정 #38). 발행은 `writeTerminal`의 CAS가 성공한 소유자만 하므로 같은
-  eventId가 두 번 오지는 않는다 — 상태 쓰기를 잃은 행은 `OutboxRecoveryScheduler`가 **같은 행(같은 eventId)** 을 reclaim해 다시
-  보내므로 메시지가 두 번 게시되고, 두 번째 전달의 성공 이벤트가 그 eventId로 리스너를 깨운다(`/ask`는 두 번째 게시물에만 스레드).
-  성공 이벤트 뒤의 처리는 메모리 안이라 리스너 실패·재시작이면 그 턴은 사라진다(결정 #38 한계).
+- **배달 결과를 되받는 길은 둘이다(2026-10-13, 이전에는 성공 이벤트 하나)**: relay는 Slack이 메시지를 받으면(`ok`) 상태를 쓰기
+  **전에** `MessageDeliveredEvent`를, 터미널 상태를 기록한 **뒤에** `MessagePublishSuccessEvent`를 동기 발행한다. 둘 다 `eventId`·
+  `commandDetailType`·`messageTs`(`chat.postMessage`의 `ts`)를 담고, 리스너 예외는 로그로 삼킨다.
+  - 성공 이벤트의 소비자는 `StandupSummaryService` 하나다(요약 메시지의 `outbox:<eventId>` 마커를 실제 ts로 치환). 발행은
+    `writeTerminal`의 CAS가 성공한 소유자만 하므로 같은 eventId가 두 번 오지는 않는다 — 상태 쓰기를 잃은 행은
+    `OutboxRecoveryScheduler`가 **같은 행(같은 eventId)** 을 reclaim해 다시 보내므로 메시지가 두 번 게시되고, 두 번째 전달의 성공
+    이벤트가 그 eventId로 리스너를 깨운다.
+  - 전달 이벤트의 소비자는 `AgentAskThreadStarter` 하나다: `AGENT_ASK_QUESTION` 행을 다시 읽어 `agent_ask_turn` 레저에 적고
+    `threadId = ts`로 에이전트 턴을 시작한다(결정 #38·#40). 결과 이벤트가 아니어서 뒤에 claim을 잃는 소유자도 내고, 재게시 때는
+    같은 eventId로 다시 온다 — 레저 PK가 그 eventId라 턴은 하나이고 스레드는 ts가 먼저 적힌 게시물에 달린다. 이전(10-12)에는
+    `/ask`도 성공 이벤트를 들었고 그 뒤가 메모리뿐이라 리스너 실패·재시작이면 턴이 사라졌다. 그 한계는 레저로 닫혔고 남은 한계는
+    결정 #40에 있다.
 - **모달 예외의 이유**: `views.open`은 요청 스레드의 `trigger_id`가 필요하고 발급 후 약 3초에 만료된다. 그래서
   `OpenViewEvent`는 아웃박스를 거치지 않고 `SlackViewOpenDispatcher`(`@EventListener`, 의도적으로 `@Async` 없음)가
   `MessageDispatcher.dispatchImmediate`로 호출한다 — 트랜잭션 경계를 가진 호출자 안에서는 `ViewOpenDeferral`이 경계가

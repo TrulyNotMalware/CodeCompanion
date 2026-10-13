@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-11_
+_type: pattern · updated: 2026-10-13_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -96,7 +96,8 @@ _type: pattern · updated: 2026-10-11_
   동시 호출이 섞이지 않음을 고정한다.
 - **`maxAttempts`는 총 실행 횟수다.** Spring Framework 7의 `maxRetries`는 최초 시도 뒤의 재실행 횟수라 `RetryService`가
   `maxAttempts - 1`을 넘긴다(예전 off-by-one은 고쳐졌고 `RetryServiceTest`가 고정). 기본 3회, 릴레이 상태 기록도
-  `STATUS_WRITE_ATTEMPTS` = 3회다(시도마다 한 트랜잭션, 연쇄 발송의 다음 조각 저장 포함). 최악 소요는
+  `STATUS_WRITE_ATTEMPTS` = 3회다(시도마다 한 트랜잭션, 연쇄 발송의 다음 조각 저장 포함). `/ask` 전달 리스너의 아웃박스 재조회와
+  레저 기록도 이 상수를 일부러 함께 쓴다(2026-10-13, 결정 #40 — 올리면 세 루프가 함께 길어진다). 최악 소요는
   `retryTimeBound(attemptTimeout, maxAttempts)`가 코드로 계산한다.
 - `recoveryCallBack`은 재시도가 소진돼 `RetryException`이 났을 때만 실행되고, 없으면 그 `RetryException`(마지막 원인을 감쌈)이
   전파된다. 기본 `includes(Exception)`은 `DataIntegrityViolationException`·검증 예외처럼 재시도해도 소용없는 실패까지

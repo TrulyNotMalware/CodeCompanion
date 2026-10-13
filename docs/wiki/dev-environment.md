@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-10-12_
+_type: guide · updated: 2026-10-13_
 
 > JDK 25 · Gradle 9.8.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -65,14 +65,16 @@ _type: guide · updated: 2026-10-12_
   끝내야 하므로 레코드당 평균 예산은 60초다. PENDING 행 레코드 1건은 Slack 디스패치 1회이고(나머지 CDC 이벤트는 즉시 반환),
   레코드 1건의 최악 시간은 Slack HTTP 상한(산식과 합계는 `infrastructure/.../impl/command/AGENTS.md`에만 있다)과 SQL 대기
   (풀 고갈 시 6 × Hikari `connection-timeout` + 약 0.3초, `application/.../service/relay/AGENTS.md`의 "Per-record
-  time budget")의 합이다. 풀이 고갈되면 60초를 넘을 수 있고, 그때는 리밸런스·재전달이 일어나지만 PENDING만 claim하므로
+  time budget"; `/ask` 질문 행은 전달 리스너가 얹혀 16 × + 약 1초, 2026-10-13)의 합이다. 풀이 고갈되면 60초를 넘을 수 있고, 그때는 리밸런스·재전달이 일어나지만 PENDING만 claim하므로
   중복 발송은 없다. Slack 타임아웃·재시도 정책·`connection-timeout`·위 두 값을 바꾸거나 리스너 안에 대기를 넣을 때는
   두 문서의 계산부터 다시 한다. 배치가 초과되면 컨슈머가
   그룹에서 빠졌다가 재전달받는데, 이미 claim된 행은 PENDING이 아니므로 CDC 프로세서가 건너뛴다.
 - Hikari 풀: 모든 프로파일 `maximum-pool-size: 20`. 회의 cancel/reschedule/참가자 추가는 커넥션을 한 번에 하나만 쓴다: 핸들러가
   `isolatedWriteTemplate`의 `REQUIRES_NEW` 쓰기를 interaction 트랜잭션이 커밋해 커넥션을 돌려준 뒤로 미룬다(핸들러 밖 인라인
   호출만 둘을 잡는다). `agentTurnExecutor`가 가득 차 거절된 `@bot` 멘션은 둘을 잡는다: 과부하 안내는 `afterCompletion` 안의
-  `REQUIRES_NEW` 쓰기인데, 그때 커밋된 멘션 트랜잭션이 아직 커넥션을 쥐고 있다.
+  `REQUIRES_NEW` 쓰기인데, 그때 커밋된 멘션 트랜잭션이 아직 커넥션을 쥐고 있다. 거절된 `/ask` 턴은 그렇지 않다: 전달 리스너·레저
+  쓰기·과부하 안내가 감싸는 트랜잭션 없이 릴레이의 디스패치 스레드에서 한 번에 하나씩 커넥션을 쓰고, ask 스윕은 스케줄러 스레드에서
+  같은 식으로 돈다(2026-10-13, 코드를 읽어 판단했고 측정하지는 않았다. 산정식은 그대로).
   릴레이 executor·스케줄러·CDC 리스너가 같은 풀을 쓴다.
   산정식: 동시 회의 interaction 수 + 같은 순간 거절된 멘션 수 × 2 + 릴레이 워커(`relayTaskExecutor` 4) + 스케줄러
   스레드(4) + CDC 리스너(1) + DB를 쓰는 AI 턴(`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent` 4). 요청 스레드는 가상 스레드라 동시 interaction을
@@ -242,7 +244,8 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
   (무효 키였던 `enabled: false`는 2026-09-21에 제거). `db/migration/V*.sql`은 **사람이 수동으로 적용**한다.
 - 스키마 기동 방식: `local`/`slack-live`/`dev`는 `ddl-auto: update`로 Hibernate가 베이스 테이블을 만들고 `V*` 스크립트는 그 위에 얹는
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
-- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V25**(2026-10-08 `feature/gap-closure`; 마지막으로 fetch한 `origin/main`은 V23), 다음은 **V26**. 번호를 정하기
+- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V26**(2026-10-13 `feature/ask-turn-ledger`의 미커밋 작업 트리; `main`과 마지막으로 fetch한
+  `origin/main` `8446f9d8`은 V25), 다음은 **V27**. 번호를 정하기
   전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
 - **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈춰 있었고 #26(`f9971700`, 2026-10-06)이
   V18~V23을 한꺼번에 실었다. 아직 V17인 환경의 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
@@ -257,6 +260,13 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
   이전 릴리스가 서비스하는 동안, 배포 전에 이 순서로 적용한다. `GOOGLE_CALENDAR_ENABLED=true`는 두 테이블이 생긴 뒤에만 켠다 — 미러
   훅이 미팅 쓰기 트랜잭션 안에서 이 테이블을 읽고 쓰므로, 테이블 없이 켜면 미팅 생성·수락·취소·일정 변경이 SQL 오류로 롤백된다
   (훅 구조에서 추론, 미측정). 꺼져 있으면 훅은 no-op이다.
+- **`/ask` 턴 레저 릴리스 — V26.** 새 테이블 `agent_ask_turn` 하나와 인덱스만 만들고(`CREATE TABLE IF NOT EXISTS`) 기존 테이블을
+  건드리지 않으며 외래 키도 없으므로, 이전 릴리스가 서비스하는 동안 배포 전에 적용한다. 기능 플래그는 없다 — 새 바이너리는 `/ask`
+  질문이 전달될 때마다 이 테이블에 쓴다. 테이블 없이 배포하면 `/ask`는 여전히 답하지만(레저 기록 실패 → lease 없는 턴) 재시작·크래시에
+  대한 내구성이 없고 질문마다 ERROR 한 줄, ask 스윕도 60초마다 ERROR 한 줄을 남긴다(코드에서 추론, 미측정). 스크립트는 로컬 MariaDB
+  12.3.3의 빈 DB에 두 번 적용해 보았고(2026-10-13, 두 번째는 변화 없음) 그 테이블에서 레저의 SQL 문을 손으로 실행했다. 다만
+  애플리케이션이 그 테이블 위에서 돈 적은 없다(미확인) — 스펙은 Hibernate가 H2에 만든 테이블을 쓰고, 거기서 `status`는 enum
+  컬럼인데 스크립트는 `VARCHAR(16)`이라 테스트가 본 DDL과 이 스크립트는 같은 것이 아니다. 결정 #40.
 - 새 엔티티는 JPA 스키마 클래스(`infrastructure/repository/*/schema/`)와 마이그레이션을 **둘 다** 추가한다. H2/`ddl-auto` 테스트는
   MariaDB 전용 문법 오류를 잡지 못하므로 `slack-live` DB에 한 번 적용해 본다.
 
@@ -337,6 +347,10 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
   정상이면 끝까지 보내고 상태를 기록한다(예산은 상태 기록의 SQL 시간을 0으로 센다). AI 턴은 닫기가 시작되면 새로 받지 않고(과부하 안내), 20초 대기가 끝날 때까지 시작하지
   못한 큐의 턴은 버리면서 같은 안내를 outbox에 남긴다(`AgentTurnExecutor`). 안내는 3초 예산(`AGENT_TURN_DISCARD_BUDGET`) 안에서만
   쓰고, 예산이 끝나면 남은 턴은 안내 없이 버린다(ERROR 한 줄, `agent.turns{outcome=dropped}`). 대기 뒤에도 돌고 있던 턴의 답은 여전히 잃는다.
+  여기까지는 멘션 턴이다. `/ask` 턴(레저 lease, 2026-10-13)은 닫기 중 거절되거나 큐에서 버려져도 안내 없이 레저 행이 `PENDING`으로
+  남고(`AgentTurnShutdownContextTest`), 대기 뒤에도 돌던 턴은 `IN_PROGRESS`로 남아 `sidecar.requestTimeoutSeconds` + 60초 뒤부터 ask
+  스윕이 다시 돌린다(스윕 쪽은 `AgentAskThreadStarterTest`가 행을 직접 심어 확인했고, 닫히는 컨텍스트가 실행 중인 `/ask` 턴을 끊는
+  장면 자체는 실행해 보지 않았다). 결정 #40.
   풀이 고갈되면 문장마다 `connection-timeout`이 더해지고 상태 UPDATE가 잠금을 오래 기다려도 예산을 넘을 수 있으며, 크래시·SIGKILL은
   여전히 디스패치를 끊어 스윕이 두 번 게시할 수 있다. 메모리는
   힙 1Gi(limit 2Gi의 50%) + 비힙을 덮도록 request 1536Mi. 전략은 V20 릴리스 동안 `Recreate`라(이전 파드와 겹치면 안 됨) 롤아웃마다 이전 파드

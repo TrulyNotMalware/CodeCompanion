@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-13 -->
 
 # infrastructure/repository/outbox
 
@@ -23,7 +23,7 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
 | Directory | Purpose |
 |-----------|---------|
 | `schema/` | `OutboxMessage` entity, `MessageStatus`, `OutboxSchemaVersion` (see `schema/AGENTS.md`) |
-| `dto/` | `OutboxUpdateEvent` hierarchy and `CommandOutput.toOutboxUpdateEvent` (see `dto/AGENTS.md`) |
+| `dto/` | `OutboxUpdateEvent` hierarchy, `CommandOutput.toOutboxUpdateEvent` and `MessageDeliveredEvent` (see `dto/AGENTS.md`) |
 
 ## For AI Agents
 

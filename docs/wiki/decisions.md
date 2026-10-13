@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-12_
+_type: decision · updated: 2026-10-13_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -118,18 +118,20 @@ _type: decision · updated: 2026-10-12_
       동안(첫 연결 전, 또는 disconnect 뒤 재연결 전) 수락한 미팅은 큐 행이 없어 미러되지 않는다.
 38. **`/ask`는 질문을 채널 메시지로 올리고 답은 그 스레드에 달며, 스레드 id는 아웃박스 전달 이벤트에서 얻는다 (2026-10-12).**
     슬래시 호출은 채널에 보이지 않고 `response_url`은 도메인에 들어오지 않으므로, `AskSlashContext`는
-    `MessageContent.AgentQuestion`을 담은 `ChannelMessage`(detailType `AGENT_ASK_QUESTION`) 하나만 아웃박스에 넣는다. 전달 뒤
-    relay가 발행하는 `MessagePublishSuccessEvent`의 `messageTs`를 `AgentAskThreadStarter`가 받아 아웃박스 행을 디코딩하고
-    `AgentConverseRequestEvent(threadId = ts)`를 발행하면, 그 뒤는 멘션 `ask`와 같은 경로다(세션 키 `channel:ts:user`라 그 스레드에서
-    멘션하면 이어진다). 기각: ① 동기 `chat.postMessage`로 ts를 먼저 얻기 — 모달 외 유일한 아웃박스 우회가 되고 at-least-once를
-    잃는다; ② `response_url`을 도메인까지 전달 — 5회·30분 제한이고 스레드가 없다; ③ 사용자별 세션 키(`channel:user`) — 톱레벨
+    `MessageContent.AgentQuestion`을 담은 `ChannelMessage`(detailType `AGENT_ASK_QUESTION`) 하나만 아웃박스에 넣는다. Slack이 그
+    메시지를 받으면 relay가 발행하는 `MessageDeliveredEvent`의 `messageTs`를 `AgentAskThreadStarter`가 받아 아웃박스 행을 디코딩하고
+    `AgentConverseRequestEvent(threadId = ts)`를 만들어 `AgentConverseService`에 넘기면, 그 뒤는 멘션 `ask`와 같은 턴이다(세션 키
+    `channel:ts:user`라 그 스레드에서 멘션하면 이어진다). 기각: ① 동기 `chat.postMessage`로 ts를 먼저 얻기 — 모달 외 유일한
+    아웃박스 우회가 되고 at-least-once를 잃는다; ② `response_url`을 도메인까지 전달 — 5회·30분 제한이고 스레드가 없다; ③ 사용자별 세션 키(`channel:user`) — 톱레벨
     멘션은 호출마다 새 스레드라 의미가 어긋난다. 알려진 한계: 봇이 없는 채널에서는 루트 메시지가 `not_in_channel`로 실패해 아무
-    응답이 없다(슬래시 공통, 후속 3-1); relay는 자기 CAS가 터미널 상태를 기록했을 때만 성공 이벤트를 내므로 같은 eventId가 두 번 오지는
-    않지만, 상태 쓰기를 잃으면 recovery가 같은 행을 reclaim해 루트 메시지를 **다시 게시**하고 두 번째 게시물에만 스레드가 달린다(수용);
-    성공 이벤트 이후는 메모리 안(리스너 → 턴 executor)이라 리스너의 DB 읽기 실패나 턴 전 재시작이면 질문만 남고 답이 오지 않는다 —
-    `@bot ask`도 턴 중 재시작이면 같지만 `/ask`는 전달 뒤 창이 하나 더 있다. 영속 레저(outbox eventId + ts, V26) + 재개 스윕은 후속
-    (Codex 2026-10-12 HIGH). 상태: 유지. 근거:
+    응답이 없다(슬래시 공통, 후속 3-1); 상태 쓰기를 잃으면 recovery가 같은 행을 reclaim해 루트 메시지를 **다시 게시**한다(수용) — 턴은
+    질문(아웃박스 `event_id`)당 하나라 스레드는 ts가 레저에 먼저 적힌 게시물 하나에만 달린다. 상태: 유지. 근거:
     `service/agent/AGENTS.md`, `StandupSummaryService`의 `outbox:<eventId>` 치환 패턴, `.omc/plans/slash-slice1-ask-standup-answer.md`.
+    - **전달 훅과 한계의 변경 (2026-10-13):** 처음(10-12)에는 relay가 터미널 상태를 기록한 **뒤**의 `MessagePublishSuccessEvent`가 턴을
+      시작했고, 그 뒤는 메모리 안(리스너 → 턴 executor)이라 리스너의 DB 읽기 실패나 턴 전 재시작이면 질문만 남고 답이 오지 않았다
+      (`@bot ask`도 턴 중 재시작이면 같지만 `/ask`는 전달 뒤 창이 하나 더 있었다. Codex 2026-10-12 HIGH, 당시 "영속 레저 + 재개 스윕은
+      후속"으로 기록). 그 한계는 결정 #40으로 닫혔고, 훅이 상태 기록 **앞**의 `MessageDeliveredEvent`로 바뀐 것도 그 결정이다. 그때의
+      "두 번째 게시물에만 스레드가 달린다"도 이제 위와 같이 바뀌었다.
 39. **`/standup answer`는 서비스가 후보를 미리 조회해 도메인에 넘기고, 슬래시 기원 제출은 DM 갱신 대신 ephemeral로 확인한다
     (2026-10-12).** 도메인은 저장소를 못 보므로 `StandupSlashServiceImpl`이 루틴마다 후보 세션 하나를 골라 `StandupAnswerCandidate`로
     넘기고, 컨텍스트는 0개면 안내, 1개면 기존 `StandupFill` 모달, 여럿이면 이름을 요구한다(같은 이름이 여럿이면 DM 버튼으로 안내).
@@ -141,6 +143,93 @@ _type: decision · updated: 2026-10-12_
     있다(Codex HIGH). 프롬프트 전 조기 답변은 그 세션이 유일할 때만 허용된다. DM 알림이 없는 제출(`noticeMessageTs` 공백)은 `UpdateMessage` 대신 요청자에게 ephemeral로
     결과를 알린다. 이유: 기존 모달·제출 파이프라인(`STANDUP_PROMPT`/`STANDUP_ANSWER_SUBMIT`)을 그대로 쓰기 위해. 상태: 유지.
     근거: `service/standup/AGENTS.md`, `.omc/plans/slash-slice1-ask-standup-answer.md`.
+40. **`/ask` 턴의 시작은 전용 레저 `agent_ask_turn`(V26)에 먼저 적고, 턴은 그 행의 lease 아래에서 돌며, 60초 스윕이 결과가 날 때까지
+    다시 돌린다 (2026-10-13).** 결정 #38에 적어 둔 한계(전달 뒤가 메모리뿐)를 닫는다. 질문 하나에 행 하나이고 PK는 질문 아웃박스 행의
+    `event_id`, `message_ts`가 답 스레드다. 프롬프트·요청자·채널은 복사하지 않고 턴마다 아웃박스 행에서 다시 읽는다. 턴의 결과는 넷 중
+    하나다 — 답, 실패 안내, 과부하 안내, 포기 안내. 이유: 크래시·재시작·사이드카 busy·결과 트랜잭션 실패가 "질문만 남고 답이 없는" 상태로
+    끝나지 않게 하되, 아웃박스의 상태 기록 경로에는 실패 지점을 더하지 않기 위해. 멘션(`@bot ask`) 턴에는 레저가 없다(아래 한계).
+    상태: 유지. 근거: `service/agent/AGENTS.md`, `service/relay/AGENTS.md`, `repository/agent/AGENTS.md`,
+    `V26__add_agent_ask_turn.sql` 헤더, git-ignored `.omc/plans/ask-turn-ledger.md`.
+    - **write-ahead 순서:** relay는 디스패치 결과가 `ok`이면 상태를 쓰기 **전에** `MessageDeliveredEvent`를 동기 발행한다. 뜻은 "전송
+      수단이 메시지를 받았고 행은 아직 기록되지 않았다"이고, 결과 이벤트(`OutboxUpdateEvent`)가 아니라서 뒤에 claim을 잃는 소유자도
+      발행할 수 있다. 리스너 예외는 ERROR 로그로 남고 상태 쓰기는 그대로 진행된다. 리스너(`AgentAskThreadStarter.onDelivered`)는
+      `AGENT_ASK_QUESTION`이고 ts가 있을 때만 아웃박스 행을 다시 읽고, 레저 행을 넣고, 턴을 executor에 넘긴다. 그래서 크래시가 레저
+      insert 앞이면 아웃박스 행이 `IN_PROGRESS`로 남아 아웃박스 스윕이 질문을 다시 게시하고 그 전달이 레저를 쓰며, insert 뒤면 레저 행이
+      남아 ask 스윕이 첫 게시물의 스레드에서 턴을 이어 간다. **기각: 레저 쓰기를 상태 기록 트랜잭션 안에 넣기**(연쇄 조각의 다음 행을
+      넣는 방식) — 레저 실패가 `SUCCESS`를 롤백시켜 스윕이 질문을 다시 게시한다. 지금 순서에서는 레저 실패가 그 턴의 내구성만 잃는다
+      (턴은 lease 없이 그대로 시작). 이 순서는 리스너가 발행 스레드에서 동기로 돌 때만 성립한다 — `@Async`·비동기 multicaster·성공
+      이벤트 뒤로의 이동은 조용히 깨뜨리며, `ApplicationContextSmokeTest`가 "`publishEvent`가 돌아왔을 때 행이 있다"로 고정한다.
+    - **상태 기계와 카운터 둘:** `PENDING → IN_PROGRESS → COMPLETED | ABANDONED`, 모든 전이는 관측한 `attempt_count`를 조건으로 건
+      네이티브 UPDATE 하나다(결정 #10의 claim-token 패턴, 토큰은 아웃박스처럼 `attempt_count`). `begin`(PENDING → IN_PROGRESS)은
+      `attempt_count`와 `run_count`를 함께 올리고, busy 반납 `release`는 `run_count`만 하나 돌려주며, 고아 회수 `releaseOrphan`과
+      `finish`는 둘 다 건드리지 않는다. `attempt_count`는 소유권 토큰일 뿐이고 포기 예산은 `run_count`다 — 사이드카의 busy·429가 예산을
+      쓰지 않게 하려는 분리다(아웃박스의 `attempt_count`/`send_count`와 같은 이유). `finish`의 조건은 `status IN ('PENDING',
+      'IN_PROGRESS')` + 같은 attempt라서, 고아로 회수됐지만 아무도 다시 시작하기 전에 끝난 실행은 결과를 남기고, 다른 실행이 시작한
+      뒤에는 진다. `recordDelivered`는 조회 없이 insert부터 하고 중복이면 저장된 행을 읽어 돌려주며, 이번 호출이 행을 넣었는지 이미
+      있던 행을 찾았는지를 함께 알린다(`RecordedAskTurn.storedNow`). 트랜잭션 안에서 불리면
+      `IllegalStateException`으로 거부한다(거부된 insert의 새 인스턴스가 영속성 컨텍스트에 남아 뒤의 조회가 저장된 행 대신 그것을
+      돌려주기 때문). 두 시각 컬럼은 호출자의 `Clock`에서 온다.
+    - **lease:** `AgentConverseService`는 턴마다 `AgentTurnLease`를 받는다. 멘션과 "레저 쓰기에 실패한 `/ask`"는 `Unleased`(아무것도
+      쓰지 않음)다. lease가 있으면 사이드카 호출 전에 `begin()`(지면 호출 없이 끝), 답·실패 안내 트랜잭션의 마지막 쓰기로 `settle()`,
+      busy면 `giveBack()`을 먼저 쓴다. lease 쓰기가 CAS에서 지면 예외를 던지므로 그 트랜잭션이 롤백돼, 턴을 잃은 실행은 아무것도
+      게시하지 않는다. `giveBack()`은 그 실행이 빚진 안내를 `BusyNotice`로 돌려준다 — lease 없는 턴은 `CONVERSATION_BUSY`(기존
+      `BUSY_MESSAGE`), lease 있는 턴의 **첫** 실행은 `ANSWER_LATER`(`ANSWER_LATER_MESSAGE`: "I'm busy right now — I'll answer your
+      question in its thread as soon as I can."), 이후 실행은 `NONE`(조용히 반납만). `BUSY` 감사 행은 안내가 나갈 때만 함께 쓴다.
+      문구를 나눈 이유(2026-10-13, Codex 교차 리뷰): 새 `/ask` 스레드에는 "이 대화의 이전 요청"이 없고, 이 ephemeral은 별도 아웃박스
+      행이라 rate limit으로 보류되면 재개된 실행의 답보다 **늦게** 도착할 수 있다 — 새 문구는 진행 중이라고 말하지 않으므로 이미
+      달린 답과 모순되지 않는다(보장은 아니다: 그 턴이 답 대신 실패 안내로 끝날 수는 있다). **행을 방금 넣은 전달**에서 executor가 가득 차면 과부하 안내와 `settle()`을 한 `REQUIRES_NEW` 트랜잭션에
+      쓴다(실행 없이 `COMPLETED`). 이미 있던 행을 찾은 전달은 아래 스윕과 같은 `offer`다. executor가 이미 종료
+      중이면(`ThreadPoolTaskExecutor`의 풀이 `isShutdown`) 안내 없이 행을 `PENDING`으로 두고, 종료 대기가 끝나 시작하지 못한 채 버려진
+      큐의 턴도 같다 — 다음 기동의 스윕이 맡는다. 셀별 동작 표는 `service/agent/AGENTS.md`에 있다.
+    - **스윕:** `AgentAskThreadStarter.resume()`이 60초 fixedDelay(첫 실행도 60초 뒤)로, 60초 넘게 기다린 `PENDING`과 `sidecar.
+      requestTimeoutSeconds`(기본 120) + 60초 넘게 갱신되지 않은 `IN_PROGRESS`를 오래된 순으로 20건 읽는다. 고아 `IN_PROGRESS`는 먼저
+      `PENDING`으로 회수하고, `run_count`가 5 이상이거나 전달 뒤 1시간이 지난 행은 실패 안내와 함께 `ABANDONED`로 끝내며(한 트랜잭션,
+      감사 행 없음), 나머지는 executor에 `offer`한다. **스윕은 executor가 가득 찼다는 이유로 턴을 끝내지 않는다** — 거절된 `offer`는
+      아무것도 쓰지 않고 다음 스윕이 다시 낸다. 이유: 운영은 레플리카 2개라 한쪽 스윕의 거절이 다른 레플리카가 큐에 넣은 턴이나 busy로
+      반납된 턴을 닫으면 안 된다. **같은 규칙이 전달 경로에도 적용된다(2026-10-13, Codex 교차 리뷰 MEDIUM):** 과부하 안내로 턴을
+      끝내는 것은 **이번 호출이 행을 넣었을 때뿐**이다. 이미 있던 `PENDING` 행(상태 쓰기를 잃어 다시 게시된 질문, 또는 같은 리스너
+      호출 안에서 insert는 커밋됐는데 응답을 잃은 뒤의 재시도)은 `offer`로 넘기고, 거절되면 아무것도 쓰지 않은 채 스윕에 맡긴다.
+      고치기 전의 순서: A가 전달·레저 기록 뒤 상태 쓰기 전에 죽고 → B의 스윕이 턴을 큐에 넣고 → 아웃박스 복구가 A에서 다시 전달 →
+      A의 executor가 가득 차 과부하 안내 + `COMPLETED` → B의 큐에 있던 턴이 `begin`에서 진다. 첫 전달의 거절을 그대로 둔 이유는
+      그것이 이 레인의 입장 제어이기 때문이다(가득 찬 executor는 새 질문을 한 시간까지 내구성 있게 쌓아 두지 않고 바로 돌려보낸다).
+      그때는 안전하다 — 방금 넣은 행은 스윕을 통해서는 다른 레플리카의 큐에 있을 수 없다. 스윕은 `ASK_PENDING_GRACE`(60초)보다 오래된
+      `PENDING`만 읽는다(레플리카 시계가 그보다 훨씬 작게 어긋난다는 전제). 행마다 실패를 따로 가두므로(ERROR 로그) 한 행의 예외가 배치의 나머지를 막지 않는다. 상수는
+      `AgentAskThreadStarter.kt`의 `ASK_*`이고 YAML 키는 없다. 이 JVM의 큐에 이미 있는 턴은 메모리 집합 `queued`로 건너뛴다(레플리카
+      사이에는 보이지 않으므로 두 레플리카가 한 턴을 각자 큐에 넣을 수 있고, `begin` CAS가 하나만 통과시킨다).
+    - **시간 예산:** 리스너는 relay의 `renewClaim` → `completeClaim` 사이, 디스패치 스레드에서 돈다. 정상 경로는 커넥션 획득 2회(아웃박스
+      재조회, 레저 insert), 행을 방금 넣은 전달에서 턴이 거절되면 `REQUIRES_NEW` 안내로 1회 더. 최악은 10회다 — 재조회 3회, insert
+      3회와 중복 뒤 저장 행 조회 3회, 안내 1회(이 경로의 안내는 기록이 세 번 다 실패한 뒤 lease 없는 폴백이 거절될 때의 것이다. 행을
+      찾은 전달은 안내를 쓰지 않는다). 재시도 루프 둘의 백오프는 각 0.33초, 합 0.66초다. ask 행에 대해 `service/relay/AGENTS.md`의 (a)는
+      16 × `connection-timeout` + 0.99초(≈ 81초), (b)의 SQL 쪽은 13 × `connection-timeout` + 0.99초(≈ 66초)가 된다
+      (`connection-timeout` 5초 기준의 산술이며 실측은 아니다. 5초는 `local`·`dev`·`slack-live` YAML의 값이고 `prod`는 환경 변수가
+      정한다). **`RELAY_RECORD_TIME_BOUND`(45.99초)와 `RECORD_SHUTDOWN_WAIT`(46초)는 바꾸지 않는다**: 리스너의 DB 시간과 재시도
+      백오프는 커밋·연쇄 조각 insert처럼 그 상한 밖에 둔다. 넘겼을 때의 결과도 같다 — 상태가
+      기록되지 않아 스윕이 질문을 다시 게시하지만, 레저 키가 아웃박스 `event_id`라 턴은 하나다. 리스너의 재시도 횟수는 relay의
+      `STATUS_WRITE_ATTEMPTS`(3)를 일부러 공유한다(레저 쓰기가 뒤따르는 상태 쓰기만큼 시도된다. 올리면 두 루프가 함께 길어진다).
+    - **메트릭:** `agent.turns{outcome}`에 `resumed`(스윕의 `offer`가 받아들여진 수)와 `abandoned`(커밋된 포기, 안내 유무 무관)가
+      더해졌다. lease가 있는 턴의 busy는 안내가 없는 실행에서도 `busy`를 올린다. executor가 종료 중이라 거절된 턴은 `rejected`가 아니라
+      `discarded`로 세고, 종료 때 `PENDING`으로 남긴 `/ask` 턴은 어느 쪽으로도 세지 않는다.
+    - **남은 한계:** ① 리스너의 아웃박스 재조회가 세 번 모두 실패하고 뒤의 상태 쓰기가 성공하면 그 턴은 여전히 사라진다(질문은
+      게시됐고 레저 행은 없다). ② lease 없는 폴백은 한 스레드에 두 번 답할 수 있다 — 레저 insert가 커밋됐는데 그 응답을 잃고 같은 리스너
+      호출의 나머지 시도도 실패한 경우, lease 없는 턴이 답하고 60초 뒤 스윕이 저장된 행을 다시 돌린다. ③ lease를 잃은 실행은 결과
+      트랜잭션 실패와 같은 ERROR로만 남고 메트릭은 그 실행을 `completed`로 센다(토큰 포함). ④ 스윕의 디코드에는 relay의
+      `OutboxSchemaVersion.SUPPORTED` 검사가 없어, 이 바이너리가 디코드하지 못하는 행은 안내 없이 `ABANDONED`가 된다. ⑤ 진행할 수 없는
+      행(이 JVM 큐에 있는 턴, 거절된 offer, 안내 쓰기가 실패한 포기)은 `updated_at`이 가장 오래돼 20건 배치의 앞자리를 계속 차지한다.
+      ⑥ 첫 실행이 중단되고 뒤의 실행이 busy면 busy 안내가 나가지 않는다 — 첫 실행의 안내 트랜잭션이 롤백된 경우도 같다(고아 회수
+      뒤의 실행은 lease의 두 번째 실행이다. 안내는 첫 반납과 함께만 커밋되므로 두 번 나가지는 않는다). ⑦ 디스패치 결과를 모르는 질문(`outcome_unknown`)은 전달 이벤트도 ts도
+      없어 턴이 없다(변함없음). ⑧ `@bot` 멘션 턴은 여전히 메모리뿐이라 턴 중 재시작이면 사라진다. ⑨ 레저 행은 지우지 않는다(보존 정리 없음).
+      ⑩ 첫 busy 안내는 Slack이 늦게 배달하면 답보다 뒤에 도착할 수 있다 — 문구는 더 이상 작업이 진행 중이라고 말하지 않는다.
+      ⑪ 한 질문의 전달 둘이 동시에 겹치면(아웃박스 소유자 둘이 모두 보낸 경우) 행을 넣은 쪽이 가득 차 과부하 안내로 끝내는 사이
+      다른 쪽이 막 큐에 넣은 턴은 아무 일도 하지 않는다(코드를 읽어 확인, 스펙 없음).
+    - **운영과 미검증:** `ddl-auto: none`인 환경은 이 코드를 올리기 전에 V26을 적용한다(새 테이블 하나, `CREATE TABLE IF NOT EXISTS`).
+      테이블이 없으면 `recordDelivered`가 매번 실패해 `/ask`는 lease 없는 폴백으로 답하되 내구성이 없고 질문마다 ERROR가 남으며, 스윕도
+      매 주기 ERROR를 남긴다(코드에서 추론, 미측정). 스펙은 네이티브 문장을 H2에서 실행한다(인프라 스펙은 `MODE=MariaDB`, 애플리케이션
+      스펙은 기본 모드, 테이블은 Hibernate가 생성). MariaDB에서는 2026-10-13에 한 번 손으로 확인했다 — 로컬 12.3.3
+      (`innodb_snapshot_isolation` ON)의 빈 DB에 V26을 두 번 적용했고(두 번째는 변화 없음), `mariadb` 클라이언트의 prepared statement로
+      다섯 문장의 이기는 경로·지는 경로, `GREATEST` 바닥, 고아 컷오프의 1마이크로초 경계, 바인딩한 `LIMIT`을 실행했다. lease를 잃은
+      소유자의 `finish`는 그 트랜잭션이 아직 읽지 않았으면 0행, 읽은 뒤면 오류 1020이고 어느 쪽이든 롤백이다. JPA·Connector/J를 거친
+      경로(V26 테이블 위의 엔티티 매핑, `recordDelivered`의 중복 키 변환)는 MariaDB에서 실행해 보지 않았다(미확인). `@Scheduled`가 실제로 도는 것(스모크는 등록만 확인), CDC 경로 종단, 레플리카 두 개의 동시 동작, 실제 사이드카의
+      429 반복도 실행해 보지 않았다(미확인).
 
 ## 빌드·런타임
 
@@ -231,7 +320,7 @@ _type: decision · updated: 2026-10-12_
     변경과 **같은 트랜잭션**에 넣는다 — 처리 결과와 처리 표시가 함께 커밋·롤백되므로 실패한 원본은 표시가 남지 않아
     재시도가 정상 처리된다. 메모리 맵은 같은 파드 안의 1차 필터로 남긴다. 착수 전 조사할 것: 이벤트 핸들러가 트랜잭션
     밖에서 하는 일(비동기 AI 턴은 메모리 이벤트라 파드가 죽으면 사라짐 — dedup과는 별개 문제), Slack `event_id` 추출 위치,
-    다음 마이그레이션 번호 V24, 보존 기간 정리 작업.
+    다음 마이그레이션 번호(기록 당시 V24, 2026-10-13 기준 V27), 보존 기간 정리 작업.
     근거: `application/.../security/SlackRetryDeduplicator.kt`, `application/src/main/resources/k8s/deployment.yaml`,
     `application/src/main/resources/k8s/AGENTS.md`.
 
@@ -354,6 +443,12 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `application/src/main/kotlin/dev/notypie/application/health/OutboxMetrics.kt`,
   `configurations/{KafkaConsumerConfiguration,CveConfiguration,SlackRequestBuilderConfiguration}.kt`,
   `service/agent/AgentConverseService.kt`
+- `/ask` 턴 레저(#38·#40): `application/src/main/kotlin/dev/notypie/application/service/agent/{AgentAskThreadStarter,AgentConverseService}.kt`,
+  `service/relay/SlackMessageRelayServiceImpl.kt`, `infrastructure/src/main/kotlin/dev/notypie/repository/agent/{AgentAskTurnRepository.kt,
+  schema/AgentAskTurnSchema.kt}`, `repository/outbox/dto/OutboxMessageEvents.kt`, `db/migration/V26__add_agent_ask_turn.sql`, 스펙
+  `AgentAskTurnRepositoryTest`·`AgentAskThreadStarterTest`·`AgentConverseServiceTest`·`SlackMessageRelayServiceImplTest`·
+  `ApplicationContextSmokeTest`·`AgentTurnShutdownContextTest`, 위 디렉터리들의 `AGENTS.md`(2026-10-13, 미커밋 작업 트리
+  `feature/ask-turn-ledger`)
 - Google Calendar(#36·#37): `git show --stat 3c0529bf 6ae0a047`(`archive/gap-closure` 태그 기준), `application/src/main/kotlin/dev/notypie/application/service/calendar/AGENTS.md`,
   `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/AGENTS.md`, `db/migration/V24__…`·`V25__…`, git-ignored
   `.omc/plans/google-calendar-user-oauth.md`(설계와 리뷰 반영 결정 전부)

@@ -15,8 +15,10 @@ import dev.notypie.application.outbox.stubClaimLifecycle
 import dev.notypie.impl.command.RATE_LIMITED_REASON
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
+import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
@@ -116,9 +118,11 @@ class DebeziumLogTailingProcessorTest :
                             now = DEFAULT_TEST_NOW,
                         )
                     }
-                    val published = slot<Any>()
-                    verify(exactly = 1) { f.eventPublisher.publishEvent(capture(published)) }
-                    published.captured.shouldBeInstanceOf<MessagePublishSuccessEvent>().eventId shouldBe
+                    val published = mutableListOf<Any>()
+                    verify(exactly = 2) { f.eventPublisher.publishEvent(capture(published)) }
+                    published.first().shouldBeInstanceOf<MessageDeliveredEvent>().eventId shouldBe
+                        UUID.fromString(eventId)
+                    published.last().shouldBeInstanceOf<MessagePublishSuccessEvent>().eventId shouldBe
                         UUID.fromString(eventId)
                 }
             }
@@ -171,7 +175,7 @@ class DebeziumLogTailingProcessorTest :
                         f.outboxRepository.claimPending(eventId = any(), attemptCount = any(), now = any())
                     }
                     verify(exactly = 0) { f.dispatcher.dispatch(event = any()) }
-                    verify(exactly = 0) { f.eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { f.eventPublisher.publishEvent(any<Any>()) }
                 }
             }
         }
@@ -204,7 +208,7 @@ class DebeziumLogTailingProcessorTest :
                         f.outboxRepository.claimPending(eventId = any(), attemptCount = any(), now = any())
                     }
                     verify(exactly = 0) { f.dispatcher.dispatch(event = any()) }
-                    verify(exactly = 0) { f.eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { f.eventPublisher.publishEvent(any<Any>()) }
                 }
             }
         }
@@ -229,9 +233,10 @@ class DebeziumLogTailingProcessorTest :
                 shouldNotThrowAny { f.processor.consume(envelope = envelope) }
                 shouldNotThrowAny { f.processor.consume(envelope = envelope) }
 
-                then("no exception reaches the container and the message is sent only once") {
+                then("no exception reaches the container, the message is sent only once and no outcome is announced") {
                     verify(exactly = 1) { f.dispatcher.dispatch(event = any()) }
-                    verify(exactly = 0) { f.eventPublisher.publishEvent(any()) }
+                    verify(exactly = 1) { f.eventPublisher.publishEvent(ofType<MessageDeliveredEvent>()) }
+                    verify(exactly = 0) { f.eventPublisher.publishEvent(ofType<OutboxUpdateEvent>()) }
                 }
             }
         }
@@ -279,7 +284,7 @@ class DebeziumLogTailingProcessorTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { f.eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { f.eventPublisher.publishEvent(any<Any>()) }
                 }
             }
         }

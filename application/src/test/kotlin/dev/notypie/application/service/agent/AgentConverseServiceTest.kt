@@ -9,6 +9,7 @@ import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.createAgentConverseRequestEvent
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -20,12 +21,15 @@ import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
+import dev.notypie.repository.agent.AgentTurnHistoryRepositoryImpl
 import dev.notypie.repository.agent.AgentTurnRecord
+import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
 import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.schema.createOutboxMessage
 import dev.notypie.templates.SlackBlockLimits
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -35,6 +39,7 @@ import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.mockk.Called
 import io.mockk.CapturingSlot
 import io.mockk.Runs
 import io.mockk.every
@@ -42,8 +47,10 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.orm.jpa.JpaTransactionManager
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.TransactionSynchronization
@@ -104,6 +111,17 @@ class AgentConverseServiceTest :
             }
             return stager
         }
+
+        fun leaseThat(
+            begins: Boolean = true,
+            owes: BusyNotice = BusyNotice.NONE,
+            resumesAfterDiscard: Boolean = true,
+        ): AgentTurnLease =
+            mockk(relaxUnitFun = true) {
+                every { begin() } returns begins
+                every { giveBack() } returns owes
+                every { discarded() } returns resumesAfterDiscard
+            }
 
         given("a turn that completes") {
             val basicInfo = createCommandBasicInfo()
@@ -513,6 +531,515 @@ class AgentConverseServiceTest :
                         Int::class.java,
                         noticeEventId,
                     ) shouldBe 1
+                }
+            }
+        }
+
+        given("a leased turn that completes") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Completed(sessionId = "sess-next", finalText = "done")
+            val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
+            every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
+            val historyRepository = mockk<AgentTurnHistoryRepository>(relaxed = true)
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val lease = leaseThat()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
+                    outboundStager = stagerCapturing(stagedMessage = slot()),
+                    eventPublisher = eventPublisher,
+                )
+
+            `when`("it is submitted with its lease") {
+                val accepted = service.submit(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("the lease is taken before the sidecar call and settled as the last write of the answer") {
+                    accepted shouldBe true
+                    verifyOrder {
+                        lease.begin()
+                        gateway.converse(request = any())
+                        sessionRepository.saveProviderSessionId(
+                            sessionKey = any(),
+                            providerSessionId = "sess-next",
+                            now = fixedNow,
+                        )
+                        historyRepository.record(turn = any())
+                        eventPublisher.publishEvent(events = any())
+                        lease.settle()
+                    }
+                    verify(exactly = 1) { lease.settle() }
+                    verify(exactly = 0) { lease.giveBack() }
+                }
+            }
+        }
+
+        given("a leased turn whose lease was taken by another run while it waited in the queue") {
+            val gateway = mockk<AgentGateway>()
+            val sessionRepository = mockk<AgentSessionRepository>()
+            val eventPublisher = mockk<EventPublisher>()
+            val meterRegistry = SimpleMeterRegistry()
+            val lease = leaseThat(begins = false)
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                )
+
+            `when`("the executor starts it") {
+                service.submit(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("the sidecar is never called and nothing is read, written, published or counted") {
+                    verify(exactly = 1) { lease.begin() }
+                    verify { listOf(gateway, sessionRepository, eventPublisher) wasNot Called }
+                    verify(exactly = 0) { lease.settle() }
+                    meterRegistry.meters.shouldBeEmpty()
+                }
+            }
+        }
+
+        given("a leased turn whose first run is rejected as busy") {
+            val basicInfo = createCommandBasicInfo()
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns AgentTurnResult.Busy
+            val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
+            every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
+            val historyRepository = mockk<AgentTurnHistoryRepository>(relaxed = true)
+            val recordedTurn = slot<AgentTurnRecord>()
+            every { historyRepository.record(turn = capture(recordedTurn)) } just Runs
+            val stagedMessage = slot<OutboundMessage>()
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val lease = leaseThat(owes = BusyNotice.ANSWER_LATER)
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    eventPublisher = eventPublisher,
+                )
+
+            `when`("it is submitted with its lease") {
+                service.submit(event = createAgentConverseRequestEvent(responseBasicInfo = basicInfo), lease = lease)
+
+                then("the turn is given back first, then the BUSY audit row and the answer-later notice are written") {
+                    verifyOrder {
+                        lease.giveBack()
+                        historyRepository.record(turn = any())
+                        eventPublisher.publishEvent(events = any())
+                    }
+                    verify(exactly = 1) { lease.giveBack() }
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                    verify(exactly = 0) { lease.settle() }
+                    recordedTurn.captured.outcome shouldBe AgentTurnOutcome.BUSY
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    staged.recipient?.id shouldBe basicInfo.publisherId
+                    staged.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        AgentConverseService.ANSWER_LATER_MESSAGE
+                }
+            }
+        }
+
+        given("a leased turn whose later run is rejected as busy") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns AgentTurnResult.Busy
+            val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
+            every { sessionRepository.findProviderSessionId(sessionKey = any()) } returns null
+            val historyRepository = mockk<AgentTurnHistoryRepository>()
+            val outboundStager = mockk<OutboundMessageStager>()
+            val eventPublisher = mockk<EventPublisher>()
+            val meterRegistry = SimpleMeterRegistry()
+            val lease = leaseThat()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
+                    outboundStager = outboundStager,
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                )
+
+            `when`("it is submitted with its lease") {
+                service.submit(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("the turn is given back to run again: no busy notice, no audit row, no settle") {
+                    verify(exactly = 1) { lease.giveBack() }
+                    verify(exactly = 0) { lease.settle() }
+                    verify { listOf(historyRepository, outboundStager, eventPublisher) wasNot Called }
+                }
+
+                then("the busy result is still counted") {
+                    meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "busy").count() shouldBe 1.0
+                }
+            }
+        }
+
+        given("a leased turn that fails") {
+            val gateway = mockk<AgentGateway>()
+            every { gateway.converse(request = any()) } returns
+                AgentTurnResult.Failed(code = "timeout", message = "turn exceeded the ceiling")
+            val stagedMessage = slot<OutboundMessage>()
+            val lease = leaseThat()
+            val service =
+                buildService(agentGateway = gateway, outboundStager = stagerCapturing(stagedMessage = stagedMessage))
+
+            `when`("it is submitted with its lease") {
+                service.submit(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("the failure notice is staged and the turn is settled") {
+                    stagedMessage.captured
+                        .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AgentConverseService.FAILURE_MESSAGE
+                    verify(exactly = 1) { lease.settle() }
+                    verify(exactly = 0) { lease.giveBack() }
+                }
+            }
+        }
+
+        given("a leased turn arriving while every turn slot and queue entry is taken") {
+            val gateway = mockk<AgentGateway>()
+            val stagedMessage = slot<OutboundMessage>()
+            val meterRegistry = SimpleMeterRegistry()
+            val lease = leaseThat()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    meterRegistry = meterRegistry,
+                    turnExecutor = Executor { throw RejectedExecutionException("full") },
+                )
+
+            `when`("it is submitted with its lease") {
+                val accepted = service.submit(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("the overload notice is staged and the turn is settled without ever beginning") {
+                    accepted shouldBe false
+                    stagedMessage.captured
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldBe AgentConverseService.OVERLOADED_MESSAGE
+                    verify(exactly = 1) { lease.settle() }
+                    verify(exactly = 0) { lease.begin() }
+                    verify(exactly = 0) { gateway.converse(request = any()) }
+                    meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "rejected").count() shouldBe 1.0
+                }
+            }
+        }
+
+        given("a leased turn still queued when the executor's shutdown wait ends") {
+            val outboundStager = mockk<OutboundMessageStager>()
+            val eventPublisher = mockk<EventPublisher>()
+            val meterRegistry = SimpleMeterRegistry()
+            val queued = mutableListOf<Runnable>()
+            val lease = leaseThat(resumesAfterDiscard = true)
+            val service =
+                buildService(
+                    agentGateway = mockk(),
+                    outboundStager = outboundStager,
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                    turnExecutor = Executor { queued += it },
+                )
+
+            `when`("the executor discards it unstarted") {
+                service.submit(event = createAgentConverseRequestEvent(), lease = lease)
+                queued.single().shouldBeInstanceOf<AgentTurn>().discard()
+
+                then("no notice is staged or counted and the lease is left to be begun again") {
+                    verify(exactly = 1) { lease.discarded() }
+                    verify { listOf(outboundStager, eventPublisher) wasNot Called }
+                    verify(exactly = 0) { lease.settle() }
+                    verify(exactly = 0) { lease.begin() }
+                    meterRegistry.meters.shouldBeEmpty()
+                }
+            }
+        }
+
+        given("a turn offered to the executor") {
+            `when`("every turn slot and queue entry is taken") {
+                val outboundStager = mockk<OutboundMessageStager>()
+                val eventPublisher = mockk<EventPublisher>()
+                val meterRegistry = SimpleMeterRegistry()
+                val lease = mockk<AgentTurnLease>()
+                val accepted =
+                    buildService(
+                        agentGateway = mockk(),
+                        outboundStager = outboundStager,
+                        eventPublisher = eventPublisher,
+                        meterRegistry = meterRegistry,
+                        turnExecutor = Executor { throw RejectedExecutionException("full") },
+                    ).offer(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("the offer is refused and has no other effect: no notice, no lease call, no count") {
+                    accepted shouldBe false
+                    verify { listOf(lease, outboundStager, eventPublisher) wasNot Called }
+                    meterRegistry.meters.shouldBeEmpty()
+                }
+            }
+
+            `when`("the executor has room") {
+                val queued = mutableListOf<Runnable>()
+                val gateway = mockk<AgentGateway>()
+                every { gateway.converse(request = any()) } returns AgentTurnResult.Busy
+                val lease = leaseThat()
+                val accepted =
+                    buildService(agentGateway = gateway, turnExecutor = Executor { queued += it })
+                        .offer(event = createAgentConverseRequestEvent(), lease = lease)
+                queued.single().run()
+
+                then("it is accepted and runs like a submitted turn, beginning with its lease") {
+                    accepted shouldBe true
+                    verifyOrder {
+                        lease.begin()
+                        gateway.converse(request = any())
+                        lease.giveBack()
+                    }
+                }
+            }
+        }
+
+        given("a turn submitted after the turn executor was shut down") {
+            fun shutDownExecutor(): ThreadPoolTaskExecutor =
+                ThreadPoolTaskExecutor().apply {
+                    initialize()
+                    threadPoolExecutor.shutdown()
+                }
+
+            `when`("the turn holds a lease") {
+                val outboundStager = mockk<OutboundMessageStager>()
+                val eventPublisher = mockk<EventPublisher>()
+                val meterRegistry = SimpleMeterRegistry()
+                val lease = leaseThat()
+                val accepted =
+                    buildService(
+                        agentGateway = mockk(),
+                        outboundStager = outboundStager,
+                        eventPublisher = eventPublisher,
+                        meterRegistry = meterRegistry,
+                        turnExecutor = shutDownExecutor(),
+                    ).submit(event = createAgentConverseRequestEvent(), lease = lease)
+
+                then("it is left to be begun again like a discarded turn: no overload notice, no settle, no count") {
+                    accepted shouldBe false
+                    verify(exactly = 1) { lease.discarded() }
+                    verify(exactly = 0) { lease.settle() }
+                    verify { listOf(outboundStager, eventPublisher) wasNot Called }
+                    meterRegistry.meters.shouldBeEmpty()
+                }
+            }
+
+            `when`("the turn is a mention without a lease") {
+                val basicInfo = createCommandBasicInfo()
+                val stagedMessage = slot<OutboundMessage>()
+                val meterRegistry = SimpleMeterRegistry()
+                buildService(
+                    agentGateway = mockk(),
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    meterRegistry = meterRegistry,
+                    turnExecutor = shutDownExecutor(),
+                ).handleAgentConverse(event = createAgentConverseRequestEvent(responseBasicInfo = basicInfo))
+
+                then("the requester gets the overload notice and the turn is counted as discarded, not rejected") {
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    staged.recipient?.id shouldBe basicInfo.publisherId
+                    staged.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        AgentConverseService.OVERLOADED_MESSAGE
+                    meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "discarded").count() shouldBe
+                        1.0
+                    meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "rejected").count() shouldBe
+                        0.0
+                }
+            }
+        }
+
+        given("a turn the resume sweep gives up on") {
+            val basicInfo = createCommandBasicInfo()
+            val event = createAgentConverseRequestEvent(threadId = TEST_THREAD_TS, responseBasicInfo = basicInfo)
+            val stagedMessage = slot<OutboundMessage>()
+            val historyRepository = mockk<AgentTurnHistoryRepository>()
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val lease = leaseThat()
+            val service =
+                buildService(
+                    agentGateway = mockk(),
+                    agentTurnHistoryRepository = historyRepository,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    eventPublisher = eventPublisher,
+                )
+
+            `when`("abandon") {
+                val abandoned = service.abandon(event = event, lease = lease)
+
+                then("the failure notice is staged into the question's thread and the lease is abandoned after it") {
+                    abandoned shouldBe true
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    staged.target.id shouldBe basicInfo.channel
+                    staged.threadId shouldBe TEST_THREAD_TS
+                    val content = staged.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.headline shouldBe AgentConverseService.RESPONSE_HEADLINE
+                    content.markdown shouldBe AgentConverseService.FAILURE_MESSAGE
+                    verifyOrder {
+                        eventPublisher.publishEvent(events = any())
+                        lease.abandon()
+                    }
+                    verify { historyRepository wasNot Called }
+                }
+            }
+        }
+
+        given("leased turns whose outcome is written through a real JPA transaction") {
+            val context = createOutboxJpaContext()
+            afterSpec { context.close() }
+            val transactionManager = context.getBean(JpaTransactionManager::class.java)
+            val outboxRepository = context.getBean(MessageOutboxRepository::class.java)
+            val jdbc = context.getBean(JdbcTemplate::class.java)
+            val lostLease =
+                mockk<AgentTurnLease> {
+                    every { begin() } returns true
+                    every { settle() } throws IllegalStateException("lease lost")
+                    every { giveBack() } throws IllegalStateException("lease lost")
+                    every { abandon() } throws IllegalStateException("lease lost")
+                }
+            val busy = mockk<AgentGateway>()
+            every { busy.converse(request = any()) } returns AgentTurnResult.Busy
+            val completing = mockk<AgentGateway>()
+            every { completing.converse(request = any()) } returns
+                AgentTurnResult.Completed(sessionId = null, finalText = "late answer")
+
+            val failing = mockk<AgentGateway>()
+            every { failing.converse(request = any()) } returns
+                AgentTurnResult.Failed(code = "timeout", message = "turn exceeded the ceiling")
+            val auditRepository =
+                AgentTurnHistoryRepositoryImpl(
+                    jpaAgentTurnHistoryRepository = context.getBean(JpaAgentTurnHistoryRepository::class.java),
+                )
+
+            fun serviceStaging(
+                replyEventId: String,
+                turnExecutor: Executor = Executor { it.run() },
+                agentGateway: AgentGateway = completing,
+            ) = buildService(
+                agentGateway = agentGateway,
+                agentTurnHistoryRepository = auditRepository,
+                outboundStager = stagerCapturing(stagedMessage = slot()),
+                eventPublisher =
+                    mockk {
+                        every { publishEvent(events = any()) } answers {
+                            outboxRepository.save(createOutboxMessage(eventId = replyEventId))
+                        }
+                    },
+                turnExecutor = turnExecutor,
+                transactionManager = transactionManager,
+            )
+
+            fun committedRows(eventId: String): Int? =
+                jdbc.queryForObject("SELECT COUNT(*) FROM outbox_message WHERE event_id = ?", Int::class.java, eventId)
+
+            fun auditRows(event: AgentConverseRequestEvent): Int? =
+                jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM agent_turn_history WHERE idempotency_key = ?",
+                    Int::class.java,
+                    event.idempotencyKey.toString(),
+                )
+
+            `when`("a turn completes while it still holds its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                serviceStaging(replyEventId = replyEventId)
+                    .submit(event = createAgentConverseRequestEvent(), lease = leaseThat())
+
+                then("the answer is committed") {
+                    committedRows(eventId = replyEventId) shouldBe 1
+                }
+            }
+
+            `when`("a turn completes after another run took its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                serviceStaging(replyEventId = replyEventId)
+                    .submit(event = createAgentConverseRequestEvent(), lease = lostLease)
+
+                then("the answer is rolled back with the refused settle, so nothing is posted") {
+                    verify(exactly = 1) { lostLease.settle() }
+                    committedRows(eventId = replyEventId) shouldBe 0
+                }
+            }
+
+            `when`("the executor rejects a turn whose lease another run already took") {
+                val replyEventId = UUID.randomUUID().toString()
+                serviceStaging(
+                    replyEventId = replyEventId,
+                    turnExecutor = Executor { throw RejectedExecutionException("full") },
+                ).submit(event = createAgentConverseRequestEvent(), lease = lostLease)
+
+                then("the overload notice is rolled back with the refused settle") {
+                    committedRows(eventId = replyEventId) shouldBe 0
+                }
+            }
+
+            `when`("a turn fails while it still holds its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                val event = createAgentConverseRequestEvent()
+                serviceStaging(replyEventId = replyEventId, agentGateway = failing)
+                    .submit(event = event, lease = leaseThat())
+
+                then("the failure notice and its audit row are committed") {
+                    committedRows(eventId = replyEventId) shouldBe 1
+                    auditRows(event = event) shouldBe 1
+                }
+            }
+
+            `when`("a turn fails after another run took its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                val event = createAgentConverseRequestEvent()
+                serviceStaging(replyEventId = replyEventId, agentGateway = failing)
+                    .submit(event = event, lease = lostLease)
+
+                then("the failure notice and its audit row are rolled back with the refused settle") {
+                    committedRows(eventId = replyEventId) shouldBe 0
+                    auditRows(event = event) shouldBe 0
+                }
+            }
+
+            `when`("a first run is reported busy while it still holds its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                val event = createAgentConverseRequestEvent()
+                serviceStaging(replyEventId = replyEventId, agentGateway = busy)
+                    .submit(event = event, lease = leaseThat(owes = BusyNotice.ANSWER_LATER))
+
+                then("the busy notice and its audit row are committed") {
+                    committedRows(eventId = replyEventId) shouldBe 1
+                    auditRows(event = event) shouldBe 1
+                }
+            }
+
+            `when`("a first run is reported busy after another run took its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                val event = createAgentConverseRequestEvent()
+                serviceStaging(replyEventId = replyEventId, agentGateway = busy)
+                    .submit(event = event, lease = lostLease)
+
+                then("the refused give-back leaves no busy notice and no audit row") {
+                    committedRows(eventId = replyEventId) shouldBe 0
+                    auditRows(event = event) shouldBe 0
+                }
+            }
+
+            `when`("a turn is given up on after another run took its lease") {
+                val replyEventId = UUID.randomUUID().toString()
+                val abandoned =
+                    serviceStaging(replyEventId = replyEventId)
+                        .abandon(event = createAgentConverseRequestEvent(), lease = lostLease)
+
+                then("the failure notice is rolled back and the give-up is reported as not done") {
+                    abandoned shouldBe false
+                    committedRows(eventId = replyEventId) shouldBe 0
                 }
             }
         }

@@ -30,8 +30,10 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.Transport
+import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
+import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.kotest.assertions.throwables.shouldNotThrowAny
@@ -160,7 +162,7 @@ class SlackMessageRelayServiceImplTest :
                     }
                 val messageDispatcher = mockk<MessageDispatcher>()
                 every { messageDispatcher.dispatch(event = rendered) } returns dispatchResult
-                val published = slot<Any>()
+                val published = mutableListOf<Any>()
                 val eventPublisher = mockk<ApplicationEventPublisher>()
                 every { eventPublisher.publishEvent(capture(published)) } returns Unit
                 val outboxRepository = mockk<MessageOutboxRepository>()
@@ -171,6 +173,18 @@ class SlackMessageRelayServiceImplTest :
                         payloadRenderer = payloadRenderer,
                         messageDispatcher = messageDispatcher,
                         applicationEventPublisher = eventPublisher,
+                    )
+                val deliveredEvent =
+                    MessageDeliveredEvent(
+                        eventId = rowEventId,
+                        commandDetailType = CommandDetailType.STANDUP_SUMMARY,
+                        messageTs = "1700000000.000200",
+                    )
+                val successEvent =
+                    MessagePublishSuccessEvent(
+                        eventId = rowEventId,
+                        commandDetailType = CommandDetailType.STANDUP_SUMMARY,
+                        messageTs = "1700000000.000200",
                     )
 
                 service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 3))
@@ -193,13 +207,21 @@ class SlackMessageRelayServiceImplTest :
                     }
                 }
 
-                then("the success event keys on the ROW eventId, not any renderer-minted id, and names what was sent") {
-                    published.captured shouldBe
-                        MessagePublishSuccessEvent(
-                            eventId = rowEventId,
-                            commandDetailType = CommandDetailType.STANDUP_SUMMARY,
-                            messageTs = "1700000000.000200",
+                then("both events key on the ROW eventId, not any renderer-minted id, and name what was sent") {
+                    published shouldBe listOf(deliveredEvent, successEvent)
+                }
+
+                then("the delivery is announced before SUCCESS is written, the success event only after it") {
+                    verifyOrder {
+                        eventPublisher.publishEvent(deliveredEvent)
+                        outboxRepository.completeClaim(
+                            eventId = rowEventId.toString(),
+                            attemptCount = 3,
+                            status = MessageStatus.SUCCESS.name,
+                            now = DEFAULT_TEST_NOW,
                         )
+                        eventPublisher.publishEvent(successEvent)
+                    }
                 }
             }
 
@@ -231,7 +253,7 @@ class SlackMessageRelayServiceImplTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any<Any>()) }
                 }
             }
 
@@ -290,7 +312,7 @@ class SlackMessageRelayServiceImplTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(ofType<OutboxUpdateEvent>()) }
                 }
             }
 
@@ -298,7 +320,9 @@ class SlackMessageRelayServiceImplTest :
                 val eventId = UUID.randomUUID().toString()
                 val row = createOutboxRow(eventId = eventId)
                 val eventPublisher = mockk<ApplicationEventPublisher>()
-                every { eventPublisher.publishEvent(any()) } throws IllegalStateException("standup ts write failed")
+                every { eventPublisher.publishEvent(ofType<MessageDeliveredEvent>()) } returns Unit
+                every { eventPublisher.publishEvent(ofType<OutboxUpdateEvent>()) } throws
+                    IllegalStateException("standup ts write failed")
                 val outboxRepository = mockk<MessageOutboxRepository>()
                 outboxRepository.stubClaimLifecycle()
                 val service =
@@ -318,6 +342,113 @@ class SlackMessageRelayServiceImplTest :
                             now = any(),
                         )
                     }
+                    verify(exactly = 1) { eventPublisher.publishEvent(ofType<MessagePublishSuccessEvent>()) }
+                }
+            }
+
+            `when`("a listener of the delivery throws before the status write") {
+                val eventId = UUID.randomUUID().toString()
+                val row = createOutboxRow(eventId = eventId)
+                val eventPublisher = mockk<ApplicationEventPublisher>()
+                every { eventPublisher.publishEvent(ofType<MessageDeliveredEvent>()) } throws
+                    IllegalStateException("ask ledger insert failed")
+                every { eventPublisher.publishEvent(ofType<MessagePublishSuccessEvent>()) } returns Unit
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = dispatcherReturning(output = delivered()),
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                then("nothing is thrown, SUCCESS is still written once and the success event still follows") {
+                    shouldNotThrowAny { service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1)) }
+                    verifyOrder {
+                        eventPublisher.publishEvent(ofType<MessageDeliveredEvent>())
+                        outboxRepository.completeClaim(
+                            eventId = eventId,
+                            attemptCount = 1,
+                            status = MessageStatus.SUCCESS.name,
+                            now = any(),
+                        )
+                        eventPublisher.publishEvent(ofType<MessagePublishSuccessEvent>())
+                    }
+                    verify(exactly = 1) {
+                        outboxRepository.completeClaim(
+                            eventId = any(),
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
+                    }
+                }
+            }
+
+            `when`("Slack accepted the message but another owner recorded the row first") {
+                val rowEventId = UUID.randomUUID()
+                val row = createOutboxRow(eventId = rowEventId.toString())
+                val published = mutableListOf<Any>()
+                val eventPublisher = mockk<ApplicationEventPublisher>()
+                every { eventPublisher.publishEvent(capture(published)) } returns Unit
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle(completed = 0)
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher =
+                            dispatcherReturning(
+                                output =
+                                    successOutput(
+                                        payload = payload(),
+                                        commandType = CommandType.EXTERNAL_API,
+                                        messageTs = "1700000000.000300",
+                                    ),
+                            ),
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                then("the delivery was already announced, and no success event follows the lost status write") {
+                    published shouldBe
+                        listOf(
+                            MessageDeliveredEvent(
+                                eventId = rowEventId,
+                                commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                                messageTs = "1700000000.000300",
+                            ),
+                        )
+                }
+            }
+
+            `when`("the send is refused for good, has an unknown outcome, is rate-limited or fails transiently") {
+                val published = mutableListOf<Any>()
+                val eventPublisher = mockk<ApplicationEventPublisher>()
+                every { eventPublisher.publishEvent(capture(published)) } returns Unit
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                val messageDispatcher = mockk<MessageDispatcher>()
+                every { messageDispatcher.dispatch(event = any()) } returnsMany
+                    listOf(
+                        failOutput(event = payload(), reason = "channel_not_found"),
+                        failOutput(event = payload(), reason = "$OUTCOME_UNKNOWN_REASON: read timed out"),
+                        RateLimitedOutput(event = payload(), retryAfter = Duration.ofSeconds(30L)),
+                        failOutput(event = payload(), reason = TRANSIENT_EXHAUSTED_REASON),
+                    )
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = messageDispatcher,
+                        applicationEventPublisher = eventPublisher,
+                    )
+
+                repeat(times = 4) { service.dispatchClaimed(claim = newClaim()) }
+
+                then("no delivery is announced: only the two recorded failures publish an event") {
+                    verify(exactly = 4) { messageDispatcher.dispatch(event = any()) }
+                    published.map { it::class } shouldBe
+                        listOf(MessagePublishFailedEvent::class, MessagePublishFailedEvent::class)
                 }
             }
 
@@ -358,7 +489,7 @@ class SlackMessageRelayServiceImplTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any<Any>()) }
                 }
             }
 
@@ -451,7 +582,7 @@ class SlackMessageRelayServiceImplTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any<Any>()) }
                     tracker.lastBlockedAt() shouldBe createFixedUtcClock().instant()
                 }
             }
@@ -513,7 +644,7 @@ class SlackMessageRelayServiceImplTest :
                     verify(exactly = 0) {
                         outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = any())
                     }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any<Any>()) }
                 }
             }
 
@@ -538,7 +669,7 @@ class SlackMessageRelayServiceImplTest :
                             now = any(),
                         )
                     }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(ofType<OutboxUpdateEvent>()) }
                 }
             }
 
@@ -611,7 +742,7 @@ class SlackMessageRelayServiceImplTest :
                     }
                     verify(exactly = 0) { payloadRenderer.render(row = any()) }
                     verify(exactly = 0) { messageDispatcher.dispatch(event = any()) }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any<Any>()) }
                 }
             }
 
@@ -643,7 +774,7 @@ class SlackMessageRelayServiceImplTest :
                         outboxRepository.renewClaim(eventId = any(), attemptCount = any(), now = any())
                     }
                     verify(exactly = 0) { payloadRenderer.render(row = any()) }
-                    verify(exactly = 0) { eventPublisher.publishEvent(any()) }
+                    verify(exactly = 0) { eventPublisher.publishEvent(any<Any>()) }
                 }
             }
         }
