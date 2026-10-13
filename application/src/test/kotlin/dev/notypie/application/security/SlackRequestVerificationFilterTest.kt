@@ -18,6 +18,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
 import org.springframework.boot.env.YamlPropertySourceLoader
 import org.springframework.core.io.ClassPathResource
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockHttpServletRequest
@@ -31,6 +32,9 @@ private const val TIMESTAMP = "1714280000"
 private const val EVENTS_PATH = "/api/slack/events"
 private const val EVENT_BODY = """{"event_id":"Ev123","type":"event_callback"}"""
 private const val WELL_FORMED_SIGNATURE = "v0=0000000000000000000000000000000000000000000000000000000000000000"
+private const val ASK_SLASH_PATH = "/api/slash/ask"
+private const val ASK_FORM_BODY = "user_id=U1&command=%2Fask&text=hi"
+private const val BROWSER_ORIGIN = "https://attacker.example"
 
 class SlackRequestVerificationFilterTest :
     BehaviorSpec({
@@ -473,6 +477,54 @@ class SlackRequestVerificationFilterTest :
                 }
             }
 
+            listOf(
+                Triple(EVENTS_PATH, MediaType.APPLICATION_JSON_VALUE, EVENT_BODY),
+                Triple(ASK_SLASH_PATH, MediaType.APPLICATION_FORM_URLENCODED_VALUE, ASK_FORM_BODY),
+                Triple(
+                    "/api/slack/interaction",
+                    MediaType.APPLICATION_FORM_URLENCODED_VALUE,
+                    "payload=%7B%22type%22%3A%22block_actions%22%7D",
+                ),
+            ).forEach { (path, mediaType, rawBody) ->
+                listOf(BROWSER_ORIGIN, "http://localhost", "null").forEach { origin ->
+                    `when`("the secret is blank under the local profile and a browser posts to $path from $origin") {
+                        val response = MockHttpServletResponse()
+                        val chain = CountingFilterChain()
+
+                        filter(signingSecret = "", profiles = arrayOf("local")).doFilter(
+                            unsignedRequest(requestUri = path, rawBody = rawBody, mediaType = mediaType).apply {
+                                addHeader(HttpHeaders.ORIGIN, origin)
+                            },
+                            response,
+                            chain,
+                        )
+
+                        then("the Origin header is answered 401 before the controller") {
+                            response.status shouldBe 401
+                            chain.invocationCount shouldBe 0
+                        }
+                    }
+                }
+            }
+
+            `when`("a real secret is configured and a correctly signed request carries an Origin header") {
+                val response = MockHttpServletResponse()
+                val chain = CountingFilterChain()
+
+                filter().doFilter(
+                    signed(rawBody = ASK_FORM_BODY, path = ASK_SLASH_PATH).apply {
+                        addHeader(HttpHeaders.ORIGIN, BROWSER_ORIGIN)
+                    },
+                    response,
+                    chain,
+                )
+
+                then("the signature decides and the request reaches the controller") {
+                    response.status shouldBe 200
+                    chain.invocationCount shouldBe 1
+                }
+            }
+
             `when`("application-local.yaml, the only profile allowed to run unverified, is loaded") {
                 val localProfile = YamlPropertySourceLoader().load("local", ClassPathResource("application-local.yaml"))
                 val environment = MockEnvironment().apply { localProfile.forEach { propertySources.addLast(it) } }
@@ -507,12 +559,16 @@ private fun slackRequest(
         setContent(rawBody.toByteArray(Charsets.UTF_8))
     }
 
-private fun unsignedRequest(requestUri: String): MockHttpServletRequest =
+private fun unsignedRequest(
+    requestUri: String,
+    rawBody: String = EVENT_BODY,
+    mediaType: String = MediaType.APPLICATION_JSON_VALUE,
+): MockHttpServletRequest =
     MockHttpServletRequest().apply {
         method = "POST"
         requestURI = requestUri
-        contentType = MediaType.APPLICATION_JSON_VALUE
-        setContent(EVENT_BODY.toByteArray(Charsets.UTF_8))
+        contentType = mediaType
+        setContent(rawBody.toByteArray(Charsets.UTF_8))
     }
 
 private class CountingFilterChain(

@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.core.env.Environment
+import org.springframework.http.HttpHeaders
 import org.springframework.http.server.PathContainer
 import org.springframework.http.server.RequestPath
 import org.springframework.stereotype.Component
@@ -49,6 +50,20 @@ class SlackRequestVerificationFilter(
         if (signingSecret.isBlank()) {
             if (verificationDisabledLogged.compareAndSet(false, true)) {
                 log.warn { "Slack request signature verification is disabled because signingSecret is blank" }
+            }
+            val origin = request.getHeader(HttpHeaders.ORIGIN)
+            if (origin != null) {
+                val requestPath = normalizedPath(request = request)
+                val loggedOrigin =
+                    origin
+                        .replace(regex = CONTROL_CHARACTERS, replacement = "?")
+                        .take(n = MAX_LOGGED_ORIGIN_LENGTH)
+                log.warn {
+                    "Rejected browser-originated request while Slack signature verification is disabled: " +
+                        "path=$requestPath origin=$loggedOrigin"
+                }
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
+                return
             }
             filterChain.doFilter(request, response)
             return
@@ -151,6 +166,7 @@ class SlackRequestVerificationFilter(
         internal const val METRIC_DEFERRED_RETRIES = "codecompanion.slack.retry.deferred"
         private const val LOCAL_PROFILE = "local"
         private const val RETRYABLE_EVENTS_PATH = "/api/slack/events"
+        private const val MAX_LOGGED_ORIGIN_LENGTH = 200
         private val SLACK_PATH_PREFIXES = listOf("/api/slack", "/api/slash")
         private val UNRESOLVED_PLACEHOLDER = Regex("""\$\{[^}]*}""")
         private val REPEATED_SLASHES = Regex("/{2,}")
