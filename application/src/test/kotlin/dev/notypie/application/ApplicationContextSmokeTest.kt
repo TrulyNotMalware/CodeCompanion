@@ -179,12 +179,15 @@ class ApplicationContextSmokeTest
                     }
 
                     then(
-                        "the Slack REST requester uses Boot's RestClient.Builder: calls are observed, profiles decode",
+                        "the Slack REST requester uses Boot's RestClient.Builder: calls are observed, and profiles " +
+                            "decode, also without the email field Slack omits when users:read.email is missing",
                     ) {
                         val server =
                             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
                                 createContext("/") { exchange ->
-                                    val body = createUserProfileResponseJson(displayName = "smoke-user").toByteArray()
+                                    val body =
+                                        createUserProfileResponseJson(displayName = "smoke-user", email = null)
+                                            .toByteArray()
                                     exchange.responseHeaders.add("Content-Type", "application/json")
                                     exchange.sendResponseHeaders(200, body.size.toLong())
                                     exchange.responseBody.use { it.write(body) }

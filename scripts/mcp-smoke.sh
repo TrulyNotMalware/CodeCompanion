@@ -25,7 +25,10 @@ now=$(date +%s)
 payload=$(printf '{"sub":"%s","sk":"%s","tid":"%s","iat":%d,"exp":%d}' \
   "$PROBE_USER_ID" "smoke:probe" "$(uuidgen | tr '[:upper:]' '[:lower:]')" "$now" $((now + 300)))
 encoded=$(printf '%s' "$payload" | b64url)
-signature=$(printf '%s' "v1.$encoded" | openssl dgst -sha256 -hmac "$MCP_SIGNING_SECRET" -binary | b64url)
+# The key is read from the environment: as an `openssl -hmac` argument it would show up in `ps`.
+# -C0: a caller's PERL_UNICODE would otherwise UTF-8-encode the binary digest.
+signature=$(printf '%s' "v1.$encoded" |
+  perl -C0 -MDigest::SHA=hmac_sha256 -0777 -ne 'print hmac_sha256($_, $ENV{MCP_SIGNING_SECRET})' | b64url)
 token="v1.$encoded.$signature"
 
 initialize_body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"mcp-smoke","version":"0"}}}'
@@ -37,11 +40,14 @@ echo "   HTTP $code"
 [ "$code" = "401" ] || { echo "   FAIL: expected 401"; exit 1; }
 
 echo "2) initialize with minted token (user=$PROBE_USER_ID)"
+auth_file=$(umask 077 && mktemp)
 headers_file=$(mktemp)
 body_file=$(mktemp)
-trap 'rm -f "$headers_file" "$body_file"' EXIT
+trap 'rm -f "$auth_file" "$headers_file" "$body_file"' EXIT
+# The token reaches curl through a file (-H @file): as a -H argument it would show up in `ps`.
+printf 'Authorization: Bearer %s\n' "$token" > "$auth_file"
 code=$(curl -s -D "$headers_file" -o "$body_file" -w '%{http_code}' -X POST "$ENDPOINT" \
-  -H "Authorization: Bearer $token" "${accept_headers[@]}" -d "$initialize_body")
+  -H @"$auth_file" "${accept_headers[@]}" -d "$initialize_body")
 echo "   HTTP $code"
 # Truncated copy for the log, read from the file so a long body cannot SIGPIPE curl under pipefail.
 head -c 600 "$body_file"
@@ -53,12 +59,12 @@ session_header=()
 [ -n "$session_id" ] && session_header=(-H "Mcp-Session-Id: $session_id")
 
 # ${arr[@]+"${arr[@]}"}: a bare empty "${arr[@]}" is an unbound-variable error under `set -u` in bash 3.2 (macOS).
-curl -s -o /dev/null -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
+curl -s -o /dev/null -X POST "$ENDPOINT" -H @"$auth_file" \
   ${session_header[@]+"${session_header[@]}"} \
   "${accept_headers[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 
 echo "3) tools/list (expect all seven domain tools)"
-tools=$(curl -s -X POST "$ENDPOINT" -H "Authorization: Bearer $token" \
+tools=$(curl -s -X POST "$ENDPOINT" -H @"$auth_file" \
   ${session_header[@]+"${session_header[@]}"} \
   "${accept_headers[@]}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
 printf '%s\n' "$tools"

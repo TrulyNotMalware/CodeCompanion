@@ -93,6 +93,8 @@ _type: decision · updated: 2026-10-13_
       다른 계정으로의 교체·`SCOPE_DENIED` revoke가 상대의 grant도 취소하고, 상대는 다음 동기화의 토큰 갱신에서 `invalid_grant` →
       `REVOKED` DM을 받아 재연결한다(Google 쪽 동작은 문서 기준이고 실측은 (미확인)). 이유(사용자 판단): 한 도메인 계정 전제라
       수용. 지적: Codex 교차 리뷰(2026-10-10). 근거: `service/calendar/AGENTS.md`.
+    - **신원 확인 추가 (2026-10-13):** 위의 "이메일 매핑·추가 Slack scope가 없다"는 결정 #41로 바뀌었다 — 연결은 Google 계정의
+      검증된 이메일이 요청자의 슬랙 이메일(`users.info`)과 같을 때만 되고, 봇 scope `users:read`·`users:read.email`이 필요하다.
 37. **미러는 아웃박스 `Transport`가 아니라 전용 더티 마커 테이블 + CAS 스케줄러로 at-least-once.** `meeting_calendar_event`(V25)는
     (미팅, 사용자)당 한 행이고 "원하는 동작"이 아니라 "다시 보라"는 표시다. 훅이 미팅 쓰기 트랜잭션 안에서 행을 upsert/touch해
     `change_seq`를 올리면, 60초 워커가 claim(CAS) 뒤 미팅을 다시 읽어 이벤트가 있어야 하는지 계산하고 Google을 호출한다. 완료
@@ -230,6 +232,40 @@ _type: decision · updated: 2026-10-13_
       소유자의 `finish`는 그 트랜잭션이 아직 읽지 않았으면 0행, 읽은 뒤면 오류 1020이고 어느 쪽이든 롤백이다. JPA·Connector/J를 거친
       경로(V26 테이블 위의 엔티티 매핑, `recordDelivered`의 중복 키 변환)는 MariaDB에서 실행해 보지 않았다(미확인). `@Scheduled`가 실제로 도는 것(스모크는 등록만 확인), CDC 경로 종단, 레플리카 두 개의 동시 동작, 실제 사이드카의
       429 반복도 실행해 보지 않았다(미확인).
+41. **`/calendar connect`는 동의한 Google 계정의 검증된 이메일이 요청한 슬랙 사용자의 이메일과 같을 때만 연결한다
+    (2026-10-13).** state는 슬랙 사용자에 묶이고 브라우저에는 묶이지 않는다. 그래서 요청자가 자기 동의 링크를 남에게 열게 하면 그
+    사람의 Google 계정이 요청자의 슬랙 사용자에 연결되고, 요청자는 상대의 캘린더에 미팅을 써 넣으며 확인 DM과 `status`에서 상대의
+    이메일을 본다(보안 스캔 F22. 그전에는 `service/calendar/AGENTS.md`에 "자기 동의 DM을 전달한 사용자"의 수용 위험으로 적혀 있었다).
+    콜백은 코드 교환 직후, scope 검사 전에 `SlackUserEmailResolver`로 state 주인의 이메일을 `users.info`에서 읽어(캐시 없음)
+    id_token의 `email`과 대소문자를 무시하고 비교한다(`email_verified`가 참일 때만). 슬랙 이메일이 없으면(조회 실패, `ok=false`, 키 없음,
+    빈 값) `IDENTITY_UNAVAILABLE`(503), Google 이메일이 없거나 검증되지 않았거나 다르면 `ACCOUNT_MISMATCH`(403)다. 둘 다 아무것도
+    저장하지 않고 **revoke도 하지 않는다** — 그 grant는 다른 사람 계정의 것일 수 있고 Google의 revoke는 grant 전체라, 그 계정을
+    정당하게 연결한 다른 슬랙 사용자의 연결까지 끊을 수 있다(refresh token은 버린다). 로그는 서비스의 WARN 한 줄에 사용자 id와
+    사유(`reason=missing|unverified|different`, 또는 확인할 scope·설정)만 남기고(슬랙이 `ok=false`로 답했거나 호출이 실패했으면
+    resolver의 WARN이 한 줄 더 붙는다) 페이지는 고정 문구라 어느 쪽 이메일도 드러나지 않는다.
+    조회가 예외를 던지면 그대로 컨트롤러의 500 페이지로 가고 아무것도 저장되지 않는다. 기각: ① 쿠키·nonce·PKCE로 흐름을 브라우저에
+    묶기 — 공격자가 넘기는 것은 *시작* 링크이고 피해자의 브라우저가 공격자의 슬랙 id에 묶인 흐름을 끝까지 수행하므로 막지 못한다;
+    ② 요청자에게 "슬랙에서 확인" DM 보내기 — 공격자가 곧 요청자다(Codex 교차 리뷰); ③ `users.profile.get`의 `email`(처음 구현) —
+    슬랙 문서에서 `users:read.email`이 영향을 주는 메서드는 `users.list`·`users.info`뿐이고, `users.profile.get` 문서는 봇 토큰에
+    `email`을 약속하지 않으며 Email Display 관리자 설정이 숨길 수 있다고 적는다(2026-10-13 리뷰). 이유(사용자 결정): 신원 비교만이
+    공격자와 피해자를 구분한다. 운영: 슬랙 앱에 봇 scope `users:read`와 `users:read.email`이 함께 필요하다(슬랙은 두 번째를 첫 번째와
+    함께만 허용한다. manifest에 추가, 기존 앱은 둘 다 추가하고 다시 설치). 상태: 유지. 근거: `service/calendar/AGENTS.md`,
+    `impl/calendar/AGENTS.md`(`emailVerified`), `templates/AGENTS.md`(`SlackUserEmailResolver`), `impl/command/dto/AGENTS.md`
+    (`SlackUserInfoDto`), `docs/slack-app-manifest.yaml`, git-ignored `.omc/plans/security-scan-2026-10.md`.
+    - **알려진 한계:** ① Google 이메일과 슬랙 이메일이 다른 사용자는 연결할 수 없다. 비교는 글자 그대로(대소문자만 무시)라 Gmail의
+      점·`+태그` 변형과 Workspace 별칭 도메인도 다른 주소로 본다. ② 슬랙의 이메일을 믿는다 — 사용자가 직접 바꾸는 이메일은 메일 확인을
+      거치지만 관리자나 SCIM은 아무 주소나 넣을 수 있다. ③ 워크스페이스의 Email Display 설정이 앱에 이메일을 숨기면 모든 연결이
+      `IDENTITY_UNAVAILABLE`이 된다(슬랙 문서 기준, 미측정). ④ 검사는 연결 시점에만 하고 기존 연결은 다시 검사하지 않는다. 그래서
+      수정 전 흐름으로 저장된 행(한 슬랙 사용자의 state를 다른 사람의 Google 계정으로 완료한 연결)은 `ACTIVE`로 남아 계속 동기화된다 —
+      캘린더를 한 번이라도 켰던 환경은 한 번 감사한다: `google_calendar_connection.google_email`을 각 주인의 슬랙 이메일과 비교하거나,
+      사용자가 `/calendar disconnect` 후 다시 연결한다. ⑤ 실제 `users.info` 응답은 측정하지 않았다(스펙은 문서 모양의 JSON을
+      디코딩한다) — 앱을 다시 설치한 뒤의 첫 `/calendar connect`가 실측이다. ⑥ `email_verified`는 Google의 주장만큼만 강하다 —
+      Gmail·Workspace(`hd`) 밖의 주소에서는 "계정에 붙일 때 확인했다"는 뜻이지 지금도 그 메일함을 가졌다는 뜻이 아니다(Google
+      문서 "Authenticate with a backend server", 2026-10-13 확인: `@gmail.com` 접미사이거나 `email_verified`와 `hd`가 함께 있을 때만
+      Google이 그 주소에 권위적이고, 제3자 주소는 "ownership of the third party email account may have since changed"). 수용한 잔여 공격: 재활용된 외부 메일함을 넘겨받은 사람이 그 주소를 자기
+      슬랙 이메일로 두고(슬랙의 확인 메일이 그에게 간다) 동의 링크를 메일함의 이전 주인에게 보내면, 그 주소가 아직 붙은 이전 주인의
+      Google 계정으로 비교가 통과한다. 재활용된 메일함과 이전 주인의 동의가 함께 필요하므로, 수정 전의 "워크스페이스 멤버면 누구나"보다는
+      여전히 훨씬 높은 장벽이다(Codex 최종 리뷰).
 
 ## 빌드·런타임
 
@@ -452,6 +488,13 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
 - Google Calendar(#36·#37): `git show --stat 3c0529bf 6ae0a047`(`archive/gap-closure` 태그 기준), `application/src/main/kotlin/dev/notypie/application/service/calendar/AGENTS.md`,
   `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/AGENTS.md`, `db/migration/V24__…`·`V25__…`, git-ignored
   `.omc/plans/google-calendar-user-oauth.md`(설계와 리뷰 반영 결정 전부)
+- 연결 신원 확인(#41): `application/src/main/kotlin/dev/notypie/application/service/calendar/{CalendarConnectionService,CalendarConnectionCallback}.kt`,
+  `controllers/GoogleOAuthCallbackController.kt`, `configurations/CalendarConfiguration.kt`,
+  `infrastructure/src/main/kotlin/dev/notypie/impl/calendar/GoogleOAuthClient.kt`, `templates/SlackUserProfileResolver.kt`
+  (`SlackUserEmailResolver`), `impl/command/dto/SlackUserInfoDto.kt`, 스펙 `CalendarConnectionServiceTest`·
+  `GoogleOAuthCallbackControllerTest`·`GoogleOAuthClientTest`·`SlackUserEmailResolverTest`, 슬랙 API 문서(`users:read.email` scope,
+  `users.info`, `users.profile.get`, 2026-10-13 리뷰에서 확인)
+  (2026-10-13, 미커밋 작업 트리 `feature/security-scan-2026-10`), git-ignored `.omc/plans/security-scan-2026-10.md`
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

@@ -7,6 +7,8 @@ enum class CalendarConnectionOutcome {
     INVALID_STATE,
     EXCHANGE_FAILED,
     STORE_FAILED,
+    ACCOUNT_MISMATCH,
+    IDENTITY_UNAVAILABLE,
 }
 
 interface CalendarConnectionCallback {

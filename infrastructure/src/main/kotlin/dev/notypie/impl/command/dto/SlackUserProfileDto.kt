@@ -30,7 +30,7 @@ data class Profile(
     val statusExpiration: Int,
     @field:JsonProperty("avatar_hash")
     val avatarHash: String,
-    val email: String,
+    val email: String? = null,
     @field:JsonProperty("first_name")
     val firstName: String,
     @field:JsonProperty("last_name")

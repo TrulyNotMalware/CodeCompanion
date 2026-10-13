@@ -45,7 +45,8 @@ adds what an agent editing the manifests needs to know.
   `SLACK_API_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CDC_TOPIC`. All of them are present in the samples
   (credentials in `secret.yaml`, the rest in `configmap.yaml`). Everything else the profile reads (`MCP_ENABLED`, `MCP_SIGNING_SECRET`, `SIDECAR_*`,
   `AI_PROVIDER`, `GITHUB_TOKEN`, `GITHUB_RELEASES_PER_PAGE`, `NVD_*`, `CVE_COLLECTOR_*`, `GOOGLE_*`) has a default
-  and is opt-in. The five `GOOGLE_*` keys are in the samples anyway (client secret and token key in `secret.yaml`,
+  and is opt-in. With `MCP_ENABLED: 'true'`, `MCP_SIGNING_SECRET` must be at least 32 characters (`openssl rand -hex 32`
+  gives 64); a shorter one fails startup (`McpServerConfiguration`, 2026-10-13). The five `GOOGLE_*` keys are in the samples anyway (client secret and token key in `secret.yaml`,
   the rest in `configmap.yaml`) with `GOOGLE_CALENDAR_ENABLED: 'false'`: that key must be `'true'`, `'false'` or
   absent, because an empty string fails the Boolean binding at startup. Enabling the calendar needs V24 and V25
   applied first (`README.md`, "Google Calendar Mirror"). `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are not

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-09-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # cdc/k8s/yamls/mariadb
 
@@ -16,7 +16,7 @@ manifest declares and the mismatches an agent must know before editing.
 | `mariadb-config.yaml` | Namespace `database`; ConfigMap `mariadb-config` with `master.cnf` and `slave.cnf` (binlog `ROW`/`FULL`, `expire_logs_days=7`, `gtid_strict_mode=1`, `log_slave_updates=1`, InnoDB and slow-log tuning; `slave.cnf` adds `read_only=1`, relay log, parallel replication); Secret `mariadb-secret` with placeholder `root-password` and `replication-password`; a standalone PVC `logs-mariadb-pvc` (20Gi) |
 | `mariadb-sts.yaml` | StatefulSet `mariadb` (`serviceName: mariadb-headless`, 3 replicas, `mariadb:12.0.2`, preferred anti-affinity by hostname). Init container picks `master.cnf` + `server-id=1` for ordinal 0, else `slave.cnf` + `server-id=<ordinal+1000>`. Liveness/readiness/preStop via `mariadb-admin`/`mariadb`; requests 8Gi/500m, limits 16Gi/1000m; claim templates `data` 50Gi and `logs` 5Gi. PodDisruptionBudget `mariadb-pdb` (`minAvailable: 2`) |
 | `mariadb-svc.yaml` | Services `mariadb-master` (selector `role: master`), `mariadb-slave` (selector `role: slave`), and headless `mariadb-headless` (`clusterIP: None`, selector `app: mariadb`), all port 3306 |
-| `mariadb-job.yaml` | Job `setup-mariadb-replication` (`mariadb:12.0.2`): waits for `mariadb-0..2` over headless DNS, creates the `replicator` user on the master, runs `CHANGE MASTER TO` with the master's binlog file/position on pods 1 and 2, then writes a `test_replication` database to prove replication |
+| `mariadb-job.yaml` | Job `setup-mariadb-replication` (`mariadb:12.0.2`): waits for `mariadb-0..2` over headless DNS, creates the `replicator` user on the master, runs `CHANGE MASTER TO` with the master's binlog file/position on pods 1 and 2, then writes a `test_replication` database to prove replication. Every call is `mariadb --defaults-extra-file="$cnf" --skip-print-query-on-error -h <pod>`, with SQL that carries a password on stdin (see the password bullet below) |
 
 ## For AI Agents
 
@@ -57,7 +57,11 @@ manifest declares and the mismatches an agent must know before editing.
   image. They are also packaged into the boot jar by `processResources`.
 
 ### Testing Requirements
-- No automated tests. `kubectl apply --dry-run=server -f <file>` catches schema errors; the README's
+- No automated tests. `kubectl apply --dry-run=server -f <file>` catches schema errors. Without a reachable cluster
+  even `--dry-run=client` fails (it still runs API discovery); without a cluster, use
+  `docker run --rm -v "$PWD:/f:ro" ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary /f/<file>` (it downloads the
+  schemas, so it needs network access). For the Job script,
+  extract it (`command[2]`) and run `bash -n` on it. The README's
   verification block (`SELECT @@server_id, @@read_only` per pod, `SHOW SLAVE STATUS\G` on 1 and 2, a
   cross-pod write/read) is the functional check.
 - `kubectl logs -f job/setup-mariadb-replication -n database` must reach "Replication setup completed!";
@@ -70,8 +74,22 @@ manifest declares and the mismatches an agent must know before editing.
   Secret values, matching README wording.
 - Master/replica role is a function of the StatefulSet ordinal (0 = master), derived in the init container
   from `hostname`; never hard-code a role into the pod template.
-- All `mariadb`/`mariadb-admin` invocations pass `-p"$MYSQL_ROOT_PASSWORD"` from the Secret via
-  `secretKeyRef`; keep credentials out of literal `command` strings.
+- Credentials come from the Secret via `secretKeyRef`; keep them out of literal `command` strings.
+- **The Job keeps every password out of argv and the log.** It runs `set -e` without `-x` (xtrace prints each
+  expanded command, password included). It writes the root password once, under `umask 077`, to a `mktemp`
+  option file (`[client]`, `user=root`, `password="…"`) removed by an `EXIT` trap. The value is quoted, because an
+  unquoted option-file value ends at `#`, and escaped by parameter expansion: `\` → `\\`, `"` → `\"`, newline →
+  `\n`, which the parser turns back into a newline. A Secret made with `kubectl create secret --from-file` keeps a
+  trailing newline, and `$(…)` would strip it. Every `mariadb` call starts
+  `mariadb --defaults-extra-file="$cnf" --skip-print-query-on-error -h <pod>`: the option file must be the
+  **first** argument (anywhere else the client fails with `unknown variable 'defaults-extra-file=…'`), and
+  `print-query-on-error` defaults to on in the 12.0.2 client, which writes a failing statement (a rejected
+  `CREATE USER` or `CHANGE MASTER TO`, a dropped connection) back to stderr with the replication password in it,
+  heredoc or not. The
+  replication password goes into SQL string literals as `replication_password_sql`, with `\` → `\\` and `'` → `\'`
+  (MariaDB's default `sql_mode`; nothing here sets `NO_BACKSLASH_ESCAPES`), so a quote cannot end the literal and
+  surface part of the password in a `near '…'` error. That SQL goes in on stdin through a `<<SQL` heredoc, never in
+  `-e`. The StatefulSet's probes and `preStop` still pass `-p"$MYSQL_ROOT_PASSWORD"`.
 
 ## Dependencies
 

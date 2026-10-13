@@ -18,7 +18,6 @@ import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration
-import java.util.Base64
 
 class GoogleOAuthClientTest :
     BehaviorSpec({
@@ -84,16 +83,6 @@ class GoogleOAuthClientTest :
             return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
         }
 
-        fun idToken(email: String): String {
-            val encoder = Base64.getUrlEncoder().withoutPadding()
-            val header = encoder.encodeToString("""{"alg":"RS256"}""".toByteArray())
-            val payload =
-                encoder.encodeToString(
-                    """{"sub":"10769150350006150715113082367","email":"$email"}""".toByteArray(),
-                )
-            return "$header.$payload.signature"
-        }
-
         given("the authorization URL") {
             val url = client.authorizationUrl(state = "st ate&x")
 
@@ -119,17 +108,18 @@ class GoogleOAuthClientTest :
                             accessToken = "ya29.access",
                             refreshToken = "1//refresh",
                             expiresIn = 3599,
-                            idToken = idToken(email = "dev@example.com"),
+                            idToken = createGoogleIdToken(email = "dev@example.com"),
                             scope = "openid https://www.googleapis.com/auth/calendar.events email",
                         ),
                 )
             val grant = client.exchangeCode(code = "4/0Acode")
 
-            then("the grant carries both tokens and the email read from the id_token") {
+            then("the grant carries both tokens and the verified email read from the id_token") {
                 grant.accessToken shouldBe "ya29.access"
                 grant.refreshToken shouldBe "1//refresh"
                 grant.expiresInSeconds shouldBe 3599L
                 grant.email shouldBe "dev@example.com"
+                grant.emailVerified shouldBe true
                 grant.subject shouldBe "10769150350006150715113082367"
                 grant.scopes shouldBe setOf("openid", GoogleOAuthClient.CALENDAR_EVENTS_SCOPE, "email")
                 grant.grants(scope = GoogleOAuthClient.CALENDAR_EVENTS_SCOPE) shouldBe true
@@ -151,6 +141,41 @@ class GoogleOAuthClientTest :
             }
         }
 
+        given("a code exchange whose id_token carries email_verified as the string \"true\"") {
+            respond =
+                response(
+                    status = 200,
+                    body = createGoogleTokenResponseJson(idToken = createGoogleIdToken(emailVerified = "\"true\"")),
+                )
+
+            then("the email counts as verified") {
+                val grant = client.exchangeCode(code = "c")
+                grant.email shouldBe "dev@example.com"
+                grant.emailVerified shouldBe true
+            }
+        }
+
+        given("a code exchange whose id_token does not vouch for the email") {
+            listOf("email_verified false" to "false", "no email_verified claim" to null).forEach { (label, verified) ->
+                `when`("the id_token has $label") {
+                    respond =
+                        response(
+                            status = 200,
+                            body =
+                                createGoogleTokenResponseJson(
+                                    idToken = createGoogleIdToken(emailVerified = verified),
+                                ),
+                        )
+
+                    then("the email is kept but counts as unverified") {
+                        val grant = client.exchangeCode(code = "c")
+                        grant.email shouldBe "dev@example.com"
+                        grant.emailVerified shouldBe false
+                    }
+                }
+            }
+        }
+
         given("a code exchange without an id_token whose scope field lacks calendar access") {
             respond =
                 response(
@@ -158,9 +183,10 @@ class GoogleOAuthClientTest :
                     body = createGoogleTokenResponseJson(idToken = null, scope = "openid"),
                 )
 
-            then("subject and email are absent and the calendar scope is not granted") {
+            then("subject and email are absent, the email counts as unverified and the calendar scope is not granted") {
                 val grant = client.exchangeCode(code = "c")
                 grant.email.shouldBeNull()
+                grant.emailVerified shouldBe false
                 grant.subject.shouldBeNull()
                 grant.scopes shouldBe setOf("openid")
                 grant.grants(scope = GoogleOAuthClient.CALENDAR_EVENTS_SCOPE) shouldBe false

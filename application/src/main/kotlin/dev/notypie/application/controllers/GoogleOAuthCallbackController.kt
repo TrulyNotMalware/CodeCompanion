@@ -81,6 +81,24 @@ class GoogleOAuthCallbackController(
                             "Nothing was connected. This link cannot be used again; " +
                                 "run /calendar connect in Slack for a new one.",
                     )
+
+                CalendarConnectionOutcome.ACCOUNT_MISMATCH ->
+                    CallbackPage(
+                        status = HttpStatus.FORBIDDEN,
+                        title = "This Google account does not match your Slack account",
+                        detail =
+                            "Nothing was connected. Sign in to Google with the e-mail address of your Slack " +
+                                "profile, then run /calendar connect in Slack for a new link.",
+                    )
+
+                CalendarConnectionOutcome.IDENTITY_UNAVAILABLE ->
+                    CallbackPage(
+                        status = HttpStatus.SERVICE_UNAVAILABLE,
+                        title = "Your Slack e-mail could not be checked",
+                        detail =
+                            "Nothing was connected. This link cannot be used again; " +
+                                "run /calendar connect in Slack to try again.",
+                    )
             }
         return page.toResponse()
     }

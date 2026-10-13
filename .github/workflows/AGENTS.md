@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-06 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # .github/workflows
 
@@ -15,7 +15,7 @@ documented in `../AGENTS.md`; this file is the per-file index.
 | `security_check.yaml` | Push/PR to `main`, weekly, manual: `changes` gate (`dorny/paths-filter@v4`, `some-with-excludes`), CodeQL `java-kotlin` with a manual `./gradlew classes --no-daemon --no-build-cache` compile, Gradle dependency-graph submission (every push to `main`; source-gated on PRs) + dependency review on PRs, gitleaks secret scan with `GITLEAKS_VERSION` pinned (8.25.0+ for `[[allowlists]]`) |
 | `claude-code-review.yml` | Claude Code review on PRs; `if` skips Dependabot PRs, whose runs only receive Dependabot secrets |
 | `claude.yml` | `@claude` mention handler for issues, PR comments and reviews |
-| `deploy_action.yaml` | Merged PR to `main` only, serialised by the `deploy-production` concurrency group (an unmerged close gets a throwaway group); every `run:` step under `defaults.run.shell: bash` (`-eo pipefail`): full `build` (tests included, `apply.sh ci`, 40-minute timeout) → multi-arch image → Harbor → `envsubst '${IMAGE_NAME}'` apply to OKE (`-n api-service`; the manifest's `Recreate` strategy stops the old Pods first) → rollout (`DEPLOYMENT_ROLLOUT_TIMEOUT` 450s, deploy job 25 minutes) + Ready-pod count + in-cluster readiness check (service proxy, falling back to `kubectl exec … wget` on every non-terminating Pod of the current revision; parsed with `jq`) → `rollout undo` to the recorded revision when one of those steps failed |
+| `deploy_action.yaml` | Merged PR to `main` only, serialised by the `deploy-production` concurrency group (an unmerged close gets a throwaway group); every `run:` step under `defaults.run.shell: bash` (`-eo pipefail`): full `build` (tests included, `apply.sh ci`, 40-minute timeout) → multi-arch image → Harbor → `envsubst '${IMAGE_NAME}'` apply to OKE (`-n api-service`; the manifest's `Recreate` strategy stops the old Pods first) → rollout (`DEPLOYMENT_ROLLOUT_TIMEOUT` 450s, deploy job 25 minutes) + Ready-pod count + in-cluster readiness check (service proxy, falling back to `kubectl exec … wget` on every non-terminating Pod of the current revision; parsed with `jq`) → `rollout undo` to the recorded revision (shape-checked in the backup step, passed to the rollback through `env:`) when one of those steps failed |
 
 ## For AI Agents
 
@@ -27,8 +27,11 @@ documented in `../AGENTS.md`; this file is the per-file index.
 - Pin action majors (`@v6`, `@v4`, …); Dependabot's `github-actions` ecosystem bumps them in one grouped PR.
 
 ### Testing Requirements
-- `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color` before pushing; the only accepted
-  pre-existing findings are the `SC2086` shellcheck notes on `$GITHUB_OUTPUT` lines.
+- `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color` before pushing; the accepted
+  pre-existing findings are the `SC2086` shellcheck notes on `$GITHUB_OUTPUT` lines, `SC2129` on the backup step's
+  three output lines and `SC2016` on the deliberately single-quoted `envsubst '${IMAGE_NAME}'` (16 in total on
+  2026-10-13). The run must be inside the git checkout: on a bare copy actionlint reports "no project was found"
+  and lints nothing unless the files are passed as arguments.
 - Exercise `security_check.yaml` with `workflow_dispatch` or a PR to `main`; lint/test with a `feature/*` push.
 
 ### Common Patterns

@@ -17,6 +17,7 @@ import dev.notypie.repository.calendar.GoogleOAuthStateRepository
 import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.templates.SlackUserEmailResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -40,6 +41,7 @@ class CalendarConnectionService(
     private val queue: MeetingCalendarEventRepository,
     private val meetingRepository: MeetingRepository,
     private val oauthClient: GoogleOAuthClient,
+    private val emailResolver: SlackUserEmailResolver,
     private val tokenCipher: TokenCipher,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
@@ -96,6 +98,29 @@ class CalendarConnectionService(
                 log.warn(exception) { "Google Calendar code exchange failed: userId=$userId" }
                 return CalendarConnectionOutcome.EXCHANGE_FAILED
             }
+        val slackEmail = emailResolver.resolve(userId = userId)
+        if (slackEmail == null) {
+            log.warn {
+                "Google Calendar connection refused: no Slack e-mail to compare (check the users:read and " +
+                    "users:read.email scopes and the workspace's Email Display setting): userId=$userId"
+            }
+            return CalendarConnectionOutcome.IDENTITY_UNAVAILABLE
+        }
+        val googleEmail = grant.email
+        val mismatch =
+            when {
+                googleEmail == null -> "missing"
+                !grant.emailVerified -> "unverified"
+                !googleEmail.equals(other = slackEmail, ignoreCase = true) -> "different"
+                else -> null
+            }
+        if (mismatch != null) {
+            log.warn {
+                "Google Calendar connection refused: Google account is not the Slack user's: userId=$userId " +
+                    "reason=$mismatch"
+            }
+            return CalendarConnectionOutcome.ACCOUNT_MISMATCH
+        }
         if (!grant.grants(scope = GoogleOAuthClient.CALENDAR_EVENTS_SCOPE)) {
             log.info { "Google Calendar scope not granted: userId=$userId scopes=${grant.scopes}" }
             val active = writeTemplate.execute { connectionRepository.find(userId = userId) }?.isActive ?: false
