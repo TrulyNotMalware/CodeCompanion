@@ -5,6 +5,8 @@ import com.sun.net.httpserver.HttpServer
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.application.configurations.createCveTopicConfigDefinition
 import dev.notypie.application.security.SlackRetryDeduplicator
+import dev.notypie.application.service.agent.ASK_RESUME_PERIOD_MILLIS
+import dev.notypie.application.service.agent.AgentAskThreadStarter
 import dev.notypie.application.service.agent.AgentConverseService
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.cve.CveTopicBootstrap
@@ -35,6 +37,8 @@ import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
 import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.cve.SourceAdapter
+import dev.notypie.repository.agent.AgentAskTurnRepository
+import dev.notypie.repository.agent.schema.AgentAskTurnStatus
 import dev.notypie.repository.createRawSnapshotIsolationFailure
 import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.repository.meeting.JpaMeetingRepository
@@ -42,7 +46,7 @@ import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepositoryImpl
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.dto.MessagePublishSuccessEvent
+import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import io.kotest.assertions.nondeterministic.eventually
@@ -67,8 +71,11 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.support.PersistenceExceptionTranslator
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.scheduling.TaskScheduler
+import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
+import org.springframework.scheduling.config.FixedDelayTask
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.util.ReflectionTestUtils
@@ -76,6 +83,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.net.InetSocketAddress
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -102,6 +110,7 @@ class ApplicationContextSmokeTest
         private val eventPublisher: ApplicationEventPublisher,
         private val transactionTemplate: TransactionTemplate,
         private val outboxRepository: MessageOutboxRepository,
+        private val askTurnRepository: AgentAskTurnRepository,
         @MockkBean(relaxed = true) private val messageDispatcher: MessageDispatcher,
         @MockkBean private val agentGateway: AgentGateway,
     ) : BehaviorSpec({
@@ -121,6 +130,19 @@ class ApplicationContextSmokeTest
                         val scheduler = context.getBean(TaskScheduler::class.java)
                         scheduler.shouldBeInstanceOf<ThreadPoolTaskScheduler>()
                         scheduler.scheduledThreadPoolExecutor.corePoolSize shouldBe 4
+                    }
+
+                    then("the /ask resume sweep is a fixed-delay task that first runs one period after start") {
+                        val period = Duration.ofMillis(ASK_RESUME_PERIOD_MILLIS)
+                        val sweep =
+                            context
+                                .getBean(ScheduledAnnotationBeanPostProcessor::class.java)
+                                .scheduledTasks
+                                .map { it.task }
+                                .single { it.toString() == "${AgentAskThreadStarter::class.java.name}.resume" }
+                                .shouldBeInstanceOf<FixedDelayTask>()
+                        sweep.intervalDuration shouldBe period
+                        sweep.initialDelayDuration shouldBe period
                     }
 
                     then("the relay is wired to the dedicated relayTaskExecutor") {
@@ -300,9 +322,30 @@ class ApplicationContextSmokeTest
                 }
             }
 
+            given("an AI turn requested with no transaction active") {
+                `when`("the request event is published outside any transaction") {
+                    then("the listener's fallback execution still hands it to the agent-turn executor") {
+                        val prompts = ConcurrentLinkedQueue<String>()
+                        val threadNames = ConcurrentLinkedQueue<String>()
+                        every { agentGateway.converse(request = any()) } answers {
+                            threadNames += Thread.currentThread().name
+                            prompts += firstArg<AgentTurnRequest>().prompt
+                            AgentTurnResult.Failed(code = "smoke", message = "smoke")
+                        }
+
+                        TransactionSynchronizationManager.isActualTransactionActive() shouldBe false
+                        eventPublisher.publishEvent(createAgentConverseRequestEvent(prompt = "no transaction"))
+
+                        eventually(5.seconds) { prompts.toList() shouldContain "no transaction" }
+                        prompts.toList() shouldBe listOf("no transaction")
+                        threadNames.toList().single() shouldStartWith "agent-turn-"
+                    }
+                }
+            }
+
             given("an /ask question whose root message Slack has delivered") {
                 `when`("the relay publishes the delivery event outside any transaction") {
-                    then("the answer turn starts on the agent-turn executor, keyed to the question's thread") {
+                    then("the turn is recorded before publishEvent returns, runs on agent-turn and ends COMPLETED") {
                         val basicInfo = createCommandBasicInfo()
                         val sessionKeys = ConcurrentLinkedQueue<String>()
                         val threadNames = ConcurrentLinkedQueue<String>()
@@ -320,17 +363,25 @@ class ApplicationContextSmokeTest
 
                         TransactionSynchronizationManager.isActualTransactionActive() shouldBe false
                         eventPublisher.publishEvent(
-                            MessagePublishSuccessEvent(
+                            MessageDeliveredEvent(
                                 eventId = UUID.fromString(row.eventId),
                                 commandDetailType = CommandDetailType.AGENT_ASK_QUESTION,
                                 messageTs = "1.2",
                             ),
                         )
+                        askTurnRepository.existsById(row.eventId) shouldBe true
 
                         val expectedKey = "${basicInfo.channel}:1.2:${basicInfo.publisherId}"
-                        eventually(5.seconds) { sessionKeys.toList() shouldContain expectedKey }
+                        eventually(5.seconds) {
+                            askTurnRepository.findByIdOrNull(id = row.eventId)?.status shouldBe
+                                AgentAskTurnStatus.COMPLETED
+                        }
                         sessionKeys.toList() shouldBe listOf(expectedKey)
                         threadNames.toList().single() shouldStartWith "agent-turn-"
+                        val turn = askTurnRepository.findByIdOrNull(id = row.eventId).shouldNotBeNull()
+                        turn.messageTs shouldBe "1.2"
+                        turn.attemptCount shouldBe 1
+                        askTurnRepository.deleteById(row.eventId)
                         outboxRepository.deleteById(row.eventId)
                     }
                 }

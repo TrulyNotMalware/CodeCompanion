@@ -2,6 +2,7 @@ package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.relayQueueCapacity
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
 import dev.notypie.impl.command.event.MessageDispatcher
@@ -18,6 +19,7 @@ import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.chainedParts
+import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
 import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.dto.toOutboxUpdateEvent
@@ -52,7 +54,7 @@ private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
 internal val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
 internal val ACCESS_BLOCKED_DEFER: Duration = Duration.ofMinutes(15L)
 
-private const val STATUS_WRITE_ATTEMPTS = 3L
+internal const val STATUS_WRITE_ATTEMPTS = 3L
 
 val RELAY_RECORD_TIME_BOUND: Duration =
     RestClientRequester.DEFAULT_READ_TIMEOUT
@@ -220,12 +222,14 @@ class SlackMessageRelayServiceImpl(
             }
             result.isTransientExhausted() ->
                 logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
-            result.ok || result.isOutcomeUnknown() ->
+            result.ok || result.isOutcomeUnknown() -> {
+                if (result.ok) publishDelivered(eventId = eventId, result = result)
                 complete(
                     claim = claim,
                     updateEvent = result.toOutboxUpdateEvent(eventId = eventId),
                     next = rendered.next,
                 )
+            }
             else -> {
                 if (rendered.fallback != null) {
                     logger.warn {
@@ -286,6 +290,22 @@ class SlackMessageRelayServiceImpl(
     private fun spreadOf(claim: OutboxClaim): Duration {
         val hash = claim.row.eventId.hashCode()
         return Duration.ofMillis(Math.floorMod(hash.toLong(), RATE_LIMIT_SPREAD.toMillis()))
+    }
+
+    private fun publishDelivered(eventId: UUID, result: CommandOutput) {
+        try {
+            applicationEventPublisher.publishEvent(
+                MessageDeliveredEvent(
+                    eventId = eventId,
+                    commandDetailType = result.commandDetailType,
+                    messageTs = result.messageTs,
+                ),
+            )
+        } catch (exception: Exception) {
+            logger.error(exception) {
+                "Listener of the delivery failed for eventId=$eventId; its outcome is recorded all the same"
+            }
+        }
     }
 
     private fun complete(claim: OutboxClaim, updateEvent: OutboxUpdateEvent, next: OutboundEnvelope? = null) {

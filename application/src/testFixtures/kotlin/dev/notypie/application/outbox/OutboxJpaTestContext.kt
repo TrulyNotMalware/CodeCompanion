@@ -4,6 +4,8 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.OpenViewPayloadContents
 import dev.notypie.impl.command.event.SlackEventPayload
+import dev.notypie.repository.agent.AgentAskTurnRepository
+import dev.notypie.repository.agent.schema.AgentAskTurnSchema
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import jakarta.persistence.EntityManagerFactory
@@ -27,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.sql.DataSource
 
 @EnableTransactionManagement
-@EnableJpaRepositories(basePackageClasses = [MessageOutboxRepository::class])
+@EnableJpaRepositories(basePackageClasses = [MessageOutboxRepository::class, AgentAskTurnRepository::class])
 class OutboxJpaTestConfiguration {
     @Bean
     fun dataSource(): DataSource =
@@ -37,7 +39,7 @@ class OutboxJpaTestConfiguration {
     fun entityManagerFactory(dataSource: DataSource): LocalContainerEntityManagerFactoryBean =
         LocalContainerEntityManagerFactoryBean().apply {
             setDataSource(dataSource)
-            setPackagesToScan(OutboxMessage::class.java.packageName)
+            setPackagesToScan(OutboxMessage::class.java.packageName, AgentAskTurnSchema::class.java.packageName)
             jpaVendorAdapter = HibernateJpaVendorAdapter().apply { setGenerateDdl(true) }
         }
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
 
 # application/service
 
@@ -17,7 +17,7 @@ that the relay lane dispatches.
 | `interaction/` | `InteractionHandler` / `SlackInteractionHandlerImpl` — buttons, selects, view submissions (see `interaction/AGENTS.md`) |
 | `meeting/` | Meeting use cases plus the daily-agenda and reminder schedulers (see `meeting/AGENTS.md`) |
 | `standup/` | Routine setup, answer collection, nudging, summary posting, scheduler (see `standup/AGENTS.md`) |
-| `agent/` | `AgentConverseService` — one AI turn against the sidecar, persisted to `agent_turn_history` (see `agent/AGENTS.md`) |
+| `agent/` | `AgentConverseService` — one AI turn against the sidecar, persisted to `agent_turn_history`; `AgentAskThreadStarter` — the durable start of an `/ask` turn: the `agent_ask_turn` ledger row written when the question is delivered, and the 60 s sweep that resumes or gives up unfinished turns (see `agent/AGENTS.md`) |
 | `cve/` | CVE collection, AI summarization, subscription, query, notification (see `cve/AGENTS.md`) |
 | `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering (see `relay/AGENTS.md`) |
 | `ops/` | `OpsStatusService` — backs `@bot status` (see `ops/AGENTS.md`) |
@@ -52,6 +52,9 @@ that the relay lane dispatches.
   claim.
 - **Scheduler split.** Add the cron/fixed-rate annotation to the thin `*Scheduler`, put the logic in
   `*SchedulingService`, and unit-test the service. Keep jobs short — the shared scheduler pool is 4 threads.
+  Two sweeps keep trigger and logic in one class instead (`relay/OutboxRecoveryScheduler`,
+  `agent/AgentAskThreadStarter`): the `@Scheduled` method only contains failures and the specs call
+  `recoverOnce()` / `resumeOnce()`.
 - **Slow calls are async.** The agent turn runs in an async application listener; do not move an LLM or
   Slack Web API call onto the inbound request thread or inside a transaction.
 - Role gating goes through `CommandRoleResolver`. Resolution order is

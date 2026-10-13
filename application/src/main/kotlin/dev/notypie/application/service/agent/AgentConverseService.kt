@@ -28,6 +28,7 @@ import dev.notypie.templates.neutralizeBroadcastMentions
 import dev.notypie.templates.splitMessageText
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.event.TransactionPhase
@@ -52,6 +53,36 @@ class AgentTurn(
     fun discard() = onDiscard()
 }
 
+enum class BusyNotice {
+    CONVERSATION_BUSY,
+    ANSWER_LATER,
+    NONE,
+}
+
+interface AgentTurnLease {
+    fun begin(): Boolean
+
+    fun settle()
+
+    fun giveBack(): BusyNotice
+
+    fun abandon()
+
+    fun discarded(): Boolean
+
+    object Unleased : AgentTurnLease {
+        override fun begin(): Boolean = true
+
+        override fun settle() = Unit
+
+        override fun giveBack(): BusyNotice = BusyNotice.CONVERSATION_BUSY
+
+        override fun abandon() = Unit
+
+        override fun discarded(): Boolean = false
+    }
+}
+
 class AgentConverseService(
     private val agentGateway: AgentGateway,
     private val agentSessionRepository: AgentSessionRepository,
@@ -68,6 +99,8 @@ class AgentConverseService(
         internal const val RESPONSE_HEADLINE = "CodeCompanion — AI assistant"
         internal const val BUSY_MESSAGE =
             "I'm still working on the previous request in this conversation — please wait for it to finish."
+        internal const val ANSWER_LATER_MESSAGE =
+            "I'm busy right now — I'll answer your question in its thread as soon as I can."
         internal const val FAILURE_MESSAGE = "Sorry — I couldn't process that request. Please try again later."
         internal const val OVERLOADED_MESSAGE =
             "I'm handling too many requests right now — please ask again in a minute."
@@ -120,24 +153,65 @@ class AgentConverseService(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     fun handleAgentConverse(event: AgentConverseRequestEvent) {
-        try {
-            turnExecutor.execute(
-                AgentTurn(start = { converse(event = event) }, onDiscard = { discarded(event = event) }),
-            )
-        } catch (rejected: RejectedExecutionException) {
+        submit(event = event, lease = AgentTurnLease.Unleased)
+    }
+
+    fun submit(event: AgentConverseRequestEvent, lease: AgentTurnLease): Boolean {
+        val rejected = rejectionOf(event = event, lease = lease) ?: return true
+        if ((turnExecutor as? ThreadPoolTaskExecutor)?.threadPoolExecutor?.isShutdown == true) {
+            discarded(event = event, lease = lease)
+        } else {
             log.warn(rejected) { "Agent turn rejected, every turn slot is busy idempotencyKey=${event.idempotencyKey}" }
             meterRegistry.counter(METRIC_TURNS, "outcome", "rejected").increment()
-            publishOverloaded(event = event)
+            publishOverloaded(event = event, lease = lease)
         }
+        return false
     }
 
-    private fun discarded(event: AgentConverseRequestEvent) {
+    fun offer(event: AgentConverseRequestEvent, lease: AgentTurnLease): Boolean =
+        rejectionOf(event = event, lease = lease) == null
+
+    private fun rejectionOf(event: AgentConverseRequestEvent, lease: AgentTurnLease): RejectedExecutionException? =
+        try {
+            turnExecutor.execute(
+                AgentTurn(
+                    start = { converse(event = event, lease = lease) },
+                    onDiscard = { discarded(event = event, lease = lease) },
+                ),
+            )
+            null
+        } catch (rejected: RejectedExecutionException) {
+            rejected
+        }
+
+    fun abandon(event: AgentConverseRequestEvent, lease: AgentTurnLease): Boolean =
+        transactionTemplate
+            .runInTx {
+                eventPublisher.publishOne(
+                    event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
+                )
+                lease.abandon()
+            }.onFailure { exception ->
+                log.error(exception) {
+                    "Failed to publish agent abandon notice idempotencyKey=${event.idempotencyKey}"
+                }
+            }.isSuccess
+
+    private fun discarded(event: AgentConverseRequestEvent, lease: AgentTurnLease) {
+        if (lease.discarded()) {
+            log.info { "Agent turn not started at shutdown; it resumes later idempotencyKey=${event.idempotencyKey}" }
+            return
+        }
         log.warn { "Agent turn discarded unstarted at shutdown idempotencyKey=${event.idempotencyKey}" }
         meterRegistry.counter(METRIC_TURNS, "outcome", "discarded").increment()
-        publishOverloaded(event = event)
+        publishOverloaded(event = event, lease = lease)
     }
 
-    private fun converse(event: AgentConverseRequestEvent) {
+    private fun converse(event: AgentConverseRequestEvent, lease: AgentTurnLease) {
+        if (!lease.begin()) {
+            log.info { "Agent turn is owned or finished elsewhere; not started idempotencyKey=${event.idempotencyKey}" }
+            return
+        }
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
         val sessionKey =
@@ -166,17 +240,29 @@ class AgentConverseService(
 
         when (result) {
             is AgentTurnResult.Completed ->
-                publishAnswer(event = event, sessionKey = sessionKey, result = result, durationMs = durationMs)
+                publishAnswer(
+                    event = event,
+                    sessionKey = sessionKey,
+                    result = result,
+                    durationMs = durationMs,
+                    lease = lease,
+                )
 
             is AgentTurnResult.Busy ->
-                publishBusy(event = event, sessionKey = sessionKey, durationMs = durationMs)
+                publishBusy(event = event, sessionKey = sessionKey, durationMs = durationMs, lease = lease)
 
             is AgentTurnResult.Failed -> {
                 log.error {
                     "Agent turn failed sessionKey=$sessionKey code=${result.code} " +
                         "message=${result.message} idempotencyKey=${event.idempotencyKey}"
                 }
-                publishFailure(event = event, sessionKey = sessionKey, result = result, durationMs = durationMs)
+                publishFailure(
+                    event = event,
+                    sessionKey = sessionKey,
+                    result = result,
+                    durationMs = durationMs,
+                    lease = lease,
+                )
             }
         }
         recordMetrics(result = result, durationMs = durationMs)
@@ -215,6 +301,7 @@ class AgentConverseService(
         sessionKey: String,
         result: AgentTurnResult.Completed,
         durationMs: Long,
+        lease: AgentTurnLease,
     ) {
         log.debug {
             "Agent turn completed sessionKey=$sessionKey inputTokens=${result.inputTokens} " +
@@ -262,6 +349,7 @@ class AgentConverseService(
                             basicInfo = event.payload.responseBasicInfo,
                         ),
                 )
+                lease.settle()
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent answer sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
@@ -269,10 +357,22 @@ class AgentConverseService(
             }
     }
 
-    private fun publishBusy(event: AgentConverseRequestEvent, sessionKey: String, durationMs: Long) {
+    private fun publishBusy(
+        event: AgentConverseRequestEvent,
+        sessionKey: String,
+        durationMs: Long,
+        lease: AgentTurnLease,
+    ) {
         val basicInfo = event.payload.responseBasicInfo
         transactionTemplate
             .runInTx {
+                val owed = lease.giveBack()
+                val notice =
+                    when (owed) {
+                        BusyNotice.CONVERSATION_BUSY -> BUSY_MESSAGE
+                        BusyNotice.ANSWER_LATER -> ANSWER_LATER_MESSAGE
+                        BusyNotice.NONE -> return@runInTx owed
+                    }
                 agentTurnHistoryRepository.record(
                     turn =
                         turnRecord(
@@ -289,20 +389,28 @@ class AgentConverseService(
                                 OutboundMessage.Ephemeral(
                                     target = ConversationTarget(id = basicInfo.channel),
                                     recipient = UserRef(id = basicInfo.publisherId),
-                                    content = MessageContent.Text(headline = null, markdown = BUSY_MESSAGE),
+                                    content = MessageContent.Text(headline = null, markdown = notice),
                                     detailType = CommandDetailType.AGENT_CONVERSE,
                                 ),
                             basicInfo = basicInfo,
                         ),
                 )
+                owed
+            }.onSuccess { owed ->
+                if (owed == BusyNotice.NONE) {
+                    log.info {
+                        "Agent turn reported busy; it runs again later sessionKey=$sessionKey " +
+                            "idempotencyKey=${event.idempotencyKey}"
+                    }
+                }
             }.onFailure { exception ->
                 log.error(exception) {
-                    "Failed to publish agent busy notice idempotencyKey=${event.idempotencyKey}"
+                    "Failed to record agent busy turn idempotencyKey=${event.idempotencyKey}"
                 }
             }
     }
 
-    private fun publishOverloaded(event: AgentConverseRequestEvent) {
+    private fun publishOverloaded(event: AgentConverseRequestEvent, lease: AgentTurnLease) {
         val basicInfo = event.payload.responseBasicInfo
         afterCompletionTemplate
             .runInTx {
@@ -319,6 +427,7 @@ class AgentConverseService(
                             basicInfo = basicInfo,
                         ),
                 )
+                lease.settle()
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent overload notice idempotencyKey=${event.idempotencyKey}"
@@ -331,6 +440,7 @@ class AgentConverseService(
         sessionKey: String,
         result: AgentTurnResult.Failed,
         durationMs: Long,
+        lease: AgentTurnLease,
     ) {
         transactionTemplate
             .runInTx {
@@ -347,6 +457,7 @@ class AgentConverseService(
                 eventPublisher.publishOne(
                     event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
                 )
+                lease.settle()
             }.onFailure { exception ->
                 log.error(exception) {
                     "Failed to publish agent failure notice idempotencyKey=${event.idempotencyKey}"

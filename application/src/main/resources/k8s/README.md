@@ -182,6 +182,15 @@ the rolling update while a pre-V20 revision is still serving (for example after 
 The Google Calendar release adds V24 and V25. They only create tables and are independent of this procedure; see
 Google Calendar Mirror below.
 
+The `/ask` turn ledger release adds V26: one new table, `agent_ask_turn` (`CREATE TABLE IF NOT EXISTS`, no foreign
+key), also independent of this procedure. Production runs `ddl-auto: none`, so apply it by hand before deploying the
+code that writes it; it is safe while the previous release still serves, and there is no feature flag. If the table
+is missing, `/ask` still answers, but a restart or a crash can lose a turn again and the log carries one ERROR per
+question plus one per 60 s sweep (inferred from the code, not measured). The script was applied twice to an empty
+MariaDB 12.3.3 database (2026-10-13, a local instance; the second run changed nothing) and the ledger's SQL statements
+were run on that table by hand. The application itself has not run against the script's table: the tests use tables
+Hibernate generates on H2.
+
 If a migration must run while no Pod is up, use `kubectl scale deployment code-companion-deploy -n api-service
 --replicas=0` before merging, wait for the Pods to disappear (`kubectl get pods -n api-service -l
 app=code-companion-deploy`), run the script, then merge; V21 still waits for step 5. The workflow's apply sets `replicas: 2` again. The
@@ -472,6 +481,13 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
 되돌립니다. pre-V20 리비전이 아직 서비스 중이면(예: 워크플로가 롤백한 뒤) 롤링 업데이트로 되돌리지 마세요.
 
 Google Calendar 릴리스는 V24와 V25를 추가합니다. 테이블만 만들며 이 절차와 무관합니다. 아래 Google Calendar 미러를 참고하세요.
+
+`/ask` 턴 레저 릴리스는 V26을 추가합니다. 새 테이블 `agent_ask_turn` 하나이고(`CREATE TABLE IF NOT EXISTS`, 외래 키 없음) 역시 이
+절차와 무관합니다. 운영은 `ddl-auto: none`이므로 이 테이블에 쓰는 코드를 배포하기 전에 직접 적용하세요. 이전 릴리스가 서비스하는
+동안 적용해도 안전하고, 기능 플래그는 없습니다. 테이블이 없으면 `/ask`는 여전히 답하지만 재시작·크래시에 턴을 다시 잃을 수 있고,
+질문마다 ERROR 한 줄과 60초 스윕마다 ERROR 한 줄이 남습니다(코드에서 추론, 미측정). 이 스크립트는 로컬 MariaDB 12.3.3의 빈
+데이터베이스에 두 번 적용해 보았고(2026-10-13, 두 번째 실행은 아무것도 바꾸지 않음) 그 테이블에서 레저의 SQL 문을 손으로 실행했습니다.
+애플리케이션이 이 스크립트가 만든 테이블 위에서 돈 적은 없습니다. 테스트는 Hibernate가 H2에 만든 테이블을 씁니다.
 
 파드가 하나도 없을 때 실행해야 하는 마이그레이션이 있으면 머지 전에 `kubectl scale deployment code-companion-deploy -n
 api-service --replicas=0`으로 내리고 파드가 사라진 것을 확인한 뒤(`kubectl get pods -n api-service -l app=code-companion-deploy`)

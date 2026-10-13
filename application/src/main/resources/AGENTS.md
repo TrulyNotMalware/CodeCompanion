@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
 
 # application/resources
 
@@ -21,7 +21,7 @@ stand up change-data-capture locally and in-cluster.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `db/migration/` | `V1__` … `V25__` SQL migrations (outbox and its indexes/attempt and send counts, meeting, standup, agenda dispatch, agent session/turn history, user command roles, MCP tool call history, CVE tables and indexes, data fixes, Google Calendar connection/OAuth state and mirror queue) — see `db/migration/AGENTS.md` |
+| `db/migration/` | `V1__` … `V26__` SQL migrations (outbox and its indexes/attempt and send counts, meeting, standup, agenda dispatch, agent session/turn history, user command roles, MCP tool call history, CVE tables and indexes, data fixes, Google Calendar connection/OAuth state and mirror queue, the `/ask` turn ledger) — see `db/migration/AGENTS.md` |
 | `k8s/` | `deployment.yaml`, `service.yaml`, `configmap.yaml`, `secret.yaml` + `route/` (`ingress.yaml`, `httpRoute.yaml`) — see `k8s/README.md` (see `k8s/AGENTS.md`) |
 | `cdc/docker-compose/` | Local Debezium + MariaDB stack (`docker-compose.yml`, `debezium/connect_mariadb.sh`, `mariadb/my.cnf`) — see its `README.md` |
 | `cdc/k8s/yamls/mariadb/` | In-cluster MariaDB StatefulSet, service, config, and init job |
@@ -38,8 +38,8 @@ stand up change-data-capture locally and in-cluster.
   `ddl-auto: update` to create base tables, then the `V*` scripts patch them. Prod runs `ddl-auto: none`.
   So: a new migration must be additive and safe against a Hibernate-created base table, and any new
   entity needs *both* a JPA schema class and a migration.
-- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-08 is
-  `V25__`, so the next free one is `V26__`. Check the highest existing `V*` here and on `origin/main` before
+- **Never renumber or edit an applied migration.** The highest number in the working tree on 2026-10-13 is
+  `V26__`, so the next free one is `V27__`. Check the highest existing `V*` here and on `origin/main` before
   naming a new one.
 - **Prod config is env-var only** (`${SQL_DATABASE_URL}`, `${MCP_ENABLED}`, ...). Do not commit a literal
   secret or host here; add the variable to `k8s/configmap.yaml` / `k8s/secret.yaml` instead.
@@ -57,7 +57,10 @@ stand up change-data-capture locally and in-cluster.
   interaction transaction has committed and released its connection (`service/meeting/AGENTS.md`; only an inline
   caller outside the handler still holds two). An `@bot` mention that a full `agentTurnExecutor` rejects does hold
   two: its overload notice is a `REQUIRES_NEW` write inside `afterCompletion`, while the committed mention
-  transaction still holds its connection (measured on H2: two sessions there, one in a plain transaction). The relay executor, the schedulers and
+  transaction still holds its connection (measured on H2: two sessions there, one in a plain transaction). A
+  rejected `/ask` turn does not: its delivery listener, ledger writes and overload notice run on the relay's
+  dispatching thread with no surrounding transaction, one connection at a time, and the ask sweep runs on a
+  scheduler thread the same way (by reading the code; not measured). The relay executor, the schedulers and
   the CDC listener share the same pool. Size it as: concurrent meeting interactions + mentions rejected at the same
   moment x 2 + relay workers (`relayTaskExecutor`, 4) + scheduler threads (`spring.task.scheduling.pool.size`, 4) + CDC listener threads
   (1) + AI turns that use the DB (`agentTurnExecutor`, `slack.app.agent.turns.max-concurrent`, 4). Request threads are virtual,

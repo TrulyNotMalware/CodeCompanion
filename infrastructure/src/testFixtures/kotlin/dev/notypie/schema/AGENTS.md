@@ -1,10 +1,10 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-13 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/schema
 
 ## Purpose
-Builders for JPA schema rows and repository records in the meeting, calendar-connection, calendar-mirror, CVE, outbox, AI-usage and standup-stop lanes. `@DataJpaTest` specs persist
+Builders for JPA schema rows and repository records in the meeting, calendar-connection, calendar-mirror, CVE, outbox, AI-usage, `/ask` turn-ledger and standup-stop lanes. `@DataJpaTest` specs persist
 the schema builders on H2; `*ImplTest` and `:application` specs use the record builders as mocked-repository
 return values. Standup schema rows have no builder here: H2 specs persist the domain `createRoutine` through
 `StandupRepositoryImpl`; the one standup builder is the `RoutineStopCandidate` record.
@@ -19,6 +19,7 @@ return values. Standup schema rows have no builder here: H2 specs persist the do
 | `CveTopicCreator.kt` | `createCveTopicSchema(id = 0, topicKey = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)`; `createCveTopicDefinition(...)` same fields minus `id`; `createCveTopic(id = 1, ...)` record; `createCveSubscriptionSchema(id = 0, userId = "U_SUBSCRIBER", topicId = 1)`; `createCveDeliverySchema(id = 0, eventId = 1, userId = "U_SUBSCRIBER", status = SENT)` |
 | `CveEventCreator.kt` | `createCveEvent(id = 1, topicId = 1, externalId = "CVE-2026-0001", title, rawContent, aiSummary = null, summaryStatus = PENDING, retryCount = 0)` record; `createCveEventSchema(id = 0, topicId, externalId, title, rawContent, aiSummary, summaryStatus, claimToken = null, retryCount = 0, nextAttemptAt = null, publishedAt = null)`; `createRawSourceEvent(externalId = "R-0001", title, rawContent, publishedAt = null)` (`impl/cve/RawSourceEvent`); `createCveRecentEvent(topicDisplayName = "Java CVE", title, aiSummary = "Sample summary")`; `createUndeliveredCveEvent(eventId = 1, userId = "U_SUBSCRIBER", topicKey = "cve-java", topicDisplayName, title, aiSummary)` `createNvdPageJson(cveIds, totalResults)`: an NVD 2.0 response page with `totalResults` and one minimal vulnerability per id. |
 | `StandupRecordCreator.kt` | `createRoutineStopCandidate(routineUid = random, name = "Daily Standup", creatorId = TEST_USER_ID)` — the `lockActiveRoutinesByChannel` record, for `StandupRoutineOpsServiceTest` stubs and `StandupRepositoryImplTest` expectations |
+| `AgentAskTurnCreator.kt` | `createAgentAskTurnSchema(eventId = random, messageTs = TEST_MESSAGE_TS, status = PENDING, attemptCount = 0, runCount = 0, createdAt = 2026-10-12T09:00, updatedAt = createdAt)` — a real `AgentAskTurnSchema` row for the `/ask` turn ledger; `status` and the counters set up any state directly (the entity takes its timestamps from the constructor, so no JDBC ageing is needed). Used by `AgentAskTurnRepositoryTest` and the `:application` `AgentAskThreadStarterTest` |
 | `UsageHistoryCreator.kt` | Rows: `createAgentTurnHistorySchema(id = 0, sessionKey = "thread-1", requesterId = TEST_USER_ID, channel = TEST_CHANNEL_ID, idempotencyKey = random, outcome = COMPLETED, errorCode = null, inputTokens = 100, outputTokens = 10, durationMs = 1000)`; `createMcpToolCallHistorySchema(id = 0, toolName = "get_status", requesterId = TEST_USER_ID, sessionKey = "thread-1", turnId = random, resolvedRole = DEVELOPER, outcome = COMPLETED, errorCode = null, argumentsJson = null, durationMs = 50)`. Records: `createAgentTurnOutcomeUsage(outcome = COMPLETED, turns = 1, inputTokens = 100, outputTokens = 10, totalDurationMs = 1000)`, `createRequesterTurnUsage(requesterId = TEST_USER_ID, turns = 1, inputTokens = 100, outputTokens = 10)`, `createToolCallUsage(toolName = "get_status", outcome = COMPLETED, calls = 1)` |
 
 ## For AI Agents
@@ -66,7 +67,7 @@ schema builders; a builder default that violates a column constraint fails there
 - `infrastructure/src/main/kotlin/dev/notypie/repository/cve/` (+ `schema/`) — records, `CveTopicDefinition`,
   schema classes and enums
 - `infrastructure/src/main/kotlin/dev/notypie/repository/agent/` and `repository/mcp/` (+ `schema/`) — history schemas,
-  outcome enums and usage aggregate records; `domain/command/authorization/UserRole`
+  outcome enums and usage aggregate records, `AgentAskTurnSchema` / `AgentAskTurnStatus`; `domain/command/authorization/UserRole`
 - `infrastructure/src/main/kotlin/dev/notypie/impl/cve/RawSourceEvent`
 - `domain/meet/entity/RejectReason`; `domain/src/testFixtures/.../Constants.kt`
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # k8s
 
@@ -12,7 +12,7 @@ adds what an agent editing the manifests needs to know.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), the optional Google Calendar mirror (V24 then V25 by hand before the deploy plus the `meetings.idempotency_key` unique-index check, the Google Cloud OAuth client with the public HTTPS redirect URI, its keys, the callback route and the edge check, the `/calendar` slash command on the production Slack app (`/api/slash/calendar`), enabling through a restart that `Recreate` turns into an outage), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
+| `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), the `/ask` turn ledger note (V26 by hand before the deploy that writes it; no flag), the optional Google Calendar mirror (V24 then V25 by hand before the deploy plus the `meetings.idempotency_key` unique-index check, the Google Cloud OAuth client with the public HTTPS redirect URI, its keys, the callback route and the edge check, the `/calendar` slash command on the production Slack app (`/api/slash/calendar`), enabling through a restart that `Recreate` turns into an outage), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
 | `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 180` (its comment also lists the 0 s Google token revoke executor), `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name), `GOOGLE_CALENDAR_ENABLED` (`'false'`), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI` (placeholders) |

@@ -21,6 +21,12 @@ data class MessagePublishSuccessEvent(
     val messageTs: String = "",
 ) : OutboxUpdateEvent(eventId = eventId, status = MessageStatus.SUCCESS)
 
+data class MessageDeliveredEvent(
+    val eventId: UUID,
+    val commandDetailType: CommandDetailType,
+    val messageTs: String,
+)
+
 fun CommandOutput.toOutboxUpdateEvent(eventId: UUID): OutboxUpdateEvent =
     if (ok) {
         MessagePublishSuccessEvent(eventId = eventId, commandDetailType = commandDetailType, messageTs = messageTs)

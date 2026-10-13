@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
 
 # infrastructure/repository
 
@@ -16,7 +16,7 @@ subpackage of `@Entity` classes.
 | `meeting/` | Meetings, participants, agenda dispatch, reminders; `AddParticipantResult` (see `meeting/AGENTS.md`) |
 | `standup/` | Routines, sessions, per-member dispatches (see `standup/AGENTS.md`) |
 | `cve/` | Topics, events, subscriptions, deliveries, collect ledger (see `cve/AGENTS.md`) |
-| `agent/` | `agent_session` and `agent_turn_history` (token usage, duration, outcome) (see `agent/AGENTS.md`) |
+| `agent/` | `agent_session`, `agent_turn_history` (token usage, duration, outcome) and `agent_ask_turn`, the `/ask` turn ledger with its lease CAS statements (see `agent/AGENTS.md`) |
 | `authorization/` | `user_command_role` grants backing the role system (see `authorization/AGENTS.md`) |
 | `mcp/` | `mcp_tool_call_history` audit trail (see `mcp/AGENTS.md`) |
 | `calendar/` | `google_calendar_connection` (encrypted refresh token per Slack user), the single-use `google_oauth_state` ledger and the `meeting_calendar_event` mirror queue (claim-token plus `change_seq` generation CAS) (see `calendar/AGENTS.md`) |
@@ -46,7 +46,9 @@ subpackage of `@Entity` classes.
   ingestion, `resetStuck` for crash recovery, and a window claim in the collect ledger. The calendar mirror queue
   adds a generation counter (`change_seq`) to the claim token so a change during the external call is not lost,
   on the success path and on the failure path alike: `markSynced`, `markFailed` and `retryLater` all take the seq
-  the claim observed and leave the row `PENDING`, due at once, when a hook moved it meanwhile.
+  the claim observed and leave the row `PENDING`, due at once, when a hook moved it meanwhile. The `/ask` turn
+  ledger (`agent/AgentAskTurnRepository`) follows the outbox row instead: every transition is guarded by the
+  observed `attempt_count`, and a second counter (`run_count`) is the give-up budget.
 - **Host-only meeting authorization is enforced in SQL**, e.g. `WHERE m.meetingUid = :meetingUid AND
   m.publisherId = :requesterId`. That single atomic statement is the authorization check — never
   replace it with a load-then-compare, and never rely on the UI hiding a button.
@@ -75,7 +77,8 @@ Note that H2 will not catch MariaDB-specific native-SQL syntax — verify those 
   a transaction throws in every caller, HTTP or scheduler alike. Only `open class` Impls can take method-level
   annotations; `plugin.spring` does not open a class for them.
 - DTO projections (`dev.notypie.domain.*.dto`) cross the boundary outward; JPA schema classes never leak
-  into `application` or `domain`.
+  into `domain`, and into `application` only for the two tables it drives through their Spring Data interfaces
+  directly: `outbox/schema/OutboxMessage` and `agent/schema/AgentAskTurnSchema`.
 - `JPAJsonConverter` (in `infrastructure/common/`) for JSON columns; `PartitionKeyUtil` for Kafka
   partition keys.
 

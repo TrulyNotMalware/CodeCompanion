@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # test/kotlin/dev/notypie/application/service
 
@@ -16,7 +16,7 @@ matters, and asserts on the captured `OutboundMessage` effects — never on Slac
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `agent/` | `AgentConverseService` one-turn flow (see `agent/AGENTS.md`) |
+| `agent/` | `AgentConverseService` one-turn flow and its `AgentTurnLease` contract, `AgentAskThreadStarter` (the `/ask` turn ledger and resume sweep on H2), the usage report and the `/ask` slash service (see `agent/AGENTS.md`) |
 | `command/` | `CommandExecutor`, `CommandRoleResolver`, `RoleManagementService` (see `command/AGENTS.md`) |
 | `cve/` | CVE bootstrap plus `ai/`, `collector/`, `notification/`, `ops/`, `query/`, `subscription/` (see `cve/AGENTS.md`) |
 | `interaction/` | `SlackInteractionHandlerImpl` routing (see `interaction/AGENTS.md`) |
