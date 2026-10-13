@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
 
 # application/security
 
@@ -14,7 +14,7 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackRequestVerificationFilter.kt` | `OncePerRequestFilter` at `HIGHEST_PRECEDENCE + 10`. Constructor takes `AppConfig`, `Environment`, verifier, deduplicator, `MeterRegistry` and runs `requireUsableSigningSecret` (startup fails on an unresolved `${...}` placeholder in any profile, or on a blank secret unless `local` is the only active profile; the message names the active profiles, never the secret). Applies to every path under `/api/slack` and `/api/slash`, judged on the raw URI, the container-decoded `servletPath + pathInfo`, and Spring's per-segment-decoded path (path parameters stripped), each normalised (`..`/`.`, repeated slashes, trailing slash, lowercase). Order: blank secret (`local` alone) → pass through with a one-shot warning; `checkHeaders` fails (timestamp missing, not an integer or outside the tolerance; signature not `v0=` + 64 lower-case hex) → 401 without reading the body; body over 1 MiB → 413; bad signature → 401; non-events paths → chain; `/api/slack/events` → deduplicator admission. A retry answered 503 increments the `codecompanion.slack.retry.deferred` counter (`METRIC_DEFERRED_RETRIES`). `SlackHeaders` also carries `X-Slack-No-Retry` |
+| `SlackRequestVerificationFilter.kt` | `OncePerRequestFilter` at `HIGHEST_PRECEDENCE + 10`. Constructor takes `AppConfig`, `Environment`, verifier, deduplicator, `MeterRegistry` and runs `requireUsableSigningSecret` (startup fails on an unresolved `${...}` placeholder in any profile, or on a blank secret unless `local` is the only active profile; the message names the active profiles, never the secret). Applies to every path under `/api/slack` and `/api/slash`, judged on the raw URI, the container-decoded `servletPath + pathInfo`, and Spring's per-segment-decoded path (path parameters stripped), each normalised (`..`/`.`, repeated slashes, trailing slash, lowercase). Order: blank secret (`local` alone) → a request carrying an `Origin` header is answered 401 (logged with the path and the origin, its control characters replaced by `?` and cut to 200 characters), anything else passes through; the one-shot "verification is disabled" warning fires before that check, on the first unsigned request whether or not it is then rejected; `checkHeaders` fails (timestamp missing, not an integer or outside the tolerance; signature not `v0=` + 64 lower-case hex) → 401 without reading the body; body over 1 MiB → 413; bad signature → 401; non-events paths → chain; `/api/slack/events` → deduplicator admission. A retry answered 503 increments the `codecompanion.slack.retry.deferred` counter (`METRIC_DEFERRED_RETRIES`). `SlackHeaders` also carries `X-Slack-No-Retry` |
 | `SlackSignatureVerifier.kt` | `checkHeaders(timestamp, signature, tolerance)` — the body-free part (presence, freshness window — the skew is `Math.subtractExact(now, ts)` checked against `-tolerance..tolerance`, and an overflowing subtraction is `EXPIRED_TIMESTAMP`, because `abs(now - ts)` wrapped to a negative "fresh" value for `ts = Long.MIN_VALUE + now` —, `v0=[0-9a-f]{64}` shape → `MALFORMED_SIGNATURE`) that the filter runs before buffering; `verify(...)` = `checkHeaders` + the `v0=` HMAC-SHA256 over `v0:timestamp:body`; hex via the stdlib `ByteArray.toHexString()` (the only hex helper in the package) |
 | `SlackRetryDeduplicator.kt` | `SlackRequestFingerprint.of(method, requestPath, body)` (normalised path + SHA-256 of the raw body — never the timestamp/signature, which Slack recomputes per retry); sealed `SlackRetryAdmission` (`FirstAttempt(ticket)`, `Untracked`, `RetryOfInFlight`, `RetryOfCompleted`); `SlackRetryTicket(fingerprint, generation)`; `InMemorySlackRetryDeduplicator(clock, ttl = 10 min, maxEntries = 10_000)` with `admit` / `markCompleted(ticket)` / `markFailed(ticket)` over an IN_FLIGHT / COMPLETED map whose entries carry the generation of the admission that created them |
 | `CachedBodyHttpServletRequest.kt` | Wraps the request so the raw body can be read for signing *and* re-read by the controller; rebuilds the parameter map from the signed form body only — the query string is ignored by `getParameter` / `getParameterValues` / `getParameterMap` / `getParameterNames` and `getQueryString()` returns `null`, because Slack's signature does not cover the URL. Built only through `cacheWithinLimit(request)`, which returns `null` when `contentLengthLong` exceeds `MAX_BODY_BYTES` (1 MiB) or a bounded `readNBytes(MAX_BODY_BYTES + 1)` overflows (chunked bodies) |
@@ -53,7 +53,19 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   (and its unauthenticated actuator endpoints) is unreachable from the network even when `./run app.jar` is
   started without `-e` (the script's default environment is `local`). Socket Mode is an outbound WebSocket and
   the local sidecar calls back on loopback, so nothing needs the port from outside. The filter spec pins the
-  binding.
+  binding. Loopback alone does not stop a page in the developer's browser (a cross-site form POST to
+  `/api/slash/*` or to `/api/slack/interaction`, which reads a form `payload` field and declares no `consumes`,
+  needs no preflight, and DNS rebinding reaches the JSON events endpoint), so the blank-secret branch answers any
+  request carrying an `Origin` header with 401: every current browser sends it on a cross-site or same-origin POST
+  (form submit, `fetch`, `sendBeacon`; DNS rebinding included; Firefox 69 and older and IE11 omitted it on
+  cross-site form POSTs), Slack does not, and curl sends it
+  only when given explicitly, so local curl testing and Socket Mode are unaffected while a replayed browser request
+  (`curl -H 'Origin: …'`) is refused on purpose.
+- **The `Origin` check holds only while every Slack mapping is POST.** Every mapping under `/api/slack/**` and
+  `/api/slash/**` is a `@PostMapping`, so Spring answers GET and HEAD with 405. A browser can send a GET without
+  `Origin` (`<img src>`, link navigation, a 301/302/303 redirect of a cross-site POST), so a GET mapping under
+  those prefixes would reach the controller unsigned under `local` — keep them POST-only, or extend the
+  blank-secret check to the request method first.
 - **Cheap rejection first — against scanners, not against an attacker.** Header presence, timestamp freshness
   and signature shape are checked before the body is read, so requests without plausible Slack headers cost no
   buffering. The check is not authentication: the format is public (current epoch seconds + `v0=` + any 64
