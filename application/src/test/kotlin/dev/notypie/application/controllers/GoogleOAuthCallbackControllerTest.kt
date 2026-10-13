@@ -111,6 +111,43 @@ class GoogleOAuthCallbackControllerTest :
                     response.contentAsString shouldNotContain "s<i>"
                 }
             }
+
+            `when`("the Google account is not the requester's Slack account") {
+                every { callback.completeConnection(code = "c<b>", state = "s<i>", error = null) } returns
+                    CalendarConnectionOutcome.ACCOUNT_MISMATCH
+                val response = callback("code" to "c<b>", "state" to "s<i>")
+
+                then("a 403 fixed-text page asks for the Slack profile's e-mail and a new link, never cached") {
+                    response.status shouldBe 403
+                    response.contentType shouldStartWith "text/html"
+                    response.getHeader("Cache-Control") shouldBe "no-store"
+                    response.contentAsString shouldContain "This Google account does not match your Slack account"
+                    response.contentAsString shouldContain "Sign in to Google with the e-mail address of your Slack"
+                    response.contentAsString shouldContain "/calendar connect"
+                    response.contentAsString shouldNotContain "@"
+                }
+
+                then("no request parameter is echoed") {
+                    response.contentAsString shouldNotContain "c<b>"
+                    response.contentAsString shouldNotContain "s<i>"
+                }
+            }
+
+            `when`("the requester's Slack e-mail could not be read") {
+                every { callback.completeConnection(code = "c", state = "s", error = null) } returns
+                    CalendarConnectionOutcome.IDENTITY_UNAVAILABLE
+                val response = callback("code" to "c", "state" to "s")
+
+                then("a 503 fixed-text page says the link is spent and points at connect, never cached") {
+                    response.status shouldBe 503
+                    response.contentType shouldStartWith "text/html"
+                    response.getHeader("Cache-Control") shouldBe "no-store"
+                    response.contentAsString shouldContain "Your Slack e-mail could not be checked"
+                    response.contentAsString shouldContain "This link cannot be used again"
+                    response.contentAsString shouldContain "/calendar connect"
+                    response.contentAsString shouldNotContain "@"
+                }
+            }
         }
 
         given("a callback that fails outside the classified outcomes") {

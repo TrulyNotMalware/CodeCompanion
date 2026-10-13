@@ -29,11 +29,13 @@ data class GoogleTokenGrant(
     val scopes: Set<String>,
     val subject: String?,
     val email: String?,
+    val emailVerified: Boolean,
 ) {
     fun grants(scope: String): Boolean = scope in scopes
 
     override fun toString(): String =
-        "GoogleTokenGrant(expiresInSeconds=$expiresInSeconds, scopes=$scopes, subject=$subject, email=$email)"
+        "GoogleTokenGrant(expiresInSeconds=$expiresInSeconds, scopes=$scopes, subject=$subject, email=$email, " +
+            "emailVerified=$emailVerified)"
 }
 
 data class GoogleAccessToken(
@@ -115,6 +117,7 @@ class GoogleOAuthClient(
             scopes = grantedScopes(body = body),
             subject = claims?.subject,
             email = claims?.email,
+            emailVerified = claims?.emailVerified ?: false,
         )
     }
 
@@ -246,6 +249,7 @@ class GoogleOAuthClient(
             IdTokenClaims(
                 subject = payload.path("sub").asString("").takeIf { it.isNotBlank() },
                 email = payload.path("email").asString("").takeIf { it.isNotBlank() },
+                emailVerified = payload.path("email_verified").asBoolean(false),
             )
         } catch (exception: IllegalArgumentException) {
             log.debug(exception) { "id_token payload is not base64url" }
@@ -259,6 +263,7 @@ class GoogleOAuthClient(
     private data class IdTokenClaims(
         val subject: String?,
         val email: String?,
+        val emailVerified: Boolean,
     )
 
     private fun formEncode(vararg fields: Pair<String, String>): String =

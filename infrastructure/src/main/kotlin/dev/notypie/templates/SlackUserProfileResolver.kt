@@ -1,6 +1,7 @@
 package dev.notypie.templates
 
 import dev.notypie.impl.command.RestRequester
+import dev.notypie.impl.command.dto.SlackUserInfoDto
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Clock
@@ -107,4 +108,31 @@ class SlackUserProfileResolver(
                     thumbnailUrl = dto.profile.imageSize24.takeIf { it.isNotBlank() },
                 )
             }
+}
+
+class SlackUserEmailResolver(
+    private val restRequester: RestRequester,
+    private val slackApiToken: String,
+) {
+    fun resolve(userId: String): String? {
+        val response =
+            restRequester
+                .safeGet(
+                    uri = "users.info?user={user}",
+                    authorizationHeader = slackApiToken,
+                    responseType = SlackUserInfoDto::class.java,
+                    uriVariables = mapOf("user" to userId),
+                ).getOrElse { exception ->
+                    logger.warn { "users.info failed for $userId: ${exception.javaClass.simpleName}" }
+                    return null
+                }.body
+        if (response == null || !response.ok) {
+            logger.warn { "users.info answered ok=false for $userId: error=${response?.error}" }
+            return null
+        }
+        return response.user
+            ?.profile
+            ?.email
+            ?.takeIf { it.isNotBlank() }
+    }
 }

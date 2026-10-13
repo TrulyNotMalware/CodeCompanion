@@ -19,7 +19,7 @@
 #                                              SLACK_CALENDAR_COMMAND / SLACK_ASK_COMMAND,
 #                                              CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY
 #                                              (SIDECAR_PROVIDER=claude)
-#   ~/.config/codecompanion/local-secrets.env  generated (0600), missing keys appended: sidecar
+#   ~/.config/codecompanion/local-secrets.env  generated, kept at 0600, missing keys appended: sidecar
 #                                              bearer, MCP signing secret, Google token key
 #   INFRA_MARIADB_ENV                          default ~/infra/mariadb/.env: BIND_IP,
 #                                              MARIADB_ROOT_PASSWORD
@@ -63,6 +63,7 @@ ensure_secrets() {
   local key value
   (
     umask 077
+    if [ -f "$SECRETS_ENV" ]; then chmod 600 "$SECRETS_ENV"; fi
     for key in SIDECAR_BEARER_SECRET MCP_SIGNING_SECRET GOOGLE_TOKEN_ENCRYPTION_KEY; do
       if grep -q "^$key=" "$SECRETS_ENV" 2>/dev/null; then continue; fi
       case "$key" in

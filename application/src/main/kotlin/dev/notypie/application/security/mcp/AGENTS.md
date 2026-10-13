@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
 
 # application/security/mcp
 
@@ -36,7 +36,9 @@ token before the MCP protocol sees the request, and the transport provider's con
   `slack.app.mcp.allow-remote=true` plus a network policy — the token alone is not the perimeter.
 - Expiry uses `exp + clockSkew` on the verifier's clock only; `iat` is informational. TTL and skew come
   from `slack.app.mcp.token-ttl-seconds` / `clock-skew-seconds`, the secret from
-  `slack.app.mcp.signing-secret` (boot fails when MCP is enabled with a blank secret).
+  `slack.app.mcp.signing-secret` (boot fails when MCP is enabled with a blank secret or one shorter than
+  32 characters — `MIN_SIGNING_SECRET_LENGTH` in `McpServerConfiguration`; the message names the key and the
+  minimum, never the value; `scripts/local-container.sh` generates 64 hex characters).
 - Role decisions never belong here — `mcp/McpToolGate` resolves the role from DB/config per call. A token
   outlives a revoke: the next call is denied on every replica, because the resolver never caches an elevated
   role.

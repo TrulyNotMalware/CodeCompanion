@@ -93,7 +93,8 @@ _type: guide · updated: 2026-10-13_
 1. orbstack MariaDB(`code_companion`)와 3-broker Kafka + Debezium이 떠 있어야 한다. `local`은 CDC 모드라 Kafka 없이는 뜨지 않는다.
 2. **별도의 개발용 Slack 앱**에서 Socket Mode를 켜고 `connections:write` 스코프의 app-level token을 발급한다. Socket Mode는
    앱 전체 설정이라 운영 앱에 켜면 Request URL이 비활성화된다.
-3. `SLACK_API_TOKEN`, `SLACK_APP_TOKEN`을 env로 주고 `./gradlew :application:bootRun --args='--spring.profiles.active=local'`
+3. `SLACK_API_TOKEN`, `SLACK_APP_TOKEN`, `DATABASE_USER_PWD`(기본값 없음 — 2026-10-13 공개 저장소에 커밋돼 있던 기본값 제거,
+   `ProfileYamlTest`가 고정)를 env로 주고 `./gradlew :application:bootRun --args='--spring.profiles.active=local'`
    을 실행한다. 명령 이름이 `/meetup`·`/standup`·`/calendar`·`/ask`가 아니면 `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` /
    `SLACK_CALENDAR_COMMAND` / `SLACK_ASK_COMMAND`로 매핑한다.
 4. 로그의 `Slack Socket Mode receiver connected`가 성공 신호다.
@@ -162,7 +163,8 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
    - `TURN_TIMEOUT_SEC`(사이드카 기본 90)는 앱의 `slack.app.agent.sidecar.request-timeout-seconds`(`local` yaml 120) 이하로
      둔다. 사이드카 쪽 타임아웃이 먼저 터져야 앱이 끊긴 스트림 대신 타임아웃 응답을 받는다.
 5. 앱은 A의 env에 더해 MCP 서명 시크릿을 env `SLACK_APP_MCP_SIGNINGSECRET`(`slack.app.mcp.signing-secret`의 relaxed binding)로
-   주고, 다음 플래그로 띄운다. `local` yaml은 MCP를 켜지 않으므로 플래그가 필요하다.
+   주고, 다음 플래그로 띄운다. `local` yaml은 MCP를 켜지 않으므로 플래그가 필요하다. 시크릿은 32자 이상이어야 한다
+   (`McpServerConfiguration`이 더 짧으면 기동을 거부한다, 2026-10-13); `openssl rand -hex 32`가 64자를 만든다.
 
    ```bash
    --slack.app.mcp.enabled=true --spring.ai.mcp.server.enabled=true --spring.ai.mcp.server.protocol=STREAMABLE
@@ -211,6 +213,9 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
 터널은 필요 없다 — 동의 링크를 앱이 도는 머신의 브라우저에서 열면 된다. 명령은 2026-10-08부터 `/meetup`의 서브커맨드가 아니라
 자체 슬래시 명령이다: Socket Mode 개발 앱(A)의 *Slash Commands*에 `/calendar`(설명 예: "Link your Google Calendar", usage hint
 `connect | disconnect | status`)를 추가한다. Socket Mode라 Request URL은 필요 없다. 다른 이름을 쓰면 `SLACK_CALENDAR_COMMAND`로 맞춘다.
+같은 앱에 봇 scope `users:read`와 `users:read.email`을 함께 추가하고 다시 설치한다 — 연결은 동의한 Google 계정의 검증된 이메일이
+`users.info`로 읽은 슬랙 이메일과 같을 때만 되고([decisions.md](decisions.md) #41), 슬랙 이메일을 읽지 못하면 "Your Slack e-mail
+could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2의 테스트 사용자도 슬랙과 같은 이메일의 Google 계정이어야 한다.
 
 1. Google Cloud 프로젝트에서 **Google Calendar API**를 사용 설정한다. 꺼져 있으면 Calendar 호출이 403
    `accessNotConfigured`/`SERVICE_DISABLED`로 끝나고, 워커는 행을 실패시키지 않은 채 틱마다 ERROR 한 줄을 남기고 멈춘다(DM 없음).
@@ -285,8 +290,9 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
   픽스처 토큰은 `xoxb-test…`처럼 룰에 안 걸리는 가짜를 유지한다.
 - `scripts/local-container.sh`의 입력 파일은 모두 저장소 밖에 있고 저장소에는 키 이름만 남긴다(목록은
   [`scripts/AGENTS.md`](../../scripts/AGENTS.md)).
-- `scripts/mcp-smoke.sh`는 `MCP_SIGNING_SECRET` env를 요구하며 `slack.app.mcp.signing-secret`과 같아야 한다. 토큰 포맷
-  (`ScopedTurnTokenCodec`)이 바뀌면 스크립트도 같은 커밋에서 바꾼다.
+- `scripts/mcp-smoke.sh`는 `MCP_SIGNING_SECRET` env를 요구하며 `slack.app.mcp.signing-secret`과 같아야 한다(32자 이상). 토큰 포맷
+  (`ScopedTurnTokenCodec`)이 바뀌면 스크립트도 같은 커밋에서 바꾼다. HMAC은 perl `Digest::SHA`가 env에서 키를 읽어 계산하므로
+  키가 프로세스 인자 목록에 드러나지 않는다(2026-10-13).
 
 ## CI/CD 요약
 
@@ -385,7 +391,8 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
 - `gradle-config/apply.sh`, `gradle-config/gradle-{macos,linux,common,ci}.properties`, `gradle-config/README.md`
 - `application/build.gradle.kts`, `infrastructure/build.gradle.kts`, `application/Dockerfile`
 - `application/src/main/resources/application.yaml`, `application-{local,slack-live,dev,prod}.yaml`, `db/migration/V1__…`~`V22__…`,
-  `k8s/**`, `cdc/**`; `infrastructure/src/test/resources/application.yaml`
+  `k8s/**`, `cdc/**`; `infrastructure/src/test/resources/application.yaml`;
+  `application/src/test/kotlin/dev/notypie/application/configurations/ProfileYamlTest.kt`
 - `application/src/main/kotlin/dev/notypie/application/configurations/AppConfig.kt`, `CveConfiguration.kt`,
   `conditions/Conditions.kt`, `socket/SocketModeReceiver.kt`, `security/SlackRequestVerificationFilter.kt`
 - `.github/workflows/{lint,simple_test_action,security_check,deploy_action}.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`

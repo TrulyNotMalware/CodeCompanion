@@ -75,9 +75,8 @@ features:
 
 oauth_config:
   scopes:
-    # The app calls chat.postMessage, chat.postEphemeral, chat.update, views.open and users.profile.get,
+    # The app calls chat.postMessage, chat.postEphemeral, chat.update, views.open, users.profile.get and users.info,
     # and receives app_mention. DMs are posted with `channel = <user id>`.
-    # users:read becomes necessary only if per-member timezone lookup is added.
     bot:
       - app_mentions:read
       - chat:write
@@ -85,6 +84,10 @@ oauth_config:
       - im:write
       # users.profile.get: publisher name and avatar on meeting invitations; without it the bare mention is shown.
       - users.profile:read
+      # users.info: the user's e-mail, which /calendar connect compares with the Google account. Slack requires
+      # users:read.email to be requested together with users:read; without both, no calendar connects.
+      - users:read
+      - users:read.email
 
 settings:
   event_subscriptions:

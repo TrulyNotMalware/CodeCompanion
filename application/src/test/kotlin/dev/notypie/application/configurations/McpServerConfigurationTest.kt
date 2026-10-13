@@ -11,6 +11,8 @@ import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.mockk
@@ -46,7 +48,10 @@ class McpServerConfigurationTest :
                 .withBean(CveSubscriptionService::class.java, { mockk(relaxed = true) })
                 .withBean(CveLatestQueryService::class.java, { mockk(relaxed = true) })
                 .withBean(AgentUsageReportService::class.java, { mockk(relaxed = true) })
-                .withPropertyValues("slack.app.mcp.enabled=true", "slack.app.mcp.signing-secret=mcp-test-secret")
+                .withPropertyValues(
+                    "slack.app.mcp.enabled=true",
+                    "slack.app.mcp.signing-secret=mcp-test-secret-mcp-test-secret-",
+                )
 
         given("the MCP server enabled") {
             `when`("the streamable HTTP transport is built") {
@@ -63,6 +68,23 @@ class McpServerConfigurationTest :
                         mcpMapper.readValue("""{"name":"tool","count":2}""", McpMapperProbe::class.java) shouldBe
                             McpMapperProbe(name = "tool", count = 2)
                     }
+                }
+            }
+
+            `when`("the signing secret is one character shorter than the 32-character minimum") {
+                val shortSecret = "mcp-test-secret-mcp-test-secret"
+
+                then("startup fails naming the property and the minimum, never the value") {
+                    contextRunner
+                        .withPropertyValues("slack.app.mcp.signing-secret=$shortSecret")
+                        .run { context ->
+                            val messages =
+                                generateSequence<Throwable>(checkNotNull(context.startupFailure)) { it.cause }
+                                    .map { it.message.orEmpty() }
+                                    .joinToString()
+                            messages shouldContain "slack.app.mcp.signing-secret must be at least 32 characters"
+                            messages shouldNotContain shortSecret
+                        }
                 }
             }
         }

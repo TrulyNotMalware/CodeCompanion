@@ -27,6 +27,8 @@ import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.Duration
 
+private const val MIN_SIGNING_SECRET_LENGTH = 32
+
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.mcp", name = ["enabled"], havingValue = "true")
 class McpServerConfiguration {
@@ -34,6 +36,9 @@ class McpServerConfiguration {
     fun scopedTurnTokenCodec(appConfig: AppConfig, clock: Clock): ScopedTurnTokenCodec {
         require(appConfig.mcp.signingSecret.isNotBlank()) {
             "slack.app.mcp.signing-secret must be set when MCP is enabled"
+        }
+        require(appConfig.mcp.signingSecret.length >= MIN_SIGNING_SECRET_LENGTH) {
+            "slack.app.mcp.signing-secret must be at least $MIN_SIGNING_SECRET_LENGTH characters when MCP is enabled"
         }
         return ScopedTurnTokenCodec(
             signingSecret = appConfig.mcp.signingSecret,

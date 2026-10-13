@@ -259,6 +259,15 @@ jobs:
             echo "::error::Could not read the current Deployment: $(cat "$err_file")"
             exit 1
           fi
+          # A newline in a value would forge more GITHUB_OUTPUT lines; only these shapes reach the rollback.
+          if ! [[ "$PREVIOUS_REVISION" =~ ^[0-9]+$ || "$PREVIOUS_REVISION" == none ]]; then
+            echo "::error::The Deployment's revision annotation is not a number; refusing to record it."
+            exit 1
+          fi
+          if ! [[ "$PREVIOUS_IMAGE" =~ ^[A-Za-z0-9._:/@-]+$ ]]; then
+            echo "::error::The Deployment's container image is not a plain image reference; refusing to record it."
+            exit 1
+          fi
           echo "previous-revision=$PREVIOUS_REVISION" >> $GITHUB_OUTPUT
           echo "previous-template=$PREVIOUS_TEMPLATE" >> $GITHUB_OUTPUT
           echo "previous-image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
@@ -396,10 +405,11 @@ jobs:
       - name: Rollback on failure
         id: rollback
         if: failure() && (steps.apply.outcome == 'failure' || steps.rollout.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.health.outcome == 'failure')
+        env:
+          PREVIOUS_REVISION: ${{ steps.backup.outputs.previous-revision }}
+          PREVIOUS_TEMPLATE: ${{ steps.backup.outputs.previous-template }}
+          PREVIOUS_IMAGE: ${{ steps.backup.outputs.previous-image }}
         run: |
-          PREVIOUS_REVISION="${{ steps.backup.outputs.previous-revision }}"
-          PREVIOUS_TEMPLATE="${{ steps.backup.outputs.previous-template }}"
-
           if [ -z "$PREVIOUS_REVISION" ] || [ "$PREVIOUS_REVISION" = "none" ]; then
             echo "No previous revision recorded (first deploy); nothing to roll back."
             echo "result=not rolled back" >> $GITHUB_OUTPUT
@@ -433,7 +443,7 @@ jobs:
           echo "result=rollback failed" >> $GITHUB_OUTPUT
           kubectl rollout undo deployment/${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} --to-revision="$PREVIOUS_REVISION"
           kubectl rollout status deployment ${{ env.K8S_DEPLOYMENT_NAME }} -n ${{ env.K8S_NAMESPACE }} --timeout=${{ env.DEPLOYMENT_ROLLOUT_TIMEOUT }}
-          echo "Rolled back to the template of revision $PREVIOUS_REVISION (image: ${{ steps.backup.outputs.previous-image }})."
+          echo "Rolled back to the template of revision $PREVIOUS_REVISION (image: $PREVIOUS_IMAGE)."
           echo "result=rolled back" >> $GITHUB_OUTPUT
 
       - name: Update deployment status on failure

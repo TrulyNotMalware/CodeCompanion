@@ -18,6 +18,7 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.TokenCipher
+import dev.notypie.impl.command.RestRequester
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
 import dev.notypie.repository.calendar.MeetingCalendarEventRepository
@@ -57,6 +58,7 @@ class CalendarConfigurationTest :
                 .withBean(GoogleOAuthStateRepository::class.java, { mockk(relaxed = true) })
                 .withBean(MeetingCalendarEventRepository::class.java, { mockk(relaxed = true) })
                 .withBean(MeetingRepository::class.java, { mockk(relaxed = true) })
+                .withBean(RestRequester::class.java, { mockk() })
                 .withBean("entityManagerFactory", Any::class.java, { Any() })
 
         val fullyConfigured =

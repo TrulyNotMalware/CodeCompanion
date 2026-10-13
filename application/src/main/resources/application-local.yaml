@@ -11,7 +11,7 @@ spring:
     driver-class-name: org.mariadb.jdbc.Driver
     url: ${DATABASE_URL:jdbc:mariadb://localhost:3306/code_companion}
     username: ${DATABASE_USER_NAME:root}
-    password: ${DATABASE_USER_PWD:root_password}
+    password: ${DATABASE_USER_PWD}
     hikari:
       transaction-isolation: TRANSACTION_REPEATABLE_READ
       maximum-pool-size: 20

@@ -29,6 +29,19 @@ class ProfileYamlTest :
             }
         }
 
+        given("the local profile, which is committed to a public repository") {
+            val yaml = profile(name = "local")
+
+            `when`("its datasource password is read") {
+                val passwordHasNoDefault =
+                    yaml.getProperty("spring.datasource.password").toString() == "\${DATABASE_USER_PWD}"
+
+                then("the password comes from the environment with no committed default") {
+                    passwordHasNoDefault shouldBe true
+                }
+            }
+        }
+
         given("the prod and dev profiles") {
             `when`("their actuator exposure is read") {
                 val exposures =

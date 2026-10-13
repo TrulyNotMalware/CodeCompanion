@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
 
 # .github
 
@@ -149,7 +149,12 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 - **Rollback:** `Backup current deployment` reads the Deployment once as JSON and records its
   `deployment.kubernetes.io/revision`, a sha256 of `.spec.template` (`jq -cS`, so key order does not matter) and
   the image (for the log). `NotFound` records `none` (first deploy); any other lookup error fails the step before
-  anything is applied, instead of silently disabling the rollback. On failure the rollback step re-reads the
+  anything is applied, instead of silently disabling the rollback. So does a revision that is not `^[0-9]+$` or
+  `none`, or an image that is not `^[A-Za-z0-9._:/@-]+$`: both are read from the cluster and written line-wise to
+  `$GITHUB_OUTPUT`, where a newline would forge further outputs, and the error never echoes the value. The rollback
+  step receives the three outputs through its `env:` block (`PREVIOUS_REVISION`, `PREVIOUS_TEMPLATE`,
+  `PREVIOUS_IMAGE`) and uses them only as quoted shell variables; never interpolate a cluster-derived value with
+  `${{ }}` into a `run:` script, where it becomes shell source. On failure the rollback step re-reads the
   Deployment (3 tries, 5s apart) and runs `kubectl rollout undo --to-revision=<recorded>` + `rollout status`
   when the template hash **or** the revision differs from the backup. The template is compared because the API
   server stores it synchronously on apply, while the revision annotation is written later by the controller (a

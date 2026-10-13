@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
 
 # scripts
 
@@ -35,9 +35,14 @@ the launcher that runs the `local` profile in containers for live testing.
 - `mcp-smoke.sh` keeps its optional session header as `${session_header[@]+"${session_header[@]}"}` (see the bash
   3.2 rule below) and keeps responses in a file or a variable before trimming or grepping them: `curl … | head -c N`
   under `pipefail` fails the script when the reader exits before the writer finishes.
-- `mcp-smoke.sh` uses `openssl` for base64url and HMAC, and `curl` with an explicit expected HTTP code or content
-  check per step (`grep -q` / `grep -Eq` on the saved body); its comment header states the exact invocation and
-  what each numbered step expects.
+- **No secret on a command line.** `mcp-smoke.sh` computes the HMAC with `perl -C0 -MDigest::SHA=hmac_sha256`,
+  which reads the key from `$ENV{MCP_SIGNING_SECRET}`; `openssl dgst -hmac <key>` put it in the process list. Both
+  give the same base64url signature for the same key and message. `-C0` stops a caller's `PERL_UNICODE` from
+  UTF-8-encoding the binary digest: with `PERL_UNICODE=SO` and no `-C0` the signature is wrong. The minted token (valid
+  300 s, possibly for a real admin id) reaches `curl` as `-H @"$auth_file"`, a `mktemp` file created under
+  `umask 077` and removed by the `EXIT` trap, never as `-H "Authorization: …"` (curl 7.55+). `openssl` stays for
+  base64url, and `curl` runs with an explicit expected HTTP code or content check per step (`grep -q` / `grep -Eq`
+  on the saved body); its comment header states the exact invocation and what each numbered step expects.
 
 #### `local-container.sh`
 - **It never starts or stops `~/infra`.** Before building it checks that MariaDB (3306) and Kafka (19092, 29092,
@@ -50,7 +55,7 @@ the launcher that runs the `local` profile in containers for live testing.
   | Input | Holds |
   |-------|-------|
   | `~/.config/codecompanion/local.env` | `SLACK_API_TOKEN`, `SLACK_APP_TOKEN` (required); optional `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`, `SLACK_MEETING_COMMAND` / `SLACK_STANDUP_COMMAND` / `SLACK_CALENDAR_COMMAND` / `SLACK_ASK_COMMAND`, and `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` for `SIDECAR_PROVIDER=claude` |
-  | `~/.config/codecompanion/local-secrets.env` | `SIDECAR_BEARER_SECRET`, `MCP_SIGNING_SECRET` (hex, 32 bytes), `GOOGLE_TOKEN_ENCRYPTION_KEY` (base64, 32 bytes); created 0600 inside a `umask 077` subshell, and a key missing from an existing file is appended alone |
+  | `~/.config/codecompanion/local-secrets.env` | `SIDECAR_BEARER_SECRET`, `MCP_SIGNING_SECRET` (hex, 32 bytes), `GOOGLE_TOKEN_ENCRYPTION_KEY` (base64, 32 bytes); created 0600 inside a `umask 077` subshell, and a key missing from an existing file is appended alone; every `up` first runs `chmod 600` on an existing file, **before** appending, because appending never changes the mode of a file created looser by hand and the new secret must not land in it while it is still readable |
   | `INFRA_MARIADB_ENV` (default `~/infra/mariadb/.env`) | `BIND_IP`, `MARIADB_ROOT_PASSWORD` (the app connects as `root` to `code_companion`) |
 
   Overridable from the calling shell: `SIDECAR_IMAGE` (default a local agent-sidecar build tag; build one from
@@ -96,6 +101,7 @@ the launcher that runs the `local` profile in containers for live testing.
   `local-container.sh` runs
 
 ### External
-`bash`, `curl`, `openssl`, `uuidgen`; `local-container.sh` also needs `docker`, `nc` and `git`.
+`bash`, `curl`, `openssl`, `uuidgen`; `mcp-smoke.sh` also needs `perl` with the core `Digest::SHA` module;
+`local-container.sh` also needs `docker`, `nc` and `git`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

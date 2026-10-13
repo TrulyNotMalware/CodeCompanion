@@ -1,5 +1,9 @@
 package dev.notypie.application.service.calendar
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.service.meeting.createH2DataSource
@@ -32,10 +36,12 @@ import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.schema.createCalendarConnection
 import dev.notypie.schema.createTestTokenCipher
+import dev.notypie.templates.SlackUserEmailResolver
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -52,6 +58,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.PlatformTransactionManager
@@ -89,6 +96,7 @@ class CalendarConnectionServiceTest :
             scopes: Set<String> = calendarScopes,
             subject: String? = "sub-1",
             email: String? = "dev@example.com",
+            emailVerified: Boolean = true,
         ) = GoogleTokenGrant(
             accessToken = "ya29",
             refreshToken = refreshToken,
@@ -96,7 +104,20 @@ class CalendarConnectionServiceTest :
             scopes = scopes,
             subject = subject,
             email = email,
+            emailVerified = emailVerified,
         )
+
+        fun warningsDuring(block: () -> Unit): List<String> {
+            val logger = LoggerFactory.getLogger(CalendarConnectionService::class.java) as Logger
+            val appender = ListAppender<ILoggingEvent>().apply { start() }
+            logger.addAppender(appender)
+            try {
+                block()
+            } finally {
+                logger.detachAppender(appender)
+            }
+            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+        }
 
         class Harness(
             val connections: GoogleCalendarConnectionRepository = mockk(),
@@ -104,11 +125,17 @@ class CalendarConnectionServiceTest :
             val queue: MeetingCalendarEventRepository = mockk(),
             val meetings: MeetingRepository = mockk(),
             val oauth: GoogleOAuthClient = mockk(),
+            val emails: SlackUserEmailResolver = mockk(),
             cipher: TokenCipher,
             clock: Clock,
             appConfig: AppConfig,
             transactionManager: PlatformTransactionManager = createStubTransactionManager(),
+            slackEmail: String?,
         ) {
+            init {
+                every { emails.resolve(userId = TEST_USER_ID) } returns slackEmail
+            }
+
             val staged = mutableListOf<OutboundMessage>()
             val basicInfos = mutableListOf<CommandBasicInfo>()
             val revocations = mutableListOf<Any>()
@@ -129,6 +156,7 @@ class CalendarConnectionServiceTest :
                     queue = queue,
                     meetingRepository = meetings,
                     oauthClient = oauth,
+                    emailResolver = emails,
                     tokenCipher = cipher,
                     outboundStager = stager,
                     eventPublisher = publisher,
@@ -153,8 +181,17 @@ class CalendarConnectionServiceTest :
                 content.shouldBeInstanceOf<MessageContent.Text>().markdown
         }
 
-        fun harness(transactionManager: PlatformTransactionManager = createStubTransactionManager()): Harness =
-            Harness(cipher = cipher, clock = clock, appConfig = appConfig, transactionManager = transactionManager)
+        fun harness(
+            transactionManager: PlatformTransactionManager = createStubTransactionManager(),
+            slackEmail: String? = "dev@example.com",
+        ): Harness =
+            Harness(
+                cipher = cipher,
+                clock = clock,
+                appConfig = appConfig,
+                transactionManager = transactionManager,
+                slackEmail = slackEmail,
+            )
 
         given("`/calendar connect`") {
             fun connectHarness(existing: CalendarConnection?): Harness =
@@ -515,6 +552,139 @@ class CalendarConnectionServiceTest :
                     dm.target.id shouldBe TEST_USER_ID
                     with(h) { dm.markdown() shouldBe "Google Calendar connected as dev@example.com." }
                     h.revocations.shouldBeEmpty()
+                }
+
+                then("the Slack e-mail of the user the state was issued to is looked up once, after the exchange") {
+                    verifyOrder {
+                        h.oauth.exchangeCode(code = "good")
+                        h.emails.resolve(userId = TEST_USER_ID)
+                    }
+                    verify(exactly = 1) { h.emails.resolve(userId = any()) }
+                }
+            }
+
+            `when`("the Google e-mail differs from the Slack e-mail only in letter case") {
+                val storedToken = CapturingSlotHolder()
+                val h =
+                    harness(slackEmail = "dev@example.com")
+                        .withConsumedState()
+                        .savingConnection(storedToken = storedToken)
+                        .apply { every { oauth.exchangeCode(code = "good") } returns grant(email = "Dev@Example.COM") }
+
+                then("the accounts match and the user is connected") {
+                    h.service.completeConnection(code = "good", state = "ok", error = null) shouldBe
+                        CalendarConnectionOutcome.CONNECTED
+                    cipher.decrypt(token = storedToken.slot.captured) shouldBe "1//fresh"
+                }
+            }
+
+            listOf(
+                Triple("another person's verified e-mail", grant(email = "attacker@example.com"), "different"),
+                Triple("an e-mail Google does not vouch for", grant(emailVerified = false), "unverified"),
+                Triple("no e-mail in the id_token", grant(email = null, emailVerified = false), "missing"),
+            ).forEach { (label, mismatched, reason) ->
+                `when`("the consent completes with $label") {
+                    val h =
+                        harness(slackEmail = "dev@example.com").withConsumedState().apply {
+                            every { oauth.exchangeCode(code = "victim") } returns mismatched
+                        }
+                    lateinit var outcome: CalendarConnectionOutcome
+                    val warnings =
+                        warningsDuring {
+                            outcome = h.service.completeConnection(code = "victim", state = "ok", error = null)
+                        }
+
+                    then("one WARN names the user id and reason=$reason, never an address") {
+                        warnings shouldHaveSize 1
+                        warnings.single() shouldContain "userId=$TEST_USER_ID"
+                        warnings.single() shouldContain "reason=$reason"
+                        warnings.single() shouldNotContain "@"
+                    }
+
+                    then("the outcome is ACCOUNT_MISMATCH and nothing is stored, staged or queued") {
+                        outcome shouldBe CalendarConnectionOutcome.ACCOUNT_MISMATCH
+                        verify(exactly = 0) {
+                            h.connections.saveActive(
+                                userId = any(),
+                                googleSubject = any(),
+                                googleEmail = any(),
+                                encryptedRefreshToken = any(),
+                                now = any(),
+                            )
+                        }
+                        verify(exactly = 0) { h.queue.enqueue(meetingId = any(), slackUserId = any(), now = any()) }
+                        h.staged.shouldBeEmpty()
+                    }
+
+                    then("nothing is revoked: the grant belongs to another account and a revoke is grant-wide") {
+                        verify(exactly = 0) { h.oauth.revoke(token = any()) }
+                        h.revocations.shouldBeEmpty()
+                    }
+                }
+            }
+
+            `when`("the Slack e-mail of the requester cannot be read") {
+                val h =
+                    harness(slackEmail = null).withConsumedState().apply {
+                        every { oauth.exchangeCode(code = "good") } returns grant()
+                    }
+                val outcome = h.service.completeConnection(code = "good", state = "ok", error = null)
+
+                then("the outcome is IDENTITY_UNAVAILABLE and nothing is stored, staged or revoked") {
+                    outcome shouldBe CalendarConnectionOutcome.IDENTITY_UNAVAILABLE
+                    verify(exactly = 0) {
+                        h.connections.saveActive(
+                            userId = any(),
+                            googleSubject = any(),
+                            googleEmail = any(),
+                            encryptedRefreshToken = any(),
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { h.oauth.revoke(token = any()) }
+                    h.staged.shouldBeEmpty()
+                    h.revocations.shouldBeEmpty()
+                }
+            }
+
+            `when`("looking up the Slack e-mail throws") {
+                val h =
+                    harness().withConsumedState().apply {
+                        every { oauth.exchangeCode(code = "good") } returns grant()
+                        every { emails.resolve(userId = TEST_USER_ID) } throws IllegalStateException("lookup broke")
+                    }
+
+                then("the exception escapes to the controller's 500 page and nothing is stored, staged or revoked") {
+                    shouldThrow<IllegalStateException> {
+                        h.service.completeConnection(code = "good", state = "ok", error = null)
+                    }.message shouldBe "lookup broke"
+                    verify(exactly = 0) {
+                        h.connections.saveActive(
+                            userId = any(),
+                            googleSubject = any(),
+                            googleEmail = any(),
+                            encryptedRefreshToken = any(),
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { h.oauth.revoke(token = any()) }
+                    h.staged.shouldBeEmpty()
+                    h.revocations.shouldBeEmpty()
+                }
+            }
+
+            `when`("another person's Google account also left the calendar scope unticked") {
+                val h =
+                    harness(slackEmail = "dev@example.com").withConsumedState().apply {
+                        every { oauth.exchangeCode(code = "victim") } returns
+                            grant(email = "attacker@example.com", scopes = setOf("openid", "email"))
+                    }
+                val outcome = h.service.completeConnection(code = "victim", state = "ok", error = null)
+
+                then("the mismatch wins over the scope denial, so the other account's grant is not revoked") {
+                    outcome shouldBe CalendarConnectionOutcome.ACCOUNT_MISMATCH
+                    verify(exactly = 0) { h.oauth.revoke(token = any()) }
+                    verify(exactly = 0) { h.connections.find(userId = any()) }
                 }
             }
 
@@ -908,7 +1078,7 @@ class CalendarConnectionServiceTest :
                 val storedToken = CapturingSlotHolder()
                 val replaced = createCalendarConnection(googleSubject = null, googleEmail = "Old@example.com")
                 val h =
-                    harness()
+                    harness(slackEmail = "new@example.com")
                         .withConsumedState()
                         .savingConnection(storedToken = storedToken, replaced = replaced)
                         .apply {

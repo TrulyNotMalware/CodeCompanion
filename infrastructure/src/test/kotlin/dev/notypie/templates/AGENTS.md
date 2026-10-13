@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-13 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/templates
 
 ## Purpose
 Specs for the Slack Block Kit builders in main `templates/`: element-level, block-level and full-template /
-modal-view JSON. Plain Kotest `BehaviorSpec`s; the only collaborator is a MockK `RestRequester` for the
-`users.profile.get` lookup. Modal JSON is validated by round-tripping it through the Slack SDK's `View`
+modal-view JSON, plus the two Slack user lookups in `SlackUserProfileResolver.kt`. Plain Kotest `BehaviorSpec`s; the
+only collaborator is a MockK `RestRequester` for the `users.profile.get` and `users.info` lookups. Modal JSON is validated by round-tripping it through the Slack SDK's `View`
 deserializer.
 
 ## Key Files
@@ -19,7 +19,8 @@ deserializer.
 | `SlackBlockLimitsTest.kt` | `splitSectionText`: text that fits comes back as one chunk; long text splits on line boundaries within the 2,900 budget and rejoins to the original; an over-long line wraps at spaces; more chunks than `maxSections` keeps that many and ends with `TRUNCATION_MARKER`; a code block cut by a boundary is closed and re-opened, and a boundary right before the closing fence yields no empty re-opened block; no cut splits a surrogate pair or an `&amp;` entity. `splitMessageText`: a 40,000-character answer with a code block across a cut gives bodies within `MESSAGE_BODY_BUDGET` with balanced fences, a fence-free answer rejoins exactly, too many parts keeps `maxMessages` and ends with the marker. `truncateSectionText` and `truncatePlainText` |
 | `SlackViewDslTest.kt` | `modal { … }` with two `plainTextInput`s serialized through `jsonMapper` and read back as a Slack SDK `View`: the one given `maxLength = 255` carries `max_length` 255 (and `multiline`), the one without has none |
 | `SlackMrkdwnTest.kt` | `escapeMrkdwn`: `<!channel>` and `<url\|label>` become literal, `< 2.3.1` survives as text, `&` first, emphasis unchanged, same result as `escapeMarkup`. `neutralizeBroadcastMentions`: `<!channel>`, `<!here>`, `<!everyone>`, `<!group>`, labelled forms and `<!subteam^…>` become literal; links, `<@U…>`, emphasis and `<!date^…>` survive |
-| `SlackUserProfileResolverTest.kt` | `SlackUserProfileResolver(restRequester, slackApiToken, clock, ttl, failureTtl, maxEntries)` with a MockK `RestRequester` and a local mutable `Clock`. Cases: a hit is cached (one lookup for two resolves) and the user id is passed as the `{user}` URI variable; blank display name falls back to the real name without an empty thumbnail; a failed lookup degrades to `<@id>` and is negative-cached for the 60 s failure TTL; an `ok = false` response behaves the same; an entry older than `ttl` is fetched again; at `maxEntries` an expired entry is evicted before a live one, and with none expired only the oldest entry goes Three threads missing the same user while the first lookup is held → one `users.profile.get` and the same view for all four; a lookup that throws releases its slot, so the next render asks again. |
+| `SlackUserEmailResolverTest.kt` | `SlackUserEmailResolver(restRequester, slackApiToken)` with a strict MockK `RestRequester` stubbed only for `uri = "users.info?user={user}"`, the bot token and `uriVariables = mapOf("user" to TEST_USER_ID)`; bodies are `createUserInfoResponseJson` / `createUserInfoErrorJson` decoded with the shared `jsonMapper`, and WARNs are captured with a Logback `ListAppender` on the `dev.notypie.templates` logger. A body with the e-mail and many unmodelled keys → the address, no WARN, and two resolves make two calls (no cache); no `email` key → `null`, no WARN (the caller logs); blank → `null`; `ok = false` with `missing_scope` → `null`, one WARN with the user id and `error=missing_scope`; a failed `Result` → `null`, one WARN with the user id and `RestClientException` but not the exception message |
+| `SlackUserProfileResolverTest.kt` | `SlackUserProfileResolver(restRequester, slackApiToken, clock, ttl, failureTtl, maxEntries)` with a MockK `RestRequester` and a local mutable `Clock`. Cases: a hit is cached (one lookup for two resolves) and the user id is passed as the `{user}` URI variable; blank display name falls back to the real name without an empty thumbnail; a `users.profile.get` body without an `email` key (`createUserProfileResponseJson(email = null)`) decoded with the shared `jsonMapper` still names the publisher (fails with `KotlinInvalidNullException` when `Profile.email` is non-null again); a failed lookup degrades to `<@id>` and is negative-cached for the 60 s failure TTL; an `ok = false` response behaves the same; an entry older than `ttl` is fetched again; at `maxEntries` an expired entry is evicted before a live one, and with none expired only the oldest entry goes Three threads missing the same user while the first lookup is held → one `users.profile.get` and the same view for all four; a lookup that throws releases its slot, so the next render asks again. |
 
 ## For AI Agents
 
@@ -38,7 +39,8 @@ deserializer.
   update the count in the same commit and say why in the `then` name.
 - `BlockKitLimitsGuardTest` lists only inputs production can produce. When a sender's bound changes (a new cap, a
   new `MessageContent`), change its case here; do not feed inputs past what the sender can emit.
-- `approvalTemplate` is the only path that calls `RestRequester` (through `SlackUserProfileResolver`); stub
+- Among the builders, `approvalTemplate` is the only path that calls `RestRequester` (through
+  `SlackUserProfileResolver`); `SlackUserEmailResolverTest` stubs `users.info` the same way. Stub
   `safeGet` with the exact `uri` / `authorizationHeader` / `responseType` / `uriVariables` (or `any()`) or the
   strict mock throws.
 

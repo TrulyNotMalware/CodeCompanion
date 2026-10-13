@@ -1,12 +1,15 @@
 package dev.notypie.templates
 
+import dev.notypie.common.jsonMapper
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createProfile
+import dev.notypie.impl.command.dto.createUserProfileResponseJson
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -126,6 +129,25 @@ class SlackUserProfileResolverTest :
                     resolver.resolve(userId = TEST_USER_ID) shouldBe
                         PublisherView(displayName = "Jun Ho", thumbnailUrl = null)
                 }
+            }
+        }
+
+        given("a users.profile.get body without an email key, as Slack sends it without users:read.email") {
+            val dto =
+                jsonMapper.readValue(
+                    createUserProfileResponseJson(displayName = "junho", email = null),
+                    SlackUserProfileDto::class.java,
+                )
+            val resolver =
+                SlackUserProfileResolver(
+                    restRequester = requesterReturning(Result.success(ResponseEntity.ok(dto))),
+                    slackApiToken = TEST_BOT_TOKEN,
+                )
+
+            then("the body still decodes, so the publisher is named instead of the bare mention") {
+                dto.profile.email.shouldBeNull()
+                resolver.resolve(userId = TEST_USER_ID) shouldBe
+                    PublisherView(displayName = "junho", thumbnailUrl = "https://example.com/img24.png")
             }
         }
 

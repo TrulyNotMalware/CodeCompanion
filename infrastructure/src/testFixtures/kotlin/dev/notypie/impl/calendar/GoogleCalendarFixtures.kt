@@ -2,6 +2,7 @@ package dev.notypie.impl.calendar
 
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.Base64
 import java.util.UUID
 
 fun createCalendarEventBody(
@@ -66,3 +67,19 @@ fun createGoogleTokenResponseJson(
         scope?.let { """"scope": "$it"""" },
         """"token_type": "Bearer"""",
     ).joinToString(separator = ", ", prefix = "{", postfix = "}")
+
+fun createGoogleIdToken(
+    subject: String? = "10769150350006150715113082367",
+    email: String? = "dev@example.com",
+    emailVerified: String? = "true",
+): String {
+    val encoder = Base64.getUrlEncoder().withoutPadding()
+    val header = encoder.encodeToString("""{"alg":"RS256"}""".toByteArray())
+    val claims =
+        listOfNotNull(
+            subject?.let { """"sub":"$it"""" },
+            email?.let { """"email":"$it"""" },
+            emailVerified?.let { """"email_verified":$it""" },
+        ).joinToString(separator = ",", prefix = "{", postfix = "}")
+    return "$header.${encoder.encodeToString(claims.toByteArray())}.signature"
+}

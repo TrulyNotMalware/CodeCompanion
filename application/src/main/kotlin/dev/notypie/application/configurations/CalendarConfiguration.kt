@@ -15,10 +15,12 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.TokenCipher
+import dev.notypie.impl.command.RestRequester
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
 import dev.notypie.repository.calendar.MeetingCalendarEventRepository
 import dev.notypie.repository.meeting.MeetingRepository
+import dev.notypie.templates.SlackUserEmailResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
@@ -169,6 +171,7 @@ class CalendarConfiguration(
         calendarEventRepository: MeetingCalendarEventRepository,
         meetingRepository: MeetingRepository,
         googleOAuthClient: GoogleOAuthClient,
+        restRequester: RestRequester,
         tokenCipher: TokenCipher,
         outboundStager: OutboundMessageStager,
         eventPublisher: EventPublisher,
@@ -182,6 +185,7 @@ class CalendarConfiguration(
             queue = calendarEventRepository,
             meetingRepository = meetingRepository,
             oauthClient = googleOAuthClient,
+            emailResolver = SlackUserEmailResolver(restRequester = restRequester, slackApiToken = appConfig.api.token),
             tokenCipher = tokenCipher,
             outboundStager = outboundStager,
             eventPublisher = eventPublisher,
