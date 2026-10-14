@@ -83,6 +83,16 @@ interface AgentTurnLease {
     }
 }
 
+class AgentTurnLeaseLostException(
+    message: String,
+) : IllegalStateException(message)
+
+private enum class Written {
+    POSTED,
+    SUPERSEDED,
+    FAILED,
+}
+
 class AgentConverseService(
     private val agentGateway: AgentGateway,
     private val agentSessionRepository: AgentSessionRepository,
@@ -184,18 +194,19 @@ class AgentConverseService(
             rejected
         }
 
-    fun abandon(event: AgentConverseRequestEvent, lease: AgentTurnLease): Boolean =
-        transactionTemplate
-            .runInTx {
-                eventPublisher.publishOne(
-                    event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
-                )
-                lease.abandon()
-            }.onFailure { exception ->
-                log.error(exception) {
+    fun abandon(event: AgentConverseRequestEvent, lease: AgentTurnLease): Boolean {
+        val written =
+            transactionTemplate
+                .runInTx {
+                    eventPublisher.publishOne(
+                        event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
+                    )
+                    lease.abandon()
+                }.reported(event = event, what = "abandon notice") {
                     "Failed to publish agent abandon notice idempotencyKey=${event.idempotencyKey}"
                 }
-            }.isSuccess
+        return written == Written.POSTED
+    }
 
     private fun discarded(event: AgentConverseRequestEvent, lease: AgentTurnLease) {
         if (lease.discarded()) {
@@ -238,34 +249,35 @@ class AgentConverseService(
             )
         val durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000L
 
-        when (result) {
-            is AgentTurnResult.Completed ->
-                publishAnswer(
-                    event = event,
-                    sessionKey = sessionKey,
-                    result = result,
-                    durationMs = durationMs,
-                    lease = lease,
-                )
+        val written =
+            when (result) {
+                is AgentTurnResult.Completed ->
+                    publishAnswer(
+                        event = event,
+                        sessionKey = sessionKey,
+                        result = result,
+                        durationMs = durationMs,
+                        lease = lease,
+                    )
 
-            is AgentTurnResult.Busy ->
-                publishBusy(event = event, sessionKey = sessionKey, durationMs = durationMs, lease = lease)
+                is AgentTurnResult.Busy ->
+                    publishBusy(event = event, sessionKey = sessionKey, durationMs = durationMs, lease = lease)
 
-            is AgentTurnResult.Failed -> {
-                log.error {
-                    "Agent turn failed sessionKey=$sessionKey code=${result.code} " +
-                        "message=${result.message} idempotencyKey=${event.idempotencyKey}"
+                is AgentTurnResult.Failed -> {
+                    log.error {
+                        "Agent turn failed sessionKey=$sessionKey code=${result.code} " +
+                            "message=${result.message} idempotencyKey=${event.idempotencyKey}"
+                    }
+                    publishFailure(
+                        event = event,
+                        sessionKey = sessionKey,
+                        result = result,
+                        durationMs = durationMs,
+                        lease = lease,
+                    )
                 }
-                publishFailure(
-                    event = event,
-                    sessionKey = sessionKey,
-                    result = result,
-                    durationMs = durationMs,
-                    lease = lease,
-                )
             }
-        }
-        recordMetrics(result = result, durationMs = durationMs)
+        recordMetrics(result = result, durationMs = durationMs, superseded = written == Written.SUPERSEDED)
     }
 
     private fun contextPrompt(payload: AgentConversePayload): String {
@@ -302,12 +314,12 @@ class AgentConverseService(
         result: AgentTurnResult.Completed,
         durationMs: Long,
         lease: AgentTurnLease,
-    ) {
+    ): Written {
         log.debug {
             "Agent turn completed sessionKey=$sessionKey inputTokens=${result.inputTokens} " +
                 "outputTokens=${result.outputTokens} durationMs=$durationMs idempotencyKey=${event.idempotencyKey}"
         }
-        transactionTemplate
+        return transactionTemplate
             .runInTx {
                 result.sessionId?.let {
                     agentSessionRepository.saveProviderSessionId(
@@ -350,10 +362,8 @@ class AgentConverseService(
                         ),
                 )
                 lease.settle()
-            }.onFailure { exception ->
-                log.error(exception) {
-                    "Failed to publish agent answer sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
-                }
+            }.reported(event = event, what = "answer") {
+                "Failed to publish agent answer sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
             }
     }
 
@@ -362,9 +372,9 @@ class AgentConverseService(
         sessionKey: String,
         durationMs: Long,
         lease: AgentTurnLease,
-    ) {
+    ): Written {
         val basicInfo = event.payload.responseBasicInfo
-        transactionTemplate
+        return transactionTemplate
             .runInTx {
                 val owed = lease.giveBack()
                 val notice =
@@ -403,10 +413,8 @@ class AgentConverseService(
                             "idempotencyKey=${event.idempotencyKey}"
                     }
                 }
-            }.onFailure { exception ->
-                log.error(exception) {
-                    "Failed to record agent busy turn idempotencyKey=${event.idempotencyKey}"
-                }
+            }.reported(event = event, what = "busy give-back") {
+                "Failed to record agent busy turn idempotencyKey=${event.idempotencyKey}"
             }
     }
 
@@ -428,10 +436,8 @@ class AgentConverseService(
                         ),
                 )
                 lease.settle()
-            }.onFailure { exception ->
-                log.error(exception) {
-                    "Failed to publish agent overload notice idempotencyKey=${event.idempotencyKey}"
-                }
+            }.reported(event = event, what = "overload notice") {
+                "Failed to publish agent overload notice idempotencyKey=${event.idempotencyKey}"
             }
     }
 
@@ -441,7 +447,7 @@ class AgentConverseService(
         result: AgentTurnResult.Failed,
         durationMs: Long,
         lease: AgentTurnLease,
-    ) {
+    ): Written =
         transactionTemplate
             .runInTx {
                 agentTurnHistoryRepository.record(
@@ -458,12 +464,9 @@ class AgentConverseService(
                     event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
                 )
                 lease.settle()
-            }.onFailure { exception ->
-                log.error(exception) {
-                    "Failed to publish agent failure notice idempotencyKey=${event.idempotencyKey}"
-                }
+            }.reported(event = event, what = "failure notice") {
+                "Failed to publish agent failure notice idempotencyKey=${event.idempotencyKey}"
             }
-    }
 
     private fun turnRecord(
         event: AgentConverseRequestEvent,
@@ -488,12 +491,28 @@ class AgentConverseService(
         )
     }
 
-    private fun recordMetrics(result: AgentTurnResult, durationMs: Long) {
+    private fun Result<*>.reported(event: AgentConverseRequestEvent, what: String, failure: () -> String): Written {
+        val exception = exceptionOrNull() ?: return Written.POSTED
+        if (exception is AgentTurnLeaseLostException) {
+            log.warn {
+                "Agent turn superseded; $what not posted idempotencyKey=${event.idempotencyKey} (${exception.message})"
+            }
+            return Written.SUPERSEDED
+        }
+        log.error(exception) { failure() }
+        return Written.FAILED
+    }
+
+    private fun recordMetrics(result: AgentTurnResult, durationMs: Long, superseded: Boolean) {
         val outcome =
-            when (result) {
-                is AgentTurnResult.Completed -> "completed"
-                is AgentTurnResult.Busy -> "busy"
-                is AgentTurnResult.Failed -> "failed"
+            if (superseded) {
+                "superseded"
+            } else {
+                when (result) {
+                    is AgentTurnResult.Completed -> "completed"
+                    is AgentTurnResult.Busy -> "busy"
+                    is AgentTurnResult.Failed -> "failed"
+                }
             }
         meterRegistry.counter(METRIC_TURNS, "outcome", outcome).increment()
         meterRegistry.timer(METRIC_TURN_DURATION, "outcome", outcome).record(Duration.ofMillis(durationMs))

@@ -4,6 +4,7 @@ import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.schema.MessageStatus
 import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -14,6 +15,7 @@ fun createOutboxMessage(
     payload: String = "{}",
     createdAt: LocalDateTime = LocalDateTime.now(),
     status: MessageStatus = MessageStatus.PENDING,
+    schemaVersion: Int = OutboxSchemaVersion.V2,
 ): OutboxMessage =
     OutboxMessage(
         eventId = eventId,
@@ -22,6 +24,7 @@ fun createOutboxMessage(
         transport = Transport.SLACK.name,
         payload = payload,
         createdAt = createdAt,
+        schemaVersion = schemaVersion,
     ).apply { updateMessageStatus(status = status) }
 
 fun createOutboxColumnMap(
