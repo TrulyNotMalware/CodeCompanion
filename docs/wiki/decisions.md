@@ -213,10 +213,20 @@ _type: decision · updated: 2026-10-14_
       `discarded`로 세고, 종료 때 `PENDING`으로 남긴 `/ask` 턴은 어느 쪽으로도 세지 않는다.
     - **남은 한계:** ① 리스너의 아웃박스 재조회가 세 번 모두 실패하고 뒤의 상태 쓰기가 성공하면 그 턴은 여전히 사라진다(질문은
       게시됐고 레저 행은 없다). ② lease 없는 폴백은 한 스레드에 두 번 답할 수 있다 — 레저 insert가 커밋됐는데 그 응답을 잃고 같은 리스너
-      호출의 나머지 시도도 실패한 경우, lease 없는 턴이 답하고 60초 뒤 스윕이 저장된 행을 다시 돌린다. ③ lease를 잃은 실행은 결과
-      트랜잭션 실패와 같은 ERROR로만 남고 메트릭은 그 실행을 `completed`로 센다(토큰 포함). ④ 스윕의 디코드에는 relay의
-      `OutboxSchemaVersion.SUPPORTED` 검사가 없어, 이 바이너리가 디코드하지 못하는 행은 안내 없이 `ABANDONED`가 된다. ⑤ 진행할 수 없는
-      행(이 JVM 큐에 있는 턴, 거절된 offer, 안내 쓰기가 실패한 포기)은 `updated_at`이 가장 오래돼 20건 배치의 앞자리를 계속 차지한다.
+      호출의 나머지 시도도 실패한 경우, lease 없는 턴이 답하고 60초 뒤 스윕이 저장된 행을 다시 돌린다. ③ (2026-10-14 해소) lease를 잃은 실행은 결과
+      트랜잭션 실패와 같은 ERROR로만 남고 메트릭은 그 실행을 `completed`로 셌다 → lease 쓰기가 `AgentTurnLeaseLostException`을 던지고, 다섯 결과
+      트랜잭션(`publishAnswer`·`publishBusy`·`publishFailure`·`publishOverloaded`·`abandon`)은 그 예외만 WARN "superseded"(스택 없음)로 남기며
+      `recordMetrics`는 `outcome=superseded`로 센다(토큰은 사이드카가 실제로 썼으므로 `agent.tokens`에 그대로 센다; 다른 실패는 예전처럼 ERROR·원래 outcome).
+      ④ (2026-10-14 해소) 스윕의 디코드에는 relay의 `OutboxSchemaVersion.SUPPORTED` 검사가 없어, 디코드에 실패한 행은 안내 없이 즉시
+      `ABANDONED`가 됐고, 이 바이너리가 모르는 버전의 행은 검사 없이 디코드됐다(jackson-databind 3.2.3은 `FAIL_ON_UNKNOWN_PROPERTIES`가 기본 false이고
+      코덱도 켜지 않으므로, 모르는 필드는 조용히 버려진다 — 예: V6 질문 행을 V6 이전 바이너리가 `fallback` 없이 디코드해 답한다. 이 수정은 과거
+      바이너리를 바꾸지 못하므로 그 롤백 시나리오 자체는 그대로다) → 이 바이너리부터는 스윕과 전달 리스너가 디코드 **전에** `row.schemaVersion in
+      SUPPORTED`를 보고, 미지원 버전·`OutboundMessageCodecException`인 행은 포기하지 않고 스윕마다 ERROR만 남기며 쓰기·집계 없이 보류하다가
+      포기 조건(5회/1시간)에서 안내 없이 `ABANDONED`(CAS가 이겼을 때만 ERROR·집계; 스레드 안내는 채널이 읽을 수 없는 행에만 있어 만들 수 없고, 아웃박스 행의
+      `publisherId`로 DM을 보내는 것은 별도 기능이다). 행이 없거나 질문이 아닌 내용이면 예전처럼 즉시 `ABANDONED`.
+      이것은 relay와 같은 트레이드오프다: 더 새 버전의 행은 그 버전을 아는 레플리카가 돌리도록 기다리게 하는 대신(롤아웃 중), 1시간 넘게 새 레플리카가
+      돌아오지 않으면 예전 같으면 필드를 버리고라도 답했을 질문이 안내 없이 포기되고, 디코드 자체가 안 되는 행은 즉시 포기되는 대신 1시간을 기다린다. ⑤ 진행할 수 없는
+      행(이 JVM 큐에 있는 턴, 거절된 offer, 안내 쓰기가 실패한 포기, 읽을 수 없는 질문 행은 최대 1시간)은 `updated_at`이 가장 오래돼 20건 배치의 앞자리를 계속 차지한다.
       ⑥ 첫 실행이 중단되고 뒤의 실행이 busy면 busy 안내가 나가지 않는다 — 첫 실행의 안내 트랜잭션이 롤백된 경우도 같다(고아 회수
       뒤의 실행은 lease의 두 번째 실행이다. 안내는 첫 반납과 함께만 커밋되므로 두 번 나가지는 않는다). ⑦ 디스패치 결과를 모르는 질문(`outcome_unknown`)은 전달 이벤트도 ts도
       없어 턴이 없다(변함없음). ⑧ `@bot` 멘션 턴은 여전히 메모리뿐이라 턴 중 재시작이면 사라진다. ⑨ 레저 행은 지우지 않는다(보존 정리 없음).

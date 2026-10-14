@@ -16,16 +16,17 @@ import dev.notypie.repository.agent.recordDelivered
 import dev.notypie.repository.agent.schema.AgentAskTurnSchema
 import dev.notypie.repository.agent.schema.AgentAskTurnStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
-import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.OutboundMessageCodec
 import dev.notypie.repository.outbox.OutboundMessageCodecException
 import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.event.EventListener
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import tools.jackson.core.JacksonException
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
@@ -44,6 +45,18 @@ private data class AskedQuestion(
     val basicInfo: CommandBasicInfo,
     val content: MessageContent.AgentQuestion,
 )
+
+private sealed interface QuestionRow {
+    data object Absent : QuestionRow
+
+    data class Unreadable(
+        val reason: String,
+    ) : QuestionRow
+
+    data class Asked(
+        val question: AskedQuestion,
+    ) : QuestionRow
+}
 
 @Service
 class AgentAskThreadStarter(
@@ -67,11 +80,26 @@ class AgentAskThreadStarter(
             log.warn { "Asked question eventId=$eventId was delivered without a ts; no turn can be threaded" }
             return
         }
-        val asked = retryService.execute(action = { askedOf(eventId = eventId) }, maxAttempts = STATUS_WRITE_ATTEMPTS)
-        if (asked == null) {
-            log.warn { "Asked question eventId=$eventId is gone or carries no question; no turn starts" }
-            return
-        }
+        val asked =
+            when (
+                val row =
+                    retryService.execute(
+                        action = { questionRowOf(eventId = eventId) },
+                        maxAttempts = STATUS_WRITE_ATTEMPTS,
+                    )
+            ) {
+                QuestionRow.Absent -> {
+                    log.warn { "Asked question eventId=$eventId is gone or carries no question; no turn starts" }
+                    return
+                }
+
+                is QuestionRow.Unreadable -> {
+                    log.error { "Asked question eventId=$eventId cannot be read (${row.reason}); no turn starts" }
+                    return
+                }
+
+                is QuestionRow.Asked -> row.question
+            }
         val recorded = recordedOrNull(eventId = eventId, messageTs = event.messageTs, asked = asked)
         if (recorded == null) {
             agentConverseService.submit(
@@ -186,7 +214,27 @@ class AgentAskThreadStarter(
     }
 
     private fun abandon(turn: AgentAskTurnSchema) {
-        val asked = askedOrAbandon(turn = turn) ?: return
+        val asked =
+            when (val row = questionRowOf(eventId = turn.eventId)) {
+                QuestionRow.Absent -> {
+                    abandonGone(turn = turn)
+                    return
+                }
+
+                is QuestionRow.Unreadable -> {
+                    if (abandonWithoutNotice(turn = turn)) {
+                        log.error {
+                            "Ask turn eventId=${turn.eventId} abandoned without a notice after " +
+                                "${turn.runCount} runs, delivered at ${turn.createdAt}: its question cannot be read " +
+                                "(${row.reason})"
+                        }
+                        meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "abandoned").increment()
+                    }
+                    return
+                }
+
+                is QuestionRow.Asked -> row.question
+            }
         val abandoned =
             agentConverseService.abandon(
                 event = requestOf(messageTs = turn.messageTs, asked = asked),
@@ -200,33 +248,64 @@ class AgentAskThreadStarter(
         meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "abandoned").increment()
     }
 
-    private fun askedOrAbandon(turn: AgentAskTurnSchema): AskedQuestion? {
-        val asked = askedOf(eventId = turn.eventId)
-        if (asked == null) {
-            val abandoned =
-                askTurnRepository.finish(
-                    eventId = turn.eventId,
-                    attemptCount = turn.attemptCount,
-                    status = AgentAskTurnStatus.ABANDONED.name,
-                    now = now(),
-                ) == 1
-            if (abandoned) {
-                log.warn {
-                    "Asked question eventId=${turn.eventId} is gone or carries no question; abandoning its turn"
-                }
-                meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "abandoned").increment()
+    private fun askedOrAbandon(turn: AgentAskTurnSchema): AskedQuestion? =
+        when (val row = questionRowOf(eventId = turn.eventId)) {
+            QuestionRow.Absent -> {
+                abandonGone(turn = turn)
+                null
             }
+
+            is QuestionRow.Unreadable -> {
+                log.error {
+                    "Asked question eventId=${turn.eventId} cannot be read (${row.reason}); left for a later sweep"
+                }
+                null
+            }
+
+            is QuestionRow.Asked -> row.question
         }
-        return asked
+
+    private fun abandonGone(turn: AgentAskTurnSchema) {
+        if (!abandonWithoutNotice(turn = turn)) return
+        log.warn { "Asked question eventId=${turn.eventId} is gone or carries no question; abandoning its turn" }
+        meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "abandoned").increment()
     }
 
-    private fun askedOf(eventId: String): AskedQuestion? {
-        val row = outboxRepository.findByIdOrNull(id = eventId) ?: return null
-        val envelope = decoded(payload = row.payload) ?: return null
+    private fun abandonWithoutNotice(turn: AgentAskTurnSchema): Boolean =
+        askTurnRepository.finish(
+            eventId = turn.eventId,
+            attemptCount = turn.attemptCount,
+            status = AgentAskTurnStatus.ABANDONED.name,
+            now = now(),
+        ) == 1
+
+    private fun questionRowOf(eventId: String): QuestionRow {
+        val row = outboxRepository.findByIdOrNull(id = eventId) ?: return QuestionRow.Absent
+        if (row.schemaVersion !in OutboxSchemaVersion.SUPPORTED) {
+            return QuestionRow.Unreadable(
+                reason = "schemaVersion=${row.schemaVersion}, not in ${OutboxSchemaVersion.SUPPORTED}",
+            )
+        }
+        val envelope =
+            try {
+                OutboundMessageCodec.decode(json = row.payload)
+            } catch (undecodable: OutboundMessageCodecException) {
+                return QuestionRow.Unreadable(reason = reasonOf(undecodable = undecodable))
+            }
         val content =
             (envelope.message as? OutboundMessage.ChannelMessage)?.content as? MessageContent.AgentQuestion
-                ?: return null
-        return AskedQuestion(basicInfo = envelope.basicInfo, content = content)
+                ?: return QuestionRow.Absent
+        return QuestionRow.Asked(question = AskedQuestion(basicInfo = envelope.basicInfo, content = content))
+    }
+
+    private fun reasonOf(undecodable: OutboundMessageCodecException): String {
+        val cause: Throwable = undecodable.cause ?: return "undecodable payload"
+        val path: String = (cause as? JacksonException)?.pathReference.orEmpty()
+        return if (path.isEmpty()) {
+            "undecodable payload: ${cause.javaClass.simpleName}"
+        } else {
+            "undecodable payload: ${cause.javaClass.simpleName} at $path"
+        }
     }
 
     private fun requestOf(messageTs: String, asked: AskedQuestion): AgentConverseRequestEvent =
@@ -242,13 +321,6 @@ class AgentAskThreadStarter(
                 ),
             type = CommandDetailType.AGENT_CONVERSE,
         )
-
-    private fun decoded(payload: String): OutboundEnvelope? =
-        try {
-            OutboundMessageCodec.decode(json = payload)
-        } catch (undecodable: OutboundMessageCodecException) {
-            null
-        }
 
     private fun leaseOf(turn: AgentAskTurnSchema): AgentTurnLease =
         AskTurnLease(eventId = turn.eventId, attempt = turn.attemptCount)
@@ -301,7 +373,11 @@ class AgentAskThreadStarter(
         }
 
         private fun owned(updated: Int) {
-            check(updated == 1) { "Ask turn eventId=$eventId attempt=$attempt belongs to another run or is finished" }
+            if (updated != 1) {
+                throw AgentTurnLeaseLostException(
+                    message = "Ask turn eventId=$eventId attempt=$attempt belongs to another run or is finished",
+                )
+            }
         }
     }
 }

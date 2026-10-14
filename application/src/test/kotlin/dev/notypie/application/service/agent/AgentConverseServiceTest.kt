@@ -1,5 +1,9 @@
 package dev.notypie.application.service.agent
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxJpaContext
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
@@ -30,6 +34,7 @@ import dev.notypie.schema.createOutboxMessage
 import dev.notypie.templates.SlackBlockLimits
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -37,6 +42,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.Called
@@ -48,6 +54,8 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
+import org.slf4j.LoggerFactory
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.orm.jpa.JpaTransactionManager
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
@@ -122,6 +130,27 @@ class AgentConverseServiceTest :
                 every { giveBack() } returns owes
                 every { discarded() } returns resumesAfterDiscard
             }
+
+        fun loggedDuring(action: () -> Unit): List<ILoggingEvent> {
+            val appender = ListAppender<ILoggingEvent>().apply { start() }
+            val logger = LoggerFactory.getLogger(AgentConverseService::class.java.packageName) as Logger
+            logger.addAppender(appender)
+            try {
+                action()
+            } finally {
+                logger.detachAppender(appender)
+            }
+            return appender.list.toList()
+        }
+
+        fun List<ILoggingEvent>.messagesAt(level: Level): List<String> =
+            filter { it.level == level }.map { it.formattedMessage }
+
+        fun SimpleMeterRegistry.turns(outcome: String): Double =
+            counter(AgentConverseService.METRIC_TURNS, "outcome", outcome).count()
+
+        fun SimpleMeterRegistry.timedTurns(outcome: String): Long =
+            timer(AgentConverseService.METRIC_TURN_DURATION, "outcome", outcome).count()
 
         given("a turn that completes") {
             val basicInfo = createCommandBasicInfo()
@@ -904,15 +933,30 @@ class AgentConverseServiceTest :
             val lostLease =
                 mockk<AgentTurnLease> {
                     every { begin() } returns true
-                    every { settle() } throws IllegalStateException("lease lost")
-                    every { giveBack() } throws IllegalStateException("lease lost")
-                    every { abandon() } throws IllegalStateException("lease lost")
+                    every { settle() } throws AgentTurnLeaseLostException(message = "lease lost")
+                    every { giveBack() } throws AgentTurnLeaseLostException(message = "lease lost")
+                    every { abandon() } throws AgentTurnLeaseLostException(message = "lease lost")
+                }
+            val failingLedger =
+                mockk<AgentTurnLease> {
+                    every { begin() } returns true
+                    every { settle() } throws DataAccessResourceFailureException("ledger down")
+                }
+            val failingState =
+                mockk<AgentTurnLease> {
+                    every { begin() } returns true
+                    every { settle() } throws IllegalStateException("not a lease")
                 }
             val busy = mockk<AgentGateway>()
             every { busy.converse(request = any()) } returns AgentTurnResult.Busy
             val completing = mockk<AgentGateway>()
             every { completing.converse(request = any()) } returns
-                AgentTurnResult.Completed(sessionId = null, finalText = "late answer")
+                AgentTurnResult.Completed(
+                    sessionId = null,
+                    finalText = "late answer",
+                    inputTokens = 120L,
+                    outputTokens = 45L,
+                )
 
             val failing = mockk<AgentGateway>()
             every { failing.converse(request = any()) } returns
@@ -926,6 +970,7 @@ class AgentConverseServiceTest :
                 replyEventId: String,
                 turnExecutor: Executor = Executor { it.run() },
                 agentGateway: AgentGateway = completing,
+                meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry(),
             ) = buildService(
                 agentGateway = agentGateway,
                 agentTurnHistoryRepository = auditRepository,
@@ -936,6 +981,7 @@ class AgentConverseServiceTest :
                             outboxRepository.save(createOutboxMessage(eventId = replyEventId))
                         }
                     },
+                meterRegistry = meterRegistry,
                 turnExecutor = turnExecutor,
                 transactionManager = transactionManager,
             )
@@ -962,24 +1008,119 @@ class AgentConverseServiceTest :
 
             `when`("a turn completes after another run took its lease") {
                 val replyEventId = UUID.randomUUID().toString()
-                serviceStaging(replyEventId = replyEventId)
-                    .submit(event = createAgentConverseRequestEvent(), lease = lostLease)
+                val event = createAgentConverseRequestEvent()
+                val meterRegistry = SimpleMeterRegistry()
+                val logged =
+                    loggedDuring {
+                        serviceStaging(replyEventId = replyEventId, meterRegistry = meterRegistry)
+                            .submit(event = event, lease = lostLease)
+                    }
 
                 then("the answer is rolled back with the refused settle, so nothing is posted") {
                     verify(exactly = 1) { lostLease.settle() }
                     committedRows(eventId = replyEventId) shouldBe 0
                 }
+
+                then("the run is reported superseded at WARN without a stack trace, and nothing at ERROR") {
+                    logged.messagesAt(level = Level.WARN) shouldBe
+                        listOf(
+                            "Agent turn superseded; answer not posted idempotencyKey=${event.idempotencyKey} " +
+                                "(lease lost)",
+                        )
+                    logged.single { it.level == Level.WARN }.throwableProxy shouldBe null
+                    logged.messagesAt(level = Level.ERROR).shouldBeEmpty()
+                }
+
+                then("it is counted and timed as superseded, not completed, while its tokens are still counted") {
+                    meterRegistry.turns(outcome = "superseded") shouldBe 1.0
+                    meterRegistry.turns(outcome = "completed") shouldBe 0.0
+                    meterRegistry.timedTurns(outcome = "superseded") shouldBe 1L
+                    meterRegistry.timedTurns(outcome = "completed") shouldBe 0L
+                    meterRegistry.counter(AgentConverseService.METRIC_TOKENS, "direction", "input").count() shouldBe
+                        120.0
+                    meterRegistry.counter(AgentConverseService.METRIC_TOKENS, "direction", "output").count() shouldBe
+                        45.0
+                }
+            }
+
+            `when`("a turn completes while its lease write fails for another reason") {
+                val replyEventId = UUID.randomUUID().toString()
+                val event = createAgentConverseRequestEvent()
+                val meterRegistry = SimpleMeterRegistry()
+                val logged =
+                    loggedDuring {
+                        serviceStaging(replyEventId = replyEventId, meterRegistry = meterRegistry)
+                            .submit(event = event, lease = failingLedger)
+                    }
+
+                then("the answer is rolled back and logged at ERROR with its cause, not as superseded") {
+                    committedRows(eventId = replyEventId) shouldBe 0
+                    val error = logged.single { it.level == Level.ERROR }
+                    error.formattedMessage shouldStartWith "Failed to publish agent answer sessionKey="
+                    error.formattedMessage shouldEndWith "idempotencyKey=${event.idempotencyKey}"
+                    error.throwableProxy?.className shouldBe DataAccessResourceFailureException::class.java.name
+                    logged.messagesAt(level = Level.WARN).shouldBeEmpty()
+                }
+
+                then("it is still counted as completed") {
+                    meterRegistry.turns(outcome = "completed") shouldBe 1.0
+                    meterRegistry.turns(outcome = "superseded") shouldBe 0.0
+                }
+            }
+
+            `when`("a turn completes while its outcome transaction fails with a plain IllegalStateException") {
+                val replyEventId = UUID.randomUUID().toString()
+                val event = createAgentConverseRequestEvent()
+                val meterRegistry = SimpleMeterRegistry()
+                val logged =
+                    loggedDuring {
+                        serviceStaging(replyEventId = replyEventId, meterRegistry = meterRegistry)
+                            .submit(event = event, lease = failingState)
+                    }
+
+                then("only the lease's own exception reads as superseded: this one is an ERROR with its cause") {
+                    committedRows(eventId = replyEventId) shouldBe 0
+                    val error = logged.single { it.level == Level.ERROR }
+                    error.formattedMessage shouldStartWith "Failed to publish agent answer sessionKey="
+                    error.formattedMessage shouldEndWith "idempotencyKey=${event.idempotencyKey}"
+                    error.throwableProxy?.className shouldBe IllegalStateException::class.java.name
+                    error.throwableProxy?.message shouldBe "not a lease"
+                    logged.messagesAt(level = Level.WARN).shouldBeEmpty()
+                }
+
+                then("it is counted as completed, not superseded") {
+                    meterRegistry.turns(outcome = "completed") shouldBe 1.0
+                    meterRegistry.turns(outcome = "superseded") shouldBe 0.0
+                }
             }
 
             `when`("the executor rejects a turn whose lease another run already took") {
                 val replyEventId = UUID.randomUUID().toString()
-                serviceStaging(
-                    replyEventId = replyEventId,
-                    turnExecutor = Executor { throw RejectedExecutionException("full") },
-                ).submit(event = createAgentConverseRequestEvent(), lease = lostLease)
+                val event = createAgentConverseRequestEvent()
+                val meterRegistry = SimpleMeterRegistry()
+                val logged =
+                    loggedDuring {
+                        serviceStaging(
+                            replyEventId = replyEventId,
+                            turnExecutor = Executor { throw RejectedExecutionException("full") },
+                            meterRegistry = meterRegistry,
+                        ).submit(event = event, lease = lostLease)
+                    }
 
                 then("the overload notice is rolled back with the refused settle") {
                     committedRows(eventId = replyEventId) shouldBe 0
+                }
+
+                then("the rejection is still counted, and the refused settle is a WARN, not an ERROR") {
+                    logged.messagesAt(level = Level.WARN) shouldBe
+                        listOf(
+                            "Agent turn rejected, every turn slot is busy idempotencyKey=${event.idempotencyKey}",
+                            "Agent turn superseded; overload notice not posted " +
+                                "idempotencyKey=${event.idempotencyKey} (lease lost)",
+                        )
+                    logged.messagesAt(level = Level.ERROR).shouldBeEmpty()
+                    meterRegistry.turns(outcome = "rejected") shouldBe 1.0
+                    meterRegistry.turns(outcome = "superseded") shouldBe 0.0
                 }
             }
 
@@ -998,12 +1139,35 @@ class AgentConverseServiceTest :
             `when`("a turn fails after another run took its lease") {
                 val replyEventId = UUID.randomUUID().toString()
                 val event = createAgentConverseRequestEvent()
-                serviceStaging(replyEventId = replyEventId, agentGateway = failing)
-                    .submit(event = event, lease = lostLease)
+                val meterRegistry = SimpleMeterRegistry()
+                val logged =
+                    loggedDuring {
+                        serviceStaging(
+                            replyEventId = replyEventId,
+                            agentGateway = failing,
+                            meterRegistry = meterRegistry,
+                        ).submit(event = event, lease = lostLease)
+                    }
 
                 then("the failure notice and its audit row are rolled back with the refused settle") {
                     committedRows(eventId = replyEventId) shouldBe 0
                     auditRows(event = event) shouldBe 0
+                }
+
+                then("the run is reported superseded at WARN; the only ERROR is the sidecar failure itself") {
+                    logged.messagesAt(level = Level.WARN) shouldBe
+                        listOf(
+                            "Agent turn superseded; failure notice not posted idempotencyKey=${event.idempotencyKey} " +
+                                "(lease lost)",
+                        )
+                    logged.messagesAt(level = Level.ERROR).single() shouldStartWith "Agent turn failed sessionKey="
+                }
+
+                then("it is counted and timed as superseded, not failed") {
+                    meterRegistry.turns(outcome = "superseded") shouldBe 1.0
+                    meterRegistry.turns(outcome = "failed") shouldBe 0.0
+                    meterRegistry.timedTurns(outcome = "superseded") shouldBe 1L
+                    meterRegistry.timedTurns(outcome = "failed") shouldBe 0L
                 }
             }
 
@@ -1022,24 +1186,57 @@ class AgentConverseServiceTest :
             `when`("a first run is reported busy after another run took its lease") {
                 val replyEventId = UUID.randomUUID().toString()
                 val event = createAgentConverseRequestEvent()
-                serviceStaging(replyEventId = replyEventId, agentGateway = busy)
-                    .submit(event = event, lease = lostLease)
+                val meterRegistry = SimpleMeterRegistry()
+                val logged =
+                    loggedDuring {
+                        serviceStaging(replyEventId = replyEventId, agentGateway = busy, meterRegistry = meterRegistry)
+                            .submit(event = event, lease = lostLease)
+                    }
 
                 then("the refused give-back leaves no busy notice and no audit row") {
                     committedRows(eventId = replyEventId) shouldBe 0
                     auditRows(event = event) shouldBe 0
                 }
+
+                then("the run is reported superseded at WARN, and nothing at ERROR") {
+                    logged.messagesAt(level = Level.WARN) shouldBe
+                        listOf(
+                            "Agent turn superseded; busy give-back not posted idempotencyKey=${event.idempotencyKey} " +
+                                "(lease lost)",
+                        )
+                    logged.messagesAt(level = Level.ERROR).shouldBeEmpty()
+                }
+
+                then("it is counted and timed as superseded, not busy") {
+                    meterRegistry.turns(outcome = "superseded") shouldBe 1.0
+                    meterRegistry.turns(outcome = "busy") shouldBe 0.0
+                    meterRegistry.timedTurns(outcome = "superseded") shouldBe 1L
+                    meterRegistry.timedTurns(outcome = "busy") shouldBe 0L
+                }
             }
 
             `when`("a turn is given up on after another run took its lease") {
                 val replyEventId = UUID.randomUUID().toString()
-                val abandoned =
-                    serviceStaging(replyEventId = replyEventId)
-                        .abandon(event = createAgentConverseRequestEvent(), lease = lostLease)
+                val event = createAgentConverseRequestEvent()
+                val abandoned = mutableListOf<Boolean>()
+                val logged =
+                    loggedDuring {
+                        abandoned +=
+                            serviceStaging(replyEventId = replyEventId).abandon(event = event, lease = lostLease)
+                    }
 
                 then("the failure notice is rolled back and the give-up is reported as not done") {
-                    abandoned shouldBe false
+                    abandoned shouldContainExactly listOf(false)
                     committedRows(eventId = replyEventId) shouldBe 0
+                }
+
+                then("the refused abandon is a WARN, not an ERROR") {
+                    logged.messagesAt(level = Level.WARN) shouldBe
+                        listOf(
+                            "Agent turn superseded; abandon notice not posted idempotencyKey=${event.idempotencyKey} " +
+                                "(lease lost)",
+                        )
+                    logged.messagesAt(level = Level.ERROR).shouldBeEmpty()
                 }
             }
         }

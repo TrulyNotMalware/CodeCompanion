@@ -33,6 +33,8 @@ import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
+import dev.notypie.repository.outbox.schema.OutboxMessage
+import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
 import dev.notypie.schema.createAgentAskTurnSchema
 import dev.notypie.schema.createOutboxMessage
 import io.kotest.assertions.throwables.shouldThrow
@@ -41,6 +43,10 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.Called
@@ -171,6 +177,30 @@ class AgentAskThreadStarterTest :
                         .toRow(message = createAgentQuestionMessage(prompt = prompt), basicInfo = basicInfo),
                 ).eventId
 
+        fun questionRowAt(schemaVersion: Int): OutboxMessage =
+            createOutboxMessage(
+                payload =
+                    CodecOutboundMessagePort()
+                        .toRow(message = createAgentQuestionMessage(), basicInfo = basicInfo)
+                        .payload,
+                schemaVersion = schemaVersion,
+            )
+
+        val unsupportedVersion = 99
+        val belowSupportedVersion = 1
+
+        fun unsupportedReason(version: Int = unsupportedVersion): String =
+            "schemaVersion=$version, not in ${OutboxSchemaVersion.SUPPORTED}"
+
+        val undecodableReason = "undecodable payload: "
+        val payloadMarker = "PAYLOAD-MARKER-7F3C"
+
+        fun questionPayloadCarryingMarker(): String =
+            CodecOutboundMessagePort()
+                .toRow(message = createAgentQuestionMessage(), basicInfo = basicInfo)
+                .payload
+                .replace(oldValue = CommandDetailType.AGENT_ASK_QUESTION.name, newValue = payloadMarker)
+
         fun storedTurn(
             prompt: String,
             updatedAt: LocalDateTime,
@@ -247,6 +277,7 @@ class AgentAskThreadStarterTest :
                         noticeIds += outboxRepository.save(createOutboxMessage()).eventId
                     }
                 }
+            val converseMeters = SimpleMeterRegistry()
             val starter =
                 AgentAskThreadStarter(
                     outboxRepository = outboxRepository,
@@ -258,7 +289,7 @@ class AgentAskThreadStarterTest :
                             agentTurnHistoryRepository = auditRepository,
                             outboundStager = outboundStager,
                             eventPublisher = eventPublisher,
-                            meterRegistry = SimpleMeterRegistry(),
+                            meterRegistry = converseMeters,
                             transactionManager = transactionManager,
                             turnExecutor = turnExecutor,
                             clock = clock,
@@ -270,6 +301,9 @@ class AgentAskThreadStarterTest :
                 )
 
             fun committedNotices(): Int = noticeIds.count { outboxRepository.existsById(it) }
+
+            fun countedTurns(outcome: String): Double =
+                converseMeters.counter(AgentConverseService.METRIC_TURNS, "outcome", outcome).count()
         }
 
         fun realLane(gateway: AgentGateway, turnExecutor: Executor): RealServiceLane {
@@ -493,9 +527,9 @@ class AgentAskThreadStarterTest :
                 }
 
                 then("every outcome the first run then writes is refused and changes nothing") {
-                    shouldThrow<IllegalStateException> { firstRun.settle() }
-                    shouldThrow<IllegalStateException> { firstRun.giveBack() }
-                    shouldThrow<IllegalStateException> { firstRun.abandon() }
+                    shouldThrow<AgentTurnLeaseLostException> { firstRun.settle() }
+                    shouldThrow<AgentTurnLeaseLostException> { firstRun.giveBack() }
+                    shouldThrow<AgentTurnLeaseLostException> { firstRun.abandon() }
                     val unchanged = turnOf(eventId = eventId)
                     unchanged.status shouldBe AgentAskTurnStatus.IN_PROGRESS
                     unchanged.attemptCount shouldBe 2
@@ -635,12 +669,47 @@ class AgentAskThreadStarterTest :
                 val outbox = FlakyOutbox(delegate = outboxRepository, failures = 0)
                 val lane = lane(outbox = outbox.repository)
                 val eventId = outboxRepository.save(createOutboxMessage(payload = "{}")).eventId
-                lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
+                val errors =
+                    loggedDuring(level = Level.ERROR) {
+                        lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
+                    }
 
                 then("the row is read once, not retried, and no turn is recorded or submitted") {
                     outbox.reads.get() shouldBe 1
                     askTurnRepository.count() shouldBe 0L
                     lane.submitted.shouldBeEmpty()
+                }
+
+                then("one single-line ERROR names the event and the decode failure") {
+                    errors.single() shouldStartWith "Asked question eventId=$eventId cannot be read ($undecodableReason"
+                    errors.single() shouldEndWith "); no turn starts"
+                    errors.single() shouldNotContain "\n"
+                }
+            }
+
+            listOf(belowSupportedVersion, unsupportedVersion).forEach { version ->
+                `when`("the row carries schema version $version, outside the supported set") {
+                    val lane = lane()
+                    val eventId = outboxRepository.save(questionRowAt(schemaVersion = version)).eventId
+                    val warnings = mutableListOf<String>()
+                    val errors =
+                        loggedDuring(level = Level.ERROR) {
+                            warnings +=
+                                loggedDuring(level = Level.WARN) {
+                                    lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
+                                }
+                        }
+
+                    then("one ERROR names the event and version $version; no warning, no turn recorded or submitted") {
+                        errors shouldBe
+                            listOf(
+                                "Asked question eventId=$eventId cannot be read " +
+                                    "(${unsupportedReason(version = version)}); no turn starts",
+                            )
+                        warnings.shouldBeEmpty()
+                        askTurnRepository.count() shouldBe 0L
+                        lane.submitted.shouldBeEmpty()
+                    }
                 }
             }
         }
@@ -812,6 +881,172 @@ class AgentAskThreadStarterTest :
                     val running = turnOf(eventId = eventId)
                     running.status shouldBe AgentAskTurnStatus.IN_PROGRESS
                     running.attemptCount shouldBe 1
+                }
+            }
+        }
+
+        given("a recorded turn whose question row this binary cannot read when the sweep runs") {
+            listOf(belowSupportedVersion, unsupportedVersion).forEach { version ->
+                `when`("the row carries schema version $version, outside the supported set") {
+                    val outbox = FlakyOutbox(delegate = outboxRepository, failures = 0)
+                    val lane = lane(outbox = outbox.repository)
+                    val eventId = outboxRepository.save(questionRowAt(schemaVersion = version)).eventId
+                    askTurnRepository.saveAndFlush(
+                        createAgentAskTurnSchema(
+                            eventId = eventId,
+                            attemptCount = 2,
+                            runCount = 1,
+                            updatedAt = lane.clock.now.minus(gracePassed),
+                        ),
+                    )
+                    val before = jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId)
+                    val resumed = mutableListOf<Int>()
+                    val errors =
+                        loggedDuring(level = Level.ERROR) {
+                            resumed += lane.starter.resumeOnce()
+                            lane.clock.advance(by = Duration.ofMillis(ASK_RESUME_PERIOD_MILLIS))
+                            resumed += lane.starter.resumeOnce()
+                        }
+
+                    then("each sweep logs one ERROR naming the event and version $version; the row is left as it was") {
+                        errors shouldBe
+                            List(size = 2) {
+                                "Asked question eventId=$eventId cannot be read " +
+                                    "(${unsupportedReason(version = version)}); left for a later sweep"
+                            }
+                        turnOf(eventId = eventId).status shouldBe AgentAskTurnStatus.PENDING
+                        jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId) shouldBe before
+                    }
+
+                    then("version $version: nothing offered, abandoned or counted; each sweep reads the row once") {
+                        resumed shouldContainExactly listOf(0, 0)
+                        lane.offered.shouldBeEmpty()
+                        lane.abandoned.shouldBeEmpty()
+                        lane.counted(outcome = "abandoned") shouldBe 0.0
+                        lane.counted(outcome = "resumed") shouldBe 0.0
+                        outbox.reads.get() shouldBe 2
+                    }
+                }
+            }
+
+            `when`("the row carries a supported version whose payload cannot be decoded") {
+                val outbox = FlakyOutbox(delegate = outboxRepository, failures = 0)
+                val lane = lane(outbox = outbox.repository)
+                val payload = questionPayloadCarryingMarker()
+                val eventId = outboxRepository.save(createOutboxMessage(payload = payload)).eventId
+                askTurnRepository.saveAndFlush(
+                    createAgentAskTurnSchema(
+                        eventId = eventId,
+                        attemptCount = 2,
+                        runCount = 1,
+                        updatedAt = lane.clock.now.minus(gracePassed),
+                    ),
+                )
+                val before = jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId)
+                val resumed = mutableListOf<Int>()
+                val errors = loggedDuring(level = Level.ERROR) { resumed += lane.starter.resumeOnce() }
+
+                then("one ERROR names the event and the decode failure, and the turn is left exactly as it was") {
+                    errors.single() shouldStartWith "Asked question eventId=$eventId cannot be read ($undecodableReason"
+                    errors.single() shouldEndWith "); left for a later sweep"
+                    turnOf(eventId = eventId).status shouldBe AgentAskTurnStatus.PENDING
+                    jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId) shouldBe before
+                }
+
+                then("nothing is offered, abandoned or counted, and the question row is read once") {
+                    resumed shouldContainExactly listOf(0)
+                    lane.offered.shouldBeEmpty()
+                    lane.abandoned.shouldBeEmpty()
+                    lane.counted(outcome = "abandoned") shouldBe 0.0
+                    outbox.reads.get() shouldBe 1
+                }
+
+                then("the reason names the failing field on one line and quotes no payload value") {
+                    payload shouldContain payloadMarker
+                    errors.single() shouldContain "[\"detailType\"]"
+                    errors.single() shouldNotContain payloadMarker
+                    errors.single() shouldNotContain "\n"
+                }
+            }
+        }
+
+        given("recorded turns the sweep gives up on whose question rows this binary cannot read") {
+            val lane = lane()
+            val now = lane.clock.now
+            val pastWindow = now.minus(ASK_GIVE_UP_AFTER).minusSeconds(1L)
+            val deliveredRecently = now.minusMinutes(10L)
+            val expired = outboxRepository.save(questionRowAt(schemaVersion = unsupportedVersion)).eventId
+            val spent = outboxRepository.save(questionRowAt(schemaVersion = unsupportedVersion)).eventId
+            askTurnRepository.saveAndFlush(
+                createAgentAskTurnSchema(
+                    eventId = expired,
+                    attemptCount = 1,
+                    runCount = 1,
+                    createdAt = pastWindow,
+                    updatedAt = now.minusMinutes(3L),
+                ),
+            )
+            askTurnRepository.saveAndFlush(
+                createAgentAskTurnSchema(
+                    eventId = spent,
+                    attemptCount = ASK_MAX_RUNS,
+                    runCount = ASK_MAX_RUNS,
+                    createdAt = deliveredRecently,
+                    updatedAt = now.minusMinutes(2L),
+                ),
+            )
+
+            `when`("the sweep runs") {
+                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resumeOnce() }
+
+                then("both turns are ABANDONED and counted, without a notice or an offer") {
+                    turnOf(eventId = expired).status shouldBe AgentAskTurnStatus.ABANDONED
+                    turnOf(eventId = spent).status shouldBe AgentAskTurnStatus.ABANDONED
+                    lane.counted(outcome = "abandoned") shouldBe 2.0
+                    lane.abandoned.shouldBeEmpty()
+                    lane.offered.shouldBeEmpty()
+                }
+
+                then("each give-up is one ERROR naming the event, its runs, its delivery and the reason") {
+                    errors shouldBe
+                        listOf(
+                            "Ask turn eventId=$expired abandoned without a notice after 1 runs, " +
+                                "delivered at $pastWindow: its question cannot be read (${unsupportedReason()})",
+                            "Ask turn eventId=$spent abandoned without a notice after $ASK_MAX_RUNS runs, " +
+                                "delivered at $deliveredRecently: its question cannot be read (${unsupportedReason()})",
+                        )
+                }
+            }
+        }
+
+        given("an expired turn whose question row cannot be read and which another run begins during the sweep") {
+            val afterFind = mutableListOf<() -> Unit>()
+            val changingLedger =
+                ledgerChangingAfterFind(delegate = askTurnRepository) { afterFind.forEach { change -> change() } }
+            val lane = lane(ledger = changingLedger)
+            val now = lane.clock.now
+            val eventId = outboxRepository.save(questionRowAt(schemaVersion = unsupportedVersion)).eventId
+            askTurnRepository.saveAndFlush(
+                createAgentAskTurnSchema(
+                    eventId = eventId,
+                    attemptCount = 1,
+                    runCount = 1,
+                    createdAt = now.minus(ASK_GIVE_UP_AFTER).minusSeconds(1L),
+                    updatedAt = now.minus(gracePassed),
+                ),
+            )
+            afterFind += { askTurnRepository.begin(eventId = eventId, attemptCount = 1, now = now) }
+
+            `when`("the sweep runs") {
+                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resumeOnce() }
+
+                then("the lost abandon is neither logged nor counted, and the row stays with that run") {
+                    errors.shouldBeEmpty()
+                    lane.counted(outcome = "abandoned") shouldBe 0.0
+                    lane.abandoned.shouldBeEmpty()
+                    val running = turnOf(eventId = eventId)
+                    running.status shouldBe AgentAskTurnStatus.IN_PROGRESS
+                    running.attemptCount shouldBe 2
                 }
             }
         }
@@ -1334,7 +1569,10 @@ class AgentAskThreadStarterTest :
             val eventId = storedQuestion()
 
             `when`("the question is delivered") {
-                real.starter.onDelivered(event = deliveryOf(eventId = eventId))
+                val errors =
+                    loggedDuring(level = Level.ERROR) {
+                        real.starter.onDelivered(event = deliveryOf(eventId = eventId))
+                    }
                 val running = turnOf(eventId = eventId)
 
                 then("the give-back and the audit row roll back with it; the run stays IN_PROGRESS for the sweep") {
@@ -1343,6 +1581,13 @@ class AgentAskThreadStarterTest :
                     running.runCount shouldBe 1
                     auditOutcomes().shouldBeEmpty()
                     real.committedNotices() shouldBe 0
+                }
+
+                then("the failed notice is an ERROR and the run counts as busy, not superseded") {
+                    errors shouldBe
+                        listOf("Failed to record agent busy turn idempotencyKey=${basicInfo.idempotencyKey}")
+                    real.countedTurns(outcome = "busy") shouldBe 1.0
+                    real.countedTurns(outcome = "superseded") shouldBe 0.0
                 }
             }
 
@@ -1455,6 +1700,58 @@ class AgentAskThreadStarterTest :
                     answer.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe "answered once"
                     sweeping.committedNotices() shouldBe 1
                     auditOutcomes() shouldContainExactly listOf(AgentTurnOutcome.COMPLETED.name)
+                }
+            }
+        }
+
+        given("an asked question whose run is taken over while the sidecar answers, through the real service") {
+            var takeOver: () -> Unit = {}
+            val answering =
+                mockk<AgentGateway> {
+                    every { converse(request = any()) } answers {
+                        takeOver()
+                        AgentTurnResult.Completed(sessionId = null, finalText = "late answer")
+                    }
+                }
+            val real = realLane(gateway = answering, turnExecutor = Executor { it.run() })
+            val eventId = storedQuestion()
+            takeOver = {
+                askTurnRepository.releaseOrphan(
+                    eventId = eventId,
+                    attemptCount = 1,
+                    orphanedBefore = real.clock.now.plusSeconds(1L),
+                    now = real.clock.now,
+                )
+                askTurnRepository.begin(eventId = eventId, attemptCount = 1, now = real.clock.now)
+            }
+
+            `when`("the question is delivered and the first run's settle loses its CAS") {
+                val warnings = mutableListOf<String>()
+                val errors =
+                    loggedDuring(level = Level.ERROR) {
+                        warnings +=
+                            loggedDuring(level = Level.WARN) {
+                                real.starter.onDelivered(event = deliveryOf(eventId = eventId))
+                            }
+                    }
+                val running = turnOf(eventId = eventId)
+
+                then("the answer and its audit row roll back, and the row stays with the run that took it over") {
+                    real.committedNotices() shouldBe 0
+                    auditOutcomes().shouldBeEmpty()
+                    running.status shouldBe AgentAskTurnStatus.IN_PROGRESS
+                    running.attemptCount shouldBe 2
+                }
+
+                then("the run is reported superseded at WARN and counted so, with nothing at ERROR") {
+                    warnings shouldBe
+                        listOf(
+                            "Agent turn superseded; answer not posted idempotencyKey=${basicInfo.idempotencyKey} " +
+                                "(Ask turn eventId=$eventId attempt=1 belongs to another run or is finished)",
+                        )
+                    errors.shouldBeEmpty()
+                    real.countedTurns(outcome = "superseded") shouldBe 1.0
+                    real.countedTurns(outcome = "completed") shouldBe 0.0
                 }
             }
         }

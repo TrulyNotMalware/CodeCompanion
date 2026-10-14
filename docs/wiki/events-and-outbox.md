@@ -280,8 +280,9 @@ _type: architecture · updated: 2026-10-14_
   `RECORD_SHUTDOWN_WAIT` 46초)은 바꾸지 않았다 — 리스너의 DB 시간과 백오프는 커밋처럼 그 상한 밖이고, 넘기면 상태가 기록되지
   않아 스윕이 질문을 다시 게시하지만 레저 키 덕에 턴은 하나다. 재시도 횟수는 `STATUS_WRITE_ATTEMPTS`(3)를 일부러 공유한다.
 - 레저 스윕은 아웃박스 스윕과 별개의 잡이다(`AgentAskThreadStarter.resume`, 60초 fixedDelay, 틱당 20건). 레저에는 헬스
-  인디케이터도 게이지도 없다 — 포기된 턴은 `agent.turns{outcome="abandoned"}`와 ERROR 로그로만 보이고, `OutboxRetentionScheduler`는
-  레저 행을 지우지 않는다(보존 정리 없음).
+  인디케이터도 게이지도 없다 — 포기된 턴은 `agent.turns{outcome="abandoned"}`와 ERROR 로그로만 보이고, 읽을 수 없는 질문 행(미지원 스키마 버전·디코드 실패)은
+  포기 조건까지 스윕마다 ERROR 로그로만, lease를 잃고 롤백된 실행은 `outcome="superseded"`와 WARN으로만 보인다(2026-10-14, 결정 #40 ③④).
+  `OutboxRetentionScheduler`는 레저 행을 지우지 않는다(보존 정리 없음).
 - 검증 범위: 스펙은 레저의 네이티브 문장을 H2에서 실행한다. MariaDB 12.3.3에서는 V26 적용과 다섯 문장을 `mariadb` 클라이언트로 한 번
   확인했고(2026-10-13, 결정 #40), 애플리케이션(JPA·Connector/J)이 그 테이블 위에서 돈 적은 없다(미확인). CDC 모드에서
   이 훅이 리스너 스레드에서 도는 경로는 스펙이 real relay + mock 저장소로만 확인했다(Kafka·Debezium을 거친 종단 실행은 미확인).
