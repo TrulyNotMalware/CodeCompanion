@@ -23,6 +23,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
 import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createCancelMeetingEvent
 import dev.notypie.domain.meet.createGetMeetingListEvent
@@ -1139,6 +1140,11 @@ class MeetingServiceImplTest :
                                         MessageContent.MeetingList(
                                             meetings = meetings,
                                             currentUserId = payload.responseBasicInfo.publisherId,
+                                        ),
+                                    fallback =
+                                        channelRefusedNotice(
+                                            channel = target,
+                                            recipient = UserRef(id = basic.publisherId),
                                         ),
                                 ),
                             basicInfo = payload.responseBasicInfo,

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-14 -->
 
 # application/service/agent
 
@@ -101,6 +101,11 @@ summarise the turns and MCP tool calls of the last N days.
   waits in this instance's executor queue: an id is added before the hand-off and removed when the hand-off was
   refused, when the turn begins (after its CAS) and when it is discarded. Another replica cannot see it, so two
   replicas may both queue one turn; the `begin` CAS decides and the loser does nothing.
+- **A question in a channel Slack refuses starts no turn** (B-2, 2026-10-14). The question row carries
+  `fallback = channelRefusedNotice(...)`; on `not_in_channel` / `no_permission` the relay records `FAILURE`,
+  publishes no `MessageDeliveredEvent` (so no ledger row and no turn) and stages the notice as a DM with no detail
+  type, which `onDelivered` ignores. Residual: if the first post succeeded but its status write was lost and the
+  bot left the channel before the re-post, the requester gets the notice for a question that is being answered.
 - **Known limits of the `/ask` lane (2026-10-13).** An outbox read that fails on all three attempts, followed by
   a status write that succeeds, still loses the turn (question posted, no ledger row). The unleased fallback can
   answer twice in one thread when a ledger insert committed but its acknowledgement was lost and no later

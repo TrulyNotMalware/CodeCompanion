@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-13_
+_type: decision · updated: 2026-10-14_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -126,7 +126,7 @@ _type: decision · updated: 2026-10-13_
     `channel:ts:user`라 그 스레드에서 멘션하면 이어진다). 기각: ① 동기 `chat.postMessage`로 ts를 먼저 얻기 — 모달 외 유일한
     아웃박스 우회가 되고 at-least-once를 잃는다; ② `response_url`을 도메인까지 전달 — 5회·30분 제한이고 스레드가 없다; ③ 사용자별 세션 키(`channel:user`) — 톱레벨
     멘션은 호출마다 새 스레드라 의미가 어긋난다. 알려진 한계: 봇이 없는 채널에서는 루트 메시지가 `not_in_channel`로 실패해 아무
-    응답이 없다(슬래시 공통, 후속 3-1); 상태 쓰기를 잃으면 recovery가 같은 행을 reclaim해 루트 메시지를 **다시 게시**한다(수용) — 턴은
+    응답이 없다(슬래시 공통, 후속 3-1 → 2026-10-14 결정 #42: 거절되면 요청자 DM으로 안내, 턴은 시작하지 않음); 상태 쓰기를 잃으면 recovery가 같은 행을 reclaim해 루트 메시지를 **다시 게시**한다(수용) — 턴은
     질문(아웃박스 `event_id`)당 하나라 스레드는 ts가 레저에 먼저 적힌 게시물 하나에만 달린다. 상태: 유지. 근거:
     `service/agent/AGENTS.md`, `StandupSummaryService`의 `outbox:<eventId>` 치환 패턴, `.omc/plans/slash-slice1-ask-standup-answer.md`.
     - **전달 훅과 한계의 변경 (2026-10-13):** 처음(10-12)에는 relay가 터미널 상태를 기록한 **뒤**의 `MessagePublishSuccessEvent`가 턴을
@@ -143,7 +143,7 @@ _type: decision · updated: 2026-10-13_
     `LocalDateTime.of(sessionDate, trigger).atZone(member.userTimezone)`에 보내므로 멤버의 날짜가 곧 세션 날짜다(서쪽 멤버가 다음 날
     세션에 답하는 사고, 코드 리뷰 HIGH-1). 전날까지 보는 이유: `cutoffOffset`이 최대 1,440분이라 전날 세션이 자정을 넘겨 열려 있을 수
     있다(Codex HIGH). 프롬프트 전 조기 답변은 그 세션이 유일할 때만 허용된다. DM 알림이 없는 제출(`noticeMessageTs` 공백)은 `UpdateMessage` 대신 요청자에게 ephemeral로
-    결과를 알린다. 이유: 기존 모달·제출 파이프라인(`STANDUP_PROMPT`/`STANDUP_ANSWER_SUBMIT`)을 그대로 쓰기 위해. 상태: 유지.
+    결과를 알린다. (2026-10-14: 그 ephemeral에는 결정 #42의 DM 폴백이 붙는다.) 이유: 기존 모달·제출 파이프라인(`STANDUP_PROMPT`/`STANDUP_ANSWER_SUBMIT`)을 그대로 쓰기 위해. 상태: 유지.
     근거: `service/standup/AGENTS.md`, `.omc/plans/slash-slice1-ask-standup-answer.md`.
 40. **`/ask` 턴의 시작은 전용 레저 `agent_ask_turn`(V26)에 먼저 적고, 턴은 그 행의 lease 아래에서 돌며, 60초 스윕이 결과가 날 때까지
     다시 돌린다 (2026-10-13).** 결정 #38에 적어 둔 한계(전달 뒤가 메모리뿐)를 닫는다. 질문 하나에 행 하나이고 PK는 질문 아웃박스 행의
@@ -266,6 +266,39 @@ _type: decision · updated: 2026-10-13_
       슬랙 이메일로 두고(슬랙의 확인 메일이 그에게 간다) 동의 링크를 메일함의 이전 주인에게 보내면, 그 주소가 아직 붙은 이전 주인의
       Google 계정으로 비교가 통과한다. 재활용된 메일함과 이전 주인의 동의가 함께 필요하므로, 수정 전의 "워크스페이스 멤버면 누구나"보다는
       여전히 훨씬 높은 장벽이다(Codex 최종 리뷰).
+
+42. **봇이 없는 채널에서 Slack이 거절한 슬래시 응답은 같은 상태 쓰기 CAS로 요청자 DM에 다시 보낸다 (2026-10-14).**
+    슬래시 명령은 봇이 멤버가 아닌 채널에서도 호출되는데 응답은 전부 채널 ephemeral(또는 `/ask`·`/meetup`의 채널 메시지)이라
+    `chat.postEphemeral`/`chat.postMessage`가 `not_in_channel`(또는 `no_permission`)로 영구 실패하고 사용자는 아무것도 못 봤다
+    (#38의 알려진 한계, 후속 3-1). 멘션 답장의 "요청자 전용 ephemeral"(51233034)은 Slack이 봇이 있는 채널의 `app_mention`만
+    보내기 때문에 안전했는데, 그 전제 없이 모양만 슬래시로 복사된 것이 원인이다. 해법: 채널 응답을 내는 생산자가 `fallback: DirectReply?`
+    (`UserRef` + `MessageContent.Text`, `OutboundMessage`가 아닌 값 타입)를 붙이고, relay는 디스패치가 채널 단위 영구 거절
+    (`isChannelRefused()` — `impl/command/AGENTS.md`의 채널 단위 영구 거절 목록 + `channel_not_found` + `user_not_in_channel`(요청자가 전달 전에
+    채널을 떠난 경우, Codex 교차 리뷰). `restricted_action*`·`access_denied`는 채널 단위가 아닐 수 있지만 DM 시도가 사용자에게 닿는 유일한 길이고
+    최악의 경우 폴백 행이 같은 거절로 끝날 뿐이라 집합에 둔다)로 끝났을 때만 그 DM을 `next` 행으로
+    싣는다 — `ReplaceMessage.fallback`(V4, `archive/gap-closure`의 `6ebd8dca` 2026-10-08 작성·#29로 2026-10-11 머지)이 쓰는 `completeAndChain` CAS 그대로라, 상태 쓰기를 이긴 소유자만 한 번 싣고
+    레플리카 둘이어도 중복이 없다. DM 행은 `basicInfo.channel = 요청자 id`로 만든다(렌더러는 `target`을 읽지 않고 `basicInfo.channel`에
+    게시한다 — 기존 DM과 같은 방식). 폴백이 있는 행은 **V6**이고 스탬프는 머리·continuation 모든 조각이 필요로 하는 가장 높은 버전으로
+    찍는다(이전 first-match `when`은 V5 질문에 폴백이 있어도 V5로 찍어 옛 바이너리가 폴백을 버렸을 것이고, continuation 안의 `ReplaceMessage.fallback`을 V3으로 찍던
+    누락 — 2026-10-11 캘린더 리뷰 후속 목록의 A8 — 도 같은 버그였다). 대상: `/standup list|stop`·`answer` 안내와 슬래시 기원 확인·모달 열기 실패 안내, `/meetup list`와 인자 오류, `/meetup` 단독,
+    `/ask` 질문·usage·권한 거부, `/subscribe`·`/unsubscribe`의 빈 상태 안내, `/calendar status|disconnect`(connect의 "DM을 보냈다" 채널 안내 줄만 예외 —
+    동의 링크가 이미 DM이라 두 번 보내지 않는다), `Command.replyToSlashFailure`의 공통 오류. 본문이 있는 응답은 원문 앞에 한 줄
+    (`_(Sent here because my reply in <#C> was refused.)_`)을 붙여 보내고, 채널에 있어야 의미 있는 것(`/ask` 질문, `/meetup` 폼,
+    `/meetup list` 목록)은 안내문만 보낸다 — 문구는 거절 사유가 멤버십이 아닐 수도 있어(`is_archived`, `restricted_action*`) 봇 이름과
+    사유를 단정하지 않고, 도메인 문장이라 Slack도 지칭하지 않는다. `/ask` 질문이 거절되면 `MessageDeliveredEvent`가 없으므로 레저 행도 턴도 생기지 않고 안내 DM만 간다(DM은
+    `SIMPLE_TEXT`라 `AgentAskThreadStarter`가 보지 않는다).
+    기각: ① 슬래시 `response_url`을 핸들로 도메인에 실어 ephemeral을 그 URL로 보내기 — 봇이 없는 채널에서도 보이지만 5회·30분
+    제한이라 아웃박스 지연(CDC 정지·access-blocked 15분·rate limit·스윕) 뒤에는 `expired_url`로 실패해 결국 DM 폴백이 필요하고,
+    `/ask` 질문 실패 안내와 모달 기원 확인(`private_metadata` 운반)도 따로 필요하다 — UX 개선으로 나중에 얹을 수 있다(#38의 기각 ②는
+    답변 표면에 한한 것이라 그때 범위를 명시해 수정한다); ② 거절 시 `conversations.join` 후 재전송 — `channels:join` 스코프·재설치,
+    공개 채널만, 봇이 사용자 명령의 부작용으로 채널에 들어가는 정책 문제; ③ `chat:write.public` — `chat.postEphemeral` 적용 여부가
+    문서에 없고 스레드 멘션은 어차피 멤버십이 필요하다; ④ 슬래시 HTTP ack 본문에 답장 — 빈 200을 테스트가 고정하고 Socket Mode는
+    처리 전에 ack 하며 아웃박스 우회다(#38 ①). 알려진 한계: 폴백은 한 홉 더 걸린다(폴링 5초, CDC는 즉시, 커넥터 정지 시 stale 스윕
+    5~6분); 거의 모든 슬래시 응답 행이 V6이 되므로 V6을 모르는 바이너리(롤백·롤아웃 중 구 레플리카)는 그 행을 `IN_PROGRESS`로 쥔다
+    (24시간 상한); `/meetup list`는 목록이 아니라 안내만 DM으로 간다(`MeetingList`는 `ChannelMessage`에 렌더되지 않음, 후속 후보);
+    Messages 탭이 읽기 전용이라 DM에 답할 수는 없다. 안내문의 `<#C>`는 채널 id 멘션이라 봇이 없는 1:1 DM(`D…`)·그룹 DM(`G…`)에서 거절된 경우에는 어색하게 렌더되고 "초대" 안내도 맞지 않는다(그 대화에서 거절될 때만 보인다). 어느 채널 유형이 `not_in_channel`과 `channel_not_found` 중 무엇을 돌려주는지는
+    미확인이라 둘 다 처리한다. 상태: 유지. 근거: `service/relay/AGENTS.md`, `impl/command/AGENTS.md`,
+    `domain/.../command/outbound/AGENTS.md`, `.omc/plans/b2-not-in-channel-slash-replies.md`(git 미추적).
 
 ## 빌드·런타임
 
@@ -495,6 +528,13 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `GoogleOAuthCallbackControllerTest`·`GoogleOAuthClientTest`·`SlackUserEmailResolverTest`, 슬랙 API 문서(`users:read.email` scope,
   `users.info`, `users.profile.get`, 2026-10-13 리뷰에서 확인)
   (2026-10-13, 미커밋 작업 트리 `feature/security-scan-2026-10`), git-ignored `.omc/plans/security-scan-2026-10.md`
+- 봇이 없는 채널의 슬래시 응답 DM 폴백(#42): `domain/src/main/kotlin/dev/notypie/domain/command/outbound/{DirectReply,OutboundMessage}.kt`(`DirectReply`와 헬퍼, `fallback`),
+  `entity/Command.kt`(`replyToSlashFailure`), `entity/context/form/{AskSlash,StandupSlash,RequestMeeting,CalendarSlash}Context.kt`,
+  `application/src/main/kotlin/dev/notypie/application/service/relay/{OutboxPayloadRenderer,SlackMessageRelayServiceImpl}.kt`,
+  `service/standup/{StandupRoutineOpsService,StandupAnswerService}.kt`, `service/meeting/MeetingServiceImpl.kt`, `service/calendar/CalendarReplies.kt`,
+  `infrastructure/src/main/kotlin/dev/notypie/impl/command/ApplicationMessageDispatcher.kt`(`isChannelRefused`),
+  `repository/outbox/{OutboundMessagePort,OutboundMessageCodec}.kt`, `repository/outbox/schema/OutboxSchemaVersion.kt`(V6),
+  git-ignored `.omc/plans/b2-not-in-channel-slash-replies.md`(선택지 A~D와 아키텍트 검토 반영)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

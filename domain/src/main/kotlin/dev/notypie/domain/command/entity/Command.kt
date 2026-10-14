@@ -17,6 +17,8 @@ import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.common.escapeMarkup
 import java.util.UUID
@@ -63,11 +65,19 @@ abstract class Command<T : SubCommandDefinition>(
                 val command = slashCommandName.takeIf { it.isNotBlank() }?.let { "`$it`" } ?: "that command"
                 "Something went wrong handling $command. Please try again."
             }
+        val channel = ConversationTarget(id = commandData.channel)
+        val content = MessageContent.Text(headline = null, markdown = markdown)
         intents.offer(
             effect =
                 OutboundMessage.Ephemeral(
-                    target = ConversationTarget(id = commandData.channel),
-                    content = MessageContent.Text(headline = null, markdown = markdown),
+                    target = channel,
+                    content = content,
+                    fallback =
+                        directFallbackOf(
+                            channel = channel,
+                            recipient = UserRef(id = commandData.actorId),
+                            content = content,
+                        ),
                 ),
         )
     }

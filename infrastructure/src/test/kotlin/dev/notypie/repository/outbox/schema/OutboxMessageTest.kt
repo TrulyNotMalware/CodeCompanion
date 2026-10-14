@@ -3,6 +3,7 @@ package dev.notypie.repository.outbox.schema
 import dev.notypie.domain.command.createAgentQuestionMessage
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.DirectReply
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
@@ -145,7 +146,7 @@ class OutboxMessageTest :
                 then("only the row with a fallback is stamped V4, so an older binary holds it instead of dropping it") {
                     withFallback.schemaVersion shouldBe OutboxSchemaVersion.V4
                     withoutFallback.schemaVersion shouldBe OutboxSchemaVersion.V2
-                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4, 5)
+                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4, 5, 6)
                 }
 
                 then("the fallback survives the codec") {
@@ -177,6 +178,58 @@ class OutboxMessageTest :
                     question.schemaVersion shouldBe OutboxSchemaVersion.V5
                     plain.schemaVersion shouldBe OutboxSchemaVersion.V2
                     OutboxSchemaVersion.SUPPORTED shouldContain OutboxSchemaVersion.V5
+                }
+            }
+        }
+
+        given("CodecOutboundMessagePort.toRow for messages that carry a direct-reply fallback") {
+            val basicInfo = createCommandBasicInfo()
+            val channel = ConversationTarget(id = basicInfo.channel)
+            val requester = UserRef(id = basicInfo.publisherId)
+            val text = MessageContent.Text(headline = null, markdown = "plain")
+            val reply = DirectReply(recipient = requester, content = text)
+            val plain = OutboundMessage.ChannelMessage(target = channel, content = text)
+            val ephemeralWithFallback =
+                OutboundMessage.Ephemeral(target = channel, recipient = requester, content = text, fallback = reply)
+
+            fun versionOf(message: OutboundMessage, continuation: List<OutboundMessage> = emptyList()): Int =
+                port.toRow(message = message, basicInfo = basicInfo, continuation = continuation).schemaVersion
+
+            `when`("the fallback sits on the head row") {
+                then("an /ask question with a fallback is V6, not V5, and so is an ephemeral with one") {
+                    versionOf(message = createAgentQuestionMessage(fallback = reply)) shouldBe OutboxSchemaVersion.V6
+                    versionOf(message = ephemeralWithFallback) shouldBe OutboxSchemaVersion.V6
+                    versionOf(message = plain.copy(fallback = reply)) shouldBe OutboxSchemaVersion.V6
+                    OutboxSchemaVersion.SUPPORTED shouldContain OutboxSchemaVersion.V6
+                }
+
+                then("the direct reply a relay stages, a plain channel message, is V2") {
+                    versionOf(message = plain) shouldBe OutboxSchemaVersion.V2
+                }
+            }
+
+            `when`("the fallback or a newer shape sits only in a continuation part") {
+                then("the head row takes the highest version any part needs") {
+                    versionOf(message = plain, continuation = listOf(plain, ephemeralWithFallback)) shouldBe
+                        OutboxSchemaVersion.V6
+                    versionOf(message = plain, continuation = listOf(createAgentQuestionMessage())) shouldBe
+                        OutboxSchemaVersion.V5
+                    versionOf(message = plain, continuation = listOf(plain)) shouldBe OutboxSchemaVersion.V3
+                }
+            }
+
+            `when`("the fallback is nested in a replace-original message's fallback ephemeral") {
+                val replace =
+                    OutboundMessage.ReplaceMessage(
+                        handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list"),
+                        content = text,
+                        fallback = ephemeralWithFallback,
+                    )
+
+                then("the row is V6, so a V4 or V5 binary holds it instead of dropping the nested fallback") {
+                    versionOf(message = replace) shouldBe OutboxSchemaVersion.V6
+                    versionOf(message = replace.copy(fallback = ephemeralWithFallback.copy(fallback = null))) shouldBe
+                        OutboxSchemaVersion.V4
                 }
             }
         }

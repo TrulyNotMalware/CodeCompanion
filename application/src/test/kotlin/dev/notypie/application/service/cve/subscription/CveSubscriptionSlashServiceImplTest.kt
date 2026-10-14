@@ -10,14 +10,18 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.command.inbound.TriggerHandle
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import dev.notypie.repository.cve.CveSubscriptionRepository
 import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.CapturingSlot
@@ -60,6 +64,15 @@ class CveSubscriptionSlashServiceImplTest :
                 outboundStager = stager,
                 eventPublisher = publisher,
             )
+
+        fun OutboundMessage.Ephemeral.shouldCopyToRequesterDm() {
+            fallback shouldBe
+                directFallbackOf(
+                    channel = ConversationTarget(id = "C_CMD"),
+                    recipient = UserRef(id = "U_SUB"),
+                    content = content.shouldBeInstanceOf<MessageContent.Text>(),
+                )
+        }
 
         fun stagerCapturing(staged: CapturingSlot<OutboundMessage>): OutboundMessageStager {
             val stager = mockk<OutboundMessageStager>()
@@ -136,11 +149,12 @@ class CveSubscriptionSlashServiceImplTest :
             `when`("/subscribe is received") {
                 service.handleSubscribe(headers = noHeaders, payload = payload, commandData = commandData)
 
-                then("an informative ephemeral is staged and published instead of opening a modal") {
+                then("an informative ephemeral with a DM copy for a refused channel is staged instead of a modal") {
                     verify(exactly = 0) { commandExecutor.execute<SubCommandDefinition>(command = any()) }
                     val ephemeral = staged.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldContain
                         "no CVE topics available"
+                    ephemeral.shouldCopyToRequesterDm()
                     verify(exactly = 1) { publisher.publishEvent(events = any()) }
                 }
             }
@@ -163,11 +177,12 @@ class CveSubscriptionSlashServiceImplTest :
             `when`("/unsubscribe is received") {
                 service.handleUnsubscribe(headers = noHeaders, payload = payload, commandData = commandData)
 
-                then("an informative ephemeral is staged instead of opening a modal") {
+                then("an informative ephemeral with a DM copy is staged instead of opening a modal") {
                     verify(exactly = 0) { commandExecutor.execute<SubCommandDefinition>(command = any()) }
                     val ephemeral = staged.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldContain
                         "no CVE topic subscriptions to remove"
+                    ephemeral.shouldCopyToRequesterDm()
                 }
             }
         }

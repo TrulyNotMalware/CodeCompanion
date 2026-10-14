@@ -9,6 +9,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 
 internal const val CALENDAR_HEADLINE = "CodeCompanion — Google Calendar"
 
@@ -16,16 +17,26 @@ internal fun OutboundMessageStager.stageCalendarEphemeral(
     text: String,
     basicInfo: CommandBasicInfo,
     publisher: EventPublisher,
+    copyToDirectMessageOnRefusal: Boolean = true,
 ) {
+    val channel = ConversationTarget(id = basicInfo.channel)
+    val requester = UserRef(id = basicInfo.publisherId)
+    val content = MessageContent.Text(headline = CALENDAR_HEADLINE, markdown = text)
     val staged =
         checkNotNull(
             stage(
                 message =
                     OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = basicInfo.channel),
-                        recipient = UserRef(id = basicInfo.publisherId),
-                        content = MessageContent.Text(headline = CALENDAR_HEADLINE, markdown = text),
+                        target = channel,
+                        recipient = requester,
+                        content = content,
                         detailType = CommandDetailType.CALENDAR_CONNECTION,
+                        fallback =
+                            if (copyToDirectMessageOnRefusal) {
+                                directFallbackOf(channel = channel, recipient = requester, content = content)
+                            } else {
+                                null
+                            },
                     ),
                 basicInfo = basicInfo,
             ),

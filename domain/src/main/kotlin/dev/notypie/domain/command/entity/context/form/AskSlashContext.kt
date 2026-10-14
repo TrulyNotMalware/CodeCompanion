@@ -15,6 +15,8 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.escapeMarkup
 
 internal class AskSlashContext(
@@ -36,17 +38,20 @@ internal class AskSlashContext(
         internal val USAGE_MESSAGE: String = "Usage: `${ASK_USAGE.escapeMarkup()}`"
     }
 
+    private val channel: ConversationTarget = ConversationTarget(id = commandBasicInfo.channel)
+    private val requester: UserRef = UserRef(id = commandBasicInfo.publisherId)
+
     override fun parseCommandType(): CommandType = CommandType.PIPELINE
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.AGENT_ASK_QUESTION
 
     override fun runCommand(): CommandOutput {
         if (!actorRole.grants(permission = CommandPermission.AI)) return permissionDenied()
-        if (prompt.isBlank()) return createErrorResponse(errMessage = USAGE_MESSAGE)
+        if (prompt.isBlank()) return usageError()
         addOutbound(
             message =
                 OutboundMessage.ChannelMessage(
-                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    target = channel,
                     content =
                         MessageContent.AgentQuestion(
                             prompt = prompt,
@@ -54,6 +59,7 @@ internal class AskSlashContext(
                             channelName = channelName,
                         ),
                     detailType = commandDetailType,
+                    fallback = channelRefusedNotice(channel = channel, recipient = requester),
                 ),
         )
         return CommandOutput.success(
@@ -64,18 +70,30 @@ internal class AskSlashContext(
     }
 
     private fun permissionDenied(): CommandOutput {
-        addOutbound(
-            message =
-                OutboundMessage.Ephemeral(
-                    target = ConversationTarget(id = commandBasicInfo.channel),
-                    recipient = UserRef(id = commandBasicInfo.publisherId),
-                    content = MessageContent.Text(headline = null, markdown = PERMISSION_DENIED_MESSAGE),
-                ),
-        )
+        addOutbound(message = replyToRequester(markdown = PERMISSION_DENIED_MESSAGE))
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,
             commandDetailType = commandDetailType,
+        )
+    }
+
+    private fun usageError(): CommandOutput {
+        addOutbound(message = replyToRequester(markdown = USAGE_MESSAGE))
+        return CommandOutput.fail(
+            basicInfo = commandBasicInfo,
+            commandDetailType = commandDetailType,
+            reason = USAGE_MESSAGE,
+        )
+    }
+
+    private fun replyToRequester(markdown: String): OutboundMessage.Ephemeral {
+        val content = MessageContent.Text(headline = null, markdown = markdown)
+        return OutboundMessage.Ephemeral(
+            target = channel,
+            recipient = requester,
+            content = content,
+            fallback = directFallbackOf(channel = channel, recipient = requester, content = content),
         )
     }
 }

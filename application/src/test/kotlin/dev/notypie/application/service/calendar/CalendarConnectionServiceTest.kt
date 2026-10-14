@@ -17,9 +17,12 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.dto.MeetingDto
@@ -179,6 +182,15 @@ class CalendarConnectionServiceTest :
 
             fun OutboundMessage.Ephemeral.markdown(): String =
                 content.shouldBeInstanceOf<MessageContent.Text>().markdown
+
+            fun OutboundMessage.Ephemeral.shouldCopyToRequesterDm() {
+                fallback shouldBe
+                    directFallbackOf(
+                        channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                        recipient = UserRef(id = TEST_USER_ID),
+                        content = content.shouldBeInstanceOf<MessageContent.Text>(),
+                    )
+            }
         }
 
         fun harness(
@@ -239,10 +251,11 @@ class CalendarConnectionServiceTest :
                     dmBasicInfo.appId shouldBe TEST_APP_ID
                 }
 
-                then("the channel reply only says a DM was sent, so the link never shows in the channel") {
+                then("the channel reply only says a DM was sent and has no DM copy, since the link is there") {
                     val ephemeral = h.ephemeral()
                     ephemeral.target.id shouldBe TEST_CHANNEL_ID
                     ephemeral.recipient?.id shouldBe TEST_USER_ID
+                    ephemeral.fallback shouldBe null
                     with(h) {
                         ephemeral.markdown() shouldBe
                             "I sent you a direct message with a link to connect your Google Calendar."
@@ -331,10 +344,11 @@ class CalendarConnectionServiceTest :
                     revocation.reason shouldBe CalendarConnectionService.DISCONNECT_REASON
                 }
 
-                then("the reply says the access is being revoked") {
+                then("the reply says the access is being revoked, with a DM copy for a refused channel") {
                     with(h) {
                         ephemeral().markdown() shouldBe
                             "Google Calendar disconnected. CodeCompanion's access at Google is being revoked."
+                        ephemeral().shouldCopyToRequesterDm()
                     }
                 }
             }
@@ -345,10 +359,11 @@ class CalendarConnectionServiceTest :
                 val h = harness().apply { every { connections.find(userId = TEST_USER_ID) } returns null }
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.STATUS))
 
-                then("the reply says so and points at connect") {
+                then("the reply says so and points at connect, with a DM copy for a refused channel") {
                     with(h) {
                         ephemeral().markdown() shouldBe
                             "Google Calendar is not connected. ${CalendarConnectionService.CONNECT_USAGE}"
+                        ephemeral().shouldCopyToRequesterDm()
                     }
                 }
             }

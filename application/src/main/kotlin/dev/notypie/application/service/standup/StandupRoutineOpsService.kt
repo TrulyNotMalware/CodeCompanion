@@ -14,6 +14,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.standup.dto.RoutineDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.repository.standup.StandupRepository
@@ -62,15 +63,19 @@ class StandupRoutineOpsService(
                     stopRoutine(payload = payload) to CommandDetailType.STANDUP_ROUTINE_STOP
             }
 
+        val channel = ConversationTarget(id = basicInfo.channel)
+        val requester = UserRef(id = basicInfo.publisherId)
+        val content = MessageContent.Text(headline = RESPONSE_HEADLINE, markdown = text)
         val staged =
             checkNotNull(
                 outboundStager.stage(
                     message =
                         OutboundMessage.Ephemeral(
-                            target = ConversationTarget(id = basicInfo.channel),
-                            recipient = UserRef(id = basicInfo.publisherId),
-                            content = MessageContent.Text(headline = RESPONSE_HEADLINE, markdown = text),
+                            target = channel,
+                            recipient = requester,
+                            content = content,
                             detailType = detailType,
+                            fallback = directFallbackOf(channel = channel, recipient = requester, content = content),
                         ),
                     basicInfo = basicInfo,
                 ),

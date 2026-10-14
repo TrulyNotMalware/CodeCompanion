@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
+import dev.notypie.domain.command.outbound.DirectReply
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import tools.jackson.core.JacksonException
@@ -44,6 +45,11 @@ private interface TimeScheduleInfoMixin
 @JsonInclude(JsonInclude.Include.NON_NULL)
 private interface ReplaceMessageMixin
 
+private interface DirectReplyFallbackMixin {
+    @get:JsonInclude(JsonInclude.Include.NON_NULL)
+    val fallback: DirectReply?
+}
+
 class OutboundMessageCodecException(
     message: String,
     cause: Throwable? = null,
@@ -66,6 +72,8 @@ object OutboundMessageCodec {
             .addMixIn(MessageContent::class.java, MessageContentMixin::class.java)
             .addMixIn(TimeScheduleInfo::class.java, TimeScheduleInfoMixin::class.java)
             .addMixIn(OutboundMessage.ReplaceMessage::class.java, ReplaceMessageMixin::class.java)
+            .addMixIn(OutboundMessage.ChannelMessage::class.java, DirectReplyFallbackMixin::class.java)
+            .addMixIn(OutboundMessage.Ephemeral::class.java, DirectReplyFallbackMixin::class.java)
             .build()
 
     fun encode(envelope: OutboundEnvelope): String =

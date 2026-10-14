@@ -15,6 +15,7 @@ import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.AnswerRecordResult
 import dev.notypie.repository.standup.StandupRepository
@@ -53,13 +54,21 @@ class StandupAnswerServiceTest :
                     detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
                 )
 
-            fun ephemeralTo(text: String): OutboundMessage.Ephemeral =
-                OutboundMessage.Ephemeral(
+            fun ephemeralTo(text: String): OutboundMessage.Ephemeral {
+                val content = MessageContent.Text(headline = null, markdown = text)
+                return OutboundMessage.Ephemeral(
                     target = ConversationTarget(id = "C_CMD"),
                     recipient = UserRef(id = "U_STANDUP"),
-                    content = MessageContent.Text(headline = null, markdown = text),
+                    content = content,
                     detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                    fallback =
+                        directFallbackOf(
+                            channel = ConversationTarget(id = "C_CMD"),
+                            recipient = UserRef(id = "U_STANDUP"),
+                            content = content,
+                        ),
                 )
+            }
 
             fun repoAnswering(result: AnswerRecordResult): StandupRepository {
                 val repo = mockk<StandupRepository>()
@@ -251,20 +260,27 @@ class StandupAnswerServiceTest :
 
                 service.onStandupModalOpenFailed(event = event)
 
-                then("an ephemeral retry notice is published to the publisher") {
+                then("an ephemeral retry notice is published to the publisher, with a DM copy for a refusal") {
+                    val content =
+                        MessageContent.Text(
+                            headline = null,
+                            markdown =
+                                "Couldn't open the standup form. _Tip: re-click the " +
+                                    "*Fill in standup* button in the original DM, or run " +
+                                    "`/standup answer` in the routine's channel, to try again._",
+                        )
                     verify(exactly = 1) {
                         stager.stage(
                             message =
                                 OutboundMessage.Ephemeral(
                                     target = ConversationTarget(id = "D_STANDUP"),
                                     recipient = null,
-                                    content =
-                                        MessageContent.Text(
-                                            headline = null,
-                                            markdown =
-                                                "Couldn't open the standup form. _Tip: re-click the " +
-                                                    "*Fill in standup* button in the original DM, or run " +
-                                                    "`/standup answer` in the routine's channel, to try again._",
+                                    content = content,
+                                    fallback =
+                                        directFallbackOf(
+                                            channel = ConversationTarget(id = "D_STANDUP"),
+                                            recipient = UserRef(id = "U_STANDUP"),
+                                            content = content,
                                         ),
                                 ),
                             basicInfo =

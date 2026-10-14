@@ -1,5 +1,9 @@
 package dev.notypie.application.service.relay
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.AsyncConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
@@ -28,6 +32,7 @@ import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundEnvelope
+import dev.notypie.repository.outbox.OutboundMessageCodec
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
@@ -51,6 +56,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
@@ -909,6 +915,228 @@ class SlackMessageRelayServiceImplTest :
                 then("the retry finds the row already recorded and the next part is staged only once") {
                     verify(exactly = 2) { lane.completed(status = MessageStatus.SUCCESS) }
                     verify(exactly = 1) { lane.outboxRepository.save(any()) }
+                }
+            }
+        }
+
+        given("dispatchClaimed on a slash reply that carries a fallback") {
+            val basicInfo = createCommandBasicInfo()
+            val directReply =
+                OutboundEnvelope(
+                    message =
+                        OutboundMessage.ChannelMessage(
+                            target = ConversationTarget(id = basicInfo.publisherId),
+                            content = MessageContent.Text(headline = null, markdown = "copy"),
+                        ),
+                    basicInfo = basicInfo.copy(channel = basicInfo.publisherId),
+                )
+
+            fun loggedDuring(level: Level, action: () -> Unit): List<String> {
+                val appender = ListAppender<ILoggingEvent>().apply { start() }
+                val logger = LoggerFactory.getLogger(SlackMessageRelayServiceImpl::class.java.packageName) as Logger
+                logger.addAppender(appender)
+                try {
+                    action()
+                } finally {
+                    logger.detachAppender(appender)
+                }
+                return appender.list.filter { it.level == level }.map { it.formattedMessage }
+            }
+
+            class FallbackLane(
+                result: CommandOutput,
+                trigger: FallbackTrigger = FallbackTrigger.CHANNEL_REFUSED,
+                completed: List<Int> = listOf(1),
+                next: OutboundEnvelope? = null,
+                val transactionManager: PlatformTransactionManager = createStubTransactionManager(),
+            ) {
+                val eventId = UUID.randomUUID().toString()
+                val row = createOutboxRow(eventId = eventId, schemaVersion = OutboxSchemaVersion.V6)
+                val fallbackRow = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val published = mutableListOf<Any>()
+                val outboxRepository =
+                    mockk<MessageOutboxRepository>().also { repository ->
+                        repository.stubClaimLifecycle()
+                        every {
+                            repository.completeClaim(eventId = any(), attemptCount = any(), status = any(), now = any())
+                        } returnsMany completed
+                        every { repository.save(fallbackRow) } returns fallbackRow
+                    }
+                val port =
+                    mockk<OutboundMessagePort> {
+                        every {
+                            toRow(
+                                message = directReply.message,
+                                basicInfo = directReply.basicInfo,
+                                transport = Transport.SLACK,
+                                continuation = emptyList(),
+                            )
+                        } returns fallbackRow
+                    }
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        outboundMessagePort = port,
+                        payloadRenderer =
+                            mockk {
+                                every { render(row = row) } returns
+                                    RenderedRow(
+                                        payload = payload(),
+                                        next = next,
+                                        fallback = FallbackPlan(envelope = directReply, trigger = trigger),
+                                    )
+                            },
+                        messageDispatcher = dispatcherReturning(output = result),
+                        applicationEventPublisher =
+                            mockk { every { publishEvent(capture(published)) } returns Unit },
+                        transactionManager = transactionManager,
+                    )
+
+                fun dispatch() = service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                fun completed(status: MessageStatus) =
+                    outboxRepository.completeClaim(
+                        eventId = eventId,
+                        attemptCount = 1,
+                        status = status.name,
+                        now = DEFAULT_TEST_NOW,
+                    )
+            }
+
+            listOf(
+                "not_in_channel",
+                "no_permission",
+                "channel_not_found",
+                "restricted_action_read_only_channel",
+                "user_not_in_channel",
+            ).forEach { code ->
+                `when`("Slack refuses the reply's channel with $code") {
+                    val lane = FallbackLane(result = failOutput(event = payload(), reason = code))
+                    val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+
+                    then("FAILURE is written and the direct reply is staged once, inside the same transaction") {
+                        verify(exactly = 1) { lane.outboxRepository.save(any()) }
+                        verifyOrder {
+                            lane.transactionManager.getTransaction(any())
+                            lane.completed(status = MessageStatus.FAILURE)
+                            lane.outboxRepository.save(lane.fallbackRow)
+                            lane.transactionManager.commit(any())
+                        }
+                    }
+
+                    then("no delivery is announced, only the failure, and the warning names the refusal") {
+                        lane.published.map { it::class } shouldBe listOf(MessagePublishFailedEvent::class)
+                        warnings shouldBe
+                            listOf(
+                                "Slack refused the channel of eventId=${lane.eventId} " +
+                                    "idempotencyKey=${lane.row.idempotencyKey} ($code); " +
+                                    "staged its direct reply to ${basicInfo.publisherId}",
+                            )
+                    }
+                }
+            }
+
+            `when`("Slack rejects the reply for a reason that is not a channel refusal") {
+                val lane = FallbackLane(result = failOutput(event = payload(), reason = "invalid_blocks"))
+                lane.dispatch()
+
+                then("FAILURE is written and no direct reply is staged") {
+                    verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
+                    verify(exactly = 0) { lane.outboxRepository.save(any()) }
+                }
+            }
+
+            `when`("a replace-original fallback meets the same rejection") {
+                val lane =
+                    FallbackLane(
+                        result = failOutput(event = payload(), reason = "invalid_blocks"),
+                        trigger = FallbackTrigger.ANY_DEFINITIVE_FAILURE,
+                    )
+                val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+
+                then("its fallback is still staged for any definitive failure, with the replace wording") {
+                    verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
+                    verify(exactly = 1) { lane.outboxRepository.save(lane.fallbackRow) }
+                    warnings shouldBe
+                        listOf(
+                            "Replacing the original message failed for eventId=${lane.eventId} " +
+                                "idempotencyKey=${lane.row.idempotencyKey} (invalid_blocks); staged its fallback",
+                        )
+                }
+            }
+
+            `when`("another owner already recorded the refused row") {
+                val refused = failOutput(event = payload(), reason = "not_in_channel")
+                val lane = FallbackLane(result = refused, completed = listOf(0))
+                val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+
+                then("this worker stages no direct reply and claims none: the only warning is the take-over") {
+                    verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
+                    verify(exactly = 0) { lane.outboxRepository.save(any()) }
+                    warnings shouldBe
+                        listOf("Claim attempt=1 on eventId=${lane.eventId} was taken over; FAILURE not recorded")
+                }
+            }
+
+            `when`("every status write of the refused row fails") {
+                val lane = FallbackLane(result = failOutput(event = payload(), reason = "not_in_channel"))
+                every {
+                    lane.outboxRepository.completeClaim(
+                        eventId = any(),
+                        attemptCount = any(),
+                        status = any(),
+                        now = any(),
+                    )
+                } throws DataAccessResourceFailureException("database down")
+                val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+
+                then("nothing is staged and no warning claims a direct reply") {
+                    verify(exactly = STATUS_WRITE_ATTEMPTS.toInt()) { lane.completed(status = MessageStatus.FAILURE) }
+                    verify(exactly = 0) { lane.outboxRepository.save(any()) }
+                    warnings shouldBe emptyList()
+                }
+            }
+
+            `when`("the send is rate-limited, held as access-blocked, or has an unknown outcome") {
+                val lanes =
+                    listOf(
+                        RateLimitedOutput(event = payload(), retryAfter = Duration.ofSeconds(30L)),
+                        failOutput(event = payload(), reason = ACCESS_BLOCKED_REASON),
+                        failOutput(event = payload(), reason = "$OUTCOME_UNKNOWN_REASON: timeout"),
+                    ).map { result -> FallbackLane(result = result) }
+                lanes.forEach { lane -> lane.dispatch() }
+
+                then("none of them stages the direct reply") {
+                    lanes.forEach { lane -> verify(exactly = 0) { lane.outboxRepository.save(any()) } }
+                }
+            }
+
+            `when`("a refused row also carried the rest of a chain") {
+                val chainPart =
+                    OutboundMessage.ChannelMessage(
+                        target = ConversationTarget(id = basicInfo.channel),
+                        content = MessageContent.Text(headline = "(2/2)", markdown = "part 2"),
+                    )
+                val next = OutboundEnvelope(message = chainPart, basicInfo = basicInfo)
+                val lane = FallbackLane(result = failOutput(event = payload(), reason = "not_in_channel"), next = next)
+                every { lane.row.payload } returns
+                    OutboundMessageCodec.encode(
+                        envelope =
+                            OutboundEnvelope(
+                                message = chainPart,
+                                basicInfo = basicInfo,
+                                continuation = listOf(chainPart),
+                            ),
+                    )
+                val errors = loggedDuring(level = Level.ERROR) { lane.dispatch() }
+
+                then("the direct reply is staged instead of the next part, and the dropped part is logged") {
+                    verify(exactly = 1) { lane.outboxRepository.save(lane.fallbackRow) }
+                    errors shouldBe
+                        listOf(
+                            "Dropping 1 chained parts after eventId=${lane.eventId} " +
+                                "idempotencyKey=${lane.row.idempotencyKey} ended FAILURE",
+                        )
                 }
             }
         }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-14 -->
 
 # domain/command/outbound (test)
 
@@ -11,7 +11,7 @@ conscious change that touches a test.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboundMessageTest.kt` | `BehaviorSpec` that constructs and reads back: the `@JvmInline` value classes `ConversationTarget`, `UserRef`, `ModalOpenHandle`, `ResponseReplaceHandle` and the `MessageRef` pair; every `MessageContent` variant (`Text`, `ErrorNotice`, `Schedule` with `TimeScheduleInfo`, `MeetingRequest` with `ApprovalContents`); every `ModalForm` variant (`Reschedule`, `AddParticipant`, `StandupFill`, `StandupSetup`, `DeclineReason`); every `OutboundMessage` variant (`ChannelMessage`, `Ephemeral` — `recipient == null` means the publisher, `DirectMessage`, `UpdateMessage`, `ReplaceMessage`, `OpenModal`, `Approval` — `routingExtras` defaults to empty, `Notice`). Builds `ApprovalContents` through a private `approvalContents()` helper instead of the fixture `createApprovalContents` |
+| `OutboundMessageTest.kt` | `BehaviorSpec` that constructs and reads back: the `@JvmInline` value classes `ConversationTarget`, `UserRef`, `ModalOpenHandle`, `ResponseReplaceHandle` and the `MessageRef` pair; every `MessageContent` variant (`Text`, `ErrorNotice`, `Schedule` with `TimeScheduleInfo`, `MeetingRequest` with `ApprovalContents`); every `ModalForm` variant (`Reschedule`, `AddParticipant`, `StandupFill`, `StandupSetup`, `DeclineReason`); every `OutboundMessage` variant (`ChannelMessage`, `Ephemeral` — `recipient == null` means the publisher, `DirectMessage`, `UpdateMessage`, `ReplaceMessage`, `OpenModal`, `Approval` — `routingExtras` defaults to empty, `Notice`; `ChannelMessage` / `Ephemeral` `fallback` defaults to `null`). The exact wording of `channelRefusedNotice` and `directFallbackOf` (prefix line, original headline kept, no transport name) is pinned here, and a hostile channel id (`C1> <https://evil.example|Re-authorize & go`) comes out escaped in both. Builds `ApprovalContents` through a private `approvalContents()` helper instead of the fixture `createApprovalContents` |
 
 ## For AI Agents
 

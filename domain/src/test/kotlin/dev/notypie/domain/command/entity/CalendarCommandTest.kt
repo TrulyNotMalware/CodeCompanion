@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.entity
 
+import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -8,8 +9,11 @@ import dev.notypie.domain.command.entity.slash.CALENDAR_USAGE
 import dev.notypie.domain.command.entity.slash.CalendarCommand
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -29,7 +33,14 @@ class CalendarCommandTest :
         fun List<CommandEffect>.usageEphemeral(): String {
             val ephemeral = single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
             ephemeral.recipient shouldBe null
-            return ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
+            val content = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>()
+            ephemeral.fallback shouldBe
+                directFallbackOf(
+                    channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                    recipient = UserRef(id = TEST_USER_ID),
+                    content = content,
+                )
+            return content.markdown
         }
 
         given("the /calendar usage line") {

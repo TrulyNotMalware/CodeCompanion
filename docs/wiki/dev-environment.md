@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-10-13_
+_type: guide · updated: 2026-10-14_
 
 > JDK 25 · Gradle 9.8.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -249,9 +249,7 @@ could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2�
   (무효 키였던 `enabled: false`는 2026-09-21에 제거). `db/migration/V*.sql`은 **사람이 수동으로 적용**한다.
 - 스키마 기동 방식: `local`/`slack-live`/`dev`는 `ddl-auto: update`로 Hibernate가 베이스 테이블을 만들고 `V*` 스크립트는 그 위에 얹는
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
-- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V26**(2026-10-13 `feature/ask-turn-ledger`의 미커밋 작업 트리; `main`과 마지막으로 fetch한
-  `origin/main` `8446f9d8`은 V25), 다음은 **V27**. 번호를 정하기
-  전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
+- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V26**(`main` `c80d312b`, PR #36, 2026-10-13), 다음은 **V27**. 번호를 정하기 전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
 - **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈춰 있었고 #26(`f9971700`, 2026-10-06)이
   V18~V23을 한꺼번에 실었다. 아직 V17인 환경의 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
   구 파드 종료 → 배포 → V21**이다. V21을 뺀 나머지는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 구 바이너리는 그것에 의존하지

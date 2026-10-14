@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
 
 # domain/command/outbound
 
@@ -12,7 +12,8 @@ adapter implements to turn these into staged events.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboundMessage.kt` | `sealed interface OutboundMessage : CommandEffect` — `ChannelMessage(target, content, detailType?, threadId?)`, `Ephemeral(target, recipient?, content, detailType?)`, `DirectMessage(recipient, content)`, `UpdateMessage(ref, content: MessageContent.Text, detailType)`, `ReplaceMessage(handle, content: MessageContent.Text, fallback: Ephemeral? = null)` (Text by type since B1 — both rewrite markdown in place, so non-Text content is unrepresentable; `fallback` is what the relay sends instead when Slack refuses the replace, e.g. an expired or used-up handle — the `/meetup list` close uses it to fall back to the host's ephemeral), `OpenModal(handle, form)`, `Approval(target, recipient?, approval, routingExtras)`, `Notice(target, mentions, message)` |
+| `OutboundMessage.kt` | `sealed interface OutboundMessage : CommandEffect` — `ChannelMessage(target, content, detailType?, threadId?, fallback: DirectReply? = null)`, `Ephemeral(target, recipient?, content, detailType?, fallback: DirectReply? = null)` (`fallback` is the requester's DM the relay stages when Slack refuses the reply's channel, see `DirectReply.kt`), `DirectMessage(recipient, content)`, `UpdateMessage(ref, content: MessageContent.Text, detailType)`, `ReplaceMessage(handle, content: MessageContent.Text, fallback: Ephemeral? = null)` (Text by type since B1 — both rewrite markdown in place, so non-Text content is unrepresentable; `fallback` is what the relay sends instead when Slack refuses the replace, e.g. an expired or used-up handle — the `/meetup list` close uses it to fall back to the host's ephemeral), `OpenModal(handle, form)`, `Approval(target, recipient?, approval, routingExtras)`, `Notice(target, mentions, message)` |
+| `DirectReply.kt` | `data class DirectReply(recipient: UserRef, content: MessageContent.Text)` — a DM to one user, not an `OutboundMessage`: it is never staged on its own, has no codec subtype and cannot carry a thread, a detail type or non-Text content. `channelRefusedNotice(channel, recipient)` builds the neutral notice (`I couldn't reply in <#C>: the post there was refused. If I'm not a member of that channel, invite me and try again.`) for replies whose content belongs in the channel (the `/ask` question, the `/meetup` form, the `/meetup list` list); `directFallbackOf(channel, recipient, content)` copies a Text reply with one leading line `_(Sent here because my reply in <#C> was refused.)_` and the original headline. Both escape the channel id with `escapeMarkup()` so a forged id cannot break out of the `<#…>` mention, and neither names the transport (domain text stays transport-neutral). Producers call these two, never hand-write the text |
 | `MessageContent.kt` | `sealed interface` — `Text(headline?, markdown)`, `ErrorNotice(className, message, details?)`, `Schedule(headline, info: TimeScheduleInfo)`, `MeetingRequest(approval?)`, `MeetingList(meetings: List<MeetingDto>, currentUserId)`, `StandupSummary(routineName, sessionDate, members, answers, questions)`, `AgentQuestion(prompt, requesterName, channelName)` (the `/ask` question) |
 | `ModalForm.kt` | `sealed interface` — `Reschedule`, `AddParticipant` (both `meetingUid`, `requesterId`, `channel`, `listHandle: ResponseReplaceHandle?` — the `/meetup list` message the modal was opened from, ferried to the submission so its success can close the list), `StandupFill(sessionUid, routineUid, requesterId, originNotice)`, `StandupSetup(creatorId, commandChannel)`, `DeclineReason(meetingIdempotencyKey, participantUserId, meetingTitle, originNotice?)`, `CveSubscribe(topics)`, `CveUnsubscribe(topics)`; `TopicOption(key, label)` |
 | `OutboundTargets.kt` | Value classes `ConversationTarget(id)`, `UserRef(id)`; `MessageRef(conversation, messageId)` |
@@ -34,6 +35,14 @@ adapter implements to turn these into staged events.
   `view_submission` has no channel of its own.
 - `threadId` non-null on `ChannelMessage` posts a threaded reply; `AgentConverse` replies use the thread
   root as the conversation id.
+- **Slash replies carry a `fallback`** (B-2, 2026-10-14): a slash command can run in a channel the bot has not
+  joined, where `chat.postEphemeral` / `chat.postMessage` fail with `not_in_channel` / `no_permission`. Every
+  slash reply sets `fallback`: the contexts in `entity/context/form/AGENTS.md`, `Command.replyToSlashFailure`, and
+  the application services that answer a slash command in its channel (`service/standup`, `service/meeting`
+  `getMeetingListEvent`, `service/calendar`, `service/cve/subscription`). The one exception is the
+  `/calendar connect` pointer, whose consent link is already a DM. Mention-path and interaction replies set none
+  (the bot is in those channels). A row with a `fallback` is stamped schema V6
+  (`infrastructure/repository/outbox/schema/AGENTS.md`).
 - `Ephemeral.recipient = null` is the common case (`CommandContext.errorEphemeral`); infrastructure
   resolves the addressee. `Approval.routingExtras` are appended to the button value after
   `<idempotencyKey>,<detailType>` — see `command/inbound/AGENTS.md` for the read side.

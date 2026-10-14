@@ -6,7 +6,9 @@ import dev.notypie.application.outbox.createOutboxJpaContext
 import dev.notypie.application.outbox.createPollingProcessorFixture
 import dev.notypie.application.outbox.createRelayService
 import dev.notypie.application.outbox.outboxColumn
+import dev.notypie.domain.command.createAgentQuestionMessage
 import dev.notypie.domain.command.createCommandBasicInfo
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
@@ -15,6 +17,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
 import dev.notypie.impl.command.OutboundRenderer
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.createPostEventPayloadContents
@@ -68,11 +71,13 @@ class OutboxChainJpaTransactionTest :
         ) {
             val clock = MutableClock()
             val sent = CopyOnWriteArrayList<OutboundMessage>()
+            val sentTo = CopyOnWriteArrayList<String>()
             val dispatcher = ScriptedMessageDispatcher(outcomes = outcomes, fallback = delivered)
             private val renderer =
                 mockk<OutboundRenderer> {
                     every { render(message = any(), basicInfo = any()) } answers {
                         sent += firstArg<OutboundMessage>()
+                        sentTo += secondArg<CommandBasicInfo>().channel
                         createPostEventPayloadContents(commandDetailType = CommandDetailType.SIMPLE_TEXT)
                     }
                 }
@@ -199,6 +204,69 @@ class OutboxChainJpaTransactionTest :
 
                 then("only the replacement is sent and no fallback row is written") {
                     lane.sent shouldBe listOf(replace)
+                    statuses() shouldBe listOf(MessageStatus.SUCCESS.name)
+                }
+            }
+        }
+
+        given("an /ask question staged with the notice for a channel Slack refuses") {
+            val requester = UserRef(id = basicInfo.publisherId)
+            val channel = ConversationTarget(id = basicInfo.channel)
+            val notice = channelRefusedNotice(channel = channel, recipient = requester)
+            val question = createAgentQuestionMessage(channel = basicInfo.channel, fallback = notice)
+            val directReply =
+                OutboundMessage.ChannelMessage(target = ConversationTarget(id = requester.id), content = notice.content)
+
+            fun stageQuestion(): String =
+                repository.save(codecPort.toRow(message = question, basicInfo = basicInfo)).eventId
+
+            `when`("Slack answers not_in_channel, then the poller runs again") {
+                jdbc.update("DELETE FROM outbox_message")
+                val refused: (SlackEventPayload) -> CommandOutput =
+                    { failOutput(event = it, reason = "not_in_channel") }
+                val lane = Lane(outcomes = listOf(refused))
+                val headId = stageQuestion()
+                lane.poller.pollPending()
+                val fallbackRows = pendingIds()
+                lane.poller.pollPending()
+
+                then("the question ends FAILURE, and the notice is staged once as a plain row and sent to the DM") {
+                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V6
+                    jdbc.outboxColumn(eventId = headId, column = "status") shouldBe MessageStatus.FAILURE.name
+                    fallbackRows.size shouldBe 1
+                    val fallbackId = fallbackRows.single()
+                    jdbc.outboxColumn(eventId = fallbackId, column = "schema_version") shouldBe OutboxSchemaVersion.V2
+                    OutboundMessageCodec.decode(json = payloadOf(eventId = fallbackId)).message shouldBe directReply
+                    lane.sent shouldBe listOf(question, directReply)
+                    lane.sentTo shouldBe listOf(basicInfo.channel, requester.id)
+                    statuses().sorted() shouldBe listOf(MessageStatus.FAILURE.name, MessageStatus.SUCCESS.name)
+                }
+            }
+
+            `when`("Slack rejects the question for a reason that is not a channel refusal") {
+                jdbc.update("DELETE FROM outbox_message")
+                val rejected: (SlackEventPayload) -> CommandOutput =
+                    { failOutput(event = it, reason = "invalid_blocks") }
+                val lane = Lane(outcomes = listOf(rejected))
+                stageQuestion()
+                lane.poller.pollPending()
+                lane.poller.pollPending()
+
+                then("the question ends FAILURE and no notice row is written") {
+                    lane.sent shouldBe listOf(question)
+                    statuses() shouldBe listOf(MessageStatus.FAILURE.name)
+                }
+            }
+
+            `when`("Slack accepts the question") {
+                jdbc.update("DELETE FROM outbox_message")
+                val lane = Lane()
+                stageQuestion()
+                lane.poller.pollPending()
+                lane.poller.pollPending()
+
+                then("only the question is sent and no notice row is written") {
+                    lane.sent shouldBe listOf(question)
                     statuses() shouldBe listOf(MessageStatus.SUCCESS.name)
                 }
             }

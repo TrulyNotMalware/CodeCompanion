@@ -14,6 +14,8 @@ import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 
 private const val CONNECT_ACTION = "connect"
 private const val DISCONNECT_ACTION = "disconnect"
@@ -54,12 +56,20 @@ internal class CalendarSlashContext(
     }
 
     private fun usageError(message: String): CommandOutput {
+        val channel = ConversationTarget(id = commandBasicInfo.channel)
+        val content = MessageContent.Text(headline = null, markdown = message)
         addOutbound(
             message =
                 OutboundMessage.Ephemeral(
-                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    target = channel,
                     recipient = null,
-                    content = MessageContent.Text(headline = null, markdown = message),
+                    content = content,
+                    fallback =
+                        directFallbackOf(
+                            channel = channel,
+                            recipient = UserRef(id = commandBasicInfo.publisherId),
+                            content = content,
+                        ),
                 ),
         )
         return CommandOutput.fail(

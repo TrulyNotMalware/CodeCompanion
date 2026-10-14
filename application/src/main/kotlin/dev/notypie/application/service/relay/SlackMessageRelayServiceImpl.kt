@@ -231,17 +231,36 @@ class SlackMessageRelayServiceImpl(
                 )
             }
             else -> {
-                if (rendered.fallback != null) {
-                    logger.warn {
-                        "Replacing the original message failed for eventId=$eventId " +
-                            "idempotencyKey=${row.idempotencyKey} (${result.errorReason}); staging its fallback"
-                    }
+                val fallback = rendered.fallback?.takeIf { plan -> plan.firesOn(result = result) }
+                val recorded =
+                    complete(
+                        claim = claim,
+                        updateEvent = result.toOutboxUpdateEvent(eventId = eventId),
+                        next = fallback?.envelope,
+                        dropsChain = true,
+                    )
+                if (recorded && fallback != null) {
+                    logStagedFallback(row = row, eventId = eventId, result = result, plan = fallback)
                 }
-                complete(
-                    claim = claim,
-                    updateEvent = result.toOutboxUpdateEvent(eventId = eventId),
-                    next = rendered.fallback,
-                )
+            }
+        }
+    }
+
+    private fun logStagedFallback(
+        row: OutboxMessage,
+        eventId: UUID,
+        result: CommandOutput,
+        plan: FallbackPlan,
+    ) {
+        logger.warn {
+            when (plan.trigger) {
+                FallbackTrigger.ANY_DEFINITIVE_FAILURE ->
+                    "Replacing the original message failed for eventId=$eventId " +
+                        "idempotencyKey=${row.idempotencyKey} (${result.errorReason}); staged its fallback"
+
+                FallbackTrigger.CHANNEL_REFUSED ->
+                    "Slack refused the channel of eventId=$eventId idempotencyKey=${row.idempotencyKey} " +
+                        "(${result.errorReason}); staged its direct reply to ${plan.envelope.basicInfo.channel}"
             }
         }
     }
@@ -308,9 +327,14 @@ class SlackMessageRelayServiceImpl(
         }
     }
 
-    private fun complete(claim: OutboxClaim, updateEvent: OutboxUpdateEvent, next: OutboundEnvelope? = null) {
-        if (!writeTerminal(claim = claim, status = updateEvent.status, next = next)) return
-        if (next == null && updateEvent.status == MessageStatus.FAILURE) logDroppedChain(row = claim.row)
+    private fun complete(
+        claim: OutboxClaim,
+        updateEvent: OutboxUpdateEvent,
+        next: OutboundEnvelope? = null,
+        dropsChain: Boolean = next == null,
+    ): Boolean {
+        if (!writeTerminal(claim = claim, status = updateEvent.status, next = next)) return false
+        if (dropsChain && updateEvent.status == MessageStatus.FAILURE) logDroppedChain(row = claim.row)
         try {
             applicationEventPublisher.publishEvent(updateEvent)
         } catch (exception: Exception) {
@@ -319,6 +343,7 @@ class SlackMessageRelayServiceImpl(
                     "${updateEvent.status}"
             }
         }
+        return true
     }
 
     private fun writeTerminal(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope? = null): Boolean {

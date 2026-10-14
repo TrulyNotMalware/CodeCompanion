@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox/schema
 
@@ -10,7 +10,7 @@ no Spring, no database — it checks the in-memory `OutboxMessage` the port prod
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxMessageTest.kt` | `toChainHead` of three parts → payload with part 1 and parts 2–3 as continuation, `chainedParts() == 2`, schema V3; of one part → V2, `chainedParts() == 0`. A `ReplaceMessage` with a `fallback` → V4 and the fallback decodes back; without one → V2; `SUPPORTED == {2, 3, 4}`. `CodecOutboundMessagePort().toRow(message, basicInfo)`: `eventId` non-blank and unique per call, `idempotencyKey` / `publisherId` copied from `createCommandBasicInfo()`, `transport == Transport.SLACK.name`, `schemaVersion == OutboxSchemaVersion.V2`, `status == MessageStatus.PENDING.name`, and `payload` decodes back through `OutboundMessageCodec` to the original `basicInfo` and a `ChannelMessage` / `Text`. `OutboxMessage.updateMessageStatus` to `SUCCESS` and `FAILURE`; `toRow` stamps only an `AgentQuestion` row V5 and `SUPPORTED` is {2, 3, 4, 5} |
+| `OutboxMessageTest.kt` | `toChainHead` of three parts → payload with part 1 and parts 2–3 as continuation, `chainedParts() == 2`, schema V3; of one part → V2, `chainedParts() == 0`. A `ReplaceMessage` with a `fallback` → V4 and the fallback decodes back; without one → V2; `SUPPORTED == {2, 3, 4, 5, 6}`. `CodecOutboundMessagePort().toRow(message, basicInfo)`: `eventId` non-blank and unique per call, `idempotencyKey` / `publisherId` copied from `createCommandBasicInfo()`, `transport == Transport.SLACK.name`, `schemaVersion == OutboxSchemaVersion.V2`, `status == MessageStatus.PENDING.name`, and `payload` decodes back through `OutboundMessageCodec` to the original `basicInfo` and a `ChannelMessage` / `Text`. `OutboxMessage.updateMessageStatus` to `SUCCESS` and `FAILURE`; `toRow` stamps only an `AgentQuestion` row V5 and `SUPPORTED` contains V5. A `DirectReply` fallback → V6 on an `/ask` question (not V5), an `Ephemeral` and a plain `ChannelMessage`; the staged direct reply itself → V2; in a continuation part only → V6 (an `AgentQuestion` there → V5, a plain chain → V3); nested in a `ReplaceMessage`'s fallback ephemeral → V6, without it → V4 |
 
 ## For AI Agents
 

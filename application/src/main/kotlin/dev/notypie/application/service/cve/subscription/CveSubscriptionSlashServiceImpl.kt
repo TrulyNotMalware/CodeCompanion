@@ -14,6 +14,8 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.TopicOption
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import dev.notypie.repository.cve.CveSubscriptionRepository
 import dev.notypie.repository.cve.CveTopic
@@ -117,13 +119,21 @@ class CveSubscriptionSlashServiceImpl(
 
     private fun publishInfo(commandData: InboundCommand, idempotencyKey: UUID, message: String) {
         val basicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey)
+        val channel = ConversationTarget(id = basicInfo.channel)
+        val content = MessageContent.Text(headline = null, markdown = message)
         outboundStager
             .stage(
                 message =
                     OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = basicInfo.channel),
+                        target = channel,
                         recipient = null,
-                        content = MessageContent.Text(headline = null, markdown = message),
+                        content = content,
+                        fallback =
+                            directFallbackOf(
+                                channel = channel,
+                                recipient = UserRef(id = basicInfo.publisherId),
+                                content = content,
+                            ),
                     ),
                 basicInfo = basicInfo,
             )?.let { eventPublisher.publishOne(event = it) }

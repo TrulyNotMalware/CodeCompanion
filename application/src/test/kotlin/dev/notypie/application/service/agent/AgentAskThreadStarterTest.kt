@@ -297,6 +297,23 @@ class AgentAskThreadStarterTest :
                     lane.submitted.shouldBeEmpty()
                 }
             }
+
+            `when`("a plain-text delivery with a ts arrives, as the /ask notice staged for a refused channel does") {
+                val lane = lane()
+                val eventId = storedQuestion()
+                val warnings =
+                    loggedDuring(level = Level.WARN) {
+                        lane.starter.onDelivered(
+                            event = deliveryOf(eventId = eventId, commandDetailType = CommandDetailType.SIMPLE_TEXT),
+                        )
+                    }
+
+                then("it is ignored before the outbox is read: no warning, no turn recorded or submitted") {
+                    warnings.shouldBeEmpty()
+                    askTurnRepository.count() shouldBe 0L
+                    lane.submitted.shouldBeEmpty()
+                }
+            }
         }
 
         given("an asked question delivered without a Slack ts") {
