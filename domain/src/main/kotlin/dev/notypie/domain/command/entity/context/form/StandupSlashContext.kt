@@ -18,6 +18,7 @@ import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.standup.dto.StandupAnswerCandidate
 import dev.notypie.domain.standup.entity.Routine
@@ -156,12 +157,16 @@ internal class StandupSlashContext(
     }
 
     private fun replyToRequester(markdown: String) {
+        val channel = ConversationTarget(id = commandBasicInfo.channel)
+        val requester = UserRef(id = commandBasicInfo.publisherId)
+        val content = MessageContent.Text(headline = null, markdown = markdown)
         addOutbound(
             message =
                 OutboundMessage.Ephemeral(
-                    target = ConversationTarget(id = commandBasicInfo.channel),
-                    recipient = UserRef(id = commandBasicInfo.publisherId),
-                    content = MessageContent.Text(headline = null, markdown = markdown),
+                    target = channel,
+                    recipient = requester,
+                    content = content,
+                    fallback = directFallbackOf(channel = channel, recipient = requester, content = content),
                 ),
         )
     }

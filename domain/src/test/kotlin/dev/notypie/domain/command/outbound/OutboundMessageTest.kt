@@ -5,6 +5,7 @@ import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -196,6 +197,16 @@ class OutboundMessageTest :
                     notice.message shouldBe "heads up"
                 }
 
+                then("a channel message and an ephemeral carry no direct-reply fallback unless one is given") {
+                    OutboundMessage.ChannelMessage(target = target, content = content).fallback shouldBe null
+                    OutboundMessage.Ephemeral(target = target, content = content).fallback shouldBe null
+                    val reply = DirectReply(recipient = recipient, content = content)
+                    val channel = OutboundMessage.ChannelMessage(target = target, content = content, fallback = reply)
+                    val ephemeral = OutboundMessage.Ephemeral(target = target, content = content, fallback = reply)
+                    channel.fallback shouldBe reply
+                    ephemeral.fallback shouldBe reply
+                }
+
                 then("Approval routingExtras defaults to empty") {
                     val approvalMessage =
                         OutboundMessage.Approval(
@@ -205,6 +216,69 @@ class OutboundMessageTest :
                         )
                     approvalMessage.recipient shouldBe null
                     approvalMessage.routingExtras shouldBe emptyList()
+                }
+            }
+        }
+
+        given("the direct-reply fallbacks for a channel that refused the reply") {
+            val channel = ConversationTarget(id = "C_REFUSED")
+            val requester = UserRef(id = "U_REQUESTER")
+
+            `when`("the neutral notice is built") {
+                val notice = channelRefusedNotice(channel = channel, recipient = requester)
+
+                then("it names the channel, blames no single cause, and goes to the requester without a headline") {
+                    notice shouldBe
+                        DirectReply(
+                            recipient = requester,
+                            content =
+                                MessageContent.Text(
+                                    headline = null,
+                                    markdown =
+                                        "I couldn't reply in <#C_REFUSED>: the post there was refused. " +
+                                            "If I'm not a member of that channel, invite me and try again.",
+                                ),
+                        )
+                }
+            }
+
+            `when`("a reply with content is copied as the fallback") {
+                val copy =
+                    directFallbackOf(
+                        channel = channel,
+                        recipient = requester,
+                        content =
+                            MessageContent.Text(
+                                headline = "CodeCompanion — standup",
+                                markdown = "line 1\nline 2",
+                            ),
+                    )
+
+                then("one line naming the channel precedes the original markdown, and the headline is kept") {
+                    copy shouldBe
+                        DirectReply(
+                            recipient = requester,
+                            content =
+                                MessageContent.Text(
+                                    headline = "CodeCompanion — standup",
+                                    markdown =
+                                        "_(Sent here because my reply in <#C_REFUSED> was refused.)_\nline 1\nline 2",
+                                ),
+                        )
+                }
+            }
+
+            `when`("the channel id carries mrkdwn control characters") {
+                val hostile = ConversationTarget(id = "C1> <https://evil.example|Re-authorize & go")
+                val text = MessageContent.Text(headline = null, markdown = "body")
+                val notice = channelRefusedNotice(channel = hostile, recipient = requester)
+                val copy = directFallbackOf(channel = hostile, recipient = requester, content = text)
+
+                then("both helpers escape the id, so the channel mention stays one closed token") {
+                    val escaped = "C1&gt; &lt;https://evil.example|Re-authorize &amp; go"
+                    notice.content.markdown shouldStartWith
+                        "I couldn't reply in <#$escaped>: the post there was refused."
+                    copy.content.markdown shouldBe "_(Sent here because my reply in <#$escaped> was refused.)_\nbody"
                 }
             }
         }

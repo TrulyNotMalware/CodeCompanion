@@ -14,9 +14,12 @@ import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.StandupOpsAction
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.repository.standup.StandupRepository
@@ -72,6 +75,12 @@ class StandupRoutineOpsServiceTest :
                 .also { message ->
                     message.target.id shouldBe TEST_CHANNEL_ID
                     message.recipient?.id shouldBe TEST_USER_ID
+                    message.fallback shouldBe
+                        directFallbackOf(
+                            channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                            recipient = UserRef(id = TEST_USER_ID),
+                            content = message.content.shouldBeInstanceOf<MessageContent.Text>(),
+                        )
                 }
 
         fun CapturingSlot<OutboundMessage>.markdown(): String =

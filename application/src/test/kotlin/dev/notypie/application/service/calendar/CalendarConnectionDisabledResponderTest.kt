@@ -7,9 +7,12 @@ import dev.notypie.domain.command.createCalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
 import dev.notypie.domain.command.entity.event.EventPublisher
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -42,8 +45,14 @@ class CalendarConnectionDisabledResponderTest :
                     ephemeral.target.id shouldBe TEST_CHANNEL_ID
                     ephemeral.recipient?.id shouldBe TEST_USER_ID
                     ephemeral.detailType shouldBe CommandDetailType.CALENDAR_CONNECTION
-                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
-                        CalendarConnectionDisabledResponder.DISABLED_MESSAGE
+                    val content = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>()
+                    content.markdown shouldBe CalendarConnectionDisabledResponder.DISABLED_MESSAGE
+                    ephemeral.fallback shouldBe
+                        directFallbackOf(
+                            channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                            recipient = UserRef(id = TEST_USER_ID),
+                            content = content,
+                        )
                     verify(exactly = 1) { publisher.publishEvent(events = any()) }
                 }
             }

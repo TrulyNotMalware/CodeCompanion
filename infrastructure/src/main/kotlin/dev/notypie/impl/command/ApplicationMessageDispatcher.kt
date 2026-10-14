@@ -67,6 +67,17 @@ private val SLACK_ACCESS_ERRORS =
         "org_login_required",
         "team_added_to_org",
     )
+private val CHANNEL_REFUSED_SLACK_ERRORS =
+    setOf(
+        "not_in_channel",
+        "user_not_in_channel",
+        "no_permission",
+        "channel_not_found",
+        "is_archived",
+        "access_denied",
+        "ekm_access_denied",
+    )
+private const val RESTRICTED_ACTION_ERROR_PREFIX = "restricted_action"
 private val SLACK_RESPONSE_URL_HOSTS = setOf("hooks.slack.com", "hooks.slack-gov.com")
 private const val HTTP_TOO_MANY_REQUESTS = 429
 private const val HTTP_SERVER_ERROR = 500
@@ -100,6 +111,10 @@ fun CommandOutput.isTransientExhausted(): Boolean = !ok && errorReason == TRANSI
 fun CommandOutput.isAccessBlocked(): Boolean = !ok && errorReason == ACCESS_BLOCKED_REASON
 
 fun CommandOutput.isOutcomeUnknown(): Boolean = !ok && errorReason.startsWith(prefix = OUTCOME_UNKNOWN_REASON)
+
+fun CommandOutput.isChannelRefused(): Boolean =
+    !ok &&
+        (errorReason in CHANNEL_REFUSED_SLACK_ERRORS || errorReason.startsWith(prefix = RESTRICTED_ACTION_ERROR_PREFIX))
 
 fun CommandOutput.retryAfter(): Duration? = (this as? RateLimitedOutput)?.retryAfter
 

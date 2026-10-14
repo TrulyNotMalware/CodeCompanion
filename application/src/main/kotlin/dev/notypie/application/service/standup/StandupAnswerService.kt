@@ -12,6 +12,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.repository.standup.AnswerRecordResult
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -76,18 +77,26 @@ class StandupAnswerService(
                         ),
                 )
 
-            is StandupAnswerConfirmation.Ephemeral ->
+            is StandupAnswerConfirmation.Ephemeral -> {
+                val requester = UserRef(id = payload.userId)
                 stageConfirmation(
                     event = event,
                     channel = confirmation.channel,
                     message =
                         OutboundMessage.Ephemeral(
                             target = confirmation.channel,
-                            recipient = UserRef(id = payload.userId),
+                            recipient = requester,
                             content = content,
                             detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                            fallback =
+                                directFallbackOf(
+                                    channel = confirmation.channel,
+                                    recipient = requester,
+                                    content = content,
+                                ),
                         ),
                 )
+            }
 
             StandupAnswerConfirmation.None -> Unit
         }
@@ -107,19 +116,27 @@ class StandupAnswerService(
                 channel = event.channel,
                 idempotencyKey = event.idempotencyKey,
             )
+        val channel = ConversationTarget(id = basicInfo.channel)
+        val content =
+            MessageContent.Text(
+                headline = null,
+                markdown =
+                    "Couldn't open the standup form. _Tip: re-click the *Fill in standup* button " +
+                        "in the original DM, or run `/standup answer` in the routine's channel, " +
+                        "to try again._",
+            )
         outboundStager
             .stage(
                 message =
                     OutboundMessage.Ephemeral(
-                        target = ConversationTarget(id = basicInfo.channel),
+                        target = channel,
                         recipient = null,
-                        content =
-                            MessageContent.Text(
-                                headline = null,
-                                markdown =
-                                    "Couldn't open the standup form. _Tip: re-click the *Fill in standup* button " +
-                                        "in the original DM, or run `/standup answer` in the routine's channel, " +
-                                        "to try again._",
+                        content = content,
+                        fallback =
+                            directFallbackOf(
+                                channel = channel,
+                                recipient = UserRef(id = event.userId),
+                                content = content,
                             ),
                     ),
                 basicInfo = basicInfo,

@@ -18,6 +18,7 @@ import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.standup.createStandupAnswerCandidate
 import dev.notypie.domain.standup.dto.StandupAnswerCandidate
 import io.kotest.core.spec.style.BehaviorSpec
@@ -40,10 +41,20 @@ class StandupSlashContextTest :
             intents = intentQueue,
         )
 
+        fun OutboundMessage.Ephemeral.shouldFallBackToRequesterDm() {
+            fallback shouldBe
+                directFallbackOf(
+                    channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                    recipient = UserRef(id = TEST_USER_ID),
+                    content = content.shouldBeInstanceOf<MessageContent.Text>(),
+                )
+        }
+
         fun requesterEphemeralMarkdown(effects: List<CommandEffect>): String {
             val ephemeral = effects.single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
             ephemeral.target.id shouldBe TEST_CHANNEL_ID
             ephemeral.recipient shouldBe UserRef(id = TEST_USER_ID)
+            ephemeral.shouldFallBackToRequesterDm()
             return ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
         }
 
@@ -156,6 +167,7 @@ class StandupSlashContextTest :
                     ephemeral.recipient shouldBe UserRef(id = TEST_USER_ID)
                     ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
                         "Usage: `/standup stop &lt;routine-name&gt;`"
+                    ephemeral.shouldFallBackToRequesterDm()
                 }
             }
         }

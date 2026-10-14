@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.entity
 
 import dev.notypie.domain.TEST_CHANNEL_ID
+import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.SubCommand
 import dev.notypie.domain.command.SubCommandDefinition
@@ -22,6 +23,8 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.directFallbackOf
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -201,7 +204,14 @@ class CommandTest :
                 val ephemeral = command.drainIntents().single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                 ephemeral.target shouldBe ConversationTarget(id = TEST_CHANNEL_ID)
                 ephemeral.recipient shouldBe null
-                return output to ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown
+                val content = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>()
+                ephemeral.fallback shouldBe
+                    directFallbackOf(
+                        channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                        recipient = UserRef(id = TEST_USER_ID),
+                        content = content,
+                    )
+                return output to content.markdown
             }
 
             `when`("the subcommand is unknown and the echoed token carries markup and runs long") {

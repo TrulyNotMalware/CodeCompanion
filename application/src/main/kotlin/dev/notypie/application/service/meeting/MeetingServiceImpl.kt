@@ -22,6 +22,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
 import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.Meeting
 import dev.notypie.impl.command.slack.SlashCommandRequestBody
@@ -347,10 +348,12 @@ class MeetingServiceImpl(
                 startAt = payload.startDate,
                 endAt = payload.endDate,
             )
+        val channel = ConversationTarget(id = basicInfo.channel)
         val message =
             OutboundMessage.Ephemeral(
-                target = ConversationTarget(id = basicInfo.channel),
+                target = channel,
                 content = MessageContent.MeetingList(meetings = meetings, currentUserId = basicInfo.publisherId),
+                fallback = channelRefusedNotice(channel = channel, recipient = UserRef(id = basicInfo.publisherId)),
             )
         outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }

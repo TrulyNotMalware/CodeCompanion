@@ -35,17 +35,35 @@ class CodecOutboundMessagePort : OutboundMessagePort {
             transport = transport.name,
             payload = OutboundMessageCodec.encode(envelope = envelope),
             createdAt = LocalDateTime.now(),
-            schemaVersion =
-                when {
-                    message is OutboundMessage.ChannelMessage && message.content is MessageContent.AgentQuestion ->
-                        OutboxSchemaVersion.V5
-
-                    message is OutboundMessage.ReplaceMessage && message.fallback != null -> OutboxSchemaVersion.V4
-
-                    continuation.isNotEmpty() -> OutboxSchemaVersion.V3
-
-                    else -> OutboxSchemaVersion.V2
-                },
+            schemaVersion = schemaVersionOf(message = message, continuation = continuation),
         )
     }
 }
+
+private fun schemaVersionOf(message: OutboundMessage, continuation: List<OutboundMessage>): Int {
+    val chainVersion = if (continuation.isEmpty()) OutboxSchemaVersion.V2 else OutboxSchemaVersion.V3
+    return maxOf(chainVersion, (listOf(message) + continuation).maxOf { part -> part.requiredSchemaVersion() })
+}
+
+private fun OutboundMessage.requiredSchemaVersion(): Int =
+    when (this) {
+        is OutboundMessage.ChannelMessage ->
+            when {
+                fallback != null -> OutboxSchemaVersion.V6
+                content is MessageContent.AgentQuestion -> OutboxSchemaVersion.V5
+                else -> OutboxSchemaVersion.V2
+            }
+
+        is OutboundMessage.Ephemeral -> if (fallback != null) OutboxSchemaVersion.V6 else OutboxSchemaVersion.V2
+
+        is OutboundMessage.ReplaceMessage ->
+            fallback?.let { ephemeral -> maxOf(OutboxSchemaVersion.V4, ephemeral.requiredSchemaVersion()) }
+                ?: OutboxSchemaVersion.V2
+
+        is OutboundMessage.DirectMessage,
+        is OutboundMessage.UpdateMessage,
+        is OutboundMessage.OpenModal,
+        is OutboundMessage.Approval,
+        is OutboundMessage.Notice,
+        -> OutboxSchemaVersion.V2
+    }

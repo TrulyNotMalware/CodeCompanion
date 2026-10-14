@@ -229,6 +229,7 @@ class CalendarConnectionService(
             text = "${prefix}I sent you a direct message with a link to connect your Google Calendar.",
             basicInfo = basicInfo,
             publisher = eventPublisher,
+            copyToDirectMessageOnRefusal = false,
         )
     }
 

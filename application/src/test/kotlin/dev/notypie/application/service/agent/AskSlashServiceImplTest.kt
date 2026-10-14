@@ -2,6 +2,7 @@ package dev.notypie.application.service.agent
 
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.NoSubCommands
 import dev.notypie.domain.command.authorization.UserRole
@@ -10,8 +11,11 @@ import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.slash.AskCommand
 import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -48,7 +52,15 @@ class AskSlashServiceImplTest :
                 then("exactly one AskCommand over that command data runs and posts the question to the channel") {
                     command.shouldBeInstanceOf<AskCommand>().commandData shouldBe commandData
                     command.handleEvent().ok shouldBe true
-                    command.drainIntents().single() shouldBe createAgentQuestionMessage(prompt = "why is CI red?")
+                    command.drainIntents().single() shouldBe
+                        createAgentQuestionMessage(
+                            prompt = "why is CI red?",
+                            fallback =
+                                channelRefusedNotice(
+                                    channel = ConversationTarget(id = TEST_CHANNEL_ID),
+                                    recipient = UserRef(id = TEST_USER_ID),
+                                ),
+                        )
                 }
             }
 

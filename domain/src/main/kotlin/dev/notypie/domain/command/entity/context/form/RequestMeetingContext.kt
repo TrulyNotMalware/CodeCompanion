@@ -19,6 +19,9 @@ import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.meet.entity.Meeting
 import java.time.LocalDateTime
@@ -42,10 +45,16 @@ internal class RequestMeetingContext(
             MeetingSubCommandDefinition.LIST -> return runListSubCommand(commandDetailType = commandDetailType)
 
             MeetingSubCommandDefinition.NONE -> {
+                val channel = ConversationTarget(id = commandBasicInfo.channel)
                 addOutbound(
                     OutboundMessage.ChannelMessage(
-                        target = ConversationTarget(id = commandBasicInfo.channel),
+                        target = channel,
                         content = MessageContent.MeetingRequest(approval = null),
+                        fallback =
+                            channelRefusedNotice(
+                                channel = channel,
+                                recipient = UserRef(id = commandBasicInfo.publisherId),
+                            ),
                     ),
                 )
             }
@@ -92,11 +101,19 @@ internal class RequestMeetingContext(
     }
 
     private fun listArgumentError(commandDetailType: CommandDetailType, message: String): CommandOutput {
+        val channel = ConversationTarget(id = commandBasicInfo.channel)
+        val content = MessageContent.Text(headline = null, markdown = message)
         addOutbound(
             OutboundMessage.Ephemeral(
-                target = ConversationTarget(id = commandBasicInfo.channel),
+                target = channel,
                 recipient = null,
-                content = MessageContent.Text(headline = null, markdown = message),
+                content = content,
+                fallback =
+                    directFallbackOf(
+                        channel = channel,
+                        recipient = UserRef(id = commandBasicInfo.publisherId),
+                        content = content,
+                    ),
             ),
         )
         return CommandOutput.fail(

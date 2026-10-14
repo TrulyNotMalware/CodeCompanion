@@ -5,10 +5,12 @@ import com.slack.api.util.http.SlackHttpClient
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createActionEventPayloadContents
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.command.event.failOutput
+import dev.notypie.impl.command.event.successOutput
 import dev.notypie.impl.retry.RetryService
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeLessThan
@@ -309,6 +311,7 @@ class ApplicationMessageDispatcherTest :
 
                 then("each is held as access-blocked, reported once with its code, and not retried here") {
                     outputs.map { it.isAccessBlocked() } shouldBe codes.map { true }
+                    outputs.map { it.isChannelRefused() } shouldBe codes.map { false }
                     outputs.map { it.errorReason } shouldBe codes.map { ACCESS_BLOCKED_REASON }
                     accessBlocks.toList() shouldBe codes
                     calls.get() shouldBe codes.size
@@ -319,7 +322,17 @@ class ApplicationMessageDispatcherTest :
         given("chat.* refuses a single channel or message") {
             reset()
             val codes =
-                listOf("ekm_access_denied", "no_permission", "not_in_channel", "is_archived", "restricted_action")
+                listOf(
+                    "ekm_access_denied",
+                    "no_permission",
+                    "not_in_channel",
+                    "is_archived",
+                    "restricted_action",
+                    "restricted_action_read_only_channel",
+                    "access_denied",
+                    "channel_not_found",
+                    "user_not_in_channel",
+                )
             codes.forEach { code -> responses.add(status(code = 200, body = """{"ok":false,"error":"$code"}""")) }
 
             `when`("one channel message per error code is dispatched") {
@@ -330,6 +343,33 @@ class ApplicationMessageDispatcherTest :
                     outputs.map { it.errorReason } shouldBe codes
                     accessBlocks.toList() shouldBe emptyList()
                     calls.get() shouldBe codes.size
+                }
+
+                then("each is a channel refusal, the trigger for a slash reply's direct-message fallback") {
+                    outputs.map { it.isChannelRefused() } shouldBe codes.map { true }
+                }
+            }
+        }
+
+        given("outcomes that are not a refusal of one channel") {
+            val reasons =
+                listOf(
+                    RATE_LIMITED_REASON,
+                    "$OUTCOME_UNKNOWN_REASON: read timed out",
+                    ACCESS_BLOCKED_REASON,
+                    TRANSIENT_EXHAUSTED_REASON,
+                    "invalid_blocks",
+                    "msg_too_long",
+                    "expired_url",
+                )
+
+            `when`("each is classified") {
+                val failures = reasons.map { reason -> failOutput(event = channelMessage(), reason = reason) }
+                val delivered = successOutput(payload = channelMessage(), commandType = CommandType.EXTERNAL_API)
+
+                then("none of them, and no success, counts as a channel refusal") {
+                    failures.map { it.isChannelRefused() } shouldBe reasons.map { false }
+                    delivered.isChannelRefused() shouldBe false
                 }
             }
         }

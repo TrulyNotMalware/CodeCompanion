@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.entity
 
+import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.createAgentQuestionMessage
@@ -8,9 +9,12 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.slash.ASK_USAGE
 import dev.notypie.domain.command.entity.slash.AskCommand
 import dev.notypie.domain.command.intent.CommandEffect
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.directFallbackOf
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -37,8 +41,18 @@ class AskCommandTest :
                 .shouldBeInstanceOf<MessageContent.AgentQuestion>()
                 .prompt
 
+        val channel = ConversationTarget(id = TEST_CHANNEL_ID)
+        val requester = UserRef(id = TEST_USER_ID)
+
         fun List<CommandEffect>.ephemeral(): OutboundMessage.Ephemeral =
-            single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+            single().shouldBeInstanceOf<OutboundMessage.Ephemeral>().also { ephemeral ->
+                ephemeral.fallback shouldBe
+                    directFallbackOf(
+                        channel = channel,
+                        recipient = requester,
+                        content = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>(),
+                    )
+            }
 
         given("the /ask usage line") {
             then("names the command and its single free-text argument") {
@@ -53,7 +67,11 @@ class AskCommandTest :
                 then("it succeeds and posts the question to the command channel, unthreaded") {
                     result.ok shouldBe true
                     result.commandDetailType shouldBe CommandDetailType.AGENT_ASK_QUESTION
-                    effects.single() shouldBe createAgentQuestionMessage(prompt = "what is kotlin?")
+                    effects.single() shouldBe
+                        createAgentQuestionMessage(
+                            prompt = "what is kotlin?",
+                            fallback = channelRefusedNotice(channel = channel, recipient = requester),
+                        )
                 }
             }
 
@@ -100,10 +118,10 @@ class AskCommandTest :
             `when`("the text is empty") {
                 val (result, effects) = run(text = "", actorRole = UserRole.AI_USER)
 
-                then("it fails with the escaped usage line as an ephemeral and posts nothing to the channel") {
+                then("it fails with the escaped usage line to the requester and posts nothing to the channel") {
                     result.ok shouldBe false
                     val ephemeral = effects.ephemeral()
-                    ephemeral.recipient shouldBe null
+                    ephemeral.recipient shouldBe requester
                     ephemeral.content shouldBe MessageContent.Text(headline = null, markdown = usage)
                 }
             }

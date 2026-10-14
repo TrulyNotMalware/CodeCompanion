@@ -10,6 +10,7 @@ sealed interface OutboundMessage : CommandEffect {
         val content: MessageContent,
         val detailType: CommandDetailType? = null,
         val threadId: String? = null,
+        val fallback: DirectReply? = null,
     ) : OutboundMessage
 
     data class Ephemeral(
@@ -17,6 +18,7 @@ sealed interface OutboundMessage : CommandEffect {
         val recipient: UserRef? = null,
         val content: MessageContent,
         val detailType: CommandDetailType? = null,
+        val fallback: DirectReply? = null,
     ) : OutboundMessage
 
     data class DirectMessage(

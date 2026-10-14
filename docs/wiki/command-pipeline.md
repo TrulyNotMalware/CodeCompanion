@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-13_
+_type: architecture · updated: 2026-10-14_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -93,6 +93,11 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `simpleEphemeralTextRequest(headLineText)`가 채널 `Text`와 같은 `simpleTextResponseTemplate`으로 렌더한다(null이면
   본문만). `chat.postEphemeral`은 봇이 채널 멤버여야 하는데, Slack은 앱이 들어 있지 않은 대화의 `app_mention`을 보내지
   않으므로 멘션 답장에서는 항상 성립한다. `notice`, `ask` 스레드 답장, CVE 구독·조회 DM은 그대로다.
+- **슬래시 답장은 그 전제가 없다(2026-10-14, 결정 #42)**: 슬래시는 봇이 없는 채널에서도 호출되므로 채널 ephemeral·채널 메시지가
+  `not_in_channel`/`no_permission`/`user_not_in_channel` 등으로 영구 실패할 수 있다(전체 집합은 결정 #42). 슬래시 응답을 내는 생산자는 `Ephemeral`/`ChannelMessage`에
+  `fallback: DirectReply?`(요청자 `UserRef` + `Text`)를 붙이고, relay가 채널 단위 영구 거절(`isChannelRefused()`)일 때만 그 DM을
+  `next` 행으로 싣는다(폴백을 품은 원래 행이 V6이고 실제로 실리는 DM 행은 V2, `ReplaceMessage.fallback`과 같은 CAS). 본문이 있는 답장은 원문 앞에 한 줄을 붙인 사본, 채널에 있어야 하는
+  것(`/ask` 질문, `/meetup` 폼, `/meetup list`)은 안내문만이다. `Command.replyToSlashFailure`의 공통 오류 ephemeral도 같다.
 - **잔존 누수**: `ApprovalContents.commandDetailType`은 표현 모델에 남은 라우팅 enum이다(Refactor.md §4.4가
   `interactionValue` 문자열은 걷어냈지만 필드는 남김). `Approval` 렌더 시 버튼 값의 라우팅 타입이 여기서 나온다.
 

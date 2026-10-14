@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
 
 # application/service/meeting
 
@@ -26,6 +26,11 @@ reminder DMs at configured offsets, and a once-per-day morning agenda DM per use
 ## For AI Agents
 
 ### Working In This Directory
+- **The `/meetup list` ephemeral carries a notice fallback, not the list** (B-2, 2026-10-14).
+  `getMeetingListEvent` stages the `MeetingList` ephemeral with `fallback = channelRefusedNotice(...)`: in a
+  channel Slack refuses, the requester gets a DM saying so, not the list, because `MeetingList` does not render
+  on a `ChannelMessage` and its row buttons route differently outside an ephemeral (a full list DM is a
+  follow-up). The interaction replies reachable only from a posted list carry no fallback.
 - **`BEFORE_COMMIT` listeners ride the caller's transaction.** `createNewMeeting` and
   `updateParticipantAttendance` run inside the `@Transactional` boundary of `handleMeeting` or
   `SlackInteractionHandlerImpl.handleInteraction`; `fallbackExecution = false` means they never run outside

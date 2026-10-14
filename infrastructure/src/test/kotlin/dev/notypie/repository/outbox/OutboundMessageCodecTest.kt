@@ -6,6 +6,7 @@ import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.DirectReply
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
@@ -28,6 +29,12 @@ class OutboundMessageCodecTest :
     StringSpec({
         val basicInfo = createCommandBasicInfo()
         val target = ConversationTarget(id = basicInfo.channel)
+        val fixtureBasicInfo =
+            createCommandBasicInfo(idempotencyKey = UUID.fromString("00000000-0000-0000-0000-000000000001"))
+        val basicInfoJson =
+            "\"basicInfo\":{\"appId\":\"A12ABCDEFG\",\"appToken\":\"I_AM_TEST_TOKEN\"," +
+                "\"publisherId\":\"U012ABCDEFG\",\"channel\":\"C012ABCDEFG\"," +
+                "\"idempotencyKey\":\"00000000-0000-0000-0000-000000000001\"}"
 
         fun roundTrip(message: OutboundMessage): OutboundEnvelope =
             OutboundMessageCodec.decode(
@@ -246,12 +253,6 @@ class OutboundMessageCodecTest :
         }
 
         "pre-narrowing update/replace rows decode, and the encoded wire shape is frozen" {
-            val fixtureBasicInfo =
-                createCommandBasicInfo(idempotencyKey = UUID.fromString("00000000-0000-0000-0000-000000000001"))
-            val basicInfoJson =
-                "\"basicInfo\":{\"appId\":\"A12ABCDEFG\",\"appToken\":\"I_AM_TEST_TOKEN\"," +
-                    "\"publisherId\":\"U012ABCDEFG\",\"channel\":\"C012ABCDEFG\"," +
-                    "\"idempotencyKey\":\"00000000-0000-0000-0000-000000000001\"}"
             val updateFixture =
                 "{\"message\":{\"@type\":\"UpdateMessage\",\"ref\":{\"conversation\":\"D_NOTICE\"," +
                     "\"messageId\":\"1700000000.000700\"},\"content\":{\"@type\":\"Text\"," +
@@ -287,6 +288,61 @@ class OutboundMessageCodecTest :
             OutboundMessageCodec.decode(json = replaceFixture) shouldBe replaceEnvelope
             OutboundMessageCodec.encode(envelope = updateEnvelope) shouldBe updateFixture
             OutboundMessageCodec.encode(envelope = replaceEnvelope) shouldBe replaceFixture
+        }
+
+        "a channel message's and an ephemeral's direct-reply fallback round-trips with its Text content" {
+            val fallback =
+                DirectReply(
+                    recipient = UserRef(id = basicInfo.publisherId),
+                    content = MessageContent.Text(headline = "CodeCompanion — standup", markdown = "copy"),
+                )
+            assertRoundTrips(message = createAgentQuestionMessage(fallback = fallback))
+            assertRoundTrips(
+                message =
+                    OutboundMessage.Ephemeral(
+                        target = target,
+                        recipient = UserRef(id = basicInfo.publisherId),
+                        content = MessageContent.Text(headline = null, markdown = "original"),
+                        detailType = CommandDetailType.STANDUP_ROUTINE_LIST,
+                        fallback = fallback,
+                    ),
+            )
+        }
+
+        "channel and ephemeral rows without a fallback keep their wire shape, and a fallback adds one key" {
+            val textJson = "{\"@type\":\"Text\",\"headline\":null,\"markdown\":\"plain\"}"
+            val channelFixture =
+                "{\"message\":{\"@type\":\"ChannelMessage\",\"target\":\"C012ABCDEFG\",\"content\":$textJson," +
+                    "\"detailType\":null,\"threadId\":null},$basicInfoJson}"
+            val ephemeralJson =
+                "\"@type\":\"Ephemeral\",\"target\":\"C012ABCDEFG\",\"recipient\":\"U012ABCDEFG\"," +
+                    "\"content\":$textJson,\"detailType\":null"
+            val ephemeralFixture = "{\"message\":{$ephemeralJson},$basicInfoJson}"
+            val ephemeralWithFallbackFixture =
+                "{\"message\":{$ephemeralJson,\"fallback\":{\"recipient\":\"U012ABCDEFG\",\"content\":$textJson}}," +
+                    "$basicInfoJson}"
+            val text = MessageContent.Text(headline = null, markdown = "plain")
+            val channelEnvelope =
+                OutboundEnvelope(
+                    message = OutboundMessage.ChannelMessage(target = target, content = text),
+                    basicInfo = fixtureBasicInfo,
+                )
+            val ephemeral =
+                OutboundMessage.Ephemeral(target = target, recipient = UserRef(id = "U012ABCDEFG"), content = text)
+            val ephemeralEnvelope = OutboundEnvelope(message = ephemeral, basicInfo = fixtureBasicInfo)
+            val ephemeralWithFallbackEnvelope =
+                OutboundEnvelope(
+                    message =
+                        ephemeral.copy(fallback = DirectReply(recipient = UserRef(id = "U012ABCDEFG"), content = text)),
+                    basicInfo = fixtureBasicInfo,
+                )
+
+            OutboundMessageCodec.decode(json = channelFixture) shouldBe channelEnvelope
+            OutboundMessageCodec.decode(json = ephemeralFixture) shouldBe ephemeralEnvelope
+            OutboundMessageCodec.decode(json = ephemeralWithFallbackFixture) shouldBe ephemeralWithFallbackEnvelope
+            OutboundMessageCodec.encode(envelope = channelEnvelope) shouldBe channelFixture
+            OutboundMessageCodec.encode(envelope = ephemeralEnvelope) shouldBe ephemeralFixture
+            OutboundMessageCodec.encode(envelope = ephemeralWithFallbackEnvelope) shouldBe ephemeralWithFallbackFixture
         }
 
         "an envelope carrying the rest of a chain round-trips every part with its subtype" {

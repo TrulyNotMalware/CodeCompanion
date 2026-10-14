@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
 
 # domain/command/entity
 
@@ -12,7 +12,7 @@ is the mention vocabulary.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Command.kt` | `abstract class Command<T : SubCommandDefinition>(idempotencyKey, commandData)`: `internal intents`, `commandId`, `drainIntents()`, `internal abstract parseContext(subCommand)` / `findSubCommandDefinition()`, `handleEvent()` (any `Exception` except `InterruptedException` → `CommandOutput.fail(ERROR_RESPONSE, reason = exception.toString())`; for a slash payload it also stages a requester-only ephemeral in the command's channel, see below), `internal open val slashCommandName` (`""`) / `subCommandDefinitions` (empty) that slash commands override, interaction payloads dispatched to `ReactionContext.handleInteraction`, `createSubCommand()` (`options = subCommands.drop(1)`, invalid → `SubCommandParseException`). Top-level `internal fun String.asEchoedToken()` makes a user token safe to echo (clipped to `MAX_ECHOED_TOKEN_LENGTH` = 40 plus `…`, backticks turned into `'`, then `escapeMarkup`); used by the unknown-subcommand reply and by `context/form/CalendarSlashContext`'s unknown-action reply |
+| `Command.kt` | `abstract class Command<T : SubCommandDefinition>(idempotencyKey, commandData)`: `internal intents`, `commandId`, `drainIntents()`, `internal abstract parseContext(subCommand)` / `findSubCommandDefinition()`, `handleEvent()` (any `Exception` except `InterruptedException` → `CommandOutput.fail(ERROR_RESPONSE, reason = exception.toString())`; for a slash payload it also stages a requester-only ephemeral in the command's channel, with the same text as its DM `fallback`, see below), `internal open val slashCommandName` (`""`) / `subCommandDefinitions` (empty) that slash commands override, interaction payloads dispatched to `ReactionContext.handleInteraction`, `createSubCommand()` (`options = subCommands.drop(1)`, invalid → `SubCommandParseException`). Top-level `internal fun String.asEchoedToken()` makes a user token safe to echo (clipped to `MAX_ECHOED_TOKEN_LENGTH` = 40 plus `…`, backticks turned into `'`, then `escapeMarkup`); used by the unknown-subcommand reply and by `context/form/CalendarSlashContext`'s unknown-action reply |
 | `CommandSet.kt` | `internal enum CommandSet(requiredPermission)`: `UNKNOWN` (AI), `NOTICE`, `STATUS`, `USAGE` (OPERATIONS), `HELP` (BASIC), `ASK` (AI), `GRANT`, `REVOKE`, `ROLES`, `CVE` (ADMINISTRATION); `parseCommand` uppercases and falls back to `UNKNOWN` |
 | `CommandType.kt` | `CommandType` (`SIMPLE`, `PIPELINE`, `RESPONSE`, `EXTERNAL_API`); `CommandDetailType` — the routing token serialized by name into the outbox column and Slack `private_metadata` / button values; `internal fun CommandDetailType.createContext(basicInfo, subCommand, intents)` maps the eight non-submission interaction types to contexts and lists every other value explicitly (no `else`) in one `EmptyContext` group; the seven `view_submission` routes are intercepted before it by `SubmissionRouting.kt`. `STANDUP_ROUTINE_LIST` / `STANDUP_ROUTINE_STOP` type the `/standup list|stop` events and their ephemeral replies only, and `AGENT_USAGE_REPORT` types the `@bot usage` event and its channel reply only, so they sit in the `EmptyContext` group; `CALENDAR_CONNECTION` (2026-10-07; the `/calendar` command (`slash/CalendarCommand`), its replies and the connect DM; `EmptyContext` in `createContext`, since no button routes to it); `AGENT_ASK_QUESTION` (2026-10-12; the `/ask` question posted to the channel by `AskSlashContext`, whose delivery starts the AI turn; `EmptyContext` in `createContext`, since no button routes to it) |
 | `InteractionCommand.kt` | `InteractionCommand(appName, idempotencyKey, commandData, actorRole[, parseObserver])` — mentions and interactions; resolves a private `Route(parser, subCommandDefinition)` lazily in one exhaustive `when` over the sealed payload, so the payload is narrowed exactly once (`SlashInvocation` → `UnSupportedCommandException`); `MeetingSubCommandDefinition.NONE` for `MEETING_APPROVAL_REQUEST` / `MEETING_CREATE_REQUEST`, else `NoSubCommands` |
@@ -60,8 +60,9 @@ is the mention vocabulary.
   survives Slack);
   `SUBCOMMAND_NOT_VALID` → ``Usage: `<that subcommand's usage>` `` (else `Invalid arguments.` plus the lines); any
   other exception → ``Something went wrong handling `<slashCommandName>`. Please try again.`` ("that command" when the
-  name is blank). Mention and interaction payloads still only return the output; `CommandExecutor` logs every
-  `ERROR_RESPONSE` output at WARN for all three.
+  name is blank). The ephemeral carries `fallback = directFallbackOf(...)` to `actorId` (B-2, 2026-10-14), so the
+  reply reaches a DM when Slack refuses the channel. Mention and interaction payloads still only return the
+  output; `CommandExecutor` logs every `ERROR_RESPONSE` output at WARN for all three.
 - Visibility policy: `Command`, `InteractionCommand`, `ReplaceTextResponseCommand`, the slash commands,
   `CommandType` and `CommandDetailType` are public (the application builds and reads them);
   `intents`, `parseContext`, `findSubCommandDefinition`, `CommandSet` and `createContext` are

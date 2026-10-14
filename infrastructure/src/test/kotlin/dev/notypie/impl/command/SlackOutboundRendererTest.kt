@@ -6,6 +6,7 @@ import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.DirectReply
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
@@ -451,6 +452,72 @@ class SlackOutboundRendererTest :
                             commandBasicInfo = basicInfo,
                             commandDetailType = CommandDetailType.SIMPLE_TEXT,
                             targetUserId = "U_TARGET",
+                        )
+                    }
+                }
+            }
+        }
+
+        given("an Ephemeral and a ChannelMessage that carry a direct-reply fallback") {
+            val content = MessageContent.Text(headline = null, markdown = "original")
+            val fallback =
+                DirectReply(
+                    recipient = UserRef(id = "U_TARGET"),
+                    content = MessageContent.Text(headline = null, markdown = "fallback copy"),
+                )
+
+            `when`("each is rendered") {
+                every {
+                    slackEventBuilder.simpleEphemeralTextRequest(
+                        headLineText = any(),
+                        textMessage = any(),
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        targetUserId = any(),
+                    )
+                } returns stubEvent
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = any(),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+
+                renderer.render(
+                    message =
+                        OutboundMessage.Ephemeral(
+                            target = target,
+                            recipient = UserRef(id = "U_TARGET"),
+                            content = content,
+                            fallback = fallback,
+                        ),
+                    basicInfo = basicInfo,
+                )
+                renderer.render(
+                    message = OutboundMessage.ChannelMessage(target = target, content = content, fallback = fallback),
+                    basicInfo = basicInfo,
+                )
+
+                then("only the primary reaches Slack in the command channel; the fallback is not in the payload") {
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleEphemeralTextRequest(
+                            headLineText = null,
+                            textMessage = "original",
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                            targetUserId = "U_TARGET",
+                        )
+                    }
+                    verify(exactly = 1) {
+                        slackEventBuilder.simpleTextRequest(
+                            commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                            headLineText = "",
+                            commandBasicInfo = basicInfo,
+                            simpleString = "original",
+                            threadTs = null,
                         )
                     }
                 }

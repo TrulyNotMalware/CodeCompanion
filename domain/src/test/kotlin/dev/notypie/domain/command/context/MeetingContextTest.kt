@@ -15,8 +15,12 @@ import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.multiUsersField
+import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.command.plainTextField
 import dev.notypie.domain.command.rejectAction
 import dev.notypie.domain.command.timePickerField
@@ -59,6 +63,11 @@ class MeetingContextTest :
                     effects.size shouldBe 1
                     val channelMessage = effects.first() as OutboundMessage.ChannelMessage
                     channelMessage.content.shouldBeInstanceOf<MessageContent.MeetingRequest>()
+                    channelMessage.fallback shouldBe
+                        channelRefusedNotice(
+                            channel = ConversationTarget(id = testCommandBasicInfo.channel),
+                            recipient = UserRef(id = testCommandBasicInfo.publisherId),
+                        )
                 }
             }
         }
@@ -184,6 +193,12 @@ class MeetingContextTest :
                     markdown.contains("Unknown range 'yesterday'") shouldBe true
                     markdown.contains("today | tomorrow | week | month") shouldBe true
                     ephemeral.recipient shouldBe null
+                    ephemeral.fallback shouldBe
+                        directFallbackOf(
+                            channel = ConversationTarget(id = testCommandBasicInfo.channel),
+                            recipient = UserRef(id = testCommandBasicInfo.publisherId),
+                            content = ephemeral.content.shouldBeInstanceOf<MessageContent.Text>(),
+                        )
                 }
             }
         }
