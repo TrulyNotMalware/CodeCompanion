@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # test/kotlin/dev/notypie/application/service/relay
 
@@ -48,7 +48,7 @@ Fixtures: `application` testFixtures `outbox/OutboxTestFixtures.kt` (`DEFAULT_TE
 `createOutboxRow(eventId, status, createdAt, attemptCount, sendCount)`, `createPollingProcessorFixture`,
 `createRelayService`, `stubClaimLifecycle`), `outbox/OutboxJpaTestContext.kt` (`createOutboxJpaContext`,
 `MutableClock`, `ScriptedMessageDispatcher`, `QueuedExecutor`, `JdbcTemplate.outboxColumn`), infrastructure
-testFixtures `createOutboxMessage` / `createPostEventPayloadContents`, and `service/relay/CdcEnvelopeCreator.kt` (`createCdcEnvelope`,
+testFixtures `createOutboxMessage` / `createPostEventPayloadContents` / `logging/LogCapture.kt` (`captureLogs`), and `service/relay/CdcEnvelopeCreator.kt` (`createCdcEnvelope`,
 `createOutboxAfterImage`, `createCdcConsumerRecord`); `domain` testFixtures `createCommandBasicInfo`.
 
 ### Common Patterns

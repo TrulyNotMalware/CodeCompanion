@@ -1,5 +1,6 @@
 package dev.notypie.application.service.meeting
 
+import ch.qos.logback.classic.Level
 import dev.notypie.application.service.calendar.MeetingCalendarMirror
 import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -18,6 +19,8 @@ import dev.notypie.domain.meet.createRescheduleMeetingEvent
 import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.eventsAt
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.meeting.RescheduleResult
@@ -617,23 +620,21 @@ class MeetingRescheduleServiceTest :
                 every { localStager.stage(message = any(), basicInfo = any()) } throws
                     IllegalStateException("outbox insert failed: database down")
 
-                var escaped: Throwable? = null
-                val errors =
-                    captureErrorLogs(loggerName = MeetingRescheduleService::class.java.name) {
-                        escaped =
-                            runCatching {
-                                serviceCapturing(
-                                    localMeetingRepository = localMeetingRepository,
-                                    localReminderRepository = mockk(relaxed = true),
-                                    localStager = localStager,
-                                ).rescheduleMeeting(event = event)
-                            }.exceptionOrNull()
+                val (escaped, logs) =
+                    captureLogs(loggerName = MeetingRescheduleService::class.java.name) {
+                        runCatching {
+                            serviceCapturing(
+                                localMeetingRepository = localMeetingRepository,
+                                localReminderRepository = mockk(relaxed = true),
+                                localStager = localStager,
+                            ).rescheduleMeeting(event = event)
+                        }.exceptionOrNull()
                     }
 
                 then("nothing escapes and one ERROR line carries the reply failure as suppressed") {
                     escaped shouldBe null
                     writeFailure.suppressed.map { it.message } shouldBe listOf("outbox insert failed: database down")
-                    errors.map { it.throwableProxy.message } shouldBe listOf("db down")
+                    logs.eventsAt(level = Level.ERROR).map { it.throwableProxy.message } shouldBe listOf("db down")
                 }
             }
         }

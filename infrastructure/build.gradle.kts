@@ -37,6 +37,7 @@ dependencies {
 
     testImplementation(testFixtures(project(":domain")))
     testFixturesImplementation(testFixtures(project(":domain")))
+    testFixturesApi("ch.qos.logback:logback-classic")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.kotest:kotest-extensions-spring")
 }

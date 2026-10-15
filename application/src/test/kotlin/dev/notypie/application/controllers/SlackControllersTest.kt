@@ -1,9 +1,6 @@
 package dev.notypie.application.controllers
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.exception.ControllerAdvice
 import dev.notypie.application.service.agent.AskSlashService
 import dev.notypie.application.service.calendar.CalendarSlashService
@@ -19,12 +16,12 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.impl.command.SlackViewOpenDispatcher
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.createOpenViewEvent
+import dev.notypie.logging.captureLogs
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -79,19 +76,13 @@ class SlackControllersTest :
         given("app_mentions the handler ignored or failed") {
             fun deliverAndCaptureWarnings(output: CommandOutput): List<String> {
                 every { eventHandler.handleEvent(headers = any(), payload = any()) } returns output
-                val appender = ListAppender<ILoggingEvent>().apply { start() }
-                val logger = LoggerFactory.getLogger(SlackEventController::class.java.packageName) as Logger
-                logger.addAppender(appender)
-                try {
+                return captureLogs(loggerName = SlackEventController::class.java.packageName) {
                     mockMvc.perform(
                         post("/api/slack/events")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""{"type":"event_callback","event":{"type":"app_mention"}}"""),
                     )
-                } finally {
-                    logger.detachAppender(appender)
-                }
-                return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+                }.messagesAt(level = Level.WARN)
             }
 
             `when`("the mention had nothing to do, as one from the bot itself or a workflow") {

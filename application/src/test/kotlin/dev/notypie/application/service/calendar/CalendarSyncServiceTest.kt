@@ -1,10 +1,10 @@
 package dev.notypie.application.service.calendar
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.MutableClock
 import dev.notypie.application.outbox.createStubTransactionManager
-import dev.notypie.application.service.meeting.captureErrorLogs
 import dev.notypie.application.service.meeting.createH2MeetingJpaStore
 import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.dto.CommandBasicInfo
@@ -16,6 +16,7 @@ import dev.notypie.impl.calendar.CalendarApiResult
 import dev.notypie.impl.calendar.CalendarEventBody
 import dev.notypie.impl.calendar.GoogleCalendarClient
 import dev.notypie.impl.calendar.createCalendarEventBody
+import dev.notypie.logging.captureLogs
 import dev.notypie.repository.calendar.CalendarMeetingView
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.MeetingCalendarEventRepository
@@ -230,7 +231,8 @@ class CalendarSyncServiceTest :
                 }
 
             fun sync(): List<ILoggingEvent> =
-                captureErrorLogs(loggerName = CalendarSyncService::class.java.name) { service.syncDue() }
+                captureLogs(loggerName = CalendarSyncService::class.java.name) { service.syncDue() }
+                    .eventsAt(level = Level.ERROR)
 
             fun token(): String = claimTokens.single()
 
@@ -1949,9 +1951,9 @@ class CalendarSyncServiceTest :
                 every { failing.syncDue() } throws IllegalStateException("db down")
 
                 val errors =
-                    captureErrorLogs(loggerName = CalendarSyncScheduler::class.java.name) {
+                    captureLogs(loggerName = CalendarSyncScheduler::class.java.name) {
                         CalendarSyncScheduler(syncService = failing).tick()
-                    }
+                    }.eventsAt(level = Level.ERROR)
 
                 then("the failure is logged and does not escape the scheduled method") {
                     errors.single().formattedMessage shouldBe "Google Calendar sync tick failed"

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
 
 # infrastructure/src/test/kotlin/dev/notypie
 
@@ -7,7 +7,8 @@
 Root test package. The only file at this level is `TestApplication.kt`, the `@SpringBootApplication` that
 Spring's test slices locate by walking up from each spec's package; every `@DataJpaTest` and `@SpringBootTest`
 spec in the subtree boots from it and inherits `src/main`'s component scan (`configurations/`, `repository/`,
-`impl/`). Each subpackage mirrors one main package and holds its specs.
+`impl/`). Each subpackage mirrors one main package and holds its specs, except `logging/`, which tests the
+testFixtures package of the same name.
 
 ## Key Files
 | File | Description |
@@ -21,6 +22,7 @@ spec in the subtree boots from it and inherits `src/main`'s component scan (`con
 | `configurations/` | `HikariDataSourceBindingTest` — `spring.datasource.hikari.*` reaches the pool built by `JpaConfiguration` (see `configurations/AGENTS.md`) |
 | `exception/` | `DatabaseExceptionTest` — `throwIfSchemaNotFound` / `schemaNotFound` build a `DatabaseException` with table, error code and details (see `exception/AGENTS.md`) |
 | `impl/` | Adapter specs: `agent/`, `command/` (+ `slack/`), `cve/`, `retry/` (see `impl/AGENTS.md`) |
+| `logging/` | `LogCaptureTest` — the shared `captureLogs` fixture (see `logging/AGENTS.md`) |
 | `repository/` | Persistence specs: `cve/`, `meeting/`, `outbox/` (+ `schema/`) (see `repository/AGENTS.md`) |
 | `templates/` | `ModalBlockBuilder`, `ModalElementBuilder`, `ModalTemplateBuilder` specs (see `templates/AGENTS.md`) |
 

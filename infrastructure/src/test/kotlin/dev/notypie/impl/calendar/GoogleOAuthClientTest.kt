@@ -1,11 +1,10 @@
 package dev.notypie.impl.calendar
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldBeNull
@@ -13,7 +12,6 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
-import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -70,18 +68,6 @@ class GoogleOAuthClientTest :
                 val (name, value) = pair.split("=", limit = 2)
                 URLDecoder.decode(name, StandardCharsets.UTF_8) to URLDecoder.decode(value, StandardCharsets.UTF_8)
             }
-
-        fun warningsDuring(block: () -> Unit): List<String> {
-            val logger = LoggerFactory.getLogger(GoogleOAuthClient::class.java) as Logger
-            val appender = ListAppender<ILoggingEvent>().apply { start() }
-            logger.addAppender(appender)
-            try {
-                block()
-            } finally {
-                logger.detachAppender(appender)
-            }
-            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
-        }
 
         given("the authorization URL") {
             val url = client.authorizationUrl(state = "st ate&x")
@@ -281,13 +267,15 @@ class GoogleOAuthClientTest :
                                     scope = null,
                                 ),
                         )
-                    lateinit var token: GoogleAccessToken
-                    val warnings = warningsDuring { token = client.refresh(refreshToken = "1//refresh") }
+                    val (token, logs) =
+                        captureLogs(loggerName = GoogleOAuthClient::class.java.name) {
+                            client.refresh(refreshToken = "1//refresh")
+                        }
 
                     then("the token is kept for Google's documented one hour and a WARN says so") {
                         token.accessToken shouldBe "ya29.fresh"
                         token.expiresInSeconds shouldBe 3600L
-                        warnings shouldBe
+                        logs.messagesAt(level = Level.WARN) shouldBe
                             listOf("Google refresh response has no positive expires_in; assuming 3600s")
                     }
                 }

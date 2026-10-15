@@ -1,9 +1,6 @@
 package dev.notypie.application.service.calendar
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.service.meeting.createH2DataSource
@@ -30,6 +27,8 @@ import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.impl.calendar.GoogleOAuthException
 import dev.notypie.impl.calendar.GoogleTokenGrant
 import dev.notypie.impl.calendar.TokenCipher
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import dev.notypie.repository.calendar.ConnectionSaved
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleOAuthStateRepository
@@ -61,7 +60,6 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
-import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.PlatformTransactionManager
@@ -109,18 +107,6 @@ class CalendarConnectionServiceTest :
             email = email,
             emailVerified = emailVerified,
         )
-
-        fun warningsDuring(block: () -> Unit): List<String> {
-            val logger = LoggerFactory.getLogger(CalendarConnectionService::class.java) as Logger
-            val appender = ListAppender<ILoggingEvent>().apply { start() }
-            logger.addAppender(appender)
-            try {
-                block()
-            } finally {
-                logger.detachAppender(appender)
-            }
-            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
-        }
 
         class Harness(
             val connections: GoogleCalendarConnectionRepository = mockk(),
@@ -603,11 +589,11 @@ class CalendarConnectionServiceTest :
                         harness(slackEmail = "dev@example.com").withConsumedState().apply {
                             every { oauth.exchangeCode(code = "victim") } returns mismatched
                         }
-                    lateinit var outcome: CalendarConnectionOutcome
-                    val warnings =
-                        warningsDuring {
-                            outcome = h.service.completeConnection(code = "victim", state = "ok", error = null)
+                    val (outcome, logs) =
+                        captureLogs(loggerName = CalendarConnectionService::class.java.name) {
+                            h.service.completeConnection(code = "victim", state = "ok", error = null)
                         }
+                    val warnings = logs.messagesAt(level = Level.WARN)
 
                     then("one WARN names the user id and reason=$reason, never an address") {
                         warnings shouldHaveSize 1

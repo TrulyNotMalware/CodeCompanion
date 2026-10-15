@@ -1,9 +1,8 @@
 package dev.notypie.application.security
 
 import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.logging.captureLogs
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -15,7 +14,6 @@ import jakarta.servlet.ServletRequest
 import jakarta.servlet.ServletResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.slf4j.LoggerFactory
 import org.springframework.boot.env.YamlPropertySourceLoader
 import org.springframework.core.io.ClassPathResource
 import org.springframework.http.HttpHeaders
@@ -210,19 +208,14 @@ class SlackRequestVerificationFilterTest :
 
         given("a request rejected for unusable Slack headers") {
             `when`("the filter logs the rejection") {
-                val appender = ListAppender<ILoggingEvent>().apply { start() }
-                val rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
-                rootLogger.addAppender(appender)
-                try {
-                    filter().doFilter(
-                        unsignedRequest(requestUri = EVENTS_PATH),
-                        MockHttpServletResponse(),
-                        CountingFilterChain(),
-                    )
-                } finally {
-                    rootLogger.detachAppender(appender)
-                }
-                val messages = appender.list.map { it.formattedMessage }
+                val messages =
+                    captureLogs(loggerName = Logger.ROOT_LOGGER_NAME) {
+                        filter().doFilter(
+                            unsignedRequest(requestUri = EVENTS_PATH),
+                            MockHttpServletResponse(),
+                            CountingFilterChain(),
+                        )
+                    }.events.map { it.formattedMessage }
 
                 then("the log line carries the rejection reason, not a lambda object") {
                     messages.any { it.contains("Rejected Slack request headers") } shouldBe true

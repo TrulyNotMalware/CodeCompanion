@@ -1,9 +1,6 @@
 package dev.notypie.application.service.meeting
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.service.calendar.MeetingCalendarMirror
 import dev.notypie.application.service.calendar.NoopMeetingCalendarMirror
 import dev.notypie.application.service.command.CommandExecutor
@@ -35,6 +32,8 @@ import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.eventsAt
 import dev.notypie.repository.createSnapshotIsolationFailure
 import dev.notypie.repository.meeting.AddParticipantResult
 import dev.notypie.repository.meeting.MeetingRepository
@@ -50,7 +49,6 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
-import org.slf4j.LoggerFactory
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.transaction.support.TransactionTemplate
@@ -1015,16 +1013,15 @@ class MeetingServiceImplTest :
                     )
                 } throws writeFailure
 
-                var escaped: Throwable? = null
-                val errors =
-                    captureErrorLogs(loggerName = MeetingServiceImpl::class.java.name) {
-                        escaped = runCatching { downService.cancelMeeting(event = event) }.exceptionOrNull()
+                val (escaped, logs) =
+                    captureLogs(loggerName = MeetingServiceImpl::class.java.name) {
+                        runCatching { downService.cancelMeeting(event = event) }.exceptionOrNull()
                     }
 
                 then("nothing escapes and one ERROR line carries the reply failure as suppressed") {
                     escaped shouldBe null
                     writeFailure.suppressed.map { it.message } shouldBe listOf("outbox insert failed: database down")
-                    errors.map { it.throwableProxy.message } shouldBe listOf("db down")
+                    logs.eventsAt(level = Level.ERROR).map { it.throwableProxy.message } shouldBe listOf("db down")
                 }
             }
 
@@ -1039,16 +1036,15 @@ class MeetingServiceImplTest :
                     )
                 } throws writeFailure
 
-                var escaped: Throwable? = null
-                val errors =
-                    captureErrorLogs(loggerName = MeetingServiceImpl::class.java.name) {
-                        escaped = runCatching { downService.addParticipants(event = event) }.exceptionOrNull()
+                val (escaped, logs) =
+                    captureLogs(loggerName = MeetingServiceImpl::class.java.name) {
+                        runCatching { downService.addParticipants(event = event) }.exceptionOrNull()
                     }
 
                 then("nothing escapes and one ERROR line carries the reply failure as suppressed") {
                     escaped shouldBe null
                     writeFailure.suppressed.map { it.message } shouldBe listOf("outbox insert failed: database down")
-                    errors.map { it.throwableProxy.message } shouldBe listOf("db down")
+                    logs.eventsAt(level = Level.ERROR).map { it.throwableProxy.message } shouldBe listOf("db down")
                 }
             }
         }
@@ -1186,15 +1182,3 @@ class MeetingServiceImplTest :
             }
         }
     })
-
-internal fun captureErrorLogs(loggerName: String, block: () -> Unit): List<ILoggingEvent> {
-    val appender = ListAppender<ILoggingEvent>().apply { start() }
-    val logger = LoggerFactory.getLogger(loggerName) as Logger
-    logger.addAppender(appender)
-    try {
-        block()
-    } finally {
-        logger.detachAppender(appender)
-    }
-    return appender.list.filter { it.level == Level.ERROR }
-}
