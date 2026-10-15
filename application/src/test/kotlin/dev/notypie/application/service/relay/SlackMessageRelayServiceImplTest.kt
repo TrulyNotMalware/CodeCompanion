@@ -1,9 +1,6 @@
 package dev.notypie.application.service.relay
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.AsyncConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
@@ -30,6 +27,7 @@ import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
+import dev.notypie.logging.captureLogs
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundEnvelope
 import dev.notypie.repository.outbox.OutboundMessageCodec
@@ -56,7 +54,6 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import io.mockk.verifyOrder
-import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
@@ -931,17 +928,7 @@ class SlackMessageRelayServiceImplTest :
                     basicInfo = basicInfo.copy(channel = basicInfo.publisherId),
                 )
 
-            fun loggedDuring(level: Level, action: () -> Unit): List<String> {
-                val appender = ListAppender<ILoggingEvent>().apply { start() }
-                val logger = LoggerFactory.getLogger(SlackMessageRelayServiceImpl::class.java.packageName) as Logger
-                logger.addAppender(appender)
-                try {
-                    action()
-                } finally {
-                    logger.detachAppender(appender)
-                }
-                return appender.list.filter { it.level == level }.map { it.formattedMessage }
-            }
+            val loggerName = SlackMessageRelayServiceImpl::class.java.packageName
 
             class FallbackLane(
                 result: CommandOutput,
@@ -1012,7 +999,8 @@ class SlackMessageRelayServiceImplTest :
             ).forEach { code ->
                 `when`("Slack refuses the reply's channel with $code") {
                     val lane = FallbackLane(result = failOutput(event = payload(), reason = code))
-                    val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+                    val warnings =
+                        captureLogs(loggerName = loggerName) { lane.dispatch() }.messagesAt(level = Level.WARN)
 
                     then("FAILURE is written and the direct reply is staged once, inside the same transaction") {
                         verify(exactly = 1) { lane.outboxRepository.save(any()) }
@@ -1052,7 +1040,7 @@ class SlackMessageRelayServiceImplTest :
                         result = failOutput(event = payload(), reason = "invalid_blocks"),
                         trigger = FallbackTrigger.ANY_DEFINITIVE_FAILURE,
                     )
-                val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+                val warnings = captureLogs(loggerName = loggerName) { lane.dispatch() }.messagesAt(level = Level.WARN)
 
                 then("its fallback is still staged for any definitive failure, with the replace wording") {
                     verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
@@ -1068,7 +1056,7 @@ class SlackMessageRelayServiceImplTest :
             `when`("another owner already recorded the refused row") {
                 val refused = failOutput(event = payload(), reason = "not_in_channel")
                 val lane = FallbackLane(result = refused, completed = listOf(0))
-                val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+                val warnings = captureLogs(loggerName = loggerName) { lane.dispatch() }.messagesAt(level = Level.WARN)
 
                 then("this worker stages no direct reply and claims none: the only warning is the take-over") {
                     verify(exactly = 1) { lane.completed(status = MessageStatus.FAILURE) }
@@ -1088,7 +1076,7 @@ class SlackMessageRelayServiceImplTest :
                         now = any(),
                     )
                 } throws DataAccessResourceFailureException("database down")
-                val warnings = loggedDuring(level = Level.WARN) { lane.dispatch() }
+                val warnings = captureLogs(loggerName = loggerName) { lane.dispatch() }.messagesAt(level = Level.WARN)
 
                 then("nothing is staged and no warning claims a direct reply") {
                     verify(exactly = STATUS_WRITE_ATTEMPTS.toInt()) { lane.completed(status = MessageStatus.FAILURE) }
@@ -1128,7 +1116,7 @@ class SlackMessageRelayServiceImplTest :
                                 continuation = listOf(chainPart),
                             ),
                     )
-                val errors = loggedDuring(level = Level.ERROR) { lane.dispatch() }
+                val errors = captureLogs(loggerName = loggerName) { lane.dispatch() }.messagesAt(level = Level.ERROR)
 
                 then("the direct reply is staged instead of the next part, and the dropped part is logged") {
                     verify(exactly = 1) { lane.outboxRepository.save(lane.fallbackRow) }

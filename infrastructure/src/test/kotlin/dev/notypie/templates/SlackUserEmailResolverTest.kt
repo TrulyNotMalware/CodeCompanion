@@ -1,9 +1,6 @@
 package dev.notypie.templates
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
@@ -11,6 +8,8 @@ import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserInfoDto
 import dev.notypie.impl.command.dto.createUserInfoErrorJson
 import dev.notypie.impl.command.dto.createUserInfoResponseJson
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -21,7 +20,6 @@ import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.web.client.RestClientException
 
@@ -42,30 +40,19 @@ class SlackUserEmailResolverTest :
                 } returns result
             }
 
-        fun warningsDuring(block: () -> Unit): List<String> {
-            val logger = LoggerFactory.getLogger("dev.notypie.templates") as Logger
-            val appender = ListAppender<ILoggingEvent>().apply { start() }
-            logger.addAppender(appender)
-            try {
-                block()
-            } finally {
-                logger.detachAppender(appender)
-            }
-            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
-        }
+        val loggerName = "dev.notypie.templates"
 
         given("a users.info body with the e-mail and many fields the DTO does not model") {
             val requester = requesterReturning(result = decoded(json = createUserInfoResponseJson()))
             val resolver = SlackUserEmailResolver(restRequester = requester, slackApiToken = TEST_BOT_TOKEN)
 
             `when`("the user is resolved twice") {
-                lateinit var emails: List<String?>
-                val warnings =
-                    warningsDuring { emails = List(size = 2) { resolver.resolve(userId = TEST_USER_ID) } }
+                val (emails, logs) =
+                    captureLogs(loggerName = loggerName) { List(size = 2) { resolver.resolve(userId = TEST_USER_ID) } }
 
                 then("the unknown fields are ignored and the profile e-mail comes back without a warning") {
                     emails shouldBe listOf("test@example.com", "test@example.com")
-                    warnings.shouldBeEmpty()
+                    logs.messagesAt(level = Level.WARN).shouldBeEmpty()
                 }
 
                 then("each resolve asks Slack, with the user id as a URI template variable, nothing cached") {
@@ -90,10 +77,9 @@ class SlackUserEmailResolverTest :
                 )
 
             then("there is no e-mail, and the resolver itself does not warn") {
-                var email: String? = "unresolved"
-                val warnings = warningsDuring { email = resolver.resolve(userId = TEST_USER_ID) }
+                val (email, logs) = captureLogs(loggerName = loggerName) { resolver.resolve(userId = TEST_USER_ID) }
                 email.shouldBeNull()
-                warnings.shouldBeEmpty()
+                logs.messagesAt(level = Level.WARN).shouldBeEmpty()
             }
         }
 
@@ -118,7 +104,9 @@ class SlackUserEmailResolverTest :
                 )
 
             then("there is no e-mail and one WARN names the user id and Slack's error code") {
-                val warnings = warningsDuring { resolver.resolve(userId = TEST_USER_ID).shouldBeNull() }
+                val (email, logs) = captureLogs(loggerName = loggerName) { resolver.resolve(userId = TEST_USER_ID) }
+                email.shouldBeNull()
+                val warnings = logs.messagesAt(level = Level.WARN)
                 warnings shouldHaveSize 1
                 warnings.single() shouldContain TEST_USER_ID
                 warnings.single() shouldContain "error=missing_scope"
@@ -134,7 +122,9 @@ class SlackUserEmailResolverTest :
                 )
 
             then("there is no e-mail and one WARN names the user id and the failure type, not its message") {
-                val warnings = warningsDuring { resolver.resolve(userId = TEST_USER_ID).shouldBeNull() }
+                val (email, logs) = captureLogs(loggerName = loggerName) { resolver.resolve(userId = TEST_USER_ID) }
+                email.shouldBeNull()
+                val warnings = logs.messagesAt(level = Level.WARN)
                 warnings shouldHaveSize 1
                 warnings.single() shouldContain TEST_USER_ID
                 warnings.single() shouldContain "RestClientException"

@@ -1,10 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie
 
 ## Purpose
-Root fixture package. No files at this level; each subpackage builds the types of the matching main package.
+Root fixture package. No files at this level; each subpackage builds the types of the matching main package, except
+`dto/` (shapes for the live jsonplaceholder spec) and `logging/` (the Logback capture shared by both modules' specs),
+which build no main type.
 The `TEST_USER_ID`, `TEST_CHANNEL_ID`, `TEST_TOKEN`, `TEST_APP_ID` (and similar) defaults used throughout come
 from `domain/src/testFixtures/kotlin/dev/notypie/domain/Constants.kt`, not from here.
 
@@ -13,6 +15,7 @@ from `domain/src/testFixtures/kotlin/dev/notypie/domain/Constants.kt`, not from 
 |-----------|---------|
 | `dto/` | Request/response shapes for the live `RestClientRequesterTest` (jsonplaceholder API) (see `dto/AGENTS.md`) |
 | `impl/` | Slack payload JSON, typed `InteractionPayload`, Events API request graphs, infra event creators, Google Calendar request, error and OAuth token-response builders (see `impl/AGENTS.md`) |
+| `logging/` | `captureLogs` — Logback capture for specs in `:infrastructure` and `:application` (see `logging/AGENTS.md`) |
 | `repository/` | Snapshot-isolation transaction fake and a transactional proxy for `*Impl` unit specs (see `repository/AGENTS.md`) |
 | `schema/` | JPA schema-row and record creators for the meeting, calendar-mirror, calendar-connection (record plus a test `TokenCipher`) and CVE lanes (see `schema/AGENTS.md`) |
 

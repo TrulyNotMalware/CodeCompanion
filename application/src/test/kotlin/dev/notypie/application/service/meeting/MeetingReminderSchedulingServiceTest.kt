@@ -1,5 +1,6 @@
 package dev.notypie.application.service.meeting
 
+import ch.qos.logback.classic.Level
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.domain.command.createCommandBasicInfo
@@ -8,6 +9,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.meet.createMeetingReminderDto
+import dev.notypie.logging.captureLogs
 import dev.notypie.repository.createSnapshotIsolationFailure
 import dev.notypie.repository.meeting.MeetingReminderRepository
 import dev.notypie.repository.meeting.ReadyReminder
@@ -215,9 +217,9 @@ class MeetingReminderSchedulingServiceTest :
                 every { repo.reminderExists(meetingId = any(), offsetMinutes = any()) } returns false
 
                 val errors =
-                    captureErrorLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
+                    captureLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
                         service.materializeReminders()
-                    }
+                    }.eventsAt(level = Level.ERROR)
 
                 then("the bug is logged at ERROR for that meeting and the next meeting is still materialized") {
                     errors.map { it.formattedMessage } shouldBe

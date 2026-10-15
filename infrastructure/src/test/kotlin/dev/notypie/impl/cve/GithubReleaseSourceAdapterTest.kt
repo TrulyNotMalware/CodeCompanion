@@ -1,11 +1,10 @@
 package dev.notypie.impl.cve
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.schema.createCveTopic
 import io.kotest.core.spec.style.BehaviorSpec
@@ -15,7 +14,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
-import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.LocalDateTime
@@ -60,17 +58,7 @@ class GithubReleaseSourceAdapterTest :
                 exchange.responseBody.use { it.write(bytes) }
             }
 
-        fun warningsDuring(block: () -> Unit): List<String> {
-            val logger = LoggerFactory.getLogger(GithubReleaseSourceAdapter::class.java) as Logger
-            val appender = ListAppender<ILoggingEvent>().apply { start() }
-            logger.addAppender(appender)
-            try {
-                block()
-            } finally {
-                logger.detachAppender(appender)
-            }
-            return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
-        }
+        val loggerName = GithubReleaseSourceAdapter::class.java.name
 
         given("an anonymous call answered 403 with the rate limit exhausted") {
             respond = { exchange ->
@@ -82,11 +70,12 @@ class GithubReleaseSourceAdapterTest :
             }
 
             `when`("fetch") {
-                var events: List<RawSourceEvent>? = null
-                val warnings = warningsDuring { events = adapter(token = "").fetch(topic = githubTopic()) }
+                val (fetched, logs) =
+                    captureLogs(loggerName = loggerName) { adapter(token = "").fetch(topic = githubTopic()) }
+                val warnings = logs.messagesAt(level = Level.WARN)
 
                 then("it still returns an empty list, but the log names the rate limit and its reset") {
-                    events shouldBe emptyList()
+                    fetched shouldBe emptyList()
                     val warning = warnings.singleOrNull { it.contains("rate limit exhausted") }
                     warning.shouldNotBeNull()
                     warning shouldContain "anonymous, 60 requests/hour"
@@ -99,7 +88,10 @@ class GithubReleaseSourceAdapterTest :
             respond = jsonResponse(status = 403, body = """{"message":"Forbidden"}""")
 
             `when`("fetch") {
-                val warnings = warningsDuring { adapter(token = "gh-token").fetch(topic = githubTopic()) }
+                val warnings =
+                    captureLogs(loggerName = loggerName) {
+                        adapter(token = "gh-token").fetch(topic = githubTopic())
+                    }.messagesAt(level = Level.WARN)
 
                 then("it is logged as an ordinary non-2xx, not as a rate limit") {
                     warnings shouldBe listOf("GitHub releases returned 403 for topic=${githubTopic().topicKey}")

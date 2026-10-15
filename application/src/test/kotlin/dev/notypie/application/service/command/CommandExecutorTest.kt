@@ -1,9 +1,6 @@
 package dev.notypie.application.service.command
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.domain.command.TestCommand
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.createSlashInboundCommand
@@ -16,6 +13,7 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
+import dev.notypie.logging.captureLogs
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
@@ -29,7 +27,6 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
-import org.slf4j.LoggerFactory
 import java.util.UUID
 
 class CommandExecutorTest :
@@ -189,17 +186,7 @@ class CommandExecutorTest :
         }
 
         given("commands whose outputs differ in how they failed") {
-            fun warningsWhile(block: () -> Unit): List<ILoggingEvent> {
-                val appender = ListAppender<ILoggingEvent>().apply { start() }
-                val logger = LoggerFactory.getLogger(CommandExecutor::class.java) as Logger
-                logger.addAppender(appender)
-                try {
-                    block()
-                } finally {
-                    logger.detachAppender(appender)
-                }
-                return appender.list.filter { it.level == Level.WARN }
-            }
+            val loggerName = CommandExecutor::class.java.name
             val staged = mutableListOf<OutboundMessage>()
             every { intentResolver.resolveAll(intents = any(), basicInfo = any()) } returns emptyList()
             every { outboundStager.stage(message = capture(staged), basicInfo = any()) } returns
@@ -216,7 +203,10 @@ class CommandExecutorTest :
                         commandData = createSlashInboundCommand(appToken = "xoxb-secret-token"),
                         failure = IllegalStateException("database down"),
                     )
-                val warnings = warningsWhile { executor.execute(command = command) }
+                val warnings =
+                    captureLogs(loggerName = loggerName) {
+                        executor.execute(command = command)
+                    }.eventsAt(level = Level.WARN)
 
                 then("one WARN names the command, its ids and the reason, never the app token") {
                     warnings.size shouldBe 1
@@ -242,7 +232,10 @@ class CommandExecutorTest :
                         commandData = createMentionInboundCommand(),
                         failure = IllegalStateException("bad <@U1>\nWARN forged line\u001b[31m"),
                     )
-                val warnings = warningsWhile { executor.execute(command = command) }
+                val warnings =
+                    captureLogs(loggerName = loggerName) {
+                        executor.execute(command = command)
+                    }.eventsAt(level = Level.WARN)
 
                 then("the one WARN replaces each control character with ? so the reason cannot forge a log line") {
                     val line = warnings.single().formattedMessage
@@ -254,7 +247,7 @@ class CommandExecutorTest :
 
             `when`("a command succeeds, or its context fails on purpose with its own reply") {
                 val warnings =
-                    warningsWhile {
+                    captureLogs(loggerName = loggerName) {
                         executor.execute(
                             command =
                                 TestCommand(
@@ -269,7 +262,7 @@ class CommandExecutorTest :
                                     commandData = createSlashInboundCommand(subCommands = listOf("bogus")),
                                 ),
                         )
-                    }
+                    }.eventsAt(level = Level.WARN)
 
                 then("nothing is logged at WARN") {
                     warnings.shouldBeEmpty()

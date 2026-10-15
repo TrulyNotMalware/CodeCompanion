@@ -1,9 +1,6 @@
 package dev.notypie.application.service.agent
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.MutableClock
 import dev.notypie.application.outbox.QueuedExecutor
@@ -24,6 +21,8 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import dev.notypie.repository.agent.AgentAskTurnRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepositoryImpl
 import dev.notypie.repository.agent.JpaAgentTurnHistoryRepository
@@ -53,7 +52,6 @@ import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.slf4j.LoggerFactory
 import org.springframework.core.retry.RetryException
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.data.repository.findByIdOrNull
@@ -235,17 +233,7 @@ class AgentAskThreadStarterTest :
                 messageTs = messageTs,
             )
 
-        fun loggedDuring(level: Level, action: () -> Unit): List<String> {
-            val appender = ListAppender<ILoggingEvent>().apply { start() }
-            val logger = LoggerFactory.getLogger(AgentAskThreadStarter::class.java.packageName) as Logger
-            logger.addAppender(appender)
-            try {
-                action()
-            } finally {
-                logger.detachAppender(appender)
-            }
-            return appender.list.filter { it.level == level }.map { it.formattedMessage }
-        }
+        val loggerName = AgentAskThreadStarter::class.java.packageName
 
         val transactionManager = context.getBean(JpaTransactionManager::class.java)
         val jdbc = context.getBean(JdbcTemplate::class.java)
@@ -336,11 +324,11 @@ class AgentAskThreadStarterTest :
                 val lane = lane()
                 val eventId = storedQuestion()
                 val warnings =
-                    loggedDuring(level = Level.WARN) {
+                    captureLogs(loggerName = loggerName) {
                         lane.starter.onDelivered(
                             event = deliveryOf(eventId = eventId, commandDetailType = CommandDetailType.SIMPLE_TEXT),
                         )
-                    }
+                    }.messagesAt(level = Level.WARN)
 
                 then("it is ignored before the outbox is read: no warning, no turn recorded or submitted") {
                     warnings.shouldBeEmpty()
@@ -355,9 +343,9 @@ class AgentAskThreadStarterTest :
                 val lane = lane()
                 val eventId = storedQuestion()
                 val warnings =
-                    loggedDuring(level = Level.WARN) {
+                    captureLogs(loggerName = loggerName) {
                         lane.starter.onDelivered(event = deliveryOf(eventId = eventId, messageTs = ""))
-                    }
+                    }.messagesAt(level = Level.WARN)
 
                 then("there is no thread to answer in: one warning names the event, nothing is recorded or submitted") {
                     warnings shouldBe
@@ -625,9 +613,9 @@ class AgentAskThreadStarterTest :
                 val lane = lane()
                 val eventId = UUID.randomUUID().toString()
                 val warnings =
-                    loggedDuring(level = Level.WARN) {
+                    captureLogs(loggerName = loggerName) {
                         lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                    }
+                    }.messagesAt(level = Level.WARN)
 
                 then("a warning names the event and no turn is recorded or submitted") {
                     warnings shouldBe
@@ -653,9 +641,9 @@ class AgentAskThreadStarterTest :
                             ),
                         ).eventId
                 val warnings =
-                    loggedDuring(level = Level.WARN) {
+                    captureLogs(loggerName = loggerName) {
                         lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                    }
+                    }.messagesAt(level = Level.WARN)
 
                 then("a warning names the event and no turn is recorded or submitted") {
                     warnings shouldBe
@@ -670,9 +658,9 @@ class AgentAskThreadStarterTest :
                 val lane = lane(outbox = outbox.repository)
                 val eventId = outboxRepository.save(createOutboxMessage(payload = "{}")).eventId
                 val errors =
-                    loggedDuring(level = Level.ERROR) {
+                    captureLogs(loggerName = loggerName) {
                         lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                    }
+                    }.messagesAt(level = Level.ERROR)
 
                 then("the row is read once, not retried, and no turn is recorded or submitted") {
                     outbox.reads.get() shouldBe 1
@@ -691,22 +679,18 @@ class AgentAskThreadStarterTest :
                 `when`("the row carries schema version $version, outside the supported set") {
                     val lane = lane()
                     val eventId = outboxRepository.save(questionRowAt(schemaVersion = version)).eventId
-                    val warnings = mutableListOf<String>()
-                    val errors =
-                        loggedDuring(level = Level.ERROR) {
-                            warnings +=
-                                loggedDuring(level = Level.WARN) {
-                                    lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                                }
+                    val logs =
+                        captureLogs(loggerName = loggerName) {
+                            lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
                         }
 
                     then("one ERROR names the event and version $version; no warning, no turn recorded or submitted") {
-                        errors shouldBe
+                        logs.messagesAt(level = Level.ERROR) shouldBe
                             listOf(
                                 "Asked question eventId=$eventId cannot be read " +
                                     "(${unsupportedReason(version = version)}); no turn starts",
                             )
-                        warnings.shouldBeEmpty()
+                        logs.messagesAt(level = Level.WARN).shouldBeEmpty()
                         askTurnRepository.count() shouldBe 0L
                         lane.submitted.shouldBeEmpty()
                     }
@@ -804,9 +788,9 @@ class AgentAskThreadStarterTest :
                 val lane = lane(ledger = ledger)
                 val eventId = storedQuestion(prompt = "still answered")
                 val errors =
-                    loggedDuring(level = Level.ERROR) {
+                    captureLogs(loggerName = loggerName) {
                         lane.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                    }
+                    }.messagesAt(level = Level.ERROR)
 
                 then("the turn starts once without a lease, threaded under the delivered ts") {
                     val request = lane.submitted.single()
@@ -848,7 +832,8 @@ class AgentAskThreadStarterTest :
                     .eventId
 
             `when`("the sweep runs") {
-                val warnings = loggedDuring(level = Level.WARN) { lane.starter.resumeOnce() }
+                val warnings =
+                    captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }.messagesAt(level = Level.WARN)
 
                 then("a warning names the event, the turn is ABANDONED and counted, and nothing is offered") {
                     warnings shouldBe
@@ -873,7 +858,8 @@ class AgentAskThreadStarterTest :
             afterFind += { askTurnRepository.begin(eventId = eventId, attemptCount = 0, now = now) }
 
             `when`("the sweep runs") {
-                val warnings = loggedDuring(level = Level.WARN) { lane.starter.resumeOnce() }
+                val warnings =
+                    captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }.messagesAt(level = Level.WARN)
 
                 then("the lost abandon is neither warned about nor counted, and the row stays with that run") {
                     warnings.shouldBeEmpty()
@@ -900,13 +886,13 @@ class AgentAskThreadStarterTest :
                         ),
                     )
                     val before = jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId)
-                    val resumed = mutableListOf<Int>()
-                    val errors =
-                        loggedDuring(level = Level.ERROR) {
-                            resumed += lane.starter.resumeOnce()
+                    val (resumed, logs) =
+                        captureLogs(loggerName = loggerName) {
+                            val firstSweep = lane.starter.resumeOnce()
                             lane.clock.advance(by = Duration.ofMillis(ASK_RESUME_PERIOD_MILLIS))
-                            resumed += lane.starter.resumeOnce()
+                            listOf(firstSweep, lane.starter.resumeOnce())
                         }
+                    val errors = logs.messagesAt(level = Level.ERROR)
 
                     then("each sweep logs one ERROR naming the event and version $version; the row is left as it was") {
                         errors shouldBe
@@ -943,8 +929,8 @@ class AgentAskThreadStarterTest :
                     ),
                 )
                 val before = jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId)
-                val resumed = mutableListOf<Int>()
-                val errors = loggedDuring(level = Level.ERROR) { resumed += lane.starter.resumeOnce() }
+                val (resumed, logs) = captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }
+                val errors = logs.messagesAt(level = Level.ERROR)
 
                 then("one ERROR names the event and the decode failure, and the turn is left exactly as it was") {
                     errors.single() shouldStartWith "Asked question eventId=$eventId cannot be read ($undecodableReason"
@@ -954,7 +940,7 @@ class AgentAskThreadStarterTest :
                 }
 
                 then("nothing is offered, abandoned or counted, and the question row is read once") {
-                    resumed shouldContainExactly listOf(0)
+                    resumed shouldBe 0
                     lane.offered.shouldBeEmpty()
                     lane.abandoned.shouldBeEmpty()
                     lane.counted(outcome = "abandoned") shouldBe 0.0
@@ -997,7 +983,8 @@ class AgentAskThreadStarterTest :
             )
 
             `when`("the sweep runs") {
-                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resumeOnce() }
+                val errors =
+                    captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }.messagesAt(level = Level.ERROR)
 
                 then("both turns are ABANDONED and counted, without a notice or an offer") {
                     turnOf(eventId = expired).status shouldBe AgentAskTurnStatus.ABANDONED
@@ -1038,7 +1025,8 @@ class AgentAskThreadStarterTest :
             afterFind += { askTurnRepository.begin(eventId = eventId, attemptCount = 1, now = now) }
 
             `when`("the sweep runs") {
-                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resumeOnce() }
+                val errors =
+                    captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }.messagesAt(level = Level.ERROR)
 
                 then("the lost abandon is neither logged nor counted, and the row stays with that run") {
                     errors.shouldBeEmpty()
@@ -1188,7 +1176,8 @@ class AgentAskThreadStarterTest :
 
             `when`("the read throws an exception") {
                 val lane = lane(ledger = ledgerThrowing(failure = DataAccessResourceFailureException("ledger down")))
-                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resume() }
+                val errors =
+                    captureLogs(loggerName = loggerName) { lane.starter.resume() }.messagesAt(level = Level.ERROR)
 
                 then("the tick returns normally with the failure logged") {
                     errors shouldBe listOf("Ask turn resume sweep failed")
@@ -1257,12 +1246,12 @@ class AgentAskThreadStarterTest :
             storedTurn(prompt = "read works", updatedAt = now.minusMinutes(5L))
 
             `when`("the sweep runs") {
-                val resumed = mutableListOf<Int>()
-                val errors = loggedDuring(level = Level.ERROR) { resumed += lane.starter.resumeOnce() }
+                val (resumed, logs) = captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }
+                val errors = logs.messagesAt(level = Level.ERROR)
 
                 then("the failing row is logged by its event id and the row after it is still offered") {
                     errors shouldBe listOf("Ask turn resume failed for eventId=$unreadable")
-                    resumed shouldContainExactly listOf(1)
+                    resumed shouldBe 1
                     lane.offered.map { it.payload.prompt } shouldContainExactly listOf("read works")
                 }
 
@@ -1352,7 +1341,8 @@ class AgentAskThreadStarterTest :
                 )
 
             `when`("the sweep runs") {
-                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resumeOnce() }
+                val errors =
+                    captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }.messagesAt(level = Level.ERROR)
 
                 then("both spent turns get the failure notice in their thread and are ABANDONED, counted and logged") {
                     lane.abandoned.map { it.payload.prompt } shouldContainExactly listOf("spent orphan", "spent")
@@ -1470,7 +1460,8 @@ class AgentAskThreadStarterTest :
                 storedTurn(prompt = "spent", runCount = ASK_MAX_RUNS, updatedAt = now.minus(gracePassed))
 
             `when`("the sweep runs") {
-                val errors = loggedDuring(level = Level.ERROR) { lane.starter.resumeOnce() }
+                val errors =
+                    captureLogs(loggerName = loggerName) { lane.starter.resumeOnce() }.messagesAt(level = Level.ERROR)
 
                 then("the turn is left for the next sweep and is neither counted nor logged as abandoned") {
                     turnOf(eventId = spent).status shouldBe AgentAskTurnStatus.PENDING
@@ -1570,9 +1561,9 @@ class AgentAskThreadStarterTest :
 
             `when`("the question is delivered") {
                 val errors =
-                    loggedDuring(level = Level.ERROR) {
+                    captureLogs(loggerName = loggerName) {
                         real.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                    }
+                    }.messagesAt(level = Level.ERROR)
                 val running = turnOf(eventId = eventId)
 
                 then("the give-back and the audit row roll back with it; the run stays IN_PROGRESS for the sweep") {
@@ -1726,13 +1717,9 @@ class AgentAskThreadStarterTest :
             }
 
             `when`("the question is delivered and the first run's settle loses its CAS") {
-                val warnings = mutableListOf<String>()
-                val errors =
-                    loggedDuring(level = Level.ERROR) {
-                        warnings +=
-                            loggedDuring(level = Level.WARN) {
-                                real.starter.onDelivered(event = deliveryOf(eventId = eventId))
-                            }
+                val logs =
+                    captureLogs(loggerName = loggerName) {
+                        real.starter.onDelivered(event = deliveryOf(eventId = eventId))
                     }
                 val running = turnOf(eventId = eventId)
 
@@ -1744,12 +1731,12 @@ class AgentAskThreadStarterTest :
                 }
 
                 then("the run is reported superseded at WARN and counted so, with nothing at ERROR") {
-                    warnings shouldBe
+                    logs.messagesAt(level = Level.WARN) shouldBe
                         listOf(
                             "Agent turn superseded; answer not posted idempotencyKey=${basicInfo.idempotencyKey} " +
                                 "(Ask turn eventId=$eventId attempt=1 belongs to another run or is finished)",
                         )
-                    errors.shouldBeEmpty()
+                    logs.messagesAt(level = Level.ERROR).shouldBeEmpty()
                     real.countedTurns(outcome = "superseded") shouldBe 1.0
                     real.countedTurns(outcome = "completed") shouldBe 0.0
                 }
