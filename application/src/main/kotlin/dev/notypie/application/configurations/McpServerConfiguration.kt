@@ -18,16 +18,44 @@ import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties
 import org.springframework.ai.mcp.server.webmvc.transport.WebMvcStreamableServerTransportProvider
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.web.servlet.FilterRegistrationBean
+import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.Ordered
+import org.springframework.core.env.Environment
+import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.Duration
 
 private const val MIN_SIGNING_SECRET_LENGTH = 32
+private const val SLACK_MCP_ENABLED = "slack.app.mcp.enabled"
+private const val SPRING_AI_MCP_SERVER_ENABLED = "spring.ai.mcp.server.enabled"
+
+private fun String?.switchedOn(matchIfMissing: Boolean): Boolean =
+    this?.equals(other = "true", ignoreCase = true) ?: matchIfMissing
+
+@Component
+class McpSwitchesCheck : BeanFactoryPostProcessor {
+    override fun postProcessBeanFactory(beanFactory: ConfigurableListableBeanFactory) {
+        val environment =
+            beanFactory.getBean(ConfigurableApplicationContext.ENVIRONMENT_BEAN_NAME, Environment::class.java)
+        val tokenPipeline = environment.getProperty(SLACK_MCP_ENABLED)
+        val transport = environment.getProperty(SPRING_AI_MCP_SERVER_ENABLED)
+        val tokenPipelineOn = tokenPipeline.switchedOn(matchIfMissing = false)
+        val transportOn = transport.switchedOn(matchIfMissing = true)
+        check(tokenPipelineOn == transportOn) {
+            "$SLACK_MCP_ENABLED=${tokenPipeline ?: "unset"} (on: $tokenPipelineOn) and " +
+                "$SPRING_AI_MCP_SERVER_ENABLED=${transport ?: "unset"} (on: $transportOn) must match: the first " +
+                "switches the turn-token filter and tools, the second the /mcp transport, and each is on only " +
+                "for the value true; set both, as MCP_ENABLED does in the prod profile"
+        }
+    }
+}
 
 @Configuration
 @ConditionalOnProperty(prefix = "slack.app.mcp", name = ["enabled"], havingValue = "true")

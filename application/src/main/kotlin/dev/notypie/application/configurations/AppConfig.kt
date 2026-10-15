@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
 import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.cve.schema.CveTopicCategory
@@ -165,9 +166,18 @@ data class AppConfig(
         ) {
             init {
                 require(batchSize > 0) { "outbox.polling.batch-size must be positive" }
-                require(stuckInProgressSeconds > 0L) { "outbox.polling.stuck-in-progress-seconds must be positive" }
+                require(stuckInProgressSeconds >= MIN_STUCK_IN_PROGRESS_SECONDS) {
+                    "outbox.polling.stuck-in-progress-seconds must be at least $MIN_STUCK_IN_PROGRESS_SECONDS " +
+                        "(twice the relay's per-record time bound), or the recovery sweep reclaims rows mid-send: " +
+                        "$stuckInProgressSeconds"
+                }
                 require(giveUpAfterHours > 0L) { "outbox.polling.give-up-after-hours must be positive" }
                 require(maxSends > 0) { "outbox.polling.max-sends must be positive" }
+            }
+
+            companion object {
+                val MIN_STUCK_IN_PROGRESS_SECONDS: Long =
+                    Math.ceilDiv(RELAY_RECORD_TIME_BOUND.multipliedBy(2L).toMillis(), 1_000L)
             }
         }
     }

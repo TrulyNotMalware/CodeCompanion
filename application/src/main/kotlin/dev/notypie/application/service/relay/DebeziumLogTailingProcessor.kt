@@ -36,7 +36,7 @@ class DebeziumLogTailingProcessor(
         @Payload(required = false) envelope: Envelope?,
     ) {
         if (envelope == null) {
-            logger.warn { "Skipping CDC tombstone record." }
+            logger.debug { "Skipping CDC tombstone record." }
             return
         }
         val afterImage = envelope.payload.after ?: return

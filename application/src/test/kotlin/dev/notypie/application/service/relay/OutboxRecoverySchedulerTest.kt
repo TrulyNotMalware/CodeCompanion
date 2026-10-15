@@ -5,8 +5,11 @@ import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.mockk.Runs
 import io.mockk.every
@@ -14,6 +17,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.Duration
 
 class OutboxRecoverySchedulerTest :
     BehaviorSpec({
@@ -261,6 +265,20 @@ class OutboxRecoverySchedulerTest :
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(retryingSendThreshold = 0) }
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(stuckThresholdSeconds = 0L) }
                 shouldThrow<IllegalArgumentException> { AppConfig.Outbox.Health(accessBlockedWindowSeconds = 0L) }
+            }
+
+            then("a stuck threshold below twice the relay's per-record time bound is rejected naming the floor") {
+                val floor = AppConfig.Outbox.Polling.MIN_STUCK_IN_PROGRESS_SECONDS
+                val twiceTheBound = RELAY_RECORD_TIME_BOUND.multipliedBy(2L)
+                Duration.ofSeconds(floor) shouldBeGreaterThanOrEqualTo twiceTheBound
+                Duration.ofSeconds(floor - 1L) shouldBeLessThan twiceTheBound
+                shouldThrow<IllegalArgumentException> {
+                    AppConfig.Outbox.Polling(stuckInProgressSeconds = floor - 1L)
+                }.message shouldBe
+                    "outbox.polling.stuck-in-progress-seconds must be at least $floor (twice the relay's per-record " +
+                    "time bound), or the recovery sweep reclaims rows mid-send: ${floor - 1L}"
+                shouldNotThrowAny { AppConfig.Outbox.Polling(stuckInProgressSeconds = floor) }
+                shouldNotThrowAny { AppConfig.Outbox.Polling() }
             }
         }
 

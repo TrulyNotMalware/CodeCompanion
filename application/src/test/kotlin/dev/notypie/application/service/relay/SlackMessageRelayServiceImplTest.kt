@@ -47,6 +47,7 @@ import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
@@ -605,11 +606,18 @@ class SlackMessageRelayServiceImplTest :
                             dispatcherReturning(output = RateLimitedOutput(event = payload(), retryAfter = null)),
                     )
 
-                service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+                val warnings =
+                    captureLogs(loggerName = SlackMessageRelayServiceImpl::class.java.packageName) {
+                        service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+                    }.messagesAt(level = Level.WARN)
 
                 then("it waits the default minute plus its spread") {
                     deferredTo.captured shouldBeGreaterThanOrEqualTo DEFAULT_TEST_NOW.minusSeconds(240L)
                     deferredTo.captured shouldBeLessThan DEFAULT_TEST_NOW.minusSeconds(120L)
+                }
+
+                then("the deferral warning reads the missing Retry-After as none") {
+                    warnings.single() shouldStartWith "Slack rate limit (Retry-After=none);"
                 }
             }
 

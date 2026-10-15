@@ -12,6 +12,7 @@ import dev.notypie.impl.command.isOutcomeUnknown
 import dev.notypie.impl.command.isRateLimited
 import dev.notypie.impl.command.isTransientExhausted
 import dev.notypie.impl.command.retryAfter
+import dev.notypie.impl.command.retryAfterLabel
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.impl.retry.retryTimeBound
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -213,7 +214,7 @@ class SlackMessageRelayServiceImpl(
                 defer(
                     claim = claim,
                     retryAfter = result.retryAfter(),
-                    reason = "Slack rate limit (Retry-After=${result.retryAfter()?.toSeconds()}s)",
+                    reason = "Slack rate limit (Retry-After=${result.retryAfter().retryAfterLabel()})",
                 )
             result.isAccessBlocked() -> {
                 logger.error { "Slack refused the bot's access; holding eventId=$eventId until it is fixed" }

@@ -1,5 +1,6 @@
 package dev.notypie.application.service.relay
 
+import ch.qos.logback.classic.Level
 import dev.notypie.application.configurations.CdcDeadLetterRecovery
 import dev.notypie.application.configurations.CountingRecordRecoverer
 import dev.notypie.application.configurations.DEAD_LETTER_HANDOFFS_METRIC
@@ -14,6 +15,7 @@ import dev.notypie.application.outbox.createRelayService
 import dev.notypie.application.outbox.stubClaimLifecycle
 import dev.notypie.impl.command.RATE_LIMITED_REASON
 import dev.notypie.impl.command.event.MessageDispatcher
+import dev.notypie.logging.captureLogs
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
@@ -23,7 +25,9 @@ import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
@@ -53,6 +57,8 @@ import java.util.concurrent.CompletableFuture
 
 class DebeziumLogTailingProcessorTest :
     BehaviorSpec({
+        val loggerName = DebeziumLogTailingProcessor::class.java.name
+
         data class Fixture(
             val dispatcher: MessageDispatcher,
             val eventPublisher: ApplicationEventPublisher,
@@ -134,13 +140,22 @@ class DebeziumLogTailingProcessorTest :
             every { f.outboxRepository.findById(eventId) } returns Optional.empty()
 
             `when`("the record is consumed") {
-                f.processor.consume(envelope = createCdcEnvelope(after = createOutboxAfterImage(eventId = eventId)))
+                val warnings =
+                    captureLogs(loggerName = loggerName) {
+                        f.processor.consume(
+                            envelope = createCdcEnvelope(after = createOutboxAfterImage(eventId = eventId)),
+                        )
+                    }.messagesAt(level = Level.WARN)
 
                 then("nothing is claimed or dispatched") {
                     verify(exactly = 0) {
                         f.outboxRepository.claimPending(eventId = any(), attemptCount = any(), now = any())
                     }
                     verify(exactly = 0) { f.dispatcher.dispatch(event = any()) }
+                }
+
+                then("the processor's logger warns about the missing row") {
+                    warnings.single() shouldStartWith "Outbox row missing for eventId=$eventId"
                 }
             }
         }
@@ -293,10 +308,14 @@ class DebeziumLogTailingProcessorTest :
             val f = fixture()
 
             `when`("the record is a tombstone") {
-                f.processor.consume(envelope = null)
+                val logs = captureLogs(loggerName = loggerName) { f.processor.consume(envelope = null) }
 
                 then("it is skipped without touching the database") {
                     verify(exactly = 0) { f.outboxRepository.findById(any()) }
+                }
+
+                then("it logs no warning, since every retention purge emits one per deleted row") {
+                    logs.eventsAt(level = Level.WARN).shouldBeEmpty()
                 }
             }
 

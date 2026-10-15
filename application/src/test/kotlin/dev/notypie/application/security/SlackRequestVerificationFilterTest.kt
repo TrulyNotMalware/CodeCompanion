@@ -1,8 +1,10 @@
 package dev.notypie.application.security
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.logging.captureLogs
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -252,12 +254,19 @@ class SlackRequestVerificationFilterTest :
 
                 val replayResponse = MockHttpServletResponse()
                 val replayChain = CountingFilterChain()
-                underTest.doFilter(signed(), replayResponse, replayChain)
+                val replayLogs =
+                    captureLogs(loggerName = SlackRequestVerificationFilter::class.java.packageName) {
+                        underTest.doFilter(signed(), replayResponse, replayChain)
+                    }.messagesAt(level = Level.INFO)
 
                 then("the replay is acknowledged with 200 and the handlers run only once") {
                     firstChain.invocationCount shouldBe 1
                     replayResponse.status shouldBe 200
                     replayChain.invocationCount shouldBe 0
+                }
+
+                then("the acknowledgement log reads the missing retry number as none") {
+                    replayLogs.single() shouldContain "retryNum=none"
                 }
             }
 
@@ -283,6 +292,26 @@ class SlackRequestVerificationFilterTest :
                     meterRegistry
                         .counter(SlackRequestVerificationFilter.METRIC_DEFERRED_RETRIES)
                         .count() shouldBe 1.0
+                }
+            }
+
+            `when`("a replay without a retry number arrives while the original attempt is still running") {
+                val underTest = filter()
+                val replayResponse = MockHttpServletResponse()
+                val replayChain = CountingFilterChain()
+                val originalChain =
+                    CountingFilterChain(onInvoke = { underTest.doFilter(signed(), replayResponse, replayChain) })
+
+                val infoLogs =
+                    captureLogs(loggerName = SlackRequestVerificationFilter::class.java.packageName) {
+                        underTest.doFilter(signed(), MockHttpServletResponse(), originalChain)
+                    }.messagesAt(level = Level.INFO)
+
+                then("the replay gets 503, the handlers run once, and the log reads the retry number as none") {
+                    originalChain.invocationCount shouldBe 1
+                    replayResponse.status shouldBe 503
+                    replayChain.invocationCount shouldBe 0
+                    infoLogs.single() shouldContain "retryNum=none"
                 }
             }
 
@@ -440,6 +469,29 @@ class SlackRequestVerificationFilterTest :
                                 .orEmpty()
                         profiles.forEach { profile -> message shouldContain profile }
                     }
+                }
+            }
+
+            listOf(
+                arrayOf("slack-live", "local"),
+                arrayOf("prod", "local"),
+                arrayOf("local", "dev"),
+            ).forEach { profiles ->
+                `when`("a real secret is configured and local is combined with ${profiles.joinToString()}") {
+                    then("startup fails because local's actuator exposure would leave loopback") {
+                        val message =
+                            shouldThrow<IllegalStateException> {
+                                filter(signingSecret = SIGNING_SECRET, profiles = profiles)
+                            }.message.orEmpty()
+                        message shouldContain "cannot be combined with other profiles"
+                        profiles.forEach { profile -> message shouldContain profile }
+                    }
+                }
+            }
+
+            `when`("a real secret is configured under the local profile alone") {
+                then("the filter is created") {
+                    shouldNotThrowAny { filter(signingSecret = SIGNING_SECRET, profiles = arrayOf("local")) }
                 }
             }
 
