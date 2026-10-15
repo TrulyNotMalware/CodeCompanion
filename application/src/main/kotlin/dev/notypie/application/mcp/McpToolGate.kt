@@ -5,6 +5,7 @@ import dev.notypie.application.security.mcp.ScopedTurnToken
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.domain.command.authorization.CommandPermission
 import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository
 import dev.notypie.repository.mcp.McpToolCallRecord
 import dev.notypie.repository.mcp.schema.McpToolCallOutcome
@@ -31,8 +32,7 @@ private fun fenceToolResult(text: String): String {
         if (neutralised.length <= MAX_TOOL_RESULT_CHARS) {
             neutralised
         } else {
-            val end = MAX_TOOL_RESULT_CHARS - if (neutralised[MAX_TOOL_RESULT_CHARS - 1].isHighSurrogate()) 1 else 0
-            neutralised.take(n = end) + TRUNCATED_MARKER
+            neutralised.takeSurrogateSafe(maxLength = MAX_TOOL_RESULT_CHARS) + TRUNCATED_MARKER
         }
     return "$TOOL_RESULT_PREAMBLE\n<tool_result>\n$capped\n</tool_result>"
 }

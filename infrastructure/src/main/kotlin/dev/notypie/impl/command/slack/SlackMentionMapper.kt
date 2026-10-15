@@ -109,7 +109,11 @@ private fun Element.restoreLeaf(botId: String): String =
         ELEMENT_TYPE_USER -> userId?.takeIf { it != botId }?.let { "<@$it>" }.orEmpty()
         ELEMENT_TYPE_LINK -> {
             val label = extractText()
-            if (label.isNullOrBlank() || label == url) url.orEmpty() else "$label ($url)"
+            when {
+                label.isNullOrBlank() || label == url -> url.orEmpty()
+                url.isNullOrBlank() -> label
+                else -> "$label ($url)"
+            }
         }
         ELEMENT_TYPE_CHANNEL -> channelId?.let { "<#$it>" }.orEmpty()
         ELEMENT_TYPE_USERGROUP -> usergroupId?.let { "<!subteam^$it>" }.orEmpty()

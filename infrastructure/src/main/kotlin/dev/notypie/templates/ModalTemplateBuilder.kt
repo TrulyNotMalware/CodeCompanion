@@ -9,6 +9,7 @@ import dev.notypie.domain.meet.dto.MeetingDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.dto.RoutineMemberDto
 import dev.notypie.domain.standup.dto.StandupAnswerDto
+import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.RestClientRequester.Companion.SLACK_API_BASE_URL
 import dev.notypie.impl.command.RestRequester
@@ -563,7 +564,10 @@ class ModalTemplateBuilder(
                 blocks {
                     input(blockId = StandupSetupModalIds.NAME_BLOCK_ID) {
                         label(text = "Routine name")
-                        plainTextInput(actionId = StandupSetupModalIds.NAME_ACTION_ID)
+                        plainTextInput(
+                            actionId = StandupSetupModalIds.NAME_ACTION_ID,
+                            maxLength = Routine.MAX_NAME_LENGTH,
+                        )
                     }
                     input(blockId = StandupSetupModalIds.QUESTIONS_BLOCK_ID) {
                         label(text = "Questions (one per line)")

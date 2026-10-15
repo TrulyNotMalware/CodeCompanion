@@ -65,6 +65,19 @@ class SlackMentionMapperTest :
             }
         }
 
+        listOf(null to "no url", "" to "a blank url").forEach { (url, case) ->
+            given("a link element that carries a label and $case") {
+                `when`("flattened") {
+                    val mention =
+                        mapWith(createTextElement(text = "ask see "), createLinkElement(label = "the docs", url = url))
+
+                    then("the label is kept alone instead of being followed by an empty or null url") {
+                        mention.text shouldBe "ask see the docs"
+                    }
+                }
+            }
+        }
+
         given("a rich_text mention mixing user mentions and command text") {
             `when`("flattened") {
                 val mention =

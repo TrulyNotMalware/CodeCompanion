@@ -1,5 +1,6 @@
 package dev.notypie.repository.cve
 
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.repository.cve.schema.CveEventSchema
 import dev.notypie.repository.cve.schema.CveSummaryStatus
 import org.springframework.data.domain.PageRequest
@@ -20,8 +21,8 @@ open class CveEventRepositoryImpl(
         jpaCveEventRepository.insertIgnore(
             topicId = topicId,
             externalId = externalId,
-            title = title.take(TITLE_MAX_LENGTH),
-            rawContent = rawContent.take(RAW_CONTENT_MAX_LENGTH),
+            title = title.takeSurrogateSafe(maxLength = TITLE_MAX_LENGTH),
+            rawContent = rawContent.takeSurrogateSafe(maxLength = RAW_CONTENT_MAX_LENGTH),
             publishedAt = publishedAt,
         )
 

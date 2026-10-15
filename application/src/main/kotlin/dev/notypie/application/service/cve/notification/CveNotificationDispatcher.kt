@@ -5,6 +5,7 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.repository.cve.CveDeliveryRepository
 import dev.notypie.repository.cve.UndeliveredCveEvent
 import dev.notypie.repository.cve.schema.CveDeliveryMode
@@ -228,7 +229,11 @@ class CveNotificationDispatcher(
     private fun digestEventLine(event: UndeliveredCveEvent): String {
         val summary = event.aiSummary
         val title = "• *${event.title.escapeMrkdwn()}*"
-        return if (summary.isNullOrBlank()) title else "$title\n${summary.take(digestSummaryMaxLength).escapeMrkdwn()}"
+        return if (summary.isNullOrBlank()) {
+            title
+        } else {
+            "$title\n${summary.takeSurrogateSafe(maxLength = digestSummaryMaxLength).escapeMrkdwn()}"
+        }
     }
 
     companion object {

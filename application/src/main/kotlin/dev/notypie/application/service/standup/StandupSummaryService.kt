@@ -6,6 +6,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.StandupCutoffEvent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.domain.standup.dto.StandupAnswerDto
 import dev.notypie.domain.standup.entity.enums.SessionStatus
 import dev.notypie.repository.outbox.MessageOutboxRepository
@@ -37,7 +38,11 @@ internal fun List<StandupAnswerDto>.boundedForSummary(): List<StandupAnswerDto> 
                 responses =
                     answer.responses.map { raw ->
                         val response = raw.replace(regex = CONTROL_CHARACTERS, replacement = "")
-                        if (response.length <= perResponse) response else "${response.take(perResponse - 1)}…"
+                        if (response.length <= perResponse) {
+                            response
+                        } else {
+                            "${response.takeSurrogateSafe(maxLength = perResponse - 1)}…"
+                        }
                     },
             )
         }

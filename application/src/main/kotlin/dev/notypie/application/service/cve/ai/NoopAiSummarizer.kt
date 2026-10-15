@@ -1,8 +1,10 @@
 package dev.notypie.application.service.cve.ai
 
+import dev.notypie.domain.common.takeSurrogateSafe
+
 class NoopAiSummarizer : AiSummarizer {
     override fun summarize(request: SummaryRequest): String {
-        val body = request.rawContent.take(MAX_CONTENT_CHARS)
+        val body = request.rawContent.takeSurrogateSafe(maxLength = MAX_CONTENT_CHARS)
         return if (body.isBlank()) request.eventTitle else "${request.eventTitle}\n\n$body"
     }
 

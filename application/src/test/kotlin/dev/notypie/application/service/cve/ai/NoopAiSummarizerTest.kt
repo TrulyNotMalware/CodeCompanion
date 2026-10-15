@@ -47,6 +47,19 @@ class NoopAiSummarizerTest :
             }
         }
 
+        given("an event whose content has an emoji across the truncation cap") {
+            val kept = "x".repeat(n = NoopAiSummarizer.MAX_CONTENT_CHARS - 1)
+            val request = createSummaryRequest(eventTitle = "Title", rawContent = "$kept\uD83D\uDE00 tail")
+
+            `when`("summarized") {
+                val summary = summarizer.summarize(request = request)
+
+                then("the content is cut before the emoji instead of through it") {
+                    summary shouldBe "Title\n\n$kept"
+                }
+            }
+        }
+
         given("two calls with the same request") {
             val request = createSummaryRequest(rawContent = "Same input.")
 

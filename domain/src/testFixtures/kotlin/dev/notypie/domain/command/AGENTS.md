@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/command
 
@@ -19,7 +19,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
 | `InboundInteractionInputCreator.kt` | `createInboundInteraction(detailType = NOTHING, action = passiveAction(), form, actor, channelId, trigger, reply, message, idempotencyKey, routingExtras, submission)`; submissions `createAddParticipantSubmission(meetingUidRaw = random, requesterId = "U_HOST", participantUserIdsRaw = "U_A", listHandleRaw = "")` and `createRescheduleMeetingSubmission(meetingUidRaw = random, requesterId = "U_HOST", date = "2099-10-01", time = "14:30", listHandleRaw = "")` (both parse; the requester differs from the `TEST_USER_ID` actor so the blank-requester fallback stays visible); actions `approveAction`, `rejectAction`, `passiveAction`; fields `inboundField(kind, rawValue, isSelected, key)`, `applyButtonField()`, `rejectButtonField()`, `plainTextField(text)`, `datePickerField(date, format)`, `timePickerField(time, format)`, `multiUsersField(userName, maximumSequence)`; `SEPARATOR` |
 | `MockEventBuilderCreator.kt` | `createIntentQueue(): IntentQueue` — a fresh `DefaultIntentQueue` (file name is historical; nothing here is mocked) |
 | `TestCommandEventCreator.kt` | `TestPayload`, `TestCommandEvent(name, isInternal = true, ...)`, `INTERNAL_EVENT_NAME` / `EXTERNAL_EVENT_NAME`, `createInternalTestEvent()`, `createExternalTestEvent()`, `createDomainEventQueue()`, `EventQueue.flushQueue()` |
-| `TestCommandFactory.kt` | `TestCommand(idempotencyKey, commandData, intentToProduce = null, rawEffectToProduce = null, failure = null)` — `Command<NoSubCommands>` whose `TestContext` throws `failure` when given (the `ERROR_RESPONSE` path), else emits the optional intent / raw effect and returns `CommandOutput.success` |
+| `TestCommandFactory.kt` | `TestCommand(idempotencyKey, commandData, intentToProduce = null, rawEffectToProduce = null, failure = null)` — `Command<NoSubCommands>` whose `TestContext` throws `failure` when given (the `ERROR_RESPONSE` path), else emits the optional intent / raw effect and returns `CommandOutput.success`; `createAnonymousFailingCommand(failure)` — an object-expression `Command<NoSubCommands>` (no class name) on a mention payload whose `parseContext` throws `failure`; it lives here because other modules cannot implement `Command`'s `internal abstract` members |
 | `UnknownSubCommandDefinition.kt` | Enum implementing `SubCommandDefinition`: `UNKNOWN`, `TOO_MANY_ARGUMENTS_SUB_COMMAND` (`minRequiredArgs = Int.MAX_VALUE`) |
 
 ## For AI Agents
@@ -56,6 +56,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
   `ApprovalCallbackContextTest`; `headLineText = null` falls back to `"Approval Requests"`.
 - `TestCommand` is the executor-level probe (application `CommandExecutorTest`): pass `intentToProduce` to
   check that one intent is drained and published. `TestContext` is `internal`; do not widen it.
+  `createAnonymousFailingCommand` pins `CommandExecutor`'s `anonymous` name fallback in its failure WARN.
 - `TestCommandEvent` / `create{Internal,External}TestEvent` / `createDomainEventQueue` serve only
   `EventQueueTest`. `flushQueue()` and `UnknownSubCommandDefinition` (with `UNKNOWN_SUB_COMMAND_IDENTIFIER`)
   have **no consumer** — remove them or put them to use rather than adding parallel helpers.

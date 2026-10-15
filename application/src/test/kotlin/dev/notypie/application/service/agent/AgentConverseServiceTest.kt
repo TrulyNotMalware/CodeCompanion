@@ -381,6 +381,12 @@ class AgentConverseServiceTest :
                     capped.removeSuffix("\n${SlackBlockLimits.TRUNCATION_MARKER}").last().isHighSurrogate() shouldBe
                         false
                 }
+
+                then("the split pair is dropped and the truncation marker follows the plain prefix") {
+                    capped shouldBe
+                        "a".repeat(n = AgentConverseService.MAX_ANSWER_LENGTH - 14) +
+                        "\n${SlackBlockLimits.TRUNCATION_MARKER}"
+                }
             }
 
             `when`("the answer fits") {

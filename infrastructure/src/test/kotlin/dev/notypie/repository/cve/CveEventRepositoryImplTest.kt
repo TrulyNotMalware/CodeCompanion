@@ -86,6 +86,42 @@ class CveEventRepositoryImplTest :
             }
         }
 
+        given("insertIgnore with a title and rawContent whose emoji straddles each cap") {
+            val jpa = mockk<JpaCveEventRepository>()
+            val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)
+            val titleSlot = slot<String>()
+            val rawContentSlot = slot<String>()
+            val keptTitle = "t".repeat(n = CveEventRepositoryImpl.TITLE_MAX_LENGTH - 1)
+            val keptRawContent = "b".repeat(n = CveEventRepositoryImpl.RAW_CONTENT_MAX_LENGTH - 1)
+            every {
+                jpa.insertIgnore(
+                    topicId = 1L,
+                    externalId = "R3",
+                    title = capture(titleSlot),
+                    rawContent = capture(rawContentSlot),
+                    publishedAt = null,
+                )
+            } returns 1
+
+            `when`("inserting") {
+                repository.insertIgnore(
+                    topicId = 1L,
+                    externalId = "R3",
+                    title = "$keptTitle\uD83D\uDE00 tail",
+                    rawContent = "$keptRawContent\uD83D\uDE00 tail",
+                    publishedAt = null,
+                )
+
+                then("the title is cut before the emoji instead of through it") {
+                    titleSlot.captured shouldBe keptTitle
+                }
+
+                then("the rawContent is cut before the emoji instead of through it") {
+                    rawContentSlot.captured shouldBe keptRawContent
+                }
+            }
+        }
+
         given("findClaimable") {
             val jpa = mockk<JpaCveEventRepository>()
             val repository = CveEventRepositoryImpl(jpaCveEventRepository = jpa)

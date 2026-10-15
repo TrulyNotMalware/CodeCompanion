@@ -9,6 +9,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveRecentEvent
 import dev.notypie.repository.cve.CveSubscriptionRepository
@@ -99,7 +100,7 @@ class CveLatestQueryService(
         val summary =
             event.aiSummary
                 .orEmpty()
-                .take(SUMMARY_MAX_LENGTH)
+                .takeSurrogateSafe(maxLength = SUMMARY_MAX_LENGTH)
                 .escapeMrkdwn()
         return "*${event.topicDisplayName.escapeMrkdwn()}* — *${event.title.escapeMrkdwn()}*\n$summary"
     }

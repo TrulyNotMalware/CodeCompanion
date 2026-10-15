@@ -1,7 +1,10 @@
 package dev.notypie.domain.common
 
+import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.domain.common.error.ValidationException
+import dev.notypie.domain.common.error.ValidationExceptionWithName
 import io.kotest.assertions.assertSoftly
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -467,6 +470,26 @@ class ValidationBuilderTest :
                         validationResult[1].fieldName shouldBe "member"
                         validationResult[1].reason shouldBe roleErrorMessage
                         validationResult[1].value shouldBe "GUEST"
+                    }
+                }
+            }
+        }
+
+        given("a builder whose validate() already threw") {
+            listOf(
+                Triple("", "unnamed", ValidationException::class),
+                Triple("Probe", "named", ValidationExceptionWithName::class),
+            ).forEach { (className, label, expectedType) ->
+                `when`("another error is added to the same builder after the $label exception was thrown") {
+                    val builder = ValidationBuilder()
+                    builder.addError(fieldName = "first", value = "1", reason = "bad")
+                    val thrown =
+                        shouldThrow<CodeCompanionRuntimeException> { builder.validate(className = className) }
+                    builder.addError(fieldName = "second", value = "2", reason = "bad")
+
+                    then("the $label exception keeps only the errors present when it was thrown") {
+                        thrown::class shouldBe expectedType
+                        thrown.details.map { it.fieldName } shouldBe listOf("first")
                     }
                 }
             }

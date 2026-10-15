@@ -1589,6 +1589,25 @@ class CalendarSyncServiceTest :
                 }
             }
 
+            `when`("the row reaches the attempt limit with a reason whose emoji straddles the reason cap") {
+                val h = Harness()
+                h.due(row(attempts = 7) to view())
+                every { h.calendarClient.insert(accessToken = any(), eventId = any(), event = any()) } returns
+                    CalendarApiResult.Failed(statusCode = 500, message = "x".repeat(n = 199) + "\uD83D\uDE00 tail")
+
+                h.sync()
+
+                then("the DM cuts the reason before the emoji instead of through it") {
+                    h.directMessages() shouldBe
+                        listOf(
+                            host to
+                                "CodeCompanion couldn't sync *Sprint review* to your Google Calendar " +
+                                "(${"x".repeat(n = 199)}). It will not retry; reconnect with `/calendar connect` " +
+                                "if this keeps happening.",
+                        )
+                }
+            }
+
             `when`("the row reaches the limit but a hook changed the meeting during that last attempt") {
                 val h = Harness()
                 h.due(row(attempts = 7) to view())

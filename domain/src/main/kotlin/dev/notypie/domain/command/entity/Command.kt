@@ -21,6 +21,7 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.error.exceptionDetails
 import dev.notypie.domain.common.escapeMarkup
+import dev.notypie.domain.common.takeSurrogateSafe
 import java.util.UUID
 
 abstract class Command<T : SubCommandDefinition>(
@@ -140,7 +141,8 @@ abstract class Command<T : SubCommandDefinition>(
                 errorCode = CommandErrorCode.SUBCOMMAND_NOT_VALID,
                 details =
                     exceptionDetails {
-                        "subcommand options" value options.joinToString { "," } because "sub command validation failed"
+                        "subcommand options" value options.joinToString(separator = ",") because
+                            "sub command validation failed"
                     },
             )
         }
@@ -148,7 +150,8 @@ abstract class Command<T : SubCommandDefinition>(
 }
 
 internal fun String.asEchoedToken(): String {
-    val clipped = if (length > MAX_ECHOED_TOKEN_LENGTH) take(n = MAX_ECHOED_TOKEN_LENGTH) + "…" else this
+    val clipped =
+        if (length > MAX_ECHOED_TOKEN_LENGTH) takeSurrogateSafe(maxLength = MAX_ECHOED_TOKEN_LENGTH) + "…" else this
     return clipped.replace(oldValue = "`", newValue = "'").escapeMarkup()
 }
 

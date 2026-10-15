@@ -1,21 +1,22 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-15 -->
 
 # domain/common
 
 ## Purpose
 The leaf package of the domain module: the `ValidationBuilder` DSL (`validate {}` / `validateAndReturn {}`),
-the `IdempotencyData` marker interface, and the error contract (`ErrorCode`, `ExceptionArgument`,
-`exceptionDetails {}`, `CodeCompanionRuntimeException`) that `command/`, `meet/`, `standup/` and the
+the text helpers in `SafeText.kt` (`escapeMarkup`, `takeSurrogateSafe`), the `IdempotencyData` marker
+interface, and the error contract (`ErrorCode`, `ExceptionArgument`, `exceptionDetails {}`,
+`CodeCompanionRuntimeException`) that `command/`, `meet/`, `standup/` and the
 `application` / `infrastructure` modules all build their exceptions on. It imports nothing from the repo
 outside itself — only `java.time`, `java.io` and `java.util` (identity sets for `or`).
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Validation.kt` | `ValidationBuilder` plus two entrypoints: public `validate(className = "", block)` (throws) and `internal validateAndReturn(className = "", block)` (returns `List<ExceptionArgument>`). Full operator inventory under Common Patterns |
+| `Validation.kt` | `ValidationBuilder` plus two entrypoints: public `validate(className = "", block)` (throws) and `internal validateAndReturn(className = "", block)` (returns `List<ExceptionArgument>`). Both `getErrors()` and the thrown exception's `details` are copies, so a later `addError` on the same builder cannot change them. Full operator inventory under Common Patterns |
 | `IdempotencyData.kt` | `IdempotencyData : java.io.Serializable` marker. Implemented by `command/inbound/InboundCommand`; `application/common/IdempotencyCreator` turns it into the idempotency `UUID` |
-| `MarkupEscape.kt` | `String.escapeMarkup()`: replaces `&`, `<`, `>` with `&amp;`, `&lt;`, `&gt;` (ampersand first) so user- or upstream-supplied text interpolated into outbound markdown cannot become a broadcast mention or a disguised link. Canonical implementation: `infrastructure/templates/escapeMrkdwn()` delegates to it so domain-built and template-built markdown escape identically. Stdlib only, named transport-neutrally |
+| `SafeText.kt` | Helpers for echoing user- or upstream-supplied text. `String.escapeMarkup()`: replaces `&`, `<`, `>` with `&amp;`, `&lt;`, `&gt;` (ampersand first) so text interpolated into outbound markdown cannot become a broadcast mention or a disguised link. Canonical implementation: `infrastructure/templates/escapeMrkdwn()` delegates to it so domain-built and template-built markdown escape identically. `String.takeSurrogateSafe(maxLength)`: keeps at most `maxLength` UTF-16 units (`take(n = maxLength)`) and drops a trailing high surrogate when the cut lands inside a surrogate pair, so the cut never introduces a split pair (a text that already ends in a lone high surrogate and fits the limit comes back unchanged); it does not keep grapheme clusters whole (a flag, a skin-tone modifier or a ZWJ sequence can still be cut between code points). Callers that reach users: `command/entity/Command.kt`'s `asEchoedToken`, `infrastructure/templates/SlackBlockLimits`, the stored CVE title and raw content (`infrastructure/repository/cve/CveEventRepositoryImpl`; the raw content reaches users through `NoopAiSummarizer` and the sidecar summarizer's prompt), and in the application the standup summary, the CVE digest summary, `/latest`, `NoopAiSummarizer`'s body cap, the calendar failure DM and the `/ask` answer cap. Model-facing callers: `AgentConverseService.sanitizeContextName` (system prompt) and `McpToolGate`'s tool-result fence. Log, audit and storage-only cuts (the sidecar error text, dispatcher failure reasons, the MCP audit key) still use plain `take`. Stdlib only, named transport-neutrally |
 | `error/Errors.kt` | `ErrorCode` (`message` only — transport-neutral); `internal enum CommonErrorCode` (only `VALIDATION_FAILED`); `ExceptionArgument(fieldName, value, reason = "")`; `exceptionDetails {}` with `ExceptionDetailsBuilder` / `ReasonBuilder`; `abstract CodeCompanionRuntimeException(val errorCode, val details)`; `internal ValidationException` and `internal ValidationExceptionWithName(className, ...)` |
 
 ## Subdirectories

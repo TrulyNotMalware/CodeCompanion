@@ -3,8 +3,12 @@ package dev.notypie.templates
 import com.slack.api.model.block.ContextBlock
 import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
+import com.slack.api.model.block.InputBlock
 import com.slack.api.model.block.SectionBlock
 import com.slack.api.model.block.composition.MarkdownTextObject
+import com.slack.api.model.block.element.PlainTextInputElement
+import com.slack.api.model.view.View
+import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createApprovalContents
@@ -16,6 +20,7 @@ import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.createRoutineMemberDto
 import dev.notypie.domain.standup.createStandupAnswerDto
+import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createProfile
@@ -1596,6 +1601,19 @@ class ModalTemplateBuilderTest :
                             StandupSetupModalIds.CUTOFF_BLOCK_ID,
                             StandupSetupModalIds.TIMEZONE_BLOCK_ID,
                         )
+                }
+
+                then("the routine name input is capped at the routine name limit") {
+                    val nameInput =
+                        GsonFactory
+                            .createSnakeCase()
+                            .fromJson(json, View::class.java)
+                            .blocks
+                            .filterIsInstance<InputBlock>()
+                            .single { it.blockId == StandupSetupModalIds.NAME_BLOCK_ID }
+                            .element
+                            .shouldBeInstanceOf<PlainTextInputElement>()
+                    nameInput.maxLength shouldBe Routine.MAX_NAME_LENGTH
                 }
 
                 then("each Block Kit element type is rendered") {
