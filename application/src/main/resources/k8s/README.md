@@ -179,8 +179,8 @@ the `strategy` block from `deployment.yaml` in a follow-up PR. `kubectl apply` r
 the last-applied configuration, and the API server defaults it back to `RollingUpdate` (25% / 25%). Do not restore
 the rolling update while a pre-V20 revision is still serving (for example after the workflow rolled back).
 
-The Google Calendar release adds V24 and V25. They only create tables and are independent of this procedure; see
-Google Calendar Mirror below.
+The Google Calendar release adds V24 and V25, and V27 (2026-10-15) indexes one of their tables. They only create
+tables and an index and are independent of this procedure; see Google Calendar Mirror below.
 
 The `/ask` turn ledger release adds V26: one new table, `agent_ask_turn` (`CREATE TABLE IF NOT EXISTS`, no foreign
 key), also independent of this procedure. Production runs `ddl-auto: none`, so apply it by hand before deploying the
@@ -260,15 +260,19 @@ Because both containers share the Pod network namespace, no Service or NetworkPo
 host or approve into it (see the root `README.md`). The feature is off unless `GOOGLE_CALENDAR_ENABLED` is `true`:
 until then `/calendar` only answers that it is not enabled and `/oauth/google/callback` returns `404`.
 
-1. **Migrations: V24, then V25, by hand.** Production runs `ddl-auto: none`. Both scripts only create new tables
-   (`CREATE TABLE IF NOT EXISTS`; V25's foreign key references `meetings`), so apply them while the previous release
-   still serves, before the deploy that ships them. Then confirm:
+1. **Migrations: V24, then V25, then V27, by hand.** Production runs `ddl-auto: none`. V24 and V25 only create new
+   tables (`CREATE TABLE IF NOT EXISTS`; V25's foreign key references `meetings`) and V27 only adds
+   `idx_google_oauth_state_slack_user_id` to V24's `google_oauth_state` (the file runs the online form with a 5 s
+   lock wait itself; re-run it if it times out), so apply
+   them while the previous release still serves, before the deploy that ships them. Then confirm:
    ```sql
    SHOW TABLES LIKE 'google_%';
    SHOW TABLES LIKE 'meeting_calendar_event';
+   SHOW INDEX FROM google_oauth_state WHERE Key_name = 'idx_google_oauth_state_slack_user_id';
    SHOW INDEX FROM meetings WHERE Column_name = 'idempotency_key';
    ```
-   The first query lists `google_calendar_connection` and `google_oauth_state`. The last should show a unique index:
+   The first query lists `google_calendar_connection` and `google_oauth_state`, the third shows V27's index. The last
+   should show a unique index:
    the entity declares one, but `meetings` predates V1 (Hibernate created it), and the mirror hooks look a meeting up
    by that key. If it is missing, look for duplicates first
    (`SELECT idempotency_key, COUNT(*) FROM meetings GROUP BY idempotency_key HAVING COUNT(*) > 1;`), resolve any, then
@@ -480,7 +484,8 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
 `strategy` 블록을 지웁니다. 필드가 last-applied 설정에 있으므로 `kubectl apply`가 지우고, API 서버가 `RollingUpdate`(25% / 25%)로
 되돌립니다. pre-V20 리비전이 아직 서비스 중이면(예: 워크플로가 롤백한 뒤) 롤링 업데이트로 되돌리지 마세요.
 
-Google Calendar 릴리스는 V24와 V25를 추가합니다. 테이블만 만들며 이 절차와 무관합니다. 아래 Google Calendar 미러를 참고하세요.
+Google Calendar 릴리스는 V24와 V25를 추가하고, V27(2026-10-15)이 그중 한 테이블에 인덱스를 더합니다. 테이블과 인덱스만 만들며 이
+절차와 무관합니다. 아래 Google Calendar 미러를 참고하세요.
 
 `/ask` 턴 레저 릴리스는 V26을 추가합니다. 새 테이블 `agent_ask_turn` 하나이고(`CREATE TABLE IF NOT EXISTS`, 외래 키 없음) 역시 이
 절차와 무관합니다. 운영은 `ddl-auto: none`이므로 이 테이블에 쓰는 코드를 배포하기 전에 직접 적용하세요. 이전 릴리스가 서비스하는
@@ -556,15 +561,19 @@ AI 어시스턴트 기능(`@bot ask`)을 사용하려면 [agent-sidecar](https:/
 캘린더에 미러합니다(루트 `README.md` 참고). `GOOGLE_CALENDAR_ENABLED`가 `true`가 아니면 꺼져 있고, 그동안 `/calendar`는
 꺼져 있다는 안내만 하며 `/oauth/google/callback`은 `404`를 돌려줍니다.
 
-1. **마이그레이션: V24, 이어서 V25를 직접 적용.** 운영은 `ddl-auto: none`입니다. 두 스크립트는 새 테이블만 만들므로
-   (`CREATE TABLE IF NOT EXISTS`, V25의 외래 키가 `meetings`를 참조) 이전 릴리스가 서비스하는 동안, 이 스크립트를 싣는 배포 전에
-   적용합니다. 그다음 확인합니다:
+1. **마이그레이션: V24, V25, 이어서 V27을 직접 적용.** 운영은 `ddl-auto: none`입니다. V24와 V25는 새 테이블만 만들고
+   (`CREATE TABLE IF NOT EXISTS`, V25의 외래 키가 `meetings`를 참조) V27은 V24의 `google_oauth_state`에
+   `idx_google_oauth_state_slack_user_id`만 더하므로(스크립트가 5초 락 대기의 온라인 형식을 직접 실행하며, 시간 초과면 다시 실행)
+   이전 릴리스가 서비스하는 동안, 이 스크립트를
+   싣는 배포 전에 적용합니다. 그다음 확인합니다:
    ```sql
    SHOW TABLES LIKE 'google_%';
    SHOW TABLES LIKE 'meeting_calendar_event';
+   SHOW INDEX FROM google_oauth_state WHERE Key_name = 'idx_google_oauth_state_slack_user_id';
    SHOW INDEX FROM meetings WHERE Column_name = 'idempotency_key';
    ```
-   첫 쿼리는 `google_calendar_connection`과 `google_oauth_state`를 보여야 합니다. 마지막 쿼리는 유니크 인덱스를 보여야 합니다:
+   첫 쿼리는 `google_calendar_connection`과 `google_oauth_state`를, 세 번째 쿼리는 V27의 인덱스를 보여야 합니다. 마지막 쿼리는
+   유니크 인덱스를 보여야 합니다:
    엔티티는 유니크로 선언하지만 `meetings`는 V1 이전에 Hibernate가 만든 테이블이고, 미러 훅이 이 키로 미팅을 찾습니다. 인덱스가
    없으면 먼저 중복을 찾아(`SELECT idempotency_key, COUNT(*) FROM meetings GROUP BY idempotency_key HAVING COUNT(*) > 1;`)
    정리한 뒤, 마이그레이션 헤더와 같은 온라인 형식으로 추가합니다(`SET SESSION lock_wait_timeout = 5;` 후 `ALTER TABLE meetings

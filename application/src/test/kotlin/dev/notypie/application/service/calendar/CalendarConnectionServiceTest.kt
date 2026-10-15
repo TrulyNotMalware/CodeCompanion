@@ -101,7 +101,6 @@ class CalendarConnectionServiceTest :
         ) = GoogleTokenGrant(
             accessToken = "ya29",
             refreshToken = refreshToken,
-            expiresInSeconds = 3600L,
             scopes = scopes,
             subject = subject,
             email = email,

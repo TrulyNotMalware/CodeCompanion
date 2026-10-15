@@ -79,7 +79,7 @@ class CalendarConfiguration(
     @DependsOn("entityManagerFactory")
     fun googleTokenRevocationExecutor(): ThreadPoolTaskExecutor =
         GoogleTokenRevocationExecutor().apply {
-            corePoolSize = 1
+            corePoolSize = 2
             maxPoolSize = 2
             queueCapacity = REVOCATION_QUEUE_CAPACITY
             setThreadNamePrefix("google-revoke-")

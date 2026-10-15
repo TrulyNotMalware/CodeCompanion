@@ -12,6 +12,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.web.bind.MissingServletRequestParameterException
 
 class GoogleOAuthCallbackControllerTest :
     BehaviorSpec({
@@ -169,6 +170,17 @@ class GoogleOAuthCallbackControllerTest :
                     response.contentAsString shouldNotContain "google_oauth_state"
                     response.contentAsString shouldNotContain "c<b>"
                     response.contentAsString shouldNotContain "s<i>"
+                }
+            }
+
+            `when`("a Spring MVC exception that carries its own 4xx status is raised") {
+                every { callback.completeConnection(code = "c", state = "s", error = null) } throws
+                    MissingServletRequestParameterException("code", "String")
+                val response = callback("code" to "c", "state" to "s")
+
+                then("its 400 stands instead of the 500 page") {
+                    response.status shouldBe 400
+                    response.contentAsString shouldNotContain "The connection could not be completed"
                 }
             }
 

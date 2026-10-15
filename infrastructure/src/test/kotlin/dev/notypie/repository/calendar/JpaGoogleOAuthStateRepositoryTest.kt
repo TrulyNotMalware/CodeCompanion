@@ -1,13 +1,19 @@
 package dev.notypie.repository.calendar
 
+import dev.notypie.repository.calendar.schema.GoogleOAuthStateSchema
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.repository.findByIdOrNull
 import java.time.Duration
 import java.time.Instant
 
@@ -50,8 +56,8 @@ class JpaGoogleOAuthStateRepositoryTest
                         repository.consume(state = "state-late", now = now.plus(Duration.ofMinutes(11))).shouldBeNull()
                         entityManager.clear()
                         jpaGoogleOAuthStateRepository
-                            .findById("state-late")
-                            .get()
+                            .findByIdOrNull(id = "state-late")
+                            .shouldNotBeNull()
                             .consumedAt
                             .shouldBeNull()
                     }
@@ -60,6 +66,38 @@ class JpaGoogleOAuthStateRepositoryTest
                 `when`("an unknown state is consumed") {
                     then("nothing is returned") {
                         repository.consume(state = "never-issued", now = now).shouldBeNull()
+                    }
+                }
+            }
+
+            given("a fresh state with its application-assigned id") {
+                `when`("it is saved and read back") {
+                    val state = GoogleOAuthStateSchema(state = "state-new", slackUserId = "U_NEW", expiresAt = now)
+                    val saved = jpaGoogleOAuthStateRepository.save(state)
+                    val loadedIsNew = jpaGoogleOAuthStateRepository.findByIdOrNull(id = "state-new")?.isNew
+                    jpaGoogleOAuthStateRepository.deleteById("state-new")
+
+                    then("it is persisted as new instead of merged, so no SELECT precedes the INSERT") {
+                        saved shouldBeSameInstanceAs state
+                        saved.isNew shouldBe false
+                    }
+
+                    then("a row loaded back from the database is not new") {
+                        loadedIsNew shouldBe false
+                    }
+                }
+
+                `when`("a second state with the same id is issued for another user") {
+                    then("it is refused instead of overwriting the first user's row") {
+                        repository.issue(state = "state-taken", userId = "U_FIRST", expiresAt = now.plusSeconds(60))
+
+                        shouldThrow<DataIntegrityViolationException> {
+                            repository.issue(
+                                state = "state-taken",
+                                userId = "U_SECOND",
+                                expiresAt = now.plusSeconds(60),
+                            )
+                        }
                     }
                 }
             }

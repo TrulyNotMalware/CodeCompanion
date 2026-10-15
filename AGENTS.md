@@ -44,7 +44,7 @@ flow **application → infrastructure → domain** (and **application → domain
 ## For AI Agents
 
 ### Working In This Directory
-- **Every directory carries an `AGENTS.md`** (245 files). Line 1 points at the nearest parent
+- **Every directory carries an `AGENTS.md`** (247 files). Line 1 points at the nearest parent
   (`<!-- Parent: ../AGENTS.md -->`), line 2 carries `Generated | Updated` dates, and text below the
   `<!-- MANUAL:` marker survives regeneration. When you add a directory, add its `AGENTS.md` and a row in the
   parent's `## Subdirectories` table; when you change a directory's contents, update its file and bump `Updated`.

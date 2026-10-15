@@ -1,7 +1,7 @@
 package dev.notypie.impl.calendar
 
 import dev.notypie.common.jsonMapper
-import dev.notypie.impl.cve.sendWithinDeadline
+import dev.notypie.impl.http.sendWithinDeadline
 import io.github.oshai.kotlinlogging.KotlinLogging
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.JsonNode
@@ -25,7 +25,6 @@ class GoogleOAuthException(
 data class GoogleTokenGrant(
     val accessToken: String,
     val refreshToken: String,
-    val expiresInSeconds: Long,
     val scopes: Set<String>,
     val subject: String?,
     val email: String?,
@@ -34,8 +33,7 @@ data class GoogleTokenGrant(
     fun grants(scope: String): Boolean = scope in scopes
 
     override fun toString(): String =
-        "GoogleTokenGrant(expiresInSeconds=$expiresInSeconds, scopes=$scopes, subject=$subject, email=$email, " +
-            "emailVerified=$emailVerified)"
+        "GoogleTokenGrant(scopes=$scopes, subject=$subject, email=$email, emailVerified=$emailVerified)"
 }
 
 data class GoogleAccessToken(
@@ -113,7 +111,6 @@ class GoogleOAuthClient(
         return GoogleTokenGrant(
             accessToken = accessToken,
             refreshToken = refreshToken,
-            expiresInSeconds = body.path("expires_in").asLong(0L),
             scopes = grantedScopes(body = body),
             subject = claims?.subject,
             email = claims?.email,
