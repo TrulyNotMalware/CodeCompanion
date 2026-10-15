@@ -56,8 +56,8 @@ form bodies that `ApplicationMessageDispatcher` sends. `EventPublisher` implemen
   blocked (`chat.*` only), anything else → permanent.
   - Rate limited — `chat.*` HTTP 429, `chat.*` `ok=false error=ratelimited`, `response_url` HTTP 429 or JSON
     `{"ok":false,"error":"ratelimited"}` → `SlackRateLimitedException`, handled outside `RetryService`. If
-    `Retry-After` (seconds or HTTP-date, clamped to `[0, MAX_RETRY_AFTER]` = 24 h when parsed, the outbox
-    give-up bound, so a huge value cannot overflow the relay's `LocalDateTime` arithmetic) is ≤
+    `Retry-After` (seconds or HTTP-date, read by the shared `parseRetryAfter` in `../http/BoundedHttp.kt` and
+    clamped to `[0, MAX_RETRY_AFTER]` = 24 h when parsed, the outbox give-up bound, so a huge value cannot overflow the relay's `LocalDateTime` arithmetic) is ≤
     `MAX_INLINE_RETRY_AFTER` (3s) the thread waits once and calls again; a larger or missing `Retry-After`, a second rate limit, or an interrupt during the wait (flag
     restored) returns `RateLimitedOutput(retryAfter)` at once (`isRateLimited()`, `retryAfter()`). The relay
     defers the row past `Retry-After`. The CDC listener thread must never sleep long.
@@ -189,6 +189,7 @@ Fixtures: `testFixtures/.../impl/command/BlockActionPayloadCreator`, `slack/Inte
   `CommandEvent` / `EventPayload` / `EventPublisher`, `CommandBasicInfo`, `CommandDetailType`,
   `CommandOutput`, modal-open-failed events
 - `impl/command/event`, `impl/command/slack`, `impl/command/dto`, `impl/retry/RetryService`
+- `impl/http/BoundedHttp.kt` — `parseRetryAfter`, `MAX_RETRY_AFTER`
 - `repository/standup/StandupRepository` (stager), `templates/` (`SlackTemplateBuilder`, `ButtonType`,
   `dto/LayoutBlocks`)
 

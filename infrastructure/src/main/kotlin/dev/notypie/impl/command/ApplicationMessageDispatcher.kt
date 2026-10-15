@@ -26,6 +26,7 @@ import dev.notypie.impl.command.event.PostEventPayloadContents
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
+import dev.notypie.impl.http.parseRetryAfter
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.impl.retry.retryTimeBound
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -42,11 +43,7 @@ import okhttp3.internal.http2.StreamResetException
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.retry.RetryException
 import java.io.IOException
-import java.math.BigInteger
 import java.time.Duration
-import java.time.Instant
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
 private val dispatcherLog = KotlinLogging.logger {}
 
@@ -91,7 +88,6 @@ private const val RESPONSE_URL_METHOD = "response_url"
 private const val MAX_RESPONSE_BODY_BYTES = 4_096L
 private const val MAX_FAILURE_REASON_CHARS = 200
 private val MAX_INLINE_RETRY_AFTER: Duration = Duration.ofSeconds(3L)
-internal val MAX_RETRY_AFTER: Duration = Duration.ofHours(24L)
 private val IDEMPOTENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(IOException::class.java, SlackApiException::class.java, SlackTransientErrorException::class.java)
 
@@ -406,17 +402,6 @@ class ApplicationMessageDispatcher(
                 )
             }
         return buildCommandOutputFromResponse(result = result, event = event, idempotent = idempotent)
-    }
-
-    private fun parseRetryAfter(value: String?): Duration? {
-        val trimmed = value?.trim() ?: return null
-        trimmed.toBigIntegerOrNull()?.let { seconds ->
-            val bounded = seconds.coerceIn(BigInteger.ZERO, MAX_RETRY_AFTER.seconds.toBigInteger())
-            return Duration.ofSeconds(bounded.toLong())
-        }
-        return runCatching { ZonedDateTime.parse(trimmed, DateTimeFormatter.RFC_1123_DATE_TIME) }
-            .map { Duration.between(Instant.now(), it.toInstant()).coerceIn(Duration.ZERO, MAX_RETRY_AFTER) }
-            .getOrNull()
     }
 
     override fun dispatchImmediate(event: OpenViewPayloadContents): CommandOutput {

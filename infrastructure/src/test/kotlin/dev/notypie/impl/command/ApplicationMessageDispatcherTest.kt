@@ -14,6 +14,7 @@ import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
+import dev.notypie.impl.http.MAX_RETRY_AFTER
 import dev.notypie.impl.retry.RetryService
 import dev.notypie.logging.captureLogs
 import dev.notypie.logging.messagesAt

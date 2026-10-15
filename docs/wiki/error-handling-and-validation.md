@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-15_
+_type: pattern · updated: 2026-10-19_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -129,7 +129,9 @@ _type: pattern · updated: 2026-10-15_
   없으면 `handleUnexpected`의 500 `internal_error`로 떨어진다.
 - `DatabaseException`은 500이고 `tableName`은 로그에만 쓰이며, 수신자의 정적 타입이라 매핑된 DTO(`MeetingDto`/`RoutineDto`) 이름이 찍힌다(위 절).
 - `Command.handleEvent`가 잡은 예외의 `errorReason`은 `CommandExecutor` WARN과, HTTP 멘션이면 `SlackEventController`의 WARN에만
-  남는다(2026-10-11부터 둘 다 제어문자를 `?`로 치환). 슬래시 요청자 ephemeral은 고정 문구(또는 escape된 토큰 + usage)이지
+  남는다(2026-10-11부터 둘 다 제어문자를 `?`로 치환, 2026-10-15부터는 C1 제어문자·서식 문자(bidi 등)·U+2028/U+2029까지
+  `application/common/LogSanitizing.kt`의 `neutralizeControlCharacters` 하나로). 슬래시 요청자 ephemeral은 고정 문구(또는
+  escape된 토큰 + usage)이지
   예외 문구가 아니다. `Error`는 잡지 않는다.
 - `DetailErrorAlertContext`(`MessageContent.ErrorNotice`를 채널에 게시)는 스펙은 있지만 **생성하는 프로덕션 코드가 없다.**
 - Socket Mode 실패는 로그로만 남는다(인터랙션은 ack하지 않아 Slack이 사용자에게 오류를 보인다). 로컬 프로파일 전용이라 감수하고 있는 상태다.

@@ -4,13 +4,19 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.common.jsonMapper
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.comparables.shouldBeGreaterThan
+import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.time.Duration
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 class GoogleCalendarClientTest :
     BehaviorSpec({
@@ -220,6 +226,38 @@ class GoogleCalendarClientTest :
             then("the hint is capped at 24 hours, so one header cannot park a row for years") {
                 client.insert(accessToken = "ya29.access", eventId = mirroredId, event = event) shouldBe
                     CalendarApiResult.RateLimited(retryAfter = Duration.ofHours(24L))
+            }
+        }
+
+        given("a 429 whose Retry-After is an HTTP date an hour ahead") {
+            val inAnHour =
+                DateTimeFormatter.RFC_1123_DATE_TIME.format(Instant.now().plusSeconds(3600L).atOffset(ZoneOffset.UTC))
+            respond =
+                response(
+                    status = 429,
+                    body =
+                        createGoogleApiErrorJson(
+                            code = 429,
+                            reason = "rateLimitExceeded",
+                            message = "Rate Limit Exceeded",
+                        ),
+                    headers = mapOf("Retry-After" to inAnHour),
+                )
+
+            then("it is RateLimited with the time left until that date") {
+                val result = client.insert(accessToken = "ya29.access", eventId = mirroredId, event = event)
+                val retryAfter = result.shouldBeInstanceOf<CalendarApiResult.RateLimited>().retryAfter.shouldNotBeNull()
+                retryAfter shouldBeGreaterThan Duration.ofMinutes(55L)
+                retryAfter shouldBeLessThanOrEqualTo Duration.ofHours(1L)
+            }
+        }
+
+        given("a 403 whose only reason is the ErrorInfo RATE_LIMIT_EXCEEDED") {
+            respond = response(status = 403, body = createGoogleRateLimitErrorInfoJson())
+
+            then("it is RateLimited, not a failure that counts against the row's attempts") {
+                client.insert(accessToken = "ya29.access", eventId = mirroredId, event = event) shouldBe
+                    CalendarApiResult.RateLimited(retryAfter = null)
             }
         }
 

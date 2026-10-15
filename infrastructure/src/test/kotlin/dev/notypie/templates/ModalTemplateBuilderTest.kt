@@ -1,12 +1,18 @@
 package dev.notypie.templates
 
+import com.slack.api.model.block.ActionsBlock
 import com.slack.api.model.block.ContextBlock
 import com.slack.api.model.block.DividerBlock
 import com.slack.api.model.block.HeaderBlock
 import com.slack.api.model.block.InputBlock
 import com.slack.api.model.block.SectionBlock
 import com.slack.api.model.block.composition.MarkdownTextObject
+import com.slack.api.model.block.element.ButtonElement
+import com.slack.api.model.block.element.DatePickerElement
+import com.slack.api.model.block.element.MultiStaticSelectElement
 import com.slack.api.model.block.element.PlainTextInputElement
+import com.slack.api.model.block.element.StaticSelectElement
+import com.slack.api.model.block.element.TimePickerElement
 import com.slack.api.model.view.View
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.TEST_BOT_TOKEN
@@ -832,15 +838,13 @@ class ModalTemplateBuilderTest :
                     result.template[0].shouldBeInstanceOf<HeaderBlock>()
                     result.template[1].shouldBeInstanceOf<DividerBlock>()
                     result.template[2].shouldBeInstanceOf<SectionBlock>()
-                    result.template[3].shouldBeInstanceOf<com.slack.api.model.block.ActionsBlock>()
+                    result.template[3].shouldBeInstanceOf<ActionsBlock>()
                 }
 
                 then("the reschedule + add-participant + cancel buttons carry the routing values the parser expects") {
-                    val actionsBlock =
-                        result.template[3] as com.slack.api.model.block.ActionsBlock
+                    val actionsBlock = result.template[3] as ActionsBlock
                     actionsBlock.blockId shouldBe "${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid"
-                    val buttons =
-                        actionsBlock.elements.map { it as com.slack.api.model.block.element.ButtonElement }
+                    val buttons = actionsBlock.elements.map { it as ButtonElement }
                     buttons.size shouldBe 3
 
                     val rescheduleButton = buttons[0]
@@ -887,8 +891,7 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("every block_id and action_id is unique so Slack does not reject with invalid_blocks") {
-                    val actionsBlocks =
-                        result.template.filterIsInstance<com.slack.api.model.block.ActionsBlock>()
+                    val actionsBlocks = result.template.filterIsInstance<ActionsBlock>()
                     actionsBlocks.size shouldBe 2
 
                     val blockIds = actionsBlocks.map { it.blockId }
@@ -897,7 +900,7 @@ class ModalTemplateBuilderTest :
                     val actionIds =
                         actionsBlocks
                             .flatMap { it.elements }
-                            .map { (it as com.slack.api.model.block.element.ButtonElement).actionId }
+                            .map { (it as ButtonElement).actionId }
                     actionIds.size shouldBe 6
                     actionIds shouldBe actionIds.distinct()
                 }
@@ -919,8 +922,7 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("the cancel button is suppressed so the user can't double-cancel") {
-                    val actionsCount =
-                        result.template.count { it is com.slack.api.model.block.ActionsBlock }
+                    val actionsCount = result.template.count { it is ActionsBlock }
                     actionsCount shouldBe 0
                     result.interactionStates shouldBe emptyList()
                 }
@@ -953,13 +955,13 @@ class ModalTemplateBuilderTest :
                 then("only the host's row gets a host-actions block carrying reschedule + add-participant + cancel") {
                     val actionsBlocks =
                         result.template
-                            .filterIsInstance<com.slack.api.model.block.ActionsBlock>()
+                            .filterIsInstance<ActionsBlock>()
                     actionsBlocks.size shouldBe 1
                     val buttons =
                         actionsBlocks
                             .single()
                             .elements
-                            .map { it as com.slack.api.model.block.element.ButtonElement }
+                            .map { it as ButtonElement }
                     buttons.map { it.value } shouldBe
                         listOf(
                             "$listKey,MEETING_RESCHEDULE_REQUEST,$hostMeetingUid",
@@ -1041,8 +1043,7 @@ class ModalTemplateBuilderTest :
                 }
 
                 then("each rendered meeting carries an inline cancel actions block") {
-                    val actionsCount =
-                        result.template.count { it is com.slack.api.model.block.ActionsBlock }
+                    val actionsCount = result.template.count { it is ActionsBlock }
                     actionsCount shouldBe ModalTemplateBuilder.MAX_MEETINGS_PER_LIST
                 }
             }
@@ -1266,9 +1267,9 @@ class ModalTemplateBuilderTest :
                         noticeMessageTs = noticeMessageTs,
                     )
                 val view =
-                    com.slack.api.util.json.GsonFactory
+                    GsonFactory
                         .createSnakeCase()
-                        .fromJson(json, com.slack.api.model.view.View::class.java)
+                        .fromJson(json, View::class.java)
 
                 then("top-level envelope parses into a View with the callback_id and private_metadata") {
                     view.type shouldBe "modal"
@@ -1284,10 +1285,9 @@ class ModalTemplateBuilderTest :
                 then("blocks include the title section and the dropdown input with the expected action_id") {
                     val inputBlock =
                         view.blocks
-                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .filterIsInstance<InputBlock>()
                             .single { it.blockId == DeclineReasonModalIds.BLOCK_ID }
-                    val dropdown =
-                        inputBlock.element as com.slack.api.model.block.element.StaticSelectElement
+                    val dropdown = inputBlock.element as StaticSelectElement
                     dropdown.actionId shouldBe DeclineReasonModalIds.ACTION_ID
                     dropdown.options.size shouldBe 8
                 }
@@ -1295,28 +1295,26 @@ class ModalTemplateBuilderTest :
                 then("blocks include an optional free-text detail input for the Other reason") {
                     val detailBlock =
                         view.blocks
-                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .filterIsInstance<InputBlock>()
                             .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
                     detailBlock.isOptional shouldBe true
-                    val textInput =
-                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    val textInput = detailBlock.element as PlainTextInputElement
                     textInput.actionId shouldBe DeclineReasonModalIds.DETAIL_ACTION_ID
                 }
 
                 then("the detail input is capped at the stored detail length") {
                     val detailBlock =
                         view.blocks
-                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .filterIsInstance<InputBlock>()
                             .single { it.blockId == DeclineReasonModalIds.DETAIL_BLOCK_ID }
-                    val textInput =
-                        detailBlock.element as com.slack.api.model.block.element.PlainTextInputElement
+                    val textInput = detailBlock.element as PlainTextInputElement
                     textInput.maxLength shouldBe RejectReason.MAX_DETAIL_LENGTH
                 }
             }
 
             `when`("the meeting title carries mrkdwn control sequences") {
                 val view =
-                    com.slack.api.util.json.GsonFactory
+                    GsonFactory
                         .createSnakeCase()
                         .fromJson(
                             templateBuilder.declineReasonModalViewJson(
@@ -1326,7 +1324,7 @@ class ModalTemplateBuilderTest :
                                 noticeChannel = noticeChannel,
                                 noticeMessageTs = noticeMessageTs,
                             ),
-                            com.slack.api.model.view.View::class.java,
+                            View::class.java,
                         )
 
                 then("the title section shows it as literal text") {
@@ -1347,10 +1345,10 @@ class ModalTemplateBuilderTest :
             val channel = "C_LIST"
             val currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30)
 
-            fun view(json: String): com.slack.api.model.view.View =
-                com.slack.api.util.json.GsonFactory
+            fun view(json: String): View =
+                GsonFactory
                     .createSnakeCase()
-                    .fromJson(json, com.slack.api.model.view.View::class.java)
+                    .fromJson(json, View::class.java)
 
             `when`("opened from a /meetup list row whose response URL holds reserved characters") {
                 val json =
@@ -1398,10 +1396,10 @@ class ModalTemplateBuilderTest :
 
                 then("the emitted JSON round-trips through the Slack SDK view deserializer") {
                     val view =
-                        com.slack.api.util.json.GsonFactory
+                        GsonFactory
                             .createSnakeCase()
-                            .fromJson(json, com.slack.api.model.view.View::class.java)
-                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .fromJson(json, View::class.java)
+                    val inputs = view.blocks.filterIsInstance<InputBlock>()
                     val blockIds = inputs.map { it.blockId }
 
                     view.type shouldBe "modal"
@@ -1418,12 +1416,12 @@ class ModalTemplateBuilderTest :
                     val datePicker =
                         inputs
                             .single { it.blockId == RescheduleMeetingModalIds.DATE_BLOCK_ID }
-                            .element as com.slack.api.model.block.element.DatePickerElement
+                            .element as DatePickerElement
                     datePicker.actionId shouldBe RescheduleMeetingModalIds.DATE_ACTION_ID
                     val timePicker =
                         inputs
                             .single { it.blockId == RescheduleMeetingModalIds.TIME_BLOCK_ID }
-                            .element as com.slack.api.model.block.element.TimePickerElement
+                            .element as TimePickerElement
                     timePicker.actionId shouldBe RescheduleMeetingModalIds.TIME_ACTION_ID
                 }
             }
@@ -1465,10 +1463,10 @@ class ModalTemplateBuilderTest :
 
                 then("the emitted JSON parses as a Slack View") {
                     val view =
-                        com.slack.api.util.json.GsonFactory
+                        GsonFactory
                             .createSnakeCase()
-                            .fromJson(json, com.slack.api.model.view.View::class.java)
-                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .fromJson(json, View::class.java)
+                    val inputs = view.blocks.filterIsInstance<InputBlock>()
 
                     view.type shouldBe "modal"
                     view.callbackId shouldBe StandupModalIds.CALLBACK_ID
@@ -1533,7 +1531,7 @@ class ModalTemplateBuilderTest :
 
             `when`("the routine name carries mrkdwn control sequences") {
                 val view =
-                    com.slack.api.util.json.GsonFactory
+                    GsonFactory
                         .createSnakeCase()
                         .fromJson(
                             templateBuilder.standupModalViewJson(
@@ -1545,7 +1543,7 @@ class ModalTemplateBuilderTest :
                                 noticeMessageTs = "1700000000.000400",
                                 questions = listOf("Q1"),
                             ),
-                            com.slack.api.model.view.View::class.java,
+                            View::class.java,
                         )
 
                 then("the header section shows it as literal text") {
@@ -1579,10 +1577,10 @@ class ModalTemplateBuilderTest :
 
                 then("the emitted JSON round-trips through the Slack SDK view deserializer") {
                     val view =
-                        com.slack.api.util.json.GsonFactory
+                        GsonFactory
                             .createSnakeCase()
-                            .fromJson(json, com.slack.api.model.view.View::class.java)
-                    val inputs = view.blocks.filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .fromJson(json, View::class.java)
+                    val inputs = view.blocks.filterIsInstance<InputBlock>()
                     val blockIds = inputs.map { it.blockId }
 
                     view.type shouldBe "modal"
@@ -1648,18 +1646,17 @@ class ModalTemplateBuilderTest :
 
                 then("the multi-select renders an option per topic with value = topic key") {
                     val view =
-                        com.slack.api.util.json.GsonFactory
+                        GsonFactory
                             .createSnakeCase()
-                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                            .fromJson(json, View::class.java)
                     view.type shouldBe "modal"
                     view.callbackId shouldBe CveSubscriptionModalIds.SUBSCRIBE_CALLBACK_ID
                     view.submit.text shouldBe "Subscribe"
                     val input =
                         view.blocks
-                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .filterIsInstance<InputBlock>()
                             .single { it.blockId == CveSubscriptionModalIds.SUBSCRIBE_TOPICS_BLOCK_ID }
-                    val select =
-                        input.element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    val select = input.element as MultiStaticSelectElement
                     select.actionId shouldBe CveSubscriptionModalIds.SUBSCRIBE_TOPICS_ACTION_ID
                     select.options.map { it.value } shouldBe listOf("kotlin", "spring")
                 }
@@ -1677,14 +1674,14 @@ class ModalTemplateBuilderTest :
                             },
                     )
                 val options =
-                    com.slack.api.util.json.GsonFactory
+                    GsonFactory
                         .createSnakeCase()
-                        .fromJson(json, com.slack.api.model.view.View::class.java)
+                        .fromJson(json, View::class.java)
                         .blocks
-                        .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                        .filterIsInstance<InputBlock>()
                         .single()
                         .element
-                        .shouldBeInstanceOf<com.slack.api.model.block.element.MultiStaticSelectElement>()
+                        .shouldBeInstanceOf<MultiStaticSelectElement>()
                         .options
 
                 then("the first 100 topics are offered, labels cut to 75 characters and keys unchanged") {
@@ -1713,16 +1710,15 @@ class ModalTemplateBuilderTest :
 
                 then("the emitted JSON round-trips through the Slack SDK view deserializer") {
                     val view =
-                        com.slack.api.util.json.GsonFactory
+                        GsonFactory
                             .createSnakeCase()
-                            .fromJson(json, com.slack.api.model.view.View::class.java)
+                            .fromJson(json, View::class.java)
                     view.submit.text shouldBe "Unsubscribe"
                     val input =
                         view.blocks
-                            .filterIsInstance<com.slack.api.model.block.InputBlock>()
+                            .filterIsInstance<InputBlock>()
                             .single { it.blockId == CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_BLOCK_ID }
-                    val select =
-                        input.element as com.slack.api.model.block.element.MultiStaticSelectElement
+                    val select = input.element as MultiStaticSelectElement
                     select.actionId shouldBe CveSubscriptionModalIds.UNSUBSCRIBE_TOPICS_ACTION_ID
                     select.options.single().value shouldBe "cve-java"
                 }
@@ -1731,10 +1727,10 @@ class ModalTemplateBuilderTest :
     })
 
 private fun standupAnswerMaxLengths(json: String): List<Int> =
-    com.slack.api.util.json.GsonFactory
+    GsonFactory
         .createSnakeCase()
-        .fromJson(json, com.slack.api.model.view.View::class.java)
+        .fromJson(json, View::class.java)
         .blocks
-        .filterIsInstance<com.slack.api.model.block.InputBlock>()
+        .filterIsInstance<InputBlock>()
         .filter { it.blockId.startsWith(StandupModalIds.BLOCK_ID_PREFIX) }
-        .map { (it.element as com.slack.api.model.block.element.PlainTextInputElement).maxLength }
+        .map { (it.element as PlainTextInputElement).maxLength }

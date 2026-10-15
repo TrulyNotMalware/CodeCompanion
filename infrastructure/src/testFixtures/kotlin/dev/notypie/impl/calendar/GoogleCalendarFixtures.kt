@@ -52,6 +52,16 @@ fun createGoogleServiceDisabledErrorJson(
         """"details": $details}}"""
 }
 
+fun createGoogleRateLimitErrorInfoJson(
+    message: String = "Quota exceeded for quota metric 'Queries' of service 'calendar-json'",
+): String =
+    createGoogleServiceDisabledErrorJson(
+        legacyReason = null,
+        errorInfoReason = "RATE_LIMIT_EXCEEDED",
+        status = "RESOURCE_EXHAUSTED",
+        message = message,
+    )
+
 fun createGoogleTokenResponseJson(
     accessToken: String? = "ya29.access",
     refreshToken: String? = "1//refresh",

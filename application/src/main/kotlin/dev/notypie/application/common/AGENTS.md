@@ -1,11 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-15 -->
 
 # application/common
 
 ## Purpose
 Framework-light helpers shared across the `application` module: deterministic idempotency-key
-derivation, Slack slash-command form parsing into the transport-neutral `InboundCommand`, and a
+derivation, Slack slash-command form parsing into the transport-neutral `InboundCommand`, the log-line
+sanitizer for request-derived text, a
 `TransactionTemplate` wrapper that gives scheduler/async code a `Result`-typed transaction boundary, and a
 factory for a template that runs work outside the caller's transaction.
 Nothing here is a Spring bean; every helper is a top-level function or `object` usable without an
@@ -16,6 +17,7 @@ application context.
 |------|-------------|
 | `IdempotencyCreator.kt` | `object IdempotencyCreator` with two `create(data, currentTimeMillis = System.currentTimeMillis()): UUID` overloads (`String` / `IdempotencyData`). Seed is `currentTimeMillis / 1000`; the key is `UUID.nameUUIDFromBytes("$data|$seed")`. `IdempotencyDataSerializer` + `DefaultIdempotencyDataSerializer` (`jsonMapper` bytes → SHA-256 hex) turn an `IdempotencyData` into the `String` input |
 | `SlackRequestParser.kt` | `parseRequestBodyData(data: Map<String, String>): SlashCommandRequestBody` (Jackson `convertValue`); `parseRequestBodyData(headers, data): Pair<SlashCommandRequestBody, InboundCommand>` adds `toInboundCommand()` — `headers` is accepted but unused; `Map<String, Any>.convert<T>()` is a reified `convertValue` helper with no current call sites |
+| `LogSanitizing.kt` | `internal fun String.neutralizeControlCharacters()`: replaces every `\p{Cc}` character (C0 and C1 controls: `\n`, `\r`, ESC, NEL U+0085, CSI U+009B, …), every `\p{Cf}` format character (bidi overrides and isolates such as U+202E, zero-width characters, so a ZWJ inside an emoji sequence also becomes `?`) and the Unicode line and paragraph separators (U+2028, U+2029) with `?`, so text a user, Slack or a browser controls cannot forge, colour or visually reorder a log line; the set is `service/agent/AgentConverseService`'s name sanitizer's. Callers: `service/command/CommandExecutor` (the failure WARN's reason), `controllers/SlackEventController` (the failed-mention WARN), `exception/ControllerAdvice` (the unsupported command type) and `security/SlackRequestVerificationFilter` (the rejected `Origin` header). Until 2026-10-15 it was `exception/ControllerAdvice.kt`'s `stripControlCharacters()` over `\p{Cntrl}`, which in Java covers only ASCII controls |
 | `TransactionTemplateExt.kt` | `inline fun <T> TransactionTemplate.runInTx(crossinline action: () -> T): Result<T>` — `runCatching` inside `execute` with `setRollbackOnly()` on failure, and an outer `runCatching` around `execute` so a commit-time failure (flush, a `BEFORE_COMMIT` listener such as the outbox write) is also returned as `Result.failure` instead of escaping past the caller's `.onFailure` (2026-10-01). `internal fun detachedTemplate(transactionManager): TransactionTemplate` — `PROPAGATION_NOT_SUPPORTED`, the counterpart of `service/meeting`'s `isolatedWriteTemplate` (`REQUIRES_NEW`): the caller's transaction is suspended for the block, so a `@Transactional` repository call inside it runs in its own transaction and its failure cannot mark the caller's rollback-only. Used by `StandupRoutineOpsService` (stop's admin lookup), `AgentUsageReportService` and `OpsStatusService` (report rendering). The block takes a second pooled connection while the caller still holds one |
 
 ## For AI Agents
@@ -56,7 +58,7 @@ application context.
 data + same window → same UUID, window boundary (`999` vs `1000` ms) → different, plus regression cases
 built from the domain testFixtures (`createMentionInboundCommand`, `createInteractionInboundCommand`,
 `createSlashInboundCommand`). Always pass `currentTimeMillis` explicitly — never rely on the wall clock.
-`parseRequestBodyData` has no direct spec. `runInTx` has `TransactionTemplateExtTest` on a real H2 transaction
+`parseRequestBodyData` has no direct spec. `neutralizeControlCharacters` has none either: `service/command/CommandExecutorTest` (C0, C1, U+2028, U+2029, U+202E in a failure reason) and `security/SlackRequestVerificationFilterTest` (the same classes in a rejected `Origin`) pin it through its callers. `runInTx` has `TransactionTemplateExtTest` on a real H2 transaction
 manager; the services build `TransactionTemplate(transactionManager)` themselves, so service specs either stub a
 MockK `PlatformTransactionManager` (`getTransaction` → relaxed `TransactionStatus`, `commit`/`rollback` `just Runs`)
 when only call order matters, or pass `createH2TransactionManager` when a case claims a rollback or a commit. Build `InboundCommand` inputs with the testFixtures creators, not inline

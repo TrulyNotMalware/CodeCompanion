@@ -1,6 +1,7 @@
 package dev.notypie.impl.cve
 
 import dev.notypie.common.jsonMapper
+import dev.notypie.impl.http.sendWithinDeadline
 import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.schema.CveSourceType
 import io.github.oshai.kotlinlogging.KotlinLogging

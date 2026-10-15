@@ -45,6 +45,9 @@ that entry point carries `@Transactional` (the slash transaction, like every oth
 - **The expired-state purge lives in the callback's consume transaction, not in `connect`.** A range `DELETE`
   next to the `INSERT` of a new state in the same transaction gap-locks the `expires_at` index under
   REPEATABLE READ and two concurrent connects can deadlock; the consume transaction inserts nothing.
+  Consequence (open follow-up, 2026-10-15): there is no expired-state purge outside a successful callback, so the
+  states of abandoned connects accumulate in `google_oauth_state` until some user's callback succeeds (or the user
+  disconnects). A scheduled `deleteExpired` outside any connect transaction would bound the table.
 - **Tokens never reach a message or a log.** Logs carry the Slack user id, Google's error code and the granted
   scope list; the e-mail goes only into the user's own DM and `status` (the identity check's two outcomes log the
   user id and a fixed reason only and render fixed pages, so neither the Google nor the Slack e-mail is echoed). The refresh token is
