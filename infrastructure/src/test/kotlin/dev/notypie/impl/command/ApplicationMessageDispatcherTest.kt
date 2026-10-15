@@ -11,6 +11,7 @@ import dev.notypie.impl.command.event.createActionEventPayloadContents
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
+import dev.notypie.impl.http.MAX_RETRY_AFTER
 import dev.notypie.impl.retry.RetryService
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.ints.shouldBeLessThan

@@ -1,8 +1,9 @@
 package dev.notypie.impl.calendar
 
 import dev.notypie.common.jsonMapper
-import dev.notypie.impl.cve.SourceResponse
-import dev.notypie.impl.cve.sendWithinDeadline
+import dev.notypie.impl.http.BoundedResponse
+import dev.notypie.impl.http.parseRetryAfter
+import dev.notypie.impl.http.sendWithinDeadline
 import io.github.oshai.kotlinlogging.KotlinLogging
 import tools.jackson.core.JacksonException
 import java.net.URI
@@ -64,9 +65,9 @@ class GoogleCalendarClient(
         private const val CONFIRMED_STATUS = "confirmed"
         private const val DEFAULT_MAX_BODY_BYTES = 64 * 1024
         private const val JSON_CONTENT_TYPE = "application/json"
-        private val RATE_LIMIT_REASONS = setOf("rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded")
+        private val RATE_LIMIT_REASONS =
+            setOf("rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "RATE_LIMIT_EXCEEDED")
         private val API_DISABLED_REASONS = setOf("accessNotConfigured", "SERVICE_DISABLED")
-        private val MAX_RETRY_AFTER: Duration = Duration.ofHours(24L)
     }
 
     private val httpClient: HttpClient =
@@ -140,7 +141,7 @@ class GoogleCalendarClient(
     private fun execute(
         request: HttpRequest,
         operation: String,
-        onSuccess: (SourceResponse) -> CalendarApiResult,
+        onSuccess: (BoundedResponse) -> CalendarApiResult,
     ): CalendarApiResult {
         val response =
             try {
@@ -182,7 +183,7 @@ class GoogleCalendarClient(
         }
     }
 
-    private fun eventIdOf(response: SourceResponse): CalendarApiResult {
+    private fun eventIdOf(response: BoundedResponse): CalendarApiResult {
         val eventId =
             try {
                 jsonMapper.readTree(response.body).path("id").asString("")
@@ -197,14 +198,8 @@ class GoogleCalendarClient(
         return CalendarApiResult.Ok(eventId = eventId)
     }
 
-    private fun retryAfterOf(response: SourceResponse): Duration? =
-        response.headers
-            .firstValue("Retry-After")
-            .getOrNull()
-            ?.trim()
-            ?.toLongOrNull()
-            ?.takeIf { it >= 0L }
-            ?.let { minOf(Duration.ofSeconds(it), MAX_RETRY_AFTER) }
+    private fun retryAfterOf(response: BoundedResponse): Duration? =
+        parseRetryAfter(value = response.headers.firstValue("Retry-After").getOrNull())
 
     private fun apiErrorOf(body: String): GoogleApiError =
         try {

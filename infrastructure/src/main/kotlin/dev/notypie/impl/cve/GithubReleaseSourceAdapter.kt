@@ -1,6 +1,8 @@
 package dev.notypie.impl.cve
 
 import dev.notypie.common.jsonMapper
+import dev.notypie.impl.http.BoundedResponse
+import dev.notypie.impl.http.sendWithinDeadline
 import dev.notypie.repository.cve.CveTopic
 import dev.notypie.repository.cve.schema.CveSourceType
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -68,7 +70,7 @@ class GithubReleaseSourceAdapter(
         return parseReleases(body = response.body, topic = topic)
     }
 
-    private fun logFailure(response: SourceResponse, topic: CveTopic) {
+    private fun logFailure(response: BoundedResponse, topic: CveTopic) {
         val status = response.statusCode
         val remaining = response.headers.firstValue("x-ratelimit-remaining").getOrNull()
         val retryAfter = response.headers.firstValue("retry-after").getOrNull()

@@ -1,5 +1,6 @@
 package dev.notypie.application.security
 
+import dev.notypie.application.common.neutralizeControlCharacters
 import dev.notypie.application.configurations.AppConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
@@ -56,7 +57,7 @@ class SlackRequestVerificationFilter(
                 val requestPath = normalizedPath(request = request)
                 val loggedOrigin =
                     origin
-                        .replace(regex = CONTROL_CHARACTERS, replacement = "?")
+                        .neutralizeControlCharacters()
                         .take(n = MAX_LOGGED_ORIGIN_LENGTH)
                 log.warn {
                     "Rejected browser-originated request while Slack signature verification is disabled: " +
@@ -170,7 +171,7 @@ class SlackRequestVerificationFilter(
         private val SLACK_PATH_PREFIXES = listOf("/api/slack", "/api/slash")
         private val UNRESOLVED_PLACEHOLDER = Regex("""\$\{[^}]*}""")
         private val REPEATED_SLASHES = Regex("/{2,}")
-        private val CONTROL_CHARACTERS = Regex("\\p{Cntrl}")
+        private val ASCII_CONTROL_CHARACTERS = Regex("\\p{Cntrl}")
 
         private fun requireUsableSigningSecret(signingSecret: String, activeProfiles: Set<String>) {
             check(!UNRESOLVED_PLACEHOLDER.containsMatchIn(signingSecret)) {
@@ -206,7 +207,7 @@ class SlackRequestVerificationFilter(
         private fun normalize(path: String): String {
             val collapsed =
                 path
-                    .replace(regex = CONTROL_CHARACTERS, replacement = "")
+                    .replace(regex = ASCII_CONTROL_CHARACTERS, replacement = "")
                     .replace(regex = REPEATED_SLASHES, replacement = "/")
             val cleaned = StringUtils.cleanPath(collapsed).lowercase()
             return if (cleaned.length > 1) cleaned.trimEnd('/') else cleaned

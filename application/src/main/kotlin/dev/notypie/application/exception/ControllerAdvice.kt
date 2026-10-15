@@ -1,5 +1,6 @@
 package dev.notypie.application.exception
 
+import dev.notypie.application.common.neutralizeControlCharacters
 import dev.notypie.application.security.SlackHeaders
 import dev.notypie.domain.common.error.CodeCompanionRuntimeException
 import dev.notypie.exception.meeting.DatabaseException
@@ -11,10 +12,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 
 private val log = KotlinLogging.logger {}
-
-private val CONTROL_CHARACTERS = Regex("\\p{Cntrl}")
-
-internal fun String.stripControlCharacters(): String = replace(regex = CONTROL_CHARACTERS, replacement = "?")
 
 @RestControllerAdvice
 class ControllerAdvice : ResponseEntityExceptionHandler() {
@@ -30,7 +27,7 @@ class ControllerAdvice : ResponseEntityExceptionHandler() {
     fun handleUnsupportedSlackCommandType(
         e: UnsupportedSlackCommandTypeException,
     ): ResponseEntity<Map<String, String>> {
-        val commandType = e.rawCommandType.stripControlCharacters()
+        val commandType = e.rawCommandType.neutralizeControlCharacters()
         log.warn { "Received unsupported Slack command type '$commandType'" }
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)

@@ -1,5 +1,6 @@
 package dev.notypie.application.security
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.logging.captureLogs
@@ -497,6 +498,24 @@ class SlackRequestVerificationFilterTest :
                             chain.invocationCount shouldBe 0
                         }
                     }
+                }
+            }
+
+            `when`("the rejected Origin carries C0 and C1 controls, a bidi override and the Unicode line separator") {
+                val rejections =
+                    captureLogs(loggerName = SlackRequestVerificationFilter::class.java.name) {
+                        filter(signingSecret = "", profiles = arrayOf("local")).doFilter(
+                            unsignedRequest(requestUri = EVENTS_PATH).apply {
+                                addHeader(HttpHeaders.ORIGIN, "https://x\n\u0085\u009b31m ‮y")
+                            },
+                            MockHttpServletResponse(),
+                            CountingFilterChain(),
+                        )
+                    }.messagesAt(level = Level.WARN).filter { it.startsWith("Rejected browser-originated request") }
+
+                then("the one WARN shows each of them as ?, so the header cannot forge or disguise a log line") {
+                    rejections.size shouldBe 1
+                    rejections.single() shouldContain "origin=https://x???31m??y"
                 }
             }
 

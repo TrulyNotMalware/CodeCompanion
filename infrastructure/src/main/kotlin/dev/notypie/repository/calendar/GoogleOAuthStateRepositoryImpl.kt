@@ -1,9 +1,9 @@
 package dev.notypie.repository.calendar
 
 import dev.notypie.repository.calendar.schema.GoogleOAuthStateSchema
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
-import kotlin.jvm.optionals.getOrNull
 
 open class GoogleOAuthStateRepositoryImpl(
     private val jpaGoogleOAuthStateRepository: JpaGoogleOAuthStateRepository,
@@ -18,7 +18,7 @@ open class GoogleOAuthStateRepositoryImpl(
     @Transactional
     override fun consume(state: String, now: Instant): String? {
         if (jpaGoogleOAuthStateRepository.consume(state = state, now = now) != 1) return null
-        return jpaGoogleOAuthStateRepository.findById(state).getOrNull()?.slackUserId
+        return jpaGoogleOAuthStateRepository.findByIdOrNull(id = state)?.slackUserId
     }
 
     @Transactional

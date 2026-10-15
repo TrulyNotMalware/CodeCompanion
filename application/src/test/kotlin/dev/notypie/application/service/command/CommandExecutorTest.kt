@@ -225,23 +225,28 @@ class CommandExecutorTest :
                 }
             }
 
-            `when`("a failure's reason carries a line break and a terminal escape") {
+            `when`("a failure's reason carries C0 and C1 controls, a bidi override and the Unicode separators") {
                 val command =
                     TestCommand(
                         idempotencyKey = UUID.randomUUID(),
                         commandData = createMentionInboundCommand(),
-                        failure = IllegalStateException("bad <@U1>\nWARN forged line\u001b[31m"),
+                        failure =
+                            IllegalStateException(
+                                "bad <@U1>\nWARN forged line\u001b[31m\u0085NEL\u009b31m\u2028LS\u2029PS\u202eRLO",
+                            ),
                     )
                 val warnings =
                     captureLogs(loggerName = loggerName) {
                         executor.execute(command = command)
                     }.eventsAt(level = Level.WARN)
 
-                then("the one WARN replaces each control character with ? so the reason cannot forge a log line") {
+                then("the one WARN replaces each of them with ? so the reason cannot forge a log line") {
                     val line = warnings.single().formattedMessage
-                    line shouldContain "reason=java.lang.IllegalStateException: bad <@U1>?WARN forged line?[31m"
-                    line shouldNotContain "\n"
-                    line shouldNotContain "\u001b"
+                    line shouldContain
+                        "reason=java.lang.IllegalStateException: bad <@U1>?WARN forged line?[31m?NEL?31m?LS?PS?RLO"
+                    listOf("\n", "\u001b", "\u0085", "\u009b", "\u2028", "\u2029", "\u202e").forEach { forbidden ->
+                        line shouldNotContain forbidden
+                    }
                 }
             }
 

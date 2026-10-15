@@ -2,6 +2,7 @@ package dev.notypie.impl.calendar
 
 import java.security.SecureRandom
 import java.util.Base64
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -52,7 +53,7 @@ class TokenCipher(
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
         return try {
             cipher.doFinal(decoder.decode(segments[2])).toString(Charsets.UTF_8)
-        } catch (exception: javax.crypto.AEADBadTagException) {
+        } catch (exception: AEADBadTagException) {
             throw IllegalArgumentException("encrypted token failed authentication", exception)
         }
     }

@@ -9,6 +9,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.web.ErrorResponse
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -105,6 +106,7 @@ class GoogleOAuthCallbackController(
 
     @ExceptionHandler(value = [Exception::class])
     fun handleUnexpected(exception: Exception): ResponseEntity<String> {
+        if (exception is ErrorResponse) throw exception
         logger.error(exception) { "Google Calendar OAuth callback failed unexpectedly" }
         if (exception is InterruptedException) Thread.currentThread().interrupt()
         val page =

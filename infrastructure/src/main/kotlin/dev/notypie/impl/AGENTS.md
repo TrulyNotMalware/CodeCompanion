@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
 
 # infrastructure/impl
 
@@ -7,7 +7,8 @@
 The adapter layer proper. `impl/command` is the Slack transport adapter — it maps Slack wire payloads
 into the domain's neutral inbound model, resolves domain intents into command events, renders neutral
 outbound messages into Slack payloads, and publishes events. `impl/agent` talks to the AI sidecar,
-`impl/cve` to external CVE feeds, and `impl/retry` provides bounded retry support.
+`impl/cve` to external CVE feeds, `impl/calendar` to Google, `impl/http` holds their shared bounded-HTTP and
+`Retry-After` helpers, and `impl/retry` provides bounded retry support.
 
 ## Subdirectories
 | Directory | Purpose |
@@ -19,6 +20,7 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
 | `agent/` | `AgentGateway` port + `SidecarAgentClient` (HTTP + SSE) (see `agent/AGENTS.md`) |
 | `cve/` | `SourceAdapter` port + `NvdCveSourceAdapter`, `GithubReleaseSourceAdapter` (see `cve/AGENTS.md`) |
 | `retry/` | `RetryService` (see `retry/AGENTS.md`) |
+| `http/` | `BoundedHttp.kt`: `HttpClient.sendWithinDeadline` (one deadline over headers and body, a body size cap), `BoundedResponse`, `parseRetryAfter` (seconds or HTTP date, clamped to 24 h) — shared by `cve/`, `calendar/` and the dispatcher (see `http/AGENTS.md`) |
 | `calendar/` | `GoogleOAuthClient` (authorization URL, code exchange, refresh, revoke), `GoogleCalendarClient` (primary-calendar event insert / patch / delete as a `CalendarApiResult`) + `TokenCipher` (AES-GCM for stored refresh tokens) (see `calendar/AGENTS.md`) |
 
 ## Key Files
@@ -88,7 +90,9 @@ dropped.
   newly added variant.
 - No KDoc. A one-line `//` comment stays only for a hidden constraint (an external API quirk, a
   trigger_id expiry) that no test, type or name pins.
-- JDK `HttpClient` for the sidecar's SSE stream; Spring `RestClient` for ordinary Slack/HTTP calls.
+- JDK `HttpClient` for the sidecar's SSE stream and, through `http/sendWithinDeadline`, for the CVE feeds and
+  Google; the Slack SDK's OkHttp client for `chat.*`, `views.open` and `response_url`; Spring `RestClient` for the
+  Slack user lookups (`users.profile.get`, `users.info`) through `command/RestClientRequester`.
 
 ## Dependencies
 

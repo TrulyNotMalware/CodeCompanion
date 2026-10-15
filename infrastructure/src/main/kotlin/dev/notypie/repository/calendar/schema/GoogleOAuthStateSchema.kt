@@ -4,8 +4,12 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Index
+import jakarta.persistence.PostLoad
+import jakarta.persistence.PostPersist
 import jakarta.persistence.Table
+import jakarta.persistence.Transient
 import org.hibernate.annotations.CreationTimestamp
+import org.springframework.data.domain.Persistable
 import java.time.Instant
 import java.time.LocalDateTime
 
@@ -13,6 +17,7 @@ import java.time.LocalDateTime
 @Table(
     indexes = [
         Index(name = "idx_google_oauth_state_expires_at", columnList = "expires_at"),
+        Index(name = "idx_google_oauth_state_slack_user_id", columnList = "slack_user_id"),
     ],
 )
 class GoogleOAuthStateSchema(
@@ -28,4 +33,17 @@ class GoogleOAuthStateSchema(
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
-)
+) : Persistable<String> {
+    @field:Transient
+    private var newRow: Boolean = true
+
+    override fun getId(): String = state
+
+    override fun isNew(): Boolean = newRow
+
+    @PostPersist
+    @PostLoad
+    protected fun markPersisted() {
+        newRow = false
+    }
+}

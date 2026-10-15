@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
 
 # k8s
 
@@ -12,7 +12,7 @@ adds what an agent editing the manifests needs to know.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), the `/ask` turn ledger note (V26 by hand before the deploy that writes it; no flag), the optional Google Calendar mirror (V24 then V25 by hand before the deploy plus the `meetings.idempotency_key` unique-index check, the Google Cloud OAuth client with the public HTTPS redirect URI, its keys, the callback route and the edge check, the `/calendar` slash command on the production Slack app (`/api/slash/calendar`), enabling through a restart that `Recreate` turns into an outage), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
+| `README.md` | Apply order, the one-time no-overlap release procedure with the V18–V23 migration checklist (V21 after the rollout; the same order as `../db/migration/AGENTS.md`), the `/ask` turn ledger note (V26 by hand before the deploy that writes it; no flag), the optional Google Calendar mirror (V24, V25, then V27 by hand before the deploy plus the `meetings.idempotency_key` unique-index check, the Google Cloud OAuth client with the public HTTPS redirect URI, its keys, the callback route and the edge check, the `/calendar` slash command on the production Slack app (`/api/slash/calendar`), enabling through a restart that `Recreate` turns into an outage), prerequisites (`dockercred` pull secret, zoneinfo on nodes), routing choice, optional agent-sidecar setup |
 | `deployment.yaml` | Deployment `code-companion-deploy` (2 replicas, `image: $IMAGE_NAME`, containerPort 80, `envFrom` Secret + ConfigMap, `hostPath` `/etc/localtime` mount, `terminationGracePeriodSeconds: 180` (its comment also lists the 0 s Google token revoke executor), `preStop` `sleep 5`, container `securityContext.allowPrivilegeEscalation: false`, startup/readiness/liveness probes on `/actuator/health/{liveness,readiness}`, `resources` 250m/1536Mi requests and 2Gi memory limit) and PodDisruptionBudget `code-companion-pdb` (`minAvailable: 1`) |
 | `service.yaml` | ClusterIP Service `code-companion-svc`, port 80 → 80, selector `app: code-companion-deploy` |
 | `configmap.yaml` | ConfigMap `code-companion-configmap`: `SQL_PROD_ISOLATION_LEVEL`, `SQL_PROD_CONNECTION_TIMEOUT`, `SQL_PROD_VALIDATION_TIMEOUT`, `HIBERNATE_DEFAULT_BATCH_SIZE`, `KAFKA_BOOTSTRAP_SERVERS` (placeholder), `SLACK_CDC_TOPIC` (`cdc.code_companion.outbox_message`, the Debezium `topic.prefix: cdc` name), `GOOGLE_CALENDAR_ENABLED` (`'false'`), `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI` (placeholders) |
@@ -49,7 +49,7 @@ adds what an agent editing the manifests needs to know.
   gives 64); a shorter one fails startup (`McpServerConfiguration`, 2026-10-13). The five `GOOGLE_*` keys are in the samples anyway (client secret and token key in `secret.yaml`,
   the rest in `configmap.yaml`) with `GOOGLE_CALENDAR_ENABLED: 'false'`: that key must be `'true'`, `'false'` or
   absent, because an empty string fails the Boolean binding at startup. Enabling the calendar needs V24 and V25
-  applied first (`README.md`, "Google Calendar Mirror"). `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are not
+  applied first, with V27 (an index) in the same step (`README.md`, "Google Calendar Mirror"). `VERSION`, `BUILD_DATE`, `GIT_REF`, `BUILD_NUMBER` are not
   manifest keys: the deploy workflow passes them as Docker build args and `application/Dockerfile` bakes them into the image env (`BUILD_DATE` is the
   merged PR's `merged_at`; the workflow runs on `pull_request`, whose payload has no `head_commit`).
   The management base path is no longer an env var: it is fixed at `/actuator` in `application-prod.yaml`. A
