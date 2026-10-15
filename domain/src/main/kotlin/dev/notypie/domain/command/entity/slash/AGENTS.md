@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # domain/command/entity/slash
 
@@ -44,6 +44,8 @@ grammar, and the one `CommandOutput` subclass that carries a built `Meeting` bac
   `SubCommandDefinition` enum also override `subCommandDefinitions` with its `entries`, so the usage reply lists
   them. `MeetingSubCommandDefinition.NONE.usage` is `/meetup` (opens the form) so the list starts with it;
   `StandupSubCommandDefinition.NONE.usage` stays blank because bare `/standup` is `setup`.
+  The names are hard-coded in the domain: a Socket Mode override (`slack.app.socket.*-command`, local only)
+  changes routing only, not the usage and error text, which still shows the default name.
 - `MeetingListRange.WEEK` / `MONTH` are rolling windows from `now`, not calendar weeks/months; `TODAY` /
   `TOMORROW` snap to midnight. Specs pass `now` explicitly to `dateRange(now)`.
 - `RequestMeetingContextResult.ok` is always `true` (`RequestMeetingContext.interactionResults`

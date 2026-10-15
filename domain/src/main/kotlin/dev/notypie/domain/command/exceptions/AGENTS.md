@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # domain/command/exceptions
 
@@ -18,8 +18,9 @@ sealed exception hierarchy thrown while parsing sub-commands or routing an unsup
 ### Working In This Directory
 - Throw sites: `entity/Command.createSubCommand` (`SUBCOMMAND_NOT_VALID`),
   `entity/slash/RequestMeetingCommand` and `StandupCommand.findSubCommandDefinition`
-  (`SUBCOMMAND_NOT_FOUND`), `entity/Command.executeInteraction` and
-  `entity/InteractionCommand.buildParser` (`UNSUPPORTED_COMMAND_TYPE`). The never-thrown
+  (`SUBCOMMAND_NOT_FOUND`), `entity/Command.executeInteraction`,
+  `entity/InteractionCommand.resolveRoute` and `entity/slash/SlashInvocations.kt` (`InboundCommand.slashInvocation`)
+  (`UNSUPPORTED_COMMAND_TYPE`). The never-thrown
   `COMMAND_NOT_FOUND` / `UNKNOWN_SUBCOMMAND_TYPE` / `VALIDATION_FAILED` were removed on 2026-09-22.
 - Nothing here escapes the domain. `Command.handleEvent()` catches it and returns
   `CommandOutput.fail(..., ERROR_RESPONSE, reason = exception.toString())` (class name plus `errorCode.message`;
@@ -31,8 +32,6 @@ sealed exception hierarchy thrown while parsing sub-commands or routing an unsup
 - Everything is `internal`, so `:application` cannot catch these types — it only observes
   `CommandOutput.ok == false`. Do not widen visibility to special-case them upstream; add a
   `CommandDetailType` or an outbound message instead.
-- `CommandErrorCode.VALIDATION_FAILED` duplicates `CommonErrorCode.VALIDATION_FAILED`; entity validation
-  goes through `validate {}` and never uses this one.
 - The thrown exception keeps `errorCode` as a property; there is no HTTP status on domain codes.
 
 ### Testing Requirements

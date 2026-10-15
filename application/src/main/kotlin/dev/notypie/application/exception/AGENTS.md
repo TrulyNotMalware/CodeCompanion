@@ -1,28 +1,29 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-15 -->
 
 # application/exception
 
 ## Purpose
 Application-layer exception types plus the `@RestControllerAdvice` that turns them into HTTP responses.
 The exceptions extend the domain base `CodeCompanionRuntimeException` and carry structured metadata via
-an `ErrorCode` enum and `List<ExceptionArgument>` details. Coverage is deliberately narrow: two
+an `ErrorCode` enum and `List<ExceptionArgument>` details. Coverage is deliberately narrow: three
 payload-parse failures raised while mapping an `app_mention` event, one infrastructure exception
 (`DatabaseException`), and a catch-all for anything else.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `PayloadParseException.kt` | `enum class PayloadParseErrorCode : ErrorCode` — `APP_ID_NOT_FOUND` ("Application ID not found in payload.") and `UNSUPPORTED_SLACK_COMMAND_TYPE` ("Unsupported Slack command type in payload."). `AppIdNotFoundException(errorCode, details)` and `UnsupportedSlackCommandTypeException(rawCommandType: String, errorCode, details)`, both `: CodeCompanionRuntimeException` |
+| `PayloadParseException.kt` | `enum class PayloadParseErrorCode : ErrorCode` — `APP_ID_NOT_FOUND` ("Application ID not found in payload."), `UNSUPPORTED_SLACK_COMMAND_TYPE` ("Unsupported Slack command type in payload.") and `INVALID_EVENT_PAYLOAD` ("Slack event payload does not have the expected shape."). `AppIdNotFoundException(errorCode, details)`, `UnsupportedSlackCommandTypeException(rawCommandType: String, errorCode, details)` and `InvalidEventPayloadException(errorCode, details, cause)` (keeps the binding failure as its cause), all `: CodeCompanionRuntimeException` |
 | `ControllerAdvice.kt` | `@RestControllerAdvice class ControllerAdvice`. `handleDatabaseException` logs `ERROR` (with the table name) and returns `500` `{"error": "internal_error"}`; `handleUnsupportedSlackCommandType` logs `WARN` (raw type through the file's `internal fun String.stripControlCharacters()`, which replaces every `\p{Cntrl}` character with `?`; `service/command/CommandExecutor` reuses it for its failure `WARN`) and returns `400` `{"error": "unsupported_command_type"}` with `X-Slack-No-Retry: 1` — the user-controlled type is never echoed in the body; `handleUnexpected(e: Exception)` logs `ERROR` and returns the same `500` body; `handleUnreadablePayload` answers `400` `{"error": "invalid_payload"}` with `X-Slack-No-Retry: 1` for `AppIdNotFoundException` and `InvalidEventPayloadException` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- Both exceptions are thrown only from `service/mention/SlackMentionEventHandlerImpl.parseAppMentionEvent`:
+- All three exceptions are thrown only from `service/mention/SlackMentionEventHandlerImpl`:
   `resolveAppId` throws `AppIdNotFoundException` when `api_app_id` is missing; `resolveCommandType`
   throws `UnsupportedSlackCommandTypeException` when `SlackEventType.valueOf(rawType.uppercase())` fails
-  on the callback's top-level `type`. Details are built with the
+  on the callback's top-level `type`; `convertBodyData` throws `InvalidEventPayloadException` when the
+  `SlackEventCallBackRequest` binding fails. Details are built with the
   `exceptionDetails { "field" value "..." because "..." }` DSL from `domain/common/error/Errors.kt` —
   use it rather than hand-building `ExceptionArgument` lists.
 - **Unreadable payloads are 400 with `X-Slack-No-Retry: 1`** (2026-10-02): `handleUnreadablePayload` takes

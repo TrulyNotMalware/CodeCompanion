@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-07 | Updated: 2026-10-14 -->
+<!-- Generated: 2026-10-07 | Updated: 2026-10-15 -->
 
 # application/service/calendar
 
@@ -96,7 +96,11 @@ that entry point carries `@Transactional` (the slash transaction, like every oth
   check both call `find(userId)` for that user). So when two Slack users connected the same Google account, one
   user's disconnect, switch to another account or `SCOPE_DENIED` revoke is expected to revoke the other user's grant
   too (Google's documented grant-wide revoke, not observed here); that user's next token refresh then answers `invalid_grant` and goes through the same `REVOKED` path
-  (accepted 2026-10-11, `docs/wiki/decisions.md` #36).
+  (accepted 2026-10-11, `docs/wiki/decisions.md` #36). Since decision #41 (above) a connection needs the Google
+  account's verified e-mail to equal the requester's Slack e-mail, so this situation cannot arise through a new
+  connection any more, assuming Slack e-mails are unique per workspace member and stable (Slack behaviour, not
+  verified here). What remains is rows stored before #41, and e-mails changed or reassigned afterwards (by the
+  user, an administrator or SCIM; #41 does not recheck existing connections).
 - **Disconnect clears the user's consent states, connected or not.** `deleteForUser` removes every state row of
   the user, consumed ones included, before the no-connection check. A consent link issued before `disconnect` and
   clicked after it would otherwise connect the account without a fresh `connect`, including the link of a user who

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # application/service/mention
 
@@ -13,7 +13,7 @@ domain context sees it.
 | File | Description |
 |------|-------------|
 | `AppMentionEventHandler.kt` | Interface: `parseAppMentionEvent(headers, payload): InboundCommand`, `handleEvent(commandData): CommandOutput`, `handleEvent(headers, payload): CommandOutput`. Taken by `SlackEventController` and `SocketModeReceiver` |
-| `SlackMentionEventHandlerImpl.kt` | `@Service`. Constants `SLACK_APPID_KEY_NAME = "api_app_id"` and `SLACK_APP_NAME = "CodeCompanion"` (the latter is reused by `SlackInteractionHandlerImpl`). Parse: `resolveAppId` (throws `AppIdNotFoundException` / `APP_ID_NOT_FOUND`), `jsonMapper.convertValue(payload, SlackEventCallBackRequest)`, `resolveCommandType` validates `SlackEventType.valueOf(type.uppercase())` (throws `UnsupportedSlackCommandTypeException` / `UNSUPPORTED_SLACK_COMMAND_TYPE`), then `toMentionInboundCommand(appId, channelName, actorName)`. Takes the `PlatformTransactionManager`; neither `handleEvent` overload is `@Transactional`. `handleEvent(commandData)` builds the command first (`buildCommand` sets `actorRole = commandRoleResolver.resolve(userId = commandData.actorId)`, outside any transaction, so a failed role query degrades to `USER` without leaving the mention transaction rollback-only) and then runs only `commandExecutor.execute` in a `TransactionTemplate` (rolls back on any `Throwable`) |
+| `SlackMentionEventHandlerImpl.kt` | `@Service`. Constants `SLACK_APPID_KEY_NAME = "api_app_id"` and `SLACK_APP_NAME = "CodeCompanion"` (the latter is reused by `SlackInteractionHandlerImpl`). Parse: `resolveAppId` (throws `AppIdNotFoundException` / `APP_ID_NOT_FOUND`), `jsonMapper.convertValue(payload, SlackEventCallBackRequest)` (a failed binding throws `InvalidEventPayloadException` / `INVALID_EVENT_PAYLOAD`), `resolveCommandType` validates `SlackEventType.valueOf(type.uppercase())` (throws `UnsupportedSlackCommandTypeException` / `UNSUPPORTED_SLACK_COMMAND_TYPE`), then `toMentionInboundCommand(appId, channelName, actorName)`. Takes the `PlatformTransactionManager`; neither `handleEvent` overload is `@Transactional`. `handleEvent(commandData)` builds the command first (`buildCommand` sets `actorRole = commandRoleResolver.resolve(userId = commandData.actorId)`, outside any transaction, so a failed role query degrades to `USER` without leaving the mention transaction rollback-only) and then runs only `commandExecutor.execute` in a `TransactionTemplate` (rolls back on any `Throwable`) |
 
 ## For AI Agents
 
@@ -54,7 +54,7 @@ domain context sees it.
 Spec under `application/src/test/kotlin/dev/notypie/application/service/mention/`. Fixture:
 `createAppMentionPayload` (application testFixtures, same package). MockK `CommandExecutor` and
 `CommandRoleResolver`; assert the `InteractionCommand` passed to `execute` (app name, role, idempotency
-key) and the thrown `AppIdNotFoundException` / `UnsupportedSlackCommandTypeException` for bad payloads.
+key) and the thrown `AppIdNotFoundException` / `UnsupportedSlackCommandTypeException` / `InvalidEventPayloadException` for bad payloads.
 
 ### Common Patterns
 - Interface + `Impl` pair; controllers depend on the interface.
@@ -67,7 +67,7 @@ key) and the thrown `AppIdNotFoundException` / `UnsupportedSlackCommandTypeExcep
 ### Internal
 - `application/service/command/` — `CommandExecutor`, `CommandRoleResolver`
 - `application/common/IdempotencyCreator`
-- `application/exception/` — `AppIdNotFoundException`, `UnsupportedSlackCommandTypeException`,
+- `application/exception/` — `AppIdNotFoundException`, `UnsupportedSlackCommandTypeException`, `InvalidEventPayloadException`,
   `PayloadParseErrorCode`
 - `infrastructure/impl/command/slack/` — `SlackEventCallBackRequest`, `SlackEventType`,
   `SlackMentionMapper.toMentionInboundCommand`

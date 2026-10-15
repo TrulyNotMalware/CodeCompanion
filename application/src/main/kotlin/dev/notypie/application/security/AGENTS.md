@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
 
 # application/security
 
@@ -101,6 +101,13 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
   in flight when Slack's last retry arrives and then fails, the event is lost — Slack has no further retry.
   Cross-replica exactly-once needs a shared store (e.g. a DB unique key on `event_id`); swap in a
   `SlackRetryDeduplicator` implementation for that.
+- **Slash and interaction replay: deferred by user decision (2026-10-15) and accepted until then (`docs/wiki/decisions.md` #34).** Only
+  `/api/slack/events` is fingerprinted (`RETRYABLE_EVENTS_PATH`); every other signed path goes straight to the
+  chain after the signature and timestamp check, so a captured, signed slash or interaction request can be
+  replayed until it leaves the timestamp tolerance (`request-timestamp-tolerance-seconds`, default 300). The attacker
+  first needs a capture on the TLS, ingress or tunnel path. Not fixed: extending the fingerprint to those
+  paths would again cover one JVM only (the multi-replica gap above), and whether their bodies are unique per
+  request (`trigger_id`) is unverified; a real fix needs a shared store, i.e. a table (V27 or later).
 - **MCP filter rejects before `initialize` and `tools/list`**, so no anonymous request ever reaches the
   MCP server. It is registered through a `FilterRegistrationBean` scoped to the endpoint path and only
   when MCP is enabled. Keep it ahead of protocol handling.
