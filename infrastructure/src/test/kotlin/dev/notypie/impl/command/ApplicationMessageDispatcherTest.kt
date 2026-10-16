@@ -1,27 +1,40 @@
 package dev.notypie.impl.command
 
+import ch.qos.logback.classic.Level
 import com.slack.api.Slack
 import com.slack.api.util.http.SlackHttpClient
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.command.entity.event.DeclineModalOpenFailedEvent
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createActionEventPayloadContents
+import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.command.event.createPostEventPayloadContents
 import dev.notypie.impl.command.event.failOutput
 import dev.notypie.impl.command.event.successOutput
 import dev.notypie.impl.retry.RetryService
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.internal.http2.ErrorCode
 import okhttp3.internal.http2.StreamResetException
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataAccessResourceFailureException
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -90,17 +103,19 @@ class ApplicationMessageDispatcherTest :
         val unknownOutcomes = ConcurrentLinkedDeque<String>()
         val accessBlocks = ConcurrentLinkedDeque<String>()
 
-        fun dispatcher(sleeper: (Duration) -> Unit = { sleeps.add(it) }) =
-            ApplicationMessageDispatcher(
-                botToken = "xoxb-test",
-                applicationEventPublisher = mockk(relaxed = true),
-                retryService = RetryService(),
-                onOutcomeUnknown = { unknownOutcomes.add(it) },
-                onAccessBlocked = { accessBlocks.add(it) },
-                slack = slack,
-                okHttpClient = loopbackClient,
-                sleeper = sleeper,
-            )
+        fun dispatcher(
+            sleeper: (Duration) -> Unit = { sleeps.add(it) },
+            applicationEventPublisher: ApplicationEventPublisher = mockk(relaxed = true),
+        ) = ApplicationMessageDispatcher(
+            botToken = "xoxb-test",
+            applicationEventPublisher = applicationEventPublisher,
+            retryService = RetryService(),
+            onOutcomeUnknown = { unknownOutcomes.add(it) },
+            onAccessBlocked = { accessBlocks.add(it) },
+            slack = slack,
+            okHttpClient = loopbackClient,
+            sleeper = sleeper,
+        )
 
         val defaultDispatcher = dispatcher()
 
@@ -176,12 +191,21 @@ class ApplicationMessageDispatcherTest :
             responses.add(status(code = 429, body = RATE_LIMITED_JSON))
 
             `when`("a channel message is dispatched") {
-                val output = defaultDispatcher.dispatch(event = channelMessage())
+                val (output, logs) =
+                    captureLogs(loggerName = ApplicationMessageDispatcher::class.java.packageName) {
+                        defaultDispatcher.dispatch(event = channelMessage())
+                    }
 
                 then("the unknown window is not waited out inline") {
                     output.isRateLimited() shouldBe true
                     sleeps shouldBe emptyList()
                     calls.get() shouldBe 1
+                }
+
+                then("the missing Retry-After reads as none, never null, in the warning and the exception text") {
+                    logs.messagesAt(level = Level.WARN).single { it.startsWith("Slack rate limited") } shouldContain
+                        "(Retry-After=none)"
+                    SlackRateLimitedException(retryAfter = null).message shouldBe "Slack rate limited, Retry-After=none"
                 }
             }
         }
@@ -503,12 +527,20 @@ class ApplicationMessageDispatcherTest :
             responses.add(status(code = 200, body = """{"ok":false}"""))
 
             `when`("a channel message is dispatched") {
-                val output = defaultDispatcher.dispatch(event = channelMessage())
+                val (output, logs) =
+                    captureLogs(loggerName = ApplicationMessageDispatcher::class.java.packageName) {
+                        defaultDispatcher.dispatch(event = channelMessage())
+                    }
 
                 then("it is a plain rejection, not an unreadable body or an outcome unknown") {
                     output.ok shouldBe false
                     output.errorReason shouldBe UNSPECIFIED_ERROR_REASON
                     calls.get() shouldBe 1
+                }
+
+                then("the warning reads the missing error and warning as none") {
+                    logs.messagesAt(level = Level.WARN).single { it.startsWith("Slack rejected") } shouldContain
+                        "error=none warning=none"
                 }
             }
         }
@@ -1042,7 +1074,10 @@ class ApplicationMessageDispatcherTest :
                     )
                 val plainHttp =
                     defaultDispatcher.dispatch(event = actionResponse(responseUrl = "http://hooks.slack.com/actions/x"))
-                val garbage = defaultDispatcher.dispatch(event = actionResponse(responseUrl = "not a url"))
+                val (garbage, garbageLogs) =
+                    captureLogs(loggerName = ApplicationMessageDispatcher::class.java.packageName) {
+                        defaultDispatcher.dispatch(event = actionResponse(responseUrl = "not a url"))
+                    }
                 val userinfo =
                     defaultDispatcher.dispatch(
                         event = actionResponse(responseUrl = "https://hooks.slack.com@evil.example/actions/x"),
@@ -1063,6 +1098,11 @@ class ApplicationMessageDispatcherTest :
                         output.errorReason shouldStartWith "response_url_rejected"
                     }
                     calls.get() shouldBe 0
+                }
+
+                then("the refusal of an unparsable URL reads its host and port as none in the log and the reason") {
+                    garbageLogs.messagesAt(level = Level.WARN).single() shouldContain "host=none port=none"
+                    garbage.errorReason shouldBe "response_url_rejected: host=none port=none is not a Slack hooks URL"
                 }
             }
         }
@@ -1114,6 +1154,68 @@ class ApplicationMessageDispatcherTest :
                     output.ok shouldBe false
                     output.errorReason shouldStartWith "http_400: xxxx"
                     output.errorReason.length shouldBeLessThan 300
+                }
+            }
+        }
+
+        given("views.open fails for a decline-reason modal and the open-failure listener throws") {
+            listOf(
+                "rejects the trigger" to status(code = 200, body = """{"ok":false,"error":"expired_trigger_id"}"""),
+                "answers HTTP 500" to status(code = 500, body = ""),
+            ).forEach { (what, answer) ->
+                `when`("Slack $what") {
+                    reset()
+                    responses.add(answer)
+                    val publisher = mockk<ApplicationEventPublisher>()
+                    every { publisher.publishEvent(any<Any>()) } throws
+                        DataAccessResourceFailureException("database down")
+                    val event = createOpenViewEvent(triggerId = "trigger").payload
+                    val (output, logs) =
+                        captureLogs(loggerName = ApplicationMessageDispatcher::class.java.packageName) {
+                            shouldNotThrowAny {
+                                dispatcher(applicationEventPublisher = publisher).dispatchImmediate(event = event)
+                            }
+                        }
+
+                    then("the failure is returned instead of thrown, after the fallback event was attempted") {
+                        output.ok shouldBe false
+                        calls.get() shouldBe 1
+                        verify(exactly = 1) { publisher.publishEvent(ofType<DeclineModalOpenFailedEvent>()) }
+                    }
+
+                    then("the listener failure is logged at ERROR with the idempotency key") {
+                        logs.messagesAt(level = Level.ERROR).filter { message ->
+                            message.contains("Open-failure listener") &&
+                                message.contains(event.idempotencyKey.toString())
+                        } shouldHaveSize 1
+                    }
+                }
+            }
+        }
+
+        given("views.open fails for a standup modal, which carries no meeting key") {
+            listOf(
+                Triple("rejects it without an error code", status(code = 200, body = """{"ok":false}"""), Level.WARN),
+                Triple("answers HTTP 500", status(code = 500, body = ""), Level.ERROR),
+            ).forEach { (what, answer, level) ->
+                `when`("Slack $what") {
+                    reset()
+                    responses.add(answer)
+                    val event =
+                        createOpenViewEvent(commandDetailType = CommandDetailType.STANDUP_PROMPT, triggerId = "trigger")
+                            .payload
+                            .copy(meetingIdempotencyKey = null)
+                    val (output, logs) =
+                        captureLogs(loggerName = ApplicationMessageDispatcher::class.java.packageName) {
+                            defaultDispatcher.dispatchImmediate(event = event)
+                        }
+
+                    then("the failure log reads the missing values as none, never null") {
+                        output.ok shouldBe false
+                        val line = logs.messagesAt(level = level).single { it.startsWith("views.open") }
+                        line shouldContain "meetingIdempotencyKey=none"
+                        line shouldNotContain "null"
+                    }
                 }
             }
         }

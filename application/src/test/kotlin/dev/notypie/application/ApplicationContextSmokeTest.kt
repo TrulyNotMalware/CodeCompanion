@@ -3,6 +3,7 @@ package dev.notypie.application
 import com.ninjasquad.springmockk.MockkBean
 import com.sun.net.httpserver.HttpServer
 import com.zaxxer.hikari.HikariDataSource
+import dev.notypie.application.configurations.McpSwitchesCheck
 import dev.notypie.application.configurations.createCveTopicConfigDefinition
 import dev.notypie.application.security.SlackRetryDeduplicator
 import dev.notypie.application.service.agent.ASK_RESUME_PERIOD_MILLIS
@@ -124,6 +125,10 @@ class ApplicationContextSmokeTest
                         (context.getBean("&entityManagerFactory") as PersistenceExceptionTranslator)
                             .translateExceptionIfPossible(createRawSnapshotIsolationFailure(table = "meetings"))
                             .shouldBeInstanceOf<SnapshotIsolationConflictException>()
+                    }
+
+                    then("the component scan registers the MCP switch check") {
+                        context.getBeansOfType(McpSwitchesCheck::class.java).size shouldBe 1
                     }
 
                     then("@Scheduled jobs run on a 4-thread ThreadPoolTaskScheduler") {

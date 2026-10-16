@@ -37,7 +37,8 @@ module's specs and `:application`'s (which consume `testFixtures(project(":infra
 ./gradlew :infrastructure:test --tests 'dev.notypie.logging.*'
 ```
 Pinned by `src/test/kotlin/dev/notypie/logging/LogCaptureTest.kt`. Consumed by `GoogleOAuthClientTest`,
-`GithubReleaseSourceAdapterTest`, `SlackUserEmailResolverTest` and, in `:application`, `AgentConverseServiceTest`,
+`GithubReleaseSourceAdapterTest`, `SlackUserEmailResolverTest`, `ApplicationMessageDispatcherTest` and, in
+`:application`, `AgentConverseServiceTest`, `DebeziumLogTailingProcessorTest`,
 `AgentAskThreadStarterTest`, `SlackMessageRelayServiceImplTest`, `MeetingServiceImplTest`,
 `MeetingReminderSchedulingServiceTest`, `MeetingRescheduleServiceTest`, `CalendarConnectionServiceTest`,
 `CalendarSyncServiceTest`, `CommandExecutorTest`, `SlackControllersTest` and `SlackRequestVerificationFilterTest`.

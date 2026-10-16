@@ -32,7 +32,7 @@ class SlackRequestVerificationFilter(
     private val deferredRetries = meterRegistry.counter(METRIC_DEFERRED_RETRIES)
 
     init {
-        requireUsableSigningSecret(
+        requireUsableProfilesAndSigningSecret(
             signingSecret = appConfig.api.signingSecret,
             activeProfiles = environment.activeProfiles.toSet(),
         )
@@ -118,12 +118,12 @@ class SlackRequestVerificationFilter(
         val retryNum = cachedRequest.getHeader(SlackHeaders.RETRY_NUM)
         when (val admission = retryDeduplicator.admit(fingerprint = fingerprint, retryNum = retryNum)) {
             SlackRetryAdmission.RetryOfCompleted -> {
-                log.info { "Acknowledged Slack retry of a completed request: retryNum=$retryNum" }
+                log.info { "Acknowledged Slack retry of a completed request: retryNum=${retryNum ?: "none"}" }
                 response.status = HttpServletResponse.SC_OK
             }
 
             SlackRetryAdmission.RetryOfInFlight -> {
-                log.info { "Deferred Slack retry of an in-flight request: retryNum=$retryNum" }
+                log.info { "Deferred Slack retry of an in-flight request: retryNum=${retryNum ?: "none"}" }
                 deferredRetries.increment()
                 response.status = HttpServletResponse.SC_SERVICE_UNAVAILABLE
             }
@@ -172,9 +172,13 @@ class SlackRequestVerificationFilter(
         private val REPEATED_SLASHES = Regex("/{2,}")
         private val CONTROL_CHARACTERS = Regex("\\p{Cntrl}")
 
-        private fun requireUsableSigningSecret(signingSecret: String, activeProfiles: Set<String>) {
+        private fun requireUsableProfilesAndSigningSecret(signingSecret: String, activeProfiles: Set<String>) {
             check(!UNRESOLVED_PLACEHOLDER.containsMatchIn(signingSecret)) {
                 "slack.app.api.signing-secret is an unresolved placeholder; set SLACK_SIGNING_SECRET"
+            }
+            check(LOCAL_PROFILE !in activeProfiles || activeProfiles == setOf(LOCAL_PROFILE)) {
+                "the '$LOCAL_PROFILE' profile cannot be combined with other profiles: it exposes unauthenticated " +
+                    "actuator endpoints that only its loopback binding protects (active profiles: $activeProfiles)"
             }
             check(signingSecret.isNotBlank() || activeProfiles == setOf(LOCAL_PROFILE)) {
                 "slack.app.api.signing-secret is blank; only the '$LOCAL_PROFILE' profile on its own may run " +

@@ -118,6 +118,8 @@ fun CommandOutput.isChannelRefused(): Boolean =
 
 fun CommandOutput.retryAfter(): Duration? = (this as? RateLimitedOutput)?.retryAfter
 
+fun Duration?.retryAfterLabel(): String = this?.let { "${it.toSeconds()}s" } ?: "none"
+
 class RateLimitedOutput(
     event: SlackEventPayload,
     val retryAfter: Duration?,
@@ -186,7 +188,7 @@ class SlackTransientErrorException(
 
 class SlackRateLimitedException(
     val retryAfter: Duration?,
-) : RuntimeException("Slack rate limited, Retry-After=${retryAfter?.toSeconds()}s")
+) : RuntimeException("Slack rate limited, Retry-After=${retryAfter.retryAfterLabel()}")
 
 class ApplicationMessageDispatcher(
     private val botToken: String,
@@ -328,7 +330,7 @@ class ApplicationMessageDispatcher(
 
     private fun rateLimitedOutput(event: SlackEventPayload, retryAfter: Duration?): CommandOutput {
         dispatcherLog.warn {
-            "Slack rate limited ${event.commandDetailType} (Retry-After=${retryAfter?.toSeconds()}s); " +
+            "Slack rate limited ${event.commandDetailType} (Retry-After=${retryAfter.retryAfterLabel()}); " +
                 "leaving it to the outbox recovery sweep"
         }
         return RateLimitedOutput(event = event, retryAfter = retryAfter)
@@ -430,8 +432,8 @@ class ApplicationMessageDispatcher(
                     successOutput(payload = event, commandType = CommandType.EXTERNAL_API)
                 } else {
                     dispatcherLog.warn {
-                        "views.open rejected by Slack: error=${apiResponse.error} " +
-                            "meetingIdempotencyKey=${event.meetingIdempotencyKey} " +
+                        "views.open rejected by Slack: error=${apiResponse.error ?: "none"} " +
+                            "meetingIdempotencyKey=${event.meetingIdempotencyKey ?: "none"} " +
                             "participantUserId=${event.participantUserId}"
                     }
                     publishOpenFailure(event = event, reason = apiResponse.error ?: "unknown Slack error")
@@ -440,7 +442,7 @@ class ApplicationMessageDispatcher(
             },
             onFailure = { error ->
                 dispatcherLog.error(error) {
-                    "views.open threw: meetingIdempotencyKey=${event.meetingIdempotencyKey} " +
+                    "views.open threw: meetingIdempotencyKey=${event.meetingIdempotencyKey ?: "none"} " +
                         "participantUserId=${event.participantUserId}"
                 }
                 publishOpenFailure(event = event, reason = error.message ?: error::class.java.simpleName)
@@ -451,32 +453,39 @@ class ApplicationMessageDispatcher(
 
     private fun publishOpenFailure(event: OpenViewPayloadContents, reason: String) {
         if (event.participantUserId.isBlank()) return
-        when (event.commandDetailType) {
-            CommandDetailType.MEETING_DECLINE_REASON -> {
-                val meetingIdempotencyKey = event.meetingIdempotencyKey ?: return
-                applicationEventPublisher.publishEvent(
-                    DeclineModalOpenFailedEvent(
-                        meetingIdempotencyKey = meetingIdempotencyKey,
-                        participantUserId = event.participantUserId,
-                        apiAppId = event.apiAppId,
-                        channel = event.channel,
-                        idempotencyKey = event.idempotencyKey,
-                        reason = reason,
-                    ),
-                )
+        try {
+            when (event.commandDetailType) {
+                CommandDetailType.MEETING_DECLINE_REASON -> {
+                    val meetingIdempotencyKey = event.meetingIdempotencyKey ?: return
+                    applicationEventPublisher.publishEvent(
+                        DeclineModalOpenFailedEvent(
+                            meetingIdempotencyKey = meetingIdempotencyKey,
+                            participantUserId = event.participantUserId,
+                            apiAppId = event.apiAppId,
+                            channel = event.channel,
+                            idempotencyKey = event.idempotencyKey,
+                            reason = reason,
+                        ),
+                    )
+                }
+                CommandDetailType.STANDUP_PROMPT -> {
+                    applicationEventPublisher.publishEvent(
+                        StandupModalOpenFailedEvent(
+                            userId = event.participantUserId,
+                            apiAppId = event.apiAppId,
+                            channel = event.channel,
+                            idempotencyKey = event.idempotencyKey,
+                            reason = reason,
+                        ),
+                    )
+                }
+                else -> Unit
             }
-            CommandDetailType.STANDUP_PROMPT -> {
-                applicationEventPublisher.publishEvent(
-                    StandupModalOpenFailedEvent(
-                        userId = event.participantUserId,
-                        apiAppId = event.apiAppId,
-                        channel = event.channel,
-                        idempotencyKey = event.idempotencyKey,
-                        reason = reason,
-                    ),
-                )
+        } catch (exception: Exception) {
+            dispatcherLog.error(exception) {
+                "Open-failure listener for ${event.commandDetailType} threw: " +
+                    "idempotencyKey=${event.idempotencyKey} participantUserId=${event.participantUserId}"
             }
-            else -> Unit
         }
     }
 
@@ -484,11 +493,14 @@ class ApplicationMessageDispatcher(
         val url = event.responseUrl.toHttpUrlOrNull()
         if (url == null || !url.isHttps || url.port != HTTPS_PORT || url.host !in SLACK_RESPONSE_URL_HOSTS) {
             dispatcherLog.warn {
-                "Refusing response_url outside https://$SLACK_RESPONSE_URL_HOSTS: host=${url?.host} port=${url?.port}"
+                "Refusing response_url outside https://$SLACK_RESPONSE_URL_HOSTS: " +
+                    "host=${url?.host ?: "none"} port=${url?.port ?: "none"}"
             }
             return failOutput(
                 event = event,
-                reason = "response_url_rejected: host=${url?.host} port=${url?.port} is not a Slack hooks URL",
+                reason =
+                    "response_url_rejected: host=${url?.host ?: "none"} port=${url?.port ?: "none"} " +
+                        "is not a Slack hooks URL",
             )
         }
         val request =
@@ -581,7 +593,8 @@ class ApplicationMessageDispatcher(
             return failOutput(event = event, reason = ACCESS_BLOCKED_REASON)
         }
         dispatcherLog.warn {
-            "Slack rejected ${event.commandDetailType}: error=${result.error} warning=${result.warning}"
+            "Slack rejected ${event.commandDetailType}: error=${result.error ?: "none"} " +
+                "warning=${result.warning ?: "none"}"
         }
         return failOutput(event = event, reason = error.ifEmpty { UNSPECIFIED_ERROR_REASON })
     }
