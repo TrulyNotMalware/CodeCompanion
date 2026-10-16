@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # domain/meet/entity
 
@@ -28,10 +28,10 @@ or rehydrated from JPA.
   `members` passed in (each as a non-host `Member`), so the publisher appears there only if the caller
   also listed them. Callers that need "everyone" must add `host` themselves.
 - `Meeting` is rehydrated in production via `MeetingSchema.toDomainEntity()`
-  (`infrastructure/repository/meeting/MeetingRepositoryImpl.kt`): once after `createNewMeeting` and once
-  in the add-participant path, where it runs inside `runCatching` as the capacity check. Because the
-  constructor requires `startAt > now()`, rehydrating a meeting whose start time has passed throws, and
-  that path reports `OVER_CAPACITY` regardless of the participant count. Keep that coupling in mind
+  (`infrastructure/repository/meeting/MeetingRepositoryImpl.kt`): once, right after `createNewMeeting`
+  saves the schema. The add-participant path does not rehydrate: it checks `startAt` (`MEETING_STARTED`) and
+  `Meeting.MAX_PARTICIPANTS` (`OVER_CAPACITY`) directly on the schema. Because the constructor requires
+  `startAt > now()`, rehydrating a meeting whose start time has passed throws. Keep that coupling in mind
   before adding constructor rules or reusing `toDomainEntity()` on a read path.
 - There is no `cancel()` / `reschedule()` mutator: `isCanceled` is a constructor flag and both operations
   are repository updates whose host-only check lives in the SQL `WHERE` clause. Do not add a domain guard
