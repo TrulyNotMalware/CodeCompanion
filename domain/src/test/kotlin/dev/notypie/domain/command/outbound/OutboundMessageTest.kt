@@ -1,10 +1,16 @@
 package dev.notypie.domain.command.outbound
 
+import dev.notypie.domain.TEST_SLACK_RESPONSE_URL
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.dto.modals.TimeScheduleInfo
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.entity.context.form.AddParticipantParsed
+import dev.notypie.domain.command.entity.context.form.RescheduleMeetingParsed
+import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import java.time.LocalDateTime
 import java.util.UUID
@@ -24,6 +30,79 @@ class OutboundMessageTest :
                     val ref = MessageRef(conversation = ConversationTarget(id = "C1"), messageId = "1700.0001")
                     ref.conversation shouldBe ConversationTarget(id = "C1")
                     ref.messageId shouldBe "1700.0001"
+                }
+            }
+        }
+
+        given("a response handle inside the data classes that carry it") {
+            val handle = ResponseReplaceHandle(raw = TEST_SLACK_RESPONSE_URL)
+            val meetingUid = UUID.randomUUID()
+            val requesterId = "U1"
+            val channel = ConversationTarget(id = "C1")
+            val newStartAt = LocalDateTime.of(2026, 1, 1, 9, 0)
+            val content = MessageContent.Text(headline = null, markdown = "hello")
+
+            `when`("they are printed") {
+                val nonNullCarrier = OutboundMessage.ReplaceMessage(handle = handle, content = content)
+                val nullableCarriers =
+                    listOf(
+                        ModalForm.Reschedule(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            channel = channel,
+                            listHandle = handle,
+                        ),
+                        ModalForm.AddParticipant(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            channel = channel,
+                            listHandle = handle,
+                        ),
+                        CommandIntent.CancelMeeting(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            listHandle = handle,
+                        ),
+                        CommandIntent.RescheduleMeeting(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            newStartAt = newStartAt,
+                            listHandle = handle,
+                        ),
+                        CommandIntent.AddParticipant(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            participantUserIds = listOf("U2"),
+                            listHandle = handle,
+                        ),
+                        AddParticipantParsed(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            participantUserIds = listOf("U2"),
+                            listHandle = handle,
+                        ),
+                        RescheduleMeetingParsed(
+                            meetingUid = meetingUid,
+                            requesterId = requesterId,
+                            newStartAt = newStartAt,
+                            listHandle = handle,
+                        ),
+                    )
+
+                then("neither a non-null nor a nullable handle property prints the URL") {
+                    (nullableCarriers + nonNullCarrier).forEach { carrier ->
+                        carrier.toString() shouldNotContain "hooks.slack.com"
+                    }
+                    nonNullCarrier.toString() shouldContain "handle=ResponseReplaceHandle(redacted)"
+                    nullableCarriers.forEach { carrier ->
+                        carrier.toString() shouldContain "listHandle=ResponseReplaceHandle(redacted)"
+                    }
+                }
+
+                then("the handle prints redacted on its own, in a template and boxed in a collection") {
+                    handle.toString() shouldBe "ResponseReplaceHandle(redacted)"
+                    "$handle" shouldBe "ResponseReplaceHandle(redacted)"
+                    listOf(handle).toString() shouldBe "[ResponseReplaceHandle(redacted)]"
                 }
             }
         }

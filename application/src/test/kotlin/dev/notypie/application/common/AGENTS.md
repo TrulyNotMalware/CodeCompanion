@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # test/kotlin/dev/notypie/application/common
 
@@ -11,7 +11,7 @@ Specs for the idempotency-key primitives in `application/common`: deterministic 
 | File | Description |
 |------|-------------|
 | `TransactionTemplateExtTest.kt` | `runInTx` on a real H2 `DataSourceTransactionManager` with a probe table: success commits and returns the value; a throwing action rolls back and returns its failure; an action that returns while a registered `beforeCommit` throws → the write rolls back and the commit failure comes back as `Result.failure` |
-| `IdempotencyCreatorTest.kt` | `IdempotencyCreator.create(data, currentTimeMillis)` and `DefaultIdempotencyDataSerializer.serialize`. Same data + same 1 s bucket (`millis / 1000`) → same UUID; 999 ms vs 1000 ms → different; nested field whose type is not `java.io.Serializable` still hashes (Jackson, not JDK serialization); real `createMentionInboundCommand()` is stable across two calls (regression for seed jitter); `createInteractionInboundCommand()` and `createSlashInboundCommand(triggerId)` (nested `@JvmInline TriggerHandle`) serialize cleanly; serializer output is 64 lowercase hex chars. Plain Kotest `BehaviorSpec`, no mocks. |
+| `IdempotencyCreatorTest.kt` | `IdempotencyCreator.create(data, currentTimeMillis)` and `DefaultIdempotencyDataSerializer.serialize`. Same data + same 1 s bucket (`millis / 1000`) → same UUID; 999 ms vs 1000 ms → different; nested field whose type is not `java.io.Serializable` still hashes (Jackson, not JDK serialization); real `createMentionInboundCommand()` is stable across two calls (regression for seed jitter); `createInteractionInboundCommand()` and `createSlashInboundCommand(triggerId)` (nested `@JvmInline TriggerHandle`) serialize cleanly; two interaction commands that differ only in `ReplyHandle` (`TEST_SLACK_RESPONSE_URL` vs `TEST_LIST_HANDLE`, same interaction id) get different keys and the same URL the same key — the key hashes the raw URL, not the redacted `toString()`; serializer output is 64 lowercase hex chars. Plain Kotest `BehaviorSpec`, no mocks. |
 
 The file also declares three package-level helper data classes (`TestIdempotencyData`, `NonSerializableInner`,
 `NestedNonSerializableIdempotencyData`) rather than placing them in `testFixtures/` — they are only meaningful

@@ -8,7 +8,9 @@ value class ModalOpenHandle(
 @JvmInline
 value class ResponseReplaceHandle(
     val raw: String,
-)
+) {
+    override fun toString(): String = "ResponseReplaceHandle(redacted)"
+}
 
 internal fun replaceHandleOrNull(raw: String): ResponseReplaceHandle? =
     raw.takeIf { it.isNotBlank() }?.let { ResponseReplaceHandle(raw = it) }

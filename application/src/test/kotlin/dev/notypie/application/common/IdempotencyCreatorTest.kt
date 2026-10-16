@@ -1,13 +1,19 @@
 package dev.notypie.application.common
 
+import dev.notypie.domain.TEST_LIST_HANDLE
+import dev.notypie.domain.TEST_SLACK_RESPONSE_URL
+import dev.notypie.domain.command.createInboundInteraction
 import dev.notypie.domain.command.createInteractionInboundCommand
+import dev.notypie.domain.command.createInteractionResponseInboundCommand
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.createSlashInboundCommand
+import dev.notypie.domain.command.inbound.ReplyHandle
 import dev.notypie.domain.common.IdempotencyData
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import java.util.UUID
 
 data class TestIdempotencyData(
     val value: String,
@@ -147,6 +153,35 @@ class IdempotencyCreatorTest :
                     val key2 = IdempotencyCreator.create(data = data, currentTimeMillis = timeMillis)
                     key1.shouldNotBeNull()
                     key1 shouldBe key2
+                }
+            }
+        }
+
+        given("interaction InboundCommands that differ only in their reply handle") {
+            val interactionKey = UUID.randomUUID()
+            val timeMillis = 5000L
+
+            fun keyFor(replyUrl: String): UUID =
+                IdempotencyCreator.create(
+                    data =
+                        createInteractionResponseInboundCommand(
+                            interaction =
+                                createInboundInteraction(
+                                    reply = ReplyHandle(raw = replyUrl),
+                                    idempotencyKey = interactionKey,
+                                ),
+                        ),
+                    currentTimeMillis = timeMillis,
+                )
+
+            `when`("their keys are created in the same time window") {
+                val first = keyFor(replyUrl = TEST_SLACK_RESPONSE_URL)
+                val again = keyFor(replyUrl = TEST_SLACK_RESPONSE_URL)
+                val other = keyFor(replyUrl = TEST_LIST_HANDLE)
+
+                then("the key follows the raw URL: the same URL gives the same key, another URL another key") {
+                    again shouldBe first
+                    other shouldNotBe first
                 }
             }
         }

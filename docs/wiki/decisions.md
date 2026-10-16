@@ -47,6 +47,19 @@ _type: decision · updated: 2026-10-19_
     `deliveries(event_id, user_id)`)가 맡는다. 상태: 유지. 근거: `CveBotPlan.md` §0.5-3.
 12. **멱등성 키는 인바운드 데이터 + 1초 창의 결정적 UUID.** 이유: Slack 재전송을 같은 키로 접는다. 창을
     바꾸면 아웃박스·Kafka·Slack 재시도 의미가 바뀐다. 상태: 유지. 근거: `IdempotencyCreator.kt`.
+44. **슬래시 명령의 실패는 원자적이다 — 효과 전부, 아니면 오류 안내만 (2026-10-15).** `Command.handleEvent()`가 슬래시
+    payload의 예외를 잡으면 오류 ephemeral을 넣기 **전에** `intents.clear()`로, 컨텍스트가 던지기 전에 쌓은 intent·outbound를
+    버린다. 이유: 이전에는 그 효과가 그대로 drain·발행되고(`handleEvent`가 예외를 삼키므로 슬래시 트랜잭션도 롤백되지 않는다)
+    그 옆에 "Please try again."이 붙어, 사용자가 다시 시도하면 같은 효과가 두 번 일어날 수 있었다. 지금은 쌓은 뒤 던지는
+    컨텍스트가 없어(2026-10-15 트리아지와 리뷰의 대조) 잠복한 경로를 미리 막은 것이다. 원자성은 executor에 넘어가는 큐의 내용에 대한
+    것이다 — 그 뒤의 스테이징·발행·Slack 전달은 이전처럼 따로 실패할 수 있다. **멘션·인터랙션은 의도적으로 범위 밖이다** —
+    사용자는 B7을 슬래시 한정으로 승인했고, 두 경로는 쌓인 효과를 그대로 남긴다(`CommandTest`가 둘 다 고정). 다시 시도하라는 안내는
+    없지만 답이 없는 버튼 실패도 재클릭을 부를 수 있어 같은 위험이 잠복해 있다. 인터랙션까지 넓히면 `OpenModal`을 먼저 쌓는 버튼
+    핸들러(`entity/context/form/AGENTS.md`의 "Effect order is load-bearing")가 그 뒤에 던질 때 모달도 사라지므로, 쌓은 뒤 던지는 인터랙션
+    컨텍스트가 생기면 그 순서와 함께 다시 본다. 기각: 부분 효과를 남기고 문구만 바꾸기. "부분 성공"을 알리고 싶은 컨텍스트는 던지지
+    말고 결과를 돌려주되(`createErrorResponse`), 이미 일어난 일을 다시 하라고 권하면 같은 중복을 부르므로 문구는 무엇이 됐고 무엇이
+    안 됐는지를 말한다. 상태: 유지. 근거: `domain/.../command/entity/AGENTS.md`, `CommandTest`("a command whose context queues an
+    intent and then throws").
 
 ## 권한과 AI
 
@@ -405,6 +418,32 @@ _type: decision · updated: 2026-10-19_
       멈추거나 한 배치에 limit보다 많이 지울 수 있고, MariaDB가 어떻게 세는지는 확인하지 않았다(미확인). 상태: 유지. 근거: `service/agent/AGENTS.md`(`AgentRetentionScheduler.kt`), `repository/agent/AGENTS.md`,
       `repository/mcp/AGENTS.md`, `configurations/AGENTS.md`(`AppConfig.kt`), `application-prod.yaml`, `AgentRetentionSchedulerTest`,
       `AppConfigBindingTest`, `AgentAskTurnRepositoryTest`, `AgentTurnHistoryRepositoryImplTest`, `McpToolCallHistoryRepositoryImplTest`.
+45. **응답 핸들은 `toString()`에서 원값을 가린다 (2026-10-15).** `ResponseReplaceHandle`과 `ReplyHandle`(둘 다 Slack
+    `response_url`)의 `toString()`은 `ResponseReplaceHandle(redacted)` / `ReplyHandle(redacted)`다. 그 URL은 30분 안에 5회까지 그 대화에
+    답할 수 있는 bearer 값으로 다룬다 — 슬랙 문서가 설명하는 사용법은 그 URL로의 POST뿐이다(토큰이 필요 없다는 것은 이 설명에서 나온
+    추론이다). 핸들을 담은 data class(`ReplaceMessage`, `ModalForm.Reschedule`/`AddParticipant`, `CommandIntent.CancelMeeting`/
+    `RescheduleMeeting`/`AddParticipant`, 파스된 제출 모델, `InboundInteraction`)의 생성된 `toString`이 그것을 그대로 찍었다. 정상 경로에서
+    그런 객체를 로그에 찍는 곳은 없었지만, 렌더러의 `OpenModal` 가드(`OutboundRenderer.kt`의 `error("OpenModal is not a renderer
+    concern; …: $message")`)는 메시지 전체를 예외 메시지에 넣어 `ModalForm.Reschedule`/`AddParticipant`의 `listHandle`을 찍을 수
+    있었다 — 이 결정으로 그 경로도 가려진다. value class 한 곳만 바꾸면 모든 운반 data class에 퍼진다 — Kotlin 2.4.21이 만든
+    바이트코드에서 non-null 프로퍼티는 `ResponseReplaceHandle.toString-impl`을 바로, nullable 프로퍼티는 null 검사 뒤 같은 메서드를
+    부른다(`javap`으로 확인, `OutboundMessageTest`가 두 경우와 컬렉션 안의 박스 값을 고정). 도메인 이벤트 payload 3종
+    (`CancelMeetingPayload`·`RescheduleMeetingPayload`·`AddParticipantPayload`)은 data class가 아니라 `toString`이 클래스 이름과 해시뿐이고,
+    data class가 되더라도 가려진다. 전송 코드는 `.raw`를 읽는다. 아웃박스 코덱(`OutboundMessageCodec`이 자기 `JsonMapper`를 만든다)과
+    멱등 키(`IdempotencyCreator` → `infrastructure/.../common/JsonMapper.kt`의 `jsonMapper`)는 서로 다른 매퍼지만 둘 다 `KotlinModule`을
+    등록한 Jackson이라 `toString`이 아니라 unboxed 원값을 쓴다 — 저장 형식은 `OutboundMessageCodecTest`의 고정 JSON 단언이, 키가 원값을
+    따른다는 것은 `IdempotencyCreatorTest`(reply URL만 다른 두 명령은 다른 키, 같은 URL은 같은 키)가 고정한다. `TriggerHandle`/`ModalOpenHandle`
+    (trigger id)과 `MessageHandle`(메시지 ts)은 가리지 않는다 — trigger id는 토큰을 요구하는 `views.open`에만 쓰이고 3초 안에 만료되며
+    한 번만 쓸 수 있고, ts는 비밀이 아니다. 비용: 로그와 디버거에서 원값이 보이지 않고, `toString`이 상수라 테스트 실패 메시지와
+    data class 비교의 diff에서도 서로 다른 두 핸들이 똑같이 찍혀 구분되지 않는다 — 값이 다른지는 `.raw`로 비교한다. Jackson 같은
+    직렬화 덤프는 `toString`을 거치지 않으므로 원값을 그대로 보인다. 남은 노출(이번에 고치지 않음): ① 모달이 나르는 `/meetup list`
+    핸들은 컨텍스트가 파싱하기 전까지 평범한 `String`이라(`InboundSubmission.*.listHandleRaw`, `routingExtras[2]`) 그 제출과
+    `InboundInteraction`을 찍으면 보인다. ② 같은 핸들이 모달 `private_metadata`에 URL 인코딩돼 들어가므로(`SlackOutboundStager` →
+    `ModalTemplateBuilder`) 그 뷰 JSON을 든 `OpenViewPayloadContents.viewJson`(data class)을 찍어도 보인다. ③ 인프라의 Slack 요청 DTO
+    (`SlashCommandRequestBody`, `InteractionPayload`, `ActionEventPayloadContents`)가 `responseUrl`을 문자열로 든다. ④ 인접한 다른 값:
+    `InboundCommand.appToken`·`CommandBasicInfo.appToken`은 Slack 요청 본문의 `token`(슬랙이 deprecated한 verification token)이고, 두
+    data class의 생성된 `toString`이 그대로 찍는다(`CommandExecutor`의 WARN은 일부러 빼 둔다). 운영은 서명 검증을 쓰므로 위험은 낮다.
+    상태: 유지. 근거: `domain/.../command/outbound/AGENTS.md`, `domain/.../command/inbound/AGENTS.md`.
 
 ## 빌드·런타임
 
@@ -660,6 +699,14 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   상한, 상태 분류 스펙) 2026-10-19; Codex 교차 리뷰 반영(2026-10-19): `service/agent/AgentUsageReportService.kt`(`since` 한 번, 쿼리 셋),
   `common/TransactionTemplateExt.kt`(`detachedTemplate` = `PROPAGATION_NOT_SUPPORTED`), `resources/cdc/k8s/yamls/mariadb/mariadb-config.yaml`·
   `resources/cdc/docker-compose/mariadb/my.cnf`(`binlog_format=ROW`)
+- 원자적 슬래시 실패·응답 핸들 마스킹(#44·#45): `domain/src/main/kotlin/dev/notypie/domain/command/entity/Command.kt`
+  (`replyToSlashFailure`), `intent/IntentQueue.kt`(`clear`), `outbound/InteractionHandles.kt`, `inbound/InboundInteraction.kt`,
+  `entity/event/Event.kt`, `infrastructure/.../impl/command/{OutboundRenderer,SlackOutboundStager}.kt`, `impl/command/event/SlackEventPayloads.kt`,
+  `application/.../common/IdempotencyCreator.kt`, `infrastructure/.../common/JsonMapper.kt`, `repository/outbox/OutboundMessageCodec.kt`, 스펙
+  `CommandTest`·`OutboundMessageTest`·`InboundInteractionTest`·`IdempotencyCreatorTest`·`OutboundMessageCodecTest`, `javap -c`로 본
+  `CommandIntent$CancelMeeting`·`OutboundMessage$ReplaceMessage`의 `toString`(Kotlin 2.4.21), 슬랙 문서 "Handling user interaction"
+  (response_url은 그 URL로 POST, 30분 안에 5회; trigger는 3초 만료·1회)·`views.open`(토큰 필수)(2026-10-15 조회), "Implementing slash
+  commands"(`token`은 deprecated verification token, 2026-10-19 조회)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 
