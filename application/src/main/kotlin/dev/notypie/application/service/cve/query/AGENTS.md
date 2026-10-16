@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # application/service/cve/query
 
@@ -14,14 +14,14 @@ pure DB read — the AI summary was produced once by `../ai/CveSummaryWorker`, n
 |------|-------------|
 | `CveQuerySlashService.kt` | Interface: `handleLatest(headers, payload: SlashCommandRequestBody, commandData: InboundCommand)`. Called from `controllers/SlashCommandController` and `socket/SocketModeReceiver` |
 | `CveQuerySlashServiceImpl.kt` | `@Transactional handleLatest`: feature off → `log.warn` and return; else `CveLatestSlashCommand(idempotencyKey, commandData, topicKey = extractTopicKey(commandData.subCommands))`. `internal fun extractTopicKey(subCommands)` in the companion: first non-blank argument, lower-cased; `null` when there is none |
-| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently; else the text comes from `internal fun renderLatest(userId, topicKey)`, which the `cve_latest` MCP tool in `application/mcp/DomainReadTools` also calls (the tool checks `cve.enabled` itself; `renderLatest` does not). No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey.equals(key, ignoreCase = true) }` or "Topic `key` is not available.". `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700); the joined body is cut at `BODY_MAX_LENGTH` (2 900) with `…(truncated)`. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` Topic names, titles, summaries and the echoed unknown key go through `escapeMrkdwn()`; the 700-character trim runs on the raw summary and the 2,900 cap (`truncateSectionText`, never splitting an entity) on the escaped body. |
+| `CveLatestQueryService.kt` | `@Transactional @EventListener handleCveLatest(event)`: feature off → return silently; else the text comes from `internal fun renderLatest(userId, topicKey)`, which the `cve_latest` MCP tool in `application/mcp/DomainReadTools` also calls (the tool checks `cve.enabled` itself; `renderLatest` does not). No topic key → `findSubscribedTopics(userId)`; empty → "You have no CVE topic subscriptions. Use `/subscribe` to pick topics first."; else read across all subscribed ids. With a key → `findActiveTopics().firstOrNull { it.topicKey.equals(key, ignoreCase = true) }` or "Topic `key` is not available.". `findRecentDoneEvents(topicIds, limit = LATEST_LIMIT (5))`; empty → "No recent CVE updates …". Each event renders as `*Topic* — *Title*` + summary cut at `SUMMARY_MAX_LENGTH` (700); the joined body is cut to `BODY_MAX_LENGTH` (2,900) characters of text plus `\n…(truncated)`, 2,913 in total. DM via `CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)`, headline `CodeCompanion — latest CVE updates` Topic names, titles, summaries and the echoed unknown key go through `escapeMrkdwn()`; the 700-character trim (`domain/common/takeSurrogateSafe`, never splitting a surrogate pair) runs on the raw summary and the 2,913 total cap (`truncateSectionText`, never splitting an entity) on the escaped body. |
 
 ## For AI Agents
 
 ### Working In This Directory
 - Cap the aggregate, not just each summary. The whole body lands in one Slack `section` block and Slack
   rejects mrkdwn over 3 000 characters (`invalid_blocks`); 5 × 700 already exceeds that, so
-  `BODY_MAX_LENGTH` is what makes the DM postable. The same rule lives in
+  `BODY_MAX_LENGTH` (2,913 with the marker, under Slack's 3,000) is what makes the DM postable. The same rule lives in
   `../notification/CveNotificationDispatcher`.
 - `extractTopicKey` lower-cases the argument, so the listener matches keys **ignoring case**: `/latest springBoot`
   arrives as `springboot` and must still find the yaml key `springBoot`, which the subscribe modal uses verbatim.
@@ -59,6 +59,7 @@ testFixtures). The truncation case asserts `markdown.length == 2900 + "\n…(tru
 - `infrastructure/repository/cve/` — `CveSubscriptionRepository`, `CveTopicRepository`,
   `CveEventRepository.findRecentDoneEvents`, `CveRecentEvent`
 - `infrastructure/impl/command/slack/SlashCommandRequestBody`
+- `domain/common/takeSurrogateSafe` — the per-event summary cap
 
 ### External
 Spring `@Service` / `@Transactional` / `@EventListener`, kotlin-logging.

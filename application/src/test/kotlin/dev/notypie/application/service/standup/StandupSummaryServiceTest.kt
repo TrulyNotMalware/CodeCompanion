@@ -202,6 +202,20 @@ class StandupSummaryServiceTest :
             }
         }
 
+        given("a stored answer whose emoji straddles the per-response cut") {
+            val kept = "x".repeat(n = SUMMARY_MEMBER_RESPONSE_CHARS - 2)
+            val answers =
+                listOf(createStandupAnswerDto(userId = "U1", responses = listOf("$kept\uD83D\uDE00 and more")))
+
+            `when`("they are bounded for the summary") {
+                val bounded = answers.boundedForSummary()
+
+                then("the cut drops the whole emoji instead of leaving half of it before the ellipsis") {
+                    bounded.single().responses shouldBe listOf("$kept…")
+                }
+            }
+        }
+
         given("stored answers carrying control characters") {
             val answers =
                 listOf(createStandupAnswerDto(userId = "U1", responses = listOf("line one\n\tline\u0001 two\u0000")))

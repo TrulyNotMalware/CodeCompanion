@@ -196,6 +196,37 @@ class CveLatestQueryServiceTest :
             }
         }
 
+        given("a recent event whose summary has an emoji across the per-event cap") {
+            val subscriptionRepository = mockk<CveSubscriptionRepository>()
+            val eventRepository = mockk<CveEventRepository>()
+            every { subscriptionRepository.findSubscribedTopics(userId = TEST_USER_ID) } returns
+                listOf(createCveTopic(id = 11L, topicKey = "kotlin", displayName = "Kotlin"))
+            every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns
+                listOf(
+                    createCveRecentEvent(
+                        topicDisplayName = "Kotlin",
+                        title = "t",
+                        aiSummary = "s".repeat(n = 699) + "\uD83D\uDE00 tail",
+                    ),
+                )
+            val staged = slot<OutboundMessage>()
+            val service =
+                serviceWith(
+                    subscriptionRepository = subscriptionRepository,
+                    topicRepository = mockk(),
+                    eventRepository = eventRepository,
+                    stager = stagerCapturing(stagedMessage = staged),
+                )
+
+            `when`("handled") {
+                service.handleCveLatest(event = createCveLatestRequestEvent())
+
+                then("the summary is cut before the emoji instead of through it") {
+                    staged.markdown() shouldBe "*Kotlin* — *t*\n${"s".repeat(n = 699)}"
+                }
+            }
+        }
+
         given("recent events whose feed text carries Slack control sequences") {
             val subscriptionRepository = mockk<CveSubscriptionRepository>()
             val eventRepository = mockk<CveEventRepository>()

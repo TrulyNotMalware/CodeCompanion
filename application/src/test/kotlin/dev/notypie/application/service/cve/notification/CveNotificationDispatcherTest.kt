@@ -527,45 +527,49 @@ class CveNotificationDispatcherTest :
             }
         }
 
-        given("a digest event whose summary exceeds the configured maximum") {
-            val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
-            val outboundMessagePort = mockk<OutboundMessagePort>()
-            val outboxRepository = stubOutbox()
-            val messages = mutableListOf<OutboundMessage>()
-            every {
-                deliveryRepository.findUndeliveredByUser(
-                    deliveryMode = CveDeliveryMode.DIGEST,
-                    since = any(),
-                    doneBefore = any(),
-                    limit = 50,
-                )
-            } returns
-                listOf(
-                    createUndeliveredCveEvent(
-                        eventId = 1L,
-                        userId = "U1",
-                        topicDisplayName = "Alpha",
-                        title = "t",
-                        aiSummary = "0123456789ABCDEF",
-                    ),
-                )
-            every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
-            every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
-                createOutboxRow(eventId = UUID.randomUUID().toString())
-            }
-            val dispatcher =
-                dispatcherWith(
-                    deliveryRepository = deliveryRepository,
-                    outboundMessagePort = outboundMessagePort,
-                    outboxRepository = outboxRepository,
-                    digestSummaryMaxLength = 10,
-                )
+        listOf(
+            Triple("exceeds the configured maximum", "0123456789ABCDEF", "0123456789"),
+            Triple("has an emoji across the configured maximum", "012345678\uD83D\uDE00AB", "012345678"),
+        ).forEach { (case, aiSummary, kept) ->
+            given("a digest event whose summary $case") {
+                val deliveryRepository = mockk<CveDeliveryRepository>(relaxed = true)
+                val outboundMessagePort = mockk<OutboundMessagePort>()
+                val messages = mutableListOf<OutboundMessage>()
+                every {
+                    deliveryRepository.findUndeliveredByUser(
+                        deliveryMode = CveDeliveryMode.DIGEST,
+                        since = any(),
+                        doneBefore = any(),
+                        limit = 50,
+                    )
+                } returns
+                    listOf(
+                        createUndeliveredCveEvent(
+                            eventId = 1L,
+                            userId = "U1",
+                            topicDisplayName = "Alpha",
+                            title = "t",
+                            aiSummary = aiSummary,
+                        ),
+                    )
+                every { deliveryRepository.claim(eventId = any(), userId = any()) } returns true
+                every { outboundMessagePort.toRow(message = capture(messages), basicInfo = any()) } answers {
+                    createOutboxRow(eventId = UUID.randomUUID().toString())
+                }
+                val dispatcher =
+                    dispatcherWith(
+                        deliveryRepository = deliveryRepository,
+                        outboundMessagePort = outboundMessagePort,
+                        outboxRepository = stubOutbox(),
+                        digestSummaryMaxLength = 10,
+                    )
 
-            `when`("the digest tick runs") {
-                dispatcher.digestTick()
+                `when`("the digest tick runs") {
+                    dispatcher.digestTick()
 
-                then("the summary is truncated to the configured length") {
-                    messages.single().channelText().markdown shouldBe "*Alpha*\n• *t*\n0123456789"
+                    then("the summary is cut to the configured length, never through a surrogate pair") {
+                        messages.single().channelText().markdown shouldBe "*Alpha*\n• *t*\n$kept"
+                    }
                 }
             }
         }

@@ -7,6 +7,7 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
+import dev.notypie.domain.command.entity.asEchoedToken
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
@@ -82,7 +83,9 @@ internal class RequestMeetingContext(
                     MeetingListRange.parseOrNull(token = token)
                         ?: return listArgumentError(
                             commandDetailType = commandDetailType,
-                            message = "Unknown range '$token'. Usage: /meetup list [${MeetingListRange.usageTokens()}]",
+                            message =
+                                "Unknown range '${token.asEchoedToken()}'. " +
+                                    "Usage: /meetup list [${MeetingListRange.usageTokens()}]",
                         )
             }
         val (startAt, endAt) = range.dateRange(now = LocalDateTime.now())

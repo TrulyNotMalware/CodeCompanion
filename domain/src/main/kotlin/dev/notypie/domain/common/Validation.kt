@@ -473,10 +473,11 @@ class ValidationBuilder {
 
     fun validate(className: String = "") {
         if (errors.isNotEmpty()) {
+            val details = getErrors()
             throw when {
                 className.isBlank() -> {
                     ValidationException(
-                        details = errors,
+                        details = details,
                         errorCode = CommonErrorCode.VALIDATION_FAILED,
                     )
                 }
@@ -484,7 +485,7 @@ class ValidationBuilder {
                 else -> {
                     ValidationExceptionWithName(
                         className = className,
-                        details = errors,
+                        details = details,
                         errorCode = CommonErrorCode.VALIDATION_FAILED,
                     )
                 }

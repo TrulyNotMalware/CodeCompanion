@@ -21,7 +21,7 @@ import java.util.UUID
 
 class CalendarCommandTest :
     BehaviorSpec({
-        fun run(vararg tokens: String): Pair<CommandOutput, List<CommandEffect>> {
+        fun runCalendar(vararg tokens: String): Pair<CommandOutput, List<CommandEffect>> {
             val command =
                 CalendarCommand(
                     idempotencyKey = UUID.randomUUID(),
@@ -51,7 +51,7 @@ class CalendarCommandTest :
 
         given("/calendar with one action") {
             `when`("the action is 'connect'") {
-                val (result, intents) = run("connect")
+                val (result, intents) = runCalendar("connect")
 
                 then("it succeeds as a CALENDAR_CONNECTION command and emits CalendarConnect for the requester") {
                     result.ok shouldBe true
@@ -62,7 +62,7 @@ class CalendarCommandTest :
             }
 
             `when`("the action is 'DISCONNECT' in upper case") {
-                val (result, intents) = run("DISCONNECT")
+                val (result, intents) = runCalendar("DISCONNECT")
 
                 then("it matches case-insensitively and emits CalendarDisconnect") {
                     result.ok shouldBe true
@@ -71,7 +71,7 @@ class CalendarCommandTest :
             }
 
             `when`("the action is 'status' surrounded by blank tokens") {
-                val (result, intents) = run("", "status", " ")
+                val (result, intents) = runCalendar("", "status", " ")
 
                 then("the blanks are ignored and it emits CalendarStatus") {
                     result.ok shouldBe true
@@ -82,7 +82,7 @@ class CalendarCommandTest :
 
         given("/calendar that does not name exactly one known action") {
             `when`("no action is given") {
-                val (result, intents) = run()
+                val (result, intents) = runCalendar()
 
                 then("it fails with the usage line as a requester-only ephemeral and emits no intent") {
                     result.ok shouldBe false
@@ -91,7 +91,7 @@ class CalendarCommandTest :
             }
 
             `when`("the action is a typo") {
-                val (result, intents) = run("conect")
+                val (result, intents) = runCalendar("conect")
 
                 then("it fails and names the unknown action before the usage line") {
                     result.ok shouldBe false
@@ -100,7 +100,7 @@ class CalendarCommandTest :
             }
 
             `when`("the unknown action is Slack markup") {
-                val (result, intents) = run("<!channel>")
+                val (result, intents) = runCalendar("<!channel>")
 
                 then("the echoed action is escaped") {
                     result.ok shouldBe false
@@ -109,7 +109,7 @@ class CalendarCommandTest :
             }
 
             `when`("the unknown action carries markup and a backtick and runs long") {
-                val (result, intents) = run("<!channel>&`" + "x".repeat(n = 60))
+                val (result, intents) = runCalendar("<!channel>&`" + "x".repeat(n = 60))
 
                 then("the echoed action is clipped to 40 characters, its backtick turned into a quote, then escaped") {
                     result.ok shouldBe false
@@ -119,7 +119,7 @@ class CalendarCommandTest :
             }
 
             `when`("an extra argument follows the action") {
-                val (result, intents) = run("connect", "now")
+                val (result, intents) = runCalendar("connect", "now")
 
                 then("it rejects the extra argument with the usage line") {
                     result.ok shouldBe false

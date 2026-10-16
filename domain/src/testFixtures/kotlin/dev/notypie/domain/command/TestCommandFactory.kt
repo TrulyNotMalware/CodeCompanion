@@ -34,6 +34,17 @@ class TestCommand(
     override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
 }
 
+fun createAnonymousFailingCommand(failure: RuntimeException): Command<NoSubCommands> =
+    object : Command<NoSubCommands>(
+        idempotencyKey = UUID.randomUUID(),
+        commandData = createMentionInboundCommand(),
+    ) {
+        override fun parseContext(subCommand: SubCommand<NoSubCommands>): CommandContext<out NoSubCommands> =
+            throw failure
+
+        override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
+    }
+
 internal class TestContext(
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,

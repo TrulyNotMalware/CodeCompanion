@@ -1,5 +1,7 @@
 package dev.notypie.templates
 
+import dev.notypie.domain.common.takeSurrogateSafe
+
 object SlackBlockLimits {
     const val SECTION_TEXT_MAX_LENGTH: Int = 3_000
     const val SECTION_TEXT_BUDGET: Int = 2_900
@@ -123,8 +125,7 @@ private fun String.countFences(): Int {
 
 private fun String.takeSafely(limit: Int): String {
     if (length <= limit) return this
-    val end = if (this[limit - 1].isHighSurrogate()) limit - 1 else limit
-    val cut = substring(0, end)
+    val cut = takeSurrogateSafe(maxLength = limit)
     val ampersand = cut.lastIndexOf('&')
     return if (ampersand >= 0 && ampersand > cut.length - MAX_ENTITY_LENGTH && cut.indexOf(';', ampersand) < 0) {
         cut.substring(0, ampersand)

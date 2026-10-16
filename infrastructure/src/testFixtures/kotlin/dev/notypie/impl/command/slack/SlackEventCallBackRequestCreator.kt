@@ -159,3 +159,6 @@ fun createRichAppMentionJson(botUserId: String): String =
 fun createUserElement(userId: String) = Element(type = "user", userId = userId)
 
 fun createTextElement(text: String) = Element(type = "text", userId = null, text = PlainText(value = text))
+
+fun createLinkElement(label: String, url: String?): Element =
+    Element(type = "link", userId = null, text = PlainText(value = label), url = url)

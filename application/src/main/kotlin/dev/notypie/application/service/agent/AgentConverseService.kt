@@ -15,6 +15,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.command.outbound.UserRef
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
@@ -136,22 +137,16 @@ class AgentConverseService(
                 .replace(regex = QUOTE_BREAKING_CHARACTERS, replacement = "'")
                 .replace(regex = WHITESPACE_RUN, replacement = " ")
                 .trim()
-                .takeWithinCodePoints(maxLength = MAX_CONTEXT_NAME_LENGTH)
+                .takeSurrogateSafe(maxLength = MAX_CONTEXT_NAME_LENGTH)
                 .trim()
 
         internal fun capAnswer(text: String): String =
             if (text.length <= MAX_ANSWER_LENGTH) {
                 text
             } else {
-                text.takeWithinCodePoints(maxLength = MAX_ANSWER_LENGTH - ANSWER_TRUNCATION_SUFFIX.length) +
+                text.takeSurrogateSafe(maxLength = MAX_ANSWER_LENGTH - ANSWER_TRUNCATION_SUFFIX.length) +
                     ANSWER_TRUNCATION_SUFFIX
             }
-
-        private fun String.takeWithinCodePoints(maxLength: Int): String {
-            if (length <= maxLength) return this
-            val end = if (this[maxLength - 1].isHighSurrogate()) maxLength - 1 else maxLength
-            return substring(startIndex = 0, endIndex = end)
-        }
     }
 
     private val transactionTemplate: TransactionTemplate = TransactionTemplate(transactionManager)

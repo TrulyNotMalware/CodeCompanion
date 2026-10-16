@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
 
 # application/service/cve/ai
 
@@ -17,7 +17,7 @@ working (deterministically) with no LLM. Which implementation exists is decided 
 | `CveSummaryWorker.kt` | `class CveSummaryWorker(cveEventRepository, cveTopicRepository, aiSummarizer, batchSize, maxRetries, backoffMinutes, stuckMinutes)`. `@Scheduled(fixedDelay = 60_000) tick()`: `resetStuck(olderThan = now - stuckMinutes, nextAttemptAt = now + backoffMinutes, now)` (each reset claim spends one retry; a non-zero count is logged at WARN) then `findClaimable(now, maxRetries, limit = batchSize)` → per event `claimForSummary(id, token = UUID, now, maxRetries)` (0 rows → skip), `summarize`, `markDone(id, token, summary, now)`; `AiSummarizerBusyException` → `releaseClaim(nextAttemptAt = now + 2 min)`; any other exception → `markFailed(nextAttemptAt = now + backoffMinutes * attempt)`, logged as dead-lettered once `attempt >= maxRetries` |
 | `CveSummaryPromptBuilder.kt` | `build(request)`: category instructions (`CVE` → `CVE_INSTRUCTIONS`; `LANGUAGE` / `FRAMEWORK` / `ETC` → `RELEASE_INSTRUCTIONS`, both ending in `OUTPUT_RULES`: Korean, Slack mrkdwn, ≤ ~30 lines), the trusted topic name, then the untrusted title + content inside `UNTRUSTED_BEGIN` / `UNTRUSTED_END` fences with `UNTRUSTED_GUARD` above; `neutralizeFences` replaces fence strings found in source data with `FENCE_REPLACEMENT` |
 | `SidecarAiSummarizer.kt` | `class SidecarAiSummarizer(agentGateway, promptBuilder)`: one-shot `AgentTurnRequest(sessionKey = "cve:summary:$eventId", prompt)` — no resume id, no MCP token. `Completed` → `finalText`; `Failed` → `AiSummarizationException`; `Busy` → `AiSummarizerBusyException` |
-| `NoopAiSummarizer.kt` | Returns the title plus the first `MAX_CONTENT_CHARS` (1500) characters of `rawContent`, or the title alone when the body is blank |
+| `NoopAiSummarizer.kt` | Returns the title plus the first `MAX_CONTENT_CHARS` (1500) UTF-16 units of `rawContent` (cut by `domain/common/takeSurrogateSafe`, never through a surrogate pair), or the title alone when the body is blank |
 
 ## For AI Agents
 
@@ -72,6 +72,7 @@ in `infrastructure/src/test/kotlin/dev/notypie/repository/cve/`.
 - `application/configurations/CveConfiguration` — provider selection and worker tunables
 - `application/service/cve/collector/` — produces the `PENDING` rows consumed here
 - `application/service/cve/notification/` — delivers the `DONE` summaries
+- `domain/common/takeSurrogateSafe` — `NoopAiSummarizer`'s body cap
 
 ### External
 Spring `@Scheduled`, kotlin-logging.

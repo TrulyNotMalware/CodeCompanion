@@ -2,6 +2,7 @@ package dev.notypie.application.service.command
 
 import ch.qos.logback.classic.Level
 import dev.notypie.domain.command.TestCommand
+import dev.notypie.domain.command.createAnonymousFailingCommand
 import dev.notypie.domain.command.createMentionInboundCommand
 import dev.notypie.domain.command.createSlashInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -242,6 +243,19 @@ class CommandExecutorTest :
                     line shouldContain "reason=java.lang.IllegalStateException: bad <@U1>?WARN forged line?[31m"
                     line shouldNotContain "\n"
                     line shouldNotContain "\u001b"
+                }
+            }
+
+            `when`("a command whose class has no name fails") {
+                val warnings =
+                    captureLogs(loggerName = loggerName) {
+                        executor.execute(
+                            command = createAnonymousFailingCommand(failure = IllegalStateException("boom")),
+                        )
+                    }.eventsAt(level = Level.WARN)
+
+                then("the WARN names it anonymous") {
+                    warnings.single().formattedMessage shouldContain "Command anonymous failed"
                 }
             }
 

@@ -126,6 +126,32 @@ class RequestMeetingCommandTest :
                         .contains("Unknown range 'bogus'") shouldBe true
                 }
             }
+
+            listOf(
+                Triple("a broadcast mention", "<!channel>", "&lt;!channel&gt;"),
+                Triple("a 60-character token", "y".repeat(n = 60), "${"y".repeat(n = 40)}…"),
+            ).forEach { (label, token, echoed) ->
+                `when`("the unknown range is $label") {
+                    val command =
+                        RequestMeetingCommand(
+                            idempotencyKey = UUID.randomUUID(),
+                            commandData = createSlashInboundCommand(subCommands = listOf("list", token)),
+                        )
+                    val result = command.handleEvent()
+                    val intents = command.drainIntents()
+
+                    then("the reply echoes it escaped and clipped like any other echoed token") {
+                        result.ok shouldBe false
+                        intents
+                            .single()
+                            .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                            .markdown shouldBe
+                            "Unknown range '$echoed'. Usage: /meetup list [today | tomorrow | week | month]"
+                    }
+                }
+            }
         }
 
         given("RequestMeetingCommand handleEvent with no subcommands") {

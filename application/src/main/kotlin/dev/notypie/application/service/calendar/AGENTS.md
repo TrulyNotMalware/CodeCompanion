@@ -182,8 +182,8 @@ that entry point carries `@Transactional` (the slash transaction, like every oth
   answer time (a `responded_at` column, option (a) in `.omc/plans/google-calendar-user-oauth.md` 2-C) would allow it
   and is a recorded candidate, not implemented.
 - **The failure DM** reads "CodeCompanion couldn't sync *<title>* to your Google Calendar (<reason>). It will not
-  retry; reconnect with `/calendar connect` if this keeps happening." — title and reason (first 200 chars)
-  through `escapeMarkup`, "a meeting" when the meeting is gone. The reason is the backoff's user-facing one: the
+  retry; reconnect with `/calendar connect` if this keeps happening." — title and reason (first 200 chars, cut by
+  `takeSurrogateSafe`, so it never splits a surrogate pair) through `escapeMarkup`, "a meeting" when the meeting is gone. The reason is the backoff's user-facing one: the
   fixed text or Google's own message for an API or token outcome, and "an internal error" for an unexpected
   exception, whose raw message stays in `last_error` and the logs (`backoff`'s `userReason`, defaulting to the
   diagnostic `reason`). It goes out only when `markFailed` reports
@@ -283,6 +283,7 @@ the committed transaction's. Events come from `createCalendarConnectionRequestEv
 - Consumers: `application/controllers/SlashCommandController` and `application/socket/SocketModeReceiver` (through
   `CalendarSlashService`); `application/controllers/GoogleOAuthCallbackController` (through `CalendarConnectionCallback`);
   `application/service/meeting/MeetingServiceImpl` and `MeetingRescheduleService` (through `MeetingCalendarMirror`)
+- `domain/common/` — `escapeMarkup` (connection replies, failure DM), `takeSurrogateSafe` (the failure DM's reason cap)
 
 ### External
 Spring context events, transactions and scheduling, kotlin-logging, `java.security.SecureRandom`, a `java.util.concurrent.Executor`.

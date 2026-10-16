@@ -6,6 +6,7 @@ import dev.notypie.application.service.standup.containFailure
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.common.escapeMarkup
+import dev.notypie.domain.common.takeSurrogateSafe
 import dev.notypie.impl.calendar.CalendarApiResult
 import dev.notypie.impl.calendar.CalendarEventBody
 import dev.notypie.impl.calendar.GoogleCalendarClient
@@ -525,8 +526,8 @@ class CalendarSyncService(
     private fun syncFailureMessage(title: String?, reason: String): String {
         val meeting = title?.let { "*${it.escapeMarkup()}*" } ?: "a meeting"
         return "CodeCompanion couldn't sync $meeting to your Google Calendar " +
-            "(${reason.take(MAX_REASON_LENGTH).escapeMarkup()}). It will not retry; reconnect with " +
-            "`/calendar connect` if this keeps happening."
+            "(${reason.takeSurrogateSafe(maxLength = MAX_REASON_LENGTH).escapeMarkup()}). " +
+            "It will not retry; reconnect with `/calendar connect` if this keeps happening."
     }
 
     private fun eventBody(view: CalendarMeetingView): CalendarEventBody {

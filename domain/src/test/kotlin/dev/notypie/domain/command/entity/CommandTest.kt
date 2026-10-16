@@ -228,6 +228,26 @@ class CommandTest :
                 }
             }
 
+            `when`("the echoed unknown token has an emoji across the clip point") {
+                val token = "x".repeat(n = 39) + "\uD83D\uDE00" + "tail"
+                val (_, markdown) = replyOf(command = ProbeCommand(commandData = slashData(token)))
+
+                then("the clip keeps whole characters instead of leaving half of the emoji") {
+                    markdown shouldBe
+                        "Unknown subcommand `${"x".repeat(n = 39)}…`.\n" +
+                        "Usage:\n• `/probe`\n• `/probe run &lt;job&gt;`"
+                }
+            }
+
+            `when`("a subcommand without its own usage misses the arguments it requires") {
+                val (output, markdown) = replyOf(command = ProbeCommand(commandData = slashData("bare")))
+
+                then("the requester gets the generic hint and every usage line") {
+                    output.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
+                    markdown shouldBe "Invalid arguments.\nUsage:\n• `/probe`\n• `/probe run &lt;job&gt;`"
+                }
+            }
+
             `when`("the subcommand misses the arguments it requires") {
                 val (output, markdown) = replyOf(command = ProbeCommand(commandData = slashData("run")))
 
@@ -298,6 +318,7 @@ private enum class ProbeSubCommand(
 ) : SubCommandDefinition {
     NONE(subCommandIdentifier = "", usage = "/probe"),
     RUN(subCommandIdentifier = "run", usage = "/probe run <job>", requiresArguments = true, minRequiredArgs = 1),
+    BARE(subCommandIdentifier = "bare", usage = "", requiresArguments = true, minRequiredArgs = 1),
 }
 
 private class ProbeCommand(
