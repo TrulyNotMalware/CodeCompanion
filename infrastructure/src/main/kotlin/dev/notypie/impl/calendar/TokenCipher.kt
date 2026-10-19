@@ -11,7 +11,9 @@ class TokenCipher(
     keyBase64: String,
 ) {
     companion object {
-        private const val VERSION = "v1"
+        private const val BOUND_VERSION = "v2"
+        private const val UNBOUND_VERSION = "v1"
+        private const val UNSUPPORTED_FORMAT = "unsupported encrypted token format"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val KEY_BYTES = 32
         private const val IV_BYTES = 12
@@ -36,25 +38,40 @@ class TokenCipher(
         key = SecretKeySpec(keyBytes, "AES")
     }
 
-    fun encrypt(plaintext: String): String {
+    fun encrypt(plaintext: String, userId: String): String {
+        val associatedData = associatedDataOf(userId = userId)
         val iv = ByteArray(IV_BYTES).also { random.nextBytes(it) }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+        cipher.updateAAD(associatedData)
         val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
-        return "$VERSION.${encoder.encodeToString(iv)}.${encoder.encodeToString(ciphertext)}"
+        return "$BOUND_VERSION.${encoder.encodeToString(iv)}.${encoder.encodeToString(ciphertext)}"
     }
 
-    fun decrypt(token: String): String {
+    fun decrypt(token: String, userId: String): String {
+        val associatedData = associatedDataOf(userId = userId)
         val segments = token.split(".")
-        require(segments.size == 3 && segments[0] == VERSION) { "unsupported encrypted token format" }
+        require(segments.size == 3) { UNSUPPORTED_FORMAT }
+        val bound =
+            when (segments[0]) {
+                BOUND_VERSION -> true
+                UNBOUND_VERSION -> false
+                else -> throw IllegalArgumentException(UNSUPPORTED_FORMAT)
+            }
         val iv = decoder.decode(segments[1])
-        require(iv.size == IV_BYTES) { "unsupported encrypted token format" }
+        require(iv.size == IV_BYTES) { UNSUPPORTED_FORMAT }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+        if (bound) cipher.updateAAD(associatedData)
         return try {
             cipher.doFinal(decoder.decode(segments[2])).toString(Charsets.UTF_8)
         } catch (exception: AEADBadTagException) {
             throw IllegalArgumentException("encrypted token failed authentication", exception)
         }
+    }
+
+    private fun associatedDataOf(userId: String): ByteArray {
+        require(userId.isNotBlank()) { "an encrypted token must be bound to a user id" }
+        return userId.toByteArray(Charsets.UTF_8)
     }
 }

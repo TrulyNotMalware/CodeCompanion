@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # db/migration
 
@@ -42,11 +42,12 @@ the release checklist below decide the order.
 | `V25__add_meeting_calendar_event.sql` | `meeting_calendar_event`, the Google Calendar mirror queue: one row per `(meeting_id, slack_user_id)` (unique `uk_meeting_calendar_event_meeting_user`, FK cascade to `meetings`), `google_event_id VARCHAR(1024)`, `status` PENDING/SYNCING/SYNCED/FAILED, `change_seq BIGINT DEFAULT 1`, `attempts`, `next_attempt_at DATETIME(6)`, `claim_token`, `last_error`, `created_at DATETIME(6) NOT NULL` and `updated_at DATETIME(6) NULL` without a database default or `ON UPDATE` (as in `V24`; every insert and transition binds them); indexes `(status, next_attempt_at)` and `(slack_user_id)`. The row is a dirty marker (the worker recomputes the desired event from the meeting) and `change_seq` is the generation the completion CAS compares, so a change during the Google call is synced again without losing the event id. Apply after `V24`; new table only, safe beside the previous release; rollback is `DROP TABLE` |
 | `V26__add_agent_ask_turn.sql` | `agent_ask_turn`, the `/ask` turn ledger: one row per delivered question, `event_id VARCHAR(36)` PK = the `outbox_message.event_id` of the question row (not its `idempotency_key`, which answer rows share and which is not unique per ask), `message_ts VARCHAR(32)` (the Slack ts, i.e. the answer thread), `status VARCHAR(16)` PENDING/IN_PROGRESS/COMPLETED/ABANDONED, `attempt_count INT DEFAULT 0` (the ownership token: only the PENDING → IN_PROGRESS transition raises it, it never goes down) and `run_count INT DEFAULT 0` (the give-up budget: the same transition raises it, the give-back of a turn the sidecar reported busy takes it back), `created_at` / `updated_at DATETIME(6) NOT NULL` without a database default or `ON UPDATE` (every insert and transition binds them from the application clock); index `(status, updated_at)` for the resume sweep. No foreign key to `outbox_message` (the retention purge deletes the question row long after the turn ended). New table only, `CREATE TABLE IF NOT EXISTS`, safe beside the previous release; rollback is `DROP TABLE`. Apply before the release that writes it. Since 2026-10-15 finished rows (`COMPLETED`/`ABANDONED`) past `agent.retention.ask-turn-days` are purged through the same `(status, updated_at)` index, two status ranges as in the outbox purge (no new index) |
 | `V27__add_google_oauth_state_user_index.sql` | `idx_google_oauth_state_slack_user_id` on `google_oauth_state (slack_user_id)`: `/calendar disconnect` deletes the requester's states by `slack_user_id` inside the slash transaction, and with only `V24`'s `expires_at` index that `DELETE` scanned the primary key, locking every state row until commit; with the index it locks the requester's index entries and the gap next to them, so a connect whose state sorts into that gap can still wait (InnoDB REPEATABLE READ locking, not measured on this schema). The file executes the online-DDL form itself (`SET SESSION lock_wait_timeout = 5;` then `CREATE INDEX IF NOT EXISTS … ALGORITHM=INPLACE LOCK=NONE`; MariaDB accepts `IF NOT EXISTS` together with the algorithm and lock clauses, and an existing index gives note 1061 instead of an error), so it is re-runnable and never queues behind a long transaction or falls back to a table copy. The `SET` outlives the statement in that client session. Do not size it as a small table: expired states are deleted only when some callback succeeds (and a user's on disconnect), so abandoned connects accumulate; count the rows first. Apply after `V24`, at any time relative to the deploy; index only, safe beside the previous release; rollback is `DROP INDEX IF EXISTS … ON google_oauth_state`. **Not yet run on MariaDB** (2026-10-15: no instance was available to the author). Before the first rollout, on a disposable schema at `V24` (and `V25`) with rows in `google_oauth_state`: run `V27` once (this run builds the index through `ALGORITHM=INPLACE LOCK=NONE`, so it is the one that proves the online form works), run it again (expect note 1061 and no change), and compare `SHOW CREATE TABLE google_oauth_state` with `GoogleOAuthStateSchema`. Record the version and date here as for `V26` |
+| `V28__add_google_calendar_connection_version.sql` | `google_calendar_connection.version BIGINT NOT NULL DEFAULT 0`, the optimistic-lock column of `GoogleCalendarConnectionSchema` (`@Version`, 2026-10-15, `docs/wiki/decisions.md` #47): `saveActive` reads the user's row and rewrites it, so of two callbacks of one user that read the same row the later commit used to overwrite the grant the earlier one had just stored without reporting it as replaced (that grant was never revoked); only MariaDB's snapshot isolation (1020) stopped it. Now the stale writer fails its version check on any database and the callback's one-shot store retry sees the grant it replaces; a `/calendar disconnect` that read the row before a reconnect committed fails the same way instead of deleting the new grant's row. The sync worker's `markRevoked` (a bulk JPQL `UPDATE`) does not bump the column. The file executes the online form (`SET SESSION lock_wait_timeout = 5;` then `ALTER TABLE … ADD COLUMN IF NOT EXISTS … , ALGORITHM=INPLACE, LOCK=NONE`; an existing column gives note 1060), so it is re-runnable. **Apply before the release that maps the column** (unlike `V27`, it cannot follow the deploy: every read of the connection row selects `version`, so connect, the callback's store, `/calendar status|disconnect`, the sync worker's token lookup and the revoke worker's re-read fail without it); after `V24`, safe beside the previous release, which ignores the column. Rollback: the column can stay; `ALTER TABLE google_calendar_connection DROP COLUMN IF EXISTS version` only once no Pod of this release is left. **Not yet run on MariaDB** (2026-10-15, same procedure as `V27`: run it twice on a disposable schema at `V24`, compare `SHOW CREATE TABLE google_calendar_connection` with the schema class, record version and date here) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Next free number is `V28`.** Never renumber, reorder or edit a script that has shipped; add a new one.
+- **Next free number is `V29`.** Never renumber, reorder or edit a script that has shipped; add a new one.
 - **Number ≠ apply order: the V18–V23 release checklist.** `main` had stopped at `V17`, and #26 (`f9971700`,
   2026-10-06) shipped `V18`–`V23` together. An environment still at `V17` applies them in this order, which
   `../../k8s/README.md` ("One-time") and `docs/wiki/dev-environment.md` repeat:
@@ -93,7 +94,13 @@ the release checklist below decide the order.
   hooks use both tables inside every meeting write (`application/src/main/resources/k8s/README.md`, "Google
   Calendar Mirror"). `V27` (2026-10-15) only indexes `google_oauth_state` and joins that sequence (`V24` → `V25` →
   `V27`); where `V24` is already live it can go in on its own at any time. Without it nothing fails: the disconnect
-  `DELETE` only serialises with other users' connects and callbacks.
+  `DELETE` only serialises with other users' connects and callbacks. `V28` (2026-10-15) joins the same sequence
+  (`V24` → `V25` → `V27` → `V28`) but, where `V24` is already live, must still go in **before** the deploy that ships
+  it: the entity maps its column. The same release stores refresh tokens as `v2` ciphertext bound to the row's
+  `slack_user_id` (`impl/calendar/TokenCipher`, #46); a binary from before it reads only `v1`, so a rollback past this
+  release (including the deploy workflow's `rollout undo`) turns every token stored or reconnected under it into
+  `TOKEN_UNREADABLE` at that user's next sync (connection `REVOKED`, one reconnect DM). `V28` itself is harmless to
+  that older binary.
 - **`V26` ships with the `/ask` turn ledger and is new on 2026-10-13, so assume no hand-applied environment has
   it yet.** Apply it before the deploy that ships the ledger code. Where it is missing the application still starts
   (`ddl-auto: none` does not check the schema) and `/ask` still answers, because the delivery listener falls back
@@ -124,7 +131,7 @@ the release checklist below decide the order.
   and `DATETIME(6) NOT NULL` with no default, bound by the application (`V14`, `V15`, `V24`, `V25`, `V26`). New
   tables use the second form. `V26` is the exception to the first sentence: its key is the outbox `event_id`
   itself and its CAS token is `attempt_count`, like the outbox row's.
-- New index scripts use `CREATE INDEX IF NOT EXISTS`, so a re-run never drops an index in use, and execute the online form (`SET SESSION lock_wait_timeout = 5;` + `ALGORITHM=INPLACE LOCK=NONE`) as `V27` does. `V19` keeps that form only in its header comment (it has shipped, so it stays as it is): applied verbatim, its plain `CREATE INDEX` can wait up to a day for its metadata lock. Older ones use `DROP INDEX IF EXISTS … ON <table>; CREATE INDEX …` (`V16`,
+- New index scripts use `CREATE INDEX IF NOT EXISTS`, so a re-run never drops an index in use, and execute the online form (`SET SESSION lock_wait_timeout = 5;` + `ALGORITHM=INPLACE LOCK=NONE`) as `V27` does; a new defaulted column uses `ADD COLUMN IF NOT EXISTS` with the same session timeout and `, ALGORITHM=INPLACE, LOCK=NONE` (`V28`). `V19` keeps that form only in its header comment (it has shipped, so it stays as it is): applied verbatim, its plain `CREATE INDEX` can wait up to a day for its metadata lock. Older ones use `DROP INDEX IF EXISTS … ON <table>; CREATE INDEX …` (`V16`,
   `V17`).
 - Append-only audit tables (`V10`, `V13`) index `created_at` plus one lookup key and never get `updated_at`; the
   `created_at` index also serves the retention purge's `DELETE … WHERE created_at < ? LIMIT ?`.
@@ -139,7 +146,7 @@ the release checklist below decide the order.
 - `infrastructure/repository/authorization/schema/` — `V12`
 - `infrastructure/repository/mcp/schema/` — `V13`
 - `infrastructure/repository/cve/schema/` — `V14`–`V17`
-- `infrastructure/repository/calendar/schema/` — `V24`, `V25`, `V27`
+- `infrastructure/repository/calendar/schema/` — `V24`, `V25`, `V27`, `V28`
 - `../../application-*.yaml` — `ddl-auto` per profile decides whether a script is applied by hand
 
 ### External

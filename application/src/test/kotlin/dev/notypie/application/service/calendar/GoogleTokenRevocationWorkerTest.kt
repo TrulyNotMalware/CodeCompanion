@@ -9,6 +9,7 @@ import dev.notypie.impl.calendar.GoogleOAuthClient
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.schema.createCalendarConnection
+import dev.notypie.schema.createLegacyEncryptedToken
 import dev.notypie.schema.createTestTokenCipher
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
@@ -25,7 +26,7 @@ import java.util.concurrent.RejectedExecutionException
 class GoogleTokenRevocationWorkerTest :
     BehaviorSpec({
         val cipher = createTestTokenCipher()
-        val encrypted = cipher.encrypt(plaintext = "1//refresh")
+        val encrypted = cipher.encrypt(plaintext = "1//refresh", userId = "U_CAL")
 
         class Harness(
             executor: Executor = Executor { task -> task.run() },
@@ -94,6 +95,33 @@ class GoogleTokenRevocationWorkerTest :
                 then("no revoke is attempted and the manual-removal hint is sent") {
                     verify(exactly = 0) { h.oauth.revoke(token = any()) }
                     h.hintDm().target.id shouldBe "U_CAL"
+                }
+            }
+
+            `when`("the token was encrypted for another Slack user and copied into this user's row") {
+                val h = Harness()
+                h.worker.onRevocationRequested(
+                    event =
+                        event.copy(
+                            encryptedRefreshToken = cipher.encrypt(plaintext = "1//other", userId = "U_OTHER"),
+                        ),
+                )
+
+                then("it does not decrypt, so nothing is revoked and the manual-removal hint is sent") {
+                    verify(exactly = 0) { h.oauth.revoke(token = any()) }
+                    h.hintDm().target.id shouldBe "U_CAL"
+                }
+            }
+
+            `when`("the token was stored before tokens were bound to their user") {
+                val h = Harness().apply { every { oauth.revoke(token = "1//legacy") } returns true }
+                h.worker.onRevocationRequested(
+                    event = event.copy(encryptedRefreshToken = createLegacyEncryptedToken(plaintext = "1//legacy")),
+                )
+
+                then("it still decrypts and is revoked") {
+                    verify(exactly = 1) { h.oauth.revoke(token = "1//legacy") }
+                    h.staged.shouldBeEmpty()
                 }
             }
 

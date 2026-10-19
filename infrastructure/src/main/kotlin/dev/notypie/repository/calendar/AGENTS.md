@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-07 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-10-07 | Updated: 2026-10-19 -->
 
 # infrastructure/repository/calendar
 
@@ -13,9 +13,9 @@ registered in `configurations/JpaConfiguration`.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `GoogleCalendarConnectionRepository.kt` | Port: `find(userId): CalendarConnection?`, `saveActive(userId, googleSubject, googleEmail, encryptedRefreshToken, now): ConnectionSaved(connection, replaced: CalendarConnection?)` (insert or rewrite in place — status back to `ACTIVE`, `revoked_at`/`last_error` cleared; the row a rewrite replaced comes back as a snapshot so the caller can decide, by subject/e-mail, whether to revoke its grant at Google), `delete(userId): Boolean`, `hasActiveConnection(userId): Boolean` (`true` only for an `ACTIVE` row; a `REVOKED` row or no row is `false`), `markRevoked(userId, observedEncryptedRefreshToken, now, reason): Boolean` (`ACTIVE` → `REVOKED` with `revoked_at`, `last_error` and `updated_at`, only while the row still holds the ciphertext the caller refreshed with; `false` when there is no row, it is not `ACTIVE`, or a reconnect replaced the token) |
-| `GoogleCalendarConnectionRepositoryImpl.kt` | `open class`, `@Transactional` per method; `markRevoked` is the JPA repository's single `UPDATE`, `true` when it changed one row, with `updated_at` bound as `LocalDateTime.ofInstant(now, ZoneId.systemDefault())` (the JVM-zone wall time `@UpdateTimestamp` writes; a bulk JPQL `UPDATE` bypasses that annotation); `saveActive` is find-then-save under the unique `slack_user_id` key (one row per user). Two first-time callbacks racing both see no row and the loser's insert fails on the key with `DataIntegrityViolationException`; the adapter does not catch it — `CalendarConnectionService.completeConnection` retries the whole save transaction once, and the retry's `find` sees the winner's row and rewrites it |
-| `JpaGoogleCalendarConnectionRepository.kt` | `findBySlackUserId`, derived `deleteBySlackUserId(): Long`, derived `existsBySlackUserIdAndStatus(slackUserId, status): Boolean` (one indexed lookup on the unique `slack_user_id`), `@Modifying` JPQL `markRevoked(userId, observedEncryptedRefreshToken, now, updatedAt, reason): Int` (`SET status = REVOKED, revokedAt, lastError, updatedAt WHERE slackUserId AND status = ACTIVE AND encryptedRefreshToken = :observed`; enum literals spelled out, so `NativeQueryStatusLiteralTest` does not apply) |
+| `GoogleCalendarConnectionRepository.kt` | Port: `find(userId): CalendarConnection?`, `saveActive(userId, googleSubject, googleEmail, encryptedRefreshToken, now): ConnectionSaved(connection, replaced: CalendarConnection?)` (insert or rewrite in place — status back to `ACTIVE`, `revoked_at`/`last_error` cleared; the row a rewrite replaced comes back as a snapshot so the caller can decide, by subject/e-mail, whether to revoke its grant at Google), `delete(userId, observedEncryptedRefreshToken)` (removes the row only while it still carries the ciphertext the caller read; otherwise, or when the row is gone, throws `ObjectOptimisticLockingFailureException`), `hasActiveConnection(userId): Boolean` (`true` only for an `ACTIVE` row; a `REVOKED` row or no row is `false`), `markRevoked(userId, observedEncryptedRefreshToken, now, reason): Boolean` (`ACTIVE` → `REVOKED` with `revoked_at`, `last_error` and `updated_at`, only while the row still holds the ciphertext the caller refreshed with; `false` when there is no row, it is not `ACTIVE`, or a reconnect replaced the token) |
+| `GoogleCalendarConnectionRepositoryImpl.kt` | `open class`, `@Transactional` per method; `markRevoked` is the JPA repository's single `UPDATE`, `true` when it changed one row, with `updated_at` bound as `LocalDateTime.ofInstant(now, ZoneId.systemDefault())` (the JVM-zone wall time `@UpdateTimestamp` writes; a bulk JPQL `UPDATE` bypasses that annotation); `saveActive` is find-then-save under the unique `slack_user_id` key (one row per user). Two first-time callbacks racing both see no row and the loser's insert fails on the key with `DataIntegrityViolationException`; the adapter does not catch it — `CalendarConnectionService.completeConnection` retries the whole save transaction once, and the retry's `find` sees the winner's row and rewrites it. A rewrite of an existing row is guarded by the schema's `@Version` (`V28`, 2026-10-15): when another transaction rewrote the row after this one's `find`, the flush (`UPDATE … WHERE id = ? AND version = ?`) matches nothing and Hibernate throws, translated to `ObjectOptimisticLockingFailureException`, a `ConcurrencyFailureException` like MariaDB's translated 1020, so the same one-shot retry re-reads the row and reports the grant it replaces. `delete` re-reads the row by user id and removes the managed entity only while its ciphertext equals the one the caller observed; a reconnect that rewrote the row fails the versioned `DELETE` (an `OptimisticLockingFailureException`: zero rows, or MariaDB's translated 1020), and a delete-and-reinsert under a new primary key (or a missing row) fails the ciphertext check with `ObjectOptimisticLockingFailureException` (the slash transaction rolls back and the user runs `disconnect` again) |
+| `JpaGoogleCalendarConnectionRepository.kt` | `findBySlackUserId`, derived `existsBySlackUserIdAndStatus(slackUserId, status): Boolean` (one indexed lookup on the unique `slack_user_id`), `@Modifying` JPQL `markRevoked(userId, observedEncryptedRefreshToken, now, updatedAt, reason): Int` (`SET status = REVOKED, revokedAt, lastError, updatedAt WHERE slackUserId AND status = ACTIVE AND encryptedRefreshToken = :observed`; enum literals spelled out, so `NativeQueryStatusLiteralTest` does not apply) |
 | `GoogleOAuthStateRepository.kt` | Port: `issue(state, userId, expiresAt)`, `consume(state, now): String?` (the Slack user id, once), `deleteExpired(before): Int` (every expired state; its only caller is the OAuth callback after a successful consume, so there is no scheduled purge and abandoned connects accumulate between successful callbacks — follow-up, see `service/calendar/AGENTS.md`), `deleteForUser(userId): Int` (every state of that user, consumed or not — called on `disconnect` so an earlier consent link cannot reconnect the account afterwards) |
 | `GoogleOAuthStateRepositoryImpl.kt` | `issue` saves a new `GoogleOAuthStateSchema`, which is `Persistable`, so the save is a plain `INSERT` (no `SELECT` first) and a reused `state` fails with `DataIntegrityViolationException` (at flush, or at once when the first row is still in the same persistence context) instead of overwriting another user's row. `consume` = native CAS `UPDATE … SET consumed_at = :now WHERE state = :state AND consumed_at IS NULL AND expires_at > :now`, then the row's `slackUserId` (`findByIdOrNull`) only when exactly one row changed; a replayed, expired or unknown state returns `null` without a read-then-write race |
 | `JpaGoogleOAuthStateRepository.kt` | The `consume` native update, and `deleteExpiredBefore` / `deleteBySlackUser` as bulk JPQL `DELETE`s (a derived `deleteBy…` loads rows and leaves the removes pending until flush); `deleteBySlackUser` runs inside the `/calendar disconnect` slash transaction and is served by `idx_google_oauth_state_slack_user_id` (`V27`) instead of a primary-key scan that would lock every state row until the slash transaction commits; with the index it locks that user's index entries and the gap next to them (REPEATABLE READ; InnoDB behaviour, not measured here) |
@@ -37,7 +37,8 @@ registered in `configurations/JpaConfiguration`.
 - **Tokens are opaque here.** `encryptedRefreshToken` is whatever `TokenCipher` produced; nothing in this
   package decrypts, validates or logs it, and `CalendarConnection.toString()` omits it.
 - Column names, types and constraint names must match `db/migration/V24__add_google_calendar_tables.sql`,
-  `V25__add_meeting_calendar_event.sql` and `V27__add_google_oauth_state_user_index.sql`.
+  `V25__add_meeting_calendar_event.sql`, `V27__add_google_oauth_state_user_index.sql` and
+  `V28__add_google_calendar_connection_version.sql`.
 - **A `meeting_calendar_event` row is a dirty marker, not a command.** It says "look at this (meeting, user)
   again"; the worker derives insert / patch / delete from `loadSyncView` at sync time. Do not add a "desired
   action" column: a queued action is wrong as soon as a cancel and an accept commit around each other.
@@ -108,11 +109,22 @@ registered in `configurations/JpaConfiguration`.
   the 10-minute `sync-stuck-minutes`: a worker's longest path is two token refreshes and six Google calls (patch →
   404 → insert → 409 → patch, repeated once after a 401), each bounded by `request-timeout-seconds` (10 s), so about
   80 s. A reset after a successful insert is harmless: the next pass inserts the same id, gets 409 and patches.
-- **`markRevoked` is one guarded `UPDATE`, never load-mutate-save.** The table has no version column, so a
-  dirty-checked save would write every column and put the old token back over a reconnect that committed in
-  between. The `UPDATE` sets `updatedAt` itself, since a bulk statement bypasses `@UpdateTimestamp`. The `encryptedRefreshToken = :observed` clause is the version: a revocation observed on a grant that a
-  reconnect has since replaced matches nothing. A bulk JPQL `UPDATE` bypasses the persistence context; callers in
-  the same transaction must not trust an entity they loaded before it.
+- **`markRevoked` is one guarded `UPDATE`, never load-mutate-save.** The `encryptedRefreshToken = :observed` clause
+  is its version: a revocation observed on a grant that a reconnect has since replaced matches nothing. The `UPDATE`
+  sets `updatedAt` itself, since a bulk statement bypasses `@UpdateTimestamp`, and it leaves the `@Version` column
+  alone on purpose (`docs/wiki/decisions.md` #47): a reconnect or a disconnect that read the row before the revocation
+  committed should still win (the reconnect rewrites every column and stores a live grant, the disconnect deletes the
+  row anyway), and bumping the version would only fail them. A bulk JPQL `UPDATE` bypasses the persistence context;
+  callers in the same transaction must not trust an entity they loaded before it.
+- **Every other write of `google_calendar_connection` goes through the entity** (`saveActive`'s rewrite, `delete`), so
+  `@Version` sees it. A new bulk `UPDATE` of this table must either bump `version` or say here why it does not.
+  `delete` re-reads the row and removes it only while its ciphertext equals the one the caller observed; a different
+  ciphertext (a reconnect, or a delete-and-reinsert under a new primary key, which a derived `deleteBySlackUserId` let
+  through under READ COMMITTED) or a missing row throws `ObjectOptimisticLockingFailureException`; when the same row was
+  rewritten in between, the versioned `DELETE` fails as an `OptimisticLockingFailureException` too (zero rows →
+  `ObjectOptimisticLockingFailureException`; MariaDB's snapshot-isolation 1020 → `SnapshotIsolationConflictException`). The
+  guard therefore does not depend on `find` and `delete` sharing a persistence context. `GoogleCalendarConnectionRepositoryImplTest` pins both races at the repository
+  level; no service spec drives the disconnect race.
 
 ### Testing Requirements
 ```bash
@@ -120,7 +132,9 @@ registered in `configurations/JpaConfiguration`.
 ```
 `@DataJpaTest` specs on H2 construct the `*Impl` adapters by hand over the autowired `Jpa*` repositories:
 consume once / replay / expired / unknown, per-user delete leaving other users' states, bulk purge, upsert-in-place
-and delete, the active-connection check and `markRevoked`. `JpaMeetingCalendarEventRepositoryTest` runs on its own
+and delete, the active-connection check, `markRevoked` and, in committed transactions on two threads, the
+optimistic-lock races (a reconnect or a disconnect that read the row before another reconnect committed fails with
+`ObjectOptimisticLockingFailureException`; a `markRevoked` committed in between does not fail the reconnect). `JpaMeetingCalendarEventRepositoryTest` runs on its own
 `MODE=MariaDB` H2 database (the native upsert needs it) and covers every queue transition: the losing paths of each
 CAS (foreign token, replay, stale seq, the `SYNCING` status guard, a token the stuck sweep cleared), the moved-seq
 path of `markSynced`, `markFailed` and `retryLater`, the upsert's insert, update and `SYNCING` branches, and the

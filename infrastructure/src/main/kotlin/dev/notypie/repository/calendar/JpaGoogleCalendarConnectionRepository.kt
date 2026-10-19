@@ -15,8 +15,6 @@ import java.time.LocalDateTime
 interface JpaGoogleCalendarConnectionRepository : JpaRepository<GoogleCalendarConnectionSchema, Long> {
     fun findBySlackUserId(slackUserId: String): GoogleCalendarConnectionSchema?
 
-    fun deleteBySlackUserId(slackUserId: String): Long
-
     fun existsBySlackUserIdAndStatus(slackUserId: String, status: CalendarConnectionStatus): Boolean
 
     @Modifying

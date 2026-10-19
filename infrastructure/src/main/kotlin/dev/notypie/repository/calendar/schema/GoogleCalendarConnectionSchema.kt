@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
+import jakarta.persistence.Version
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
@@ -65,6 +66,11 @@ class GoogleCalendarConnectionSchema(
 
     @field:Column(name = "last_error", columnDefinition = "TEXT")
     var lastError: String? = null
+        protected set
+
+    @field:Version
+    @field:Column(name = "version", nullable = false)
+    var version: Long = 0L
         protected set
 
     fun reconnect(

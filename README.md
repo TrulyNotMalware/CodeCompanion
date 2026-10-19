@@ -163,7 +163,7 @@ A user's role is resolved in order: `slack.app.authorization.bootstrap-admins` (
 8. **(Optional) Enable the Google Calendar mirror**
    - In a Google Cloud project, enable the Google Calendar API, configure the OAuth consent screen, and create an OAuth client of type *Web application* whose redirect URI is `<public base URL>/oauth/google/callback` (Google accepts plain `http` only for `localhost`)
    - Give the Slack app the `users:read` and `users:read.email` bot scopes (Slack grants the second only together with the first; both are in [`docs/slack-app-manifest.yaml`](docs/slack-app-manifest.yaml), and an app created from an older manifest needs them added and a reinstall), because `/calendar connect` compares the Google e-mail with the user's Slack e-mail. A workspace whose Email Display setting hides e-mails from apps cannot connect
-   - Set `GOOGLE_CALENDAR_ENABLED=true`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (exactly the registered URI) and `GOOGLE_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), and apply migrations `V24`, `V25` and `V27` by hand where `ddl-auto` is `none`
+   - Set `GOOGLE_CALENDAR_ENABLED=true`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (exactly the registered URI) and `GOOGLE_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), and apply migrations `V24`, `V25`, `V27` and `V28` by hand where `ddl-auto` is `none`
    - Local setup, including the consent screen's test users, is in [`docs/wiki/dev-environment.md`](docs/wiki/dev-environment.md); production keys and routing are in [`application/src/main/resources/k8s/README.md`](application/src/main/resources/k8s/README.md)
 
 ### Testing
@@ -341,7 +341,7 @@ CodeCompanion/
 8. **(선택) Google Calendar 미러 활성화**
    - Google Cloud 프로젝트에서 Google Calendar API를 사용 설정하고 OAuth 동의 화면을 구성한 뒤, 리디렉션 URI가 `<공개 기본 URL>/oauth/google/callback`인 *웹 애플리케이션* 유형 OAuth 클라이언트 생성(Google은 `localhost`에만 평문 `http`를 허용)
    - 슬랙 앱에 봇 scope `users:read`와 `users:read.email`을 부여(슬랙은 두 번째를 첫 번째와 함께만 허용. 둘 다 [`docs/slack-app-manifest.yaml`](docs/slack-app-manifest.yaml)에 포함되어 있고, 이전 manifest로 만든 앱은 추가한 뒤 다시 설치해야 함). `/calendar connect`가 Google 이메일을 사용자의 슬랙 이메일과 비교하기 때문. 워크스페이스의 Email Display 설정이 앱에 이메일을 숨기면 연결할 수 없음
-   - `GOOGLE_CALENDAR_ENABLED=true`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`(등록한 URI와 정확히 같은 값), `GOOGLE_TOKEN_ENCRYPTION_KEY`(`openssl rand -base64 32`)를 설정하고, `ddl-auto`가 `none`인 환경에는 마이그레이션 `V24`·`V25`·`V27`을 직접 적용
+   - `GOOGLE_CALENDAR_ENABLED=true`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`(등록한 URI와 정확히 같은 값), `GOOGLE_TOKEN_ENCRYPTION_KEY`(`openssl rand -base64 32`)를 설정하고, `ddl-auto`가 `none`인 환경에는 마이그레이션 `V24`·`V25`·`V27`·`V28`을 직접 적용
    - 동의 화면의 테스트 사용자를 포함한 로컬 준비는 [`docs/wiki/dev-environment.md`](docs/wiki/dev-environment.md), 운영 키와 라우팅은 [`application/src/main/resources/k8s/README.md`](application/src/main/resources/k8s/README.md) 참고
 
 ### 테스트
