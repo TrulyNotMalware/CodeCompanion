@@ -50,7 +50,7 @@ cannot import them; `Command.handleEvent` has its own `catch (Exception)`). Noth
   spring-kafka stops the listener container on an `Error` instead of calling its error handler. Inside a
   `TransactionTemplate` callback neither helper fits, because a rethrown interrupt comes back wrapped in
   `UndeclaredThrowableException`; `application/common/runInTx` restores the flag and returns a failure instead.
-  Pure parse sites (`runCatching { UUID.fromString(…) }`, enum lookups, JSON peeks) and the two watchdog
+  Pure parse sites (enum lookups, JSON peeks, date parses; the relay's and the CDC listener's `UUID.fromString` catch `IllegalArgumentException` only, 2026-10-19) and the two watchdog
   `runCatching { stream.close() }` calls (`impl/http/BoundedHttp`, `impl/agent/SidecarAgentClient`) are left as they
   are.
 - **Blocking code only.** Both helpers catch `Exception`, which in a coroutine would also swallow

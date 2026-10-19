@@ -70,13 +70,14 @@ class DebeziumLogTailingProcessor(
         if (snapshot.status != MessageStatus.PENDING.name) return
 
         val eventId =
-            runCatching { UUID.fromString(snapshot.eventId) }
-                .getOrElse { parseFailure ->
-                    throw CdcRecordParseException(
-                        message = "Malformed eventId='${snapshot.eventId}' idempotencyKey=${snapshot.idempotencyKey}",
-                        cause = parseFailure,
-                    )
-                }
+            try {
+                UUID.fromString(snapshot.eventId)
+            } catch (malformed: IllegalArgumentException) {
+                throw CdcRecordParseException(
+                    message = "Malformed eventId='${snapshot.eventId}' idempotencyKey=${snapshot.idempotencyKey}",
+                    cause = malformed,
+                )
+            }
 
         val current = outboxRepository.findByIdOrNull(eventId.toString())
         if (current == null) {

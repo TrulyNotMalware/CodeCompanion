@@ -234,6 +234,7 @@ class McpToolGateTest :
 
                 then("the same Error propagates instead of being logged as a failed audit write") {
                     escaped shouldBeSameInstanceAs thrown
+                    verify(exactly = 1) { auditRepository.record(call = any()) }
                 }
             }
         }

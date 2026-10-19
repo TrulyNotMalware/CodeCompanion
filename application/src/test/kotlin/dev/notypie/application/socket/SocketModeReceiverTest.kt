@@ -35,17 +35,21 @@ class SocketModeReceiverTest :
         val calendarSlashService = mockk<CalendarSlashService>(relaxed = true)
         val askSlashService = mockk<AskSlashService>(relaxed = true)
 
-        fun receiverWith(appConfig: AppConfig): SocketModeReceiver =
+        fun receiverWith(
+            appConfig: AppConfig,
+            calendar: CalendarSlashService = calendarSlashService,
+            mentions: AppMentionEventHandler = mockk(),
+        ): SocketModeReceiver =
             SocketModeReceiver(
                 appConfig = appConfig,
                 meetingService = meetingService,
                 standupSlashService = standupSlashService,
                 cveSubscriptionSlashService = mockk(),
                 cveQuerySlashService = mockk(),
-                calendarSlashService = calendarSlashService,
+                calendarSlashService = calendar,
                 askSlashService = askSlashService,
                 interactionHandler = interactionHandler,
-                appMentionEventHandler = mockk(),
+                appMentionEventHandler = mentions,
             )
 
         val receiver = receiverWith(appConfig = AppConfig())
@@ -85,20 +89,6 @@ class SocketModeReceiverTest :
         }
 
         given("slash and event envelopes whose handlers throw") {
-            val failingCalendar = mockk<CalendarSlashService>()
-            val mentionHandler = mockk<AppMentionEventHandler>()
-            val failingReceiver =
-                SocketModeReceiver(
-                    appConfig = AppConfig(),
-                    meetingService = mockk(),
-                    standupSlashService = mockk(),
-                    cveSubscriptionSlashService = mockk(),
-                    cveQuerySlashService = mockk(),
-                    calendarSlashService = failingCalendar,
-                    askSlashService = mockk(),
-                    interactionHandler = mockk(),
-                    appMentionEventHandler = mentionHandler,
-                )
             val slashJson =
                 jsonMapper.writeValueAsString(
                     createSlashCommandForm(command = "/calendar", text = "status"),
@@ -107,6 +97,8 @@ class SocketModeReceiverTest :
             val loggerName = SocketModeReceiver::class.java.packageName
 
             `when`("the slash service throws an Exception") {
+                val failingCalendar = mockk<CalendarSlashService>()
+                val failingReceiver = receiverWith(appConfig = AppConfig(), calendar = failingCalendar)
                 every { failingCalendar.handleCalendar(headers = any(), payload = any(), commandData = any()) } throws
                     IllegalStateException("db down")
 
@@ -124,6 +116,8 @@ class SocketModeReceiverTest :
             }
 
             `when`("the slash service throws an Error") {
+                val failingCalendar = mockk<CalendarSlashService>()
+                val failingReceiver = receiverWith(appConfig = AppConfig(), calendar = failingCalendar)
                 val thrown = StackOverflowError("deep")
                 every { failingCalendar.handleCalendar(headers = any(), payload = any(), commandData = any()) } throws
                     thrown
@@ -136,6 +130,8 @@ class SocketModeReceiverTest :
             }
 
             `when`("the mention handler throws an Exception") {
+                val mentionHandler = mockk<AppMentionEventHandler>()
+                val failingReceiver = receiverWith(appConfig = AppConfig(), mentions = mentionHandler)
                 every { mentionHandler.handleEvent(headers = any(), payload = any()) } throws
                     IllegalStateException("db down")
 
@@ -151,6 +147,8 @@ class SocketModeReceiverTest :
             }
 
             `when`("the mention handler throws an Error") {
+                val mentionHandler = mockk<AppMentionEventHandler>()
+                val failingReceiver = receiverWith(appConfig = AppConfig(), mentions = mentionHandler)
                 val thrown = StackOverflowError("deep")
                 every { mentionHandler.handleEvent(headers = any(), payload = any()) } throws thrown
 
@@ -166,7 +164,7 @@ class SocketModeReceiverTest :
                 val (escaped, logs) =
                     captureLogs(loggerName = loggerName) {
                         shouldThrow<StackOverflowError> {
-                            failingReceiver.logErrorThenRethrow(kind = "slash", envelopeId = "env-1") { throw thrown }
+                            receiver.logErrorThenRethrow(kind = "slash", envelopeId = "env-1") { throw thrown }
                         }
                     }
 
@@ -181,7 +179,7 @@ class SocketModeReceiverTest :
                 val (escaped, logs) =
                     captureLogs(loggerName = loggerName) {
                         shouldThrow<IllegalStateException> {
-                            failingReceiver.logErrorThenRethrow(kind = "event", envelopeId = "env-2") { throw thrown }
+                            receiver.logErrorThenRethrow(kind = "event", envelopeId = "env-2") { throw thrown }
                         }
                     }
 

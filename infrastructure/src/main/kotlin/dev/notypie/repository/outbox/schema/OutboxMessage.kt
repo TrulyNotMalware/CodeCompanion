@@ -107,7 +107,7 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
         jsonMapper.convertValue(this, OutboxMessage::class.java)
     } catch (e: Exception) {
         logger.error(e) { "Failed to convert to OutboxMessage" }
-        throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
+        throw RuntimeException("Failed to convert to OutboxMessage", e)
     }
 
 private const val EPOCH_MICROS_FLOOR = 100_000_000_000_000L

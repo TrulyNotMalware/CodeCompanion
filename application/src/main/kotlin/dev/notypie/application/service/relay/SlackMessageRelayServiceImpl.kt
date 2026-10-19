@@ -162,14 +162,15 @@ class SlackMessageRelayServiceImpl(
             return
         }
         val eventId =
-            runCatching { UUID.fromString(row.eventId) }
-                .getOrElse { parseFailure ->
-                    logger.error(parseFailure) {
-                        "Failing outbox row with malformed eventId='${row.eventId}' idempotencyKey=${row.idempotencyKey}"
-                    }
-                    writeTerminal(claim = claim, status = MessageStatus.FAILURE)
-                    return
+            try {
+                UUID.fromString(row.eventId)
+            } catch (malformed: IllegalArgumentException) {
+                logger.error(malformed) {
+                    "Failing outbox row with malformed eventId='${row.eventId}' idempotencyKey=${row.idempotencyKey}"
                 }
+                writeTerminal(claim = claim, status = MessageStatus.FAILURE)
+                return
+            }
         if (row.createdAt < now().minus(giveUpAfter)) {
             logger.error {
                 "Failing outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} unsent: created at " +

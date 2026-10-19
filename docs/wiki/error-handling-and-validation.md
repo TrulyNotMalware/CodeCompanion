@@ -121,8 +121,8 @@ _type: pattern · updated: 2026-10-19_
 
    `Throwable`/`Error`를 이름으로 잡는 곳은 같은 인스턴스를 정리·로그 후 다시 던지는 다섯 곳(`SlackRequestVerificationFilter`,
    `SlackInteractionHandlerImpl`의 수동 트랜잭션, `SlackUserProfileResolver`의 in-flight future,
-   `SocketModeReceiver.logErrorThenRethrow`, `runInTx`의 기록 후 재던짐)과 위 CDC 리스너의 번역 한 곳뿐이다. 순수 파싱(`UUID.fromString`, enum 조회, JSON
-   엿보기)과 워치독의 `stream.close()` `runCatching`은 그대로 둔다.
+   `SocketModeReceiver.logErrorThenRethrow`, `runInTx`의 기록 후 재던짐)과 위 CDC 리스너의 번역 한 곳뿐이다. 순수 파싱(enum 조회, JSON 엿보기 등; relay·CDC 리스너의 `UUID.fromString`은
+   `IllegalArgumentException`만 잡는다)과 워치독의 `stream.close()` `runCatching`은 그대로 둔다.
 
 ## 재시도: `RetryService` / `RetryOptions`
 
