@@ -60,6 +60,7 @@ import org.springframework.orm.jpa.JpaTransactionManager
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
+import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
@@ -129,12 +130,15 @@ private class FlakyOutbox(
         }
 }
 
-private fun ledgerChangingAfterFind(delegate: AgentAskTurnRepository, afterFind: () -> Unit): AgentAskTurnRepository =
+private fun ledgerChangingAfterFind(
+    delegate: AgentAskTurnRepository,
+    afterFind: (limit: Int) -> Unit,
+): AgentAskTurnRepository =
     mockk {
         every { findResumable(pendingBefore = any(), orphanedBefore = any(), limit = any()) } answers {
             delegate
                 .findResumable(pendingBefore = firstArg(), orphanedBefore = secondArg(), limit = thirdArg())
-                .also { afterFind() }
+                .also { afterFind(thirdArg()) }
         }
         every { releaseOrphan(eventId = any(), attemptCount = any(), orphanedBefore = any(), now = any()) } answers {
             delegate.releaseOrphan(
@@ -1162,6 +1166,113 @@ class AgentAskThreadStarterTest :
                 then("it offers exactly one batch, least recently touched first, and leaves the newest turn") {
                     resumed shouldBe ASK_RESUME_BATCH_SIZE
                     lane.offered.map { it.payload.prompt } shouldContainExactly prompts.take(ASK_RESUME_BATCH_SIZE)
+                }
+            }
+        }
+
+        given("more unreadable question rows than one sweep takes, all ahead of a readable turn") {
+            val limits = mutableListOf<Int>()
+            val lane = lane(ledger = ledgerChangingAfterFind(delegate = askTurnRepository) { limit -> limits += limit })
+            val oldest = lane.clock.now.minusMinutes(30L)
+            val unreadable =
+                (0..ASK_RESUME_BATCH_SIZE).map { index ->
+                    val touchedAt = oldest.plusSeconds(index.toLong())
+                    val eventId = outboxRepository.save(questionRowAt(schemaVersion = unsupportedVersion)).eventId
+                    askTurnRepository.saveAndFlush(
+                        createAgentAskTurnSchema(eventId = eventId, createdAt = touchedAt, updatedAt = touchedAt),
+                    )
+                    eventId
+                }
+            storedTurn(prompt = "readable", updatedAt = oldest.plusMinutes(10L))
+
+            fun unreadableRows(): List<Map<String, Any?>> =
+                unreadable.map { eventId ->
+                    jdbc.queryForMap("SELECT * FROM agent_ask_turn WHERE event_id = ?", eventId)
+                }
+
+            val before = unreadableRows()
+
+            `when`("the sweep runs twice, one period apart") {
+                val (resumed, logs) =
+                    captureLogs(loggerName = loggerName) {
+                        val firstSweep = lane.starter.resumeOnce()
+                        lane.clock.advance(by = Duration.ofMillis(ASK_RESUME_PERIOD_MILLIS))
+                        listOf(firstSweep, lane.starter.resumeOnce())
+                    }
+
+                then("the first batch is all unreadable; the second reads past it and offers the readable turn") {
+                    resumed shouldContainExactly listOf(0, 1)
+                    limits shouldContainExactly listOf(ASK_RESUME_BATCH_SIZE, 2 * ASK_RESUME_BATCH_SIZE)
+                    lane.offered.map { it.payload.prompt } shouldContainExactly listOf("readable")
+                }
+
+                then("each sweep logs one ERROR per unreadable row it read and leaves every one of them as it was") {
+                    logs.messagesAt(level = Level.ERROR) shouldHaveSize 2 * ASK_RESUME_BATCH_SIZE + 1
+                    unreadableRows() shouldBe before
+                }
+            }
+
+            `when`("the give-up window passes and the sweep runs twice more") {
+                lane.clock.advance(by = ASK_GIVE_UP_AFTER)
+                val resumed = listOf(lane.starter.resumeOnce(), lane.starter.resumeOnce())
+
+                then("the unreadable turns are abandoned and the sweep after that reads a single batch again") {
+                    resumed shouldContainExactly listOf(0, 0)
+                    unreadable.map { eventId -> turnOf(eventId = eventId).status }.toSet() shouldBe
+                        setOf(AgentAskTurnStatus.ABANDONED)
+                    limits.drop(n = 2) shouldContainExactly listOf(2 * ASK_RESUME_BATCH_SIZE + 1, ASK_RESUME_BATCH_SIZE)
+                }
+            }
+        }
+
+        given("sweeps whose every batch holds only unreadable question rows") {
+            val limits = mutableListOf<Int>()
+            val ledger =
+                mockk<AgentAskTurnRepository> {
+                    every { findResumable(pendingBefore = any(), orphanedBefore = any(), limit = any()) } answers {
+                        val pendingBefore = firstArg<LocalDateTime>()
+                        val limit = thirdArg<Int>().also { limits += it }
+                        List(size = limit) {
+                            createAgentAskTurnSchema(
+                                createdAt = pendingBefore,
+                                updatedAt = pendingBefore.minusSeconds(1L),
+                            )
+                        }
+                    }
+                    every { begin(eventId = any(), attemptCount = any(), now = any()) } returns 1
+                    every { release(eventId = any(), attemptCount = any(), now = any()) } returns 1
+                    every {
+                        releaseOrphan(eventId = any(), attemptCount = any(), orphanedBefore = any(), now = any())
+                    } returns 1
+                    every { finish(eventId = any(), attemptCount = any(), status = any(), now = any()) } returns 1
+                }
+            val outbox =
+                mockk<MessageOutboxRepository> {
+                    every { findById(any<String>()) } returns
+                        Optional.of(questionRowAt(schemaVersion = unsupportedVersion))
+                }
+            val lane = lane(outbox = outbox, ledger = ledger)
+
+            `when`("six sweeps run") {
+                val (resumed, logs) =
+                    captureLogs(loggerName = loggerName) { List(size = 6) { lane.starter.resumeOnce() } }
+                val errors = logs.messagesAt(level = Level.ERROR)
+
+                then("each sweep reads one batch more than the last, up to 100 rows, and stays there") {
+                    limits shouldContainExactly listOf(20, 40, 60, 80, 100, 100)
+                    resumed shouldContainExactly List(size = 6) { 0 }
+                    lane.offered.shouldBeEmpty()
+                }
+
+                then("every row read is one ERROR and nothing is written") {
+                    errors shouldHaveSize limits.sum()
+                    errors.filterNot { it.endsWith(suffix = "; left for a later sweep") }.shouldBeEmpty()
+                    verify(exactly = 0) {
+                        ledger.begin(eventId = any(), attemptCount = any(), now = any())
+                        ledger.release(eventId = any(), attemptCount = any(), now = any())
+                        ledger.releaseOrphan(eventId = any(), attemptCount = any(), orphanedBefore = any(), now = any())
+                        ledger.finish(eventId = any(), attemptCount = any(), status = any(), now = any())
+                    }
                 }
             }
         }

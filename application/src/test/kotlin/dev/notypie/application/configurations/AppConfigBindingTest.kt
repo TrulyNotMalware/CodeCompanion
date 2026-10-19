@@ -158,6 +158,108 @@ class AppConfigBindingTest :
             }
         }
 
+        given("agent.retention properties") {
+            fun rootCauseOf(properties: Map<String, String>): String {
+                val failure = shouldThrow<BindException> { bind(properties = properties) }
+                return checkNotNull(generateSequence<Throwable>(failure) { it.cause }.last().message)
+            }
+
+            `when`("none are set") {
+                val retention = bind(properties = mapOf("slack.app.api.token" to "xoxb")).agent.retention
+
+                then("ask turns are kept 14 days and the history 180 days, deleted 1000 rows at a time") {
+                    retention.askTurnDays shouldBe 14L
+                    retention.historyDays shouldBe 180L
+                    retention.batchSize shouldBe 1_000
+                }
+            }
+
+            `when`("every key is set at its lowest accepted value") {
+                val retention =
+                    bind(
+                        properties =
+                            mapOf(
+                                "slack.app.agent.retention.ask-turn-days" to "2",
+                                "slack.app.agent.retention.history-days" to "91",
+                                "slack.app.agent.retention.batch-size" to "1",
+                            ),
+                    ).agent.retention
+
+                then("they bind") {
+                    retention.askTurnDays shouldBe 2L
+                    retention.historyDays shouldBe 91L
+                    retention.batchSize shouldBe 1
+                }
+            }
+
+            `when`("every key is set at its highest accepted value") {
+                val retention =
+                    bind(
+                        properties =
+                            mapOf(
+                                "slack.app.agent.retention.ask-turn-days" to "3650",
+                                "slack.app.agent.retention.history-days" to "3650",
+                                "slack.app.agent.retention.batch-size" to "10000",
+                            ),
+                    ).agent.retention
+
+                then("they bind") {
+                    retention.askTurnDays shouldBe 3_650L
+                    retention.historyDays shouldBe 3_650L
+                    retention.batchSize shouldBe 10_000
+                }
+            }
+
+            listOf(
+                Triple("history-days", "90", "agent.retention.history-days must be between 91"),
+                Triple("history-days", "3651", "agent.retention.history-days must be between 91"),
+                Triple("ask-turn-days", "0", "agent.retention.ask-turn-days must be between 1 and 3650"),
+                Triple("ask-turn-days", "3651", "agent.retention.ask-turn-days must be between 1 and 3650"),
+                Triple("batch-size", "0", "agent.retention.batch-size must be between 1 and 10000"),
+                Triple("batch-size", "10001", "agent.retention.batch-size must be between 1 and 10000"),
+            ).forEach { (key, value, expected) ->
+                `when`("$key is $value") {
+                    then("binding fails and names the property and its range") {
+                        val properties = mapOf("slack.app.agent.retention.$key" to value)
+                        rootCauseOf(properties = properties) shouldContain expected
+                    }
+                }
+            }
+
+            `when`("ask-turn-days does not outlast the outbox's give-up window") {
+                then("one day against the default 24 hours fails and names both keys") {
+                    val message = rootCauseOf(properties = mapOf("slack.app.agent.retention.ask-turn-days" to "1"))
+                    message shouldContain "agent.retention.ask-turn-days must exceed"
+                    message shouldContain "outbox.polling.give-up-after-hours"
+                }
+
+                then("a give-up window raised to the default 14 days fails") {
+                    val properties = mapOf("slack.app.outbox.polling.give-up-after-hours" to "336")
+                    rootCauseOf(properties = properties) shouldContain "agent.retention.ask-turn-days must exceed"
+                }
+
+                then("a give-up window too large for a Duration fails with the same message, not an overflow") {
+                    val properties = mapOf("slack.app.outbox.polling.give-up-after-hours" to Long.MAX_VALUE.toString())
+                    rootCauseOf(properties = properties) shouldContain "agent.retention.ask-turn-days must exceed"
+                }
+            }
+
+            `when`("one day of ask-turn retention meets a give-up window lowered below it") {
+                then("it binds") {
+                    val appConfig =
+                        bind(
+                            properties =
+                                mapOf(
+                                    "slack.app.agent.retention.ask-turn-days" to "1",
+                                    "slack.app.outbox.polling.give-up-after-hours" to "23",
+                                ),
+                        )
+                    appConfig.agent.retention.askTurnDays shouldBe 1L
+                    appConfig.outbox.polling.giveUpAfterHours shouldBe 23L
+                }
+            }
+        }
+
         given("unresolved secret placeholders") {
             `when`("the calendar client secret is still a \${...} placeholder") {
                 val appConfig =

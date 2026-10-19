@@ -3,8 +3,10 @@ package dev.notypie.repository.agent
 import dev.notypie.repository.agent.schema.AgentTurnHistorySchema
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
 interface JpaAgentTurnHistoryRepository : JpaRepository<AgentTurnHistorySchema, Long> {
@@ -38,4 +40,19 @@ interface JpaAgentTurnHistoryRepository : JpaRepository<AgentTurnHistorySchema, 
         @Param("since") since: LocalDateTime,
         pageable: Pageable,
     ): List<RequesterTurnUsage>
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        DELETE FROM agent_turn_history
+        WHERE created_at < :olderThan
+        LIMIT :limit
+    """,
+        nativeQuery = true,
+    )
+    fun deleteOlderThan(
+        @Param("olderThan") olderThan: LocalDateTime,
+        @Param("limit") limit: Int,
+    ): Int
 }

@@ -1,11 +1,13 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
+import dev.notypie.domain.command.intent.CommandIntent.AgentUsageReport
 import dev.notypie.repository.cve.schema.CveDeliveryMode
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.repository.cve.schema.CveTopicCategory
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Configuration
+import java.util.concurrent.TimeUnit
 
 const val APP_CONFIG_PROPERTIES_PREFIX = "slack.app"
 
@@ -33,6 +35,13 @@ data class AppConfig(
     val ai: Ai = Ai(),
     val calendar: Calendar = Calendar(),
 ) {
+    init {
+        require(TimeUnit.DAYS.toHours(agent.retention.askTurnDays) > outbox.polling.giveUpAfterHours) {
+            "agent.retention.ask-turn-days must exceed outbox.polling.give-up-after-hours: the outbox may deliver a " +
+                "question again until then, and without its ledger row that delivery starts a second turn"
+        }
+    }
+
     data class Authorization(
         val bootstrapAdmins: List<String> = emptyList(),
     )
@@ -269,7 +278,34 @@ data class AppConfig(
     data class Agent(
         val sidecar: Sidecar = Sidecar(),
         val turns: Turns = Turns(),
+        val retention: Retention = Retention(),
     ) {
+        data class Retention(
+            val askTurnDays: Long = 14L,
+            val historyDays: Long = 180L,
+            val batchSize: Int = 1_000,
+        ) {
+            init {
+                require(askTurnDays in 1L..MAX_RETENTION_DAYS) {
+                    "agent.retention.ask-turn-days must be between 1 and $MAX_RETENTION_DAYS: $askTurnDays"
+                }
+                require(historyDays in MIN_HISTORY_DAYS..MAX_RETENTION_DAYS) {
+                    "agent.retention.history-days must be between $MIN_HISTORY_DAYS (a day more than the longest " +
+                        "range a usage report reads, so a purge cannot cut into a report being read) and " +
+                        "$MAX_RETENTION_DAYS: $historyDays"
+                }
+                require(batchSize in 1..MAX_BATCH_SIZE) {
+                    "agent.retention.batch-size must be between 1 and $MAX_BATCH_SIZE: $batchSize"
+                }
+            }
+
+            companion object {
+                const val MIN_HISTORY_DAYS: Long = AgentUsageReport.MAX_DAYS + 1L
+                const val MAX_RETENTION_DAYS: Long = 3_650L
+                const val MAX_BATCH_SIZE: Int = 10_000
+            }
+        }
+
         data class Turns(
             val maxConcurrent: Int = 4,
             val queueCapacity: Int = 20,

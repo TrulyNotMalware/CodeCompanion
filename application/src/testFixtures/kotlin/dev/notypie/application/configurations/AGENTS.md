@@ -1,23 +1,24 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-01 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-19 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/configurations
 
 ## Purpose
 Builders for `AppConfig` fragments: the `AppConfig.Cve.TopicDefinition` that `CveTopicBootstrap` reads on
-startup, and an `AppConfig` with every secret set, for the `toString()` masking spec.
+startup, an `AppConfig` with every secret set, for the `toString()` masking spec, and an `AppConfig` with a given
+agent retention, for the retention purge spec.
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `AppConfigBinding.kt` | `@EnableConfigurationProperties(AppConfig::class) class AppConfigBinding` for `ApplicationContextRunner` specs: binds `slack.app.*` from the runner's properties. Not a `@Configuration`, so `ApplicationContextSmokeTest`'s component scan does not pick it up |
-| `AppConfigCreator.kt` | `createAppConfigWithSecrets(slackToken, slackAppToken, signingSecret, mcpSigningSecret, githubToken, nvdApiKey, sidecarBearerSecret)` — an `AppConfig` with every secret-bearing field set to a distinct fixture value, for the masking spec |
+| `AppConfigCreator.kt` | `createAppConfigWithSecrets(slackToken, slackAppToken, signingSecret, mcpSigningSecret, githubToken, nvdApiKey, sidecarBearerSecret)` — an `AppConfig` with every secret-bearing field set to a distinct fixture value, for the masking spec; `createAgentRetentionAppConfig(askTurnDays = 14, historyDays = 180, batchSize = 1000)` — an `AppConfig` whose `agent.retention` carries those values, for `AgentRetentionSchedulerTest` (2026-10-19) |
 | `CveTopicConfigCreator.kt` | `createCveTopicConfigDefinition(key = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)` |
 
 ## For AI Agents
 
 ### Working In This Directory
-- Consumed by `application/src/test/.../service/cve/CveTopicBootstrapTest.kt` only.
+- `createCveTopicConfigDefinition` is consumed by `application/src/test/.../service/cve/CveTopicBootstrapTest.kt` only.
 - `sourceConfig` is a raw, nullable JSON string — the bootstrap parses it, so specs that cover parse
   failures pass malformed JSON here rather than building a map.
 - The enums (`CveTopicCategory`, `CveSourceType`, `CveDeliveryMode`) live in infrastructure's

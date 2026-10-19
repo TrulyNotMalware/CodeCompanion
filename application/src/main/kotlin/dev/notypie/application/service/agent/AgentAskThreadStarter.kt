@@ -36,6 +36,7 @@ private val log = KotlinLogging.logger {}
 
 internal const val ASK_RESUME_PERIOD_MILLIS = 60_000L
 internal const val ASK_RESUME_BATCH_SIZE = 20
+internal const val ASK_UNREADABLE_LOOK_AHEAD_MAX = 4 * ASK_RESUME_BATCH_SIZE
 internal const val ASK_MAX_RUNS = 5
 internal val ASK_PENDING_GRACE: Duration = Duration.ofSeconds(60L)
 internal val ASK_ORPHAN_MARGIN: Duration = Duration.ofSeconds(60L)
@@ -58,6 +59,12 @@ private sealed interface QuestionRow {
     ) : QuestionRow
 }
 
+private enum class ResumeStep {
+    OFFERED,
+    UNREADABLE,
+    NOT_OFFERED,
+}
+
 @Service
 class AgentAskThreadStarter(
     private val outboxRepository: MessageOutboxRepository,
@@ -71,6 +78,9 @@ class AgentAskThreadStarter(
     private val orphanAfter: Duration =
         Duration.ofSeconds(appConfig.agent.sidecar.requestTimeoutSeconds).plus(ASK_ORPHAN_MARGIN)
     private val queued: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    @Volatile
+    private var unreadableLastSweep: Int = 0
 
     @EventListener
     fun onDelivered(event: MessageDeliveredEvent) {
@@ -131,20 +141,22 @@ class AgentAskThreadStarter(
         val now = now()
         val orphanedBefore = now.minus(orphanAfter)
         val giveUpBefore = now.minus(ASK_GIVE_UP_AFTER)
-        val resumed =
+        val steps =
             askTurnRepository
                 .findResumable(
                     pendingBefore = now.minus(ASK_PENDING_GRACE),
                     orphanedBefore = orphanedBefore,
-                    limit = ASK_RESUME_BATCH_SIZE,
-                ).count { turn ->
-                    var offered = false
+                    limit =
+                        ASK_RESUME_BATCH_SIZE +
+                            unreadableLastSweep.coerceAtMost(maximumValue = ASK_UNREADABLE_LOOK_AHEAD_MAX),
+                ).map { turn ->
+                    var step = ResumeStep.NOT_OFFERED
                     containFailure(
                         onFailure = { exception ->
                             log.error(exception) { "Ask turn resume failed for eventId=${turn.eventId}" }
                         },
                     ) {
-                        offered =
+                        step =
                             resumeOne(
                                 turn = turn,
                                 now = now,
@@ -152,8 +164,10 @@ class AgentAskThreadStarter(
                                 giveUpBefore = giveUpBefore,
                             )
                     }
-                    offered
+                    step
                 }
+        unreadableLastSweep = steps.count { it == ResumeStep.UNREADABLE }
+        val resumed = steps.count { it == ResumeStep.OFFERED }
         meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "resumed").increment(resumed.toDouble())
         return resumed
     }
@@ -163,7 +177,7 @@ class AgentAskThreadStarter(
         now: LocalDateTime,
         orphanedBefore: LocalDateTime,
         giveUpBefore: LocalDateTime,
-    ): Boolean {
+    ): ResumeStep {
         val waiting =
             when (turn.status) {
                 AgentAskTurnStatus.PENDING -> true
@@ -176,16 +190,17 @@ class AgentAskThreadStarter(
                     ) == 1
                 AgentAskTurnStatus.COMPLETED, AgentAskTurnStatus.ABANDONED -> false
             }
-        if (!waiting) return false
+        if (!waiting) return ResumeStep.NOT_OFFERED
         if (turn.runCount >= ASK_MAX_RUNS || turn.createdAt < giveUpBefore) {
             abandon(turn = turn)
-            return false
+            return ResumeStep.NOT_OFFERED
         }
-        return enqueue(turn = turn) { lease ->
-            val asked = askedOrAbandon(turn = turn)
-            asked != null &&
-                agentConverseService.offer(event = requestOf(messageTs = turn.messageTs, asked = asked), lease = lease)
+        var step = ResumeStep.NOT_OFFERED
+        enqueue(turn = turn) { lease ->
+            step = offerOrAbandon(turn = turn, lease = lease)
+            step == ResumeStep.OFFERED
         }
+        return step
     }
 
     private fun recordedOrNull(eventId: String, messageTs: String, asked: AskedQuestion): RecordedAskTurn? =
@@ -248,21 +263,28 @@ class AgentAskThreadStarter(
         meterRegistry.counter(AgentConverseService.METRIC_TURNS, "outcome", "abandoned").increment()
     }
 
-    private fun askedOrAbandon(turn: AgentAskTurnSchema): AskedQuestion? =
+    private fun offerOrAbandon(turn: AgentAskTurnSchema, lease: AgentTurnLease): ResumeStep =
         when (val row = questionRowOf(eventId = turn.eventId)) {
             QuestionRow.Absent -> {
                 abandonGone(turn = turn)
-                null
+                ResumeStep.NOT_OFFERED
             }
 
             is QuestionRow.Unreadable -> {
                 log.error {
                     "Asked question eventId=${turn.eventId} cannot be read (${row.reason}); left for a later sweep"
                 }
-                null
+                ResumeStep.UNREADABLE
             }
 
-            is QuestionRow.Asked -> row.question
+            is QuestionRow.Asked -> {
+                val offered =
+                    agentConverseService.offer(
+                        event = requestOf(messageTs = turn.messageTs, asked = row.question),
+                        lease = lease,
+                    )
+                if (offered) ResumeStep.OFFERED else ResumeStep.NOT_OFFERED
+            }
         }
 
     private fun abandonGone(turn: AgentAskTurnSchema) {

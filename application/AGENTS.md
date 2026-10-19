@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
 
 # application
 
@@ -61,7 +61,8 @@ in-process events, `MessageDispatcher` replaced by `@MockkBean`) and pins the wi
 the Hikari pool size, the `ThreadPoolTaskScheduler`, the `relayTaskExecutor` qualifier, the single `Clock`, the
 outbox gauges in the Prometheus scrape, the AI turn running only after commit (or with no transaction at all) on the
 bounded `agent-turn-` executor, the `/ask` ledger row written before the delivery event's `publishEvent` returns, the
-`/ask` resume sweep registered as a fixed-delay task and the BEFORE_COMMIT outbox write. `AgentTurnShutdownContextTest`
+`/ask` resume sweep and the agent retention purge (hourly, first run 10–20 min after start) registered as
+fixed-delay tasks, and the BEFORE_COMMIT outbox write. `AgentTurnShutdownContextTest`
 boots the same application through `SpringApplicationBuilder` to read what a closing context leaves in the database.
 There is no `src/test/resources`.
 Some other specs run against an in-memory H2 with a real

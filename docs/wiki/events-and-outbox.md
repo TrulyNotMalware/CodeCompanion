@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-14_
+_type: architecture · updated: 2026-10-15_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -282,7 +282,9 @@ _type: architecture · updated: 2026-10-14_
 - 레저 스윕은 아웃박스 스윕과 별개의 잡이다(`AgentAskThreadStarter.resume`, 60초 fixedDelay, 틱당 20건). 레저에는 헬스
   인디케이터도 게이지도 없다 — 포기된 턴은 `agent.turns{outcome="abandoned"}`와 ERROR 로그로만 보이고, 읽을 수 없는 질문 행(미지원 스키마 버전·디코드 실패)은
   포기 조건까지 스윕마다 ERROR 로그로만, lease를 잃고 롤백된 실행은 `outcome="superseded"`와 WARN으로만 보인다(2026-10-14, 결정 #40 ③④).
-  `OutboxRetentionScheduler`는 레저 행을 지우지 않는다(보존 정리 없음).
+  레저 행은 `OutboxRetentionScheduler`가 아니라 `AgentRetentionScheduler`가 지운다 — 끝난 행(`COMPLETED`/`ABANDONED`)만, `ask-turn-days`(기본 14일)
+  뒤에. 그 기간은 아웃박스의 재전송 상한(`give-up-after-hours`)보다 길어야 하며 기동 때 검증한다(레저 행이 같은 질문의 재전달을 한 턴으로 묶는 키라서,
+  결정 #43). 스윕은 직전 스윕에서 읽을 수 없던 질문 행 수만큼 다음 읽기를 넓혀 그 뒤의 행에 닿는다(결정 #40 ⑤, 2026-10-15).
 - 검증 범위: 스펙은 레저의 네이티브 문장을 H2에서 실행한다. MariaDB 12.3.3에서는 V26 적용과 다섯 문장을 `mariadb` 클라이언트로 한 번
   확인했고(2026-10-13, 결정 #40), 애플리케이션(JPA·Connector/J)이 그 테이블 위에서 돈 적은 없다(미확인). CDC 모드에서
   이 훅이 리스너 스레드에서 도는 경로는 스펙이 real relay + mock 저장소로만 확인했다(Kafka·Debezium을 거친 종단 실행은 미확인).
@@ -375,7 +377,7 @@ _type: architecture · updated: 2026-10-14_
   `common/{IdempotencyCreator,TransactionTemplateExt}.kt`, `security/{SlackRetryDeduplicator,
   SlackRequestVerificationFilter}.kt`, `service/command/{CommandExecutor,RoleManagementService}.kt`,
   `service/{standup/StandupSchedulingService,cve/notification/CveNotificationDispatcher,agent/AgentConverseService,
-  agent/AgentAskThreadStarter}.kt`; `infrastructure/.../repository/agent/AgentAskTurnRepository.kt`,
+  agent/AgentAskThreadStarter,agent/AgentRetentionScheduler}.kt`; `infrastructure/.../repository/agent/AgentAskTurnRepository.kt`,
   `repository/outbox/dto/OutboxMessageEvents.kt`, `db/migration/V26__add_agent_ask_turn.sql`; 스펙
   `SlackMessageRelayServiceImplTest`·`DebeziumLogTailingProcessorTest`(전달 이벤트의 순서와 발행 조건),
   `ApplicationContextSmokeTest`(리스너가 동기라는 것), `service/{relay,agent}/AGENTS.md`(시간 예산, lease 표)

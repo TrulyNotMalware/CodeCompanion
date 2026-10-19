@@ -19,3 +19,20 @@ fun createAppConfigWithSecrets(
             ),
         agent = AppConfig.Agent(sidecar = AppConfig.Agent.Sidecar(bearerSecret = sidecarBearerSecret)),
     )
+
+fun createAgentRetentionAppConfig(
+    askTurnDays: Long = 14L,
+    historyDays: Long = 180L,
+    batchSize: Int = 1_000,
+): AppConfig =
+    AppConfig(
+        agent =
+            AppConfig.Agent(
+                retention =
+                    AppConfig.Agent.Retention(
+                        askTurnDays = askTurnDays,
+                        historyDays = historyDays,
+                        batchSize = batchSize,
+                    ),
+            ),
+    )

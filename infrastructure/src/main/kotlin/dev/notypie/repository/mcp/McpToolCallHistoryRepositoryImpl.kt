@@ -24,4 +24,7 @@ class McpToolCallHistoryRepositoryImpl(
 
     override fun countByToolSince(since: LocalDateTime): List<ToolCallUsage> =
         jpaMcpToolCallHistoryRepository.countByToolSince(since = since)
+
+    override fun deleteOlderThan(olderThan: LocalDateTime, limit: Int): Int =
+        jpaMcpToolCallHistoryRepository.deleteOlderThan(olderThan = olderThan, limit = limit)
 }

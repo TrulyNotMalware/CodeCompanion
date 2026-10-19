@@ -158,6 +158,11 @@ slack:
         max-concurrent: ${AGENT_MAX_CONCURRENT_TURNS:4}
         queue-capacity: ${AGENT_TURN_QUEUE_CAPACITY:20}
         shutdown-await-seconds: 20
+      # Finished /ask ledger rows and turn / tool-call audit rows older than these are purged hourly in batches.
+      retention:
+        ask-turn-days: 14
+        history-days: 180
+        batch-size: 1000
     # CVE summary provider. Operating choice is sidecar (reuse the agent lane), but the default
     # stays noop so summary traffic is opt-in via AI_PROVIDER once the collector rolls out.
     ai:
